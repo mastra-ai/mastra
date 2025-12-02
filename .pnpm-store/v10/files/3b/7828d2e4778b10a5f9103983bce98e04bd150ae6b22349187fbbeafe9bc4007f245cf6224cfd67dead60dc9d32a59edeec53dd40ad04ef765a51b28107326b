@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/browser/index.ts"],
+  "sourcesContent": ["/**\n * Tools for accessing Convex in the browser.\n *\n * **If you are using React, use the {@link react} module instead.**\n *\n * ## Usage\n *\n * Create a {@link ConvexHttpClient} to connect to the Convex Cloud.\n *\n * ```typescript\n * import { ConvexHttpClient } from \"convex/browser\";\n * // typically loaded from an environment variable\n * const address = \"https://small-mouse-123.convex.cloud\";\n * const convex = new ConvexHttpClient(address);\n * ```\n *\n * @module\n */\nexport { BaseConvexClient } from \"./sync/client.js\";\nexport type {\n  BaseConvexClientOptions,\n  MutationOptions,\n  SubscribeOptions,\n  ConnectionState,\n  AuthTokenFetcher,\n} from \"./sync/client.js\";\nexport type { ConvexClientOptions } from \"./simple_client.js\";\nexport { ConvexClient } from \"./simple_client.js\";\nexport type {\n  OptimisticUpdate,\n  OptimisticLocalStore,\n} from \"./sync/optimistic_updates.js\";\nexport type { QueryToken } from \"./sync/udf_path_utils.js\";\nexport { ConvexHttpClient } from \"./http_client.js\";\nexport type { HttpMutationOptions } from \"./http_client.js\";\nexport type { QueryJournal } from \"./sync/protocol.js\";\n/** @internal */\nexport type { UserIdentityAttributes } from \"./sync/protocol.js\";\nexport type { FunctionResult } from \"./sync/function_result.js\";\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAkBA,oBAAiC;AASjC,2BAA6B;AAM7B,yBAAiC;",
+  "names": []
+}

@@ -1,0 +1,55 @@
+{
+  "name": "@supabase/functions-js",
+  "version": "2.76.1",
+  "description": "JS SDK to interact with Supabase Functions.",
+  "main": "dist/main/index.js",
+  "module": "dist/module/index.js",
+  "types": "dist/module/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "clean": "rimraf dist docs/v2",
+    "format": "prettier --write \"{src,test}/**/*.ts\"",
+    "build": "npm run clean && npm run build:main && npm run build:module",
+    "build:main": "tsc -p tsconfig.json",
+    "build:module": "tsc -p tsconfig.module.json",
+    "docs": "typedoc src/index.ts --out docs/v2",
+    "docs:json": "typedoc --json docs/v2/spec.json --excludeExternals src/index.ts",
+    "test": "jest",
+    "test:ci": "jest --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supabase/supabase-js.git",
+    "directory": "packages/core/functions-js"
+  },
+  "keywords": [
+    "functions",
+    "supabase"
+  ],
+  "author": "Supabase",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/supabase/supabase-js/issues"
+  },
+  "homepage": "https://github.com/supabase/supabase-js/tree/master/packages/core/functions-js",
+  "dependencies": {
+    "@supabase/node-fetch": "2.6.15",
+    "tslib": "2.8.1"
+  },
+  "devDependencies": {
+    "@sebbo2002/semantic-release-jsr": "^1.0.0",
+    "bs-logger": "^0.2.6",
+    "jest": "^29.7.0",
+    "nanoid": "^3.3.1",
+    "openai": "^4.52.5",
+    "testcontainers": "^8.5.1",
+    "ts-jest": "^29.4.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

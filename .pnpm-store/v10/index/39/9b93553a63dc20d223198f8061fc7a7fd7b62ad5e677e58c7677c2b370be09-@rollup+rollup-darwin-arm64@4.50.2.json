@@ -1,0 +1,25 @@
+{
+  "name": "@rollup/rollup-darwin-arm64",
+  "version": "4.50.2",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662904697,
+      "integrity": "sha512-ibbWxGGAigzP/LqqyRsMHh2GwbQ8OkX2CX01kyagsyxx1obE98dWTlMsrT3B9HKjf7YnbKR+9UOyTCoHFHhQBw==",
+      "mode": 420,
+      "size": 388
+    },
+    "README.md": {
+      "checkedAt": 1764662904697,
+      "integrity": "sha512-5LDhkzVLXNxV/AU+tUhEKd5C6vj7afZod6mOW8e5a53mlkNoTHELF4CQrDqKCpDCCk4UfcKz9asFu0hYUKrL/g==",
+      "mode": 420,
+      "size": 90
+    },
+    "rollup.darwin-arm64.node": {
+      "checkedAt": 1764662904700,
+      "integrity": "sha512-0XEcsX9eQgiBeqo1PhOZ347EH6yUSTjNeBFCloLPLsgi9n3cFMDccgxSedz+AyeJj6GKpZjx0v9otHMkb1VWkg==",
+      "mode": 420,
+      "size": 1713488
+    }
+  }
+}

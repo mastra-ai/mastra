@@ -1,0 +1,70 @@
+// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+import { APIResource } from "../../../resource.mjs";
+import * as BookmarksAPI from "./bookmarks.mjs";
+import { Bookmarks, BookmarksSinglePage, } from "./bookmarks.mjs";
+import * as CustomPagesAPI from "./custom-pages.mjs";
+import { CustomPageWithoutHTMLsSinglePage, CustomPages, } from "./custom-pages.mjs";
+import * as GatewayCAAPI from "./gateway-ca.mjs";
+import { GatewayCA, GatewayCAListResponsesSinglePage, } from "./gateway-ca.mjs";
+import * as GroupsAPI from "./groups.mjs";
+import { GroupListResponsesSinglePage, Groups, } from "./groups.mjs";
+import * as KeysAPI from "./keys.mjs";
+import { Keys, } from "./keys.mjs";
+import * as PoliciesAPI from "./policies.mjs";
+import { Policies, PolicyListResponsesSinglePage, } from "./policies.mjs";
+import * as ServiceTokensAPI from "./service-tokens.mjs";
+import { ServiceTokens, ServiceTokensSinglePage, } from "./service-tokens.mjs";
+import * as TagsAPI from "./tags.mjs";
+import { Tags, TagsSinglePage, } from "./tags.mjs";
+import * as ApplicationsAPI from "./applications/applications.mjs";
+import { ApplicationListResponsesSinglePage, Applications, } from "./applications/applications.mjs";
+import * as CertificatesAPI from "./certificates/certificates.mjs";
+import { Certificates, CertificatesSinglePage, } from "./certificates/certificates.mjs";
+import * as InfrastructureAPI from "./infrastructure/infrastructure.mjs";
+import { Infrastructure } from "./infrastructure/infrastructure.mjs";
+import * as LogsAPI from "./logs/logs.mjs";
+import { Logs } from "./logs/logs.mjs";
+import * as UsersAPI from "./users/users.mjs";
+import { UserListResponsesSinglePage, Users, } from "./users/users.mjs";
+export class Access extends APIResource {
+    constructor() {
+        super(...arguments);
+        this.gatewayCA = new GatewayCAAPI.GatewayCA(this._client);
+        this.infrastructure = new InfrastructureAPI.Infrastructure(this._client);
+        this.applications = new ApplicationsAPI.Applications(this._client);
+        this.certificates = new CertificatesAPI.Certificates(this._client);
+        this.groups = new GroupsAPI.Groups(this._client);
+        this.serviceTokens = new ServiceTokensAPI.ServiceTokens(this._client);
+        this.bookmarks = new BookmarksAPI.Bookmarks(this._client);
+        this.keys = new KeysAPI.Keys(this._client);
+        this.logs = new LogsAPI.Logs(this._client);
+        this.users = new UsersAPI.Users(this._client);
+        this.customPages = new CustomPagesAPI.CustomPages(this._client);
+        this.tags = new TagsAPI.Tags(this._client);
+        this.policies = new PoliciesAPI.Policies(this._client);
+    }
+}
+Access.GatewayCA = GatewayCA;
+Access.GatewayCAListResponsesSinglePage = GatewayCAListResponsesSinglePage;
+Access.Infrastructure = Infrastructure;
+Access.Applications = Applications;
+Access.ApplicationListResponsesSinglePage = ApplicationListResponsesSinglePage;
+Access.Certificates = Certificates;
+Access.CertificatesSinglePage = CertificatesSinglePage;
+Access.Groups = Groups;
+Access.GroupListResponsesSinglePage = GroupListResponsesSinglePage;
+Access.ServiceTokens = ServiceTokens;
+Access.ServiceTokensSinglePage = ServiceTokensSinglePage;
+Access.Bookmarks = Bookmarks;
+Access.BookmarksSinglePage = BookmarksSinglePage;
+Access.Keys = Keys;
+Access.Logs = Logs;
+Access.Users = Users;
+Access.UserListResponsesSinglePage = UserListResponsesSinglePage;
+Access.CustomPages = CustomPages;
+Access.CustomPageWithoutHTMLsSinglePage = CustomPageWithoutHTMLsSinglePage;
+Access.Tags = Tags;
+Access.TagsSinglePage = TagsSinglePage;
+Access.Policies = Policies;
+Access.PolicyListResponsesSinglePage = PolicyListResponsesSinglePage;
+//# sourceMappingURL=access.mjs.map

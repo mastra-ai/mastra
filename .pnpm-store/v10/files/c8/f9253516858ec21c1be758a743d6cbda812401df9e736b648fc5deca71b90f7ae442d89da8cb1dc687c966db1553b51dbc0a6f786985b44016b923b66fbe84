@@ -1,0 +1,17 @@
+{
+  "name": "@cloudflare/workerd-darwin-arm64",
+  "description": "👷 workerd for macOS ARM 64-bit, Cloudflare's JavaScript/Wasm Runtime",
+  "repository": "https://github.com/cloudflare/workerd",
+  "license": "Apache-2.0",
+  "preferUnplugged": false,
+  "engines": {
+    "node": ">=16"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "version": "1.20251118.0"
+}

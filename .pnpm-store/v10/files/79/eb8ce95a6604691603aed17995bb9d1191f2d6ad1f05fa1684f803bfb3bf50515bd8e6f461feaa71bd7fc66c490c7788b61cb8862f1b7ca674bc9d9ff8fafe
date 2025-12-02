@@ -1,0 +1,161 @@
+---
+title: CLI Reference
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The `jscodeshift` command-line interface (CLI) allows you to run jscodeshift codemods using a terminal or through an automated system.
+
+## Usage
+
+You can use the `jscodeshift` command to run codemods in 4 different ways
+
+**Option 1: Run from `transform.js` file in current working directory:**
+
+```bash
+jscodeshift [OPTION]... PATH...
+```
+
+This automatically looks for a `transform.js` file in the current working directory and attempts to run the transform over the specified `PATH`.
+
+**Option 2: Run from specific transform file:**
+
+```bash
+jscodeshift [OPTION]... -t TRANSFORM_PATH PATH...
+```
+
+This allows you to specify a path to a transform file and run the transform over the specified `PATH`.
+
+**Option 3: Run from specific transform URL:**
+
+```bash
+jscodeshift [OPTION]... -t URL PATH...
+```
+
+This allows you to specify a URL to a transform file and run the transform over the specified `PATH`.
+
+**Option 4: Apply transform to standard input:**
+
+```bash
+jscodeshift [OPTION]... --stdin < file_list.txt
+```
+
+Using `--stdin` allows you to run the transform over every line of standard input provided in `file_list.txt`.
+
+
+## Options
+
+### `--(no-)babel`
+
+`default: true`
+
+This allows you to apply babeljs to the transform file.
+
+### `--cpus=N`
+
+`aliases: -c`
+
+`default: max(all - 1, 1)`
+
+This allows you to start at most N child processes to process source files.
+
+### `--(no-)dry`
+
+`aliases: -d`
+
+`default: false`
+
+This allows you to dry run the codemod. Dry running is useful when you need to see how a codemod will affect your project without making changes to your files.
+
+### `--extensions=[EXT]`
+
+`default: js`
+
+Allows you to specify the extension of the files to be transformed.
+
+
+### `--help`
+
+`aliases: -h`
+
+Allows you to print the help menu.
+
+### `--ignore-config=[FILE] ...`
+
+Allows you to ignore files if they match patterns sourced from a configuration file (e.g. a .gitignore).
+
+### `--ignore-pattern=[GLOB] ...`
+
+Allows you to ignore files that match a provided glob expression.
+
+### `--(no-)gitignore`
+
+`default: false`
+
+Allows you to add entries to the current directory's .gitignore file.
+
+### `--parser=[PARSER]`
+
+`default: babel`
+
+`available options: babel|babylon|flow|ts|tsx`
+
+Allows you to specify the parser to use for parsing the source files.
+
+### `--parser-config=[FILE]`
+
+Allows you to specify path to a JSON file containing a custom parser configuration for flow or babylon.
+
+### `--(no-)print`
+
+`aliases: -p`
+
+`default: false`
+
+Allows you to print transformed files to stdout, useful for development.
+
+### `--(no-)run-in-band`
+
+`default: false`
+
+Allows `jscodeshift` to run serially in the current process.
+
+### `--(no-)silent`
+
+`aliases: -s`
+
+`default: false`
+
+Allows you to run silently (prevent writing to stdout or stderr).
+
+### `--(no-)stdin`
+
+`default: false`
+
+Allows you to run the transform over every line of standard input.
+
+### `--transform=[FILE]`
+
+`aliases: -t`
+
+`default: ./transform.js`
+
+Allows you to specify a path to the transform file. Can be either a local path or url.
+
+### `--verbose=[MODE]`
+
+`aliases: -v`
+
+`available options: 0|1|2`
+
+`default: 0`
+
+Allows you to show more information about the transform process.
+
+### `--version`
+
+Allows you to print your `jscodeshift` version.
+
+### `--fail-on-error`
+
+Allows you to return a 1 exit code when errors were found during execution of codemods.

@@ -1,0 +1,55 @@
+{
+  "name": "eslint-plugin-react-hooks",
+  "version": "5.2.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662929894,
+      "integrity": "sha512-O4KI5drJltpEvYGw6x2WkFxLkK2RVPPSnQc8lokLdc0oH6A68Ld/Mx2+wjnTQTY7X5syi6/qDUuNCj6QDRUPgA==",
+      "mode": 420,
+      "size": 1088
+    },
+    "cjs/eslint-plugin-react-hooks.development.js": {
+      "checkedAt": 1764662929895,
+      "integrity": "sha512-ceUWd2R5mrOJ6qvX8AzoBPsZI9Tpb6p60EYmI4ayV3smJ/GX24w56RklmVnqL8LhK86gIjaFoXZLnh3miopylw==",
+      "mode": 420,
+      "size": 134529
+    },
+    "cjs/eslint-plugin-react-hooks.production.js": {
+      "checkedAt": 1764662929897,
+      "integrity": "sha512-AJ25sqwaRwlBLEWOkRi6qhhHn8Tglkxl6PSUmhByUKFjWeQLlar+eWx9xZNjbWJs5Tgw46qYSI8rd1qFpGJ9dw==",
+      "mode": 420,
+      "size": 134442
+    },
+    "index.js": {
+      "checkedAt": 1764662929899,
+      "integrity": "sha512-ZFV4uYmhHnmZXSRsqDe6BhdlFDvkQgHBF8F76WRpHMugzVlmWFOjqDOB50z5SfMUQD5wU/rj968+tVbCoBk09Q==",
+      "mode": 420,
+      "size": 367
+    },
+    "package.json": {
+      "checkedAt": 1764662929903,
+      "integrity": "sha512-l1HnugyAlrQU3GeMRDUIYV10xXEFj8m1nWvBE9eCKqOQ6gtZH4GLHA98dALbTXo2al5mo7R2lvtt8L85olYDjQ==",
+      "mode": 420,
+      "size": 1586
+    },
+    "README.md": {
+      "checkedAt": 1764662929905,
+      "integrity": "sha512-dt669yDLEdT0P1syq6bnh42NQ/mpCggBbtzATMD/7AD5A/6ZRH7ZZs2BQkLV7bwhLesE5VAE+SAxB3ofEmzyFQ==",
+      "mode": 420,
+      "size": 2652
+    },
+    "cjs/eslint-plugin-react-hooks.d.ts": {
+      "checkedAt": 1764662929906,
+      "integrity": "sha512-u/YnuAGZvC7YIwt6/SUOeGwYZ6DqDnONRmRYPkRHCh+36HtOr8pZU8NdtiQa3q6k0xc7QtkAeR+uvlTQX4vvfw==",
+      "mode": 420,
+      "size": 3148
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662929907,
+      "integrity": "sha512-MYBqpY8gYAt0wa+ZQXonIIxju9sMYT3x+pikY+iJfLLInK21dw2CQnZBj0xgdxZmB/3hHL2ujSII7nsLyHO5sg==",
+      "mode": 420,
+      "size": 49
+    }
+  }
+}

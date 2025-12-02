@@ -1,0 +1,43 @@
+{
+  "name": "@google-cloud/promisify",
+  "version": "5.0.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662930171,
+      "integrity": "sha512-mPa3m3ePewoVQVvXUMOooJfWUFEctOyBFRiOEVxHBT/nAPV4iVwJcFHJvD37YZfCsToV3iAyc+GjIYiE+G6Q6A==",
+      "mode": 436,
+      "size": 11358
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662930171,
+      "integrity": "sha512-/drLGeGTLTCyt4XVn/Z38tVVebm4cjjjsTN976p2XWE+r9AttNo4e29JaoKbC9gBFqlZzToVL8U8ddYxEXwJRQ==",
+      "mode": 420,
+      "size": 5492
+    },
+    "package.json": {
+      "checkedAt": 1764662930171,
+      "integrity": "sha512-d4E55THhhWjQanODHrRkyl9ijdU4CBP09FLKHPgAhd70ztt1UR2kpiwdx/HcCvVxL+QTFI2gxZP0cCWhhSRErg==",
+      "mode": 436,
+      "size": 1432
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662930172,
+      "integrity": "sha512-PW4bIcBMqqbc3ZbkKVfiEU7NQm8hLme2ifQMIjswqQ4CB0b6q+Q+xgquJOOuo6ZBly+5kml5Ft0jO8b+9gOEvQ==",
+      "mode": 436,
+      "size": 11138
+    },
+    "README.md": {
+      "checkedAt": 1764662930172,
+      "integrity": "sha512-xFeA/VakwaV/74KRoPJVJM/miGB+pdRKQ0c15l5UxsU1rUQf2R1BBaM6IZIQ1uJXYjBazbUF7ZZTN7qm2ecW6Q==",
+      "mode": 436,
+      "size": 5718
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662930172,
+      "integrity": "sha512-IZMSh/1Ud1qbKdQpvEmrp4nWMFa300zRdqW60blztepzNtaFfa/veOW6cGYjUpcC+5GsxqruvSVKnWldMQIzhw==",
+      "mode": 420,
+      "size": 2116
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "name": "@firebase/component",
+  "version": "0.7.0",
+  "description": "Firebase Component Platform",
+  "author": "Firebase <firebase-support@google.com> (https://firebase.google.com/)",
+  "main": "dist/index.cjs.js",
+  "browser": "dist/esm/index.esm.js",
+  "module": "dist/esm/index.esm.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs.js",
+      "default": "./dist/esm/index.esm.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "lint": "eslint -c .eslintrc.js '**/*.ts' --ignore-path '../../.gitignore'",
+    "lint:fix": "eslint --fix -c .eslintrc.js '**/*.ts' --ignore-path '../../.gitignore'",
+    "build": "rollup -c",
+    "build:deps": "lerna run --scope @firebase/component --include-dependencies build",
+    "dev": "rollup -c -w",
+    "test": "run-p --npm-path npm lint test:all",
+    "test:all": "run-p --npm-path npm test:browser test:node",
+    "test:ci": "node ../../scripts/run_tests_in_ci.js -s test:all",
+    "test:browser": "karma start",
+    "test:node": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' nyc --reporter lcovonly -- mocha src/**/*.test.ts --config ../../config/mocharc.node.js",
+    "trusted-type-check": "tsec -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@firebase/util": "1.13.0",
+    "tslib": "^2.1.0"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "rollup": "2.79.2",
+    "rollup-plugin-typescript2": "0.36.0",
+    "typescript": "5.5.4"
+  },
+  "repository": {
+    "directory": "packages/component",
+    "type": "git",
+    "url": "git+https://github.com/firebase/firebase-js-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/firebase/firebase-js-sdk/issues"
+  },
+  "typings": "dist/index.d.ts",
+  "nyc": {
+    "extension": [
+      ".ts"
+    ],
+    "reportDir": "./coverage/node"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

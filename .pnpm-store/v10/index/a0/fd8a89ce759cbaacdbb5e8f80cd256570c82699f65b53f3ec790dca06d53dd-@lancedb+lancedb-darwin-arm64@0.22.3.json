@@ -1,0 +1,25 @@
+{
+  "name": "@lancedb/lancedb-darwin-arm64",
+  "version": "0.22.3",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662926283,
+      "integrity": "sha512-03//wEsg0SvO9R4Q+fN9WvIL9FKElDftDC4Xvkwb1CVSj2qHP6J24Hiz2ZeZWa7OXa26AGvNqQm6iRfDxeJx9A==",
+      "mode": 420,
+      "size": 280
+    },
+    "README.md": {
+      "checkedAt": 1764662926284,
+      "integrity": "sha512-4b/rbnKo+g/fKqtVT2/XE2Rnb4k3X/GtY0jQyPtc6cK0U1Yzj2zNCPbrusDQm85Qcvg/uunFsFyPqf0Nm9erJQ==",
+      "mode": 420,
+      "size": 102
+    },
+    "lancedb.darwin-arm64.node": {
+      "checkedAt": 1764662926692,
+      "integrity": "sha512-5lAemK/soW5gDtEydNmMlimfE5vi9BCKVoDkRKxBgq3TgF2Eb/8/on1MneTIO6e/iNPtGzFyM3Qfcys6yqX4iA==",
+      "mode": 420,
+      "size": 83810144
+    }
+  }
+}

@@ -1,0 +1,37 @@
+import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
+import type { MastraLanguageModelV2 } from '../../llm/model/shared.types.js';
+export declare class MastraLanguageModelV2Mock implements MastraLanguageModelV2 {
+    #private;
+    readonly specificationVersion = "v2";
+    readonly provider: LanguageModelV2['provider'];
+    readonly modelId: LanguageModelV2['modelId'];
+    readonly supportedUrls: LanguageModelV2['supportedUrls'];
+    constructor(config: {
+        provider?: LanguageModelV2['provider'];
+        modelId?: LanguageModelV2['modelId'];
+        supportedUrls?: LanguageModelV2['supportedUrls'] | (() => LanguageModelV2['supportedUrls']);
+        doGenerate?: LanguageModelV2['doGenerate'] | Awaited<ReturnType<LanguageModelV2['doGenerate']>> | Awaited<ReturnType<LanguageModelV2['doGenerate']>>[];
+        doStream?: LanguageModelV2['doStream'] | Awaited<ReturnType<LanguageModelV2['doStream']>> | Awaited<ReturnType<LanguageModelV2['doStream']>>[];
+    });
+    doGenerate(options: LanguageModelV2CallOptions): Promise<{
+        request: {
+            body?: unknown;
+        };
+        response: {
+            headers?: import("@ai-sdk/provider-v5").SharedV2Headers;
+        } | undefined;
+        stream: import("stream/web").ReadableStream<any>;
+    }>;
+    doStream(options: LanguageModelV2CallOptions): Promise<{
+        stream: ReadableStream<import("@ai-sdk/provider-v5").LanguageModelV2StreamPart>;
+        request?: {
+            body?: unknown;
+        };
+        response?: {
+            headers?: import("@ai-sdk/provider-v5").SharedV2Headers;
+        };
+    }>;
+    get doGenerateCalls(): LanguageModelV2CallOptions[];
+    get doStreamCalls(): LanguageModelV2CallOptions[];
+}
+//# sourceMappingURL=MastraLanguageModelV2Mock.d.ts.map

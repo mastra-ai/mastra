@@ -1,0 +1,4 @@
+import type { CoreMessage as CoreMessageV4 } from '../../../../ai-sdk.types.d.ts';
+import type { AIV5Type } from '../../types.js';
+export declare function hasAIV5CoreMessageCharacteristics(msg: CoreMessageV4 | AIV5Type.ModelMessage): msg is AIV5Type.ModelMessage;
+//# sourceMappingURL=core-model-message.d.ts.map

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/cli/codegen_templates/api_cjs.ts"],
+  "sourcesContent": ["import { apiCodegen as esmApiCodegen } from \"./api.js\";\nimport { header } from \"./common.js\";\n\nexport function apiCjsCodegen(modulePaths: string[]) {\n  const { DTS } = esmApiCodegen(modulePaths);\n  const apiJS = `${header(\"Generated `api` utility.\")}\n  const { anyApi } = require(\"convex/server\");\n  module.exports = {\n    api: anyApi,\n    internal: anyApi,\n  };\n  `;\n  return {\n    DTS,\n    JS: apiJS,\n  };\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,iBAA4C;AAC5C,oBAAuB;AAEhB,SAAS,cAAc,aAAuB;AACnD,QAAM,EAAE,IAAI,QAAI,WAAAA,YAAc,WAAW;AACzC,QAAM,QAAQ,OAAG,sBAAO,0BAA0B,CAAC;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAOnD,SAAO;AAAA,IACL;AAAA,IACA,IAAI;AAAA,EACN;AACF;",
+  "names": ["esmApiCodegen"]
+}

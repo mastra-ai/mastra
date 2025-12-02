@@ -1,0 +1,211 @@
+# Qualified type names
+
+type a b.c
+
+==>
+
+SourceFile(
+  TypeDecl(type,TypeSpec(DefName,QualifiedType(VariableName,TypeName))))
+
+# Array types
+
+type a [2+2]c
+
+==>
+
+SourceFile(
+  TypeDecl(type,TypeSpec(DefName,ArrayType(BinaryExp(Number,ArithOp,Number),TypeName))))
+
+# Slice types
+
+type a []c
+type b [][]d
+
+==>
+SourceFile(
+  TypeDecl(type,TypeSpec(DefName,SliceType(TypeName))),
+  TypeDecl(type,TypeSpec(DefName,SliceType(SliceType(TypeName)))))
+
+# Struct types
+
+type s1 struct {}
+
+type s2 struct { Person }
+
+type s2 struct {
+  f, g int
+}
+
+type s3 struct {
+  // an embedded struct
+  p.s1
+
+  // a tag
+  h int `json:"h"`
+}
+
+type g1 struct {
+    normal Array[T]
+    nested Array[Array[T]]
+}
+
+type g2[T, U any, V interface{}, W Foo[Bar[T]]] struct {}
+
+==>
+
+SourceFile(
+  TypeDecl(type,TypeSpec(DefName,StructType(struct,StructBody))),
+  TypeDecl(type,TypeSpec(DefName,StructType(struct,StructBody(
+    FieldDecl(TypeName))))),
+  TypeDecl(type,TypeSpec(DefName,StructType(struct,StructBody(
+    FieldDecl(FieldName,FieldName,TypeName))))),
+  TypeDecl(type,TypeSpec(DefName,StructType(struct,StructBody(
+    LineComment,
+    FieldDecl(QualifiedType(VariableName,TypeName)),
+    LineComment,
+    FieldDecl(FieldName,TypeName,String))))),
+  TypeDecl(type,TypeSpec(DefName,StructType(struct,StructBody(
+    FieldDecl(FieldName,ParameterizedType(TypeName,TypeArgs(TypeName))),
+    FieldDecl(FieldName,ParameterizedType(TypeName,TypeArgs(ParameterizedType(TypeName,TypeArgs(TypeName))))))))),
+  TypeDecl(type,TypeSpec(DefName,TypeParams(
+    TypeParam(TypeName,TypeName,TypeName),
+    TypeParam(TypeName,InterfaceType(interface,InterfaceBody)),
+    TypeParam(TypeName,ParameterizedType(TypeName,TypeArgs(ParameterizedType(TypeName,TypeArgs(TypeName)))))
+  ),StructType(struct,StructBody))))
+
+# Interface types
+
+type i1 interface {}
+
+type i1 interface { io.Reader }
+
+type i2 interface {
+  i1
+  io.Reader
+  SomeMethod(s string) error
+  OtherMethod(int, ...bool) bool
+}
+
+type SignedInteger interface {
+  int | int8 | ~uint | ~uint8
+}
+
+==>
+
+SourceFile(
+  TypeDecl(type,TypeSpec(DefName,InterfaceType(interface,InterfaceBody))),
+  TypeDecl(type,TypeSpec(DefName,InterfaceType(interface,InterfaceBody(
+    QualifiedType(VariableName,TypeName))))),
+  TypeDecl(type,TypeSpec(DefName,InterfaceType(interface,InterfaceBody(
+    TypeName,
+    QualifiedType(VariableName,TypeName),
+    MethodElem(FieldName,Parameters(Parameter(DefName,TypeName)),TypeName),
+    MethodElem(FieldName,Parameters(Parameter(TypeName),Parameter("...",TypeName)),TypeName))))),
+  TypeDecl(type,TypeSpec(DefName,InterfaceType(interface,InterfaceBody(
+    TypeElem(TypeName,LogicOp,TypeName,LogicOp,UnderlyingType(TypeName),LogicOp,UnderlyingType(TypeName)))))))
+
+# Interface embedded struct types
+
+type NewEmbeddings interface {
+        struct{ f int }
+        ~struct{ f int }
+        *struct{ f int }
+        struct{ f int } | ~struct{ f int }
+}
+
+==>
+
+SourceFile(TypeDecl(type,TypeSpec(DefName,InterfaceType(interface,InterfaceBody(
+  StructType(struct,StructBody(FieldDecl(FieldName,TypeName))),
+  UnderlyingType(StructType(struct,StructBody(FieldDecl(FieldName,TypeName)))),
+  PointerType(StructType(struct,StructBody(FieldDecl(FieldName,TypeName)))),
+  TypeElem(
+    StructType(struct,StructBody(FieldDecl(FieldName,TypeName))),
+    LogicOp,
+    UnderlyingType(StructType(struct,StructBody(FieldDecl(FieldName,TypeName))))))))))
+
+# Map types
+
+type m1 map[string]error
+
+==>
+
+SourceFile(
+  TypeDecl(type,TypeSpec(DefName,MapType(map,TypeName,TypeName))))
+
+# Pointer types
+
+type (
+  p1 *string
+  p2 **p1
+)
+
+==>
+
+SourceFile(TypeDecl(type,SpecList(
+  TypeSpec(DefName,PointerType(TypeName)),
+  TypeSpec(DefName,PointerType(PointerType(TypeName))))))
+
+# Channel types
+
+type (
+  c1 chan<- chan int
+  c2 chan<- chan<- struct{}
+  c3 chan<- <-chan int
+)
+
+==>
+
+SourceFile(TypeDecl(type,SpecList(
+  TypeSpec(DefName,ChannelType(chan,ChannelType("<-",chan,TypeName))),
+  TypeSpec(DefName,ChannelType(chan,"<-",ChannelType(chan,"<-",StructType(struct,StructBody)))),
+  TypeSpec(DefName,ChannelType(chan,"<-",ChannelType("<-",chan,TypeName))))))
+
+# Function types
+
+type (
+  a func(int) int
+  b func(int, *string) (bool, error)
+  c func(int, ...*string) bool
+)
+
+==>
+
+SourceFile(TypeDecl(type,SpecList(
+  TypeSpec(DefName,FunctionType(func,Parameters(Parameter(TypeName)),TypeName)),
+  TypeSpec(DefName,FunctionType(func,Parameters(
+    Parameter(TypeName),
+    Parameter(PointerType(TypeName))
+  ),Parameters(Parameter(TypeName),Parameter(TypeName)))),
+  TypeSpec(DefName,FunctionType(func,Parameters(
+    Parameter(TypeName),
+    Parameter("...",PointerType(TypeName))
+  ),TypeName)))))
+
+# Type Aliases
+
+type H1 = G1
+type _ = G2
+type _ = struct{}
+type (
+	A0 = T0
+	A1 = int
+	A2 = struct{}
+	A3 = reflect.Value
+	A4 = Value
+	A5 = Value
+)
+
+==>
+
+SourceFile(
+  TypeDecl(type,TypeSpec(DefName,TypeName)),
+  TypeDecl(type,TypeSpec(DefName,TypeName)),
+  TypeDecl(type,TypeSpec(DefName,StructType(struct,StructBody))),
+  TypeDecl(type, SpecList(
+    TypeSpec(DefName,TypeName),
+    TypeSpec(DefName,TypeName),
+    TypeSpec(DefName,StructType(struct,StructBody)),
+    TypeSpec(DefName,QualifiedType(VariableName,TypeName)),
+    TypeSpec(DefName,TypeName),
+    TypeSpec(DefName,TypeName))))

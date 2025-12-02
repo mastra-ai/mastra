@@ -1,0 +1,10 @@
+const bitBucket = {
+    id: 'bitbucket',
+    paths: {
+        pull: 'pull-requests',
+        branch: 'src',
+        ci: 'pipelines',
+        diff: 'compare'
+    }
+};
+export default bitBucket;

@@ -1,0 +1,36 @@
+{
+  "name": "is-stream-ended",
+  "version": "0.1.4",
+  "description": "Check if a stream has ended",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "dependencies": {},
+  "devDependencies": {
+    "mocha": "^2.2.5",
+    "through2": "^2.0.3"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stephenplusplus/is-stream-ended.git"
+  },
+  "keywords": [
+    "stream",
+    "end",
+    "ended",
+    "consumed",
+    "complete"
+  ],
+  "author": "Stephen Sawchuk <sawchuk@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/stephenplusplus/is-stream-ended/issues"
+  },
+  "homepage": "https://github.com/stephenplusplus/is-stream-ended#readme"
+}

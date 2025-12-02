@@ -1,0 +1,31 @@
+{
+  "name": "@octokit/openapi-types",
+  "version": "27.0.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662915825,
+      "integrity": "sha512-oNnuWgLEYzuwZhXzEZmB1+mnjC2cgS1DMu3aLQpEtMW+p1YY0tqWHSLlNLcLtI9tMzZoNmXTa582diPskJdh9w==",
+      "mode": 420,
+      "size": 1069
+    },
+    "package.json": {
+      "checkedAt": 1764662915826,
+      "integrity": "sha512-rGWH37Yb1CDib/S1kO/Z81d9KPo+d8/YxjY/l0cplX9/5bwXFmyLXu+Oj79jJM9qDJGQmsJjSEr+rTh7SyJtgw==",
+      "mode": 420,
+      "size": 553
+    },
+    "README.md": {
+      "checkedAt": 1764662915828,
+      "integrity": "sha512-WqnUdQ8JilRLttJWnhNZtK+cdA7KS923LXXO8oJlIfZIdKmOz/45s5PMNatVgsgQgD29TyRKRz5XHNT3QADVbg==",
+      "mode": 420,
+      "size": 384
+    },
+    "types.d.ts": {
+      "checkedAt": 1764662915839,
+      "integrity": "sha512-eT8RJQ0FthVeHqegLoelNUFTQnnf/RRCaXAqvQkl+EITHjsA0zOaebIbYCNEkxw/ug9ho14lErbG3nvjzY0ZIw==",
+      "mode": 420,
+      "size": 4753708
+    }
+  }
+}

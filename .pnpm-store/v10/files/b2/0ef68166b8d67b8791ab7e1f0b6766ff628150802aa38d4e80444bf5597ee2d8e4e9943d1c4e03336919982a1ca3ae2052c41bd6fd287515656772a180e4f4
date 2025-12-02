@@ -1,0 +1,15 @@
+{
+  "name": "node-screenshots-darwin-universal",
+  "version": "0.2.1",
+  "os": [
+    "darwin"
+  ],
+  "main": "node-screenshots.darwin-universal.node",
+  "files": [
+    "node-screenshots.darwin-universal.node"
+  ],
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">= 10"
+  }
+}

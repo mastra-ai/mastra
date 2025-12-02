@@ -1,0 +1,277 @@
+{
+  "name": "react-resizable-panels",
+  "version": "2.1.9",
+  "requiresBuild": false,
+  "files": {
+    "dist/react-resizable-panels.browser.cjs.js": {
+      "checkedAt": 1764662921816,
+      "integrity": "sha512-MBkNv53GcnvO89yd+ygvRf+80eRT23dEXTc+5BDvJp6kWOmoWSZouF3t+1x8yR5KnG4zrkE5d9IqunEZaaYAlA==",
+      "mode": 420,
+      "size": 84257
+    },
+    "dist/react-resizable-panels.browser.development.cjs.js": {
+      "checkedAt": 1764662921818,
+      "integrity": "sha512-T7duKoMyfP0kMNaDnz4BU9cZbTIxJkusmHr39Lcy1TeydURqlafFFa9Pjzjzdm4Sgb6BHde+zBgewqA5UYeNDA==",
+      "mode": 420,
+      "size": 88142
+    },
+    "dist/react-resizable-panels.browser.development.esm.js": {
+      "checkedAt": 1764662921819,
+      "integrity": "sha512-ooQfz+6tdXKD4Dh1ky5z9ZoLkBSK0bUUyn/jQ1CkgBLTo11OEDQZbTGxsQp4Srl1EHK+/uUmTwZguQLu+GxblQ==",
+      "mode": 420,
+      "size": 86901
+    },
+    "dist/react-resizable-panels.browser.esm.js": {
+      "checkedAt": 1764662921819,
+      "integrity": "sha512-rmUQHgIeU/SZs5InXiTGKexoan4a1rHaDvQQBwkNGTVlyVqXGHi89jVmtxnHeACwCxXioRkoYFywx6KqUS6ihA==",
+      "mode": 420,
+      "size": 83016
+    },
+    "dist/react-resizable-panels.cjs.js": {
+      "checkedAt": 1764662921820,
+      "integrity": "sha512-Upk6eI8alQDXXvSDdPRPFjwR2G4YMEROCPCRfvpfR75UvomU7l9S0TXBLtm8NVMGRVXea8HXCWT/hghfIDqWdA==",
+      "mode": 420,
+      "size": 84329
+    },
+    "dist/react-resizable-panels.development.cjs.js": {
+      "checkedAt": 1764662921820,
+      "integrity": "sha512-07Qg+YpZOwL0WluY9PLVz4ZYnwWfdjFPlP15/47gx/qWbAtJKXWkuAs5Z3tzGTfZcp9XfgM0JbtZ2xnJrBHjXw==",
+      "mode": 420,
+      "size": 88460
+    },
+    "dist/react-resizable-panels.development.esm.js": {
+      "checkedAt": 1764662921821,
+      "integrity": "sha512-J8NKWMWgvBAjGm2r4aaHn5jfZDurfUHDYsC4xKY/jyXl+VVKVwiyn3hfLeuIJmUcyhTkrA9cQSlSpexudBTIjg==",
+      "mode": 420,
+      "size": 87219
+    },
+    "dist/react-resizable-panels.development.node.cjs.js": {
+      "checkedAt": 1764662921822,
+      "integrity": "sha512-ck9pYhTHxgsEycK052qLn9bMSK4qTq5ex3+bIMJkytgCLFx+55Ml37Vlzihc1vsfAUbBQlf9CxwkKyS+xniAbg==",
+      "mode": 420,
+      "size": 80067
+    },
+    "dist/react-resizable-panels.development.node.esm.js": {
+      "checkedAt": 1764662921822,
+      "integrity": "sha512-Fr2WVCLr7q98OOE11gpa9m0QQ8jOrE56In18bF2Sgte8B6WX5dNDSPUfebuIN7KrKp3N7L3Pjl+EtQ3X1m5sJA==",
+      "mode": 420,
+      "size": 78815
+    },
+    "dist/react-resizable-panels.esm.js": {
+      "checkedAt": 1764662921823,
+      "integrity": "sha512-6Fw9a2JgNh082GQJq+g+jNGlK5sZ3gjjO2uPAOXffFMo5uKwRzbPq9P7X02SsjcgKvIZmeAbvVJsnxqmEvOp5w==",
+      "mode": 420,
+      "size": 83088
+    },
+    "dist/react-resizable-panels.node.cjs.js": {
+      "checkedAt": 1764662921823,
+      "integrity": "sha512-0ZuJqaHUg/Sm7FlOvTxJIwUrE4AxpHCV9fhucqDHUlV58kVDVzN/hW1IW277rJxUzlN8olUWJd1j9B6hysfJIA==",
+      "mode": 420,
+      "size": 76326
+    },
+    "dist/react-resizable-panels.node.esm.js": {
+      "checkedAt": 1764662921826,
+      "integrity": "sha512-p5uTeztrYEMyF/ByQKQaaoOznKhpK+xN3Ymu9Wo1uOfCXBWQbN3BA1t3TTrdUPD5LthEJKDH7qDb73U0VOUsvw==",
+      "mode": 420,
+      "size": 75074
+    },
+    "package.json": {
+      "checkedAt": 1764662921826,
+      "integrity": "sha512-tvWlwE621156QS3WHo68JmO61ngMrzEjeFEJWuVl+5NYo0DjmG7RcSDzHJsCfwE3iV6k1SoJt1VV5bGzUa27Hw==",
+      "mode": 420,
+      "size": 3469
+    },
+    "dist/react-resizable-panels.cjs.d.mts.map": {
+      "checkedAt": 1764662921827,
+      "integrity": "sha512-V+NQgG6pomox9+Yq6AGZ7RT1ordmarpJ2lQ0DcsASVxEvbnGRV6f5XdjDMYZZbAo3rG6pIKPFX3PM32VOHDkEw==",
+      "mode": 420,
+      "size": 145
+    },
+    "dist/react-resizable-panels.cjs.d.ts.map": {
+      "checkedAt": 1764662921827,
+      "integrity": "sha512-9lwTVNjahk2zXjc1yhTjd9LUTMLU2WidtS7F8ML+CCNs/30JRZ3U9jLlFipsnoo4vcJRkBK8vJXe4pwTZECqmg==",
+      "mode": 420,
+      "size": 144
+    },
+    "README.md": {
+      "checkedAt": 1764662921828,
+      "integrity": "sha512-FvOXuS47eQHIwuoXRR5tuvg/prwj50rrQzd2kFx17ClQH442X0cdyw7pGpsVfQny5wKoE0tmE8mEPfLxeJ7E9g==",
+      "mode": 420,
+      "size": 12458
+    },
+    "dist/react-resizable-panels.browser.cjs.mjs": {
+      "checkedAt": 1764662921828,
+      "integrity": "sha512-F4ik2z1hBDq3WwvNHVwA7zfFK2axO9Ic5yjWLdVczelFc6ctPSM/vl9R8sVd/WFk/fzD3G0VwcczWnWVvPbkhA==",
+      "mode": 420,
+      "size": 432
+    },
+    "dist/react-resizable-panels.browser.development.cjs.mjs": {
+      "checkedAt": 1764662921829,
+      "integrity": "sha512-E2v1x6NfGTSQOkcF3j993/5hfvz2L2xmGxIhbjfC6s4N40pDDCuBv0QJshUammvUhHS/+MKcq7tkshKFi8LGNQ==",
+      "mode": 420,
+      "size": 444
+    },
+    "dist/react-resizable-panels.cjs.mjs": {
+      "checkedAt": 1764662921830,
+      "integrity": "sha512-iTyIlx+1axbuKKCfKg1mdnzFJ76QhwjimsUN8+pZ+UE4eIfqJbcYm03tMA41YkJJPF5AIy8G8kw3yffssviYZQ==",
+      "mode": 420,
+      "size": 424
+    },
+    "dist/react-resizable-panels.development.cjs.mjs": {
+      "checkedAt": 1764662921830,
+      "integrity": "sha512-beKQnL8X15mui9UINYSl+lopfAYcJJI4XHOjph0lUcWwLqNZyTPO3wCW90I/QA8l8TcugcwPaneRJeYW2FfvMg==",
+      "mode": 420,
+      "size": 436
+    },
+    "dist/react-resizable-panels.development.node.cjs.mjs": {
+      "checkedAt": 1764662921833,
+      "integrity": "sha512-Sqe7yjoQfckSG3X2Qqziu5sIP5yn4XZXmbLrLyG+JGaZevzlR5bJSRi4sIfLwqcMQHcsdG+lN/l/dNcRHcXDUw==",
+      "mode": 420,
+      "size": 441
+    },
+    "dist/react-resizable-panels.node.cjs.mjs": {
+      "checkedAt": 1764662921834,
+      "integrity": "sha512-/MX0g5tEPrONylzW5XrcyrsCmqYBmhWFZRS2l2eHxYPZpTFGaJ3CDy/yD3BqlsqG7mlrai/5/TQ5PS2EsCHecg==",
+      "mode": 420,
+      "size": 429
+    },
+    "dist/react-resizable-panels.cjs.d.mts": {
+      "checkedAt": 1764662921835,
+      "integrity": "sha512-0XUhnHp56e+El/7RVjpg5exerjlZg98npDORkO6BWb0poDr2WUUP04pcySkfs6yN2eee7m0KPpswD0K8aoOzsA==",
+      "mode": 420,
+      "size": 103
+    },
+    "dist/declarations/src/utils/assert.d.ts": {
+      "checkedAt": 1764662921835,
+      "integrity": "sha512-OdjzmnnTKSBPyIlu4K620iixahqCh7G/BZOGCdr+m1ZgfMtsj6G4Lm6wH9TgahbNln0PTQZ/Le0tc07BV6vsiw==",
+      "mode": 420,
+      "size": 100
+    },
+    "dist/declarations/src/constants.d.ts": {
+      "checkedAt": 1764662921848,
+      "integrity": "sha512-pWKuEAsPtodrtEJgmcWwfDOhapUeD0PiMvpU53JdBxWyW78wakBDgK1nbsY9l7mNaqbLS3ySjfESIYBKEm2rkQ==",
+      "mode": 420,
+      "size": 698
+    },
+    "dist/declarations/src/utils/csp.d.ts": {
+      "checkedAt": 1764662921849,
+      "integrity": "sha512-JciMt43YD2EkSfYIBA5Eim+j/l69u+si8LAt2KTdD2zHyJ9f4VFoznaKQMVdL5zzvLq9cRwV3gN4rzWLECMQsQ==",
+      "mode": 420,
+      "size": 113
+    },
+    "dist/declarations/src/utils/cursor.d.ts": {
+      "checkedAt": 1764662921856,
+      "integrity": "sha512-OOeMMUoaVOUP4PC+cRmpNXEVwQ7HieIdNchWaQmuo982pUJsydETnXQ62rfKb/gVElIJL9Deo/9zudA4sm+wPg==",
+      "mode": 420,
+      "size": 437
+    },
+    "dist/declarations/src/utils/rects/getIntersectingRectangle.d.ts": {
+      "checkedAt": 1764662921858,
+      "integrity": "sha512-kQyItQwBvqgTc0p677ZJOoko8dLnR59VxLMOem/zRyNvT4fJkcCnHzfk7c3nMUfNheyOI+KsbpgjTbHbpfbWxA==",
+      "mode": 420,
+      "size": 158
+    },
+    "dist/declarations/src/utils/dom/getPanelElement.d.ts": {
+      "checkedAt": 1764662921859,
+      "integrity": "sha512-rV9F22Gab58s7Ct1HhfbMLVplxn/2qnO2gjQx1dIVuqDOzdaYPZHHtydSz9jfmdgtSY45ih80b7BGDiQpXaMuA==",
+      "mode": 420,
+      "size": 107
+    },
+    "dist/declarations/src/utils/dom/getPanelElementsForGroup.d.ts": {
+      "checkedAt": 1764662921859,
+      "integrity": "sha512-kZaaOHRl8kS9UPBBt6UhaCJQbnR9OrJXFRQbKSO/bd/BKbl9TUGh7Dw8UHtz+grOoe7oQ6MWp7HyB4BVmqKZYA==",
+      "mode": 420,
+      "size": 116
+    },
+    "dist/declarations/src/utils/dom/getPanelGroupElement.d.ts": {
+      "checkedAt": 1764662921860,
+      "integrity": "sha512-KezmXBvg0ibz+7hwshKDHwOfRHGNN2bSB8Y7HQXWiSHrFrFZZZoa25XwlmlhfMu2bUNrm7PW26tzJBB+/FmLXg==",
+      "mode": 420,
+      "size": 118
+    },
+    "dist/declarations/src/utils/dom/getResizeHandleElement.d.ts": {
+      "checkedAt": 1764662921860,
+      "integrity": "sha512-yhhYbAxDOTOvXU8bu3QpspT+jSWJDZmja2c8F4Z9aG5MvTxpgcnd8oGtasqDgVePz1ZFX/HebaCRBcP6ekFyUg==",
+      "mode": 420,
+      "size": 114
+    },
+    "dist/declarations/src/utils/dom/getResizeHandleElementIndex.d.ts": {
+      "checkedAt": 1764662921863,
+      "integrity": "sha512-JXvS5nAvTwyJRYSGidNFXbegXrSZpTIiskYObopxj1BKnvfnfSkQWl+72QQIGg04MsXcSe4QVyOUeICwI3c/7w==",
+      "mode": 420,
+      "size": 131
+    },
+    "dist/declarations/src/utils/dom/getResizeHandleElementsForGroup.d.ts": {
+      "checkedAt": 1764662921864,
+      "integrity": "sha512-gdxdfSlFwZgVxu4Oyup0CXPUBitghgQDNe9VoTsHNECvrn182y2XJ0hhbK60UnE30ONk1CSk04lPUyOebzysmQ==",
+      "mode": 420,
+      "size": 123
+    },
+    "dist/declarations/src/utils/dom/getResizeHandlePanelIds.d.ts": {
+      "checkedAt": 1764662921865,
+      "integrity": "sha512-N8H3SujxZDtbCCBWUxXCuf//qj63gOyk7Zl+bM0o9BQn4lWBSSM6hpO7aEOK27t/OJTYPPSoSc8RTnEqjwoSRA==",
+      "mode": 420,
+      "size": 239
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662921866,
+      "integrity": "sha512-86ThxrzGKQYzxGMn+PxGUy4rUstMBUqGCgnaSrbN9Y8iCwFYOswzehDPkUzaBgbf9v5tkTCGbTVREcklrWCOMQ==",
+      "mode": 420,
+      "size": 2097
+    },
+    "dist/declarations/src/utils/rects/intersects.d.ts": {
+      "checkedAt": 1764662921867,
+      "integrity": "sha512-eBBXDj3epjolmwVsHc9cfcMHzhoE7H5gN1lwg49duXL6g2vpAQWve45/qly6DIeA1vUeQ7C984/aD2khvZT4GQ==",
+      "mode": 420,
+      "size": 142
+    },
+    "dist/declarations/src/Panel.d.ts": {
+      "checkedAt": 1764662921867,
+      "integrity": "sha512-vWOFG63tfevzeMC3lWnnDcrP3CriKxzpMrEL56BD5RJ/NDkBhMSUsy+astbIrcsdYKJAdHx4g9Dzg6my7YTnng==",
+      "mode": 420,
+      "size": 3963
+    },
+    "dist/declarations/src/PanelGroup.d.ts": {
+      "checkedAt": 1764662921868,
+      "integrity": "sha512-n/T8Z7z0WhA3FrW4+n5RZirh0pwshDIC6tFlOJZgW58TlesaPo5I6Z/iot2tU+jHxDx78ImAq63a3wBQIMoTxw==",
+      "mode": 420,
+      "size": 1572
+    },
+    "dist/declarations/src/PanelResizeHandle.d.ts": {
+      "checkedAt": 1764662921869,
+      "integrity": "sha512-ST61E5A0y3ERUMWNH2kFOwhvucdD96UvUtAAqFzTme5kOuBODwlusBF1+52Om/XsZ+5OT52YnLhhKWPUAYF4EQ==",
+      "mode": 420,
+      "size": 1247
+    },
+    "dist/declarations/src/PanelResizeHandleRegistry.d.ts": {
+      "checkedAt": 1764662921869,
+      "integrity": "sha512-B4/vvcMP1wprRHv3eSIOLuEOkeDtoBX0/0jxHynwfHk7ynj2Ei/4vaPTPjYrYfV/BrKzmVOxH6eHHz9GpGnqtA==",
+      "mode": 420,
+      "size": 996
+    },
+    "dist/react-resizable-panels.cjs.d.ts": {
+      "checkedAt": 1764662921870,
+      "integrity": "sha512-NxFOVdN+ELm/GBvLTTM+Lsndq+AmvWYHPE8OG/he2nFsWdApn4wlkun4pp0oBOowpClg3BLtKjhFCLlU2twVwA==",
+      "mode": 420,
+      "size": 99
+    },
+    "dist/declarations/src/types.d.ts": {
+      "checkedAt": 1764662921871,
+      "integrity": "sha512-ua5bcMcdsKz7ZwL6kXv+0N5MdtaOM88DZmU990Wo+hFlS6R2AHjHpOUnTt1II0wyDRr66fo7VjYJ9TNDcN0cjw==",
+      "mode": 420,
+      "size": 178
+    },
+    "dist/declarations/src/utils/rects/types.d.ts": {
+      "checkedAt": 1764662921872,
+      "integrity": "sha512-EQzw0m4HPfIxuptsQ/zX/XHLTF/T3+NoLJaTwKr72fdKwhFInNyq1nLInoJvySE7cpAfS35zIvuE7VAnGJBx3Q==",
+      "mode": 420,
+      "size": 100
+    },
+    "LICENSE": {
+      "checkedAt": 1764662921873,
+      "integrity": "sha512-E7Vrli03RPK1tfV9zUFlMzMz7XqPWuj3TxT8WdTFKJ258vLGLip0LgfKZqT60hygCffLnutQSPbuvY0N6Ht6og==",
+      "mode": 420,
+      "size": 1069
+    }
+  }
+}

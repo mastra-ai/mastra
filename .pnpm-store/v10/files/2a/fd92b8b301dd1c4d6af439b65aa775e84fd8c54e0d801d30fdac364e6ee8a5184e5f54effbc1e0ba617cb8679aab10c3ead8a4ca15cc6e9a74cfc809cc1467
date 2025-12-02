@@ -1,0 +1,2 @@
+export declare function getEdgeToolbarTransform(x: number, y: number, zoom: number, alignX?: 'left' | 'center' | 'right', alignY?: 'top' | 'center' | 'bottom'): string;
+//# sourceMappingURL=edge-toolbar.d.ts.map

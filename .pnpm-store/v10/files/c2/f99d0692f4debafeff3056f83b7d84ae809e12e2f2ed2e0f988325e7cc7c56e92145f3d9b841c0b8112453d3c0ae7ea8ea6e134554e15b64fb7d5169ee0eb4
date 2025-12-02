@@ -1,0 +1,95 @@
+import * as react_jsx_runtime from 'react/jsx-runtime';
+import * as React$1 from 'react';
+import React__default, { ReactNode } from 'react';
+import { SchemaProvider, Renderable, ParsedField, ParsedSchema, FieldConfig as FieldConfig$1 } from '@autoform/core';
+import { FieldValues, UseFormReturn } from 'react-hook-form';
+import { SuperRefineFunction } from '@autoform/zod';
+import { fieldConfig as fieldConfig$1 } from '@autoform/yup';
+import { fieldConfig as fieldConfig$2 } from '@autoform/joi';
+
+interface AutoFormProps<T extends FieldValues> {
+    schema: SchemaProvider<T>;
+    onSubmit?: (values: T, form: UseFormReturn<T, any, T>) => void | Promise<void>;
+    defaultValues?: Partial<T>;
+    values?: Partial<T>;
+    children?: ReactNode;
+    uiComponents: AutoFormUIComponents;
+    formComponents: AutoFormFieldComponents;
+    withSubmit?: boolean;
+    onFormInit?: (form: UseFormReturn<T, any, T>) => void;
+    formProps?: React.ComponentProps<"form"> | Record<string, any>;
+}
+type ExtendableAutoFormProps<T extends FieldValues> = Omit<AutoFormProps<T>, "uiComponents" | "formComponents"> & {
+    uiComponents?: Partial<AutoFormUIComponents>;
+    formComponents?: Partial<AutoFormFieldComponents>;
+};
+interface AutoFormUIComponents {
+    Form: React.ComponentType<React.ComponentProps<"form">>;
+    FieldWrapper: React.ComponentType<FieldWrapperProps>;
+    ErrorMessage: React.ComponentType<{
+        error: string;
+    }>;
+    SubmitButton: React.ComponentType<{
+        children: ReactNode;
+    }>;
+    ObjectWrapper: React.ComponentType<ObjectWrapperProps>;
+    ArrayWrapper: React.ComponentType<ArrayWrapperProps>;
+    ArrayElementWrapper: React.ComponentType<ArrayElementWrapperProps>;
+}
+interface AutoFormFieldComponents {
+    [key: string]: React.ComponentType<AutoFormFieldProps>;
+}
+interface FieldWrapperProps {
+    label: Renderable<ReactNode>;
+    error?: Renderable<ReactNode>;
+    children: ReactNode;
+    id: string;
+    field: ParsedField;
+}
+interface ArrayWrapperProps {
+    label: Renderable<ReactNode>;
+    children: ReactNode;
+    field: ParsedField;
+    onAddItem: () => void;
+}
+interface ArrayElementWrapperProps {
+    children: ReactNode;
+    onRemove: () => void;
+    index: number;
+}
+interface ObjectWrapperProps {
+    label: Renderable<ReactNode>;
+    children: ReactNode;
+    field: ParsedField;
+}
+interface AutoFormFieldProps {
+    label: Renderable<ReactNode>;
+    field: ParsedField;
+    value: any;
+    error?: string;
+    id: string;
+    path: string[];
+    inputProps: any;
+}
+interface AutoFormContextType {
+    schema: ParsedSchema;
+    uiComponents: AutoFormUIComponents;
+    formComponents: AutoFormFieldComponents;
+}
+type FieldConfig<FieldTypes = string, CustomData = Record<string, any>> = FieldConfig$1<ReactNode, FieldTypes, React.ComponentType<FieldWrapperProps>, CustomData>;
+
+declare function AutoForm<T extends Record<string, any>>({ schema, onSubmit, defaultValues, values, children, uiComponents, formComponents, withSubmit, onFormInit, formProps, }: AutoFormProps<T>): react_jsx_runtime.JSX.Element;
+
+declare const AutoFormProvider: React$1.Provider<AutoFormContextType | null>;
+declare function useAutoForm(): AutoFormContextType;
+
+/**
+ * @deprecated Use `buildZodFieldConfig` instead.
+ */
+declare function fieldConfig<FieldTypes = string, CustomData = Record<string, any>>(config: FieldConfig$1<ReactNode, FieldTypes, React__default.ComponentType<FieldWrapperProps>, CustomData>): SuperRefineFunction;
+declare function buildZodFieldConfig<FieldTypes = string, CustomData = Record<string, any>>(): (config: FieldConfig$1<ReactNode, FieldTypes, React__default.ComponentType<FieldWrapperProps>, CustomData>) => SuperRefineFunction;
+declare function buildYupFieldConfig<FieldTypes = string, CustomData = Record<string, any>>(): (config: FieldConfig$1<ReactNode, FieldTypes, React__default.ComponentType<FieldWrapperProps>, CustomData>) => ReturnType<typeof fieldConfig$1>;
+declare function buildJoiFieldConfig<FieldTypes = string, CustomData = Record<string, any>>(): (config: FieldConfig$1<ReactNode, FieldTypes, React__default.ComponentType<FieldWrapperProps>, CustomData>) => ReturnType<typeof fieldConfig$2>;
+declare function getPathInObject(obj: any, path: string[]): any;
+
+export { type ArrayElementWrapperProps, type ArrayWrapperProps, AutoForm, type AutoFormContextType, type AutoFormFieldComponents, type AutoFormFieldProps, type AutoFormProps, AutoFormProvider, type AutoFormUIComponents, type ExtendableAutoFormProps, type FieldConfig, type FieldWrapperProps, type ObjectWrapperProps, buildJoiFieldConfig, buildYupFieldConfig, buildZodFieldConfig, fieldConfig, getPathInObject, useAutoForm };

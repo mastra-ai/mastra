@@ -1,0 +1,17 @@
+{
+  "name": "@anush008/tokenizers-darwin-universal",
+  "version": "0.0.0",
+  "os": [
+    "darwin"
+  ],
+  "main": "tokenizers.darwin-universal.node",
+  "files": [
+    "tokenizers.darwin-universal.node"
+  ],
+  "description": "Multi-arch builds of HuggingFace tokenizers",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 10"
+  },
+  "repository": "https://github.com/Anush008/tokenizers"
+}

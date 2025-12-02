@@ -1,0 +1,9 @@
+{
+    "object": "organization_domain",
+    "id": "org_domain_01HD50K7EPWCMNPGMKXKKE14XT",
+    "organization_id": "org_01JR8C1EHCRPV4B4XP4W2B9X1M",
+    "domain": "workos.com",
+    "state": "pending",
+    "verification_token": "F06PGMsZIO0shrveGWuGxgCj7",
+    "verification_strategy": "dns"
+}

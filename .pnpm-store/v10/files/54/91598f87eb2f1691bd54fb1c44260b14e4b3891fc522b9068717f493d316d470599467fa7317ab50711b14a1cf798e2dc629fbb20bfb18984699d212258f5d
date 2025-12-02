@@ -1,0 +1,120 @@
+# Empty stylesheets
+
+/* Just a comment */
+
+==>
+
+StyleSheet(Comment)
+
+# Import statements
+
+@import url("fineprint.css") print;
+@import url("bluish.css") speech;
+@import 'custom.css';
+@import url("chrome://communicator/skin/");
+@import "common.css" screen;
+
+==>
+
+StyleSheet(
+  ImportStatement(import,CallLiteral(CallTag,StringLiteral),KeywordQuery),
+  ImportStatement(import,CallLiteral(CallTag,StringLiteral),KeywordQuery),
+  ImportStatement(import,StringLiteral),
+  ImportStatement(import,CallLiteral(CallTag,StringLiteral)),
+  ImportStatement(import,StringLiteral,KeywordQuery))
+
+# Namespace statements
+
+/* Default namespace */
+@namespace url(XML-namespace-URL);
+@namespace "XML-namespace-URL";
+@namespace url(http://www.w3.org/1999/xhtml);
+@namespace svg url(http://www.w3.org/2000/svg);
+
+/* Prefixed namespace */
+@namespace prefix url(XML-namespace-URL);
+@namespace prefix "XML-namespace-URL";
+
+==>
+
+StyleSheet(
+  Comment,
+  NamespaceStatement(namespace,CallLiteral(CallTag,ParenthesizedContent)),
+  NamespaceStatement(namespace,StringLiteral),
+  NamespaceStatement(namespace,CallLiteral(CallTag,ParenthesizedContent)),
+  NamespaceStatement(namespace,NamespaceName,CallLiteral(CallTag,ParenthesizedContent)),
+  Comment,
+  NamespaceStatement(namespace,NamespaceName,CallLiteral(CallTag,ParenthesizedContent)),
+  NamespaceStatement(namespace,NamespaceName,StringLiteral))
+
+# Keyframes statements
+
+@keyframes important1 {
+  from { margin-top: 50px; }
+  50%  { margin-top: 150px !important; } /* ignored */
+  to   { margin-top: 100px; }
+}
+
+==>
+
+StyleSheet(KeyframesStatement(keyframes,KeyframeName,KeyframeList(
+  KeyframeSelector(KeyframeRangeName),Block(Declaration(PropertyName,NumberLiteral(Unit))),
+  KeyframeSelector(NumberLiteral(Unit)),Block(Declaration(PropertyName,NumberLiteral(Unit),Important)),
+  Comment,
+  KeyframeSelector(KeyframeRangeName),Block(Declaration(PropertyName,NumberLiteral(Unit))))))
+
+# Media statements
+
+@media screen and (min-width: 30em) and (orientation: landscape) {}
+@media (min-height: 680px), screen and (orientation: portrait) {}
+@media not all and (monochrome) {}
+@media only screen {}
+
+==>
+
+StyleSheet(
+  MediaStatement(media,BinaryQuery(BinaryQuery(KeywordQuery,LogicOp,FeatureQuery(FeatureName,NumberLiteral(Unit))),LogicOp,
+    FeatureQuery(FeatureName,ValueName)),Block),
+  MediaStatement(media,FeatureQuery(FeatureName,NumberLiteral(Unit)),BinaryQuery(KeywordQuery,LogicOp,FeatureQuery(FeatureName,ValueName)),Block),
+  MediaStatement(media,UnaryQuery(LogicOp,BinaryQuery(KeywordQuery,LogicOp,ParenthesizedQuery(KeywordQuery))),Block),
+  MediaStatement(media,UnaryQuery(LogicOp,KeywordQuery),Block))
+
+# Supports statements
+
+@supports (animation-name: test) {
+  div { animation-name: test; }
+}
+@supports (transform-style: preserve) or (-moz-transform-style: preserve) {}
+@supports not ((text-align-last: justify) or (-moz-text-align-last: justify)) {}
+@supports not selector(:matches(a, b)) {}
+
+==>
+
+StyleSheet(
+  SupportsStatement(supports,FeatureQuery(FeatureName,ValueName),Block(RuleSet(TagSelector(TagName),Block(Declaration(PropertyName,ValueName))))),
+  SupportsStatement(supports,BinaryQuery(FeatureQuery(FeatureName,ValueName),LogicOp,FeatureQuery(FeatureName,ValueName)),Block),
+  SupportsStatement(supports,UnaryQuery(LogicOp,ParenthesizedQuery(
+    BinaryQuery(FeatureQuery(FeatureName,ValueName),LogicOp,FeatureQuery(FeatureName,ValueName)))),Block),
+  SupportsStatement(supports,UnaryQuery(LogicOp,SelectorQuery(selector,PseudoClassSelector(":",PseudoClassName,ArgList(TagSelector(TagName),TagSelector(TagName))))),Block))
+
+# Charset statements
+
+@charset "utf-8";
+
+==>
+
+StyleSheet(CharsetStatement(charset,StringLiteral))
+
+# Other at-statements
+
+@font-face {
+  font-family: "Open Sans";
+  src: url("/a") format("woff2"), url("/b/c") format("woff");
+}
+
+==>
+
+StyleSheet(AtRule(AtKeyword,Block(
+  Declaration(PropertyName,StringLiteral),
+  Declaration(PropertyName,CallLiteral(CallTag,StringLiteral),CallExpression(Callee,ArgList(StringLiteral)),
+    CallLiteral(CallTag,StringLiteral),CallExpression(Callee,ArgList(StringLiteral))))))

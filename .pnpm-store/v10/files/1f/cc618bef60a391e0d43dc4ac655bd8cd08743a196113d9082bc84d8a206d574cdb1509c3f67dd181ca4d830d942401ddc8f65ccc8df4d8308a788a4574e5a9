@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../src/primitives/error/index.ts"],"sourcesContent":["export { ErrorPrimitiveRoot as Root } from \"./ErrorRoot\";\nexport { ErrorPrimitiveMessage as Message } from \"./ErrorMessage\";\n"],"mappings":";AAAA,SAA+B,0BAAY;AAC3C,SAAkC,6BAAe;","names":[]}

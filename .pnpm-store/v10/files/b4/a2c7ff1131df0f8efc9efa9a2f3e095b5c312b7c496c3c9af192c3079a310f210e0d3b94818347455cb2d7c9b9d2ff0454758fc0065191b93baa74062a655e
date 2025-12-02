@@ -1,0 +1,2 @@
+export declare function eventToGenerator<YieldType, ReturnType>(cb: (yieldCallback: (y: YieldType) => void, returnCallback: (r: ReturnType) => void, rejectCallack: (reason: unknown) => void) => unknown): AsyncGenerator<YieldType, ReturnType>;
+//# sourceMappingURL=eventToGenerator.d.ts.map

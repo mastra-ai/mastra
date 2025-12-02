@@ -1,0 +1,580 @@
+import type { UIMessage, StreamObjectResult } from '../ai-sdk.types.d.ts';
+import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod';
+import type { ZodSchema } from 'zod';
+import type { MastraPrimitives } from '../action/index.js';
+import { MastraBase } from '../base.js';
+import type { MastraScorers, MastraScorer } from '../evals/index.js';
+import { MastraLLMV1 } from '../llm/model/index.js';
+import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types.js';
+import { MastraLLMVNext } from '../llm/model/model.loop.js';
+import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types.js';
+import type { Mastra } from '../mastra/index.js';
+import type { MastraMemory } from '../memory/memory.js';
+import type { TracingContext, TracingProperties } from '../observability/index.js';
+import type { InputProcessor, OutputProcessor } from '../processors/index.js';
+import { RequestContext } from '../request-context/index.js';
+import type { MastraModelOutput } from '../stream/base/output.js';
+import type { OutputSchema } from '../stream/base/schema.js';
+import type { DynamicArgument } from '../types/index.js';
+import type { CompositeVoice } from '../voice/index.js';
+import { DefaultVoice } from '../voice/index.js';
+import type { Workflow } from '../workflows/index.js';
+import type { AgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types.js';
+import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list/index.js';
+import type { AgentConfig, AgentGenerateOptions, AgentStreamOptions, ToolsInput, AgentModelManagerConfig, AgentInstructions } from './types.js';
+export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+type ModelFallbacks = {
+    id: string;
+    model: DynamicArgument<MastraModelConfig>;
+    maxRetries: number;
+    enabled: boolean;
+}[];
+/**
+ * The Agent class is the foundation for creating AI agents in Mastra. It provides methods for generating responses,
+ * streaming interactions, managing memory, and handling voice capabilities.
+ *
+ * @example
+ * ```typescript
+ * import { Agent } from '@mastra/core/agent';
+ * import { Memory } from '@mastra/memory';
+ *
+ * const agent = new Agent({
+ *   id: 'my-agent',
+ *   name: 'My Agent',
+ *   instructions: 'You are a helpful assistant',
+ *   model: 'openai/gpt-5',
+ *   tools: {
+ *     calculator: calculatorTool,
+ *   },
+ *   memory: new Memory(),
+ * });
+ * ```
+ */
+export declare class Agent<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> extends MastraBase {
+    #private;
+    id: TAgentId;
+    name: string;
+    model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
+    maxRetries?: number;
+    private _agentNetworkAppend;
+    /**
+     * Creates a new Agent instance with the specified configuration.
+     *
+     * @example
+     * ```typescript
+     * import { Agent } from '@mastra/core/agent';
+     * import { Memory } from '@mastra/memory';
+     *
+     * const agent = new Agent({
+     *   id: 'weatherAgent',
+     *   name: 'Weather Agent',
+     *   instructions: 'You help users with weather information',
+     *   model: 'openai/gpt-5',
+     *   tools: { getWeather },
+     *   memory: new Memory(),
+     *   maxRetries: 2,
+     * });
+     * ```
+     */
+    constructor(config: AgentConfig<TAgentId, TTools>);
+    getMastraInstance(): Mastra<Record<string, Agent<any, ToolsInput>>, Record<string, Workflow<any, any, any, any, any, any, any>>, Record<string, import("../vector").MastraVector<any>>, Record<string, import("../tts").MastraTTS>, import("../logger").IMastraLogger, Record<string, import("../mcp").MCPServerBase<any>>, Record<string, MastraScorer<any, any, any, any>>, Record<string, import("../tools").ToolAction<any, any, any, any, any, any>>, Record<string, import("../processors/index").Processor<any>>> | undefined;
+    /**
+     * Returns the agents configured for this agent, resolving function-based agents if necessary.
+     * Used in multi-agent collaboration scenarios where this agent can delegate to other agents.
+     *
+     * @example
+     * ```typescript
+     * const agents = await agent.listAgents();
+     * console.log(Object.keys(agents)); // ['agent1', 'agent2']
+     * ```
+     */
+    listAgents({ requestContext }?: {
+        requestContext?: RequestContext;
+    }): Record<string, Agent<string, ToolsInput>> | Promise<Record<string, Agent<string, ToolsInput>>>;
+    /**
+     * Creates and returns a ProcessorRunner with resolved input/output processors.
+     * @internal
+     */
+    private getProcessorRunner;
+    /**
+     * Resolves and returns output processors from agent configuration.
+     * @internal
+     */
+    private listResolvedOutputProcessors;
+    /**
+     * Resolves and returns input processors from agent configuration.
+     * @internal
+     */
+    private listResolvedInputProcessors;
+    /**
+     * Returns the input processors for this agent, resolving function-based processors if necessary.
+     */
+    listInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]>;
+    /**
+     * Returns the output processors for this agent, resolving function-based processors if necessary.
+     */
+    listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]>;
+    /**
+     * Returns whether this agent has its own memory configured.
+     *
+     * @example
+     * ```typescript
+     * if (agent.hasOwnMemory()) {
+     *   const memory = await agent.getMemory();
+     * }
+     * ```
+     */
+    hasOwnMemory(): boolean;
+    /**
+     * Gets the memory instance for this agent, resolving function-based memory if necessary.
+     * The memory system enables conversation persistence, semantic recall, and working memory.
+     *
+     * @example
+     * ```typescript
+     * const memory = await agent.getMemory();
+     * if (memory) {
+     *   // Memory is configured
+     * }
+     * ```
+     */
+    getMemory({ requestContext }?: {
+        requestContext?: RequestContext;
+    }): Promise<MastraMemory | undefined>;
+    get voice(): CompositeVoice;
+    /**
+     * Gets the workflows configured for this agent, resolving function-based workflows if necessary.
+     * Workflows are step-based execution flows that can be triggered by the agent.
+     *
+     * @example
+     * ```typescript
+     * const workflows = await agent.listWorkflows();
+     * const workflow = workflows['myWorkflow'];
+     * ```
+     */
+    listWorkflows({ requestContext, }?: {
+        requestContext?: RequestContext;
+    }): Promise<Record<string, Workflow<any, any, any, any, any, any>>>;
+    listScorers({ requestContext, }?: {
+        requestContext?: RequestContext;
+    }): Promise<MastraScorers>;
+    /**
+     * Gets the voice instance for this agent with tools and instructions configured.
+     * The voice instance enables text-to-speech and speech-to-text capabilities.
+     *
+     * @example
+     * ```typescript
+     * const voice = await agent.getVoice();
+     * const audioStream = await voice.speak('Hello world');
+     * ```
+     */
+    getVoice({ requestContext }?: {
+        requestContext?: RequestContext;
+    }): Promise<CompositeVoice | DefaultVoice>;
+    /**
+     * Gets the instructions for this agent, resolving function-based instructions if necessary.
+     * Instructions define the agent's behavior and capabilities.
+     *
+     * @example
+     * ```typescript
+     * const instructions = await agent.getInstructions();
+     * console.log(instructions); // 'You are a helpful assistant'
+     * ```
+     */
+    getInstructions({ requestContext }?: {
+        requestContext?: RequestContext;
+    }): AgentInstructions | Promise<AgentInstructions>;
+    /**
+     * Returns the description of the agent.
+     *
+     * @example
+     * ```typescript
+     * const description = agent.getDescription();
+     * console.log(description); // 'A helpful weather assistant'
+     * ```
+     */
+    getDescription(): string;
+    /**
+     * Gets the legacy handler instance, initializing it lazily if needed.
+     * @internal
+     */
+    private getLegacyHandler;
+    /**
+     * Gets the default generate options for the legacy generate method.
+     * These options are used as defaults when calling `generateLegacy()` without explicit options.
+     *
+     * @example
+     * ```typescript
+     * const options = await agent.getDefaultGenerateOptionsLegacy();
+     * console.log(options.maxSteps); // 5
+     * ```
+     */
+    getDefaultGenerateOptionsLegacy({ requestContext, }?: {
+        requestContext?: RequestContext;
+    }): AgentGenerateOptions | Promise<AgentGenerateOptions>;
+    /**
+     * Gets the default stream options for the legacy stream method.
+     * These options are used as defaults when calling `streamLegacy()` without explicit options.
+     *
+     * @example
+     * ```typescript
+     * const options = await agent.getDefaultStreamOptionsLegacy();
+     * console.log(options.temperature); // 0.7
+     * ```
+     */
+    getDefaultStreamOptionsLegacy({ requestContext, }?: {
+        requestContext?: RequestContext;
+    }): AgentStreamOptions | Promise<AgentStreamOptions>;
+    /**
+     * Gets the default options for this agent, resolving function-based options if necessary.
+     * These options are used as defaults when calling `stream()` or `generate()` without explicit options.
+     *
+     * @example
+     * ```typescript
+     * const options = await agent.getDefaultStreamOptions();
+     * console.log(options.maxSteps); // 5
+     * ```
+     */
+    getDefaultOptions<OUTPUT extends OutputSchema = undefined>({ requestContext, }?: {
+        requestContext?: RequestContext;
+    }): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>;
+    /**
+     * Gets the tools configured for this agent, resolving function-based tools if necessary.
+     * Tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+     *
+     * @example
+     * ```typescript
+     * const tools = await agent.listTools();
+     * console.log(Object.keys(tools)); // ['calculator', 'weather']
+     * ```
+     */
+    listTools({ requestContext }?: {
+        requestContext?: RequestContext;
+    }): TTools | Promise<TTools>;
+    /**
+     * Gets or creates an LLM instance based on the provided or configured model.
+     * The LLM wraps the language model with additional capabilities like error handling.
+     *
+     * @example
+     * ```typescript
+     * const llm = await agent.getLLM();
+     * // Use with custom model
+     * const customLlm = await agent.getLLM({ model: 'openai/gpt-5' });
+     * ```
+     */
+    getLLM({ requestContext, model, }?: {
+        requestContext?: RequestContext;
+        model?: DynamicArgument<MastraModelConfig>;
+    }): MastraLLM | Promise<MastraLLM>;
+    /**
+     * Resolves a model configuration to a LanguageModel instance
+     * @param modelConfig The model configuration (magic string, config object, or LanguageModel)
+     * @returns A LanguageModel instance
+     * @internal
+     */
+    private resolveModelConfig;
+    /**
+     * Gets the model instance, resolving it if it's a function or model configuration.
+     * When the agent has multiple models configured, returns the first enabled model.
+     *
+     * @example
+     * ```typescript
+     * const model = await agent.getModel();
+     * // Get with custom model config
+     * const customModel = await agent.getModel({
+     *   modelConfig: 'openai/gpt-5'
+     * });
+     * ```
+     */
+    getModel({ requestContext, modelConfig, }?: {
+        requestContext?: RequestContext;
+        modelConfig?: Agent['model'];
+    }): MastraLanguageModel | Promise<MastraLanguageModel>;
+    /**
+     * Gets the list of configured models if the agent has multiple models, otherwise returns null.
+     * Used for model fallback and load balancing scenarios.
+     *
+     * @example
+     * ```typescript
+     * const models = await agent.getModelList();
+     * if (models) {
+     *   console.log(models.map(m => m.id));
+     * }
+     * ```
+     */
+    getModelList(requestContext?: RequestContext): Promise<Array<AgentModelManagerConfig> | null>;
+    /**
+     * Updates the agent's instructions.
+     * @internal
+     */
+    __updateInstructions(newInstructions: string): void;
+    /**
+     * Updates the agent's model configuration.
+     * @internal
+     */
+    __updateModel({ model }: {
+        model: DynamicArgument<MastraModelConfig>;
+    }): void;
+    /**
+     * Resets the agent's model to the original model set during construction.
+     * Clones arrays to prevent reordering mutations from affecting the original snapshot.
+     * @internal
+     */
+    __resetToOriginalModel(): void;
+    reorderModels(modelIds: string[]): void;
+    updateModelInModelList({ id, model, enabled, maxRetries, }: {
+        id: string;
+        model?: DynamicArgument<MastraModelConfig>;
+        enabled?: boolean;
+        maxRetries?: number;
+    }): void;
+    /**
+     * Registers  logger primitives with the agent.
+     * @internal
+     */
+    __registerPrimitives(p: MastraPrimitives): void;
+    /**
+     * Registers the Mastra instance with the agent.
+     * @internal
+     */
+    __registerMastra(mastra: Mastra): void;
+    /**
+     * Set the concrete tools for the agent
+     * @param tools
+     * @internal
+     */
+    __setTools(tools: TTools): void;
+    generateTitleFromUserMessage({ message, requestContext, tracingContext, model, instructions, }: {
+        message: string | MessageInput;
+        requestContext?: RequestContext;
+        tracingContext: TracingContext;
+        model?: DynamicArgument<MastraLanguageModel>;
+        instructions?: DynamicArgument<string>;
+    }): Promise<string>;
+    getMostRecentUserMessage(messages: Array<UIMessage | UIMessageWithMetadata>): UIMessage | UIMessageWithMetadata | undefined;
+    genTitle(userMessage: string | MessageInput | undefined, requestContext: RequestContext, tracingContext: TracingContext, model?: DynamicArgument<MastraLanguageModel>, instructions?: DynamicArgument<string>): Promise<string | undefined>;
+    __setMemory(memory: DynamicArgument<MastraMemory>): void;
+    /**
+     * Retrieves and converts memory tools to CoreTool format.
+     * @internal
+     */
+    private listMemoryTools;
+    /**
+     * Executes input processors on the message list before LLM processing.
+     * @internal
+     */
+    private __runInputProcessors;
+    /**
+     * Executes output processors on the message list after LLM processing.
+     * @internal
+     */
+    private __runOutputProcessors;
+    /**
+     * Fetches remembered messages from memory for the current thread.
+     * @internal
+     */
+    private getMemoryMessages;
+    /**
+     * Retrieves and converts assigned tools to CoreTool format.
+     * @internal
+     */
+    private listAssignedTools;
+    /**
+     * Retrieves and converts toolset tools to CoreTool format.
+     * @internal
+     */
+    private listToolsets;
+    /**
+     * Retrieves and converts client-side tools to CoreTool format.
+     * @internal
+     */
+    private listClientTools;
+    /**
+     * Retrieves and converts agent tools to CoreTool format.
+     * @internal
+     */
+    private listAgentTools;
+    /**
+     * Retrieves and converts workflow tools to CoreTool format.
+     * @internal
+     */
+    private listWorkflowTools;
+    /**
+     * Assembles all tools from various sources into a unified CoreTool dictionary.
+     * @internal
+     */
+    private convertTools;
+    /**
+     * Formats and validates tool names to comply with naming restrictions.
+     * @internal
+     */
+    private formatTools;
+    /**
+     * Adds response messages from a step to the MessageList and schedules persistence.
+     * This is used for incremental saving: after each agent step, messages are added to a save queue
+     * and a debounced save operation is triggered to avoid redundant writes.
+     *
+     * @param result - The step result containing response messages.
+     * @param messageList - The MessageList instance for the current thread.
+     * @param threadId - The thread ID.
+     * @param memoryConfig - The memory configuration for saving.
+     * @param runId - (Optional) The run ID for logging.
+     * @internal
+     */
+    private saveStepMessages;
+    /**
+     * Resolves scorer name references to actual scorer instances from Mastra.
+     * @internal
+     */
+    private resolveOverrideScorerReferences;
+    /**
+     * Resolves and prepares model configurations for the LLM.
+     * @internal
+     */
+    private prepareModels;
+    /**
+     * Executes a network loop where multiple agents can collaborate to handle messages.
+     * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
+     *
+     * @experimental
+     *
+     * @example
+     * ```typescript
+     * const result = await agent.network('Find the weather in Tokyo and plan an activity', {
+     *   memory: {
+     *     thread: 'user-123',
+     *     resource: 'my-app'
+     *   },
+     *   maxSteps: 10
+     * });
+     *
+     * for await (const chunk of result.stream) {
+     *   console.log(chunk);
+     * }
+     * ```
+     */
+    network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions): Promise<import("../stream").MastraAgentNetworkStream>;
+    generate<OUTPUT extends OutputSchema = undefined>(messages: MessageListInput, options?: AgentExecutionOptions<OUTPUT>): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>>;
+    stream<OUTPUT extends OutputSchema = undefined>(messages: MessageListInput, streamOptions?: AgentExecutionOptions<OUTPUT>): Promise<MastraModelOutput<OUTPUT>>;
+    /**
+     * Resumes a previously suspended stream execution.
+     * Used to continue execution after a suspension point (e.g., tool approval, workflow suspend).
+     *
+     * @example
+     * ```typescript
+     * // Resume after suspension
+     * const stream = await agent.resumeStream(
+     *   { approved: true },
+     *   { runId: 'previous-run-id' }
+     * );
+     * ```
+     */
+    resumeStream<OUTPUT extends OutputSchema | undefined = undefined>(resumeData: any, streamOptions?: AgentExecutionOptions<OUTPUT> & {
+        toolCallId?: string;
+    }): Promise<MastraModelOutput<OUTPUT>>;
+    /**
+     * Approves a pending tool call and resumes execution.
+     * Used when `requireToolApproval` is enabled to allow the agent to proceed with a tool call.
+     *
+     * @example
+     * ```typescript
+     * const stream = await agent.approveToolCall({
+     *   runId: 'pending-run-id'
+     * });
+     *
+     * for await (const chunk of stream) {
+     *   console.log(chunk);
+     * }
+     * ```
+     */
+    approveToolCall<OUTPUT extends OutputSchema | undefined = undefined>(options: AgentExecutionOptions<OUTPUT> & {
+        runId: string;
+        toolCallId?: string;
+    }): Promise<MastraModelOutput<OUTPUT>>;
+    /**
+     * Declines a pending tool call and resumes execution.
+     * Used when `requireToolApproval` is enabled to prevent the agent from executing a tool call.
+     *
+     * @example
+     * ```typescript
+     * const stream = await agent.declineToolCall({
+     *   runId: 'pending-run-id'
+     * });
+     *
+     * for await (const chunk of stream) {
+     *   console.log(chunk);
+     * }
+     * ```
+     */
+    declineToolCall<OUTPUT extends OutputSchema | undefined = undefined>(options: AgentExecutionOptions<OUTPUT> & {
+        runId: string;
+        toolCallId?: string;
+    }): Promise<MastraModelOutput<OUTPUT>>;
+    /**
+     * Legacy implementation of generate method using AI SDK v4 models.
+     * Use this method if you need to continue using AI SDK v4 models.
+     *
+     * @example
+     * ```typescript
+     * const result = await agent.generateLegacy('What is 2+2?');
+     * console.log(result.text);
+     * ```
+     */
+    generateLegacy(messages: MessageListInput, args?: AgentGenerateOptions<undefined, undefined> & {
+        output?: never;
+        experimental_output?: never;
+    }): Promise<GenerateTextResult<any, undefined>>;
+    generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(messages: MessageListInput, args?: AgentGenerateOptions<OUTPUT, undefined> & {
+        output?: OUTPUT;
+        experimental_output?: never;
+    }): Promise<GenerateObjectResult<OUTPUT>>;
+    generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(messages: MessageListInput, args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
+        output?: never;
+        experimental_output?: EXPERIMENTAL_OUTPUT;
+    }): Promise<GenerateTextResult<any, EXPERIMENTAL_OUTPUT>>;
+    /**
+     * Legacy implementation of stream method using AI SDK v4 models.
+     * Use this method if you need to continue using AI SDK v4 models.
+     *
+     * @example
+     * ```typescript
+     * const result = await agent.streamLegacy('Tell me a story');
+     * for await (const chunk of result.textStream) {
+     *   process.stdout.write(chunk);
+     * }
+     * ```
+     */
+    streamLegacy<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(messages: MessageListInput, args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+        output?: never;
+        experimental_output?: never;
+    }): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+    streamLegacy<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(messages: MessageListInput, args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+        output?: OUTPUT;
+        experimental_output?: never;
+    }): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties>;
+    streamLegacy<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(messages: MessageListInput, args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+        output?: never;
+        experimental_output?: EXPERIMENTAL_OUTPUT;
+    }): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
+        partialObjectStream: StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : EXPERIMENTAL_OUTPUT extends ZodSchema ? z.infer<EXPERIMENTAL_OUTPUT> : unknown>['experimental_partialOutputStream'];
+    }>;
+    /**
+     * Resolves the configuration for title generation.
+     * @internal
+     */
+    resolveTitleGenerationConfig(generateTitleConfig: boolean | {
+        model: DynamicArgument<MastraLanguageModel>;
+        instructions?: DynamicArgument<string>;
+    } | undefined): {
+        shouldGenerate: boolean;
+        model?: DynamicArgument<MastraLanguageModel>;
+        instructions?: DynamicArgument<string>;
+    };
+    /**
+     * Resolves title generation instructions, handling both static strings and dynamic functions
+     * @internal
+     */
+    resolveTitleInstructions(requestContext: RequestContext, instructions?: DynamicArgument<string>): Promise<string>;
+}
+export {};
+//# sourceMappingURL=agent.d.ts.map

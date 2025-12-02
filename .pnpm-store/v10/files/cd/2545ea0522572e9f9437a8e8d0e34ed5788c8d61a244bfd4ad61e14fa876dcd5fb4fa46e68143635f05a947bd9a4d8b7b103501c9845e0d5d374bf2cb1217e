@@ -1,0 +1,231 @@
+# The unit type
+
+type A = ();
+
+==>
+
+SourceFile(
+  TypeItem(type,TypeIdentifier, UnitType))
+
+
+# Tuple types
+
+type A = (i32, String);
+
+==>
+
+SourceFile(
+  TypeItem(type,TypeIdentifier, TupleType(TypeIdentifier, TypeIdentifier)))
+
+
+# Reference types
+
+type A = &B;
+type C = &'a str;
+type D = &'a mut str;
+
+==>
+
+SourceFile(
+  TypeItem(type,TypeIdentifier, ReferenceType(TypeIdentifier)),
+  TypeItem(type,TypeIdentifier, ReferenceType(Lifetime, TypeIdentifier)),
+  TypeItem(type,TypeIdentifier, ReferenceType(Lifetime, mut, TypeIdentifier)))
+
+
+# Raw pointer types
+
+type A = *mut B;
+type C = *const str;
+
+==>
+
+SourceFile(
+  TypeItem(type,TypeIdentifier, PointerType(mut, TypeIdentifier)),
+  TypeItem(type,TypeIdentifier, PointerType(const, TypeIdentifier)))
+
+
+# Generic types
+
+type A = B<C>;
+type D = E<F, str>;
+type G = H<'a, I>;
+type J = H<K=L>;
+
+==>
+
+SourceFile(
+  TypeItem(type,
+    TypeIdentifier,
+    GenericType(TypeIdentifier, TypeArgList(TypeIdentifier))),
+  TypeItem(type,
+    TypeIdentifier,
+    GenericType(TypeIdentifier, TypeArgList(TypeIdentifier, TypeIdentifier))),
+  TypeItem(type,
+    TypeIdentifier,
+    GenericType(TypeIdentifier, TypeArgList(Lifetime, TypeIdentifier))),
+  TypeItem(type,
+    TypeIdentifier,
+    GenericType(TypeIdentifier, TypeArgList(TypeBinding(TypeIdentifier, TypeIdentifier)))))
+
+
+# Scoped types
+
+type A = B::C;
+type D = E::F::G;
+type H = I::J<K>;
+type L = M<N>::O;
+
+==>
+
+SourceFile(
+  TypeItem(type,
+    TypeIdentifier,
+    ScopedTypeIdentifier(ScopeIdentifier, TypeIdentifier)),
+  TypeItem(type,
+    TypeIdentifier,
+    ScopedTypeIdentifier(ScopeIdentifier, ScopeIdentifier, TypeIdentifier)),
+  TypeItem(type,
+    TypeIdentifier,
+    GenericType(
+      ScopedTypeIdentifier(ScopeIdentifier, TypeIdentifier),
+      TypeArgList(TypeIdentifier))),
+  TypeItem(type,
+    TypeIdentifier,
+    ScopedTypeIdentifier(
+      ScopeIdentifier,
+      TypeArgList(TypeIdentifier),
+      TypeIdentifier)))
+
+
+# Array types
+
+type A = [B; 4];
+type C = &[D];
+
+==>
+
+SourceFile(
+  TypeItem(type,TypeIdentifier, ArrayType(TypeIdentifier, Integer)),
+  TypeItem(type,TypeIdentifier, ReferenceType(ArrayType(TypeIdentifier))))
+
+
+# Function types
+
+fn high_order1(value: i32, f: fn(i32)) -> i32 {}
+
+fn high_order2(value: i32, f: fn(i32) -> i32) -> i32 {
+    f(value)
+}
+
+fn high_order3(value: i32, f: &FnOnce(i32) -> i32) -> i32 {
+    f(value)
+}
+
+type F = for<'a, 'b> fn(&'a A, &'a B<'i, 't>,) -> C;
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(BoundIdentifier, TypeIdentifier),
+      Parameter(BoundIdentifier, FunctionType(fn, ParamList(Parameter(TypeIdentifier))))),
+    TypeIdentifier,
+    Block),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(BoundIdentifier, TypeIdentifier),
+      Parameter(BoundIdentifier, FunctionType(fn, ParamList(Parameter(TypeIdentifier)), TypeIdentifier))),
+    TypeIdentifier,
+    Block(ExpressionStatement(CallExpression(Identifier, ArgList(Identifier))))),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(BoundIdentifier, TypeIdentifier),
+      Parameter(BoundIdentifier,
+        ReferenceType(FunctionType(TypeIdentifier, ParamList(Parameter(TypeIdentifier)), TypeIdentifier)))),
+    TypeIdentifier, Block(ExpressionStatement(CallExpression(Identifier, ArgList(Identifier))))),
+  TypeItem(type,
+    TypeIdentifier,
+    FunctionType(
+      ForLifetimes(for, Lifetime, Lifetime),
+      fn,
+      ParamList(
+        Parameter(ReferenceType(Lifetime, TypeIdentifier)),
+        Parameter(ReferenceType(Lifetime, GenericType(TypeIdentifier, TypeArgList(Lifetime, Lifetime))))),
+      TypeIdentifier)))
+
+
+# Unsafe and extern function types
+
+type a = extern "C" fn(*mut c_void);
+type b = unsafe extern "C" fn() -> *mut c_void;
+
+==>
+
+SourceFile(
+  TypeItem(type,
+    TypeIdentifier,
+    FunctionType(
+      extern, String, fn,
+      ParamList(Parameter(PointerType(mut, TypeIdentifier))))),
+  TypeItem(type,
+    TypeIdentifier,
+    FunctionType(
+      unsafe, extern, String, fn,
+      ParamList,
+      PointerType(mut, TypeIdentifier))))
+
+
+# Trait objects
+
+type a = Box<Something + 'a>;
+type b = Rc<dyn Something>;
+type c = A<&dyn Fn(&B) -> C>;
+
+==>
+
+SourceFile(
+  TypeItem(type,
+    TypeIdentifier,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(BoundedType(TypeIdentifier, Lifetime)))),
+  TypeItem(type,
+    TypeIdentifier,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(DynamicType(dyn, TypeIdentifier)))),
+  TypeItem(type,
+    TypeIdentifier,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(
+        ReferenceType(
+          DynamicType(dyn, FunctionType(TypeIdentifier, ParamList(Parameter(ReferenceType(TypeIdentifier))), TypeIdentifier)))))))
+
+
+# Type cast expressions with generics
+
+a as B<C>;
+d as *mut E<<F as E>::G>;
+
+==>
+
+SourceFile(
+  ExpressionStatement(TypeCastExpression(
+    Identifier,
+    as,
+    GenericType(TypeIdentifier, TypeArgList(TypeIdentifier)))),
+  ExpressionStatement(TypeCastExpression(
+    Identifier,
+    as,
+    PointerType(
+      mut,
+      GenericType(
+        TypeIdentifier,
+        TypeArgList(
+          ScopedTypeIdentifier(
+            QualifiedScope(TypeIdentifier,as,TypeIdentifier), TypeIdentifier)))))))

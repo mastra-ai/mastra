@@ -1,0 +1,157 @@
+{
+  "name": "@aws-sdk/middleware-endpoint-discovery",
+  "version": "3.910.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662924738,
+      "integrity": "sha512-ynC7b8dfg4lTHnVQfq0stH/+dxe4ge3QOvZFHgVhoVs5eplLr+ErGDaM535ApA+2JGV3s6kp7HexWRVED3rwKg==",
+      "mode": 420,
+      "size": 11390
+    },
+    "dist-es/configurations.js": {
+      "checkedAt": 1764662924739,
+      "integrity": "sha512-TNq6w8E0H+TtLsXB6LVzdKnhV0Anc4r8c9iYlam+DAPPvYuOlEXgWzmjTuP+XM+VtY9WHvbXX2QmVkyLKa6esA==",
+      "mode": 420,
+      "size": 1161
+    },
+    "dist-es/endpointDiscoveryMiddleware.js": {
+      "checkedAt": 1764662924739,
+      "integrity": "sha512-Msg6pOOUX6S2B3gEGHpx7x8GbY4AR+qp5Ydd4Rb4syBEnvZNG10s2BoMfM50FrxeZ19KniNs4rbvFGHniuH7PA==",
+      "mode": 420,
+      "size": 1864
+    },
+    "dist-es/getCacheKey.js": {
+      "checkedAt": 1764662924740,
+      "integrity": "sha512-OG5kI6r/ze5ZFCGBHVKnyKKfepEhuhT+O0QaAuNSIEtjIV7TIn86iILE3qylKa/QRVOrbTP7WJZY+eeXdqbz3A==",
+      "mode": 420,
+      "size": 469
+    },
+    "dist-es/getEndpointDiscoveryPlugin.js": {
+      "checkedAt": 1764662924740,
+      "integrity": "sha512-/lEjLWt1EVLwsnkFgYAxfn5u3tg4wpLY8ndrwaKHvn++D7Ljzp4MqMZxA5meGLyyd8Qb1dA1xKjCnczb30h7xg==",
+      "mode": 420,
+      "size": 1108
+    },
+    "dist-cjs/index.js": {
+      "checkedAt": 1764662924741,
+      "integrity": "sha512-taMtpuWRG0xw835PckMdrLF1iqWsCk0RCX1ooSy+WzDp+YY4O5ArsRyiw9fRuFV5wzwK9nPco/GVKbsIBiAdRg==",
+      "mode": 420,
+      "size": 7803
+    },
+    "dist-es/index.js": {
+      "checkedAt": 1764662924743,
+      "integrity": "sha512-dHSbgntWcomHWAt3tBa+/8Zzbp34QvDjcmmwxWa5AU2BDqJpp+CX5LhElocpTIqnn6NW3+3kkaA96tmPOEF33w==",
+      "mode": 420,
+      "size": 130
+    },
+    "dist-es/resolveEndpointDiscoveryConfig.js": {
+      "checkedAt": 1764662924745,
+      "integrity": "sha512-/gY9SlaArKPwfpSe/bL9D5f6BahqPw1q2AbL+InAoD0a1vlKPKDRDHibJdgc6jdN1bZiNv6KYIAdc3eDuXRfQA==",
+      "mode": 420,
+      "size": 668
+    },
+    "dist-es/updateDiscoveredEndpointInCache.js": {
+      "checkedAt": 1764662924747,
+      "integrity": "sha512-PZUzR/3VObNENzy8YbC2zJUoF4o8EFHnZhpF5rzXIijZ91Z4t83BQds8k0XWaV1Od/Q/mhMJj5TBANVby4ft0Q==",
+      "mode": 420,
+      "size": 2285
+    },
+    "package.json": {
+      "checkedAt": 1764662924747,
+      "integrity": "sha512-U1C3tZ1A1NhZGJqQNjSvq0E9odkyxZXeGMxyVHQZa4g3mqTCMU9oqc0L8y3IvfgVMAXt1+timwjtjfg9eyVvFg==",
+      "mode": 420,
+      "size": 1980
+    },
+    "README.md": {
+      "checkedAt": 1764662924749,
+      "integrity": "sha512-y4RlVtp31WRPZHalzmcri/tFqAlzHhc3VVxsEbBV3veKxHAl5k3WKVnI/SOyP7hAdMZveOydR2QM8XLnmTzErw==",
+      "mode": 420,
+      "size": 372
+    },
+    "dist-types/configurations.d.ts": {
+      "checkedAt": 1764662924758,
+      "integrity": "sha512-9nivuC4xUkk+grocm0Ax3/pndVFzeTk5UzB4PO9m9azhWYop7F538WVn2TrqP+gDucSnOymnEeM3/evF12aNgg==",
+      "mode": 420,
+      "size": 196
+    },
+    "dist-types/ts3.4/configurations.d.ts": {
+      "checkedAt": 1764662924762,
+      "integrity": "sha512-Sb1P+JsrnSAM4rfRgMx0iFtlJpSyqgKE3CadFz7HZayqT0Tf5E0b6CYvgWMvQaw0MYGFy5BXqBsC0JJiTkUqrQ==",
+      "mode": 420,
+      "size": 179
+    },
+    "dist-types/endpointDiscoveryMiddleware.d.ts": {
+      "checkedAt": 1764662924763,
+      "integrity": "sha512-fEkJffPouln1QKug/QR0RjZoKqWAsvjbkmMk+6nMlHujTjDP07/GOi1lpzFqm0qI4CJTBHpnSgyOfeAy7qUicg==",
+      "mode": 420,
+      "size": 588
+    },
+    "dist-types/ts3.4/endpointDiscoveryMiddleware.d.ts": {
+      "checkedAt": 1764662924763,
+      "integrity": "sha512-c9LUmr0Pm0sKfREcFXdcVP3ygHntB4xyO2vVq0D/ornKIMVV7ddsxlXRxVrczle9ONnvL35jbBc5XtAkwvBjRQ==",
+      "mode": 420,
+      "size": 612
+    },
+    "dist-types/getCacheKey.d.ts": {
+      "checkedAt": 1764662924764,
+      "integrity": "sha512-qqIt0LObhdbVP2vyxHtSr/xCzaVS3GNkZCRD+YMtlWZEQftVaXBOj6Vy8vAVu0JvyzltoyK+thYgCKWe+P2v1w==",
+      "mode": 420,
+      "size": 320
+    },
+    "dist-types/ts3.4/getCacheKey.d.ts": {
+      "checkedAt": 1764662924765,
+      "integrity": "sha512-6w/8rGCmJh8ZZ1ejQVdGmJDdpRO9BpwWRlGO3iEqz5uYLurM3cCcY0eU1rICHirBphMWC0vTxyRc1KYXSg9aZg==",
+      "mode": 420,
+      "size": 272
+    },
+    "dist-types/getEndpointDiscoveryPlugin.d.ts": {
+      "checkedAt": 1764662924765,
+      "integrity": "sha512-hazecmVibE/x/pAzKVsi/2w7PYOWjt8FoKk1YL2DYubXREv8o8q7KugR8ZcOiZe/ugCA/gZe9QeBGtDL/zrKCw==",
+      "mode": 420,
+      "size": 1373
+    },
+    "dist-types/ts3.4/getEndpointDiscoveryPlugin.d.ts": {
+      "checkedAt": 1764662924766,
+      "integrity": "sha512-AblTEtMnCLxZzeVP+imxm7LOL3HY6boZOXpKmMQrnBe4+LFGo0nDkXXtwnweJnv3KIdjs23bc92yYFTM7L7B8w==",
+      "mode": 420,
+      "size": 1362
+    },
+    "dist-types/index.d.ts": {
+      "checkedAt": 1764662924743,
+      "integrity": "sha512-dHSbgntWcomHWAt3tBa+/8Zzbp34QvDjcmmwxWa5AU2BDqJpp+CX5LhElocpTIqnn6NW3+3kkaA96tmPOEF33w==",
+      "mode": 420,
+      "size": 130
+    },
+    "dist-types/ts3.4/index.d.ts": {
+      "checkedAt": 1764662924743,
+      "integrity": "sha512-dHSbgntWcomHWAt3tBa+/8Zzbp34QvDjcmmwxWa5AU2BDqJpp+CX5LhElocpTIqnn6NW3+3kkaA96tmPOEF33w==",
+      "mode": 420,
+      "size": 130
+    },
+    "dist-types/resolveEndpointDiscoveryConfig.d.ts": {
+      "checkedAt": 1764662924766,
+      "integrity": "sha512-PS90jLEfdIoM4BGT5TCsc9NBT5GRNUGjJ2cigSjrnrGdsestUelaiyNfSHm2SAG0Pm7FtAFSdcJD+Zmi2bieMQ==",
+      "mode": 420,
+      "size": 2432
+    },
+    "dist-types/ts3.4/resolveEndpointDiscoveryConfig.d.ts": {
+      "checkedAt": 1764662924768,
+      "integrity": "sha512-UGRyTifhtaYTKkLpbhMdx2aAw/NVf9WxBw/XaaeGoFJleIGd8RlGEKIfiw0BB7bLKlATSsqufdEtp8JE+hcDug==",
+      "mode": 420,
+      "size": 1070
+    },
+    "dist-types/ts3.4/updateDiscoveredEndpointInCache.d.ts": {
+      "checkedAt": 1764662924770,
+      "integrity": "sha512-khQKdr59vykiQltNCzVD5wlcg2BXI4RKwoUlYkrKP08FWqayVtQ3va7rKMzG8SFnH4U3KqHJFj/vmGOCW7G84w==",
+      "mode": 420,
+      "size": 592
+    },
+    "dist-types/updateDiscoveredEndpointInCache.d.ts": {
+      "checkedAt": 1764662924772,
+      "integrity": "sha512-WsZzSy3ZcMCsFlPlNaLgmA4Im3fIzYDa/uJh+m4bsrYzHFXdM7+TLwwutC5VpP2kAmVz9Tu442ty+CZVYIEQdw==",
+      "mode": 420,
+      "size": 585
+    }
+  }
+}

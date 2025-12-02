@@ -1,0 +1,12 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+libdir=@libdir_for_pc_file@
+includedir=@includedir_for_pc_file@
+
+Name: @PROJECT_NAME@
+Description: @CMAKE_PROJECT_DESCRIPTION@
+URL: @CMAKE_PROJECT_HOMEPAGE_URL@
+Version: @PROJECT_VERSION@
+Requires.private: @PC_REQUIRES_PRIVATE_ZLIB@
+Cflags: -I${includedir}
+Libs: -L${libdir} -l@PROJECT_NAME@
+Libs.private: -pthread -lm -lrt -L${libdir}

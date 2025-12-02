@@ -1,0 +1,82 @@
+{
+  "name": "@openrouter/ai-sdk-provider",
+  "version": "1.2.3",
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal/index.d.ts",
+      "import": "./dist/internal/index.mjs",
+      "module": "./dist/internal/index.mjs",
+      "require": "./dist/internal/index.js"
+    }
+  },
+  "devDependencies": {
+    "@ai-sdk/provider": "2.0.0",
+    "@ai-sdk/provider-utils": "3.0.1",
+    "@biomejs/biome": "2.1.3",
+    "@changesets/changelog-github": "0.5.1",
+    "@changesets/cli": "2.29.7",
+    "@edge-runtime/vm": "5.0.0",
+    "@types/node": "24.2.0",
+    "ai": "5.0.76",
+    "dotenv": "17.2.1",
+    "tsup": "8.5.0",
+    "typescript": "5.9.2",
+    "vite-tsconfig-paths": "5.1.4",
+    "vitest": "3.2.4",
+    "zod": "3.25.76"
+  },
+  "peerDependencies": {
+    "ai": "^5.0.0",
+    "zod": "^3.24.1 || ^v4"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/OpenRouterTeam/ai-sdk-provider",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenRouterTeam/ai-sdk-provider.git"
+  },
+  "bugs": {
+    "url": "https://github.com/OpenRouterTeam/ai-sdk-provider/issues"
+  },
+  "keywords": [
+    "ai"
+  ],
+  "dependencies": {
+    "@openrouter/sdk": "^0.1.8"
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist && rm -rf internal/dist",
+    "dev": "tsup --watch",
+    "stylecheck": "biome check",
+    "typecheck": "tsc --noEmit",
+    "format": "biome format --write",
+    "prepublish": "pnpm run build",
+    "test": "pnpm test:node && pnpm test:edge",
+    "test:edge": "vitest --config vitest.edge.config.ts --run",
+    "test:node": "vitest --config vitest.node.config.ts --run",
+    "test:e2e": "vitest --config vitest.e2e.config.ts --run",
+    "changeset": "changeset",
+    "changeset-version": "changeset version",
+    "changeset-publish": "pnpm build && pnpm test && changeset publish --provenance"
+  }
+}

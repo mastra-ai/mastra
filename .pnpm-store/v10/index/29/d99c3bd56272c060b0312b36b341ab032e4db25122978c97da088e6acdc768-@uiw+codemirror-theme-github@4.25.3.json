@@ -1,0 +1,49 @@
+{
+  "name": "@uiw/codemirror-theme-github",
+  "version": "4.25.3",
+  "requiresBuild": false,
+  "files": {
+    "cjs/index.js": {
+      "checkedAt": 1764662921324,
+      "integrity": "sha512-2jPz99JQS7h29ms6znc6U9Pae8IwB9JGiTjqGbQ2ErVh6EvC6agg0dxOSjbx8sIAZ/lVIQ0fUPx5WRUlnti6Ig==",
+      "mode": 420,
+      "size": 5555
+    },
+    "esm/index.js": {
+      "checkedAt": 1764662921325,
+      "integrity": "sha512-bl5Kjq6u2xXZ+dnlBOJSccqjrKPr18jkzKmGEAHfOXVoCuvhUMYlks88qGTMXIVXIyTDCYDaOFt1hVytlEPhAw==",
+      "mode": 420,
+      "size": 3194
+    },
+    "package.json": {
+      "checkedAt": 1764662921325,
+      "integrity": "sha512-LYBGIYe10UqUJXTKZrdS4Lv2mBO9oet/20CaxdpmKEMswl4XNQzTpq1euM/RJh6NWtMcFqNWadzrr4ogSvk/7g==",
+      "mode": 420,
+      "size": 1036
+    },
+    "README.md": {
+      "checkedAt": 1764662921326,
+      "integrity": "sha512-7WiC2223KFbpK8lDtItT7C1nsL2GQAjtNdGR3xFuvZJ91M+7Wf5Lm5yC9YwSsq9eZcZnAl/q0b11cPfu+doZqw==",
+      "mode": 420,
+      "size": 9531
+    },
+    "cjs/index.d.ts": {
+      "checkedAt": 1764662921327,
+      "integrity": "sha512-5iBh0QcwXhDDDJu5LmaIkDG+Dv2Ez1x4kL3ywbN8qm7JEqmsThPXrJtQhpqmIHrNeq66Ovut+J45VKSoLb0YEA==",
+      "mode": 420,
+      "size": 748
+    },
+    "esm/index.d.ts": {
+      "checkedAt": 1764662921327,
+      "integrity": "sha512-5iBh0QcwXhDDDJu5LmaIkDG+Dv2Ez1x4kL3ywbN8qm7JEqmsThPXrJtQhpqmIHrNeq66Ovut+J45VKSoLb0YEA==",
+      "mode": 420,
+      "size": 748
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662921329,
+      "integrity": "sha512-uje+cr9zNiJvtXKVYoHCmSD5YZeUjLkI7gb3CnnbsQNmCWfm8tZ/U2uTE4SrjJCE8EpnYEXuvlJ9mfeblUyVOA==",
+      "mode": 420,
+      "size": 3319
+    }
+  }
+}

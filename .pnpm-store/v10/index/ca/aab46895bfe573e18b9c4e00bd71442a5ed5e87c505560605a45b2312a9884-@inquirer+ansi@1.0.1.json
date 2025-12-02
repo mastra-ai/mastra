@@ -1,0 +1,61 @@
+{
+  "name": "@inquirer/ansi",
+  "version": "1.0.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662904432,
+      "integrity": "sha512-bhxBgkKTd2DAmgMqLkrEWOGttK136cUyL/Jd0C4qpIy+Hf1h+c/n/0Fvp1/7EyVEtq5XUjPjRdpWIuBzlxk6IA==",
+      "mode": 420,
+      "size": 1058
+    },
+    "dist/commonjs/index.js": {
+      "checkedAt": 1764662904432,
+      "integrity": "sha512-To+qmng4CgaDkZfiMu0e4j/Gf1i+g0e9MmfztN0Rj/U/TX2NZ9+SZfJEoYudomsgnznZYUu1pay3sv5ZMo+IVw==",
+      "mode": 420,
+      "size": 1196
+    },
+    "dist/esm/index.js": {
+      "checkedAt": 1764662904433,
+      "integrity": "sha512-ew7tegz8Ut183fwKUUJ19D0QBEIN9cpfKVu/wlBDtoR5l64DmK7O3dmvD5jvJXMSAcHFn+b8A6ne8kPPUIuXhg==",
+      "mode": 420,
+      "size": 866
+    },
+    "dist/commonjs/package.json": {
+      "checkedAt": 1764662904434,
+      "integrity": "sha512-bFiTnaWPm3Fik6gyj3o2SbbiQr8jX64ABVoMx5+yeI5Kmd+qQi4M+tvoTg1eM7g29oYn5qQJZUh37cRDuU0ExA==",
+      "mode": 420,
+      "size": 25
+    },
+    "dist/esm/package.json": {
+      "checkedAt": 1764662904434,
+      "integrity": "sha512-nTI0IMxjxr7nncxdtfDxj2uOBz2q+P+lRZ4R8t5ZqfXowXjXf6kq/J3dNSYj3sNixi//hZxxovq5Px4hcsSYfw==",
+      "mode": 420,
+      "size": 23
+    },
+    "package.json": {
+      "checkedAt": 1764662904435,
+      "integrity": "sha512-mGeQSOijNzgBSqUSeMAwodDLAkOfVnGDOnuFdDCJPSmaTBKxcMkl2hFPxMht3ri1C9x/y8YSFxajNA30kmfirA==",
+      "mode": 420,
+      "size": 1839
+    },
+    "README.md": {
+      "checkedAt": 1764662904435,
+      "integrity": "sha512-YFw+C2CD86jhNd1h30CHFlLTVgI/vxK9NdpE3SToxLsnKLMGVClF9nH/NtcFJPDlaK4YBGpUQrMtBwRA6y4C6Q==",
+      "mode": 420,
+      "size": 2199
+    },
+    "dist/commonjs/index.d.ts": {
+      "checkedAt": 1764662904436,
+      "integrity": "sha512-KwHbwKFIxNujK4bhrTAiuwixPUu4pbWr+F8HwmBWbQc2+yquFjMM6cOpH36aC3Kn74nhurzwGXQ4jfNSZzs3QA==",
+      "mode": 420,
+      "size": 620
+    },
+    "dist/esm/index.d.ts": {
+      "checkedAt": 1764662904436,
+      "integrity": "sha512-KwHbwKFIxNujK4bhrTAiuwixPUu4pbWr+F8HwmBWbQc2+yquFjMM6cOpH36aC3Kn74nhurzwGXQ4jfNSZzs3QA==",
+      "mode": 420,
+      "size": 620
+    }
+  }
+}

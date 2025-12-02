@@ -1,0 +1,13 @@
+{
+    "name": "@types/lru-cache",
+    "version": "7.10.10",
+    "typings": null,
+    "description": "Stub TypeScript definitions entry for lru-cache, which provides its own types definitions",
+    "main": "",
+    "scripts": {},
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "lru-cache": "*"
+    }
+}

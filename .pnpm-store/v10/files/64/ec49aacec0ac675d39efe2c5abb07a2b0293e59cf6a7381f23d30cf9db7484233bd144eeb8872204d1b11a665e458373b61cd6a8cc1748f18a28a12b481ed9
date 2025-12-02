@@ -1,0 +1,27 @@
+import { RegisteredLogger, ConsoleLogger } from './chunk-KJ2SW6VA.js';
+
+// src/base.ts
+var MastraBase = class {
+  component = RegisteredLogger.LLM;
+  logger;
+  name;
+  constructor({ component, name }) {
+    this.component = component || RegisteredLogger.LLM;
+    this.name = name;
+    this.logger = new ConsoleLogger({ name: `${this.component} - ${this.name}` });
+  }
+  /**
+   * Set the logger for the agent
+   * @param logger
+   */
+  __setLogger(logger) {
+    this.logger = logger;
+    if (this.component !== RegisteredLogger.LLM) {
+      this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
+    }
+  }
+};
+
+export { MastraBase };
+//# sourceMappingURL=chunk-S6URFGCZ.js.map
+//# sourceMappingURL=chunk-S6URFGCZ.js.map

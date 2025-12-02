@@ -1,0 +1,48 @@
+import type { TracingStorageStrategy } from '../../../observability/index.js';
+import type { SpanRecord, TraceRecord, TracesPaginatedArg, CreateSpanRecord, PaginationInfo, UpdateSpanRecord } from '../../types.js';
+import type { StoreOperations } from '../operations/index.js';
+import { ObservabilityStorage } from './base.js';
+export type InMemoryObservability = Map<string, SpanRecord>;
+export declare class ObservabilityInMemory extends ObservabilityStorage {
+    operations: StoreOperations;
+    collection: InMemoryObservability;
+    constructor({ collection, operations }: {
+        collection: InMemoryObservability;
+        operations: StoreOperations;
+    });
+    get tracingStrategy(): {
+        preferred: TracingStorageStrategy;
+        supported: TracingStorageStrategy[];
+    };
+    createSpan(span: CreateSpanRecord): Promise<void>;
+    batchCreateSpans(args: {
+        records: CreateSpanRecord[];
+    }): Promise<void>;
+    private validateCreateSpan;
+    private generateId;
+    getTrace(traceId: string): Promise<TraceRecord | null>;
+    getTracesPaginated({ filters, pagination, }: TracesPaginatedArg): Promise<{
+        pagination: PaginationInfo;
+        spans: SpanRecord[];
+    }>;
+    private filterForRootSpans;
+    private filterSpansByDate;
+    private filterSpansByFilter;
+    private filterSpansByPagination;
+    updateSpan(params: {
+        spanId: string;
+        traceId: string;
+        updates: Partial<UpdateSpanRecord>;
+    }): Promise<void>;
+    batchUpdateSpans(args: {
+        records: {
+            traceId: string;
+            spanId: string;
+            updates: Partial<UpdateSpanRecord>;
+        }[];
+    }): Promise<void>;
+    batchDeleteTraces(args: {
+        traceIds: string[];
+    }): Promise<void>;
+}
+//# sourceMappingURL=inmemory.d.ts.map

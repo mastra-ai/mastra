@@ -1,0 +1,144 @@
+"use strict";
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.instance = exports.IndexOfVisitor = void 0;
+const enum_js_1 = require("../enum.js");
+const visitor_js_1 = require("../visitor.js");
+const get_js_1 = require("./get.js");
+const bit_js_1 = require("../util/bit.js");
+const vector_js_1 = require("../util/vector.js");
+/** @ignore */
+class IndexOfVisitor extends visitor_js_1.Visitor {
+}
+exports.IndexOfVisitor = IndexOfVisitor;
+/** @ignore */
+function nullIndexOf(data, searchElement) {
+    // if you're looking for nulls and the vector isn't empty, we've got 'em!
+    return searchElement === null && data.length > 0 ? 0 : -1;
+}
+/** @ignore */
+function indexOfNull(data, fromIndex) {
+    const { nullBitmap } = data;
+    if (!nullBitmap || data.nullCount <= 0) {
+        return -1;
+    }
+    let i = 0;
+    for (const isValid of new bit_js_1.BitIterator(nullBitmap, data.offset + (fromIndex || 0), data.length, nullBitmap, bit_js_1.getBool)) {
+        if (!isValid) {
+            return i;
+        }
+        ++i;
+    }
+    return -1;
+}
+/** @ignore */
+function indexOfValue(data, searchElement, fromIndex) {
+    if (searchElement === undefined) {
+        return -1;
+    }
+    if (searchElement === null) {
+        switch (data.typeId) {
+            // Unions don't have a nullBitmap of its own, so compare the `searchElement` to `get()`.
+            case enum_js_1.Type.Union:
+                break;
+            // Dictionaries do have a nullBitmap, but their dictionary could also have null elements.
+            case enum_js_1.Type.Dictionary:
+                break;
+            // All other types can iterate the null bitmap
+            default:
+                return indexOfNull(data, fromIndex);
+        }
+    }
+    const get = get_js_1.instance.getVisitFn(data);
+    const compare = (0, vector_js_1.createElementComparator)(searchElement);
+    for (let i = (fromIndex || 0) - 1, n = data.length; ++i < n;) {
+        if (compare(get(data, i))) {
+            return i;
+        }
+    }
+    return -1;
+}
+/** @ignore */
+function indexOfUnion(data, searchElement, fromIndex) {
+    // Unions are special -- they do have a nullBitmap, but so can their children.
+    // If the searchElement is null, we don't know whether it came from the Union's
+    // bitmap or one of its children's. So we don't interrogate the Union's bitmap,
+    // since that will report the wrong index if a child has a null before the Union.
+    const get = get_js_1.instance.getVisitFn(data);
+    const compare = (0, vector_js_1.createElementComparator)(searchElement);
+    for (let i = (fromIndex || 0) - 1, n = data.length; ++i < n;) {
+        if (compare(get(data, i))) {
+            return i;
+        }
+    }
+    return -1;
+}
+IndexOfVisitor.prototype.visitNull = nullIndexOf;
+IndexOfVisitor.prototype.visitBool = indexOfValue;
+IndexOfVisitor.prototype.visitInt = indexOfValue;
+IndexOfVisitor.prototype.visitInt8 = indexOfValue;
+IndexOfVisitor.prototype.visitInt16 = indexOfValue;
+IndexOfVisitor.prototype.visitInt32 = indexOfValue;
+IndexOfVisitor.prototype.visitInt64 = indexOfValue;
+IndexOfVisitor.prototype.visitUint8 = indexOfValue;
+IndexOfVisitor.prototype.visitUint16 = indexOfValue;
+IndexOfVisitor.prototype.visitUint32 = indexOfValue;
+IndexOfVisitor.prototype.visitUint64 = indexOfValue;
+IndexOfVisitor.prototype.visitFloat = indexOfValue;
+IndexOfVisitor.prototype.visitFloat16 = indexOfValue;
+IndexOfVisitor.prototype.visitFloat32 = indexOfValue;
+IndexOfVisitor.prototype.visitFloat64 = indexOfValue;
+IndexOfVisitor.prototype.visitUtf8 = indexOfValue;
+IndexOfVisitor.prototype.visitLargeUtf8 = indexOfValue;
+IndexOfVisitor.prototype.visitBinary = indexOfValue;
+IndexOfVisitor.prototype.visitLargeBinary = indexOfValue;
+IndexOfVisitor.prototype.visitFixedSizeBinary = indexOfValue;
+IndexOfVisitor.prototype.visitDate = indexOfValue;
+IndexOfVisitor.prototype.visitDateDay = indexOfValue;
+IndexOfVisitor.prototype.visitDateMillisecond = indexOfValue;
+IndexOfVisitor.prototype.visitTimestamp = indexOfValue;
+IndexOfVisitor.prototype.visitTimestampSecond = indexOfValue;
+IndexOfVisitor.prototype.visitTimestampMillisecond = indexOfValue;
+IndexOfVisitor.prototype.visitTimestampMicrosecond = indexOfValue;
+IndexOfVisitor.prototype.visitTimestampNanosecond = indexOfValue;
+IndexOfVisitor.prototype.visitTime = indexOfValue;
+IndexOfVisitor.prototype.visitTimeSecond = indexOfValue;
+IndexOfVisitor.prototype.visitTimeMillisecond = indexOfValue;
+IndexOfVisitor.prototype.visitTimeMicrosecond = indexOfValue;
+IndexOfVisitor.prototype.visitTimeNanosecond = indexOfValue;
+IndexOfVisitor.prototype.visitDecimal = indexOfValue;
+IndexOfVisitor.prototype.visitList = indexOfValue;
+IndexOfVisitor.prototype.visitStruct = indexOfValue;
+IndexOfVisitor.prototype.visitUnion = indexOfValue;
+IndexOfVisitor.prototype.visitDenseUnion = indexOfUnion;
+IndexOfVisitor.prototype.visitSparseUnion = indexOfUnion;
+IndexOfVisitor.prototype.visitDictionary = indexOfValue;
+IndexOfVisitor.prototype.visitInterval = indexOfValue;
+IndexOfVisitor.prototype.visitIntervalDayTime = indexOfValue;
+IndexOfVisitor.prototype.visitIntervalYearMonth = indexOfValue;
+IndexOfVisitor.prototype.visitDuration = indexOfValue;
+IndexOfVisitor.prototype.visitDurationSecond = indexOfValue;
+IndexOfVisitor.prototype.visitDurationMillisecond = indexOfValue;
+IndexOfVisitor.prototype.visitDurationMicrosecond = indexOfValue;
+IndexOfVisitor.prototype.visitDurationNanosecond = indexOfValue;
+IndexOfVisitor.prototype.visitFixedSizeList = indexOfValue;
+IndexOfVisitor.prototype.visitMap = indexOfValue;
+/** @ignore */
+exports.instance = new IndexOfVisitor();
+
+//# sourceMappingURL=indexof.js.map

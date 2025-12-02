@@ -1,0 +1,1 @@
+{"version":3,"file":"FORGET.d.ts","sourceRoot":"","sources":["../../../lib/commands/FORGET.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,sCAAsC,CAAC;AACrE,OAAO,EAAE,aAAa,EAAE,WAAW,EAAW,MAAM,mCAAmC,CAAC;AAExF,MAAM,WAAW,iBAAiB;IAChC,IAAI,CAAC,EAAE,aAAa,CAAC;CACtB;;;IAIC;;;;;;;;OAQG;gDACkB,aAAa,OAAO,aAAa,YAAY,iBAAiB;mCAQrC,WAAW;;AAnB3D,wBAoB6B"}

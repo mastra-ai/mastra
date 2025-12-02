@@ -1,0 +1,46 @@
+{
+  "name": "uuidv7",
+  "version": "0.6.3",
+  "description": "An experimental implementation of the proposed UUID Version 7",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "require": "./dist/index.cjs",
+    "default": "./dist/index.js"
+  },
+  "bin": {
+    "uuidv7": "cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "doc": "typedoc ./src/index.ts --gitRevision \"v$npm_package_version\"",
+    "prebuild": "rm -rf ./dist",
+    "predoc": "rm -rf ./docs",
+    "prepare": "npm run build && npm run doc && npm run test",
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LiosK/uuidv7.git"
+  },
+  "keywords": [
+    "uuid",
+    "uuidv7"
+  ],
+  "author": "LiosK <contact@mail.liosk.net>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/LiosK/uuidv7/issues"
+  },
+  "homepage": "https://github.com/LiosK/uuidv7#readme",
+  "devDependencies": {
+    "mocha": "^10.2.0",
+    "typedoc": "^0.25.1",
+    "typescript": "^5.2.2"
+  }
+}

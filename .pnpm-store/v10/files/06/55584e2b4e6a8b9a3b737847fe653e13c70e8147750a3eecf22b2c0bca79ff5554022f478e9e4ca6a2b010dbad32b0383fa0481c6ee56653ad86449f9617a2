@@ -1,0 +1,38 @@
+import type { Position } from 'css-box-model';
+import { invariant } from '../../../invariant';
+import type {
+  DraggableDimensionMap,
+  DraggableId,
+  Combine,
+  LiftEffect,
+  DragImpact,
+} from '../../../types';
+import { add } from '../../position';
+import getCombinedItemDisplacement from '../../get-combined-item-displacement';
+import { tryGetCombine } from '../../get-impact-location';
+
+interface Args {
+  impact: DragImpact;
+  // all draggables in the system
+  draggables: DraggableDimensionMap;
+  afterCritical: LiftEffect;
+}
+
+// Returns the client offset required to move an item from its
+// original client position to its final resting position
+export default ({ afterCritical, impact, draggables }: Args): Position => {
+  const combine: Combine | null = tryGetCombine(impact);
+  invariant(combine);
+
+  const combineWith: DraggableId = combine.draggableId;
+  const center: Position = draggables[combineWith].page.borderBox.center;
+
+  const displaceBy: Position = getCombinedItemDisplacement({
+    displaced: impact.displaced,
+    afterCritical,
+    combineWith,
+    displacedBy: impact.displacedBy,
+  });
+
+  return add(center, displaceBy);
+};

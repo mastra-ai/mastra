@@ -1,0 +1,61 @@
+{
+  "name": "react-refresh",
+  "version": "0.17.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662909766,
+      "integrity": "sha512-O4KI5drJltpEvYGw6x2WkFxLkK2RVPPSnQc8lokLdc0oH6A68Ld/Mx2+wjnTQTY7X5syi6/qDUuNCj6QDRUPgA==",
+      "mode": 420,
+      "size": 1088
+    },
+    "babel.js": {
+      "checkedAt": 1764662909766,
+      "integrity": "sha512-T0ty/H5NvRHhVUo2mhBciRNqtD5iOgjMzNTisIptqamkE0VeHUYDGo1aOGj404ui0QVQUtRXL+pvZcUE9IbPRw==",
+      "mode": 420,
+      "size": 214
+    },
+    "cjs/react-refresh-babel.development.js": {
+      "checkedAt": 1764662909768,
+      "integrity": "sha512-Li4Yzcl1UEelEewm3ZLOmrk8iCZisN+6/+KjJmq75R2weiRB5PakEbher1NyCGtpjwDZuUi3UH5NfZZt2X1r3A==",
+      "mode": 420,
+      "size": 22095
+    },
+    "cjs/react-refresh-babel.production.js": {
+      "checkedAt": 1764662909771,
+      "integrity": "sha512-EjtPOvAcu4PuB0gediANR47Lr8ySNE7ANaw98ulMSVqKfMLRzccby7zmh/aUJDE7VrWeU3zydc3B6RUdKXp35Q==",
+      "mode": 420,
+      "size": 20627
+    },
+    "cjs/react-refresh-runtime.development.js": {
+      "checkedAt": 1764662909773,
+      "integrity": "sha512-MJG3JPs5+d07Ql9rF0gtWggkZyz4JJUW+QdpgxQaAkYKKB1jWPQz2AjEnuIwwRWnw+Ma9gxmRnFyXyykT6o5bw==",
+      "mode": 420,
+      "size": 12357
+    },
+    "cjs/react-refresh-runtime.production.js": {
+      "checkedAt": 1764662909773,
+      "integrity": "sha512-re1sdbzWA7QTyfKbV56LUB4rYwm4gI860gDglEgliDzlmX99gRg4yJRlkmq2y22dLnoCCq34PnTCDMV2cXmZeg==",
+      "mode": 420,
+      "size": 357
+    },
+    "runtime.js": {
+      "checkedAt": 1764662909774,
+      "integrity": "sha512-Gu/9GQGasz4IPEoWGZ7ZJjIWP/0W1lJWMOcCN6Qu5bpx2PWDA4+tYstGOHxie++5LCr2nbaE/mqjF4PlUu9vMg==",
+      "mode": 420,
+      "size": 218
+    },
+    "package.json": {
+      "checkedAt": 1764662909774,
+      "integrity": "sha512-LQrYO7Ion6E8zsN36CwZVJuI9etHGHZcFhUwHNPJ35SGG4Xvtuu/raDcgCjJVf7DHahpR3PzmjIoflQgAjYQ+w==",
+      "mode": 420,
+      "size": 868
+    },
+    "README.md": {
+      "checkedAt": 1764662909783,
+      "integrity": "sha512-SCTjxT9ZMloexVqhgWpkIZMFYioe5pNz/XTJJGMzyFgJBbJ24aoQai1VUAgxP2QSI3rapFKAx57ME0Pp2snhhQ==",
+      "mode": 420,
+      "size": 584
+    }
+  }
+}

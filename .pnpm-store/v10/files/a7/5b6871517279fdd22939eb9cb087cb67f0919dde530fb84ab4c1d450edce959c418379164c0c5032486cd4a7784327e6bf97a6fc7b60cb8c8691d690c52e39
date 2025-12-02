@@ -1,0 +1,1 @@
+{"version":3,"file":"useAssistantInstructions.d.ts","sourceRoot":"","sources":["../../src/model-context/useAssistantInstructions.tsx"],"names":[],"mappings":"AAKA,MAAM,MAAM,2BAA2B,GAAG;IACxC,QAAQ,CAAC,EAAE,OAAO,GAAG,SAAS,CAAC;IAC/B,WAAW,EAAE,MAAM,CAAC;CACrB,CAAC;AASF,eAAO,MAAM,wBAAwB,GACnC,QAAQ,MAAM,GAAG,2BAA2B,SAe7C,CAAC"}

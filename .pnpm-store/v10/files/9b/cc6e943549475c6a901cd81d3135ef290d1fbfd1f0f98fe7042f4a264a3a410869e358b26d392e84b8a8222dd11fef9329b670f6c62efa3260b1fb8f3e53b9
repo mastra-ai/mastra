@@ -1,0 +1,1 @@
+{"version":3,"file":"TOUCH.js","sourceRoot":"","sources":["../../../lib/commands/TOUCH.ts"],"names":[],"mappings":";;AAIA,kBAAe;IACb,YAAY,EAAE,KAAK;IACnB;;;;;;;OAOG;IACH,YAAY,CAAC,MAAqB,EAAE,GAA0B;QAC5D,MAAM,CAAC,IAAI,CAAC,OAAO,CAAC,CAAC;QACrB,MAAM,CAAC,QAAQ,CAAC,GAAG,CAAC,CAAC;IACvB,CAAC;IACD,cAAc,EAAE,SAAyC;CAC/B,CAAC"}

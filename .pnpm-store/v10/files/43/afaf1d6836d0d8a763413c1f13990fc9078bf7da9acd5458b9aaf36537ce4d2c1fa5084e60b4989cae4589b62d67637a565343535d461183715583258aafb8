@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../src/cli/lib/deployApi/definitionConfig.ts"],
+  "sourcesContent": ["import { z } from \"zod\";\nimport { componentDefinitionPath } from \"./paths.js\";\nimport { moduleConfig } from \"./modules.js\";\nimport { looseObject } from \"./utils.js\";\n\nexport const appDefinitionConfig = looseObject({\n  definition: z.nullable(moduleConfig),\n  dependencies: z.array(componentDefinitionPath),\n  schema: z.nullable(moduleConfig),\n  functions: z.array(moduleConfig),\n  udfServerVersion: z.string(),\n});\nexport type AppDefinitionConfig = z.infer<typeof appDefinitionConfig>;\n\nexport const componentDefinitionConfig = looseObject({\n  definitionPath: componentDefinitionPath,\n  definition: moduleConfig,\n  dependencies: z.array(componentDefinitionPath),\n  schema: z.nullable(moduleConfig),\n  functions: z.array(moduleConfig),\n  udfServerVersion: z.string(),\n});\nexport type ComponentDefinitionConfig = z.infer<\n  typeof componentDefinitionConfig\n>;\n"],
+  "mappings": ";AAAA,SAAS,SAAS;AAClB,SAAS,+BAA+B;AACxC,SAAS,oBAAoB;AAC7B,SAAS,mBAAmB;AAErB,aAAM,sBAAsB,YAAY;AAAA,EAC7C,YAAY,EAAE,SAAS,YAAY;AAAA,EACnC,cAAc,EAAE,MAAM,uBAAuB;AAAA,EAC7C,QAAQ,EAAE,SAAS,YAAY;AAAA,EAC/B,WAAW,EAAE,MAAM,YAAY;AAAA,EAC/B,kBAAkB,EAAE,OAAO;AAC7B,CAAC;AAGM,aAAM,4BAA4B,YAAY;AAAA,EACnD,gBAAgB;AAAA,EAChB,YAAY;AAAA,EACZ,cAAc,EAAE,MAAM,uBAAuB;AAAA,EAC7C,QAAQ,EAAE,SAAS,YAAY;AAAA,EAC/B,WAAW,EAAE,MAAM,YAAY;AAAA,EAC/B,kBAAkB,EAAE,OAAO;AAC7B,CAAC;",
+  "names": []
+}

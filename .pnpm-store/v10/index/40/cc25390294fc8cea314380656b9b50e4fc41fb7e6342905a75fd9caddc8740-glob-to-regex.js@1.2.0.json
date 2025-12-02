@@ -1,0 +1,31 @@
+{
+  "name": "glob-to-regex.js",
+  "version": "1.2.0",
+  "requiresBuild": false,
+  "files": {
+    "lib/index.js": {
+      "checkedAt": 1764662917389,
+      "integrity": "sha512-lE7m4wO9PQFKwahmWNTGkJPDI7y1ggnhowchZiGoFOobg0KusSl3IQV/zeUUgV63l+6ZxRzBa9SVkDzbjhK6yg==",
+      "mode": 420,
+      "size": 8318
+    },
+    "package.json": {
+      "checkedAt": 1764662917390,
+      "integrity": "sha512-Q4DW2Vq+lto18Y34Ez01o5YrdRK+jcH9uHnVjkyxU56J74hnmazqcxBLp4gKUpW2xPLgJdeBzyrdnhPGUDM+gA==",
+      "mode": 420,
+      "size": 1890
+    },
+    "README.md": {
+      "checkedAt": 1764662917391,
+      "integrity": "sha512-vbxLW9t3Fft/gahObDB3BM2f/ku1214DNz4dsPpw5yboO6m3Sfw7wyDeaOxvXD9UnWvEZ4IIrX5PyayN/hnTRw==",
+      "mode": 420,
+      "size": 4177
+    },
+    "lib/index.d.ts": {
+      "checkedAt": 1764662917391,
+      "integrity": "sha512-kjuRZWWvLY1IVWDRYevpv+8Ka4dQE2a7HfC35hmZeCLILak0Z85nVhn27aj3OQZsrlE8FBBePiAmrYFarwYwTw==",
+      "mode": 420,
+      "size": 1596
+    }
+  }
+}

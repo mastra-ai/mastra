@@ -1,0 +1,46 @@
+{
+  "name": "spinnies",
+  "version": "0.5.1",
+  "description": "Create and manage multiple spinners in command-line interface programs",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx mocha test"
+  },
+  "keywords": [
+    "node",
+    "nodejs",
+    "node.js",
+    "multiple",
+    "multi",
+    "multispinner",
+    "spinner",
+    "spinners",
+    "loadre",
+    "loading",
+    "loading-bar",
+    "cli",
+    "console",
+    "command-line",
+    "command",
+    "terminal"
+  ],
+  "author": "Juan Bautista Carpanelli <juanbanelli@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com:jcarpanelli/spinnies.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jcarpanelli/spinnies/issues"
+  },
+  "homepage": "https://github.com/jcarpanelli/spinnies#readme",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^2.4.2",
+    "cli-cursor": "^3.0.0",
+    "strip-ansi": "^5.2.0"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "mocha": "^6.1.4"
+  }
+}

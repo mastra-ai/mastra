@@ -1,0 +1,140 @@
+@precedence { continue }
+
+@top Stream { BOM? DocEnd? (Document (DocEnd (!continue Document)? | directiveDocument)*)? }
+
+Document {
+  DirectiveEnd element? |
+  DirectiveEnd? element |
+  (!continue Directive)+ (!continue DirectiveEnd element?)?
+}
+
+directiveDocument[@name=Document] {
+  DirectiveEnd element? |
+  (!continue Directive)+ (!continue DirectiveEnd element?)?
+}
+
+value {
+  valueAtom |
+  BlockSequence |
+  BlockMapping |
+  BlockLiteral
+}
+
+valueAtom {
+  QuotedLiteral |
+  Literal |
+  FlowSequence |
+  FlowMapping
+}
+
+element {
+  value |
+  Tagged { Tag (value | Anchored { Anchor value? })? } |
+  Anchored { Anchor (value | Tagged { Tag value? })? } |
+  Alias
+}
+
+elementAtom {
+  valueAtom |
+  Tagged { Tag (valueAtom | Anchored { Anchor valueAtom? })? } |
+  Anchored { Anchor (valueAtom | Tagged { Tag valueAtom? })? } |
+  Alias
+}
+
+flowSeqElement[@name=Item] {
+  elementAtom |
+  FlowMapping {
+    Pair { Key? ":" elementAtom? } |
+    flowMapMark Pair { (Key? ":" elementAtom?)? }
+  }
+}
+
+FlowSequence { "[" (flowSeqElement ",")* flowSeqElement? "]" }
+
+Key { elementAtom }
+
+flowPair {
+  Pair { Key (":" elementAtom?)? | ":" Key? } |
+  flowMapMark Pair { (Key? ":" elementAtom?)? }
+}
+
+FlowMapping { "{" (flowPair ",")* flowPair? "}" }
+
+BlockSequence {
+  sequenceStartMark Item { element? }
+  (sequenceContinueMark Item { element? })*
+  (blockEnd | eof)
+}
+
+explicitKey[@name=Key] { element }
+
+BlockMapping {
+  (mapStartMark Pair { Key? ":" element? } | explicitMapStartMark Pair { explicitKey? (":" element)? })
+  (mapContinueMark Pair { Key? ":" element? } | explicitMapContinueMark Pair { explicitKey? (":" element)? })*
+  (blockEnd | eof)
+}
+
+@skip {} {
+  BlockLiteral {
+    BlockLiteralHeader whitespace? Comment? (eof | linebreak BlockLiteralContent)
+  }
+
+  Directive { DirectiveName whitespace? (DirectiveContent whitespace?)? Comment? (linebreak | eof) }
+}
+
+@skip { whitespace | linebreak | Comment }
+
+@context indentation from "./tokens.js"
+
+@external tokens newlines from "./tokens.js" {
+  blockEnd,
+  eof,
+  DirectiveEnd,
+  DocEnd
+}
+
+@external tokens blockMark from "./tokens.js" {
+  sequenceStartMark[@name="-"]
+  sequenceContinueMark[@name="-"]
+  explicitMapStartMark[@name="?"]
+  explicitMapContinueMark[@name="?"]
+  flowMapMark[@name="?"]
+  mapStartMark
+  mapContinueMark
+}
+
+@external tokens literals from "./tokens.js" {
+  Literal[isolate]
+  QuotedLiteral[isolate]
+  Anchor
+  Alias
+  Tag
+}
+
+@external tokens blockLiteral from "./tokens.js" {
+  BlockLiteralContent
+}
+
+@tokens {
+  whitespace { $[ \t]+ }
+  linebreak { $[\n\r] }
+  DirectiveName { "%" ![ \t\r\n]+ }
+  DirectiveContent { ![ \t\r\n#] (![\n ] | " " ![\n#])* }
+  Comment[isolate] { "#" ![\n]* }
+  BOM { "\ufeff" }
+
+  indentationIndicator { $[1-9] }
+  chompingIndicator { $[+-] }
+  BlockLiteralHeader {
+    ("|" | ">")
+    (indentationIndicator chompingIndicator? | chompingIndicator indentationIndicator?)?
+  }
+
+  "["[@export=BracketL] "]"
+  "{"[@export=BraceL] "}"
+  ":"[@export=Colon] ","
+}
+
+@external propSource yamlHighlighting from "./highlight"
+
+@detectDelim

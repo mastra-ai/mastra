@@ -1,0 +1,1 @@
+{"version":3,"sources":["src/common/IDetachable.ts"],"names":[],"mappings":";AAAA,4DAA4D;AAC5D,kCAAkC","file":"IDetachable.js","sourcesContent":["// Copyright (c) Microsoft Corporation. All rights reserved.\r\n// Licensed under the MIT license.\r\n\r\nexport interface IDetachable {\r\n    detach(): Promise<void>;\r\n}\r\n"]}

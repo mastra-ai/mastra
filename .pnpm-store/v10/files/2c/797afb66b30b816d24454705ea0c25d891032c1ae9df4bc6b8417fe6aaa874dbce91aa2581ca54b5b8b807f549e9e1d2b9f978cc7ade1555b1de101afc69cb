@@ -1,0 +1,21 @@
+import type { StepFlowEntry, StepResult } from '../../index.js';
+import type { PubSub } from '../../../events/index.js';
+import type { Mastra } from '../../../mastra/index.js';
+import type { StepExecutor } from '../step-executor.js';
+import type { ProcessorArgs } from '.';
+export declare function processWorkflowLoop({ workflowId, prevResult, runId, executionPath, stepResults, activeSteps, resumeSteps, resumeData, parentWorkflow, requestContext, retryCount, }: ProcessorArgs, { pubsub, stepExecutor, step, stepResult, }: {
+    pubsub: PubSub;
+    stepExecutor: StepExecutor;
+    step: Extract<StepFlowEntry, {
+        type: 'loop';
+    }>;
+    stepResult: StepResult<any, any, any, any>;
+}): Promise<void>;
+export declare function processWorkflowForEach({ workflowId, prevResult, runId, executionPath, stepResults, activeSteps, resumeSteps, timeTravel, resumeData, parentWorkflow, requestContext, }: ProcessorArgs, { pubsub, mastra, step, }: {
+    pubsub: PubSub;
+    mastra: Mastra;
+    step: Extract<StepFlowEntry, {
+        type: 'foreach';
+    }>;
+}): Promise<void>;
+//# sourceMappingURL=loop.d.ts.map

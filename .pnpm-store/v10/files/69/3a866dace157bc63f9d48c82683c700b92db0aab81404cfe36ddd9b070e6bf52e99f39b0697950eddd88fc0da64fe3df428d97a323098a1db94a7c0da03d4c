@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Configuration schema for Convex project settings.\n\nDocumentation: https://docs.convex.dev/production/project-configuration#convexjson",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "node": {
+      "type": "object",
+      "description": "Node.js specific configuration for server-side packages and dependencies.",
+      "properties": {
+        "externalPackages": {
+          "type": ["array"],
+          "description": "List of packages that should be installed on the server instead of being bundled. Use this for packages that can't be bundled or need to be installed directly on the server.\n\nIf you want to mark all dependencies as external, you can use the string '*' instead of an array.\n\nDocumentation: https://docs.convex.dev/functions/bundling#external-packages",
+          "items": {
+            "type": "string"
+          },
+          "default": ["*"],
+          "oneOf": [
+            {
+              "contains": {
+                "const": "*"
+              },
+              "maxItems": 1
+            },
+            {
+              "not": {
+                "contains": {
+                  "const": "*"
+                }
+              }
+            }
+          ]
+        },
+        "nodeVersion": {
+          "type": "string",
+          "description": "The Node.js version to use for Node.js actions. The currently supported values are '18', '20', and '22'.\n\nDocumentation: https://docs.convex.dev/production/project-configuration#configuring-the-nodejs-version",
+          "default": "20"
+        }
+      }
+    },
+    "generateCommonJSApi": {
+      "type": "boolean",
+      "description": "When true, generates CommonJS-compatible API files for projects not using ES modules. Enable this if your project uses require() syntax instead of ES modules.\n\nDocumentation: https://docs.convex.dev/client/javascript/node#javascript-with-commonjs-require-syntax",
+      "default": false
+    },
+    "functions": {
+      "type": "string",
+      "description": "Path to the directory containing Convex functions. You can customize this to use a different location than the default 'convex/' directory.\n\nDocumentation: https://docs.convex.dev/production/project-configuration#changing-the-convex-folder-name-or-location",
+      "default": "convex/"
+    },
+    "codegen": {
+      "type": "object",
+      "description": "Configuration for Convex code generation.",
+      "properties": {
+        "fileType": {
+          "type": "string",
+          "enum": ["ts", "js/dts"],
+          "description": "The file format of generated code. \"ts\" generates combined .ts files (recommended for TypeScript projects), \"js/dts\" generates separate .js and .d.ts files.\n\nNote: \"js/dts\" must be used when using generateCommonJSApi.",
+          "default": "js/dts"
+        },
+        "legacyComponentApi": {
+          "type": "boolean",
+          "description": "When true (or omitted, default is true), generates inline expanded types for component APIs. When false, generates import-based component API references instead. The import-based format is more modern and recommended for projects using components.\n\nNote: When false, component.ts files are automatically generated for each component.",
+          "default": true
+        },
+        "staticApi": {
+          "type": "boolean",
+          "description": "When true, generates static `api.d.ts` files, which improves autocomplete and incremental typechecking performance in large codebases.\n\nDocumentation: https://docs.convex.dev/production/project-configuration#using-static-code-generation-beta",
+          "default": false
+        },
+        "staticDataModel": {
+          "type": "boolean",
+          "description": "When true, generates static `dataModel.d.ts` files, which improves autocomplete and incremental typechecking performance in large codebases.\n\nDocumentation: https://docs.convex.dev/production/project-configuration#using-static-code-generation-beta",
+          "default": false
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../src/cli/lib/deployApi/utils.ts"],
+  "sourcesContent": ["import { z } from \"zod\";\n\n/**\n * Convenience wrapper for z.object(...).passthrough().\n *\n * This object validator allows extra properties and passes them through.\n * This is useful for forwards compatibility if the server adds extra unknown\n * fields.\n */\nexport function looseObject<T extends z.ZodRawShape>(\n  shape: T,\n  params?: z.RawCreateParams,\n): z.ZodObject<\n  T,\n  \"passthrough\",\n  z.ZodTypeAny,\n  {\n    [k_1 in keyof z.objectUtil.addQuestionMarks<\n      z.baseObjectOutputType<T>,\n      {\n        [k in keyof z.baseObjectOutputType<T>]: undefined extends z.baseObjectOutputType<T>[k]\n          ? never\n          : k;\n      }[keyof T]\n    >]: z.objectUtil.addQuestionMarks<\n      z.baseObjectOutputType<T>,\n      {\n        [k in keyof z.baseObjectOutputType<T>]: undefined extends z.baseObjectOutputType<T>[k]\n          ? never\n          : k;\n      }[keyof T]\n    >[k_1];\n  },\n  { [k_2 in keyof z.baseObjectInputType<T>]: z.baseObjectInputType<T>[k_2] }\n> {\n  return z.object(shape, params).passthrough();\n}\n"],
+  "mappings": ";AAAA,SAAS,SAAS;AASX,gBAAS,YACd,OACA,QAuBA;AACA,SAAO,EAAE,OAAO,OAAO,MAAM,EAAE,YAAY;AAC7C;",
+  "names": []
+}

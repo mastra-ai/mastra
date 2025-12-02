@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/constructors.ts"],
+  "sourcesContent": ["const list: [string, ErrorConstructor][] = [\n  Error,\n  EvalError,\n  RangeError,\n  ReferenceError,\n  SyntaxError,\n  TypeError,\n  URIError,\n  globalThis.DOMException,\n  globalThis.AssertionError,\n  globalThis.SystemError,\n]\n  .filter(Boolean)\n  .map(\n    constructor => [constructor.name, constructor],\n  );\n\nexport const errorConstructors = new Map(list);\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,MAAM,OAAqC;AAAA,EACzC;AAAA,EACA;AAAA,EACA;AAAA,EACA;AAAA,EACA;AAAA,EACA;AAAA,EACA;AAAA,EACA,WAAW;AAAA,EACX,WAAW;AAAA,EACX,WAAW;AACb,EACG,OAAO,OAAO,EACd;AAAA,EACC,iBAAe,CAAC,YAAY,MAAM,WAAW;AAC/C;AAEK,MAAM,oBAAoB,IAAI,IAAI,IAAI;",
+  "names": []
+}

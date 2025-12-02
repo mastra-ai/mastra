@@ -1,0 +1,24 @@
+{
+  "name": "@changesets/errors",
+  "version": "0.2.0",
+  "description": "Error classes for @changesets",
+  "main": "dist/changesets-errors.cjs.js",
+  "module": "dist/changesets-errors.esm.js",
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/changesets-errors.cjs.mjs",
+        "default": "./dist/changesets-errors.cjs.js"
+      },
+      "module": "./dist/changesets-errors.esm.js",
+      "import": "./dist/changesets-errors.cjs.mjs",
+      "default": "./dist/changesets-errors.cjs.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/changesets/changesets/tree/main/packages/errors",
+  "dependencies": {
+    "extendable-error": "^0.1.5"
+  }
+}

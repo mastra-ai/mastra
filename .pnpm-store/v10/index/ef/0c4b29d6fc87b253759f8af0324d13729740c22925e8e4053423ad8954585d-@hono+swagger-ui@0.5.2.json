@@ -1,0 +1,49 @@
+{
+  "name": "@hono/swagger-ui",
+  "version": "0.5.2",
+  "requiresBuild": false,
+  "files": {
+    "CHANGELOG.md": {
+      "checkedAt": 1764662917620,
+      "integrity": "sha512-6wjeb4N4W8sJfqlZ4EzuH0gB1jv+/uXrF6BN8Fv0+TsSrh80ifr9kmbfpzcUNrBel5+R7LCCzkre8xpOKyHwcw==",
+      "mode": 420,
+      "size": 3433
+    },
+    "README.md": {
+      "checkedAt": 1764662917623,
+      "integrity": "sha512-xtglrhyyPRW3EjjpUqHYh8GNQdEwKVH8RneRn50uvWbScNXh7BPWT8ETRiTu3nwTU0XPSlJkU9xsCvxFO/xS0A==",
+      "mode": 420,
+      "size": 3895
+    },
+    "dist/index.cjs": {
+      "checkedAt": 1764662917624,
+      "integrity": "sha512-eHD5ewujJF9wMrYUmMmkWdx3WCAvbfmURa9txKubmhPTreIvhg8oP1wXG+NuXonQr40cAmcCYCDEOK6UHvi8+g==",
+      "mode": 420,
+      "size": 4902
+    },
+    "dist/index.d.cts": {
+      "checkedAt": 1764662917625,
+      "integrity": "sha512-xZwTvmlXOMwmg5DAaLrYER+FxSqkClrQUnqDSZswHhFcZQqfUCnsj/o5sh5Pnub/I5n8SmzsqR7sVsjUgc+KQg==",
+      "mode": 420,
+      "size": 3781
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662917625,
+      "integrity": "sha512-xZwTvmlXOMwmg5DAaLrYER+FxSqkClrQUnqDSZswHhFcZQqfUCnsj/o5sh5Pnub/I5n8SmzsqR7sVsjUgc+KQg==",
+      "mode": 420,
+      "size": 3781
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662917626,
+      "integrity": "sha512-xrwCZ0Hvi09gxsuUOcmCF50/kyzlRWCygenBlUviP4ZJrmPhcYZwBRG+RkExU9GsG1CN81bJnipk1bWcrjksKw==",
+      "mode": 420,
+      "size": 3847
+    },
+    "package.json": {
+      "checkedAt": 1764662917626,
+      "integrity": "sha512-MpgGuCjruJUtge+w7huYNrxc6M+DScdI2em3YOa8NCC17k+lu1PBFbbqYImcZYl1tuMpYyvKp7sQklGf1my15Q==",
+      "mode": 420,
+      "size": 1244
+    }
+  }
+}

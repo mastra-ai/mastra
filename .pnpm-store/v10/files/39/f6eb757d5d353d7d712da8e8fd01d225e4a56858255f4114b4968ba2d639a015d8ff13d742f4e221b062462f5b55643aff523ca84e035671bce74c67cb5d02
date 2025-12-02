@@ -1,0 +1,45 @@
+{
+  "name": "@joshwooding/vite-plugin-react-docgen-typescript",
+  "version": "0.6.1",
+  "description": "A vite plugin to inject react typescript docgen information",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joshwooding/vite-plugin-react-docgen-typescript.git"
+  },
+  "license": "MIT",
+  "author": "Josh Wooding",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "*.js",
+    "*.d.ts"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "glob": "^10.0.0",
+    "magic-string": "^0.30.0",
+    "react-docgen-typescript": "^2.2.2"
+  },
+  "peerDependencies": {
+    "typescript": ">= 4.3.x",
+    "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "name": "@clerk/types",
+  "version": "4.95.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662906634,
+      "integrity": "sha512-UXGoX6/RwVHnQeeCJdHoSkL+FxofEmkFHjU0MG9ixZTixOgm2SiKUBlIqgIZTUNzEiSzCGlI2QHoN0kvY4Oq9Q==",
+      "mode": 420,
+      "size": 1068
+    },
+    "dist/esm/index.js": {
+      "checkedAt": 1764662906637,
+      "integrity": "sha512-20M42gksOXM8jdUDtKv4RYJEuhGti5JuBiWOhntShhF+K41oG695I26o+sukH0PLgv7CuhB5eXpdvBDevBF+WQ==",
+      "mode": 420,
+      "size": 6456
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662906654,
+      "integrity": "sha512-/HbINlKx9Zdof16rICDJwk9KCU5myKp4A4eeqY/l5I0sfNb3wn+i4w1RMQuOFHBOWG14KJuZei/mU05wSoeQ8w==",
+      "mode": 420,
+      "size": 7711
+    },
+    "package.json": {
+      "checkedAt": 1764662906655,
+      "integrity": "sha512-3NNOab6veKtztaNYOWFdhN2K1tduozwAweC29MPQ6NnJIVe9VTpduvli4Be16cQtzwifM8TLzgoAqxwAGavQxw==",
+      "mode": 420,
+      "size": 1251
+    },
+    "dist/esm/index.js.map": {
+      "checkedAt": 1764662906674,
+      "integrity": "sha512-qesbPeVkqSUCMC2SQVrkRjWU7/aCmVgasW2QvTIRSaIkN5LOZY6QXmQjt/kxjXNRBSpBT4+cFvO97GWzPQaqsg==",
+      "mode": 420,
+      "size": 11240
+    },
+    "dist/index.js.map": {
+      "checkedAt": 1764662906681,
+      "integrity": "sha512-OS+tRiRM3rCq8Dod1xY366kV1VLsPPydpMs55fOxwEDuaAkM0E6/mmkL6RCK1TzKeNfjaMg45vXQ842P+LSR1Q==",
+      "mode": 420,
+      "size": 13908
+    },
+    "README.md": {
+      "checkedAt": 1764662906682,
+      "integrity": "sha512-O2xJrnv0Kf4mBdL6Oi923mPoZ6LHfPydy5jSH0gOHoKx3pOMFKhSp3n8UYJn53Q4irGXFUslJ4wZts9AmIH2sw==",
+      "mode": 420,
+      "size": 3039
+    },
+    "dist/index.d.mts": {
+      "checkedAt": 1764662906683,
+      "integrity": "sha512-BHep7ZQMaRSRqroG9xgayeU5DtbPu3hLyhDkQx3Kjcgs4dZNEp7qTFtCb6wQmGV7TqMgtiCoPWofMyKObmS1tQ==",
+      "mode": 420,
+      "size": 394319
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662906683,
+      "integrity": "sha512-BHep7ZQMaRSRqroG9xgayeU5DtbPu3hLyhDkQx3Kjcgs4dZNEp7qTFtCb6wQmGV7TqMgtiCoPWofMyKObmS1tQ==",
+      "mode": 420,
+      "size": 394319
+    }
+  }
+}

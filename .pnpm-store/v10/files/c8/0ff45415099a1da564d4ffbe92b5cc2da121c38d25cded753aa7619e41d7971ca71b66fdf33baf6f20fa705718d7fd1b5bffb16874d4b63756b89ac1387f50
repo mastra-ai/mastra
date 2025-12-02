@@ -1,0 +1,37 @@
+{
+    "name": "@redis/client",
+    "version": "5.8.2",
+    "license": "MIT",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist/",
+        "!dist/tsconfig.tsbuildinfo"
+    ],
+    "scripts": {
+        "test": "nyc -r text-summary -r lcov mocha -r tsx './lib/**/*.spec.ts'",
+        "release": "release-it"
+    },
+    "dependencies": {
+        "cluster-key-slot": "1.1.2"
+    },
+    "devDependencies": {
+        "@redis/test-utils": "*",
+        "@types/sinon": "^17.0.3",
+        "sinon": "^17.0.1"
+    },
+    "engines": {
+        "node": ">= 18"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/redis/node-redis.git"
+    },
+    "bugs": {
+        "url": "https://github.com/redis/node-redis/issues"
+    },
+    "homepage": "https://github.com/redis/node-redis/tree/master/packages/client",
+    "keywords": [
+        "redis"
+    ]
+}

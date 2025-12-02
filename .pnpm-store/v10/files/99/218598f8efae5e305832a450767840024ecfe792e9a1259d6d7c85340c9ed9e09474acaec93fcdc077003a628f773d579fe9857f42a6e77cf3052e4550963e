@@ -1,0 +1,55 @@
+{
+	"$id": "/inference/schemas/text2text-generation/input.json",
+	"$schema": "http://json-schema.org/draft-06/schema#",
+	"description": "Inputs for Text2text Generation inference",
+	"title": "Text2TextGenerationInput",
+	"type": "object",
+	"properties": {
+		"inputs": {
+			"description": "The input text data",
+			"type": "string"
+		},
+		"parameters": {
+			"description": "Additional inference parameters",
+			"$ref": "#/$defs/Text2textGenerationParameters"
+		}
+	},
+	"$defs": {
+		"Text2textGenerationParameters": {
+			"title": "Text2textGenerationParameters",
+			"description": "Additional inference parameters for Text2text Generation",
+			"type": "object",
+			"properties": {
+				"clean_up_tokenization_spaces": {
+					"type": "boolean",
+					"description": "Whether to clean up the potential extra spaces in the text output."
+				},
+				"truncation": {
+					"title": "Text2textGenerationTruncationStrategy",
+					"type": "string",
+					"description": "The truncation strategy to use",
+					"oneOf": [
+						{
+							"const": "do_not_truncate"
+						},
+						{
+							"const": "longest_first"
+						},
+						{
+							"const": "only_first"
+						},
+						{
+							"const": "only_second"
+						}
+					]
+				},
+				"generate_parameters": {
+					"title": "generateParameters",
+					"type": "object",
+					"description": "Additional parametrization of the text generation algorithm"
+				}
+			}
+		}
+	},
+	"required": ["inputs"]
+}

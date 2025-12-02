@@ -1,0 +1,409 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.pubsub.v1;
+
+import "google/api/annotations.proto";
+import "google/api/client.proto";
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Google.Cloud.PubSub.V1";
+option go_package = "cloud.google.com/go/pubsub/v2/apiv1/pubsubpb;pubsubpb";
+option java_multiple_files = true;
+option java_outer_classname = "SchemaProto";
+option java_package = "com.google.pubsub.v1";
+option php_namespace = "Google\\Cloud\\PubSub\\V1";
+option ruby_package = "Google::Cloud::PubSub::V1";
+
+// Service for doing schema-related operations.
+service SchemaService {
+  option (google.api.default_host) = "pubsub.googleapis.com";
+  option (google.api.oauth_scopes) =
+      "https://www.googleapis.com/auth/cloud-platform,"
+      "https://www.googleapis.com/auth/pubsub";
+
+  // Creates a schema.
+  rpc CreateSchema(CreateSchemaRequest) returns (Schema) {
+    option (google.api.http) = {
+      post: "/v1/{parent=projects/*}/schemas"
+      body: "schema"
+    };
+    option (google.api.method_signature) = "parent,schema,schema_id";
+  }
+
+  // Gets a schema.
+  rpc GetSchema(GetSchemaRequest) returns (Schema) {
+    option (google.api.http) = {
+      get: "/v1/{name=projects/*/schemas/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Lists schemas in a project.
+  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=projects/*}/schemas"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Lists all schema revisions for the named schema.
+  rpc ListSchemaRevisions(ListSchemaRevisionsRequest)
+      returns (ListSchemaRevisionsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{name=projects/*/schemas/*}:listRevisions"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Commits a new schema revision to an existing schema.
+  rpc CommitSchema(CommitSchemaRequest) returns (Schema) {
+    option (google.api.http) = {
+      post: "/v1/{name=projects/*/schemas/*}:commit"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name,schema";
+  }
+
+  // Creates a new schema revision that is a copy of the provided revision_id.
+  rpc RollbackSchema(RollbackSchemaRequest) returns (Schema) {
+    option (google.api.http) = {
+      post: "/v1/{name=projects/*/schemas/*}:rollback"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name,revision_id";
+  }
+
+  // Deletes a specific schema revision.
+  rpc DeleteSchemaRevision(DeleteSchemaRevisionRequest) returns (Schema) {
+    option (google.api.http) = {
+      delete: "/v1/{name=projects/*/schemas/*}:deleteRevision"
+    };
+    option (google.api.method_signature) = "name,revision_id";
+  }
+
+  // Deletes a schema.
+  rpc DeleteSchema(DeleteSchemaRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=projects/*/schemas/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Validates a schema.
+  rpc ValidateSchema(ValidateSchemaRequest) returns (ValidateSchemaResponse) {
+    option (google.api.http) = {
+      post: "/v1/{parent=projects/*}/schemas:validate"
+      body: "*"
+    };
+    option (google.api.method_signature) = "parent,schema";
+  }
+
+  // Validates a message against a schema.
+  rpc ValidateMessage(ValidateMessageRequest)
+      returns (ValidateMessageResponse) {
+    option (google.api.http) = {
+      post: "/v1/{parent=projects/*}/schemas:validateMessage"
+      body: "*"
+    };
+  }
+}
+
+// A schema resource.
+message Schema {
+  option (google.api.resource) = {
+    type: "pubsub.googleapis.com/Schema"
+    pattern: "projects/{project}/schemas/{schema}"
+  };
+
+  // Possible schema definition types.
+  enum Type {
+    // Default value. This value is unused.
+    TYPE_UNSPECIFIED = 0;
+
+    // A Protocol Buffer schema definition.
+    PROTOCOL_BUFFER = 1;
+
+    // An Avro schema definition.
+    AVRO = 2;
+  }
+
+  // Required. Name of the schema.
+  // Format is `projects/{project}/schemas/{schema}`.
+  string name = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The type of the schema definition.
+  Type type = 2;
+
+  // The definition of the schema. This should contain a string representing
+  // the full definition of the schema that is a valid schema definition of
+  // the type specified in `type`.
+  string definition = 3;
+
+  // Output only. Immutable. The revision ID of the schema.
+  string revision_id = 4 [
+    (google.api.field_behavior) = IMMUTABLE,
+    (google.api.field_behavior) = OUTPUT_ONLY
+  ];
+
+  // Output only. The timestamp that the revision was created.
+  google.protobuf.Timestamp revision_create_time = 6
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// View of Schema object fields to be returned by GetSchema and ListSchemas.
+enum SchemaView {
+  // The default / unset value.
+  // The API will default to the BASIC view.
+  SCHEMA_VIEW_UNSPECIFIED = 0;
+
+  // Include the name and type of the schema, but not the definition.
+  BASIC = 1;
+
+  // Include all Schema object fields.
+  FULL = 2;
+}
+
+// Request for the CreateSchema method.
+message CreateSchemaRequest {
+  // Required. The name of the project in which to create the schema.
+  // Format is `projects/{project-id}`.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "pubsub.googleapis.com/Schema"
+    }
+  ];
+
+  // Required. The schema object to create.
+  //
+  // This schema's `name` parameter is ignored. The schema object returned
+  // by CreateSchema will have a `name` made using the given `parent` and
+  // `schema_id`.
+  Schema schema = 2 [(google.api.field_behavior) = REQUIRED];
+
+  // The ID to use for the schema, which will become the final component of
+  // the schema's resource name.
+  //
+  // See https://cloud.google.com/pubsub/docs/pubsub-basics#resource_names for
+  // resource name constraints.
+  string schema_id = 3;
+}
+
+// Request for the GetSchema method.
+message GetSchemaRequest {
+  // Required. The name of the schema to get.
+  // Format is `projects/{project}/schemas/{schema}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "pubsub.googleapis.com/Schema" }
+  ];
+
+  // The set of fields to return in the response. If not set, returns a Schema
+  // with all fields filled out. Set to `BASIC` to omit the `definition`.
+  SchemaView view = 2;
+}
+
+// Request for the `ListSchemas` method.
+message ListSchemasRequest {
+  // Required. The name of the project in which to list schemas.
+  // Format is `projects/{project-id}`.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "cloudresourcemanager.googleapis.com/Project"
+    }
+  ];
+
+  // The set of Schema fields to return in the response. If not set, returns
+  // Schemas with `name` and `type`, but not `definition`. Set to `FULL` to
+  // retrieve all fields.
+  SchemaView view = 2;
+
+  // Maximum number of schemas to return.
+  int32 page_size = 3;
+
+  // The value returned by the last `ListSchemasResponse`; indicates that
+  // this is a continuation of a prior `ListSchemas` call, and that the
+  // system should return the next page of data.
+  string page_token = 4;
+}
+
+// Response for the `ListSchemas` method.
+message ListSchemasResponse {
+  // The resulting schemas.
+  repeated Schema schemas = 1;
+
+  // If not empty, indicates that there may be more schemas that match the
+  // request; this value should be passed in a new `ListSchemasRequest`.
+  string next_page_token = 2;
+}
+
+// Request for the `ListSchemaRevisions` method.
+message ListSchemaRevisionsRequest {
+  // Required. The name of the schema to list revisions for.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "pubsub.googleapis.com/Schema" }
+  ];
+
+  // The set of Schema fields to return in the response. If not set, returns
+  // Schemas with `name` and `type`, but not `definition`. Set to `FULL` to
+  // retrieve all fields.
+  SchemaView view = 2;
+
+  // The maximum number of revisions to return per page.
+  int32 page_size = 3;
+
+  // The page token, received from a previous ListSchemaRevisions call.
+  // Provide this to retrieve the subsequent page.
+  string page_token = 4;
+}
+
+// Response for the `ListSchemaRevisions` method.
+message ListSchemaRevisionsResponse {
+  // The revisions of the schema.
+  repeated Schema schemas = 1;
+
+  // A token that can be sent as `page_token` to retrieve the next page.
+  // If this field is empty, there are no subsequent pages.
+  string next_page_token = 2;
+}
+
+// Request for CommitSchema method.
+message CommitSchemaRequest {
+  // Required. The name of the schema we are revising.
+  // Format is `projects/{project}/schemas/{schema}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "pubsub.googleapis.com/Schema" }
+  ];
+
+  // Required. The schema revision to commit.
+  Schema schema = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Request for the `RollbackSchema` method.
+message RollbackSchemaRequest {
+  // Required. The schema being rolled back with revision id.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "pubsub.googleapis.com/Schema" }
+  ];
+
+  // Required. The revision ID to roll back to.
+  // It must be a revision of the same schema.
+  //
+  //   Example: c7cfa2a8
+  string revision_id = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Request for the `DeleteSchemaRevision` method.
+message DeleteSchemaRevisionRequest {
+  // Required. The name of the schema revision to be deleted, with a revision ID
+  // explicitly included.
+  //
+  // Example: `projects/123/schemas/my-schema@c7cfa2a8`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "pubsub.googleapis.com/Schema" }
+  ];
+
+  // Optional. This field is deprecated and should not be used for specifying
+  // the revision ID. The revision ID should be specified via the `name`
+  // parameter.
+  string revision_id = 2
+      [deprecated = true, (google.api.field_behavior) = OPTIONAL];
+}
+
+// Request for the `DeleteSchema` method.
+message DeleteSchemaRequest {
+  // Required. Name of the schema to delete.
+  // Format is `projects/{project}/schemas/{schema}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "pubsub.googleapis.com/Schema" }
+  ];
+}
+
+// Request for the `ValidateSchema` method.
+message ValidateSchemaRequest {
+  // Required. The name of the project in which to validate schemas.
+  // Format is `projects/{project-id}`.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "cloudresourcemanager.googleapis.com/Project"
+    }
+  ];
+
+  // Required. The schema object to validate.
+  Schema schema = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Response for the `ValidateSchema` method.
+// Empty for now.
+message ValidateSchemaResponse {}
+
+// Request for the `ValidateMessage` method.
+message ValidateMessageRequest {
+  // Required. The name of the project in which to validate schemas.
+  // Format is `projects/{project-id}`.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "cloudresourcemanager.googleapis.com/Project"
+    }
+  ];
+
+  oneof schema_spec {
+    // Name of the schema against which to validate.
+    //
+    // Format is `projects/{project}/schemas/{schema}`.
+    string name = 2 [
+      (google.api.resource_reference) = { type: "pubsub.googleapis.com/Schema" }
+    ];
+
+    // Ad-hoc schema against which to validate
+    Schema schema = 3;
+  }
+
+  // Message to validate against the provided `schema_spec`.
+  bytes message = 4;
+
+  // The encoding expected for messages
+  Encoding encoding = 5;
+}
+
+// Response for the `ValidateMessage` method.
+// Empty for now.
+message ValidateMessageResponse {}
+
+// Possible encoding types for messages.
+enum Encoding {
+  // Unspecified
+  ENCODING_UNSPECIFIED = 0;
+
+  // JSON encoding
+  JSON = 1;
+
+  // Binary encoding, as defined by the schema type. For some schema types,
+  // binary encoding may not be available.
+  BINARY = 2;
+}

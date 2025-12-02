@@ -1,0 +1,45 @@
+{
+	"$id": "/inference/schemas/zero-shot-image-classification/input.json",
+	"$schema": "http://json-schema.org/draft-06/schema#",
+	"description": "Inputs for Zero Shot Image Classification inference",
+	"title": "ZeroShotImageClassificationInput",
+	"type": "object",
+	"properties": {
+		"inputs": {
+			"description": "The input image data, with candidate labels",
+			"type": "object",
+			"title": "ZeroShotImageClassificationInputData",
+			"properties": {
+				"image": {
+					"description": "The image data to classify"
+				},
+				"candidateLabels": {
+					"description": "The candidate labels for this image",
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			},
+			"required": ["image", "candidateLabels"]
+		},
+		"parameters": {
+			"description": "Additional inference parameters",
+			"$ref": "#/$defs/ZeroShotImageClassificationParameters"
+		}
+	},
+	"$defs": {
+		"ZeroShotImageClassificationParameters": {
+			"title": "ZeroShotImageClassificationParameters",
+			"description": "Additional inference parameters for Zero Shot Image Classification",
+			"type": "object",
+			"properties": {
+				"hypothesis_template": {
+					"type": "string",
+					"description": "The sentence used in conjunction with candidateLabels to attempt the text classification by replacing the placeholder with the candidate labels."
+				}
+			}
+		}
+	},
+	"required": ["inputs"]
+}

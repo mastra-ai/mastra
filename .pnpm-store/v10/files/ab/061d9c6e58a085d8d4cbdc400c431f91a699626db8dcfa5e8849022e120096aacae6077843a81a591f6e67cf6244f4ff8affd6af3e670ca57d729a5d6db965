@@ -1,0 +1,204 @@
+import type { MastraDBMessage } from '../../agent/message-list/index.js';
+import type { MastraModelConfig } from '../../llm/model/shared.types.js';
+import type { TracingContext } from '../../observability/index.js';
+import type { ChunkType } from '../../stream/index.js';
+import type { Processor } from '../index.js';
+/**
+ * PII categories for detection and redaction
+ */
+export interface PIICategories {
+    email?: boolean;
+    phone?: boolean;
+    'credit-card'?: boolean;
+    ssn?: boolean;
+    'api-key'?: boolean;
+    'ip-address'?: boolean;
+    name?: boolean;
+    address?: boolean;
+    'date-of-birth'?: boolean;
+    url?: boolean;
+    uuid?: boolean;
+    'crypto-wallet'?: boolean;
+    iban?: boolean;
+    [customType: string]: boolean | undefined;
+}
+/**
+ * Individual PII category score
+ */
+export interface PIICategoryScore {
+    type: string;
+    score: number;
+}
+export type PIICategoryScores = PIICategoryScore[];
+/**
+ * Individual PII detection with location and redaction info
+ */
+export interface PIIDetection {
+    type: string;
+    value: string;
+    confidence: number;
+    start: number;
+    end: number;
+    redacted_value?: string | null;
+}
+/**
+ * Result structure for PII detection (simplified for minimal tokens)
+ */
+export interface PIIDetectionResult {
+    categories: PIICategoryScores | null;
+    detections: PIIDetection[] | null;
+    redacted_content?: string | null;
+}
+/**
+ * Configuration options for PIIDetector
+ */
+export interface PIIDetectorOptions {
+    /**
+     * Model configuration for the detection agent
+     * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
+     */
+    model: MastraModelConfig;
+    /**
+     * PII types to detect.
+     * If not specified, uses default types.
+     */
+    detectionTypes?: string[];
+    /**
+     * Confidence threshold for flagging (0-1, default: 0.6)
+     * PII is flagged if any category score exceeds this threshold
+     */
+    threshold?: number;
+    /**
+     * Strategy when PII is detected:
+     * - 'block': Reject the entire input with an error
+     * - 'warn': Log warning but allow content through
+     * - 'filter': Remove flagged messages but continue with remaining
+     * - 'redact': Replace detected PII with redacted versions (default)
+     */
+    strategy?: 'block' | 'warn' | 'filter' | 'redact';
+    /**
+     * Redaction method for PII:
+     * - 'mask': Replace with asterisks (***@***.com)
+     * - 'hash': Replace with SHA256 hash
+     * - 'remove': Remove entirely
+     * - 'placeholder': Replace with type placeholder ([EMAIL], [PHONE], etc.)
+     */
+    redactionMethod?: 'mask' | 'hash' | 'remove' | 'placeholder';
+    /**
+     * Custom detection instructions for the agent
+     * If not provided, uses default instructions based on detection types
+     */
+    instructions?: string;
+    /**
+     * Whether to include detection details in logs (default: false)
+     * Useful for compliance auditing and debugging
+     */
+    includeDetections?: boolean;
+    /**
+     * Whether to preserve PII format during redaction (default: true)
+     * When true, maintains structure like ***-**-1234 for phone numbers
+     */
+    preserveFormat?: boolean;
+    /**
+     * Structured output options used for the detection agent
+     */
+    structuredOutputOptions?: {
+        /**
+         * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+         */
+        jsonPromptInjection?: boolean;
+    };
+}
+/**
+ * PIIDetector uses an internal Mastra agent to identify and redact
+ * personally identifiable information for privacy compliance.
+ *
+ * Supports multiple redaction strategies and maintains audit trails
+ * for compliance with GDPR, CCPA, HIPAA, and other privacy regulations.
+ */
+export declare class PIIDetector implements Processor<'pii-detector'> {
+    readonly id = "pii-detector";
+    readonly name = "PII Detector";
+    private detectionAgent;
+    private detectionTypes;
+    private threshold;
+    private strategy;
+    private redactionMethod;
+    private includeDetections;
+    private preserveFormat;
+    private structuredOutputOptions?;
+    private static readonly DEFAULT_DETECTION_TYPES;
+    constructor(options: PIIDetectorOptions);
+    processInput(args: {
+        messages: MastraDBMessage[];
+        abort: (reason?: string) => never;
+        tracingContext?: TracingContext;
+    }): Promise<MastraDBMessage[]>;
+    /**
+     * Detect PII using the internal agent
+     */
+    private detectPII;
+    /**
+     * Determine if PII is flagged based on detections or category scores above threshold
+     */
+    private isPIIFlagged;
+    /**
+     * Handle detected PII based on strategy
+     */
+    private handleDetectedPII;
+    /**
+     * Create a redacted message with PII removed/masked
+     */
+    private createRedactedMessage;
+    /**
+     * Apply redaction method to content
+     */
+    private applyRedactionMethod;
+    /**
+     * Redact individual PII value based on method and type
+     */
+    private redactValue;
+    /**
+     * Mask PII value while optionally preserving format
+     */
+    private maskValue;
+    /**
+     * Hash PII value using SHA256
+     */
+    private hashValue;
+    /**
+     * Extract text content from message for analysis
+     */
+    private extractTextContent;
+    /**
+     * Create default detection instructions
+     */
+    private createDefaultInstructions;
+    /**
+     * Process streaming output chunks for PII detection and redaction
+     */
+    processOutputStream(args: {
+        part: ChunkType;
+        streamParts: ChunkType[];
+        state: Record<string, any>;
+        abort: (reason?: string) => never;
+        tracingContext?: TracingContext;
+    }): Promise<ChunkType | null>;
+    /**
+     * Process final output result for PII detection and redaction
+     */
+    processOutputResult({ messages, abort, tracingContext, }: {
+        messages: MastraDBMessage[];
+        abort: (reason?: string) => never;
+        tracingContext?: TracingContext;
+    }): Promise<MastraDBMessage[]>;
+    /**
+     * Get detected PII types from detection result
+     */
+    private getDetectedTypes;
+    /**
+     * Create detection prompt for the agent
+     */
+    private createDetectionPrompt;
+}
+//# sourceMappingURL=pii-detector.d.ts.map

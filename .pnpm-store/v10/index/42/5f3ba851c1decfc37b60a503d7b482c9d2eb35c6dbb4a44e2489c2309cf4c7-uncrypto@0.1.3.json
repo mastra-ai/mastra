@@ -1,0 +1,61 @@
+{
+  "name": "uncrypto",
+  "version": "0.1.3",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662927897,
+      "integrity": "sha512-ZUOz4mMEav3Dj+n3ZhgAmeZ5pM/9oYtnAll8fJqq6C8n6eBNpNUv3con8e42dckvhnjRUWcTW8p5juElOx3RRA==",
+      "mode": 420,
+      "size": 1078
+    },
+    "dist/crypto.node.cjs": {
+      "checkedAt": 1764662927903,
+      "integrity": "sha512-X2p/zBR8VHgeTRvAat6hSfMmAClTNUsLoe3jge7r3EfCXRkPGPvz9TtsyhdpzZpJJXa7CCVSPPX0oMAq6iGjcw==",
+      "mode": 420,
+      "size": 737
+    },
+    "dist/crypto.web.cjs": {
+      "checkedAt": 1764662927904,
+      "integrity": "sha512-ZJtaqOSBFdaDsTudHpeY0DCuG8YLnw4l83Px2uCQkHjShBzU1rGXrSXFMSC1H1BG+CBhaIXJoaHOxxIBFMl7Hg==",
+      "mode": 420,
+      "size": 487
+    },
+    "package.json": {
+      "checkedAt": 1764662927907,
+      "integrity": "sha512-0O2KZ0FR/tBripC3ZhNcAsH2l3kxBwMnSxyFaxC3j2TbLXw9GEp8VQLrOZc+oOHoXUTREigD8DLvTKVDh6so0g==",
+      "mode": 420,
+      "size": 1960
+    },
+    "README.md": {
+      "checkedAt": 1764662927909,
+      "integrity": "sha512-P7NqvBCCEvzFJK6TtPlzXnCow0dco6HDdICQCEq0K2hL+Z3tucjHXItgjq4cbGGWOcf0tNY7xNWMucGdPBy2jQ==",
+      "mode": 420,
+      "size": 2389
+    },
+    "dist/crypto.node.mjs": {
+      "checkedAt": 1764662927911,
+      "integrity": "sha512-l75dTJeRbmEblWQp98Us2dA3QJtsSPWYEPErQZC1GK/K26zyKelHPFhQKdgMLYgXx7GVjwyOFiN2h6V1ANQvew==",
+      "mode": 420,
+      "size": 380
+    },
+    "dist/crypto.web.mjs": {
+      "checkedAt": 1764662927912,
+      "integrity": "sha512-S7gOxrHEJ+1x9fvlkbUNqmO3mjzoq1Jn9UBmFiEik73N7fgypeP///ovn88uf8cSy22pebgWY4v+BJioisLG4Q==",
+      "mode": 420,
+      "size": 348
+    },
+    "dist/crypto.node.d.ts": {
+      "checkedAt": 1764662927914,
+      "integrity": "sha512-fMF7BsMouj99GmcmG9E4TGqf/pdhNENPmUq/uzOj5/3sQKuNf6CXepXBl7XF+XkabghCwuAP98H6IM2cqpkbeA==",
+      "mode": 420,
+      "size": 246
+    },
+    "dist/crypto.web.d.ts": {
+      "checkedAt": 1764662927914,
+      "integrity": "sha512-fMF7BsMouj99GmcmG9E4TGqf/pdhNENPmUq/uzOj5/3sQKuNf6CXepXBl7XF+XkabghCwuAP98H6IM2cqpkbeA==",
+      "mode": 420,
+      "size": 246
+    }
+  }
+}

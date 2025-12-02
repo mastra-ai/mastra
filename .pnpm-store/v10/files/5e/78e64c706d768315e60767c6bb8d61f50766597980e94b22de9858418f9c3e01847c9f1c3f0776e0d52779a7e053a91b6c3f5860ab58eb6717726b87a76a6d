@@ -1,0 +1,64 @@
+:root {
+  --aui-background: 0 0% 100%;
+  --aui-foreground: 240 10% 3.9%;
+
+  --aui-card: 0 0% 100%;
+  --aui-card-foreground: 240 10% 3.9%;
+
+  --aui-popover: 0 0% 100%;
+  --aui-popover-foreground: 240 10% 3.9%;
+
+  --aui-primary: 240 5.9% 10%;
+  --aui-primary-foreground: 0 0% 98%;
+
+  --aui-secondary: 240 4.8% 95.9%;
+  --aui-secondary-foreground: 240 5.9% 10%;
+
+  --aui-muted: 240 4.8% 95.9%;
+  --aui-muted-foreground: 240 3.8% 46.1%;
+
+  --aui-accent: 240 4.8% 95.9%;
+  --aui-accent-foreground: 240 5.9% 10%;
+
+  --aui-destructive: 0 84.2% 60.2%;
+  --aui-destructive-foreground: 0 0% 98%;
+
+  --aui-border: 240 5.9% 90%;
+  --aui-input: 240 5.9% 90%;
+  --aui-ring: 240 10% 3.9%;
+
+  --aui-radius: 0.5rem;
+
+  /* aui specific */
+  --aui-thread-max-width: 42rem;
+}
+
+.dark {
+  --aui-background: 0 0% 7%;
+  --aui-foreground: 0 0% 98%;
+
+  --aui-card: 240 10% 3.9%;
+  --aui-card-foreground: 0 0% 98%;
+
+  --aui-popover: 240 10% 3.9%;
+  --aui-popover-foreground: 0 0% 98%;
+
+  --aui-primary: 0 0% 98%;
+  --aui-primary-foreground: 240 5.9% 10%;
+
+  --aui-secondary: 240 3.7% 15.9%;
+  --aui-secondary-foreground: 0 0% 98%;
+
+  --aui-muted: 240 3.7% 15.9%;
+  --aui-muted-foreground: 240 5% 64.9%;
+
+  --aui-accent: 240 3.7% 15.9%;
+  --aui-accent-foreground: 0 0% 98%;
+
+  --aui-destructive: 0 62.8% 30.6%;
+  --aui-destructive-foreground: 0 0% 98%;
+
+  --aui-border: 240 3.7% 15.9%;
+  --aui-input: 240 3.7% 15.9%;
+  --aui-ring: 240 4.9% 83.9%;
+}

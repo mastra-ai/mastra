@@ -1,0 +1,25 @@
+{
+    "name": "@types/keygrip",
+    "version": "1.0.6",
+    "description": "TypeScript definitions for keygrip",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/keygrip",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "jKey Lu",
+            "githubUsername": "jkeylu",
+            "url": "https://github.com/jkeylu"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/keygrip"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "6bf83f5974b3f14a8897c7a44a7466a538cec2557be059088d658eb2170c44ea",
+    "typeScriptVersion": "4.5"
+}

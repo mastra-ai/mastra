@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.processLock = exports.lockInternals = exports.NavigatorLockAcquireTimeoutError = exports.navigatorLock = exports.AuthClient = exports.AuthAdminApi = exports.GoTrueClient = exports.GoTrueAdminApi = void 0;
+const tslib_1 = require("tslib");
+const GoTrueAdminApi_1 = tslib_1.__importDefault(require("./GoTrueAdminApi"));
+exports.GoTrueAdminApi = GoTrueAdminApi_1.default;
+const GoTrueClient_1 = tslib_1.__importDefault(require("./GoTrueClient"));
+exports.GoTrueClient = GoTrueClient_1.default;
+const AuthAdminApi_1 = tslib_1.__importDefault(require("./AuthAdminApi"));
+exports.AuthAdminApi = AuthAdminApi_1.default;
+const AuthClient_1 = tslib_1.__importDefault(require("./AuthClient"));
+exports.AuthClient = AuthClient_1.default;
+tslib_1.__exportStar(require("./lib/types"), exports);
+tslib_1.__exportStar(require("./lib/errors"), exports);
+var locks_1 = require("./lib/locks");
+Object.defineProperty(exports, "navigatorLock", { enumerable: true, get: function () { return locks_1.navigatorLock; } });
+Object.defineProperty(exports, "NavigatorLockAcquireTimeoutError", { enumerable: true, get: function () { return locks_1.NavigatorLockAcquireTimeoutError; } });
+Object.defineProperty(exports, "lockInternals", { enumerable: true, get: function () { return locks_1.internals; } });
+Object.defineProperty(exports, "processLock", { enumerable: true, get: function () { return locks_1.processLock; } });
+//# sourceMappingURL=index.js.map

@@ -1,0 +1,1 @@
+{"version":3,"sources":["fb/endianness.ts"],"names":[],"mappings":"AAAA,qEAAqE;AAErE;;;GAGG;AACH,MAAM,CAAN,IAAY,UAGX;AAHD,WAAY,UAAU;IACpB,+CAAU,CAAA;IACV,yCAAO,CAAA;AACT,CAAC,EAHW,UAAU,KAAV,UAAU,QAGrB","file":"endianness.mjs","sourceRoot":"../src"}

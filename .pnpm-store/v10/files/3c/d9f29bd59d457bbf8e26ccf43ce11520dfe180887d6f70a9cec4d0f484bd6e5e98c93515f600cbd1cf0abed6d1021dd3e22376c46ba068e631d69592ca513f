@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/workers/core/strip-cf-connecting-ip.worker.ts"],
+  "mappings": ";AAAA,IAAO,wCAAQ;AAAA,EACd,MAAM,SAAS;AACd,QAAM,UAAU,IAAI,QAAQ,QAAQ,OAAO;AAC3C,mBAAQ,OAAO,kBAAkB,GAC1B,MAAM,SAAS,EAAE,QAAQ,CAAC;AAAA,EAClC;AACD;",
+  "names": []
+}

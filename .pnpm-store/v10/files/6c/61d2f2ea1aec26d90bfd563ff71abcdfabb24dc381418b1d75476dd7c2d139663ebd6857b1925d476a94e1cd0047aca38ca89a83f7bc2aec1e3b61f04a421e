@@ -1,0 +1,431 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, Menlo, Monaco, 'Cascadia Mono', 'Segoe UI Mono', 'Roboto Mono',
+    'Oxygen Mono', 'Ubuntu Monospace', 'Source Code Pro', 'Fira Mono', 'Droid Sans Mono',
+    'Courier New', monospace;
+  --radius: 6px;
+}
+
+:root {
+  /**
+   * The slate shade is used as the main color for the page
+   * background and the text.
+   */
+  --slate-1: #fcfcfd;
+  --slate-2: #f9f9fb;
+  --slate-3: #f0f0f3;
+  --slate-4: #e8e8ec;
+  --slate-5: #e0e1e6;
+  --slate-6: #d9d9e0;
+  --slate-7: #cdced6;
+  --slate-8: #b9bbc6;
+  --slate-9: #8b8d98;
+  --slate-10: #80838d;
+  --slate-11: #60646c;
+  --slate-12: #1c2024;
+
+  --slate-a1: #00005503;
+  --slate-a2: #00005506;
+  --slate-a3: #0000330f;
+  --slate-a4: #00002d17;
+  --slate-a5: #0009321f;
+  --slate-a6: #00002f26;
+  --slate-a7: #00062e32;
+  --slate-a8: #00083046;
+  --slate-a9: #00051d74;
+  --slate-a10: #00071b7f;
+  --slate-a11: #0007149f;
+  --slate-a12: #000509e3;
+
+  /**
+   * The green shade is used for links and the accent color
+   */
+  --green-1: #fbfefc;
+  --green-2: #f4fbf6;
+  --green-3: #e6f6eb;
+  --green-4: #d6f1df;
+  --green-5: #c4e8d1;
+  --green-6: #adddc0;
+  --green-7: #8eceaa;
+  --green-8: #5bb98b;
+  --green-9: #30a46c;
+  --green-10: #2b9a66;
+  --green-11: #218358;
+  --green-12: #193b2d;
+
+  /**
+   * The red shade is used as the danger color
+   */
+  --red-1: #fffcfc;
+  --red-2: #fff7f7;
+  --red-3: #feebec;
+  --red-4: #ffdbdc;
+  --red-5: #ffcdce;
+  --red-6: #fdbdbe;
+  --red-7: #f4a9aa;
+  --red-8: #eb8e90;
+  --red-9: #e5484d;
+  --red-10: #dc3e42;
+  --red-11: #ce2c31;
+  --red-12: #641723;
+
+  --surface-bg: var(--slate-2);
+  --surface-fg: var(--slate-11);
+  --muted-fg: var(--slate-10);
+
+  --title-fg: var(--slate-12);
+  --subtitle-fg: var(--green-10);
+  --links-fg: var(--green-11);
+  --danger-fg: var(--red-11);
+  --border: var(--slate-4);
+
+  --checkbox-border: var(--slate-a7);
+  --checkbox-active-bg: var(--green-5);
+  --checkbox-active-fg: var(--green-11);
+  --checkbox-active-border: var(--green-6);
+
+  --card-bg: #ffffff;
+  --card-shadow: 0 0 0 1px color-mix(in oklab, var(--slate-a3), var(--slate-3) 25%),
+    0 8px 40px rgba(0, 0, 0, 0.05), 0 12px 32px -16px var(--slate-a3);
+
+  /**
+   * Colors for dumper. Also used by the errorStackSource
+   */
+  --pre-bg-color: #fff;
+  --pre-fg-color: #212121;
+  --toggle-fg-color: #989999;
+  --braces-fg-color: #0431fa;
+  --brackets-fg-color: #0431fa;
+  --dt-number-fg-color: #1976d2;
+  --dt-bigint-fg-color: #1976d2;
+  --dt-boolean-fg-color: #1976d2;
+  --dt-string-fg-color: #22863a;
+  --dt-null-fg-color: #9c9c9d;
+  --dt-undefined-fg-color: #9c9c9d;
+  --prototype-label-fg-color: #9c9c9d;
+  --dt-symbol-fg-color: #d32f2f;
+  --dt-regex-fg-color: #1976d2;
+  --dt-date-fg-color: #7b3814;
+  --dt-buffer-fg-color: #7b3814;
+  --function-label-fg-color: #6f42c1;
+  --array-label-fg-color: #d32f2f;
+  --object-label-fg-color: #d32f2f;
+  --map-label-fg-color: #d32f2f;
+  --set-label-fg-color: #d32f2f;
+  --object-key-fg-color: #212121;
+  --object-key-prefix-fg-color: #9c9c9d;
+  --class-label-fg-color: #6f42c1;
+  --collpase-label-fg-color: #9c9c9d;
+  --getter-label-fg-color: #7b3814;
+  --circular-label-fg-color: #7b3814;
+  --weakset-label-fg-color: #7b3814;
+  --weakref-label-fg-color: #7b3814;
+  --weakmap-label-fg-color: #7b3814;
+  --observable-label-fg-color: #7b3814;
+  --promise-label-fg-color: #7b3814;
+  --generator-label-fg-color: #7b3814;
+  --blob-label-fg-color: #7b3814;
+  --unknown-label-fg-color: #7b3814;
+}
+
+html.dark {
+  /**
+   * The slate shade is used as the main color for the page
+   * background and the text.
+   */
+  --slate-1: #111113;
+  --slate-2: #18191b;
+  --slate-3: #212225;
+  --slate-4: #272a2d;
+  --slate-5: #2e3135;
+  --slate-6: #363a3f;
+  --slate-7: #43484e;
+  --slate-8: #5a6169;
+  --slate-9: #696e77;
+  --slate-10: #777b84;
+  --slate-11: #b0b4ba;
+  --slate-12: #edeef0;
+
+  --slate-a1: #00000000;
+  --slate-a2: #d8f4f609;
+  --slate-a3: #ddeaf814;
+  --slate-a4: #d3edf81d;
+  --slate-a5: #d9edfe25;
+  --slate-a6: #d6ebfd30;
+  --slate-a7: #d9edff40;
+  --slate-a8: #d9edff5d;
+  --slate-a9: #dfebfd6d;
+  --slate-a10: #e5edfd7b;
+  --slate-a11: #f1f7feb5;
+  --slate-a12: #fcfdffef;
+
+  /**
+   * The green shade is used for links and the accent color
+   */
+  --green-1: #0e1512;
+  --green-2: #121b17;
+  --green-3: #132d21;
+  --green-4: #113b29;
+  --green-5: #174933;
+  --green-6: #20573e;
+  --green-7: #28684a;
+  --green-8: #2f7c57;
+  --green-9: #30a46c;
+  --green-10: #33b074;
+  --green-11: #3dd68c;
+  --green-12: #b1f1cb;
+
+  /**
+   * The red shade is used as the danger color
+   */
+  --red-1: #191111;
+  --red-2: #201314;
+  --red-3: #3b1219;
+  --red-4: #500f1c;
+  --red-5: #611623;
+  --red-6: #72232d;
+  --red-7: #8c333a;
+  --red-8: #b54548;
+  --red-9: #e5484d;
+  --red-10: #ec5d5e;
+  --red-11: #ff9592;
+  --red-12: #ffd1d9;
+
+  --surface-bg: var(--slate-2);
+  --surface-fg: var(--slate-11);
+  --muted-fg: var(--slate-10);
+
+  --title-fg: var(--slate-12);
+  --subtitle-fg: var(--green-10);
+  --links-fg: var(--green-11);
+  --danger-fg: var(--red-11);
+  --border: var(--slate-4);
+
+  --checkbox-border: var(--slate-a7);
+  --checkbox-active-bg: var(--green-5);
+  --checkbox-active-fg: var(--green-11);
+  --checkbox-active-border: var(--green-6);
+
+  --card-bg: var(--slate-a2);
+  --card-shadow: 0 0 0 1px color-mix(in oklab, var(--slate-a3), var(--slate-3) 25%),
+    0 8px 20px rgba(0, 0, 0, 0.05), 0 12px 32px -16px var(--slate-a1);
+
+  /**
+   * Colors for dumper. Also used by the errorStackSource
+   */
+  --pre-bg-color: var(--slate-a1);
+  --pre-fg-color: #94e2d5;
+  --toggle-fg-color: #7c7c8c;
+  --braces-fg-color: #f38ba8;
+  --brackets-fg-color: #f38ba8;
+  --dt-number-fg-color: #fab387;
+  --dt-bigint-fg-color: #fab387;
+  --dt-boolean-fg-color: #cba6f7;
+  --dt-string-fg-color: #a6e3a1;
+  --dt-null-fg-color: #6c7086;
+  --dt-undefined-fg-color: #6c7086;
+  --prototype-label-fg-color: #6c7086;
+  --dt-symbol-fg-color: #f9e2af;
+  --dt-regex-fg-color: #cba6f7;
+  --dt-date-fg-color: #94e2d5;
+  --dt-buffer-fg-color: #94e2d5;
+  --function-label-fg-color: #cba6f7;
+  --array-label-fg-color: #f9e2af;
+  --object-label-fg-color: #f9e2af;
+  --map-label-fg-color: #f9e2af;
+  --set-label-fg-color: #f9e2af;
+  --object-key-fg-color: #89b4fa;
+  --object-key-prefix-fg-color: #6c7086;
+  --class-label-fg-color: #cba6f7;
+  --collpase-label-fg-color: #6c7086;
+  --getter-label-fg-color: #94e2d5;
+  --circular-label-fg-color: #94e2d5;
+  --weakset-label-fg-color: #94e2d5;
+  --weakref-label-fg-color: #94e2d5;
+  --weakmap-label-fg-color: #94e2d5;
+  --observable-label-fg-color: #94e2d5;
+  --promise-label-fg-color: #94e2d5;
+  --generator-label-fg-color: #94e2d5;
+  --blob-label-fg-color: #94e2d5;
+  --unknown-label-fg-color: #94e2d5;
+}
+
+html,
+body {
+  background: var(--surface-bg);
+  font-family: var(--font-sans);
+  color: var(--surface-fg);
+  line-height: 1.2;
+}
+
+code {
+  color: var(--title-fg);
+}
+
+a {
+  color: var(--links-fg);
+}
+
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-content: center;
+  justify-content: center;
+  border: 2px solid var(--checkbox-border);
+  border-radius: 4px;
+}
+input[type='checkbox']:checked {
+  background: var(--checkbox-active-bg);
+  border-color: var(--checkbox-active-border);
+}
+input[type='checkbox']:checked + span {
+  color: var(--title-fg);
+}
+
+input[type='checkbox']::before {
+  content: '';
+  width: 15px;
+  height: 15px;
+  background: var(--checkbox-active-fg);
+  mask-image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMiIgaGVpZ2h0PSI5IiBmaWxsPSJub25lIiB2aWV3Qm94PSIwIDAgMTIgOSI+PHBhdGggZmlsbD0iI2ZmZiIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMTEuNzguMjJhLjc1Ljc1IDAgMCAxIDAgMS4wNjFsLTcuMjYgNy4yNmEuNzUuNzUgMCAwIDEtMS4wNjIgMEwuMjAyIDUuMjg1YS43NS43NSAwIDAgMSAxLjA2MS0xLjA2MWwyLjcyNSAyLjcyM0wxMC43MTguMjJhLjc1Ljc1IDAgMCAxIDEuMDYyIDAiIGNsaXAtcnVsZT0iZXZlbm9kZCIvPjwvc3ZnPg==);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: 75%;
+  visibility: hidden;
+}
+input[type='checkbox']:checked::before {
+  visibility: visible;
+}
+
+input[type='checkbox']:disabled,
+input[type='checkbox']:disabled + span {
+  opacity: 0.5;
+}
+
+/**
+ * Overriding existing defaults of dumper
+ */
+.dumper-dump,
+.dumper-dump pre,
+.dumper-dump code,
+.dumper-dump samp {
+  font-family: var(--font-mono);
+}
+.dumper-dump pre {
+  font-size: 13px;
+  padding: calc(0.5vw + 8px);
+}
+.dumper-dump .dumper-toggle span {
+  font-size: 12px;
+}
+
+/**
+ * Layout centers all the elements for displaying the
+ * error and its metadata
+ */
+#layout {
+  max-width: 1280px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: calc(1vw + 15px);
+}
+
+.card {
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  border-radius: var(--radius);
+  padding: calc(2vw + 7px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-title {
+  font-size: 18px;
+  color: var(--title-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.card-subtitle {
+  color: var(--subtitle-fg);
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.card-table {
+  width: 100%;
+  max-width: 100%;
+  border-spacing: 0;
+  table-layout: fixed;
+  overflow: scroll;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.card-table td {
+  border-bottom: 1px solid var(--border);
+  padding: calc(0.8vw + 4px) calc(0.8vw + 8px);
+  word-wrap: break-word;
+}
+
+.card-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.card-table td.table-value .dumper-dump pre {
+  padding: 0;
+  -webkit-font-smoothing: initial;
+  -moz-osx-font-smoothing: initial;
+}
+
+@media (min-width: 768px) {
+  #layout {
+    padding: 40px;
+  }
+
+  .card {
+    padding: 22px 30px;
+  }
+
+  .card-table td {
+    padding: 6px 12px;
+  }
+
+  .card-table td.table-key {
+    width: 180px;
+  }
+
+  .dumper-dump pre {
+    padding: 10px 15px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .card-table td.table-key {
+    width: 200px;
+  }
+}

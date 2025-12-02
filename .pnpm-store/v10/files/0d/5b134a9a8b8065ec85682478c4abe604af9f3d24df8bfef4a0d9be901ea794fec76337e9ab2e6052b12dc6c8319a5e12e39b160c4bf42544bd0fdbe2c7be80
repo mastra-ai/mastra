@@ -1,0 +1,1 @@
+{"version":3,"file":"request.js","sourceRoot":"","sources":["../../source/types/request.ts"],"names":[],"mappings":"","sourcesContent":["// eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- Interface is intentional to allow module augmentation\nexport interface KyRequest<T = unknown> extends Request {\n\tjson: <J = T>() => Promise<J>;\n}\n"]}

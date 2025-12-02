@@ -1,0 +1,12 @@
+'use strict';
+
+var chunkIITXXVYI_cjs = require('./chunk-IITXXVYI.cjs');
+
+
+
+Object.defineProperty(exports, "NetlifyGateway", {
+  enumerable: true,
+  get: function () { return chunkIITXXVYI_cjs.NetlifyGateway; }
+});
+//# sourceMappingURL=netlify-MXBOGAJR.cjs.map
+//# sourceMappingURL=netlify-MXBOGAJR.cjs.map

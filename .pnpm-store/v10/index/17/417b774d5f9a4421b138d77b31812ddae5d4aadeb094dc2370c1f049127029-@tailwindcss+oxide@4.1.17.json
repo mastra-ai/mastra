@@ -1,0 +1,31 @@
+{
+  "name": "@tailwindcss/oxide",
+  "version": "4.1.17",
+  "requiresBuild": false,
+  "files": {
+    "index.js": {
+      "checkedAt": 1764662929263,
+      "integrity": "sha512-HcqguPbPLWo8AcsPtyjbkSFthueTymRKHgBAtlfZM6BCXmW8OqXN9coChP4QyaDB0iq/yx84wAC8a0m4uF0dCg==",
+      "mode": 420,
+      "size": 24424
+    },
+    "package.json": {
+      "checkedAt": 1764662929265,
+      "integrity": "sha512-DTG/XePqfMCzYnUgQzO7R5Fq1fFYxtln2PMe6pOOXEv53KEp//M3t9dnG8amscVc43B0liiHhAJpGd06Wp4UOA==",
+      "mode": 420,
+      "size": 2234
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662929266,
+      "integrity": "sha512-6LjE3agg/D9AVNoTkvhPWwuA6tswanBDfHHo5e9Eu1DeRTS3sv8jFcumEJUAlI5sWmZnyqPF0IzqEYg8aFAIbQ==",
+      "mode": 420,
+      "size": 1128
+    },
+    "LICENSE": {
+      "checkedAt": 1764662929266,
+      "integrity": "sha512-9X+sI7UOelzzysUtes9vKamnAYfathdWUsIyS1QlQ5lSXr/i62gEli2uj9/sd5mFKW+aAmOdaTEAhqFEG5CWIA==",
+      "mode": 420,
+      "size": 1071
+    }
+  }
+}

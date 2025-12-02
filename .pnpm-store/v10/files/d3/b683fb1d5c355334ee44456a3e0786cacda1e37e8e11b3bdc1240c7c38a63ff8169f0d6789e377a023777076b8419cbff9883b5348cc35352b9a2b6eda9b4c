@@ -1,0 +1,48 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`when fromDate and toDate are passed in should render the dropdown element 1`] = `
+<div
+  class="rdp-dropdown_month"
+>
+  <span
+    class="rdp-vhidden"
+  >
+    Month: 
+  </span>
+  <select
+    aria-label="Month: "
+    class="rdp-dropdown"
+    name="months"
+  >
+    <option
+      value="0"
+    >
+      January
+    </option>
+    <option
+      value="1"
+    >
+      February
+    </option>
+  </select>
+  <div
+    aria-hidden="true"
+    class="rdp-caption_label"
+  >
+    January
+    <svg
+      class="rdp-dropdown_icon"
+      data-testid="iconDropdown"
+      height="8px"
+      viewBox="0 0 120 120"
+      width="8px"
+    >
+      <path
+        d="M4.22182541,48.2218254 C8.44222828,44.0014225 15.2388494,43.9273804 19.5496459,47.9996989 L19.7781746,48.2218254 L60,88.443 L100.221825,48.2218254 C104.442228,44.0014225 111.238849,43.9273804 115.549646,47.9996989 L115.778175,48.2218254 C119.998577,52.4422283 120.07262,59.2388494 116.000301,63.5496459 L115.778175,63.7781746 L67.7781746,111.778175 C63.5577717,115.998577 56.7611506,116.07262 52.4503541,112.000301 L52.2218254,111.778175 L4.22182541,63.7781746 C-0.0739418023,59.4824074 -0.0739418023,52.5175926 4.22182541,48.2218254 Z"
+        fill="currentColor"
+        fill-rule="nonzero"
+      />
+    </svg>
+  </div>
+</div>
+`;

@@ -1,0 +1,1 @@
+{"version":3,"file":"timer.d.ts","sourceRoot":"","sources":["../../../src/lib/timer.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;GAWG;AACH,MAAM,CAAC,OAAO,OAAO,KAAK;IAKf,QAAQ,EAAE,QAAQ;IAClB,SAAS,EAAE,QAAQ;IAL5B,KAAK,EAAE,MAAM,GAAG,SAAS,CAAY;IACrC,KAAK,EAAE,MAAM,CAAI;gBAGR,QAAQ,EAAE,QAAQ,EAClB,SAAS,EAAE,QAAQ;IAM5B,KAAK;IAOL,eAAe;CAWhB"}

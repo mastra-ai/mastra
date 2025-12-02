@@ -1,0 +1,14 @@
+import { AISDKError } from '../../../ai-sdk.types.d.ts';
+declare const symbol: unique symbol;
+export declare class InvalidDataContentError extends AISDKError {
+    private readonly [symbol];
+    readonly content: unknown;
+    constructor({ content, cause, message, }: {
+        content: unknown;
+        cause?: unknown;
+        message?: string;
+    });
+    static isInstance(error: unknown): error is InvalidDataContentError;
+}
+export {};
+//# sourceMappingURL=invalid-content-error.d.ts.map

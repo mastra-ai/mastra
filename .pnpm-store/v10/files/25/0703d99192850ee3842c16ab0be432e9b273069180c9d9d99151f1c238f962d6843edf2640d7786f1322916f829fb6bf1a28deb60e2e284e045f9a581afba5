@@ -1,0 +1,52 @@
+# Block comments
+
+/*
+ * Block comments
+ */
+
+/* Comment with asterisks **/
+
+==>
+
+SourceFile(
+  BlockComment,
+  BlockComment)
+
+
+# Nested block comments
+
+/* /* double nested */ */
+
+// ---
+
+/*/*/* triple nested */*/*/
+
+// ---
+
+/****
+  /****
+    nested with extra stars
+  ****/
+****/
+
+// ---
+
+==>
+
+SourceFile(
+  BlockComment(BlockComment),
+  LineComment,
+  BlockComment(BlockComment(BlockComment)),
+  LineComment,
+  BlockComment(BlockComment),
+  LineComment)
+
+
+# Line comments
+
+// Comment
+
+==>
+
+SourceFile(
+  LineComment)

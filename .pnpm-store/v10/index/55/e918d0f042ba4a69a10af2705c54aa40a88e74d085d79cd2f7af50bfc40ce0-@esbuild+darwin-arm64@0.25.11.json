@@ -1,0 +1,25 @@
+{
+  "name": "@esbuild/darwin-arm64",
+  "version": "0.25.11",
+  "requiresBuild": false,
+  "files": {
+    "bin/esbuild": {
+      "checkedAt": 1764662928910,
+      "integrity": "sha512-eI7xa/a9z9+FiM1uAGfyF8OgiNXTGAaYqt++VCTlUN9nnc6ncQaIH38i+7+btbYjFbTHg+S+x1hgHjCcyo2HqA==",
+      "mode": 493,
+      "size": 9934274
+    },
+    "package.json": {
+      "checkedAt": 1764662928913,
+      "integrity": "sha512-RgQNxWNXN9TYPS0XSL6K0IQnqqO4c0uzmkuo7hIE8zg7TpAGzjidMEa01GckgPqrQE7L+zmwuEMwLmhNml/k4g==",
+      "mode": 420,
+      "size": 383
+    },
+    "README.md": {
+      "checkedAt": 1764662928913,
+      "integrity": "sha512-/36/fz6fHQYjvUB0uBp0eUvtd4pvZRS7KbJs4xrJJP9DQz6/1LJ+WszJlO9BG5rlWfMW5dbKeAkUtq0SiqdSEA==",
+      "mode": 420,
+      "size": 145
+    }
+  }
+}

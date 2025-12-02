@@ -1,0 +1,171 @@
+import { S3VectorsServiceException as __BaseException } from "./S3VectorsServiceException";
+export class AccessDeniedException extends __BaseException {
+    name = "AccessDeniedException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "AccessDeniedException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, AccessDeniedException.prototype);
+    }
+}
+export class ConflictException extends __BaseException {
+    name = "ConflictException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "ConflictException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, ConflictException.prototype);
+    }
+}
+export const DataType = {
+    FLOAT32: "float32",
+};
+export const DistanceMetric = {
+    COSINE: "cosine",
+    EUCLIDEAN: "euclidean",
+};
+export class InternalServerException extends __BaseException {
+    name = "InternalServerException";
+    $fault = "server";
+    $retryable = {};
+    constructor(opts) {
+        super({
+            name: "InternalServerException",
+            $fault: "server",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, InternalServerException.prototype);
+    }
+}
+export class NotFoundException extends __BaseException {
+    name = "NotFoundException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "NotFoundException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, NotFoundException.prototype);
+    }
+}
+export class ServiceQuotaExceededException extends __BaseException {
+    name = "ServiceQuotaExceededException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "ServiceQuotaExceededException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, ServiceQuotaExceededException.prototype);
+    }
+}
+export class ServiceUnavailableException extends __BaseException {
+    name = "ServiceUnavailableException";
+    $fault = "server";
+    $retryable = {};
+    constructor(opts) {
+        super({
+            name: "ServiceUnavailableException",
+            $fault: "server",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, ServiceUnavailableException.prototype);
+    }
+}
+export class TooManyRequestsException extends __BaseException {
+    name = "TooManyRequestsException";
+    $fault = "client";
+    $retryable = {
+        throttling: true,
+    };
+    constructor(opts) {
+        super({
+            name: "TooManyRequestsException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, TooManyRequestsException.prototype);
+    }
+}
+export class ValidationException extends __BaseException {
+    name = "ValidationException";
+    $fault = "client";
+    fieldList;
+    constructor(opts) {
+        super({
+            name: "ValidationException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, ValidationException.prototype);
+        this.fieldList = opts.fieldList;
+    }
+}
+export const SseType = {
+    AES256: "AES256",
+    AWS_KMS: "aws:kms",
+};
+export class KmsDisabledException extends __BaseException {
+    name = "KmsDisabledException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "KmsDisabledException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, KmsDisabledException.prototype);
+    }
+}
+export class KmsInvalidKeyUsageException extends __BaseException {
+    name = "KmsInvalidKeyUsageException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "KmsInvalidKeyUsageException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, KmsInvalidKeyUsageException.prototype);
+    }
+}
+export class KmsInvalidStateException extends __BaseException {
+    name = "KmsInvalidStateException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "KmsInvalidStateException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, KmsInvalidStateException.prototype);
+    }
+}
+export class KmsNotFoundException extends __BaseException {
+    name = "KmsNotFoundException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "KmsNotFoundException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, KmsNotFoundException.prototype);
+    }
+}
+export var VectorData;
+(function (VectorData) {
+    VectorData.visit = (value, visitor) => {
+        if (value.float32 !== undefined)
+            return visitor.float32(value.float32);
+        return visitor._(value.$unknown[0], value.$unknown[1]);
+    };
+})(VectorData || (VectorData = {}));

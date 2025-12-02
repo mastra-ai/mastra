@@ -1,0 +1,101 @@
+{
+  "name": "@supabase/supabase-js",
+  "version": "2.76.1",
+  "description": "Isomorphic Javascript SDK for Supabase",
+  "keywords": [
+    "javascript",
+    "typescript",
+    "supabase"
+  ],
+  "homepage": "https://github.com/supabase/supabase-js/tree/master/packages/core/supabase-js",
+  "bugs": "https://github.com/supabase/supabase-js/issues",
+  "license": "MIT",
+  "author": "Supabase",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "main": "dist/main/index.js",
+  "module": "dist/module/index.js",
+  "types": "dist/module/index.d.ts",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supabase/supabase-js.git",
+    "directory": "packages/core/supabase-js"
+  },
+  "scripts": {
+    "clean": "rimraf dist docs/v2",
+    "build": "npm run clean && npm run build:main && npm run build:module && npm run build:umd",
+    "build:main": "tsc -p tsconfig.json",
+    "build:module": "tsc -p tsconfig.module.json",
+    "build:umd": "webpack --env mode=production",
+    "test": "npm run test:types && npm run test:run",
+    "test:all": "npm run test:types && npm run test:run && npm run test:integration && npm run test:integration:browser",
+    "test:run": "jest --runInBand --detectOpenHandles",
+    "test:unit": "jest --runInBand --detectOpenHandles test/unit",
+    "test:coverage": "jest --runInBand --coverage --testPathIgnorePatterns=\"test/integration|test/deno\"",
+    "test:integration": "jest --runInBand --detectOpenHandles test/integration.test.ts",
+    "test:integration:browser": "deno test --allow-all test/integration.browser.test.ts",
+    "test:edge-functions": "deno test --allow-all --no-check --unstable-sloppy-imports --config test/deno/deno.json test/deno/edge-functions-integration.test.ts",
+    "test:watch": "jest --watch --verbose false --silent false",
+    "test:node:playwright": "cd test/integration/node-browser && npm install && cp ../../../dist/umd/supabase.js . && npm run test",
+    "test:bun": "cd test/integration/bun && bun install && bun test",
+    "test:types": "tsd --files test/types/*.test-d.ts && jsr publish --dry-run --allow-dirty",
+    "docs": "typedoc --entryPoints src/index.ts --out docs/v2",
+    "docs:json": "typedoc --entryPoints src/index.ts --json docs/v2/spec.json --excludeExternals",
+    "serve:coverage": "npx nx test:coverage supabase-js && serve test/coverage",
+    "update:test-deps": "npx nx build supabase-js && npm pack && cp supabase-supabase-js-*.tgz test/integration/expo/supabase-supabase-js-0.0.0-automated.tgz && cp supabase-supabase-js-*.tgz test/integration/next/supabase-supabase-js-0.0.0-automated.tgz && cp supabase-supabase-js-*.tgz test/deno/supabase-supabase-js-0.0.0-automated.tgz && cp supabase-supabase-js-*.tgz test/integration/bun/supabase-supabase-js-0.0.0-automated.tgz && cd test/integration/expo && npm install && cd ../next && npm install --legacy-peer-deps && cd ../../deno && npm install && cd ../integration/bun && bun install",
+    "update:test-deps:expo": "npx nx build supabase-js && npm pack && cp supabase-supabase-js-*.tgz test/integration/expo/supabase-supabase-js-0.0.0-automated.tgz && cd test/integration/expo && npm install",
+    "update:test-deps:next": "npx nx build supabase-js && npm pack && cp supabase-supabase-js-*.tgz test/integration/next/supabase-supabase-js-0.0.0-automated.tgz && cd test/integration/next && npm install --legacy-peer-deps",
+    "update:test-deps:deno": "npx nx build supabase-js && npm pack && cp supabase-supabase-js-*.tgz test/deno/supabase-supabase-js-0.0.0-automated.tgz && cd test/deno && npm install",
+    "update:test-deps:bun": "npx nx build supabase-js && npm pack && cp supabase-supabase-js-*.tgz test/integration/bun/supabase-supabase-js-0.0.0-automated.tgz && cd test/integration/bun && bun install"
+  },
+  "dependencies": {
+    "@supabase/auth-js": "2.76.1",
+    "@supabase/functions-js": "2.76.1",
+    "@supabase/postgrest-js": "2.76.1",
+    "@supabase/realtime-js": "2.76.1",
+    "@supabase/storage-js": "2.76.1",
+    "@supabase/node-fetch": "2.6.15"
+  },
+  "devDependencies": {
+    "@sebbo2002/semantic-release-jsr": "^1.0.0",
+    "jsr": "^0.13.5",
+    "pretty-quick": "^3.1.3",
+    "puppeteer": "^24.9.0",
+    "serve": "^14.2.1",
+    "ts-jest": "^29.0.5",
+    "ts-loader": "^9.5.4",
+    "tsd": "^0.30.4",
+    "eslint-formatter-pretty": "^4.1.0",
+    "webpack": "^5.69.1",
+    "webpack-cli": "^4.9.2"
+  },
+  "jsdelivr": "dist/umd/supabase.js",
+  "unpkg": "dist/umd/supabase.js",
+  "nx": {
+    "targets": {
+      "test:integration:browser": {
+        "dependsOn": [
+          {
+            "projects": [
+              "storage-js"
+            ],
+            "target": "build"
+          }
+        ]
+      },
+      "test:edge-functions": {
+        "dependsOn": [
+          {
+            "projects": [
+              "storage-js"
+            ],
+            "target": "build"
+          }
+        ]
+      }
+    }
+  }
+}

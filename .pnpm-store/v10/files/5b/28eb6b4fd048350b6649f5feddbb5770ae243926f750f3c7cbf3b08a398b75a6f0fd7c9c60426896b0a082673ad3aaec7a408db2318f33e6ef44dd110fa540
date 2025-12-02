@@ -1,0 +1,107 @@
+"use strict";
+"use client";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/assistant-message.tsx
+var assistant_message_exports = {};
+__export(assistant_message_exports, {
+  default: () => assistant_message_default
+});
+module.exports = __toCommonJS(assistant_message_exports);
+var import_react = require("react");
+var import_react2 = require("@assistant-ui/react");
+var import_branch_picker = __toESM(require("./branch-picker.js"));
+var import_avatar = require("./base/avatar.js");
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_thread_config = require("./thread-config.js");
+var import_assistant_action_bar = __toESM(require("./assistant-action-bar.js"));
+var import_content_part = __toESM(require("./content-part.js"));
+var import_jsx_runtime = require("react/jsx-runtime");
+var AssistantMessage = () => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(AssistantMessageRoot, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantMessageAvatar, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantMessageContent, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_branch_picker.default, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_assistant_action_bar.default, {})
+  ] });
+};
+AssistantMessage.displayName = "AssistantMessage";
+var AssistantMessageAvatar = () => {
+  const { assistantAvatar: avatar = { fallback: "A" } } = (0, import_thread_config.useThreadConfig)();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_avatar.Avatar, { ...avatar });
+};
+var AssistantMessageRoot = (0, import_withDefaults.withDefaults)(import_react2.MessagePrimitive.Root, {
+  className: "aui-assistant-message-root"
+});
+AssistantMessageRoot.displayName = "AssistantMessageRoot";
+var AssistantMessageContentWrapper = (0, import_withDefaults.withDefaults)("div", {
+  className: "aui-assistant-message-content"
+});
+var AssistantMessageContent = (0, import_react.forwardRef)(({ components: componentsProp, ...rest }, ref) => {
+  const { tools, assistantMessage: { components = {} } = {} } = (0, import_thread_config.useThreadConfig)();
+  const toolsComponents = (0, import_react.useMemo)(
+    () => ({
+      by_name: !tools ? void 0 : Object.fromEntries(
+        tools.map((t) => [
+          t.unstable_tool.toolName,
+          t.unstable_tool.render
+        ])
+      ),
+      Fallback: components.ToolFallback
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [...tools ?? [], components.ToolFallback]
+  );
+  const Footer = components.Footer;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(AssistantMessageContentWrapper, { ...rest, ref, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      import_react2.MessagePrimitive.Content,
+      {
+        components: {
+          ...componentsProp,
+          Text: componentsProp?.Text ?? components.Text ?? import_content_part.default.Text,
+          Empty: componentsProp?.Empty ?? components.Empty,
+          tools: toolsComponents
+        }
+      }
+    ),
+    Footer && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Footer, {})
+  ] });
+});
+AssistantMessageContent.displayName = "AssistantMessageContent";
+var exports2 = {
+  Root: AssistantMessageRoot,
+  Avatar: AssistantMessageAvatar,
+  Content: AssistantMessageContent
+};
+var assistant_message_default = Object.assign(
+  AssistantMessage,
+  exports2
+);
+//# sourceMappingURL=assistant-message.js.map

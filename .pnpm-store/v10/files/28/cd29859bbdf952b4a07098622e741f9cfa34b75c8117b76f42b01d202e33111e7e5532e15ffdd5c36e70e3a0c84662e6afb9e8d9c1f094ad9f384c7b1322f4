@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/workers/pipelines/pipeline.worker.ts"],
+  "mappings": ";AAAA,SAAS,wBAAwB;AAEjC,IAAqB,WAArB,cAAsC,iBAAiB;AAAA,EACtD,MAAM,KAAK,MAA+B;AACzC,YAAQ,IAAI,oBAAoB,IAAI;AAAA,EACrC;AACD;",
+  "names": []
+}

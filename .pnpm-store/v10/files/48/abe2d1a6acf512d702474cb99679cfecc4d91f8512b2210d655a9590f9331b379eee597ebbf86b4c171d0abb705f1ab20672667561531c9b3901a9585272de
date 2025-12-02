@@ -1,0 +1,24 @@
+import type { StepFlowEntry, WorkflowRunState } from '../../index.js';
+import type { PubSub } from '../../../events/index.js';
+import type { StepExecutor } from '../step-executor.js';
+import type { ProcessorArgs } from '.';
+export declare function processWorkflowWaitForEvent(workflowData: ProcessorArgs, { pubsub, eventName, currentState, }: {
+    pubsub: PubSub;
+    eventName: string;
+    currentState: WorkflowRunState;
+}): Promise<void>;
+export declare function processWorkflowSleep({ workflowId, runId, executionPath, stepResults, activeSteps, resumeSteps, timeTravel, prevResult, resumeData, parentWorkflow, requestContext, }: ProcessorArgs, { pubsub, stepExecutor, step, }: {
+    pubsub: PubSub;
+    stepExecutor: StepExecutor;
+    step: Extract<StepFlowEntry, {
+        type: 'sleep';
+    }>;
+}): Promise<void>;
+export declare function processWorkflowSleepUntil({ workflowId, runId, executionPath, stepResults, activeSteps, resumeSteps, timeTravel, prevResult, resumeData, parentWorkflow, requestContext, }: ProcessorArgs, { pubsub, stepExecutor, step, }: {
+    pubsub: PubSub;
+    stepExecutor: StepExecutor;
+    step: Extract<StepFlowEntry, {
+        type: 'sleepUntil';
+    }>;
+}): Promise<void>;
+//# sourceMappingURL=sleep.d.ts.map

@@ -1,0 +1,30 @@
+{
+    "name": "@types/big.js",
+    "version": "6.2.2",
+    "description": "TypeScript definitions for big.js",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/big.js",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Steve Ognibene",
+            "githubUsername": "nycdotnet",
+            "url": "https://github.com/nycdotnet"
+        },
+        {
+            "name": "Roman Nuritdinov (Ky6uk)",
+            "githubUsername": "Ky6uk",
+            "url": "https://github.com/Ky6uk"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/big.js"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "8094f6c931e4542a2f9940dac4a0906d23d384759ea5c0490c58a45589eee113",
+    "typeScriptVersion": "4.5"
+}

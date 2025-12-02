@@ -1,0 +1,67 @@
+{
+  "name": "@storybook/icons",
+  "version": "1.6.0",
+  "requiresBuild": false,
+  "files": {
+    "dist/public/cover.jpg": {
+      "checkedAt": 1764662922202,
+      "integrity": "sha512-F/onbpluhlFLq9o8DLFm2VieYV5pgMLcGfFQ1ZSKYFKEfoDNlpL8gY0ES0akE6ZM0SkqkPev02fShX08V2ukhQ==",
+      "mode": 420,
+      "size": 52498
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662922203,
+      "integrity": "sha512-uqvT8HVB+c5jeskD1VXJ4/pWH8VO0isXB1J6XSo28Ac2iVLUdtrrKsTORL+XtfWg2t6pcDFdiv8HzPHcI5ZPsw==",
+      "mode": 420,
+      "size": 256729
+    },
+    "package.json": {
+      "checkedAt": 1764662922203,
+      "integrity": "sha512-BpBtk9xW9WO3D4wJtmLHPmYf9UfDrIeE7Sup/1cJyznCKAhOtPh5K2LipAztZ/vFhc73DuzWoIJr4eLQfVhbmg==",
+      "mode": 420,
+      "size": 4921
+    },
+    "dist/index.js.map": {
+      "checkedAt": 1764662922207,
+      "integrity": "sha512-UT4BLmoST01zJzunE2KxK5IMkaauPEIPprktWGcUdIYZgI53Zd734CjlaeqwtFPI3Pki7lcQgZlFvuT/vYo3SA==",
+      "mode": 420,
+      "size": 349277
+    },
+    "dist/index.mjs.map": {
+      "checkedAt": 1764662922207,
+      "integrity": "sha512-UT4BLmoST01zJzunE2KxK5IMkaauPEIPprktWGcUdIYZgI53Zd734CjlaeqwtFPI3Pki7lcQgZlFvuT/vYo3SA==",
+      "mode": 420,
+      "size": 349277
+    },
+    "LICENSE.md": {
+      "checkedAt": 1764662922208,
+      "integrity": "sha512-IEIfoHiHgHH+CghpiLFdaoE3Mtf1GS+p0bDDSNuscEclp+dGvzFXDWHb2+ylShUlC/qhMR4K6OkbXfFfhqGF6w==",
+      "mode": 420,
+      "size": 1080
+    },
+    "README.md": {
+      "checkedAt": 1764662922219,
+      "integrity": "sha512-ERDXiZsrLKXkO/vhTyWd+Uw68BhHoZRfXR3RhKICWyeDqPNJzYJBHKVHX0yqepcXFHQu2ZOwAuU4gnJe0V2znA==",
+      "mode": 420,
+      "size": 1156
+    },
+    "dist/index.mjs": {
+      "checkedAt": 1764662922221,
+      "integrity": "sha512-ToyafxC3z/+oqoWeGdMEx+cZauSn5uxY9PnFYgZYiL1OwX3vUcTIaxdDcP/quj6kyEOVqGaysxAi5szDsNt/SA==",
+      "mode": 420,
+      "size": 240625
+    },
+    "dist/public/logo.png": {
+      "checkedAt": 1764662922222,
+      "integrity": "sha512-1FSdEmDM4d9ibkseNvURNe9iJZUcbLq8hMoQbLGxd5PD9Hi1LCZUkciO2xtl1/P7H/Kmq+B4rbOAs/ZAE+muuA==",
+      "mode": 420,
+      "size": 3071
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662922226,
+      "integrity": "sha512-mFCxdgoFFWkx/WXMqt04ap1HuPgEE6V7Pa6yOOJ5H8k0YZmuJY6Rv9K+iUsx6FN/xvPYqPwdh1RlDGwkdJYdAA==",
+      "mode": 420,
+      "size": 31210
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "name": "typical",
+  "author": "Lloyd Brookes <opensource@75lb.com>",
+  "version": "7.3.0",
+  "description": "Isomorphic, functional type-checking for Javascript",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/75lb/typical.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "import": "./index.js",
+    "require": "./dist/index.cjs"
+  },
+  "keywords": [
+    "type",
+    "checking",
+    "check",
+    "value",
+    "valid",
+    "is",
+    "detect",
+    "number",
+    "object",
+    "plainobject",
+    "array",
+    "like",
+    "defined",
+    "string",
+    "boolean",
+    "function",
+    "promise",
+    "iterable",
+    "class",
+    "primitive",
+    "isstring",
+    "isclass",
+    "isiterable",
+    "isdefined",
+    "isobject",
+    "isomorphic",
+    "async",
+    "is-async",
+    "es6",
+    "es2015"
+  ],
+  "engines": {
+    "node": ">=12.17"
+  },
+  "scripts": {
+    "test": "npm run dist && npm run test:ci",
+    "test:ci": "75lb-nature test-runner test/*.js",
+    "docs": "75lb-nature jsdoc2md -t README.hbs index.js > README.md",
+    "dist": "75lb-nature cjs-build index.js"
+  },
+  "devDependencies": {},
+  "files": [
+    "index.js",
+    "dist"
+  ]
+}

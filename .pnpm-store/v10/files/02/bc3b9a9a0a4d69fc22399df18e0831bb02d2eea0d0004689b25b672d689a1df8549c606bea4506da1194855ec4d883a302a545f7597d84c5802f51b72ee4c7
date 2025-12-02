@@ -1,0 +1,45 @@
+{
+  "name": "@anush008/tokenizers",
+  "version": "0.0.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "tokenizers",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu",
+        "universal-apple-darwin"
+      ]
+    }
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@napi-rs/cli": "^2.16.3",
+    "ava": "^5.1.1"
+  },
+  "ava": {
+    "timeout": "3m"
+  },
+  "engines": {
+    "node": ">= 10"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "ava",
+    "universal": "napi universal",
+    "version": "napi version"
+  },
+  "packageManager": "yarn@3.6.3",
+  "repository": "https://github.com/Anush008/tokenizers",
+  "description": "Multi-arch builds of HuggingFace tokenizers",
+  "optionalDependencies": {
+    "@anush008/tokenizers-win32-x64-msvc": "0.0.0",
+    "@anush008/tokenizers-linux-x64-gnu": "0.0.0",
+    "@anush008/tokenizers-darwin-universal": "0.0.0"
+  }
+}

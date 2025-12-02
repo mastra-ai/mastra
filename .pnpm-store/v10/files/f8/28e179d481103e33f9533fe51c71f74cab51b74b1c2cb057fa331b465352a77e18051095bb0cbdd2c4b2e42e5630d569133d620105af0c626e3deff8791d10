@@ -1,0 +1,46 @@
+import type { Mastra } from '../../mastra/index.js';
+import { RequestContext } from '../../request-context/index.js';
+import type { MastraModelConfig, OpenAICompatibleConfig, MastraLanguageModel } from './shared.types.js';
+/**
+ * Type guard to check if a model config is an OpenAICompatibleConfig object
+ * @internal
+ */
+export declare function isOpenAICompatibleObjectConfig(modelConfig: MastraModelConfig | (({ requestContext, mastra, }: {
+    requestContext: RequestContext;
+    mastra?: Mastra;
+}) => MastraModelConfig | Promise<MastraModelConfig>)): modelConfig is OpenAICompatibleConfig;
+/**
+ * Resolves a model configuration to a LanguageModel instance.
+ * Supports:
+ * - Magic strings like "openai/gpt-4o"
+ * - Config objects like { id: "openai/gpt-4o", apiKey: "..." }
+ * - Direct LanguageModel instances
+ * - Dynamic functions that return any of the above
+ *
+ * @param modelConfig The model configuration
+ * @param requestContext Optional request context for dynamic resolution
+ * @param mastra Optional Mastra instance for dynamic resolution
+ * @returns A resolved LanguageModel instance
+ *
+ * @example
+ * ```typescript
+ * // String resolution
+ * const model = await resolveModelConfig("openai/gpt-4o");
+ *
+ * // Config object resolution
+ * const model = await resolveModelConfig({
+ *   id: "openai/gpt-4o",
+ *   apiKey: "sk-..."
+ * });
+ *
+ * // Dynamic resolution
+ * const model = await resolveModelConfig(
+ *   ({ requestContext }) => requestContext.get("preferredModel")
+ * );
+ * ```
+ */
+export declare function resolveModelConfig(modelConfig: MastraModelConfig | (({ requestContext, mastra, }: {
+    requestContext: RequestContext;
+    mastra?: Mastra;
+}) => MastraModelConfig | Promise<MastraModelConfig>), requestContext?: RequestContext, mastra?: Mastra): Promise<MastraLanguageModel>;
+//# sourceMappingURL=resolve-model.d.ts.map

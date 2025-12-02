@@ -1,0 +1,79 @@
+{
+  "name": "@vitest/coverage-v8",
+  "type": "module",
+  "version": "4.0.12",
+  "description": "V8 coverage provider for Vitest",
+  "author": "Anthony Fu <anthonyfu117@hotmail.com>",
+  "license": "MIT",
+  "funding": "https://opencollective.com/vitest",
+  "homepage": "https://github.com/vitest-dev/vitest/tree/main/packages/coverage-v8#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vitest-dev/vitest.git",
+    "directory": "packages/coverage-v8"
+  },
+  "bugs": {
+    "url": "https://github.com/vitest-dev/vitest/issues"
+  },
+  "keywords": [
+    "vite",
+    "vitest",
+    "test",
+    "coverage",
+    "v8"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./*": "./*"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@vitest/browser": "4.0.12",
+    "vitest": "4.0.12"
+  },
+  "peerDependenciesMeta": {
+    "@vitest/browser": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@bcoe/v8-coverage": "^1.0.2",
+    "ast-v8-to-istanbul": "^0.3.8",
+    "debug": "^4.4.3",
+    "istanbul-lib-coverage": "^3.2.2",
+    "istanbul-lib-report": "^3.0.1",
+    "istanbul-lib-source-maps": "^5.0.6",
+    "istanbul-reports": "^3.2.0",
+    "magicast": "^0.5.1",
+    "std-env": "^3.10.0",
+    "tinyrainbow": "^3.0.3",
+    "@vitest/utils": "4.0.12"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/istanbul-lib-coverage": "^2.0.6",
+    "@types/istanbul-lib-report": "^3.0.3",
+    "@types/istanbul-lib-source-maps": "^4.0.4",
+    "@types/istanbul-reports": "^3.0.4",
+    "pathe": "^2.0.3",
+    "@vitest/browser": "4.0.12",
+    "vitest": "4.0.12"
+  },
+  "scripts": {
+    "build": "premove dist && rollup -c",
+    "dev": "rollup -c --watch --watch.include 'src/**'"
+  }
+}

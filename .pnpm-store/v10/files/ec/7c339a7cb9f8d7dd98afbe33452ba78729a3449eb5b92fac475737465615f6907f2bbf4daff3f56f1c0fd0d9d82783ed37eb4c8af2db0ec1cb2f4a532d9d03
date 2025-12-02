@@ -1,0 +1,152 @@
+# Self-closing tag
+
+<foo/>
+
+==>
+
+Document(Element(SelfClosingTag(StartTag,TagName,SelfCloseEndTag)))
+
+# Regular tag
+
+<foo>bar</foo>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),Text,CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Nested tag
+
+<a><b>c</b><d/></a>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),
+  Element(OpenTag(StartTag,TagName,EndTag),Text,CloseTag(StartCloseTag,TagName,EndTag)),
+  Element(SelfClosingTag(StartTag,TagName,SelfCloseEndTag)),
+CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Attribute (double-quote)
+
+<a foo="bar"/>
+
+==>
+
+Document(Element(SelfClosingTag(StartTag,TagName,Attribute(AttributeName,Is,AttributeValue),SelfCloseEndTag)))
+
+# Attribute (apostrophe or single-quote)
+
+<a foo='bar'/>
+
+==>
+
+Document(Element(SelfClosingTag(StartTag,TagName,Attribute(AttributeName,Is,AttributeValue),SelfCloseEndTag)))
+
+
+# Multiple attributes (mixed quotes)
+
+<a b="one" c='two' d="three" e='four' ></a>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,
+  Attribute(AttributeName,Is,AttributeValue),
+  Attribute(AttributeName,Is,AttributeValue),
+  Attribute(AttributeName,Is,AttributeValue),
+  Attribute(AttributeName,Is,AttributeValue),EndTag),
+CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Entities
+
+<a attr="one&amp;two">&amp;&#67;</a>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,
+  Attribute(AttributeName,Is,AttributeValue(EntityReference)),EndTag),
+  EntityReference,
+  CharacterReference,
+CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Invalid Entities
+
+&amp&;
+
+==>
+
+Document(⚠,Text,⚠,Text)
+
+# Doctype
+
+<!doctype html>
+<doc/>
+
+==>
+
+Document(DoctypeDecl,Text,Element(SelfClosingTag(StartTag,TagName,SelfCloseEndTag)))
+
+# Processing instructions
+
+<?foo?><bar><?baz?></bar>
+
+==>
+
+Document(ProcessingInst,Element(OpenTag(StartTag,TagName,EndTag),ProcessingInst,CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Comments
+
+<!-- top comment -->
+<element><!-- inner comment --> text</element>
+<!--c--->
+
+==>
+
+Document(Comment,Text,Element(OpenTag(StartTag,TagName,EndTag),Comment,Text,CloseTag(StartCloseTag,TagName,EndTag)),Text,Comment)
+
+# Mismatched tag
+
+<a></b>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),MismatchedCloseTag(StartCloseTag,TagName,EndTag),⚠))
+
+# Nested mismatched tag
+
+<a><b><c></c></x></a>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),
+  Element(OpenTag(StartTag,TagName,EndTag),
+    Element(OpenTag(StartTag,TagName,EndTag),CloseTag(StartCloseTag,TagName,EndTag)),
+    MismatchedCloseTag(StartCloseTag,TagName,EndTag),
+    MissingCloseTag),
+  CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Mismatched tag with whitespace
+
+<doc>
+  <
+    foo bar="10">
+    blah
+  </oof>
+</doc>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),
+  Text,
+  Element(OpenTag(StartTag,TagName,Attribute(AttributeName,Is,AttributeValue),EndTag),
+    Text,
+    MismatchedCloseTag(StartCloseTag,TagName,EndTag),
+    Text,
+    MissingCloseTag),
+  CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Cdata
+
+<doc><![CDATA[ hello ]]]></doc>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),Cdata,CloseTag(StartCloseTag,TagName,EndTag)))

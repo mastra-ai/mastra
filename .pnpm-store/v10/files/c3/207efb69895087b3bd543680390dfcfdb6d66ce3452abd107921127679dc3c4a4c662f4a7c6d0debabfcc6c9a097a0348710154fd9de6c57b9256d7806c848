@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/index.ts"],
+  "sourcesContent": ["export const version = \"1.29.3\";\n"],
+  "mappings": ";AAAO,aAAM,UAAU;",
+  "names": []
+}

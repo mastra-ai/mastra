@@ -1,0 +1,1 @@
+{"version":3,"file":"TestingToken.d.ts","sourceRoot":"","sources":["../../../src/api/resources/TestingToken.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,gBAAgB,EAAE,MAAM,QAAQ,CAAC;AAE/C,qBAAa,YAAY;IAErB,QAAQ,CAAC,KAAK,EAAE,MAAM;IACtB,QAAQ,CAAC,SAAS,EAAE,MAAM;gBADjB,KAAK,EAAE,MAAM,EACb,SAAS,EAAE,MAAM;IAG5B,MAAM,CAAC,QAAQ,CAAC,IAAI,EAAE,gBAAgB,GAAG,YAAY;CAGtD"}

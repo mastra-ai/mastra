@@ -1,0 +1,616 @@
+@precedence {
+  preferGenerics
+  try
+  implFor
+  implBang
+  deref
+  call
+  params
+  macroRules
+  macroSemi
+  macro
+  unary
+  mult @left
+  add @left
+  shift @left
+  bitAnd @left
+  bitXor @left
+  bitOr @left
+  compare @left
+  and @left
+  or @left
+  assign @right
+  else @right
+  range @left
+  cast
+  return
+  typeArgs
+  block
+  bind
+  plusSep
+  bound @left
+  scope
+  crateVis
+  selfParam
+  mut @cut
+  statement
+}
+
+@skip { whitespace | LineComment | BlockComment }
+
+@top SourceFile {
+  InnerAttribute*
+  statement*
+}
+
+statement[@isGroup=Statement] {
+  declarationStatement |
+  AttributeItem |
+  ExpressionStatement {
+    blockExpression !statement |
+    nonBlockExpression ";"
+  }
+}
+
+AttributeItem { Attribute+ declarationStatement }
+
+declarationStatement {
+  ConstItem {
+    Vis? kw<"const"> BoundIdentifier ":" type ("=" expression)? ";"
+  } |
+  MacroInvocationSemi |
+  MacroDefinition {
+    ckw<"macro_rules"> !macroRules "!" Identifier (
+      "(" (MacroRule ";")* MacroRule? ")" ";" |
+      "{" (MacroRule ";")* MacroRule? "}"
+    )
+  } |
+  EmptyStatement { ";" } |
+  ModItem {
+    Vis? kw<"mod"> BoundIdentifier (";" | DeclarationList)
+  } |
+  ForeignModItem {
+    Vis? externModifier (";" | DeclarationList)
+  } |
+  StructItem {
+    Vis? kw<"struct">
+    TypeIdentifier TypeParamList?
+    (WhereClause? FieldDeclarationList | OrderedFieldDeclarationList WhereClause? ";" | ";")
+  } |
+  UnionItem {
+    Vis? ckw<"union">
+    TypeIdentifier TypeParamList? WhereClause? FieldDeclarationList
+  } |
+  EnumItem {
+    Vis? kw<"enum"> TypeIdentifier TypeParamList? WhereClause?
+    EnumVariantList { "{" commaSep<Attribute* EnumVariant> "}" }
+  } |
+  TypeItem {
+    Vis? kw<"type"> TypeIdentifier TypeParamList? "=" type ";"
+  } |
+  FunctionItem {
+    Vis? functionModifier* kw<"fn">
+    (BoundIdentifier | Metavariable) TypeParamList? ParamList ("->" type)?
+    WhereClause?
+    (Block | ";")
+  } |
+  ImplItem {
+    kw<"unsafe">? kw<"impl"> TypeParamList?
+    ((!implBang "!")? type !implFor kw<"for">)? type
+    WhereClause? DeclarationList
+  } |
+  TraitItem {
+    Vis? kw<"unsafe">? kw<"trait"> TypeIdentifier TypeParamList? TraitBounds? WhereClause? DeclarationList
+  } |
+  AssociatedType {
+    kw<"type"> TypeIdentifier TraitBounds? ";"
+  } |
+  LetDeclaration {
+    kw<"let"> (!mut kw<"mut">)? pattern (":" type)? ("=" expression)? ";"
+  } |
+  UseDeclaration {
+    Vis? kw<"use"> useClause ";"
+  } |
+  ExternCrateDeclaration {
+    Vis? kw<"extern"> kw<"crate"> (BoundIdentifier | Identifier kw<"as"> BoundIdentifier) ";"
+  } |
+  StaticItem {
+    Vis? kw<"static"> kw<"ref">? kw<"mut">? BoundIdentifier ":" type ("=" expression)? ";"
+  }
+}
+
+delimitedTokenTree { ParenthesizedTokens | BracketedTokens | BracedTokens }
+
+MacroRule { tokenTree "=>" delimitedTokenTree }
+
+tokenTree {
+  delimitedTokenTree |
+  TokenBinding {
+    Metavariable !bind ":" tokenIdentifier
+  } |
+  TokenRepetition {
+    "$" "(" tokenTree* ")" separatorToken? ("+" | "*" | "?")
+  } |
+  ArithOp { "*" | "+" } |
+  "?" |
+  separatorToken
+}
+
+separatorToken {
+  String |
+  RawString |
+  Char |
+  Integer |
+  Float |
+  tokenIdentifier |
+  Lifetime |
+  Metavariable |
+  ArithOp { "-" | "/" } |
+  BitOp { "<<" | ">>" | "&" | "|" | "^" } |
+  LogicOp { "||" | "&&" } |
+  UpdateOp | CompareOp |
+  "." | "," | ";" | ":" | "=" | "->" | "=>" | ".." | "..." | "::" | "#" | "!"
+}
+
+ParenthesizedTokens { "(" tokenTree* ")" }
+BracketedTokens { "[" tokenTree* "]" }
+BracedTokens { "{" tokenTree* "}" }
+
+Attribute {
+  "#" "[" MetaItem "]"
+}
+
+InnerAttribute {
+  "#" "!" "[" MetaItem "]"
+}
+
+MetaItem {
+  path ("=" tokenTree | delimitedTokenTree)?
+}
+
+DeclarationList {
+  "{" InnerAttribute* (declarationStatement | AttributeItem)* "}"
+}
+
+EnumVariant {
+  Vis? Identifier (FieldDeclarationList | OrderedFieldDeclarationList)? ("=" expression)?
+}
+
+FieldDeclarationList {
+  "{" commaSep<Attribute* FieldDeclaration> "}"
+}
+
+FieldDeclaration {
+  Vis? FieldIdentifier ":" type
+}
+
+OrderedFieldDeclarationList {
+  "(" commaSep<Attribute* Vis? type> ")"
+}
+
+functionModifier {
+  kw<"async"> | ckw<"default"> | kw<"const"> | kw<"unsafe"> | externModifier
+}
+
+WhereClause {
+  kw<"where"> commaSep<LifetimeClause | TypeBoundClause>
+}
+
+LifetimeClause { Lifetime ":" plusSep<Lifetime> }
+
+TypeBoundClause { (HigherRankedTraitBound | type) TraitBounds }
+
+TraitBounds {
+  ":" plusSep<type | Lifetime | HigherRankedTraitBound | RemovedTraitBound>
+}
+
+HigherRankedTraitBound {
+  kw<"for"> TypeParamList type
+}
+
+RemovedTraitBound {
+  "?" type
+}
+
+typeParam[@inline] {
+  Lifetime |
+  Metavariable |
+  TypeIdentifier |
+  ConstrainedTypeParameter |
+  OptionalTypeParameter |
+  ConstParameter
+}
+
+TypeParamList {
+  tpOpen !preferGenerics (typeParam !preferGenerics ("," typeParam? !preferGenerics)*)? tpClose
+}
+
+ConstParameter {
+  kw<"const"> BoundIdentifier ":" type
+}
+
+ConstrainedTypeParameter {
+  (Lifetime | TypeIdentifier) TraitBounds
+}
+
+OptionalTypeParameter {
+  (TypeIdentifier | ConstrainedTypeParameter) "=" type
+}
+
+useClause {
+  pathIdent<BoundIdentifier> |
+  ScopedIdentifier { simplePathPrefix BoundIdentifier } |
+  UseAsClause { simplePath kw<"as"> BoundIdentifier } |
+  UseList |
+  ScopedUseList { simplePathPrefix UseList } |
+  UseWildcard { simplePathPrefix? "*" }
+}
+
+UseList {
+  "{" commaSep<useClause> "}"
+}
+
+ParamList {
+  "(" commaSep<Attribute* (Parameter | SelfParameter | VariadicParameter { "..." } | kw<"_">)> ")"
+}
+
+SelfParameter {
+  "&"? Lifetime? (!mut kw<"mut">)? !selfParam kw<"self">
+}
+
+Parameter {
+  (!mut kw<"mut">)? pattern ":" type
+}
+
+externModifier {
+  kw<"extern"> String?
+}
+
+Vis {
+  kw<"pub"> (!call "(" (kw<"self"> | kw<"super"> | kw<"crate"> | kw<"in"> path) ")")? |
+  kw<"crate"> !crateVis
+}
+
+type[@isGroup=Type] {
+  AbstractType { kw<"impl"> (typePath | GenericType | FunctionType) } |
+  ReferenceType { "&" Lifetime? kw<"mut">? type } |
+  PointerType { "*" (kw<"const"> | kw<"mut">) type } |
+  typePath |
+  GenericType |
+  TupleType { "(" commaSep1<type> ")" } |
+  UnitType { "(" ")" } |
+  ArrayType { "[" type (";" expression)? "]" } |
+  FunctionType |
+  MacroInvocation { typePath !macro "!" delimitedTokenTree } |
+  EmptyType { "!" } |
+  DynamicType { kw<"dyn"> (typePath | GenericType | FunctionType) } |
+  BoundedType { Lifetime !bound "+" type | type !bound "+" type | type !bound "+" Lifetime }
+}
+
+FunctionType {
+  ForLifetimes { kw<"for"> tpOpen commaSep<Lifetime> tpClose }?
+  (typePath | functionModifier* kw<"fn">)
+  !params ParamList {
+    "(" commaSep<Attribute* SelfParameter | VariadicParameter { "..." } | kw<"_"> | Parameter { type }> ")"
+  }
+  ("->" type)?
+}
+
+GenericType {
+  typePath !typeArgs TypeArgList
+}
+
+TypeArgList {
+  tpOpen commaSep1<type | TypeBinding | Lifetime | literal | Block> tpClose
+}
+
+TypeBinding {
+  TypeIdentifier "=" type
+}
+
+expression[@isGroup=Expression] { blockExpression | nonBlockExpression }
+
+nonBlockExpression {
+  UnaryExpression { (ArithOp { "-" } | DerefOp { "*" } | LogicOp { "!" }) !unary expression } |
+  ReferenceExpression { "&" kw<"mut">? expression } |
+  TryExpression { expression !try "?" } |
+  BinaryExpression |
+  AssignmentExpression { expression !assign ("=" | UpdateOp) expression } |
+  TypeCastExpression { expression !cast kw<"as"> type } |
+  ReturnExpression { kw<"return"> (!return expression)? } |
+  RangeExpression { expression? !range (".." | "..." | "..=") expression? } |
+  CallExpression { expression !call ArgList } |
+  literal |
+  path |
+  AwaitExpression { expression !deref "." kw<"await"> } |
+  FieldExpression |
+  GenericFunction { (path | FieldExpression) !scope "::" TypeArgList } |
+  BreakExpression { kw<"break"> LoopLabel? (!return expression)? } |
+  ContinueExpression { kw<"continue"> LoopLabel? } |
+  IndexExpression { expression !deref "[" expression "]" } |
+  ArrayExpression { "[" InnerAttribute* (expression ";" expression | commaSep1<expression>)? "]" } |
+  TupleExpression { "(" InnerAttribute* expression ("," expression?)+ ")" } |
+  MacroInvocation { macroInvocation } |
+  UnitExpression { "(" ")" } |
+  ClosureExpression { kw<"move">? ClosureParamList (("->" type)? !statement Block | expression) } |
+  ParenthesizedExpression { "(" InnerAttribute* expression ")" } |
+  StructExpression { structName FieldInitializerList }
+}
+
+FieldExpression { expression !deref "." (FieldIdentifier | Integer) }
+
+blockExpression {
+  UnsafeBlock { kw<"unsafe"> Block } |
+  AsyncBlock { kw<"async"> kw<"move">? Block } |
+  Block |
+  IfExpression |
+  MatchExpression {
+   kw<"match"> expression MatchBlock { "{" InnerAttribute* (MatchArm<",">* MatchArm<","?>)? "}" }
+  } |
+  WhileExpression {
+    (LoopLabel ":")? kw<"while"> cond Block
+  } |
+  LoopExpression {
+    (LoopLabel ":")? kw<"loop"> Block
+  } |
+  ForExpression {
+    (LoopLabel ":")? kw<"for"> pattern kw<"in"> expression Block
+  }
+}
+
+macroInvocation {
+  path !macro "!" delimitedTokenTree
+}
+
+MacroInvocationSemi[@name=MacroInvocation] {
+  path !macro "!" ((ParenthesizedTokens | BracketedTokens) !macroSemi ";" | BracedTokens !macroSemi)
+}
+
+QualifiedScope { tpOpen type (kw<"as"> type)? tpClose }
+
+pathIdent<and> {
+  kw<"self"> |
+  Metavariable |
+  kw<"super"> |
+  kw<"crate"> |
+  and
+}
+
+pathSegment {
+  pathIdent<ScopeIdentifier> ~path !scope "::" (TypeArgList "::")?
+}
+
+path {
+  pathIdent<Identifier> ~path |
+  ScopedIdentifier {
+    (("::" | QualifiedScope !scope "::") pathSegment* | pathSegment+) pathIdent<Identifier> ~path
+  }
+}
+
+typePathSegment {
+  pathIdent<ScopeIdentifier> ~path ((!scope "::")? TypeArgList)? !scope "::"
+}
+
+typePath {
+  SelfType { kw<"self"> } ~path |
+  MetaType { Metavariable } ~path |
+  TypeIdentifier ~path |
+  ScopedTypeIdentifier {
+    (("::" | QualifiedScope !scope "::") typePathSegment* | typePathSegment+) pathIdent<TypeIdentifier> ~path
+  }
+}
+
+simplePathPrefix[@inline] {
+  "::" (pathIdent<ScopeIdentifier> ~path !scope "::")* |
+  (pathIdent<ScopeIdentifier> ~path !scope "::")+
+}
+
+simplePath {
+  pathIdent<Identifier> ~path |
+  ScopedIdentifier { simplePathPrefix pathIdent<Identifier> ~path }
+}
+
+structName {
+  pathIdent<TypeIdentifier> ~path |
+  ScopedTypeIdentifier {
+    (("::" | QualifiedScope !scope "::") pathSegment* | pathSegment+) pathIdent<TypeIdentifier> ~path
+  }
+}
+
+patternPath {
+  MetaPattern { Metavariable ~path } |
+  BoundIdentifier ~path |
+  SelfPattern { kw<"self"> ~path } |
+  ScopedIdentifier {
+    (("::" | QualifiedScope !scope "::") pathSegment* | pathSegment+) pathIdent<Identifier> ~path
+  }
+}
+
+BinaryExpression {
+  expression !add ArithOp { "+" | "-" } expression |
+  expression !mult ArithOp { "*" | "/" | "%" } expression |
+  expression !shift BitOp { "<<" | ">>" } expression |
+  expression !bitAnd BitOp { "&" } expression |
+  expression !bitXor BitOp { "^" } expression |
+  expression !bitOr BitOp { "|" } expression |
+  expression !compare CompareOp expression |
+  expression !and LogicOp { "&&" } expression |
+  expression !or LogicOp { "||" } expression
+}
+
+ArgList {
+  "(" commaSep<Attribute* expression> ")"
+}
+
+FieldInitializerList {
+  "{" commaSep<fieldInitializer> "}"
+}
+
+fieldInitializer {
+  ShorthandFieldInitializer { Attribute* Identifier } |
+  FieldInitializer { Attribute* FieldIdentifier ":" expression } |
+  BaseFieldInitializer { ".." expression }
+}
+
+IfExpression {
+  kw<"if"> cond Block (!else kw<"else"> (Block | IfExpression))?
+}
+
+cond {
+  expression |
+  LetDeclaration { kw<"let"> pattern "=" expression }
+}
+
+Guard { kw<"if"> expression }
+
+MatchArm<after> {
+  Attribute* pattern Guard?
+  "=>" (nonBlockExpression after | !block blockExpression)
+}
+
+ClosureParamList[@name=ParamList] {
+  closureParamDelim commaSep<Parameter { (!mut kw<"mut">)? pattern (":" type)?}> closureParamDelim
+}
+
+Block {
+  "{"
+  InnerAttribute*
+  statement*
+  ExpressionStatement { expression }?
+  "}"
+}
+
+pattern[@isGroup=Pattern] {
+  LiteralPattern { literalPattern } |
+  patternPath |
+  TuplePattern { structName? "(" commaSep<pattern> ")" } |
+  StructPattern {
+    structName
+    FieldPatternList { "{" commaSep<FieldPattern | ".."> "}" }
+  } |
+  RefPattern { kw<"ref"> !unary pattern } |
+  SlicePattern { "[" commaSep<pattern> "]" } |
+  CapturedPattern { BoundIdentifier "@" pattern } |
+  ReferencePattern { "&" !unary (!mut kw<"mut">)? pattern } |
+  ".." |
+  MutPattern { kw<"mut"> !unary pattern } |
+  RangePattern { (literalPattern | path) ("..." | "..=") (literalPattern | path) } |
+  OrPattern { pattern !or "|" pattern } |
+  MacroPattern { macroInvocation } |
+  kw<"_">
+}
+
+FieldPattern {
+  kw<"ref">? (!mut kw<"mut">)? (BoundIdentifier | FieldIdentifier ":" pattern)
+}
+
+literal {
+  String |
+  RawString |
+  Char |
+  boolean |
+  Integer |
+  Float
+}
+
+literalPattern {
+  literal |
+  ArithOp { "-" } (Integer | Float)
+}
+
+boolean { @specialize[@name=Boolean]<identifier, "true" | "false"> }
+
+@skip {} {
+  BlockComment[isolate] { "/*" (BlockComment | blockCommentContent)* blockCommentEnd }
+
+  String[isolate] { stringStart (Escape | stringContent)* stringEnd }
+}
+
+Identifier { identifier }
+
+TypeIdentifier { identifier }
+
+FieldIdentifier { identifier }
+
+ScopeIdentifier { identifier }
+
+BoundIdentifier { identifier }
+
+LoopLabel { quoteIdentifier }
+
+Lifetime { quoteIdentifier }
+
+kw<term> { @specialize[@name={term}]<identifier, term> }
+
+ckw<term> { @extend[@name={term}]<identifier, term> }
+
+commaSep<expr> { commaSep1<expr>? }
+
+commaSep1<expr> { expr ("," expr?)* }
+
+plusSep<expr> { expr (!plusSep "+" expr)* }
+
+@external tokens closureParam from "./tokens" { closureParamDelim[@name="|"] }
+
+@external tokens tpDelim from "./tokens" { tpOpen[@name="<"], tpClose[@name=">"] }
+
+@external tokens literalTokens from "./tokens" { RawString[isolate], Float }
+
+@tokens {
+  whitespace { $[ \t\r\n] }
+
+  UpdateOp { ($[+\-*/%^&|] | "<<" | ">>") "=" }
+
+  CompareOp { $[<>] "="? | $[!=] "=" }
+
+  Integer {
+    ($[0-9] $[0-9_]* |
+     "0x" $[0-9a-fA-F_]+ |
+     "0b" $[01_]+ |
+     "0o" $[0-7_]+)
+    (("u" | "i") ("8" | "16" | "32" | "64" | "128" | "size"))?
+  }
+
+  hex { $[0-9a-fA-F] }
+  Escape { "\\" (![xu] | "u" hex hex hex hex | "u{" hex+ "}" | "x" hex hex) }
+
+  Char { "b"? "'" (Escape | ![\\'])? "'" }
+
+  LineComment[isolate] { "//" ![\n]* }
+
+  @precedence { LineComment, "/" }
+
+  blockCommentContent { ![*/] blockCommentContent? | "*" blockCommentStar | "/" blockCommentSlash }
+  blockCommentStar { ![/*] blockCommentContent | "*" blockCommentStar }
+  blockCommentSlash { ![/*] blockCommentContent | "/" blockCommentSlash }
+
+  blockCommentEnd { ![*/] blockCommentEnd | "*" blockCommentEndStar | "/" blockCommentEndSlash }
+  blockCommentEndStar { "/" | ![/*] blockCommentEnd | "*" blockCommentEndStar }
+  blockCommentEndSlash { ![/*] blockCommentEnd | "/" blockCommentSlash }
+
+  @precedence { blockCommentEnd, blockCommentContent }
+
+  stringStart { "b"? '"' }
+  stringContent { !["\\\n]* "\n" | !["\\\n]+ }
+  stringEnd { '"' }
+
+  identBase { $[a-zA-Zα-ωΑ-Ωµ_] $[a-zA-Zα-ωΑ-Ωµ0-9_]* }
+  identifier { ("r#")? identBase }
+  tokenIdentifier[@name=Identifier] { identBase }
+  quoteIdentifier { "'" identBase }
+  Metavariable { "$" identBase }
+
+  @precedence { stringStart, Char, identifier }
+  @precedence { stringStart, Char, tokenIdentifier }
+  @precedence { Char, quoteIdentifier }
+  @precedence { Metavariable, "$" }
+
+  "[" "]" "{" "}" "(" ")"
+  ";" ":" "::" ","
+  "=" "->" "=>" ".." "..."
+  "&" "!"
+}
+
+@external propSource rustHighlighting from "./highlight"
+
+@detectDelim

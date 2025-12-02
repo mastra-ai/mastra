@@ -1,0 +1,2821 @@
+// ../../node_modules/.pnpm/vitest@3.2.4_@types+debug@4.1.12_@types+node@24.3.1_jiti@2.5.1_jsdom@26.1.0_lightningcss@1.30.1_tsx@4.20.5/node_modules/vitest/dist/chunks/vi.bdSIJ99Y.js
+import { equals, iterableEquality, subsetEquality, JestExtend, JestChaiExpect, JestAsymmetricMatchers, GLOBAL_EXPECT, ASYMMETRIC_MATCHERS_OBJECT, getState, setState, addCustomEqualityTesters, customMatchers } from "@vitest/expect.js";
+import { getCurrentTest } from "@vitest/runner.js";
+import { getNames, getTestName } from "@vitest/runner/utils.js";
+import * as chai$1 from "chai.js";
+
+// ../../node_modules/.pnpm/vitest@3.2.4_@types+debug@4.1.12_@types+node@24.3.1_jiti@2.5.1_jsdom@26.1.0_lightningcss@1.30.1_tsx@4.20.5/node_modules/vitest/dist/chunks/utils.XdZDrNZV.js
+import { getSafeTimers } from "@vitest/utils.js";
+var NAME_WORKER_STATE = "__vitest_worker__";
+function getWorkerState() {
+  const workerState = globalThis[NAME_WORKER_STATE];
+  if (!workerState) {
+    const errorMsg = 'Vitest failed to access its internal state.\n\nOne of the following is possible:\n- "vitest" is imported directly without running "vitest" command\n- "vitest" is imported inside "globalSetup" (to fix this, use "setupFiles" instead, because "globalSetup" runs in a different context)\n- "vitest" is imported inside Vite / Vitest config file\n- Otherwise, it might be a Vitest bug. Please report it to https://github.com/vitest-dev/vitest/issues\n';
+    throw new Error(errorMsg);
+  }
+  return workerState;
+}
+function getCurrentEnvironment() {
+  const state = getWorkerState();
+  return state?.environment.name;
+}
+function isChildProcess() {
+  return typeof process !== "undefined" && !!process.send;
+}
+function resetModules(modules, resetMocks = false) {
+  const skipPaths = [
+    /\/vitest\/dist\//,
+    /\/vite-node\/dist\//,
+    /vitest-virtual-\w+\/dist/,
+    /@vitest\/dist/,
+    ...!resetMocks ? [/^mock:/] : []
+  ];
+  modules.forEach((mod, path) => {
+    if (skipPaths.some((re) => re.test(path))) return;
+    modules.invalidateModule(mod);
+  });
+}
+function waitNextTick() {
+  const { setTimeout } = getSafeTimers();
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+async function waitForImportsToResolve() {
+  await waitNextTick();
+  const state = getWorkerState();
+  const promises = [];
+  let resolvingCount = 0;
+  for (const mod of state.moduleCache.values()) {
+    if (mod.promise && !mod.evaluated) promises.push(mod.promise);
+    if (mod.resolving) resolvingCount++;
+  }
+  if (!promises.length && !resolvingCount) return;
+  await Promise.allSettled(promises);
+  await waitForImportsToResolve();
+}
+
+// ../../node_modules/.pnpm/vitest@3.2.4_@types+debug@4.1.12_@types+node@24.3.1_jiti@2.5.1_jsdom@26.1.0_lightningcss@1.30.1_tsx@4.20.5/node_modules/vitest/dist/chunks/vi.bdSIJ99Y.js
+import { getSafeTimers as getSafeTimers2, assertTypes, createSimpleStackTrace } from "@vitest/utils.js";
+
+// ../../node_modules/.pnpm/vitest@3.2.4_@types+debug@4.1.12_@types+node@24.3.1_jiti@2.5.1_jsdom@26.1.0_lightningcss@1.30.1_tsx@4.20.5/node_modules/vitest/dist/chunks/_commonjsHelpers.BFTU3MAI.js
+var commonjsGlobal = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : {};
+function getDefaultExportFromCjs(x) {
+  return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
+}
+
+// ../../node_modules/.pnpm/vitest@3.2.4_@types+debug@4.1.12_@types+node@24.3.1_jiti@2.5.1_jsdom@26.1.0_lightningcss@1.30.1_tsx@4.20.5/node_modules/vitest/dist/chunks/vi.bdSIJ99Y.js
+import { stripSnapshotIndentation, addSerializer, SnapshotClient } from "@vitest/snapshot.js";
+import "@vitest/utils/error.js";
+import { fn, spyOn, mocks, isMockFunction } from "@vitest/spy.js";
+import { parseSingleStack } from "@vitest/utils/source-map.js";
+
+// ../../node_modules/.pnpm/vitest@3.2.4_@types+debug@4.1.12_@types+node@24.3.1_jiti@2.5.1_jsdom@26.1.0_lightningcss@1.30.1_tsx@4.20.5/node_modules/vitest/dist/chunks/date.Bq6ZW5rf.js
+var RealDate = Date;
+var now = null;
+var MockDate = class _MockDate extends RealDate {
+  constructor(y, m, d, h, M, s, ms) {
+    super();
+    let date;
+    switch (arguments.length) {
+      case 0:
+        if (now !== null) date = new RealDate(now.valueOf());
+        else date = new RealDate();
+        break;
+      case 1:
+        date = new RealDate(y);
+        break;
+      default:
+        d = typeof d === "undefined" ? 1 : d;
+        h = h || 0;
+        M = M || 0;
+        s = s || 0;
+        ms = ms || 0;
+        date = new RealDate(y, m, d, h, M, s, ms);
+        break;
+    }
+    Object.setPrototypeOf(date, _MockDate.prototype);
+    return date;
+  }
+};
+MockDate.UTC = RealDate.UTC;
+MockDate.now = function() {
+  return new MockDate().valueOf();
+};
+MockDate.parse = function(dateString) {
+  return RealDate.parse(dateString);
+};
+MockDate.toString = function() {
+  return RealDate.toString();
+};
+function mockDate(date) {
+  const dateObj = new RealDate(date.valueOf());
+  if (Number.isNaN(dateObj.getTime())) throw new TypeError(`mockdate: The time set is an invalid date: ${date}`);
+  globalThis.Date = MockDate;
+  now = dateObj.valueOf();
+}
+function resetDate() {
+  globalThis.Date = RealDate;
+}
+
+// ../../node_modules/.pnpm/vitest@3.2.4_@types+debug@4.1.12_@types+node@24.3.1_jiti@2.5.1_jsdom@26.1.0_lightningcss@1.30.1_tsx@4.20.5/node_modules/vitest/dist/chunks/vi.bdSIJ99Y.js
+var unsupported = [
+  "matchSnapshot",
+  "toMatchSnapshot",
+  "toMatchInlineSnapshot",
+  "toThrowErrorMatchingSnapshot",
+  "toThrowErrorMatchingInlineSnapshot",
+  "throws",
+  "Throw",
+  "throw",
+  "toThrow",
+  "toThrowError"
+];
+function createExpectPoll(expect2) {
+  return function poll(fn2, options = {}) {
+    const state = getWorkerState();
+    const defaults = state.config.expect?.poll ?? {};
+    const { interval = defaults.interval ?? 50, timeout = defaults.timeout ?? 1e3, message } = options;
+    const assertion = expect2(null, message).withContext({ poll: true });
+    fn2 = fn2.bind(assertion);
+    const test2 = chai$1.util.flag(assertion, "vitest-test");
+    if (!test2) throw new Error("expect.poll() must be called inside a test");
+    const proxy = new Proxy(assertion, { get(target, key, receiver) {
+      const assertionFunction = Reflect.get(target, key, receiver);
+      if (typeof assertionFunction !== "function") return assertionFunction instanceof chai$1.Assertion ? proxy : assertionFunction;
+      if (key === "assert") return assertionFunction;
+      if (typeof key === "string" && unsupported.includes(key)) throw new SyntaxError(`expect.poll() is not supported in combination with .${key}(). Use vi.waitFor() if your assertion condition is unstable.`);
+      return function(...args) {
+        const STACK_TRACE_ERROR = new Error("STACK_TRACE_ERROR");
+        const promise = () => new Promise((resolve, reject) => {
+          let intervalId;
+          let timeoutId;
+          let lastError;
+          const { setTimeout, clearTimeout } = getSafeTimers2();
+          const check = async () => {
+            try {
+              chai$1.util.flag(assertion, "_name", key);
+              const obj = await fn2();
+              chai$1.util.flag(assertion, "object", obj);
+              resolve(await assertionFunction.call(assertion, ...args));
+              clearTimeout(intervalId);
+              clearTimeout(timeoutId);
+            } catch (err) {
+              lastError = err;
+              if (!chai$1.util.flag(assertion, "_isLastPollAttempt")) intervalId = setTimeout(check, interval);
+            }
+          };
+          timeoutId = setTimeout(() => {
+            clearTimeout(intervalId);
+            chai$1.util.flag(assertion, "_isLastPollAttempt", true);
+            const rejectWithCause = (cause) => {
+              reject(copyStackTrace$1(new Error("Matcher did not succeed in time.", { cause }), STACK_TRACE_ERROR));
+            };
+            check().then(() => rejectWithCause(lastError)).catch((e) => rejectWithCause(e));
+          }, timeout);
+          check();
+        });
+        let awaited = false;
+        test2.onFinished ??= [];
+        test2.onFinished.push(() => {
+          if (!awaited) {
+            const negated = chai$1.util.flag(assertion, "negate") ? "not." : "";
+            const name = chai$1.util.flag(assertion, "_poll.element") ? "element(locator)" : "poll(assertion)";
+            const assertionString = `expect.${name}.${negated}${String(key)}()`;
+            const error = new Error(`${assertionString} was not awaited. This assertion is asynchronous and must be awaited; otherwise, it is not executed to avoid unhandled rejections:
+
+await ${assertionString}
+`);
+            throw copyStackTrace$1(error, STACK_TRACE_ERROR);
+          }
+        });
+        let resultPromise;
+        return {
+          then(onFulfilled, onRejected) {
+            awaited = true;
+            return (resultPromise ||= promise()).then(onFulfilled, onRejected);
+          },
+          catch(onRejected) {
+            return (resultPromise ||= promise()).catch(onRejected);
+          },
+          finally(onFinally) {
+            return (resultPromise ||= promise()).finally(onFinally);
+          },
+          [Symbol.toStringTag]: "Promise"
+        };
+      };
+    } });
+    return proxy;
+  };
+}
+function copyStackTrace$1(target, source) {
+  if (source.stack !== void 0) target.stack = source.stack.replace(source.message, target.message);
+  return target;
+}
+function commonjsRequire(path) {
+  throw new Error('Could not dynamically require "' + path + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
+}
+var chaiSubset$1 = { exports: {} };
+var chaiSubset = chaiSubset$1.exports;
+var hasRequiredChaiSubset;
+function requireChaiSubset() {
+  if (hasRequiredChaiSubset) return chaiSubset$1.exports;
+  hasRequiredChaiSubset = 1;
+  (function(module, exports) {
+    (function() {
+      (function(chaiSubset2) {
+        if (typeof commonjsRequire === "function" && true && true) {
+          return module.exports = chaiSubset2;
+        } else {
+          return chai.use(chaiSubset2);
+        }
+      })(function(chai3, utils) {
+        var Assertion2 = chai3.Assertion;
+        var assertionPrototype = Assertion2.prototype;
+        Assertion2.addMethod("containSubset", function(expected) {
+          var actual = utils.flag(this, "object");
+          var showDiff = chai3.config.showDiff;
+          assertionPrototype.assert.call(
+            this,
+            compare(expected, actual),
+            "expected #{act} to contain subset #{exp}",
+            "expected #{act} to not contain subset #{exp}",
+            expected,
+            actual,
+            showDiff
+          );
+        });
+        chai3.assert.containSubset = function(val, exp, msg) {
+          new chai3.Assertion(val, msg).to.be.containSubset(exp);
+        };
+        function compare(expected, actual) {
+          if (expected === actual) {
+            return true;
+          }
+          if (typeof actual !== typeof expected) {
+            return false;
+          }
+          if (typeof expected !== "object" || expected === null) {
+            return expected === actual;
+          }
+          if (!!expected && !actual) {
+            return false;
+          }
+          if (Array.isArray(expected)) {
+            if (typeof actual.length !== "number") {
+              return false;
+            }
+            var aa = Array.prototype.slice.call(actual);
+            return expected.every(function(exp) {
+              return aa.some(function(act) {
+                return compare(exp, act);
+              });
+            });
+          }
+          if (expected instanceof Date) {
+            if (actual instanceof Date) {
+              return expected.getTime() === actual.getTime();
+            } else {
+              return false;
+            }
+          }
+          return Object.keys(expected).every(function(key) {
+            var eo = expected[key];
+            var ao = actual[key];
+            if (typeof eo === "object" && eo !== null && ao !== null) {
+              return compare(eo, ao);
+            }
+            if (typeof eo === "function") {
+              return eo(ao);
+            }
+            return ao === eo;
+          });
+        }
+      });
+    }).call(chaiSubset);
+  })(chaiSubset$1);
+  return chaiSubset$1.exports;
+}
+var chaiSubsetExports = requireChaiSubset();
+var Subset = /* @__PURE__ */ getDefaultExportFromCjs(chaiSubsetExports);
+function createAssertionMessage(util2, assertion, hasArgs) {
+  const not = util2.flag(assertion, "negate") ? "not." : "";
+  const name = `${util2.flag(assertion, "_name")}(${"expected"})`;
+  const promiseName = util2.flag(assertion, "promise");
+  const promise = promiseName ? `.${promiseName}` : "";
+  return `expect(actual)${promise}.${not}${name}`;
+}
+function recordAsyncExpect(_test, promise, assertion, error) {
+  const test2 = _test;
+  if (test2 && promise instanceof Promise) {
+    promise = promise.finally(() => {
+      if (!test2.promises) return;
+      const index = test2.promises.indexOf(promise);
+      if (index !== -1) test2.promises.splice(index, 1);
+    });
+    if (!test2.promises) test2.promises = [];
+    test2.promises.push(promise);
+    let resolved = false;
+    test2.onFinished ??= [];
+    test2.onFinished.push(() => {
+      if (!resolved) {
+        const processor = globalThis.__vitest_worker__?.onFilterStackTrace || ((s) => s || "");
+        const stack = processor(error.stack);
+        console.warn([
+          `Promise returned by \`${assertion}\` was not awaited. `,
+          "Vitest currently auto-awaits hanging assertions at the end of the test, but this will cause the test to fail in Vitest 3. ",
+          "Please remember to await the assertion.\n",
+          stack
+        ].join(""));
+      }
+    });
+    return {
+      then(onFulfilled, onRejected) {
+        resolved = true;
+        return promise.then(onFulfilled, onRejected);
+      },
+      catch(onRejected) {
+        return promise.catch(onRejected);
+      },
+      finally(onFinally) {
+        return promise.finally(onFinally);
+      },
+      [Symbol.toStringTag]: "Promise"
+    };
+  }
+  return promise;
+}
+var _client;
+function getSnapshotClient() {
+  if (!_client) _client = new SnapshotClient({ isEqual: (received, expected) => {
+    return equals(received, expected, [iterableEquality, subsetEquality]);
+  } });
+  return _client;
+}
+function getError(expected, promise) {
+  if (typeof expected !== "function") {
+    if (!promise) throw new Error(`expected must be a function, received ${typeof expected}`);
+    return expected;
+  }
+  try {
+    expected();
+  } catch (e) {
+    return e;
+  }
+  throw new Error("snapshot function didn't throw");
+}
+function getTestNames(test2) {
+  return {
+    filepath: test2.file.filepath,
+    name: getNames(test2).slice(1).join(" > "),
+    testId: test2.id
+  };
+}
+var SnapshotPlugin = (chai3, utils) => {
+  function getTest(assertionName, obj) {
+    const test2 = utils.flag(obj, "vitest-test");
+    if (!test2) throw new Error(`'${assertionName}' cannot be used without test context`);
+    return test2;
+  }
+  for (const key of ["matchSnapshot", "toMatchSnapshot"]) utils.addMethod(chai3.Assertion.prototype, key, function(properties, message) {
+    utils.flag(this, "_name", key);
+    const isNot = utils.flag(this, "negate");
+    if (isNot) throw new Error(`${key} cannot be used with "not"`);
+    const expected = utils.flag(this, "object");
+    const test2 = getTest(key, this);
+    if (typeof properties === "string" && typeof message === "undefined") {
+      message = properties;
+      properties = void 0;
+    }
+    const errorMessage = utils.flag(this, "message");
+    getSnapshotClient().assert({
+      received: expected,
+      message,
+      isInline: false,
+      properties,
+      errorMessage,
+      ...getTestNames(test2)
+    });
+  });
+  utils.addMethod(chai3.Assertion.prototype, "toMatchFileSnapshot", function(file, message) {
+    utils.flag(this, "_name", "toMatchFileSnapshot");
+    const isNot = utils.flag(this, "negate");
+    if (isNot) throw new Error('toMatchFileSnapshot cannot be used with "not"');
+    const error = new Error("resolves");
+    const expected = utils.flag(this, "object");
+    const test2 = getTest("toMatchFileSnapshot", this);
+    const errorMessage = utils.flag(this, "message");
+    const promise = getSnapshotClient().assertRaw({
+      received: expected,
+      message,
+      isInline: false,
+      rawSnapshot: { file },
+      errorMessage,
+      ...getTestNames(test2)
+    });
+    return recordAsyncExpect(test2, promise, createAssertionMessage(utils, this), error);
+  });
+  utils.addMethod(chai3.Assertion.prototype, "toMatchInlineSnapshot", function __INLINE_SNAPSHOT__(properties, inlineSnapshot, message) {
+    utils.flag(this, "_name", "toMatchInlineSnapshot");
+    const isNot = utils.flag(this, "negate");
+    if (isNot) throw new Error('toMatchInlineSnapshot cannot be used with "not"');
+    const test2 = getTest("toMatchInlineSnapshot", this);
+    const isInsideEach = test2.each || test2.suite?.each;
+    if (isInsideEach) throw new Error("InlineSnapshot cannot be used inside of test.each or describe.each");
+    const expected = utils.flag(this, "object");
+    const error = utils.flag(this, "error");
+    if (typeof properties === "string") {
+      message = inlineSnapshot;
+      inlineSnapshot = properties;
+      properties = void 0;
+    }
+    if (inlineSnapshot) inlineSnapshot = stripSnapshotIndentation(inlineSnapshot);
+    const errorMessage = utils.flag(this, "message");
+    getSnapshotClient().assert({
+      received: expected,
+      message,
+      isInline: true,
+      properties,
+      inlineSnapshot,
+      error,
+      errorMessage,
+      ...getTestNames(test2)
+    });
+  });
+  utils.addMethod(chai3.Assertion.prototype, "toThrowErrorMatchingSnapshot", function(message) {
+    utils.flag(this, "_name", "toThrowErrorMatchingSnapshot");
+    const isNot = utils.flag(this, "negate");
+    if (isNot) throw new Error('toThrowErrorMatchingSnapshot cannot be used with "not"');
+    const expected = utils.flag(this, "object");
+    const test2 = getTest("toThrowErrorMatchingSnapshot", this);
+    const promise = utils.flag(this, "promise");
+    const errorMessage = utils.flag(this, "message");
+    getSnapshotClient().assert({
+      received: getError(expected, promise),
+      message,
+      errorMessage,
+      ...getTestNames(test2)
+    });
+  });
+  utils.addMethod(chai3.Assertion.prototype, "toThrowErrorMatchingInlineSnapshot", function __INLINE_SNAPSHOT__(inlineSnapshot, message) {
+    const isNot = utils.flag(this, "negate");
+    if (isNot) throw new Error('toThrowErrorMatchingInlineSnapshot cannot be used with "not"');
+    const test2 = getTest("toThrowErrorMatchingInlineSnapshot", this);
+    const isInsideEach = test2.each || test2.suite?.each;
+    if (isInsideEach) throw new Error("InlineSnapshot cannot be used inside of test.each or describe.each");
+    const expected = utils.flag(this, "object");
+    const error = utils.flag(this, "error");
+    const promise = utils.flag(this, "promise");
+    const errorMessage = utils.flag(this, "message");
+    if (inlineSnapshot) inlineSnapshot = stripSnapshotIndentation(inlineSnapshot);
+    getSnapshotClient().assert({
+      received: getError(expected, promise),
+      message,
+      inlineSnapshot,
+      isInline: true,
+      error,
+      errorMessage,
+      ...getTestNames(test2)
+    });
+  });
+  utils.addMethod(chai3.expect, "addSnapshotSerializer", addSerializer);
+};
+chai$1.use(JestExtend);
+chai$1.use(JestChaiExpect);
+chai$1.use(Subset);
+chai$1.use(SnapshotPlugin);
+chai$1.use(JestAsymmetricMatchers);
+function createExpect(test2) {
+  const expect2 = (value, message) => {
+    const { assertionCalls } = getState(expect2);
+    setState({ assertionCalls: assertionCalls + 1 }, expect2);
+    const assert3 = chai$1.expect(value, message);
+    const _test = test2 || getCurrentTest();
+    if (_test)
+      return assert3.withTest(_test);
+    else return assert3;
+  };
+  Object.assign(expect2, chai$1.expect);
+  Object.assign(expect2, globalThis[ASYMMETRIC_MATCHERS_OBJECT]);
+  expect2.getState = () => getState(expect2);
+  expect2.setState = (state) => setState(state, expect2);
+  const globalState = getState(globalThis[GLOBAL_EXPECT]) || {};
+  setState({
+    ...globalState,
+    assertionCalls: 0,
+    isExpectingAssertions: false,
+    isExpectingAssertionsError: null,
+    expectedAssertionsNumber: null,
+    expectedAssertionsNumberErrorGen: null,
+    environment: getCurrentEnvironment(),
+    get testPath() {
+      return getWorkerState().filepath;
+    },
+    currentTestName: test2 ? getTestName(test2) : globalState.currentTestName
+  }, expect2);
+  expect2.extend = (matchers) => chai$1.expect.extend(expect2, matchers);
+  expect2.addEqualityTesters = (customTesters) => addCustomEqualityTesters(customTesters);
+  expect2.soft = (...args) => {
+    return expect2(...args).withContext({ soft: true });
+  };
+  expect2.poll = createExpectPoll(expect2);
+  expect2.unreachable = (message) => {
+    chai$1.assert.fail(`expected${message ? ` "${message}" ` : " "}not to be reached`);
+  };
+  function assertions(expected) {
+    const errorGen = () => new Error(`expected number of assertions to be ${expected}, but got ${expect2.getState().assertionCalls}`);
+    if (Error.captureStackTrace) Error.captureStackTrace(errorGen(), assertions);
+    expect2.setState({
+      expectedAssertionsNumber: expected,
+      expectedAssertionsNumberErrorGen: errorGen
+    });
+  }
+  function hasAssertions() {
+    const error = new Error("expected any number of assertion, but got none");
+    if (Error.captureStackTrace) Error.captureStackTrace(error, hasAssertions);
+    expect2.setState({
+      isExpectingAssertions: true,
+      isExpectingAssertionsError: error
+    });
+  }
+  chai$1.util.addMethod(expect2, "assertions", assertions);
+  chai$1.util.addMethod(expect2, "hasAssertions", hasAssertions);
+  expect2.extend(customMatchers);
+  return expect2;
+}
+var globalExpect = createExpect();
+Object.defineProperty(globalThis, GLOBAL_EXPECT, {
+  value: globalExpect,
+  writable: true,
+  configurable: true
+});
+var fakeTimersSrc = {};
+var global2;
+var hasRequiredGlobal;
+function requireGlobal() {
+  if (hasRequiredGlobal) return global2;
+  hasRequiredGlobal = 1;
+  var globalObject;
+  if (typeof commonjsGlobal !== "undefined") {
+    globalObject = commonjsGlobal;
+  } else if (typeof window !== "undefined") {
+    globalObject = window;
+  } else {
+    globalObject = self;
+  }
+  global2 = globalObject;
+  return global2;
+}
+var throwsOnProto_1;
+var hasRequiredThrowsOnProto;
+function requireThrowsOnProto() {
+  if (hasRequiredThrowsOnProto) return throwsOnProto_1;
+  hasRequiredThrowsOnProto = 1;
+  let throwsOnProto;
+  try {
+    const object2 = {};
+    object2.__proto__;
+    throwsOnProto = false;
+  } catch (_) {
+    throwsOnProto = true;
+  }
+  throwsOnProto_1 = throwsOnProto;
+  return throwsOnProto_1;
+}
+var copyPrototypeMethods;
+var hasRequiredCopyPrototypeMethods;
+function requireCopyPrototypeMethods() {
+  if (hasRequiredCopyPrototypeMethods) return copyPrototypeMethods;
+  hasRequiredCopyPrototypeMethods = 1;
+  var call = Function.call;
+  var throwsOnProto = requireThrowsOnProto();
+  var disallowedProperties = [
+    // ignore size because it throws from Map
+    "size",
+    "caller",
+    "callee",
+    "arguments"
+  ];
+  if (throwsOnProto) {
+    disallowedProperties.push("__proto__");
+  }
+  copyPrototypeMethods = function copyPrototypeMethods2(prototype) {
+    return Object.getOwnPropertyNames(prototype).reduce(
+      function(result, name) {
+        if (disallowedProperties.includes(name)) {
+          return result;
+        }
+        if (typeof prototype[name] !== "function") {
+          return result;
+        }
+        result[name] = call.bind(prototype[name]);
+        return result;
+      },
+      /* @__PURE__ */ Object.create(null)
+    );
+  };
+  return copyPrototypeMethods;
+}
+var array;
+var hasRequiredArray;
+function requireArray() {
+  if (hasRequiredArray) return array;
+  hasRequiredArray = 1;
+  var copyPrototype = requireCopyPrototypeMethods();
+  array = copyPrototype(Array.prototype);
+  return array;
+}
+var calledInOrder_1;
+var hasRequiredCalledInOrder;
+function requireCalledInOrder() {
+  if (hasRequiredCalledInOrder) return calledInOrder_1;
+  hasRequiredCalledInOrder = 1;
+  var every2 = requireArray().every;
+  function hasCallsLeft(callMap, spy) {
+    if (callMap[spy.id] === void 0) {
+      callMap[spy.id] = 0;
+    }
+    return callMap[spy.id] < spy.callCount;
+  }
+  function checkAdjacentCalls(callMap, spy, index, spies) {
+    var calledBeforeNext = true;
+    if (index !== spies.length - 1) {
+      calledBeforeNext = spy.calledBefore(spies[index + 1]);
+    }
+    if (hasCallsLeft(callMap, spy) && calledBeforeNext) {
+      callMap[spy.id] += 1;
+      return true;
+    }
+    return false;
+  }
+  function calledInOrder(spies) {
+    var callMap = {};
+    var _spies = arguments.length > 1 ? arguments : spies;
+    return every2(_spies, checkAdjacentCalls.bind(null, callMap));
+  }
+  calledInOrder_1 = calledInOrder;
+  return calledInOrder_1;
+}
+var className_1;
+var hasRequiredClassName;
+function requireClassName() {
+  if (hasRequiredClassName) return className_1;
+  hasRequiredClassName = 1;
+  function className(value) {
+    const name = value.constructor && value.constructor.name;
+    return name || null;
+  }
+  className_1 = className;
+  return className_1;
+}
+var deprecated = {};
+var hasRequiredDeprecated;
+function requireDeprecated() {
+  if (hasRequiredDeprecated) return deprecated;
+  hasRequiredDeprecated = 1;
+  (function(exports) {
+    exports.wrap = function(func, msg) {
+      var wrapped = function() {
+        exports.printWarning(msg);
+        return func.apply(this, arguments);
+      };
+      if (func.prototype) {
+        wrapped.prototype = func.prototype;
+      }
+      return wrapped;
+    };
+    exports.defaultMsg = function(packageName, funcName) {
+      return `${packageName}.${funcName} is deprecated and will be removed from the public API in a future version of ${packageName}.`;
+    };
+    exports.printWarning = function(msg) {
+      if (typeof process === "object" && process.emitWarning) {
+        process.emitWarning(msg);
+      } else if (console.info) {
+        console.info(msg);
+      } else {
+        console.log(msg);
+      }
+    };
+  })(deprecated);
+  return deprecated;
+}
+var every;
+var hasRequiredEvery;
+function requireEvery() {
+  if (hasRequiredEvery) return every;
+  hasRequiredEvery = 1;
+  every = function every2(obj, fn2) {
+    var pass = true;
+    try {
+      obj.forEach(function() {
+        if (!fn2.apply(this, arguments)) {
+          throw new Error();
+        }
+      });
+    } catch (e) {
+      pass = false;
+    }
+    return pass;
+  };
+  return every;
+}
+var functionName;
+var hasRequiredFunctionName;
+function requireFunctionName() {
+  if (hasRequiredFunctionName) return functionName;
+  hasRequiredFunctionName = 1;
+  functionName = function functionName2(func) {
+    if (!func) {
+      return "";
+    }
+    try {
+      return func.displayName || func.name || // Use function decomposition as a last resort to get function
+      // name. Does not rely on function decomposition to work - if it
+      // doesn't debugging will be slightly less informative
+      // (i.e. toString will say 'spy' rather than 'myFunc').
+      (String(func).match(/function ([^\s(]+)/) || [])[1];
+    } catch (e) {
+      return "";
+    }
+  };
+  return functionName;
+}
+var orderByFirstCall_1;
+var hasRequiredOrderByFirstCall;
+function requireOrderByFirstCall() {
+  if (hasRequiredOrderByFirstCall) return orderByFirstCall_1;
+  hasRequiredOrderByFirstCall = 1;
+  var sort = requireArray().sort;
+  var slice = requireArray().slice;
+  function comparator(a, b) {
+    var aCall = a.getCall(0);
+    var bCall = b.getCall(0);
+    var aId = aCall && aCall.callId || -1;
+    var bId = bCall && bCall.callId || -1;
+    return aId < bId ? -1 : 1;
+  }
+  function orderByFirstCall(spies) {
+    return sort(slice(spies), comparator);
+  }
+  orderByFirstCall_1 = orderByFirstCall;
+  return orderByFirstCall_1;
+}
+var _function;
+var hasRequired_function;
+function require_function() {
+  if (hasRequired_function) return _function;
+  hasRequired_function = 1;
+  var copyPrototype = requireCopyPrototypeMethods();
+  _function = copyPrototype(Function.prototype);
+  return _function;
+}
+var map;
+var hasRequiredMap;
+function requireMap() {
+  if (hasRequiredMap) return map;
+  hasRequiredMap = 1;
+  var copyPrototype = requireCopyPrototypeMethods();
+  map = copyPrototype(Map.prototype);
+  return map;
+}
+var object;
+var hasRequiredObject;
+function requireObject() {
+  if (hasRequiredObject) return object;
+  hasRequiredObject = 1;
+  var copyPrototype = requireCopyPrototypeMethods();
+  object = copyPrototype(Object.prototype);
+  return object;
+}
+var set;
+var hasRequiredSet;
+function requireSet() {
+  if (hasRequiredSet) return set;
+  hasRequiredSet = 1;
+  var copyPrototype = requireCopyPrototypeMethods();
+  set = copyPrototype(Set.prototype);
+  return set;
+}
+var string;
+var hasRequiredString;
+function requireString() {
+  if (hasRequiredString) return string;
+  hasRequiredString = 1;
+  var copyPrototype = requireCopyPrototypeMethods();
+  string = copyPrototype(String.prototype);
+  return string;
+}
+var prototypes;
+var hasRequiredPrototypes;
+function requirePrototypes() {
+  if (hasRequiredPrototypes) return prototypes;
+  hasRequiredPrototypes = 1;
+  prototypes = {
+    array: requireArray(),
+    function: require_function(),
+    map: requireMap(),
+    object: requireObject(),
+    set: requireSet(),
+    string: requireString()
+  };
+  return prototypes;
+}
+var typeDetect$1 = { exports: {} };
+var typeDetect = typeDetect$1.exports;
+var hasRequiredTypeDetect;
+function requireTypeDetect() {
+  if (hasRequiredTypeDetect) return typeDetect$1.exports;
+  hasRequiredTypeDetect = 1;
+  (function(module, exports) {
+    (function(global3, factory) {
+      module.exports = factory();
+    })(typeDetect, (function() {
+      var promiseExists = typeof Promise === "function";
+      var globalObject = typeof self === "object" ? self : commonjsGlobal;
+      var symbolExists = typeof Symbol !== "undefined";
+      var mapExists = typeof Map !== "undefined";
+      var setExists = typeof Set !== "undefined";
+      var weakMapExists = typeof WeakMap !== "undefined";
+      var weakSetExists = typeof WeakSet !== "undefined";
+      var dataViewExists = typeof DataView !== "undefined";
+      var symbolIteratorExists = symbolExists && typeof Symbol.iterator !== "undefined";
+      var symbolToStringTagExists = symbolExists && typeof Symbol.toStringTag !== "undefined";
+      var setEntriesExists = setExists && typeof Set.prototype.entries === "function";
+      var mapEntriesExists = mapExists && typeof Map.prototype.entries === "function";
+      var setIteratorPrototype = setEntriesExists && Object.getPrototypeOf((/* @__PURE__ */ new Set()).entries());
+      var mapIteratorPrototype = mapEntriesExists && Object.getPrototypeOf((/* @__PURE__ */ new Map()).entries());
+      var arrayIteratorExists = symbolIteratorExists && typeof Array.prototype[Symbol.iterator] === "function";
+      var arrayIteratorPrototype = arrayIteratorExists && Object.getPrototypeOf([][Symbol.iterator]());
+      var stringIteratorExists = symbolIteratorExists && typeof String.prototype[Symbol.iterator] === "function";
+      var stringIteratorPrototype = stringIteratorExists && Object.getPrototypeOf(""[Symbol.iterator]());
+      var toStringLeftSliceLength = 8;
+      var toStringRightSliceLength = -1;
+      function typeDetect2(obj) {
+        var typeofObj = typeof obj;
+        if (typeofObj !== "object") {
+          return typeofObj;
+        }
+        if (obj === null) {
+          return "null";
+        }
+        if (obj === globalObject) {
+          return "global";
+        }
+        if (Array.isArray(obj) && (symbolToStringTagExists === false || !(Symbol.toStringTag in obj))) {
+          return "Array";
+        }
+        if (typeof window === "object" && window !== null) {
+          if (typeof window.location === "object" && obj === window.location) {
+            return "Location";
+          }
+          if (typeof window.document === "object" && obj === window.document) {
+            return "Document";
+          }
+          if (typeof window.navigator === "object") {
+            if (typeof window.navigator.mimeTypes === "object" && obj === window.navigator.mimeTypes) {
+              return "MimeTypeArray";
+            }
+            if (typeof window.navigator.plugins === "object" && obj === window.navigator.plugins) {
+              return "PluginArray";
+            }
+          }
+          if ((typeof window.HTMLElement === "function" || typeof window.HTMLElement === "object") && obj instanceof window.HTMLElement) {
+            if (obj.tagName === "BLOCKQUOTE") {
+              return "HTMLQuoteElement";
+            }
+            if (obj.tagName === "TD") {
+              return "HTMLTableDataCellElement";
+            }
+            if (obj.tagName === "TH") {
+              return "HTMLTableHeaderCellElement";
+            }
+          }
+        }
+        var stringTag = symbolToStringTagExists && obj[Symbol.toStringTag];
+        if (typeof stringTag === "string") {
+          return stringTag;
+        }
+        var objPrototype = Object.getPrototypeOf(obj);
+        if (objPrototype === RegExp.prototype) {
+          return "RegExp";
+        }
+        if (objPrototype === Date.prototype) {
+          return "Date";
+        }
+        if (promiseExists && objPrototype === Promise.prototype) {
+          return "Promise";
+        }
+        if (setExists && objPrototype === Set.prototype) {
+          return "Set";
+        }
+        if (mapExists && objPrototype === Map.prototype) {
+          return "Map";
+        }
+        if (weakSetExists && objPrototype === WeakSet.prototype) {
+          return "WeakSet";
+        }
+        if (weakMapExists && objPrototype === WeakMap.prototype) {
+          return "WeakMap";
+        }
+        if (dataViewExists && objPrototype === DataView.prototype) {
+          return "DataView";
+        }
+        if (mapExists && objPrototype === mapIteratorPrototype) {
+          return "Map Iterator";
+        }
+        if (setExists && objPrototype === setIteratorPrototype) {
+          return "Set Iterator";
+        }
+        if (arrayIteratorExists && objPrototype === arrayIteratorPrototype) {
+          return "Array Iterator";
+        }
+        if (stringIteratorExists && objPrototype === stringIteratorPrototype) {
+          return "String Iterator";
+        }
+        if (objPrototype === null) {
+          return "Object";
+        }
+        return Object.prototype.toString.call(obj).slice(toStringLeftSliceLength, toStringRightSliceLength);
+      }
+      return typeDetect2;
+    }));
+  })(typeDetect$1);
+  return typeDetect$1.exports;
+}
+var typeOf;
+var hasRequiredTypeOf;
+function requireTypeOf() {
+  if (hasRequiredTypeOf) return typeOf;
+  hasRequiredTypeOf = 1;
+  var type = requireTypeDetect();
+  typeOf = function typeOf2(value) {
+    return type(value).toLowerCase();
+  };
+  return typeOf;
+}
+var valueToString_1;
+var hasRequiredValueToString;
+function requireValueToString() {
+  if (hasRequiredValueToString) return valueToString_1;
+  hasRequiredValueToString = 1;
+  function valueToString(value) {
+    if (value && value.toString) {
+      return value.toString();
+    }
+    return String(value);
+  }
+  valueToString_1 = valueToString;
+  return valueToString_1;
+}
+var lib;
+var hasRequiredLib;
+function requireLib() {
+  if (hasRequiredLib) return lib;
+  hasRequiredLib = 1;
+  lib = {
+    global: requireGlobal(),
+    calledInOrder: requireCalledInOrder(),
+    className: requireClassName(),
+    deprecated: requireDeprecated(),
+    every: requireEvery(),
+    functionName: requireFunctionName(),
+    orderByFirstCall: requireOrderByFirstCall(),
+    prototypes: requirePrototypes(),
+    typeOf: requireTypeOf(),
+    valueToString: requireValueToString()
+  };
+  return lib;
+}
+var hasRequiredFakeTimersSrc;
+function requireFakeTimersSrc() {
+  if (hasRequiredFakeTimersSrc) return fakeTimersSrc;
+  hasRequiredFakeTimersSrc = 1;
+  const globalObject = requireLib().global;
+  let timersModule, timersPromisesModule;
+  if (typeof __vitest_required__ !== "undefined") {
+    try {
+      timersModule = __vitest_required__.timers;
+    } catch (e) {
+    }
+    try {
+      timersPromisesModule = __vitest_required__.timersPromises;
+    } catch (e) {
+    }
+  }
+  function withGlobal(_global) {
+    const maxTimeout = Math.pow(2, 31) - 1;
+    const idCounterStart = 1e12;
+    const NOOP = function() {
+      return void 0;
+    };
+    const NOOP_ARRAY = function() {
+      return [];
+    };
+    const isPresent = {};
+    let timeoutResult, addTimerReturnsObject = false;
+    if (_global.setTimeout) {
+      isPresent.setTimeout = true;
+      timeoutResult = _global.setTimeout(NOOP, 0);
+      addTimerReturnsObject = typeof timeoutResult === "object";
+    }
+    isPresent.clearTimeout = Boolean(_global.clearTimeout);
+    isPresent.setInterval = Boolean(_global.setInterval);
+    isPresent.clearInterval = Boolean(_global.clearInterval);
+    isPresent.hrtime = _global.process && typeof _global.process.hrtime === "function";
+    isPresent.hrtimeBigint = isPresent.hrtime && typeof _global.process.hrtime.bigint === "function";
+    isPresent.nextTick = _global.process && typeof _global.process.nextTick === "function";
+    const utilPromisify = _global.process && _global.__vitest_required__ && _global.__vitest_required__.util.promisify;
+    isPresent.performance = _global.performance && typeof _global.performance.now === "function";
+    const hasPerformancePrototype = _global.Performance && (typeof _global.Performance).match(/^(function|object)$/);
+    const hasPerformanceConstructorPrototype = _global.performance && _global.performance.constructor && _global.performance.constructor.prototype;
+    isPresent.queueMicrotask = _global.hasOwnProperty("queueMicrotask");
+    isPresent.requestAnimationFrame = _global.requestAnimationFrame && typeof _global.requestAnimationFrame === "function";
+    isPresent.cancelAnimationFrame = _global.cancelAnimationFrame && typeof _global.cancelAnimationFrame === "function";
+    isPresent.requestIdleCallback = _global.requestIdleCallback && typeof _global.requestIdleCallback === "function";
+    isPresent.cancelIdleCallbackPresent = _global.cancelIdleCallback && typeof _global.cancelIdleCallback === "function";
+    isPresent.setImmediate = _global.setImmediate && typeof _global.setImmediate === "function";
+    isPresent.clearImmediate = _global.clearImmediate && typeof _global.clearImmediate === "function";
+    isPresent.Intl = _global.Intl && typeof _global.Intl === "object";
+    if (_global.clearTimeout) {
+      _global.clearTimeout(timeoutResult);
+    }
+    const NativeDate = _global.Date;
+    const NativeIntl = isPresent.Intl ? Object.defineProperties(
+      /* @__PURE__ */ Object.create(null),
+      Object.getOwnPropertyDescriptors(_global.Intl)
+    ) : void 0;
+    let uniqueTimerId = idCounterStart;
+    if (NativeDate === void 0) {
+      throw new Error(
+        "The global scope doesn't have a `Date` object (see https://github.com/sinonjs/sinon/issues/1852#issuecomment-419622780)"
+      );
+    }
+    isPresent.Date = true;
+    class FakePerformanceEntry {
+      constructor(name, entryType, startTime, duration) {
+        this.name = name;
+        this.entryType = entryType;
+        this.startTime = startTime;
+        this.duration = duration;
+      }
+      toJSON() {
+        return JSON.stringify({ ...this });
+      }
+    }
+    function isNumberFinite(num) {
+      if (Number.isFinite) {
+        return Number.isFinite(num);
+      }
+      return isFinite(num);
+    }
+    let isNearInfiniteLimit = false;
+    function checkIsNearInfiniteLimit(clock, i) {
+      if (clock.loopLimit && i === clock.loopLimit - 1) {
+        isNearInfiniteLimit = true;
+      }
+    }
+    function resetIsNearInfiniteLimit() {
+      isNearInfiniteLimit = false;
+    }
+    function parseTime(str) {
+      if (!str) {
+        return 0;
+      }
+      const strings = str.split(":");
+      const l = strings.length;
+      let i = l;
+      let ms = 0;
+      let parsed;
+      if (l > 3 || !/^(\d\d:){0,2}\d\d?$/.test(str)) {
+        throw new Error(
+          "tick only understands numbers, 'm:s' and 'h:m:s'. Each part must be two digits"
+        );
+      }
+      while (i--) {
+        parsed = parseInt(strings[i], 10);
+        if (parsed >= 60) {
+          throw new Error(`Invalid time ${str}`);
+        }
+        ms += parsed * Math.pow(60, l - i - 1);
+      }
+      return ms * 1e3;
+    }
+    function nanoRemainder(msFloat) {
+      const modulo = 1e6;
+      const remainder = msFloat * 1e6 % modulo;
+      const positiveRemainder = remainder < 0 ? remainder + modulo : remainder;
+      return Math.floor(positiveRemainder);
+    }
+    function getEpoch(epoch) {
+      if (!epoch) {
+        return 0;
+      }
+      if (typeof epoch.getTime === "function") {
+        return epoch.getTime();
+      }
+      if (typeof epoch === "number") {
+        return epoch;
+      }
+      throw new TypeError("now should be milliseconds since UNIX epoch");
+    }
+    function inRange(from, to, timer) {
+      return timer && timer.callAt >= from && timer.callAt <= to;
+    }
+    function getInfiniteLoopError(clock, job) {
+      const infiniteLoopError = new Error(
+        `Aborting after running ${clock.loopLimit} timers, assuming an infinite loop!`
+      );
+      if (!job.error) {
+        return infiniteLoopError;
+      }
+      const computedTargetPattern = /target\.*[<|(|[].*?[>|\]|)]\s*/;
+      let clockMethodPattern = new RegExp(
+        String(Object.keys(clock).join("|"))
+      );
+      if (addTimerReturnsObject) {
+        clockMethodPattern = new RegExp(
+          `\\s+at (Object\\.)?(?:${Object.keys(clock).join("|")})\\s+`
+        );
+      }
+      let matchedLineIndex = -1;
+      job.error.stack.split("\n").some(function(line, i) {
+        const matchedComputedTarget = line.match(computedTargetPattern);
+        if (matchedComputedTarget) {
+          matchedLineIndex = i;
+          return true;
+        }
+        const matchedClockMethod = line.match(clockMethodPattern);
+        if (matchedClockMethod) {
+          matchedLineIndex = i;
+          return false;
+        }
+        return matchedLineIndex >= 0;
+      });
+      const stack = `${infiniteLoopError}
+${job.type || "Microtask"} - ${job.func.name || "anonymous"}
+${job.error.stack.split("\n").slice(matchedLineIndex + 1).join("\n")}`;
+      try {
+        Object.defineProperty(infiniteLoopError, "stack", {
+          value: stack
+        });
+      } catch (e) {
+      }
+      return infiniteLoopError;
+    }
+    function createDate() {
+      class ClockDate extends NativeDate {
+        /**
+         * @param {number} year
+         * @param {number} month
+         * @param {number} date
+         * @param {number} hour
+         * @param {number} minute
+         * @param {number} second
+         * @param {number} ms
+         * @returns void
+         */
+        // eslint-disable-next-line no-unused-vars
+        constructor(year, month, date, hour, minute, second, ms) {
+          if (arguments.length === 0) {
+            super(ClockDate.clock.now);
+          } else {
+            super(...arguments);
+          }
+          Object.defineProperty(this, "constructor", {
+            value: NativeDate,
+            enumerable: false
+          });
+        }
+        static [Symbol.hasInstance](instance) {
+          return instance instanceof NativeDate;
+        }
+      }
+      ClockDate.isFake = true;
+      if (NativeDate.now) {
+        ClockDate.now = function now2() {
+          return ClockDate.clock.now;
+        };
+      }
+      if (NativeDate.toSource) {
+        ClockDate.toSource = function toSource() {
+          return NativeDate.toSource();
+        };
+      }
+      ClockDate.toString = function toString() {
+        return NativeDate.toString();
+      };
+      const ClockDateProxy = new Proxy(ClockDate, {
+        // handler for [[Call]] invocations (i.e. not using `new`)
+        apply() {
+          if (this instanceof ClockDate) {
+            throw new TypeError(
+              "A Proxy should only capture `new` calls with the `construct` handler. This is not supposed to be possible, so check the logic."
+            );
+          }
+          return new NativeDate(ClockDate.clock.now).toString();
+        }
+      });
+      return ClockDateProxy;
+    }
+    function createIntl() {
+      const ClockIntl = {};
+      Object.getOwnPropertyNames(NativeIntl).forEach(
+        (property) => ClockIntl[property] = NativeIntl[property]
+      );
+      ClockIntl.DateTimeFormat = function(...args) {
+        const realFormatter = new NativeIntl.DateTimeFormat(...args);
+        const formatter = {};
+        ["formatRange", "formatRangeToParts", "resolvedOptions"].forEach(
+          (method) => {
+            formatter[method] = realFormatter[method].bind(realFormatter);
+          }
+        );
+        ["format", "formatToParts"].forEach((method) => {
+          formatter[method] = function(date) {
+            return realFormatter[method](date || ClockIntl.clock.now);
+          };
+        });
+        return formatter;
+      };
+      ClockIntl.DateTimeFormat.prototype = Object.create(
+        NativeIntl.DateTimeFormat.prototype
+      );
+      ClockIntl.DateTimeFormat.supportedLocalesOf = NativeIntl.DateTimeFormat.supportedLocalesOf;
+      return ClockIntl;
+    }
+    function enqueueJob(clock, job) {
+      if (!clock.jobs) {
+        clock.jobs = [];
+      }
+      clock.jobs.push(job);
+    }
+    function runJobs(clock) {
+      if (!clock.jobs) {
+        return;
+      }
+      for (let i = 0; i < clock.jobs.length; i++) {
+        const job = clock.jobs[i];
+        job.func.apply(null, job.args);
+        checkIsNearInfiniteLimit(clock, i);
+        if (clock.loopLimit && i > clock.loopLimit) {
+          throw getInfiniteLoopError(clock, job);
+        }
+      }
+      resetIsNearInfiniteLimit();
+      clock.jobs = [];
+    }
+    function addTimer(clock, timer) {
+      if (timer.func === void 0) {
+        throw new Error("Callback must be provided to timer calls");
+      }
+      if (addTimerReturnsObject) {
+        if (typeof timer.func !== "function") {
+          throw new TypeError(
+            `[ERR_INVALID_CALLBACK]: Callback must be a function. Received ${timer.func} of type ${typeof timer.func}`
+          );
+        }
+      }
+      if (isNearInfiniteLimit) {
+        timer.error = new Error();
+      }
+      timer.type = timer.immediate ? "Immediate" : "Timeout";
+      if (timer.hasOwnProperty("delay")) {
+        if (typeof timer.delay !== "number") {
+          timer.delay = parseInt(timer.delay, 10);
+        }
+        if (!isNumberFinite(timer.delay)) {
+          timer.delay = 0;
+        }
+        timer.delay = timer.delay > maxTimeout ? 1 : timer.delay;
+        timer.delay = Math.max(0, timer.delay);
+      }
+      if (timer.hasOwnProperty("interval")) {
+        timer.type = "Interval";
+        timer.interval = timer.interval > maxTimeout ? 1 : timer.interval;
+      }
+      if (timer.hasOwnProperty("animation")) {
+        timer.type = "AnimationFrame";
+        timer.animation = true;
+      }
+      if (timer.hasOwnProperty("idleCallback")) {
+        timer.type = "IdleCallback";
+        timer.idleCallback = true;
+      }
+      if (!clock.timers) {
+        clock.timers = {};
+      }
+      timer.id = uniqueTimerId++;
+      timer.createdAt = clock.now;
+      timer.callAt = clock.now + (parseInt(timer.delay) || (clock.duringTick ? 1 : 0));
+      clock.timers[timer.id] = timer;
+      if (addTimerReturnsObject) {
+        const res = {
+          refed: true,
+          ref: function() {
+            this.refed = true;
+            return res;
+          },
+          unref: function() {
+            this.refed = false;
+            return res;
+          },
+          hasRef: function() {
+            return this.refed;
+          },
+          refresh: function() {
+            timer.callAt = clock.now + (parseInt(timer.delay) || (clock.duringTick ? 1 : 0));
+            clock.timers[timer.id] = timer;
+            return res;
+          },
+          [Symbol.toPrimitive]: function() {
+            return timer.id;
+          }
+        };
+        return res;
+      }
+      return timer.id;
+    }
+    function compareTimers(a, b) {
+      if (a.callAt < b.callAt) {
+        return -1;
+      }
+      if (a.callAt > b.callAt) {
+        return 1;
+      }
+      if (a.immediate && !b.immediate) {
+        return -1;
+      }
+      if (!a.immediate && b.immediate) {
+        return 1;
+      }
+      if (a.createdAt < b.createdAt) {
+        return -1;
+      }
+      if (a.createdAt > b.createdAt) {
+        return 1;
+      }
+      if (a.id < b.id) {
+        return -1;
+      }
+      if (a.id > b.id) {
+        return 1;
+      }
+    }
+    function firstTimerInRange(clock, from, to) {
+      const timers2 = clock.timers;
+      let timer = null;
+      let id, isInRange;
+      for (id in timers2) {
+        if (timers2.hasOwnProperty(id)) {
+          isInRange = inRange(from, to, timers2[id]);
+          if (isInRange && (!timer || compareTimers(timer, timers2[id]) === 1)) {
+            timer = timers2[id];
+          }
+        }
+      }
+      return timer;
+    }
+    function firstTimer(clock) {
+      const timers2 = clock.timers;
+      let timer = null;
+      let id;
+      for (id in timers2) {
+        if (timers2.hasOwnProperty(id)) {
+          if (!timer || compareTimers(timer, timers2[id]) === 1) {
+            timer = timers2[id];
+          }
+        }
+      }
+      return timer;
+    }
+    function lastTimer(clock) {
+      const timers2 = clock.timers;
+      let timer = null;
+      let id;
+      for (id in timers2) {
+        if (timers2.hasOwnProperty(id)) {
+          if (!timer || compareTimers(timer, timers2[id]) === -1) {
+            timer = timers2[id];
+          }
+        }
+      }
+      return timer;
+    }
+    function callTimer(clock, timer) {
+      if (typeof timer.interval === "number") {
+        clock.timers[timer.id].callAt += timer.interval;
+      } else {
+        delete clock.timers[timer.id];
+      }
+      if (typeof timer.func === "function") {
+        timer.func.apply(null, timer.args);
+      } else {
+        const eval2 = eval;
+        (function() {
+          eval2(timer.func);
+        })();
+      }
+    }
+    function getClearHandler(ttype) {
+      if (ttype === "IdleCallback" || ttype === "AnimationFrame") {
+        return `cancel${ttype}`;
+      }
+      return `clear${ttype}`;
+    }
+    function getScheduleHandler(ttype) {
+      if (ttype === "IdleCallback" || ttype === "AnimationFrame") {
+        return `request${ttype}`;
+      }
+      return `set${ttype}`;
+    }
+    function createWarnOnce() {
+      let calls = 0;
+      return function(msg) {
+        !calls++ && console.warn(msg);
+      };
+    }
+    const warnOnce = createWarnOnce();
+    function clearTimer(clock, timerId, ttype) {
+      if (!timerId) {
+        return;
+      }
+      if (!clock.timers) {
+        clock.timers = {};
+      }
+      const id = Number(timerId);
+      if (Number.isNaN(id) || id < idCounterStart) {
+        const handlerName = getClearHandler(ttype);
+        if (clock.shouldClearNativeTimers === true) {
+          const nativeHandler = clock[`_${handlerName}`];
+          return typeof nativeHandler === "function" ? nativeHandler(timerId) : void 0;
+        }
+        warnOnce(
+          `FakeTimers: ${handlerName} was invoked to clear a native timer instead of one created by this library.
+To automatically clean-up native timers, use \`shouldClearNativeTimers\`.`
+        );
+      }
+      if (clock.timers.hasOwnProperty(id)) {
+        const timer = clock.timers[id];
+        if (timer.type === ttype || timer.type === "Timeout" && ttype === "Interval" || timer.type === "Interval" && ttype === "Timeout") {
+          delete clock.timers[id];
+        } else {
+          const clear = getClearHandler(ttype);
+          const schedule = getScheduleHandler(timer.type);
+          throw new Error(
+            `Cannot clear timer: timer created with ${schedule}() but cleared with ${clear}()`
+          );
+        }
+      }
+    }
+    function uninstall(clock, config) {
+      let method, i, l;
+      const installedHrTime = "_hrtime";
+      const installedNextTick = "_nextTick";
+      for (i = 0, l = clock.methods.length; i < l; i++) {
+        method = clock.methods[i];
+        if (method === "hrtime" && _global.process) {
+          _global.process.hrtime = clock[installedHrTime];
+        } else if (method === "nextTick" && _global.process) {
+          _global.process.nextTick = clock[installedNextTick];
+        } else if (method === "performance") {
+          const originalPerfDescriptor = Object.getOwnPropertyDescriptor(
+            clock,
+            `_${method}`
+          );
+          if (originalPerfDescriptor && originalPerfDescriptor.get && !originalPerfDescriptor.set) {
+            Object.defineProperty(
+              _global,
+              method,
+              originalPerfDescriptor
+            );
+          } else if (originalPerfDescriptor.configurable) {
+            _global[method] = clock[`_${method}`];
+          }
+        } else {
+          if (_global[method] && _global[method].hadOwnProperty) {
+            _global[method] = clock[`_${method}`];
+          } else {
+            try {
+              delete _global[method];
+            } catch (ignore) {
+            }
+          }
+        }
+        if (clock.timersModuleMethods !== void 0) {
+          for (let j = 0; j < clock.timersModuleMethods.length; j++) {
+            const entry = clock.timersModuleMethods[j];
+            timersModule[entry.methodName] = entry.original;
+          }
+        }
+        if (clock.timersPromisesModuleMethods !== void 0) {
+          for (let j = 0; j < clock.timersPromisesModuleMethods.length; j++) {
+            const entry = clock.timersPromisesModuleMethods[j];
+            timersPromisesModule[entry.methodName] = entry.original;
+          }
+        }
+      }
+      if (config.shouldAdvanceTime === true) {
+        _global.clearInterval(clock.attachedInterval);
+      }
+      clock.methods = [];
+      for (const [listener, signal] of clock.abortListenerMap.entries()) {
+        signal.removeEventListener("abort", listener);
+        clock.abortListenerMap.delete(listener);
+      }
+      if (!clock.timers) {
+        return [];
+      }
+      return Object.keys(clock.timers).map(function mapper(key) {
+        return clock.timers[key];
+      });
+    }
+    function hijackMethod(target, method, clock) {
+      clock[method].hadOwnProperty = Object.prototype.hasOwnProperty.call(
+        target,
+        method
+      );
+      clock[`_${method}`] = target[method];
+      if (method === "Date") {
+        target[method] = clock[method];
+      } else if (method === "Intl") {
+        target[method] = clock[method];
+      } else if (method === "performance") {
+        const originalPerfDescriptor = Object.getOwnPropertyDescriptor(
+          target,
+          method
+        );
+        if (originalPerfDescriptor && originalPerfDescriptor.get && !originalPerfDescriptor.set) {
+          Object.defineProperty(
+            clock,
+            `_${method}`,
+            originalPerfDescriptor
+          );
+          const perfDescriptor = Object.getOwnPropertyDescriptor(
+            clock,
+            method
+          );
+          Object.defineProperty(target, method, perfDescriptor);
+        } else {
+          target[method] = clock[method];
+        }
+      } else {
+        target[method] = function() {
+          return clock[method].apply(clock, arguments);
+        };
+        Object.defineProperties(
+          target[method],
+          Object.getOwnPropertyDescriptors(clock[method])
+        );
+      }
+      target[method].clock = clock;
+    }
+    function doIntervalTick(clock, advanceTimeDelta) {
+      clock.tick(advanceTimeDelta);
+    }
+    const timers = {
+      setTimeout: _global.setTimeout,
+      clearTimeout: _global.clearTimeout,
+      setInterval: _global.setInterval,
+      clearInterval: _global.clearInterval,
+      Date: _global.Date
+    };
+    if (isPresent.setImmediate) {
+      timers.setImmediate = _global.setImmediate;
+    }
+    if (isPresent.clearImmediate) {
+      timers.clearImmediate = _global.clearImmediate;
+    }
+    if (isPresent.hrtime) {
+      timers.hrtime = _global.process.hrtime;
+    }
+    if (isPresent.nextTick) {
+      timers.nextTick = _global.process.nextTick;
+    }
+    if (isPresent.performance) {
+      timers.performance = _global.performance;
+    }
+    if (isPresent.requestAnimationFrame) {
+      timers.requestAnimationFrame = _global.requestAnimationFrame;
+    }
+    if (isPresent.queueMicrotask) {
+      timers.queueMicrotask = _global.queueMicrotask;
+    }
+    if (isPresent.cancelAnimationFrame) {
+      timers.cancelAnimationFrame = _global.cancelAnimationFrame;
+    }
+    if (isPresent.requestIdleCallback) {
+      timers.requestIdleCallback = _global.requestIdleCallback;
+    }
+    if (isPresent.cancelIdleCallback) {
+      timers.cancelIdleCallback = _global.cancelIdleCallback;
+    }
+    if (isPresent.Intl) {
+      timers.Intl = NativeIntl;
+    }
+    const originalSetTimeout = _global.setImmediate || _global.setTimeout;
+    function createClock(start, loopLimit) {
+      start = Math.floor(getEpoch(start));
+      loopLimit = loopLimit || 1e3;
+      let nanos = 0;
+      const adjustedSystemTime = [0, 0];
+      const clock = {
+        now: start,
+        Date: createDate(),
+        loopLimit
+      };
+      clock.Date.clock = clock;
+      function getTimeToNextFrame() {
+        return 16 - (clock.now - start) % 16;
+      }
+      function hrtime(prev) {
+        const millisSinceStart = clock.now - adjustedSystemTime[0] - start;
+        const secsSinceStart = Math.floor(millisSinceStart / 1e3);
+        const remainderInNanos = (millisSinceStart - secsSinceStart * 1e3) * 1e6 + nanos - adjustedSystemTime[1];
+        if (Array.isArray(prev)) {
+          if (prev[1] > 1e9) {
+            throw new TypeError(
+              "Number of nanoseconds can't exceed a billion"
+            );
+          }
+          const oldSecs = prev[0];
+          let nanoDiff = remainderInNanos - prev[1];
+          let secDiff = secsSinceStart - oldSecs;
+          if (nanoDiff < 0) {
+            nanoDiff += 1e9;
+            secDiff -= 1;
+          }
+          return [secDiff, nanoDiff];
+        }
+        return [secsSinceStart, remainderInNanos];
+      }
+      function fakePerformanceNow() {
+        const hrt = hrtime();
+        const millis = hrt[0] * 1e3 + hrt[1] / 1e6;
+        return millis;
+      }
+      if (isPresent.hrtimeBigint) {
+        hrtime.bigint = function() {
+          const parts = hrtime();
+          return BigInt(parts[0]) * BigInt(1e9) + BigInt(parts[1]);
+        };
+      }
+      if (isPresent.Intl) {
+        clock.Intl = createIntl();
+        clock.Intl.clock = clock;
+      }
+      clock.requestIdleCallback = function requestIdleCallback(func, timeout) {
+        let timeToNextIdlePeriod = 0;
+        if (clock.countTimers() > 0) {
+          timeToNextIdlePeriod = 50;
+        }
+        const result = addTimer(clock, {
+          func,
+          args: Array.prototype.slice.call(arguments, 2),
+          delay: typeof timeout === "undefined" ? timeToNextIdlePeriod : Math.min(timeout, timeToNextIdlePeriod),
+          idleCallback: true
+        });
+        return Number(result);
+      };
+      clock.cancelIdleCallback = function cancelIdleCallback(timerId) {
+        return clearTimer(clock, timerId, "IdleCallback");
+      };
+      clock.setTimeout = function setTimeout(func, timeout) {
+        return addTimer(clock, {
+          func,
+          args: Array.prototype.slice.call(arguments, 2),
+          delay: timeout
+        });
+      };
+      if (typeof _global.Promise !== "undefined" && utilPromisify) {
+        clock.setTimeout[utilPromisify.custom] = function promisifiedSetTimeout(timeout, arg) {
+          return new _global.Promise(function setTimeoutExecutor(resolve) {
+            addTimer(clock, {
+              func: resolve,
+              args: [arg],
+              delay: timeout
+            });
+          });
+        };
+      }
+      clock.clearTimeout = function clearTimeout(timerId) {
+        return clearTimer(clock, timerId, "Timeout");
+      };
+      clock.nextTick = function nextTick(func) {
+        return enqueueJob(clock, {
+          func,
+          args: Array.prototype.slice.call(arguments, 1),
+          error: isNearInfiniteLimit ? new Error() : null
+        });
+      };
+      clock.queueMicrotask = function queueMicrotask(func) {
+        return clock.nextTick(func);
+      };
+      clock.setInterval = function setInterval(func, timeout) {
+        timeout = parseInt(timeout, 10);
+        return addTimer(clock, {
+          func,
+          args: Array.prototype.slice.call(arguments, 2),
+          delay: timeout,
+          interval: timeout
+        });
+      };
+      clock.clearInterval = function clearInterval(timerId) {
+        return clearTimer(clock, timerId, "Interval");
+      };
+      if (isPresent.setImmediate) {
+        clock.setImmediate = function setImmediate(func) {
+          return addTimer(clock, {
+            func,
+            args: Array.prototype.slice.call(arguments, 1),
+            immediate: true
+          });
+        };
+        if (typeof _global.Promise !== "undefined" && utilPromisify) {
+          clock.setImmediate[utilPromisify.custom] = function promisifiedSetImmediate(arg) {
+            return new _global.Promise(
+              function setImmediateExecutor(resolve) {
+                addTimer(clock, {
+                  func: resolve,
+                  args: [arg],
+                  immediate: true
+                });
+              }
+            );
+          };
+        }
+        clock.clearImmediate = function clearImmediate(timerId) {
+          return clearTimer(clock, timerId, "Immediate");
+        };
+      }
+      clock.countTimers = function countTimers() {
+        return Object.keys(clock.timers || {}).length + (clock.jobs || []).length;
+      };
+      clock.requestAnimationFrame = function requestAnimationFrame(func) {
+        const result = addTimer(clock, {
+          func,
+          delay: getTimeToNextFrame(),
+          get args() {
+            return [fakePerformanceNow()];
+          },
+          animation: true
+        });
+        return Number(result);
+      };
+      clock.cancelAnimationFrame = function cancelAnimationFrame(timerId) {
+        return clearTimer(clock, timerId, "AnimationFrame");
+      };
+      clock.runMicrotasks = function runMicrotasks() {
+        runJobs(clock);
+      };
+      function doTick(tickValue, isAsync, resolve, reject) {
+        const msFloat = typeof tickValue === "number" ? tickValue : parseTime(tickValue);
+        const ms = Math.floor(msFloat);
+        const remainder = nanoRemainder(msFloat);
+        let nanosTotal = nanos + remainder;
+        let tickTo = clock.now + ms;
+        if (msFloat < 0) {
+          throw new TypeError("Negative ticks are not supported");
+        }
+        if (nanosTotal >= 1e6) {
+          tickTo += 1;
+          nanosTotal -= 1e6;
+        }
+        nanos = nanosTotal;
+        let tickFrom = clock.now;
+        let previous = clock.now;
+        let timer, firstException, oldNow, nextPromiseTick, compensationCheck, postTimerCall;
+        clock.duringTick = true;
+        oldNow = clock.now;
+        runJobs(clock);
+        if (oldNow !== clock.now) {
+          tickFrom += clock.now - oldNow;
+          tickTo += clock.now - oldNow;
+        }
+        function doTickInner() {
+          timer = firstTimerInRange(clock, tickFrom, tickTo);
+          while (timer && tickFrom <= tickTo) {
+            if (clock.timers[timer.id]) {
+              tickFrom = timer.callAt;
+              clock.now = timer.callAt;
+              oldNow = clock.now;
+              try {
+                runJobs(clock);
+                callTimer(clock, timer);
+              } catch (e) {
+                firstException = firstException || e;
+              }
+              if (isAsync) {
+                originalSetTimeout(nextPromiseTick);
+                return;
+              }
+              compensationCheck();
+            }
+            postTimerCall();
+          }
+          oldNow = clock.now;
+          runJobs(clock);
+          if (oldNow !== clock.now) {
+            tickFrom += clock.now - oldNow;
+            tickTo += clock.now - oldNow;
+          }
+          clock.duringTick = false;
+          timer = firstTimerInRange(clock, tickFrom, tickTo);
+          if (timer) {
+            try {
+              clock.tick(tickTo - clock.now);
+            } catch (e) {
+              firstException = firstException || e;
+            }
+          } else {
+            clock.now = tickTo;
+            nanos = nanosTotal;
+          }
+          if (firstException) {
+            throw firstException;
+          }
+          if (isAsync) {
+            resolve(clock.now);
+          } else {
+            return clock.now;
+          }
+        }
+        nextPromiseTick = isAsync && function() {
+          try {
+            compensationCheck();
+            postTimerCall();
+            doTickInner();
+          } catch (e) {
+            reject(e);
+          }
+        };
+        compensationCheck = function() {
+          if (oldNow !== clock.now) {
+            tickFrom += clock.now - oldNow;
+            tickTo += clock.now - oldNow;
+            previous += clock.now - oldNow;
+          }
+        };
+        postTimerCall = function() {
+          timer = firstTimerInRange(clock, previous, tickTo);
+          previous = tickFrom;
+        };
+        return doTickInner();
+      }
+      clock.tick = function tick(tickValue) {
+        return doTick(tickValue, false);
+      };
+      if (typeof _global.Promise !== "undefined") {
+        clock.tickAsync = function tickAsync(tickValue) {
+          return new _global.Promise(function(resolve, reject) {
+            originalSetTimeout(function() {
+              try {
+                doTick(tickValue, true, resolve, reject);
+              } catch (e) {
+                reject(e);
+              }
+            });
+          });
+        };
+      }
+      clock.next = function next() {
+        runJobs(clock);
+        const timer = firstTimer(clock);
+        if (!timer) {
+          return clock.now;
+        }
+        clock.duringTick = true;
+        try {
+          clock.now = timer.callAt;
+          callTimer(clock, timer);
+          runJobs(clock);
+          return clock.now;
+        } finally {
+          clock.duringTick = false;
+        }
+      };
+      if (typeof _global.Promise !== "undefined") {
+        clock.nextAsync = function nextAsync() {
+          return new _global.Promise(function(resolve, reject) {
+            originalSetTimeout(function() {
+              try {
+                const timer = firstTimer(clock);
+                if (!timer) {
+                  resolve(clock.now);
+                  return;
+                }
+                let err;
+                clock.duringTick = true;
+                clock.now = timer.callAt;
+                try {
+                  callTimer(clock, timer);
+                } catch (e) {
+                  err = e;
+                }
+                clock.duringTick = false;
+                originalSetTimeout(function() {
+                  if (err) {
+                    reject(err);
+                  } else {
+                    resolve(clock.now);
+                  }
+                });
+              } catch (e) {
+                reject(e);
+              }
+            });
+          });
+        };
+      }
+      clock.runAll = function runAll() {
+        let numTimers, i;
+        runJobs(clock);
+        for (i = 0; i < clock.loopLimit; i++) {
+          if (!clock.timers) {
+            resetIsNearInfiniteLimit();
+            return clock.now;
+          }
+          numTimers = Object.keys(clock.timers).length;
+          if (numTimers === 0) {
+            resetIsNearInfiniteLimit();
+            return clock.now;
+          }
+          clock.next();
+          checkIsNearInfiniteLimit(clock, i);
+        }
+        const excessJob = firstTimer(clock);
+        throw getInfiniteLoopError(clock, excessJob);
+      };
+      clock.runToFrame = function runToFrame() {
+        return clock.tick(getTimeToNextFrame());
+      };
+      if (typeof _global.Promise !== "undefined") {
+        clock.runAllAsync = function runAllAsync() {
+          return new _global.Promise(function(resolve, reject) {
+            let i = 0;
+            function doRun() {
+              originalSetTimeout(function() {
+                try {
+                  runJobs(clock);
+                  let numTimers;
+                  if (i < clock.loopLimit) {
+                    if (!clock.timers) {
+                      resetIsNearInfiniteLimit();
+                      resolve(clock.now);
+                      return;
+                    }
+                    numTimers = Object.keys(
+                      clock.timers
+                    ).length;
+                    if (numTimers === 0) {
+                      resetIsNearInfiniteLimit();
+                      resolve(clock.now);
+                      return;
+                    }
+                    clock.next();
+                    i++;
+                    doRun();
+                    checkIsNearInfiniteLimit(clock, i);
+                    return;
+                  }
+                  const excessJob = firstTimer(clock);
+                  reject(getInfiniteLoopError(clock, excessJob));
+                } catch (e) {
+                  reject(e);
+                }
+              });
+            }
+            doRun();
+          });
+        };
+      }
+      clock.runToLast = function runToLast() {
+        const timer = lastTimer(clock);
+        if (!timer) {
+          runJobs(clock);
+          return clock.now;
+        }
+        return clock.tick(timer.callAt - clock.now);
+      };
+      if (typeof _global.Promise !== "undefined") {
+        clock.runToLastAsync = function runToLastAsync() {
+          return new _global.Promise(function(resolve, reject) {
+            originalSetTimeout(function() {
+              try {
+                const timer = lastTimer(clock);
+                if (!timer) {
+                  runJobs(clock);
+                  resolve(clock.now);
+                }
+                resolve(clock.tickAsync(timer.callAt - clock.now));
+              } catch (e) {
+                reject(e);
+              }
+            });
+          });
+        };
+      }
+      clock.reset = function reset() {
+        nanos = 0;
+        clock.timers = {};
+        clock.jobs = [];
+        clock.now = start;
+      };
+      clock.setSystemTime = function setSystemTime(systemTime) {
+        const newNow = getEpoch(systemTime);
+        const difference = newNow - clock.now;
+        let id, timer;
+        adjustedSystemTime[0] = adjustedSystemTime[0] + difference;
+        adjustedSystemTime[1] = adjustedSystemTime[1] + nanos;
+        clock.now = newNow;
+        nanos = 0;
+        for (id in clock.timers) {
+          if (clock.timers.hasOwnProperty(id)) {
+            timer = clock.timers[id];
+            timer.createdAt += difference;
+            timer.callAt += difference;
+          }
+        }
+      };
+      clock.jump = function jump(tickValue) {
+        const msFloat = typeof tickValue === "number" ? tickValue : parseTime(tickValue);
+        const ms = Math.floor(msFloat);
+        for (const timer of Object.values(clock.timers)) {
+          if (clock.now + ms > timer.callAt) {
+            timer.callAt = clock.now + ms;
+          }
+        }
+        clock.tick(ms);
+      };
+      if (isPresent.performance) {
+        clock.performance = /* @__PURE__ */ Object.create(null);
+        clock.performance.now = fakePerformanceNow;
+      }
+      if (isPresent.hrtime) {
+        clock.hrtime = hrtime;
+      }
+      return clock;
+    }
+    function install(config) {
+      if (arguments.length > 1 || config instanceof Date || Array.isArray(config) || typeof config === "number") {
+        throw new TypeError(
+          `FakeTimers.install called with ${String(
+            config
+          )} install requires an object parameter`
+        );
+      }
+      if (_global.Date.isFake === true) {
+        throw new TypeError(
+          "Can't install fake timers twice on the same global object."
+        );
+      }
+      config = typeof config !== "undefined" ? config : {};
+      config.shouldAdvanceTime = config.shouldAdvanceTime || false;
+      config.advanceTimeDelta = config.advanceTimeDelta || 20;
+      config.shouldClearNativeTimers = config.shouldClearNativeTimers || false;
+      if (config.target) {
+        throw new TypeError(
+          "config.target is no longer supported. Use `withGlobal(target)` instead."
+        );
+      }
+      function handleMissingTimer(timer) {
+        if (config.ignoreMissingTimers) {
+          return;
+        }
+        throw new ReferenceError(
+          `non-existent timers and/or objects cannot be faked: '${timer}'`
+        );
+      }
+      let i, l;
+      const clock = createClock(config.now, config.loopLimit);
+      clock.shouldClearNativeTimers = config.shouldClearNativeTimers;
+      clock.uninstall = function() {
+        return uninstall(clock, config);
+      };
+      clock.abortListenerMap = /* @__PURE__ */ new Map();
+      clock.methods = config.toFake || [];
+      if (clock.methods.length === 0) {
+        clock.methods = Object.keys(timers);
+      }
+      if (config.shouldAdvanceTime === true) {
+        const intervalTick = doIntervalTick.bind(
+          null,
+          clock,
+          config.advanceTimeDelta
+        );
+        const intervalId = _global.setInterval(
+          intervalTick,
+          config.advanceTimeDelta
+        );
+        clock.attachedInterval = intervalId;
+      }
+      if (clock.methods.includes("performance")) {
+        const proto = (() => {
+          if (hasPerformanceConstructorPrototype) {
+            return _global.performance.constructor.prototype;
+          }
+          if (hasPerformancePrototype) {
+            return _global.Performance.prototype;
+          }
+        })();
+        if (proto) {
+          Object.getOwnPropertyNames(proto).forEach(function(name) {
+            if (name !== "now") {
+              clock.performance[name] = name.indexOf("getEntries") === 0 ? NOOP_ARRAY : NOOP;
+            }
+          });
+          clock.performance.mark = (name) => new FakePerformanceEntry(name, "mark", 0, 0);
+          clock.performance.measure = (name) => new FakePerformanceEntry(name, "measure", 0, 100);
+          clock.performance.timeOrigin = getEpoch(config.now);
+        } else if ((config.toFake || []).includes("performance")) {
+          return handleMissingTimer("performance");
+        }
+      }
+      if (_global === globalObject && timersModule) {
+        clock.timersModuleMethods = [];
+      }
+      if (_global === globalObject && timersPromisesModule) {
+        clock.timersPromisesModuleMethods = [];
+      }
+      for (i = 0, l = clock.methods.length; i < l; i++) {
+        const nameOfMethodToReplace = clock.methods[i];
+        if (!isPresent[nameOfMethodToReplace]) {
+          handleMissingTimer(nameOfMethodToReplace);
+          continue;
+        }
+        if (nameOfMethodToReplace === "hrtime") {
+          if (_global.process && typeof _global.process.hrtime === "function") {
+            hijackMethod(_global.process, nameOfMethodToReplace, clock);
+          }
+        } else if (nameOfMethodToReplace === "nextTick") {
+          if (_global.process && typeof _global.process.nextTick === "function") {
+            hijackMethod(_global.process, nameOfMethodToReplace, clock);
+          }
+        } else {
+          hijackMethod(_global, nameOfMethodToReplace, clock);
+        }
+        if (clock.timersModuleMethods !== void 0 && timersModule[nameOfMethodToReplace]) {
+          const original = timersModule[nameOfMethodToReplace];
+          clock.timersModuleMethods.push({
+            methodName: nameOfMethodToReplace,
+            original
+          });
+          timersModule[nameOfMethodToReplace] = _global[nameOfMethodToReplace];
+        }
+        if (clock.timersPromisesModuleMethods !== void 0) {
+          if (nameOfMethodToReplace === "setTimeout") {
+            clock.timersPromisesModuleMethods.push({
+              methodName: "setTimeout",
+              original: timersPromisesModule.setTimeout
+            });
+            timersPromisesModule.setTimeout = (delay, value, options = {}) => new Promise((resolve, reject) => {
+              const abort = () => {
+                options.signal.removeEventListener(
+                  "abort",
+                  abort
+                );
+                clock.abortListenerMap.delete(abort);
+                clock.clearTimeout(handle);
+                reject(options.signal.reason);
+              };
+              const handle = clock.setTimeout(() => {
+                if (options.signal) {
+                  options.signal.removeEventListener(
+                    "abort",
+                    abort
+                  );
+                  clock.abortListenerMap.delete(abort);
+                }
+                resolve(value);
+              }, delay);
+              if (options.signal) {
+                if (options.signal.aborted) {
+                  abort();
+                } else {
+                  options.signal.addEventListener(
+                    "abort",
+                    abort
+                  );
+                  clock.abortListenerMap.set(
+                    abort,
+                    options.signal
+                  );
+                }
+              }
+            });
+          } else if (nameOfMethodToReplace === "setImmediate") {
+            clock.timersPromisesModuleMethods.push({
+              methodName: "setImmediate",
+              original: timersPromisesModule.setImmediate
+            });
+            timersPromisesModule.setImmediate = (value, options = {}) => new Promise((resolve, reject) => {
+              const abort = () => {
+                options.signal.removeEventListener(
+                  "abort",
+                  abort
+                );
+                clock.abortListenerMap.delete(abort);
+                clock.clearImmediate(handle);
+                reject(options.signal.reason);
+              };
+              const handle = clock.setImmediate(() => {
+                if (options.signal) {
+                  options.signal.removeEventListener(
+                    "abort",
+                    abort
+                  );
+                  clock.abortListenerMap.delete(abort);
+                }
+                resolve(value);
+              });
+              if (options.signal) {
+                if (options.signal.aborted) {
+                  abort();
+                } else {
+                  options.signal.addEventListener(
+                    "abort",
+                    abort
+                  );
+                  clock.abortListenerMap.set(
+                    abort,
+                    options.signal
+                  );
+                }
+              }
+            });
+          } else if (nameOfMethodToReplace === "setInterval") {
+            clock.timersPromisesModuleMethods.push({
+              methodName: "setInterval",
+              original: timersPromisesModule.setInterval
+            });
+            timersPromisesModule.setInterval = (delay, value, options = {}) => ({
+              [Symbol.asyncIterator]: () => {
+                const createResolvable = () => {
+                  let resolve, reject;
+                  const promise = new Promise((res, rej) => {
+                    resolve = res;
+                    reject = rej;
+                  });
+                  promise.resolve = resolve;
+                  promise.reject = reject;
+                  return promise;
+                };
+                let done = false;
+                let hasThrown = false;
+                let returnCall;
+                let nextAvailable = 0;
+                const nextQueue = [];
+                const handle = clock.setInterval(() => {
+                  if (nextQueue.length > 0) {
+                    nextQueue.shift().resolve();
+                  } else {
+                    nextAvailable++;
+                  }
+                }, delay);
+                const abort = () => {
+                  options.signal.removeEventListener(
+                    "abort",
+                    abort
+                  );
+                  clock.abortListenerMap.delete(abort);
+                  clock.clearInterval(handle);
+                  done = true;
+                  for (const resolvable of nextQueue) {
+                    resolvable.resolve();
+                  }
+                };
+                if (options.signal) {
+                  if (options.signal.aborted) {
+                    done = true;
+                  } else {
+                    options.signal.addEventListener(
+                      "abort",
+                      abort
+                    );
+                    clock.abortListenerMap.set(
+                      abort,
+                      options.signal
+                    );
+                  }
+                }
+                return {
+                  next: async () => {
+                    if (options.signal?.aborted && !hasThrown) {
+                      hasThrown = true;
+                      throw options.signal.reason;
+                    }
+                    if (done) {
+                      return { done: true, value: void 0 };
+                    }
+                    if (nextAvailable > 0) {
+                      nextAvailable--;
+                      return { done: false, value };
+                    }
+                    const resolvable = createResolvable();
+                    nextQueue.push(resolvable);
+                    await resolvable;
+                    if (returnCall && nextQueue.length === 0) {
+                      returnCall.resolve();
+                    }
+                    if (options.signal?.aborted && !hasThrown) {
+                      hasThrown = true;
+                      throw options.signal.reason;
+                    }
+                    if (done) {
+                      return { done: true, value: void 0 };
+                    }
+                    return { done: false, value };
+                  },
+                  return: async () => {
+                    if (done) {
+                      return { done: true, value: void 0 };
+                    }
+                    if (nextQueue.length > 0) {
+                      returnCall = createResolvable();
+                      await returnCall;
+                    }
+                    clock.clearInterval(handle);
+                    done = true;
+                    if (options.signal) {
+                      options.signal.removeEventListener(
+                        "abort",
+                        abort
+                      );
+                      clock.abortListenerMap.delete(abort);
+                    }
+                    return { done: true, value: void 0 };
+                  }
+                };
+              }
+            });
+          }
+        }
+      }
+      return clock;
+    }
+    return {
+      timers,
+      createClock,
+      install,
+      withGlobal
+    };
+  }
+  const defaultImplementation = withGlobal(globalObject);
+  fakeTimersSrc.timers = defaultImplementation.timers;
+  fakeTimersSrc.createClock = defaultImplementation.createClock;
+  fakeTimersSrc.install = defaultImplementation.install;
+  fakeTimersSrc.withGlobal = withGlobal;
+  return fakeTimersSrc;
+}
+var fakeTimersSrcExports = requireFakeTimersSrc();
+var FakeTimers = class {
+  _global;
+  _clock;
+  // | _fakingTime | _fakingDate |
+  // +-------------+-------------+
+  // | false       | falsy       | initial
+  // | false       | truthy     | vi.setSystemTime called first (for mocking only Date without fake timers)
+  // | true        | falsy       | vi.useFakeTimers called first
+  // | true        | truthy     | unreachable
+  _fakingTime;
+  _fakingDate;
+  _fakeTimers;
+  _userConfig;
+  _now = RealDate.now;
+  constructor({ global: global3, config }) {
+    this._userConfig = config;
+    this._fakingDate = null;
+    this._fakingTime = false;
+    this._fakeTimers = fakeTimersSrcExports.withGlobal(global3);
+    this._global = global3;
+  }
+  clearAllTimers() {
+    if (this._fakingTime) this._clock.reset();
+  }
+  dispose() {
+    this.useRealTimers();
+  }
+  runAllTimers() {
+    if (this._checkFakeTimers()) this._clock.runAll();
+  }
+  async runAllTimersAsync() {
+    if (this._checkFakeTimers()) await this._clock.runAllAsync();
+  }
+  runOnlyPendingTimers() {
+    if (this._checkFakeTimers()) this._clock.runToLast();
+  }
+  async runOnlyPendingTimersAsync() {
+    if (this._checkFakeTimers()) await this._clock.runToLastAsync();
+  }
+  advanceTimersToNextTimer(steps = 1) {
+    if (this._checkFakeTimers()) for (let i = steps; i > 0; i--) {
+      this._clock.next();
+      this._clock.tick(0);
+      if (this._clock.countTimers() === 0) break;
+    }
+  }
+  async advanceTimersToNextTimerAsync(steps = 1) {
+    if (this._checkFakeTimers()) for (let i = steps; i > 0; i--) {
+      await this._clock.nextAsync();
+      this._clock.tick(0);
+      if (this._clock.countTimers() === 0) break;
+    }
+  }
+  advanceTimersByTime(msToRun) {
+    if (this._checkFakeTimers()) this._clock.tick(msToRun);
+  }
+  async advanceTimersByTimeAsync(msToRun) {
+    if (this._checkFakeTimers()) await this._clock.tickAsync(msToRun);
+  }
+  advanceTimersToNextFrame() {
+    if (this._checkFakeTimers()) this._clock.runToFrame();
+  }
+  runAllTicks() {
+    if (this._checkFakeTimers())
+      this._clock.runMicrotasks();
+  }
+  useRealTimers() {
+    if (this._fakingDate) {
+      resetDate();
+      this._fakingDate = null;
+    }
+    if (this._fakingTime) {
+      this._clock.uninstall();
+      this._fakingTime = false;
+    }
+  }
+  useFakeTimers() {
+    if (this._fakingDate) throw new Error('"setSystemTime" was called already and date was mocked. Reset timers using `vi.useRealTimers()` if you want to use fake timers again.');
+    if (!this._fakingTime) {
+      const toFake = Object.keys(this._fakeTimers.timers).filter((timer) => timer !== "nextTick" && timer !== "queueMicrotask");
+      if (this._userConfig?.toFake?.includes("nextTick") && isChildProcess()) throw new Error("process.nextTick cannot be mocked inside child_process");
+      this._clock = this._fakeTimers.install({
+        now: Date.now(),
+        ...this._userConfig,
+        toFake: this._userConfig?.toFake || toFake,
+        ignoreMissingTimers: true
+      });
+      this._fakingTime = true;
+    }
+  }
+  reset() {
+    if (this._checkFakeTimers()) {
+      const { now: now2 } = this._clock;
+      this._clock.reset();
+      this._clock.setSystemTime(now2);
+    }
+  }
+  setSystemTime(now2) {
+    const date = typeof now2 === "undefined" || now2 instanceof Date ? now2 : new Date(now2);
+    if (this._fakingTime) this._clock.setSystemTime(date);
+    else {
+      this._fakingDate = date ?? new Date(this.getRealSystemTime());
+      mockDate(this._fakingDate);
+    }
+  }
+  getMockedSystemTime() {
+    return this._fakingTime ? new Date(this._clock.now) : this._fakingDate;
+  }
+  getRealSystemTime() {
+    return this._now();
+  }
+  getTimerCount() {
+    if (this._checkFakeTimers()) return this._clock.countTimers();
+    return 0;
+  }
+  configure(config) {
+    this._userConfig = config;
+  }
+  isFakeTimers() {
+    return this._fakingTime;
+  }
+  _checkFakeTimers() {
+    if (!this._fakingTime) throw new Error('Timers are not mocked. Try calling "vi.useFakeTimers()" first.');
+    return this._fakingTime;
+  }
+};
+function copyStackTrace(target, source) {
+  if (source.stack !== void 0) target.stack = source.stack.replace(source.message, target.message);
+  return target;
+}
+function waitFor(callback, options = {}) {
+  const { setTimeout, setInterval, clearTimeout, clearInterval } = getSafeTimers2();
+  const { interval = 50, timeout = 1e3 } = typeof options === "number" ? { timeout: options } : options;
+  const STACK_TRACE_ERROR = new Error("STACK_TRACE_ERROR");
+  return new Promise((resolve, reject) => {
+    let lastError;
+    let promiseStatus = "idle";
+    let timeoutId;
+    let intervalId;
+    const onResolve = (result) => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+      resolve(result);
+    };
+    const handleTimeout = () => {
+      if (intervalId) clearInterval(intervalId);
+      let error = lastError;
+      if (!error) error = copyStackTrace(new Error("Timed out in waitFor!"), STACK_TRACE_ERROR);
+      reject(error);
+    };
+    const checkCallback = () => {
+      if (vi.isFakeTimers()) vi.advanceTimersByTime(interval);
+      if (promiseStatus === "pending") return;
+      try {
+        const result = callback();
+        if (result !== null && typeof result === "object" && typeof result.then === "function") {
+          const thenable = result;
+          promiseStatus = "pending";
+          thenable.then((resolvedValue) => {
+            promiseStatus = "resolved";
+            onResolve(resolvedValue);
+          }, (rejectedValue) => {
+            promiseStatus = "rejected";
+            lastError = rejectedValue;
+          });
+        } else {
+          onResolve(result);
+          return true;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    };
+    if (checkCallback() === true) return;
+    timeoutId = setTimeout(handleTimeout, timeout);
+    intervalId = setInterval(checkCallback, interval);
+  });
+}
+function waitUntil(callback, options = {}) {
+  const { setTimeout, setInterval, clearTimeout, clearInterval } = getSafeTimers2();
+  const { interval = 50, timeout = 1e3 } = typeof options === "number" ? { timeout: options } : options;
+  const STACK_TRACE_ERROR = new Error("STACK_TRACE_ERROR");
+  return new Promise((resolve, reject) => {
+    let promiseStatus = "idle";
+    let timeoutId;
+    let intervalId;
+    const onReject = (error) => {
+      if (intervalId) clearInterval(intervalId);
+      if (!error) error = copyStackTrace(new Error("Timed out in waitUntil!"), STACK_TRACE_ERROR);
+      reject(error);
+    };
+    const onResolve = (result) => {
+      if (!result) return;
+      if (timeoutId) clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+      resolve(result);
+      return true;
+    };
+    const checkCallback = () => {
+      if (vi.isFakeTimers()) vi.advanceTimersByTime(interval);
+      if (promiseStatus === "pending") return;
+      try {
+        const result = callback();
+        if (result !== null && typeof result === "object" && typeof result.then === "function") {
+          const thenable = result;
+          promiseStatus = "pending";
+          thenable.then((resolvedValue) => {
+            promiseStatus = "resolved";
+            onResolve(resolvedValue);
+          }, (rejectedValue) => {
+            promiseStatus = "rejected";
+            onReject(rejectedValue);
+          });
+        } else return onResolve(result);
+      } catch (error) {
+        onReject(error);
+      }
+    };
+    if (checkCallback() === true) return;
+    timeoutId = setTimeout(onReject, timeout);
+    intervalId = setInterval(checkCallback, interval);
+  });
+}
+function createVitest() {
+  let _config = null;
+  const workerState = getWorkerState();
+  let _timers;
+  const timers = () => _timers ||= new FakeTimers({
+    global: globalThis,
+    config: workerState.config.fakeTimers
+  });
+  const _stubsGlobal = /* @__PURE__ */ new Map();
+  const _stubsEnv = /* @__PURE__ */ new Map();
+  const _envBooleans = [
+    "PROD",
+    "DEV",
+    "SSR"
+  ];
+  const utils = {
+    useFakeTimers(config) {
+      if (isChildProcess()) {
+        if (config?.toFake?.includes("nextTick") || workerState.config?.fakeTimers?.toFake?.includes("nextTick")) throw new Error('vi.useFakeTimers({ toFake: ["nextTick"] }) is not supported in node:child_process. Use --pool=threads if mocking nextTick is required.');
+      }
+      if (config) timers().configure({
+        ...workerState.config.fakeTimers,
+        ...config
+      });
+      else timers().configure(workerState.config.fakeTimers);
+      timers().useFakeTimers();
+      return utils;
+    },
+    isFakeTimers() {
+      return timers().isFakeTimers();
+    },
+    useRealTimers() {
+      timers().useRealTimers();
+      return utils;
+    },
+    runOnlyPendingTimers() {
+      timers().runOnlyPendingTimers();
+      return utils;
+    },
+    async runOnlyPendingTimersAsync() {
+      await timers().runOnlyPendingTimersAsync();
+      return utils;
+    },
+    runAllTimers() {
+      timers().runAllTimers();
+      return utils;
+    },
+    async runAllTimersAsync() {
+      await timers().runAllTimersAsync();
+      return utils;
+    },
+    runAllTicks() {
+      timers().runAllTicks();
+      return utils;
+    },
+    advanceTimersByTime(ms) {
+      timers().advanceTimersByTime(ms);
+      return utils;
+    },
+    async advanceTimersByTimeAsync(ms) {
+      await timers().advanceTimersByTimeAsync(ms);
+      return utils;
+    },
+    advanceTimersToNextTimer() {
+      timers().advanceTimersToNextTimer();
+      return utils;
+    },
+    async advanceTimersToNextTimerAsync() {
+      await timers().advanceTimersToNextTimerAsync();
+      return utils;
+    },
+    advanceTimersToNextFrame() {
+      timers().advanceTimersToNextFrame();
+      return utils;
+    },
+    getTimerCount() {
+      return timers().getTimerCount();
+    },
+    setSystemTime(time) {
+      timers().setSystemTime(time);
+      return utils;
+    },
+    getMockedSystemTime() {
+      return timers().getMockedSystemTime();
+    },
+    getRealSystemTime() {
+      return timers().getRealSystemTime();
+    },
+    clearAllTimers() {
+      timers().clearAllTimers();
+      return utils;
+    },
+    spyOn,
+    fn,
+    waitFor,
+    waitUntil,
+    hoisted(factory) {
+      assertTypes(factory, '"vi.hoisted" factory', ["function"]);
+      return factory();
+    },
+    mock(path, factory) {
+      if (typeof path !== "string") throw new TypeError(`vi.mock() expects a string path, but received a ${typeof path}`);
+      const importer = getImporter("mock");
+      _mocker().queueMock(path, importer, typeof factory === "function" ? () => factory(() => _mocker().importActual(path, importer, _mocker().getMockContext().callstack)) : factory);
+    },
+    unmock(path) {
+      if (typeof path !== "string") throw new TypeError(`vi.unmock() expects a string path, but received a ${typeof path}`);
+      _mocker().queueUnmock(path, getImporter("unmock"));
+    },
+    doMock(path, factory) {
+      if (typeof path !== "string") throw new TypeError(`vi.doMock() expects a string path, but received a ${typeof path}`);
+      const importer = getImporter("doMock");
+      _mocker().queueMock(path, importer, typeof factory === "function" ? () => factory(() => _mocker().importActual(path, importer, _mocker().getMockContext().callstack)) : factory);
+    },
+    doUnmock(path) {
+      if (typeof path !== "string") throw new TypeError(`vi.doUnmock() expects a string path, but received a ${typeof path}`);
+      _mocker().queueUnmock(path, getImporter("doUnmock"));
+    },
+    async importActual(path) {
+      return _mocker().importActual(path, getImporter("importActual"), _mocker().getMockContext().callstack);
+    },
+    async importMock(path) {
+      return _mocker().importMock(path, getImporter("importMock"));
+    },
+    mockObject(value) {
+      return _mocker().mockObject({ value }).value;
+    },
+    mocked(item, _options = {}) {
+      return item;
+    },
+    isMockFunction(fn2) {
+      return isMockFunction(fn2);
+    },
+    clearAllMocks() {
+      [...mocks].reverse().forEach((spy) => spy.mockClear());
+      return utils;
+    },
+    resetAllMocks() {
+      [...mocks].reverse().forEach((spy) => spy.mockReset());
+      return utils;
+    },
+    restoreAllMocks() {
+      [...mocks].reverse().forEach((spy) => spy.mockRestore());
+      return utils;
+    },
+    stubGlobal(name, value) {
+      if (!_stubsGlobal.has(name)) _stubsGlobal.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+      Object.defineProperty(globalThis, name, {
+        value,
+        writable: true,
+        configurable: true,
+        enumerable: true
+      });
+      return utils;
+    },
+    stubEnv(name, value) {
+      if (!_stubsEnv.has(name)) _stubsEnv.set(name, process.env[name]);
+      if (_envBooleans.includes(name)) process.env[name] = value ? "1" : "";
+      else if (value === void 0) delete process.env[name];
+      else process.env[name] = String(value);
+      return utils;
+    },
+    unstubAllGlobals() {
+      _stubsGlobal.forEach((original, name) => {
+        if (!original) Reflect.deleteProperty(globalThis, name);
+        else Object.defineProperty(globalThis, name, original);
+      });
+      _stubsGlobal.clear();
+      return utils;
+    },
+    unstubAllEnvs() {
+      _stubsEnv.forEach((original, name) => {
+        if (original === void 0) delete process.env[name];
+        else process.env[name] = original;
+      });
+      _stubsEnv.clear();
+      return utils;
+    },
+    resetModules() {
+      resetModules(workerState.moduleCache);
+      return utils;
+    },
+    async dynamicImportSettled() {
+      return waitForImportsToResolve();
+    },
+    setConfig(config) {
+      if (!_config) _config = { ...workerState.config };
+      Object.assign(workerState.config, config);
+    },
+    resetConfig() {
+      if (_config) Object.assign(workerState.config, _config);
+    }
+  };
+  return utils;
+}
+var vitest = createVitest();
+var vi = vitest;
+function _mocker() {
+  return typeof __vitest_mocker__ !== "undefined" ? __vitest_mocker__ : new Proxy({}, { get(_, name) {
+    throw new Error(`Vitest mocker was not initialized in this environment. vi.${String(name)}() is forbidden.`);
+  } });
+}
+function getImporter(name) {
+  const stackTrace = createSimpleStackTrace({ stackTraceLimit: 5 });
+  const stackArray = stackTrace.split("\n");
+  const importerStackIndex = stackArray.findIndex((stack2) => {
+    return stack2.includes(` at Object.${name}`) || stack2.includes(`${name}@`);
+  });
+  const stack = parseSingleStack(stackArray[importerStackIndex + 1]);
+  return stack?.file || "";
+}
+
+// ../../node_modules/.pnpm/vitest@3.2.4_@types+debug@4.1.12_@types+node@24.3.1_jiti@2.5.1_jsdom@26.1.0_lightningcss@1.30.1_tsx@4.20.5/node_modules/vitest/dist/index.js
+import { expectTypeOf } from "expect-type.js";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, it, onTestFailed, onTestFinished, suite, test } from "@vitest/runner.js";
+import * as chai2 from "chai.js";
+import { assert as assert2, should } from "chai.js";
+import "@vitest/expect.js";
+import "@vitest/runner/utils.js";
+import "@vitest/utils.js";
+import "@vitest/snapshot.js";
+import "@vitest/utils/error.js";
+import "@vitest/spy.js";
+import "@vitest/utils/source-map.js";
+
+// src/tests/setup.ts
+var OriginalDate = global.Date;
+var fixedDate = new OriginalDate("2023-01-01");
+global.Date = vi.fn(() => fixedDate);
+global.Date.now = vi.fn(() => fixedDate.getTime());
+//# sourceMappingURL=setup.js.map

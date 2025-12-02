@@ -1,0 +1,259 @@
+# decimal integer literals
+
+123;
+4l;
+50L;
+
+==>
+
+Program(
+  ExpressionStatement(IntegerLiteral),
+  ExpressionStatement(IntegerLiteral),
+  ExpressionStatement(IntegerLiteral))
+
+
+# hex integer literals
+
+0xa_bcd_ef0;
+0Xa_bcd_ef0;
+0X8000L;
+
+==>
+
+Program(
+  ExpressionStatement(IntegerLiteral),
+  ExpressionStatement(IntegerLiteral),
+  ExpressionStatement(IntegerLiteral))
+
+
+# octal integer literals
+
+0o123;
+0O123;
+
+==>
+
+Program(
+  ExpressionStatement(IntegerLiteral),
+  ExpressionStatement(IntegerLiteral))
+
+
+# binary integer literal
+
+0b001;
+0B001;
+0b10;
+0B1000;
+
+==>
+
+Program(
+  ExpressionStatement(IntegerLiteral),
+  ExpressionStatement(IntegerLiteral),
+  ExpressionStatement(IntegerLiteral),
+  ExpressionStatement(IntegerLiteral))
+
+
+# floating point literals
+
+4.23e9;
+4.23e-9;
+4.23e+9;
+40.3e6;
+40.3e-6;
+1.234;
+0.123456;
+.12345;
+1e4;
+0.2e-2;
+0.0e-4;
+.2e-2;
+0x5.4p-10;
+
+==>
+
+Program(
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral),
+  ExpressionStatement(FloatingPointLiteral))
+
+
+# boolean literals
+
+true;
+false;
+
+==>
+
+Program(
+  ExpressionStatement(BooleanLiteral),
+  ExpressionStatement(BooleanLiteral))
+
+
+# character literals
+
+'a';
+'%';
+'\t';
+'\\';
+'\'';
+'\u03a9';
+'\uFFFF';
+'\177';
+'™';
+
+==>
+
+Program(
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral))
+
+
+# string literals
+
+"";
+"\"";
+"This is a string";
+"'";
+
+==>
+
+Program(
+  ExpressionStatement(StringLiteral),
+  ExpressionStatement(StringLiteral),
+  ExpressionStatement(StringLiteral),
+  ExpressionStatement(StringLiteral))
+
+
+# null literals
+
+null;
+
+==>
+
+Program(
+  ExpressionStatement(null))
+
+
+# char escapes
+
+'\b';
+'\t';
+'\n';
+'\f';
+'\r';
+'\"';
+'\'';
+'\\' + 'a';
+
+==>
+
+Program(
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(BinaryExpression(CharacterLiteral, ArithOp, CharacterLiteral)))
+
+
+# octal escapes
+
+'\7';
+
+==>
+
+Program(
+  ExpressionStatement(CharacterLiteral))
+
+
+# ascii escapes
+
+'\NUL';
+'\SOH';
+'\STX';
+'\ETX';
+'\EOT';
+'\ENQ';
+'\ACK';
+'\BEL';
+'\BS';
+'\TAB';
+'\LF';
+'\VT';
+'\FF';
+'\CR';
+'\SO';
+'\SI';
+'\DLE';
+'\DC1';
+'\DC2';
+'\DC3';
+'\DC4';
+'\NAK';
+'\SYN';
+'\ETB';
+'\CAN';
+'\EM';
+'\SUB';
+'\ESC';
+'\FS';
+'\GS';
+'\RS';
+'\US';
+
+==>
+
+Program(
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral),
+  ExpressionStatement(CharacterLiteral))
+

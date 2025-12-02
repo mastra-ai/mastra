@@ -1,0 +1,73 @@
+{
+  "name": "@radix-ui/react-use-is-hydrated",
+  "version": "0.1.0",
+  "requiresBuild": false,
+  "files": {
+    "dist/index.js": {
+      "checkedAt": 1764662919957,
+      "integrity": "sha512-SrnEtnNolr0SadUtxdnVgnvRuB69JjStF+VFgEVt0DTw2vCq6dHSisM0KSazm4CcB5kc4Mn2WAFHCC9w3So8+g==",
+      "mode": 420,
+      "size": 1250
+    },
+    "package.json": {
+      "checkedAt": 1764662919959,
+      "integrity": "sha512-ew1z+aeHmjnxPA8utoQ72V9ltlyjS7N+NTbgTxBbHbKjz7c8rDmQIn8r4l6cPpN50qzZ5DChALhF2cdVg/FGcQ==",
+      "mode": 420,
+      "size": 1531
+    },
+    "dist/index.js.map": {
+      "checkedAt": 1764662919959,
+      "integrity": "sha512-a/SI5n9AHMbQ/m8HGF4q5pvttSZo1ijtH2Msce6EPCqLhJHowItlC0FYVpHEcZGRnIR4AI19BI8M3eE2Nk7uJA==",
+      "mode": 420,
+      "size": 713
+    },
+    "dist/index.mjs.map": {
+      "checkedAt": 1764662919961,
+      "integrity": "sha512-eTwLNRd7yBM4dK5iPOOBJmajM22CrK9WSrr+mMxEYKH+wE2QlRrEo/UlrsdLJpgjFgb0USLCXtKtcbi11yfP5g==",
+      "mode": 420,
+      "size": 597
+    },
+    "README.md": {
+      "checkedAt": 1764662919962,
+      "integrity": "sha512-ix206N/OICrUD6UDOAOgNUZ3fF9PmVKhIiDgRuNcYSyAmTjuWae+iNKSK/OA10dYGqmuE4YU4QPxCEj0h1439g==",
+      "mode": 420,
+      "size": 97
+    },
+    "dist/index.mjs": {
+      "checkedAt": 1764662919962,
+      "integrity": "sha512-lfR6S5aQs612dD0UqNTJ3TsTEod5ONZosNQt0JIhnfvVzR+N40FtJd1oqIArn3ALpj29AnNZKhFABkx79PtZyg==",
+      "mode": 420,
+      "size": 318
+    },
+    "dist/index.d.mts": {
+      "checkedAt": 1764662919962,
+      "integrity": "sha512-/vxhy3y+ksX9UNV+3obWqSUAvhhbpuRGmnwojuFiPvkbsSE+Pn4SM2EV9eEQCtoMWZ/WsYfBltbl/k1v307npw==",
+      "mode": 420,
+      "size": 145
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662919962,
+      "integrity": "sha512-/vxhy3y+ksX9UNV+3obWqSUAvhhbpuRGmnwojuFiPvkbsSE+Pn4SM2EV9eEQCtoMWZ/WsYfBltbl/k1v307npw==",
+      "mode": 420,
+      "size": 145
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662919965,
+      "integrity": "sha512-wSrQWTloS+W//ycZIxzdQl0tUOmB2HfJIBUGE/GsA0bebJ+yazCuAwZ7AWg1utmkGg8TgRCJH8pqexaGRy51ZA==",
+      "mode": 420,
+      "size": 51
+    },
+    "src/use-is-hydrated.tsx": {
+      "checkedAt": 1764662919966,
+      "integrity": "sha512-ZRCQ4SNVLQR1iwAraqsKJGlaxbF6wKVX/vAKUTkGU+DkGUPO1anPWioLydnYd7Kv7C/1u393Y+OmixXp12LyQg==",
+      "mode": 420,
+      "size": 309
+    },
+    "LICENSE": {
+      "checkedAt": 1764662919966,
+      "integrity": "sha512-nYbZZN//M2Dn00dr74QCQd8JL5nEhG9qE9q4YtorVPS+9eCWSZ8+sMJnL5/DEb7djeCxQG3DO7FRoVLnWAIEeA==",
+      "mode": 420,
+      "size": 1063
+    }
+  }
+}

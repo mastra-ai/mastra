@@ -1,0 +1,38 @@
+// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+
+export {
+  CreateIndicesSinglePage,
+  Indexes,
+  type CreateIndex,
+  type IndexDeleteVectorsByID,
+  type IndexDimensionConfiguration,
+  type IndexInsert,
+  type IndexQuery,
+  type IndexUpsert,
+  type IndexDeleteResponse,
+  type IndexDeleteByIDsResponse,
+  type IndexGetByIDsResponse,
+  type IndexInfoResponse,
+  type IndexInsertResponse,
+  type IndexQueryResponse,
+  type IndexUpsertResponse,
+  type IndexCreateParams,
+  type IndexListParams,
+  type IndexDeleteParams,
+  type IndexDeleteByIDsParams,
+  type IndexGetParams,
+  type IndexGetByIDsParams,
+  type IndexInfoParams,
+  type IndexInsertParams,
+  type IndexQueryParams,
+  type IndexUpsertParams,
+} from './indexes';
+export {
+  MetadataIndex,
+  type MetadataIndexCreateResponse,
+  type MetadataIndexListResponse,
+  type MetadataIndexDeleteResponse,
+  type MetadataIndexCreateParams,
+  type MetadataIndexListParams,
+  type MetadataIndexDeleteParams,
+} from './metadata-index';

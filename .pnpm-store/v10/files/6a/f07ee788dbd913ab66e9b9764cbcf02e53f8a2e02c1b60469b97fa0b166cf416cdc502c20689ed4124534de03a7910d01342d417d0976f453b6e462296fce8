@@ -1,0 +1,365 @@
+# Abstract class
+
+<?php
+
+abstract class A {
+    public function a() {}
+    abstract public function b();
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ClassDeclaration(abstract, class,
+    Name,
+    DeclarationList(
+      MethodDeclaration(Visibility, function,
+        Name,
+        ParamList,
+        Block
+      ),
+      MethodDeclaration(abstract, Visibility, function,
+        Name,
+        ParamList
+      )
+    )
+  )
+)
+
+# Anonymous classes
+
+<?php
+
+new class {
+    public function test() {}
+};
+new class extends A implements B, C {};
+new class() {
+    public $foo;
+};
+new class($a, $b) extends A {
+    use T;
+};
+
+class A {
+    public function test() {
+        return new class($this) extends A {
+            const A = 'B';
+        };
+    }
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    NewExpression(new, class,
+      DeclarationList(
+        MethodDeclaration(Visibility, function,
+          Name,
+          ParamList,
+          Block
+        )
+      )
+    )
+  ),
+  ExpressionStatement(
+    NewExpression(new, class,
+      BaseClause(extends, Name),
+      ClassInterfaceClause(implements, Name, Name),
+      DeclarationList
+    )
+  ),
+  ExpressionStatement(
+    NewExpression(new, class,
+      ArgList,
+      DeclarationList(
+        PropertyDeclaration(
+          Visibility,
+          VariableDeclarator(
+            VariableName
+          )
+        )
+      )
+    )
+  ),
+  ExpressionStatement(
+    NewExpression(new, class,
+      ArgList(VariableName, VariableName),
+      BaseClause(extends, Name),
+      DeclarationList(
+        UseDeclaration(use,
+          Name
+        )
+      )
+    )
+  ),
+  ClassDeclaration(class,
+    Name,
+    DeclarationList(
+      MethodDeclaration(Visibility, function,
+        Name,
+        ParamList,
+        Block(
+          ReturnStatement(return,
+            NewExpression(new, class,
+              ArgList(VariableName),
+              BaseClause(extends, Name),
+              DeclarationList(
+                ConstDeclaration(const,
+                  VariableDeclarator(Name, AssignOp, String)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+
+# Conditional class definition
+
+<?php
+
+if (true) {
+    class A {}
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  IfStatement(if,
+    ParenthesizedExpression(Boolean),
+    Block(
+      ClassDeclaration(class,
+        Name,
+        DeclarationList
+      )
+    )
+  )
+)
+
+# Class constant modifiers
+
+<?php
+
+class Foo {
+    const A = 1;
+    public const B = 2;
+    protected const C = 3;
+    private const D = 4;
+    final const E = 5;
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ClassDeclaration(class,
+    Name,
+    DeclarationList(
+      ConstDeclaration(const,
+        VariableDeclarator(Name, AssignOp, Integer)
+      ),
+      ConstDeclaration(Visibility, const,
+        VariableDeclarator(Name, AssignOp, Integer)
+      ),
+      ConstDeclaration(Visibility, const,
+        VariableDeclarator(Name, AssignOp, Integer)
+      ),
+      ConstDeclaration(Visibility, const,
+        VariableDeclarator(Name, AssignOp, Integer)
+      ),
+      ConstDeclaration(final, const,
+        VariableDeclarator(Name, AssignOp, Integer)
+      )
+    )
+  )
+)
+
+# Final class
+
+<?php
+
+final class A {}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ClassDeclaration(final, class,
+    Name,
+    DeclarationList
+  )
+)
+
+# Implicitly public properties and methods
+
+<?php
+
+abstract class A {
+    var $a;
+    static $b;
+    abstract function c();
+    final function d() {}
+    static function e() {}
+    final static function f() {}
+    function g() {}
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ClassDeclaration(abstract, class,
+    Name,
+    DeclarationList(
+      PropertyDeclaration(
+        var,
+        VariableDeclarator(VariableName)
+      ),
+      PropertyDeclaration(
+        static,
+        VariableDeclarator(VariableName)
+      ),
+      MethodDeclaration(abstract, function,
+        Name,
+        ParamList
+      ),
+      MethodDeclaration(final, function,
+        Name,
+        ParamList,
+        Block
+      ),
+      MethodDeclaration(static, function,
+        Name,
+        ParamList,
+        Block
+      ),
+      MethodDeclaration(final, static, function,
+        Name,
+        ParamList,
+        Block
+      ),
+      MethodDeclaration(function,
+        Name,
+        ParamList,
+        Block
+      )
+    )
+  )
+)
+
+# Property Types
+
+<?php
+
+class A {
+    public string $a;
+    protected static D $b;
+    private ?float $c;
+    private $d;
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ClassDeclaration(class,
+    Name,
+    DeclarationList(
+      PropertyDeclaration(
+        Visibility,
+        NamedType(Name),
+        VariableDeclarator(VariableName)
+      ),
+      PropertyDeclaration(
+        Visibility,
+        static,
+        NamedType(Name),
+        VariableDeclarator(VariableName)
+      ),
+      PropertyDeclaration(
+        Visibility,
+        OptionalType(LogicOp, NamedType(Name)),
+        VariableDeclarator(VariableName)
+      ),
+      PropertyDeclaration(
+        Visibility,
+        VariableDeclarator(VariableName)
+      )
+    )
+  )
+)
+
+# Constructor Property Promotion
+
+<?php
+
+class Point {
+    public function __construct(
+        public float $x = 0.0,
+        float $y = 0.0,
+        private float $z = 0.0
+    ) {}
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ClassDeclaration(class,
+    Name,
+    DeclarationList(
+      MethodDeclaration(Visibility, function,
+        Name,
+        ParamList(
+          PropertyParameter(
+            Visibility,
+            NamedType(Name),
+            VariableName,
+            AssignOp,
+            Float
+          ),
+          Parameter(
+            NamedType(Name),
+            VariableName,
+            AssignOp,
+            Float
+          ),
+          PropertyParameter(
+            Visibility,
+            NamedType(Name),
+            VariableName,
+            AssignOp,
+            Float
+          )
+        ),
+        Block
+      )
+    )
+  )
+)
+
+# Class constant
+
+<?php
+
+A::class;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    ScopedExpression(
+      Name,
+      ClassMemberName(Name)
+    ),
+    ";"
+  )
+)

@@ -1,0 +1,134 @@
+{
+  "name": "braintrust",
+  "version": "0.4.9",
+  "description": "SDK for integrating Braintrust",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/braintrustdata/braintrust-sdk.git",
+    "directory": "blob/main/js"
+  },
+  "homepage": "https://www.braintrust.dev/docs",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "browser": {
+    "./dist/index.js": "./dist/browser.js",
+    "./dist/index.d.ts": "./dist/browser.d.ts",
+    "./dist/index.mjs": "./dist/browser.mjs",
+    "./dist/index.d.mts": "./dist/browser.d.mts"
+  },
+  "bin": {
+    "braintrust": "./dist/cli.js"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "module": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./browser": {
+      "import": "./dist/browser.mjs",
+      "module": "./dist/browser.mjs",
+      "require": "./dist/browser.js"
+    },
+    "./dev": {
+      "types": "./dev/dist/index.d.ts",
+      "import": "./dev/dist/index.mjs",
+      "module": "./dev/dist/index.mjs",
+      "require": "./dev/dist/index.js"
+    },
+    "./util": {
+      "types": "./util/dist/index.d.ts",
+      "import": "./util/dist/index.mjs",
+      "module": "./util/dist/index.mjs",
+      "require": "./util/dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "dev/dist/**/*",
+    "util/dist/**/*"
+  ],
+  "scripts": {
+    "build": "cross-env NODE_OPTIONS=\"--max-old-space-size=8192\" tsup",
+    "watch": "tsup --watch",
+    "clean": "rm -r dist/* && rm -r dev/dist/*",
+    "docs": "npx typedoc --options typedoc.json src/index.ts",
+    "test": "vitest run --exclude \"src/wrappers/**/*.test.ts\" --exclude \"src/otel/**/*.test.ts\"",
+    "test:anthropic": "vitest run src/wrappers/anthropic.test.ts",
+    "test:openai": "vitest run src/wrappers/oai.test.ts",
+    "test:otel": "vitest run --dir src/otel",
+    "test:otel-no-deps": "vitest run src/otel-no-deps.test.ts --reporter=verbose",
+    "test:google-genai": "vitest run src/wrappers/google-genai.test.ts",
+    "test:ai-sdk-v1": "vitest run src/wrappers/ai-sdk-v1.test.ts",
+    "test:ai-sdk-v2": "vitest run src/wrappers/ai-sdk-v2.test.ts src/wrappers/ai-sdk-v1.test.ts",
+    "test:ai-sdk-v3": "vitest run src/wrappers/ai-sdk-v3.test.ts",
+    "test:mastra": "vitest run src/wrappers/mastra.test.ts",
+    "test:claude-agent-sdk": "vitest run src/wrappers/claude-agent-sdk.test.ts"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@ai-sdk/anthropic": "2.0.37",
+    "@anthropic-ai/sdk": "^0.60.0",
+    "@google/genai": "^1.25.0",
+    "@jest/globals": "^29.7.0",
+    "@nodelib/fs.walk": "^1.2.8",
+    "@openai/agents": "^0.0.14",
+    "@types/argparse": "^2.0.14",
+    "@types/async": "^3.2.24",
+    "@types/cli-progress": "^3.11.5",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/graceful-fs": "^4.1.9",
+    "@types/http-errors": "^2.0.4",
+    "@types/mustache": "^4.2.5",
+    "@types/node": "^20.10.5",
+    "@types/pluralize": "^0.0.30",
+    "@types/uuid": "^9.0.7",
+    "ai": "^4.3.16",
+    "async": "^3.2.5",
+    "autoevals": "^0.0.131",
+    "cross-env": "^7.0.3",
+    "npm-run-all": "^4.1.5",
+    "openapi-zod-client": "^1.18.3",
+    "prettier": "^3.5.3",
+    "tinybench": "^4.0.1",
+    "ts-jest": "^29.1.4",
+    "tsup": "^8.3.5",
+    "typedoc": "^0.25.13",
+    "typedoc-plugin-markdown": "^3.17.1",
+    "typescript": "5.4.4",
+    "vite-tsconfig-paths": "^4.3.2",
+    "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "^1.1.3",
+    "@next/env": "^14.2.3",
+    "@vercel/functions": "^1.0.2",
+    "argparse": "^2.0.1",
+    "chalk": "^4.1.2",
+    "cli-progress": "^3.12.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "esbuild": "^0.25.10",
+    "eventsource-parser": "^1.1.2",
+    "express": "^4.21.2",
+    "graceful-fs": "^4.2.11",
+    "http-errors": "^2.0.0",
+    "minimatch": "^9.0.3",
+    "mustache": "^4.2.0",
+    "pluralize": "^8.0.0",
+    "simple-git": "^3.21.0",
+    "slugify": "^1.6.6",
+    "source-map": "^0.7.4",
+    "uuid": "^9.0.1",
+    "zod": "^3.25.34",
+    "zod-to-json-schema": "^3.22.5"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.34"
+  }
+}

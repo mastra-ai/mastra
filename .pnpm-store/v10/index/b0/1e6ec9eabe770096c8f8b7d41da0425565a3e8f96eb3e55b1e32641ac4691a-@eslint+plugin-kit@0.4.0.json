@@ -1,0 +1,67 @@
+{
+  "name": "@eslint/plugin-kit",
+  "version": "0.4.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662905731,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "dist/cjs/index.cjs": {
+      "checkedAt": 1764662905732,
+      "integrity": "sha512-fYeuYfr/mjtUv6MzH/XX7BZhHBbTtYoJYmVuP6QhzZTkXHO+m4gV9Pn25vJFmlt0HOoEcRnNybxI3uuo/RydiA==",
+      "mode": 420,
+      "size": 25533
+    },
+    "dist/cjs/index.d.cts": {
+      "checkedAt": 1764662905732,
+      "integrity": "sha512-fBXyxwgbx6vgNOVIoI+Q2XQGFzy1EuP4Ui2cClaCbpp1AOuI7lab8E2xSaSxhcq25F1nqc3dDVsAXpMS7LZlvQ==",
+      "mode": 420,
+      "size": 12146
+    },
+    "dist/cjs/types.cts": {
+      "checkedAt": 1764662905733,
+      "integrity": "sha512-toleGXw9UqqYJB1xotEezy3w4oROSfBCCN+FfhaP6mdY422yKRuv6Sm3ZFhUHP4cmfj1/fDhu7dMQuKVXNfOiw==",
+      "mode": 420,
+      "size": 200
+    },
+    "dist/esm/index.js": {
+      "checkedAt": 1764662905734,
+      "integrity": "sha512-QUEza3jeMXLPlRaewn+JCKRenUROw6bwGQoSanOghS4XgEIo3P9gTWJD3yww66ehjLf9LKwkFq6kg/u8Qjp+bg==",
+      "mode": 420,
+      "size": 25431
+    },
+    "package.json": {
+      "checkedAt": 1764662905773,
+      "integrity": "sha512-l7EunsKdwHmvJJ5/u/8qU/DUhLApoPXpTm4ngPn5SwN3tya3MaEh1sH3vkiUNPoNAAJWoTtXlvg48HDA5msI3Q==",
+      "mode": 420,
+      "size": 1703
+    },
+    "README.md": {
+      "checkedAt": 1764662905774,
+      "integrity": "sha512-3IVV3otkHnzBZHIrtayoTUT4ADwFbmIoUdebMSJ1iSvBpqsWb7tvIMrGAwkA6FqQOwbO5FsGuKrz4qZMSlkoYg==",
+      "mode": 420,
+      "size": 12188
+    },
+    "dist/esm/index.d.ts": {
+      "checkedAt": 1764662905776,
+      "integrity": "sha512-wc9ycpUu9Vd6XexzayuGMRoSVVxkGnB7wo9wlOCYyfRAEN2N4/hQbnye98+BqmB4bNCS6WsGkOsjH+cP4WzXGA==",
+      "mode": 420,
+      "size": 12144
+    },
+    "dist/esm/types.d.ts": {
+      "checkedAt": 1764662905776,
+      "integrity": "sha512-CwO1l1Qh33cIhmRrpq9P7Vfu0uotfbJfLXKK69lllg5YmjTlx4s+JBVDrNrzmNvbjmIvDhXeEVjODm6KMYyTwA==",
+      "mode": 420,
+      "size": 199
+    },
+    "dist/esm/types.ts": {
+      "checkedAt": 1764662905733,
+      "integrity": "sha512-toleGXw9UqqYJB1xotEezy3w4oROSfBCCN+FfhaP6mdY422yKRuv6Sm3ZFhUHP4cmfj1/fDhu7dMQuKVXNfOiw==",
+      "mode": 420,
+      "size": 200
+    }
+  }
+}

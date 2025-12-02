@@ -1,0 +1,4 @@
+{
+  "main": "dist/changesets-cli-changelog.cjs.js",
+  "module": "dist/changesets-cli-changelog.esm.js"
+}

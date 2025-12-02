@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../src/routines/index.js"],"names":[],"mappings":";;;;;;;;;;;;AAEA","sourcesContent":["// @flow\n\nexport {default as bootstrap} from './bootstrap';\n"],"file":"index.js"}

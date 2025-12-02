@@ -1,0 +1,31 @@
+{
+  "name": "better-path-resolve",
+  "version": "1.0.0",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662904036,
+      "integrity": "sha512-FlCzEoQederMhMbl1YU1G9tIfTwHaevxRVgHj686IOfPMpFaqSdAjxaXCcUa3KusIYB40r73hIMqvOkDZLKEkA==",
+      "mode": 438,
+      "size": 877
+    },
+    "index.js": {
+      "checkedAt": 1764662904037,
+      "integrity": "sha512-8u9tHlMb+7eelt2BVNWmSU7+ZZcIEPPDqubX+58iUjxGtJUn/dW2Jwu+78XdFANRiF8UG5tZxpbTp2XfIw8A7Q==",
+      "mode": 438,
+      "size": 585
+    },
+    "LICENSE": {
+      "checkedAt": 1764662904039,
+      "integrity": "sha512-t1AcDm26ByJRcNr/ABbm4LOJT9I2zSXL2ad1G6R5vEx87AfLYX7pQ+WFpFV03C3S0Ms81qgfyknztoeP0jY7MA==",
+      "mode": 438,
+      "size": 1084
+    },
+    "README.md": {
+      "checkedAt": 1764662904040,
+      "integrity": "sha512-7fqwBs0YEKjFhfh7TdQ1QAJXR5JRuLv12GaBUAZBQuZrIlXyMjNBcKvIVQppZsSZ62GFSzzZbLMLtLrsZyt1Qg==",
+      "mode": 438,
+      "size": 511
+    }
+  }
+}

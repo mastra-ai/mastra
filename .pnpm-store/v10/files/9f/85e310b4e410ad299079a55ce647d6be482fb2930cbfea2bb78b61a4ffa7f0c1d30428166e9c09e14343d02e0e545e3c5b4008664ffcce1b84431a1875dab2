@@ -1,0 +1,192 @@
+"use strict";
+"use client";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/assistant-action-bar.tsx
+var assistant_action_bar_exports = {};
+__export(assistant_action_bar_exports, {
+  default: () => assistant_action_bar_default
+});
+module.exports = __toCommonJS(assistant_action_bar_exports);
+var import_react = require("react");
+var import_lucide_react = require("lucide-react");
+var import_react2 = require("@assistant-ui/react");
+var import_tooltip_icon_button = require("./base/tooltip-icon-button.js");
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_thread_config = require("./thread-config.js");
+var import_jsx_runtime = require("react/jsx-runtime");
+var useAllowCopy = (ensureCapability = false) => {
+  const { assistantMessage: { allowCopy = true } = {} } = (0, import_thread_config.useThreadConfig)();
+  const copySupported = (0, import_react2.useThread)((t) => t.capabilities.unstable_copy);
+  return allowCopy && (!ensureCapability || copySupported);
+};
+var useAllowSpeak = (ensureCapability = false) => {
+  const { assistantMessage: { allowSpeak = true } = {} } = (0, import_thread_config.useThreadConfig)();
+  const speechSupported = (0, import_react2.useThread)((t) => t.capabilities.speech);
+  return allowSpeak && (!ensureCapability || speechSupported);
+};
+var useAllowReload = (ensureCapability = false) => {
+  const { assistantMessage: { allowReload = true } = {} } = (0, import_thread_config.useThreadConfig)();
+  const reloadSupported = (0, import_react2.useThread)((t) => t.capabilities.reload);
+  return allowReload && (!ensureCapability || reloadSupported);
+};
+var useAllowFeedbackPositive = (ensureCapability = false) => {
+  const { assistantMessage: { allowFeedbackPositive = true } = {} } = (0, import_thread_config.useThreadConfig)();
+  const feedbackSupported = (0, import_react2.useThread)((t) => t.capabilities.feedback);
+  return allowFeedbackPositive && (!ensureCapability || feedbackSupported);
+};
+var useAllowFeedbackNegative = (ensureCapability = false) => {
+  const { assistantMessage: { allowFeedbackNegative = true } = {} } = (0, import_thread_config.useThreadConfig)();
+  const feedbackSupported = (0, import_react2.useThread)((t) => t.capabilities.feedback);
+  return allowFeedbackNegative && (!ensureCapability || feedbackSupported);
+};
+var AssistantActionBar = () => {
+  const allowCopy = useAllowCopy(true);
+  const allowReload = useAllowReload(true);
+  const allowSpeak = useAllowSpeak(true);
+  const allowFeedbackPositive = useAllowFeedbackPositive(true);
+  const allowFeedbackNegative = useAllowFeedbackNegative(true);
+  if (!allowCopy && !allowReload && !allowSpeak && !allowFeedbackPositive && !allowFeedbackNegative)
+    return null;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    AssistantActionBarRoot,
+    {
+      hideWhenRunning: true,
+      autohide: "not-last",
+      autohideFloat: "single-branch",
+      children: [
+        allowSpeak && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantActionBarSpeechControl, {}),
+        allowCopy && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantActionBarCopy, {}),
+        allowReload && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantActionBarReload, {}),
+        allowFeedbackPositive && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantActionBarFeedbackPositive, {}),
+        allowFeedbackNegative && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantActionBarFeedbackNegative, {})
+      ]
+    }
+  );
+};
+AssistantActionBar.displayName = "AssistantActionBar";
+var AssistantActionBarRoot = (0, import_withDefaults.withDefaults)(import_react2.ActionBarPrimitive.Root, {
+  className: "aui-assistant-action-bar-root"
+});
+AssistantActionBarRoot.displayName = "AssistantActionBarRoot";
+var AssistantActionBarCopy = (0, import_react.forwardRef)(({ copiedDuration, ...props }, ref) => {
+  const {
+    strings: {
+      assistantMessage: { copy: { tooltip = "Copy" } = {} } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ActionBarPrimitive.Copy, { copiedDuration, asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_tooltip_icon_button.TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.MessagePrimitive.If, { copied: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckIcon, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.MessagePrimitive.If, { copied: false, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CopyIcon, {}) })
+  ] }) }) });
+});
+AssistantActionBarCopy.displayName = "AssistantActionBarCopy";
+var AssistantActionBarSpeechControl = () => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.MessagePrimitive.If, { speaking: false, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantActionBarSpeak, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.MessagePrimitive.If, { speaking: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantActionBarStopSpeaking, {}) })
+  ] });
+};
+var AssistantActionBarSpeak = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: { speak: { tooltip = "Read aloud" } = {} } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  const allowSpeak = useAllowSpeak();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ActionBarPrimitive.Speak, { disabled: !allowSpeak, asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_tooltip_icon_button.TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.AudioLinesIcon, {}) }) });
+});
+AssistantActionBarSpeak.displayName = "AssistantActionBarSpeak";
+var AssistantActionBarStopSpeaking = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: {
+        speak: { stop: { tooltip: stopTooltip = "Stop" } = {} } = {}
+      } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  const allowSpeak = useAllowSpeak();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ActionBarPrimitive.StopSpeaking, { disabled: !allowSpeak, asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_tooltip_icon_button.TooltipIconButton, { tooltip: stopTooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.StopCircleIcon, {}) }) });
+});
+AssistantActionBarStopSpeaking.displayName = "AssistantActionBarStopSpeaking";
+var AssistantActionBarReload = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: { reload: { tooltip = "Refresh" } = {} } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  const allowReload = useAllowReload();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ActionBarPrimitive.Reload, { disabled: !allowReload, asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_tooltip_icon_button.TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.RefreshCwIcon, {}) }) });
+});
+AssistantActionBarReload.displayName = "AssistantActionBarReload";
+var AssistantActionBarFeedbackPositive = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: {
+        feedback: { positive: { tooltip = "Good response" } = {} } = {}
+      } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  const allowFeedbackPositive = useAllowFeedbackPositive();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    import_react2.ActionBarPrimitive.FeedbackPositive,
+    {
+      disabled: !allowFeedbackPositive,
+      className: "aui-assistant-action-bar-feedback-positive",
+      asChild: true,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_tooltip_icon_button.TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ThumbsUpIcon, {}) })
+    }
+  );
+});
+AssistantActionBarFeedbackPositive.displayName = "AssistantActionBarFeedbackPositive";
+var AssistantActionBarFeedbackNegative = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: {
+        feedback: { negative: { tooltip = "Bad response" } = {} } = {}
+      } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  const allowFeedbackNegative = useAllowFeedbackNegative();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    import_react2.ActionBarPrimitive.FeedbackNegative,
+    {
+      disabled: !allowFeedbackNegative,
+      className: "aui-assistant-action-bar-feedback-negative",
+      asChild: true,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_tooltip_icon_button.TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ThumbsDownIcon, {}) })
+    }
+  );
+});
+AssistantActionBarFeedbackNegative.displayName = "AssistantActionBarFeedbackNegative";
+var exports2 = {
+  Root: AssistantActionBarRoot,
+  Reload: AssistantActionBarReload,
+  Copy: AssistantActionBarCopy,
+  Speak: AssistantActionBarSpeak,
+  StopSpeaking: AssistantActionBarStopSpeaking,
+  SpeechControl: AssistantActionBarSpeechControl,
+  FeedbackPositive: AssistantActionBarFeedbackPositive,
+  FeedbackNegative: AssistantActionBarFeedbackNegative
+};
+var assistant_action_bar_default = Object.assign(
+  AssistantActionBar,
+  exports2
+);
+//# sourceMappingURL=assistant-action-bar.js.map

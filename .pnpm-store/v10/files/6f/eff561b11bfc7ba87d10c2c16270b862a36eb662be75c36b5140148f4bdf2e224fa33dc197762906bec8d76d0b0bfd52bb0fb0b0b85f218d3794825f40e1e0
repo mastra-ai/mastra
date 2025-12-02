@@ -1,0 +1,143 @@
+/* src/styles/tailwindcss/modal.css */
+.aui-modal-content {
+  z-index: 50;
+  height: 500px;
+  width: 400px;
+  overflow: clip;
+  border-radius: 0.75rem;
+  border-width: 1px;
+  background-color: hsl(var(--aui-popover));
+  padding: 0px;
+  color: hsl(var(--aui-popover-foreground));
+  --aui-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --aui-shadow-colored: 0 4px 6px -1px var(--aui-shadow-color), 0 2px 4px -2px var(--aui-shadow-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow, 0 0 #0000),
+    var(--aui-ring-shadow, 0 0 #0000),
+    var(--aui-shadow);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+.aui-modal-content > .aui-thread-root {
+  background-color: inherit;
+}
+.aui-modal-content[data-state=open] {
+  animation-name: aui-enter;
+  animation-duration: 150ms;
+  --aui-enter-opacity: initial;
+  --aui-enter-scale: initial;
+  --aui-enter-rotate: initial;
+  --aui-enter-translate-x: initial;
+  --aui-enter-translate-y: initial ;
+}
+.aui-modal-content[data-state=closed] {
+  animation-name: aui-exit;
+  animation-duration: 150ms;
+  --aui-exit-opacity: initial;
+  --aui-exit-scale: initial;
+  --aui-exit-rotate: initial;
+  --aui-exit-translate-x: initial;
+  --aui-exit-translate-y: initial;
+  --aui-exit-opacity: 0 ;
+}
+.aui-modal-content[data-state=open] {
+  --aui-enter-opacity: 0 ;
+}
+.aui-modal-content[data-state=closed] {
+  --aui-exit-scale: 0 ;
+}
+.aui-modal-content[data-state=open] {
+  --aui-enter-scale: 0;
+  --aui-enter-translate-y: 50%;
+  --aui-enter-translate-x: 50% ;
+}
+.aui-modal-content[data-state=closed] {
+  --aui-exit-translate-y: 50%;
+  --aui-exit-translate-x: 50% ;
+}
+.aui-modal-anchor {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+.aui-modal-button {
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  --aui-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --aui-shadow-colored: 0 1px 3px 0 var(--aui-shadow-color), 0 1px 2px -1px var(--aui-shadow-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow, 0 0 #0000),
+    var(--aui-ring-shadow, 0 0 #0000),
+    var(--aui-shadow);
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.aui-modal-button:hover {
+  --aui-scale-x: 1.1;
+  --aui-scale-y: 1.1;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+.aui-modal-button:active {
+  --aui-scale-x: .9;
+  --aui-scale-y: .9;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+.aui-modal-button-closed-icon {
+  position: absolute;
+  width: 1.5rem;
+  height: 1.5rem;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.aui-modal-button-closed-icon[data-state=closed] {
+  --aui-rotate: 0deg;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+.aui-modal-button-closed-icon[data-state=open] {
+  --aui-rotate: 90deg;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+.aui-modal-button-closed-icon[data-state=closed] {
+  --aui-scale-x: 1;
+  --aui-scale-y: 1;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+.aui-modal-button-closed-icon[data-state=open] {
+  --aui-scale-x: 0;
+  --aui-scale-y: 0;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+.aui-modal-button-open-icon {
+  position: absolute;
+  width: 1.5rem;
+  height: 1.5rem;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.aui-modal-button-open-icon[data-state=closed] {
+  --aui-rotate: -90deg;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+.aui-modal-button-open-icon[data-state=open] {
+  --aui-rotate: 0deg;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+.aui-modal-button-open-icon[data-state=closed] {
+  --aui-scale-x: 0;
+  --aui-scale-y: 0;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+.aui-modal-button-open-icon[data-state=open] {
+  --aui-scale-x: 1;
+  --aui-scale-y: 1;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+}
+
+/* src/styles/modal.css */
+/*# sourceMappingURL=modal.css.map */

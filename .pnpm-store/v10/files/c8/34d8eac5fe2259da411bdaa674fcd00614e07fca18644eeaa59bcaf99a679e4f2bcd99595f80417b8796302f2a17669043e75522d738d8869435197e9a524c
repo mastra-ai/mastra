@@ -1,0 +1,1 @@
+{"version":3,"file":"ZDIFF.js","sourceRoot":"","sources":["../../../lib/commands/ZDIFF.ts"],"names":[],"mappings":";;AAIA,kBAAe;IACb,YAAY,EAAE,IAAI;IAClB;;;;OAIG;IACH,YAAY,CAAC,MAAqB,EAAE,IAA2B;QAC7D,MAAM,CAAC,IAAI,CAAC,OAAO,CAAC,CAAC;QACrB,MAAM,CAAC,cAAc,CAAC,IAAI,CAAC,CAAC;IAC9B,CAAC;IACD,cAAc,EAAE,SAAyD;CAC/C,CAAC"}

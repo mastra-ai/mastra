@@ -1,0 +1,1 @@
+{"version":3,"file":"api.d.ts","sourceRoot":"","sources":["../../../../src/cli/codegen_templates/api.ts"],"names":[],"mappings":"AAEA,wBAAgB,UAAU,CAAC,UAAU,EAAE,MAAM,UAM5C;AAED,wBAAgB,gBAAgB,CAAC,UAAU,EAAE,MAAM,UAiElD;AAED,wBAAgB,UAAU,CACxB,WAAW,EAAE,MAAM,EAAE,EACrB,IAAI,CAAC,EAAE;IAAE,aAAa,CAAC,EAAE,OAAO,CAAA;CAAE;;;;;;;;EAsGnC"}

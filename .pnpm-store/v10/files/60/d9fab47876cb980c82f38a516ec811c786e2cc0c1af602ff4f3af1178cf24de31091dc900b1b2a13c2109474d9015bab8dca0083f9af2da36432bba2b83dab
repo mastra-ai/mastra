@@ -1,0 +1,128 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get_subscription:
+      path: /v1/user/subscription
+      method: GET
+      auth: false
+      docs: Gets extended information about the users subscription
+      source:
+        openapi: openapi.json
+      display-name: Get user subscription
+      response:
+        docs: Successful Response
+        type: root.Subscription
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              tier: tier
+              character_count: 1
+              character_limit: 1
+              max_character_limit_extension: 1
+              can_extend_character_limit: true
+              allowed_to_extend_character_limit: true
+              next_character_count_reset_unix: 1
+              voice_slots_used: 1
+              professional_voice_slots_used: 1
+              voice_limit: 1
+              max_voice_add_edits: 1
+              voice_add_edit_counter: 1
+              professional_voice_limit: 1
+              can_extend_voice_limit: true
+              can_use_instant_voice_cloning: true
+              can_use_professional_voice_cloning: true
+              currency: usd
+              status: trialing
+              billing_period: monthly_period
+              character_refresh_period: monthly_period
+              next_invoice:
+                amount_due_cents: 1000
+                discount_percent_off: 1.1
+                next_payment_attempt_unix: 1738356858
+              has_open_invoices: false
+    get:
+      path: /v1/user
+      method: GET
+      auth: false
+      docs: Gets information about the user
+      source:
+        openapi: openapi.json
+      display-name: Get user
+      response:
+        docs: Successful Response
+        type: root.User
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              user_id: '1234567890'
+              subscription:
+                tier: trial
+                character_count: 17231
+                character_limit: 100000
+                max_character_limit_extension: 1
+                can_extend_character_limit: false
+                allowed_to_extend_character_limit: false
+                next_character_count_reset_unix: 1738356858
+                voice_slots_used: 1
+                professional_voice_slots_used: 0
+                voice_limit: 120
+                max_voice_add_edits: 230
+                voice_add_edit_counter: 212
+                professional_voice_limit: 1
+                can_extend_voice_limit: false
+                can_use_instant_voice_cloning: true
+                can_use_professional_voice_cloning: true
+                currency: usd
+                status: free
+                billing_period: monthly_period
+                character_refresh_period: monthly_period
+              subscription_extras:
+                concurrency: 10
+                convai_concurrency: 10
+                convai_chars_per_minute: 1000
+                convai_asr_chars_per_minute: 1000
+                force_logging_disabled: false
+                can_request_manual_pro_voice_verification: true
+                can_bypass_voice_captcha: true
+                moderation:
+                  is_in_probation: false
+                  enterprise_check_nogo_voice: false
+                  enterprise_check_block_nogo_voice: false
+                  never_live_moderate: false
+                  nogo_voice_similar_voice_upload_count: 0
+                  enterprise_background_moderation_enabled: false
+                  safety_status: appeal_approved
+                  warning_status: warning
+                  on_watchlist: false
+                unused_characters_rolled_over_from_previous_period: 1000
+                overused_characters_rolled_over_from_previous_period: 1000
+                usage:
+                  rollover_credits_quota: 1000
+                  subscription_cycle_credits_quota: 1000
+                  manually_gifted_credits_quota: 1000
+                  rollover_credits_used: 1000
+                  subscription_cycle_credits_used: 1000
+                  manually_gifted_credits_used: 1000
+                  paid_usage_based_credits_used: 1000
+                  actual_reported_credits: 1000
+              is_new_user: false
+              xi_api_key: 8so27l7327189x0h939ekx293380l920
+              can_use_delayed_payment_methods: true
+              is_onboarding_completed: true
+              is_onboarding_checklist_completed: true
+              first_name: John
+              is_api_key_hashed: false
+              xi_api_key_preview: xi_api_key_preview
+              referral_link_code: referral_link_code
+              partnerstack_partner_default_link: partnerstack_partner_default_link
+  source:
+    openapi: openapi.json

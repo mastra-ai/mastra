@@ -1,0 +1,7 @@
+import { $n as getBaseAdapter, An as parseInputData, Bn as convertFromDB, Cn as getWithHooks, Dn as parseAccountInput, En as mergeSchema, Fn as createInternalAdapter, Gn as InferFieldsFromPlugins, Hn as FieldAttributeToObject, In as getAuthTables, Jn as InferFieldsOutput, Kn as InferFieldsInput, Ln as getSchema, Mn as parseSessionOutput, Nn as parseUserInput, On as parseAccountOutput, Pn as parseUserOutput, Qn as getAdapter, Rn as getMigrations, Tn as toZodSchema, Un as InferAdditionalFieldsFromPluginOptions, Vn as convertToDB, Wn as InferFieldsFromOptions, Xn as PluginFieldAttribute, Yn as InferValueType, Zn as createFieldAttribute, jn as parseSessionInput, kn as parseAdditionalUserInput, qn as InferFieldsInputClient, wn as FieldAttributeToSchema, zn as matchType } from "../index--CrC0_x3.mjs";
+import "../types-CRiHq5rJ.mjs";
+import "../helper-DU33OcfW.mjs";
+import "../index-CNCxG_Zo.mjs";
+import "../plugins-Brc8BsoZ.mjs";
+export * from "@better-auth/core/db";
+export { FieldAttributeToObject, FieldAttributeToSchema, InferAdditionalFieldsFromPluginOptions, InferFieldsFromOptions, InferFieldsFromPlugins, InferFieldsInput, InferFieldsInputClient, InferFieldsOutput, InferValueType, PluginFieldAttribute, convertFromDB, convertToDB, createFieldAttribute, createInternalAdapter, getAdapter, getAuthTables, getBaseAdapter, getMigrations, getSchema, getWithHooks, matchType, mergeSchema, parseAccountInput, parseAccountOutput, parseAdditionalUserInput, parseInputData, parseSessionInput, parseSessionOutput, parseUserInput, parseUserOutput, toZodSchema };

@@ -1,0 +1,14 @@
+const commanderInitValues = {
+    cmd: undefined,
+    args: [],
+    origin: undefined,
+    config: undefined,
+    volta: false
+};
+export const getCommander = () => {
+    if (!globalThis?.commander) {
+        globalThis.commander = commanderInitValues;
+    }
+    return globalThis.commander;
+};
+export default getCommander();

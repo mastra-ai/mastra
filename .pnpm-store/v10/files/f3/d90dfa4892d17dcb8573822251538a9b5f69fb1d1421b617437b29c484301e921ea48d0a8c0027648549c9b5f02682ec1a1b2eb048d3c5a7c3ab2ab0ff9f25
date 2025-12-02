@@ -1,0 +1,1 @@
+{"version":3,"sources":["../src/workflows/constants.ts"],"names":[],"mappings":";AACO,IAAM,cAAA,GAAiB,OAAO,SAAS;AACvC,IAAM,oBAAA,GAAuB,OAAO,eAAe","file":"chunk-NLNKQD2T.js","sourcesContent":["// symbol is used to not leak emitter to the user\nexport const EMITTER_SYMBOL = Symbol('emitter');\nexport const STREAM_FORMAT_SYMBOL = Symbol('stream_format');\n"]}

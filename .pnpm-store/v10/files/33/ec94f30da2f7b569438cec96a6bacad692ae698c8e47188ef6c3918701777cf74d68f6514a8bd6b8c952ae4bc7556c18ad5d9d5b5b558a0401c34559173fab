@@ -1,0 +1,18 @@
+'use strict';
+
+var chunkKEXGB7FK_cjs = require('../chunk-KEXGB7FK.cjs');
+
+// src/tts/index.ts
+var MastraTTS = class extends chunkKEXGB7FK_cjs.MastraBase {
+  model;
+  constructor({ model }) {
+    super({
+      component: "TTS"
+    });
+    this.model = model;
+  }
+};
+
+exports.MastraTTS = MastraTTS;
+//# sourceMappingURL=index.cjs.map
+//# sourceMappingURL=index.cjs.map

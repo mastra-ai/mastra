@@ -1,0 +1,99 @@
+{
+  "name": "@node-rs/xxhash",
+  "version": "1.7.6",
+  "description": "Fastest xxhash implementation in Node.js",
+  "keywords": [
+    "hash",
+    "xxhash",
+    "xxhashjs",
+    "Rust",
+    "node-rs",
+    "napi",
+    "napi-rs",
+    "N-API",
+    "Node-API"
+  ],
+  "author": "LongYinan <lynweklm@gmail.com>",
+  "homepage": "https://github.com/napi-rs/node-rs",
+  "license": "MIT",
+  "main": "index.js",
+  "typings": "index.d.ts",
+  "browser": "browser.js",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "browser.js"
+  ],
+  "napi": {
+    "binaryName": "xxhash",
+    "targets": [
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-linux-android",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "aarch64-pc-windows-msvc",
+      "armv7-unknown-linux-gnueabihf",
+      "x86_64-unknown-linux-musl",
+      "x86_64-unknown-freebsd",
+      "i686-pc-windows-msvc",
+      "armv7-linux-androideabi",
+      "wasm32-wasip1-threads"
+    ]
+  },
+  "engines": {
+    "node": ">= 12"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/napi-rs/node-rs.git"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts -d ../../artifacts",
+    "bench": "cross-env NODE_ENV=production node --import @oxc-node/core/register benchmark/xxhash.ts",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish",
+    "version": "napi version"
+  },
+  "bugs": {
+    "url": "https://github.com/napi-rs/node-rs/issues"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0-alpha.64",
+    "@oxc-node/core": "^0.0.15",
+    "@types/xxhashjs": "^0.2.4",
+    "cross-env": "^7.0.3",
+    "tinybench": "^3.0.0",
+    "webpack": "^5.92.1",
+    "xxhash": "^0.3.0",
+    "xxhashjs": "^0.2.2"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/Brooooooklyn"
+  },
+  "gitHead": "83ca124b3e3968c945708136d6ff68d0e0549582",
+  "optionalDependencies": {
+    "@node-rs/xxhash-darwin-x64": "1.7.6",
+    "@node-rs/xxhash-darwin-arm64": "1.7.6",
+    "@node-rs/xxhash-win32-x64-msvc": "1.7.6",
+    "@node-rs/xxhash-linux-x64-gnu": "1.7.6",
+    "@node-rs/xxhash-android-arm64": "1.7.6",
+    "@node-rs/xxhash-linux-arm64-gnu": "1.7.6",
+    "@node-rs/xxhash-linux-arm64-musl": "1.7.6",
+    "@node-rs/xxhash-win32-arm64-msvc": "1.7.6",
+    "@node-rs/xxhash-linux-arm-gnueabihf": "1.7.6",
+    "@node-rs/xxhash-linux-x64-musl": "1.7.6",
+    "@node-rs/xxhash-freebsd-x64": "1.7.6",
+    "@node-rs/xxhash-win32-ia32-msvc": "1.7.6",
+    "@node-rs/xxhash-android-arm-eabi": "1.7.6",
+    "@node-rs/xxhash-wasm32-wasi": "1.7.6"
+  }
+}

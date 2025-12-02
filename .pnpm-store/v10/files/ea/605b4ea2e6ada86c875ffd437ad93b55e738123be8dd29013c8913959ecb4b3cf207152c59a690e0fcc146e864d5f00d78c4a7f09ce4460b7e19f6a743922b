@@ -1,0 +1,7 @@
+{
+    "id": "passwordless_session_01EHDAK2BFGWCSZXP9HGZ3VK8C",
+    "email": "passwordless-session-email@workos.com",
+    "expires_at": "2020-08-13T05:50:00.000Z",
+    "link": "https://auth.workos.com/passwordless/token/confirm",
+    "object": "passwordless_session"
+}

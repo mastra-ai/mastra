@@ -1,0 +1,572 @@
+import EventEmitter from 'events';
+import { WritableStream, ReadableStream } from 'stream/web';
+import { z } from 'zod';
+import type { MastraPrimitives } from '../action/index.js';
+import { Agent } from '../agent/index.js';
+import type { AgentExecutionOptions, AgentStreamOptions } from '../agent/index.js';
+import { MastraBase } from '../base.js';
+import { RequestContext } from '../di/index.js';
+import type { MastraScorers } from '../evals/index.js';
+import type { Mastra } from '../mastra/index.js';
+import type { TracingContext, TracingOptions, TracingPolicy } from '../observability/index.js';
+import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage/index.js';
+import { WorkflowRunOutput } from '../stream/RunOutput.js';
+import type { ChunkType } from '../stream/types.js';
+import type { ToolExecutionContext } from '../tools/types.js';
+import { EMITTER_SYMBOL } from './constants.js';
+import type { ExecutionEngine, ExecutionGraph } from './execution-engine.js';
+import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step.js';
+import type { DefaultEngineType, DynamicMapping, ExtractSchemaFromStep, ExtractSchemaType, PathsToStringProps, SerializedStepFlowEntry, StepFlowEntry, StepResult, StepsRecord, StepWithComponent, StreamEvent, SubsetOf, TimeTravelContext, WorkflowConfig, WorkflowEngineType, WorkflowOptions, WorkflowResult, WorkflowRunStatus, WorkflowState, WorkflowStreamEvent, ToolStep, StepParams } from './types.js';
+export type AgentStepOptions = Omit<AgentExecutionOptions & AgentStreamOptions, 'format' | 'tracingContext' | 'requestContext' | 'abortSignal' | 'context' | 'onStepFinish' | 'output' | 'experimental_output' | 'resourceId' | 'threadId'>;
+export declare function mapVariable<TStep extends Step<string, any, any, any, any, any>>({ step, path, }: {
+    step: TStep;
+    path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
+}): {
+    step: TStep;
+    path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
+};
+export declare function mapVariable<TWorkflow extends Workflow<any, any, any, any, any, any>>({ initData: TWorkflow, path, }: {
+    initData: TWorkflow;
+    path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.';
+}): {
+    initData: TWorkflow;
+    path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.';
+};
+/**
+ * Creates a new workflow step
+ * @param params Configuration parameters for the step
+ * @param params.id Unique identifier for the step
+ * @param params.description Optional description of what the step does
+ * @param params.inputSchema Zod schema defining the input structure
+ * @param params.outputSchema Zod schema defining the output structure
+ * @param params.execute Function that performs the step's operations
+ * @returns A Step object that can be added to the workflow
+ */
+export declare function createStep<TStepId extends string, TState extends z.ZodObject<any>, TStepInput extends z.ZodType<any>, TStepOutput extends z.ZodType<any>, TResumeSchema extends z.ZodType<any>, TSuspendSchema extends z.ZodType<any>>(params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
+export declare function createStep<TStepId extends string, TStepInput extends z.ZodObject<{
+    prompt: z.ZodString;
+}>, TStepOutput extends z.ZodObject<{
+    text: z.ZodString;
+}>, TResumeSchema extends z.ZodType<any>, TSuspendSchema extends z.ZodType<any>>(agent: Agent<TStepId, any>, agentOptions?: AgentStepOptions): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
+export declare function createStep<TSchemaIn extends z.ZodType<any>, TSuspendSchema extends z.ZodType<any>, TResumeSchema extends z.ZodType<any>, TSchemaOut extends z.ZodType<any>, TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>>(tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
+export declare function cloneStep<TStepId extends string>(step: Step<string, any, any, any, any, any, DefaultEngineType>, opts: {
+    id: TStepId;
+}): Step<TStepId, any, any, any, any, any, DefaultEngineType>;
+export declare function createWorkflow<TWorkflowId extends string = string, TState extends z.ZodObject<any> = z.ZodObject<any>, TInput extends z.ZodType<any> = z.ZodType<any>, TOutput extends z.ZodType<any> = z.ZodType<any>, TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step<string, any, any, any, any, any, DefaultEngineType>[]>(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>): Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>;
+export declare function cloneWorkflow<TWorkflowId extends string = string, TState extends z.ZodObject<any> = z.ZodObject<any>, TInput extends z.ZodType<any> = z.ZodType<any>, TOutput extends z.ZodType<any> = z.ZodType<any>, TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step<string, any, any, any, any, any, DefaultEngineType>[], TPrevSchema extends z.ZodType<any> = TInput>(workflow: Workflow<DefaultEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>, opts: {
+    id: TWorkflowId;
+}): Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
+export declare class Workflow<TEngineType = any, TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<string, any, any, any, any, any, TEngineType>[], TWorkflowId extends string = string, TState extends z.ZodObject<any> = z.ZodObject<any>, TInput extends z.ZodType<any> = z.ZodType<any>, TOutput extends z.ZodType<any> = z.ZodType<any>, TPrevSchema extends z.ZodType<any> = TInput> extends MastraBase implements Step<TWorkflowId, TState, TInput, TOutput, any, any, DefaultEngineType> {
+    #private;
+    id: TWorkflowId;
+    description?: string | undefined;
+    inputSchema: TInput;
+    outputSchema: TOutput;
+    stateSchema?: TState;
+    steps: Record<string, StepWithComponent>;
+    stepDefs?: TSteps;
+    engineType: WorkflowEngineType;
+    committed: boolean;
+    protected stepFlow: StepFlowEntry<TEngineType>[];
+    protected serializedStepFlow: SerializedStepFlowEntry[];
+    protected executionEngine: ExecutionEngine;
+    protected executionGraph: ExecutionGraph;
+    retryConfig: {
+        attempts?: number;
+        delay?: number;
+    };
+    constructor({ mastra, id, inputSchema, outputSchema, stateSchema, description, executionEngine, retryConfig, steps, options, }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
+    get runs(): Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput>>;
+    get mastra(): Mastra<Record<string, Agent<any, import("../agent").ToolsInput>>, Record<string, Workflow<any, any, any, any, any, any, any>>, Record<string, import("../vector").MastraVector<any>>, Record<string, import("../tts").MastraTTS>, import("../logger").IMastraLogger, Record<string, import("../mcp").MCPServerBase<any>>, Record<string, import("../evals").MastraScorer<any, any, any, any>>, Record<string, import("../tools").ToolAction<any, any, any, any, any, any>>, Record<string, import("../processors").Processor<any>>> | undefined;
+    get options(): Omit<WorkflowOptions, "validateInputs" | "shouldPersistSnapshot"> & Required<Pick<WorkflowOptions, "validateInputs" | "shouldPersistSnapshot">>;
+    __registerMastra(mastra: Mastra): void;
+    __registerPrimitives(p: MastraPrimitives): void;
+    setStepFlow(stepFlow: StepFlowEntry<TEngineType>[]): void;
+    /**
+     * Adds a step to the workflow
+     * @param step The step to add to the workflow
+     * @returns The workflow instance for chaining
+     */
+    then<TStepId extends string, TStepState extends z.ZodObject<any>, TSchemaOut extends z.ZodType<any>>(step: Step<TStepId, SubsetOf<TStepState, TState>, TPrevSchema, TSchemaOut, any, any, TEngineType>): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
+    /**
+     * Adds a sleep step to the workflow
+     * @param duration The duration to sleep for
+     * @returns The workflow instance for chaining
+     */
+    sleep(duration: number | ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, number, any, any, TEngineType>): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
+    /**
+     * Adds a sleep until step to the workflow
+     * @param date The date to sleep until
+     * @returns The workflow instance for chaining
+     */
+    sleepUntil(date: Date | ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, Date, any, any, TEngineType>): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
+    /**
+     * @deprecated waitForEvent has been removed. Please use suspend/resume instead.
+     */
+    waitForEvent<TStepState extends z.ZodObject<any>, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(_event: string, _step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>, _opts?: {
+        timeout?: number;
+    }): void;
+    map(mappingConfig: {
+        [k: string]: {
+            step: Step<string, any, any, any, any, any, TEngineType> | Step<string, any, any, any, any, any, TEngineType>[];
+            path: string;
+        } | {
+            value: any;
+            schema: z.ZodType<any>;
+        } | {
+            initData: Workflow<TEngineType, any, any, any, any, any, any>;
+            path: string;
+        } | {
+            requestContextPath: string;
+            schema: z.ZodType<any>;
+        } | DynamicMapping<TPrevSchema, z.ZodType<any>>;
+    } | ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, any, any, any, TEngineType>, stepOptions?: {
+        id?: string | null;
+    }): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any>;
+    parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType>[]>(steps: TParallelSteps & {
+        [K in keyof TParallelSteps]: TParallelSteps[K] extends Step<string, infer S extends z.ZodObject<any>, TPrevSchema, infer O, infer R, infer E, TEngineType> ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, R, E, TEngineType> : `Error: Expected Step with state schema that is a subset of workflow state`;
+    }): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, z.ZodObject<{ [K in keyof StepsRecord<TParallelSteps>]: StepsRecord<TParallelSteps>[K]["outputSchema"]; }, any, z.ZodTypeAny>>;
+    branch<TBranchSteps extends Array<[
+        ConditionFunction<z.infer<TState>, z.infer<TPrevSchema>, any, any, TEngineType>,
+        Step<string, any, TPrevSchema, any, any, any, TEngineType>
+    ]>>(steps: TBranchSteps): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, z.ZodObject<{ [K in keyof StepsRecord<{ [K_1 in keyof TBranchSteps]: TBranchSteps[K_1][1]; }[number][]>]: StepsRecord<{ [K_1 in keyof TBranchSteps]: TBranchSteps[K_1][1]; }[number][]>[K]["outputSchema"]; }, any, z.ZodTypeAny>>;
+    dowhile<TStepState extends z.ZodObject<any>, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>, condition: LoopConditionFunction<z.infer<TState>, any, any, any, TEngineType>): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
+    dountil<TStepState extends z.ZodObject<any>, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>, condition: LoopConditionFunction<z.infer<TState>, any, any, any, TEngineType>): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
+    foreach<TPrevIsArray extends TPrevSchema extends z.ZodArray<any> ? true : false, TStepState extends z.ZodObject<any>, TStepInputSchema extends TPrevSchema extends z.ZodArray<infer TElement> ? TElement : never, TStepId extends string, TSchemaOut extends z.ZodType<any>>(step: TPrevIsArray extends true ? Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType> : 'Previous step must return an array type', opts?: {
+        concurrency: number;
+    }): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, z.ZodArray<TSchemaOut>>;
+    /**
+     * Builds the execution graph for this workflow
+     * @returns The execution graph that can be used to execute the workflow
+     */
+    buildExecutionGraph(): ExecutionGraph;
+    /**
+     * Finalizes the workflow definition and prepares it for execution
+     * This method should be called after all steps have been added to the workflow
+     * @returns A built workflow instance ready for execution
+     */
+    commit(): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TOutput>;
+    get stepGraph(): StepFlowEntry<TEngineType>[];
+    get serializedStepGraph(): SerializedStepFlowEntry[];
+    /**
+     * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
+     * @param options Optional configuration for the run
+     * @param options.runId Optional custom run ID, defaults to a random UUID
+     * @param options.resourceId Optional resource ID to associate with this run
+     * @param options.disableScorers Optional flag to disable scorers for this run
+     * @returns A Run instance that can be used to execute the workflow
+     */
+    createRun(options?: {
+        runId?: string;
+        resourceId?: string;
+        disableScorers?: boolean;
+    }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>>;
+    listScorers({ requestContext, }?: {
+        requestContext?: RequestContext;
+    }): Promise<MastraScorers>;
+    execute({ runId, inputData, resumeData, state, setState, suspend, restart, resume, timeTravel, [EMITTER_SYMBOL]: emitter, mastra, requestContext, abort, abortSignal, retryCount, tracingContext, writer, validateInputs, }: {
+        runId?: string;
+        inputData: z.infer<TInput>;
+        resumeData?: any;
+        state: z.infer<TState>;
+        setState: (state: z.infer<TState>) => void;
+        getStepResult<T extends Step<any, any, any, any, any, any, TEngineType>>(stepId: T): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
+        suspend: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
+        restart?: boolean;
+        timeTravel?: {
+            inputData?: z.infer<TInput>;
+            steps: string[];
+            nestedStepResults?: Record<string, Record<string, StepResult<any, any, any, any>>>;
+            resumeData?: any;
+        };
+        resume?: {
+            steps: string[];
+            resumePayload: any;
+            runId?: string;
+            label?: string;
+            forEachIndex?: number;
+        };
+        [EMITTER_SYMBOL]: {
+            emit: (event: string, data: any) => void;
+        };
+        mastra: Mastra;
+        requestContext?: RequestContext;
+        engine: DefaultEngineType;
+        abortSignal: AbortSignal;
+        bail: (result: any) => any;
+        abort: () => any;
+        retryCount?: number;
+        tracingContext?: TracingContext;
+        writer?: WritableStream<ChunkType>;
+        validateInputs?: boolean;
+    }): Promise<z.infer<TOutput>>;
+    listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<import("../storage").WorkflowRuns>;
+    listActiveWorkflowRuns(): Promise<{
+        runs: WorkflowRun[];
+        total: number;
+    }>;
+    restartAllActiveWorkflowRuns(): Promise<void>;
+    getWorkflowRunById(runId: string): Promise<WorkflowRun | null>;
+    protected getWorkflowRunSteps({ runId, workflowId }: {
+        runId: string;
+        workflowId: string;
+    }): Promise<Record<string, StepResult<any, any, any, any>>>;
+    getWorkflowRunExecutionResult(runId: string, withNestedWorkflows?: boolean): Promise<WorkflowState | null>;
+}
+/**
+ * Represents a workflow run that can be executed
+ */
+export declare class Run<TEngineType = any, TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<string, any, any, any, any, any, TEngineType>[], TState extends z.ZodObject<any> = z.ZodObject<any>, TInput extends z.ZodType<any> = z.ZodType<any>, TOutput extends z.ZodType<any> = z.ZodType<any>> {
+    #private;
+    protected emitter: EventEmitter;
+    /**
+     * Unique identifier for this workflow
+     */
+    readonly workflowId: string;
+    /**
+     * Unique identifier for this run
+     */
+    readonly runId: string;
+    /**
+     * Unique identifier for the resource this run is associated with
+     */
+    readonly resourceId?: string;
+    /**
+     * Whether to disable scorers for this run
+     */
+    readonly disableScorers?: boolean;
+    /**
+     * Options around how to trace this run
+     */
+    readonly tracingPolicy?: TracingPolicy;
+    /**
+     * Options around how to trace this run
+     */
+    readonly validateInputs?: boolean;
+    /**
+     * Internal state of the workflow run
+     */
+    protected state: Record<string, any>;
+    /**
+     * The execution engine for this run
+     */
+    executionEngine: ExecutionEngine;
+    /**
+     * The execution graph for this run
+     */
+    executionGraph: ExecutionGraph;
+    /**
+     * The serialized step graph for this run
+     */
+    serializedStepGraph: SerializedStepFlowEntry[];
+    /**
+     * The steps for this workflow
+     */
+    readonly workflowSteps: Record<string, StepWithComponent>;
+    readonly workflowRunStatus: WorkflowRunStatus;
+    readonly workflowEngineType: WorkflowEngineType;
+    get mastra(): Mastra<Record<string, Agent<any, import("../agent").ToolsInput>>, Record<string, Workflow<any, any, any, any, any, any, any>>, Record<string, import("../vector").MastraVector<any>>, Record<string, import("../tts").MastraTTS>, import("../logger").IMastraLogger, Record<string, import("../mcp").MCPServerBase<any>>, Record<string, import("../evals").MastraScorer<any, any, any, any>>, Record<string, import("../tools").ToolAction<any, any, any, any, any, any>>, Record<string, import("../processors").Processor<any>>> | undefined;
+    protected streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    protected closeStreamAction?: () => Promise<void>;
+    protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    protected stateSchema?: z.ZodObject<any>;
+    protected inputSchema?: z.ZodType<any>;
+    protected cleanup?: () => void;
+    protected retryConfig?: {
+        attempts?: number;
+        delay?: number;
+    };
+    constructor(params: {
+        workflowId: string;
+        runId: string;
+        resourceId?: string;
+        stateSchema?: z.ZodObject<any>;
+        inputSchema?: z.ZodType<any>;
+        executionEngine: ExecutionEngine;
+        executionGraph: ExecutionGraph;
+        mastra?: Mastra;
+        retryConfig?: {
+            attempts?: number;
+            delay?: number;
+        };
+        cleanup?: () => void;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        disableScorers?: boolean;
+        tracingPolicy?: TracingPolicy;
+        workflowSteps: Record<string, StepWithComponent>;
+        validateInputs?: boolean;
+        workflowEngineType: WorkflowEngineType;
+    });
+    get abortController(): AbortController;
+    /**
+     * Cancels the workflow execution
+     */
+    cancel(): Promise<void>;
+    protected _validateInput(inputData: z.input<TInput>): Promise<z.input<TInput>>;
+    protected _validateInitialState(initialState: z.input<TState>): Promise<z.input<TState>>;
+    protected _validateResumeData<TResumeSchema extends z.ZodType<any>>(resumeData: z.input<TResumeSchema>, suspendedStep?: StepWithComponent): Promise<z.input<TResumeSchema>>;
+    protected _validateTimetravelInputData<TInputSchema extends z.ZodType<any>>(inputData: z.input<TInputSchema>, step: Step<string, any, TInputSchema, any, any, any, TEngineType>): Promise<z.input<TInputSchema>>;
+    protected _start({ inputData, initialState, requestContext, writableStream, tracingContext, tracingOptions, format, outputOptions, }: {
+        inputData?: z.input<TInput>;
+        initialState?: z.input<TState>;
+        requestContext?: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        format?: 'legacy' | 'vnext' | undefined;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    /**
+     * Starts the workflow execution with the provided input
+     * @param input The input data for the workflow
+     * @returns A promise that resolves to the workflow output
+     */
+    start(args: {
+        inputData?: z.input<TInput>;
+        initialState?: z.input<TState>;
+        requestContext?: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    /**
+     * Starts the workflow execution with the provided input as a stream
+     * @param input The input data for the workflow
+     * @returns A promise that resolves to the workflow output
+     */
+    streamLegacy({ inputData, requestContext, onChunk, tracingContext, tracingOptions, }?: {
+        inputData?: z.input<TInput>;
+        requestContext?: RequestContext;
+        tracingContext?: TracingContext;
+        onChunk?: (chunk: StreamEvent) => Promise<unknown>;
+        tracingOptions?: TracingOptions;
+    }): {
+        stream: ReadableStream<StreamEvent>;
+        getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    };
+    /**
+     * Starts the workflow execution with the provided input as a stream
+     * @param input The input data for the workflow
+     * @returns A promise that resolves to the workflow output
+     */
+    stream(args?: {
+        inputData?: z.input<TInput>;
+        requestContext?: RequestContext;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        closeOnSuspend?: boolean;
+        initialState?: z.input<TState>;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): ReturnType<typeof this.streamVNext>;
+    /**
+     * Observe the workflow stream
+     * @returns A readable stream of the workflow events
+     */
+    observeStreamLegacy(): {
+        stream: ReadableStream<StreamEvent>;
+    };
+    /**
+     * Observe the workflow stream
+     * @returns A readable stream of the workflow events
+     */
+    observeStream(): ReturnType<typeof this.observeStreamVNext>;
+    /**
+     * Observe the workflow stream vnext
+     * @returns A readable stream of the workflow events
+     */
+    observeStreamVNext(): ReadableStream<WorkflowStreamEvent>;
+    streamAsync({ inputData, requestContext, }?: {
+        inputData?: z.input<TInput>;
+        requestContext?: RequestContext;
+    }): Promise<ReturnType<typeof this.stream>>;
+    /**
+     * Starts the workflow execution with the provided input as a stream
+     * @param input The input data for the workflow
+     * @returns A promise that resolves to the workflow output
+     */
+    streamVNext({ inputData, requestContext, tracingContext, tracingOptions, closeOnSuspend, initialState, outputOptions, }?: {
+        inputData?: z.input<TInput>;
+        requestContext?: RequestContext;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        closeOnSuspend?: boolean;
+        initialState?: z.input<TState>;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    /**
+     * Resumes the workflow execution with the provided input as a stream
+     * @param input The input data for the workflow
+     * @returns A promise that resolves to the workflow output
+     */
+    resumeStream<TResumeSchema extends z.ZodType<any>>({ step, resumeData, requestContext, tracingContext, tracingOptions, outputOptions, }?: {
+        resumeData?: z.input<TResumeSchema>;
+        step?: Step<string, any, any, any, TResumeSchema, any, TEngineType> | [
+            ...Step<string, any, any, any, any, any, TEngineType>[],
+            Step<string, any, any, any, TResumeSchema, any, TEngineType>
+        ] | string | string[];
+        requestContext?: RequestContext;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    /**
+     * Resumes the workflow execution with the provided input as a stream
+     * @param input The input data for the workflow
+     * @returns A promise that resolves to the workflow output
+     */
+    resumeStreamVNext<TResumeSchema extends z.ZodType<any>>({ step, resumeData, requestContext, tracingContext, tracingOptions, forEachIndex, outputOptions, }?: {
+        resumeData?: z.input<TResumeSchema>;
+        step?: Step<string, any, any, any, TResumeSchema, any, TEngineType> | [
+            ...Step<string, any, any, any, any, any, TEngineType>[],
+            Step<string, any, any, any, TResumeSchema, any, TEngineType>
+        ] | string | string[];
+        requestContext?: RequestContext;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        forEachIndex?: number;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    /**
+     * @internal
+     */
+    watch(cb: (event: WorkflowStreamEvent) => void): () => void;
+    /**
+     * @internal
+     */
+    watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void>;
+    resume<TResumeSchema extends z.ZodType<any>>(params: {
+        resumeData?: z.input<TResumeSchema>;
+        step?: Step<string, any, any, any, TResumeSchema, any, TEngineType> | [
+            ...Step<string, any, any, any, any, any, TEngineType>[],
+            Step<string, any, any, any, TResumeSchema, any, TEngineType>
+        ] | string | string[];
+        label?: string;
+        requestContext?: RequestContext;
+        retryCount?: number;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        writableStream?: WritableStream<ChunkType>;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+        forEachIndex?: number;
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    /**
+     * Restarts the workflow execution that was previously active
+     * @returns A promise that resolves to the workflow output
+     */
+    restart(args?: {
+        requestContext?: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    protected _resume<TResumeSchema extends z.ZodType<any>>(params: {
+        resumeData?: z.input<TResumeSchema>;
+        step?: Step<string, any, any, TResumeSchema, any, any, TEngineType> | [
+            ...Step<string, any, any, any, any, any, TEngineType>[],
+            Step<string, any, any, TResumeSchema, any, any, TEngineType>
+        ] | string | string[];
+        label?: string;
+        requestContext?: RequestContext;
+        retryCount?: number;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        writableStream?: WritableStream<ChunkType>;
+        format?: 'legacy' | 'vnext' | undefined;
+        isVNext?: boolean;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+        forEachIndex?: number;
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    protected _restart({ requestContext, writableStream, tracingContext, tracingOptions, }: {
+        requestContext?: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    protected _timeTravel<TInputSchema extends z.ZodType<any>>({ inputData, resumeData, initialState, step: stepParam, context, nestedStepsContext, requestContext, writableStream, tracingContext, tracingOptions, outputOptions, }: {
+        inputData?: z.input<TInputSchema>;
+        resumeData?: any;
+        initialState?: z.input<TState>;
+        step: Step<string, any, TInputSchema, any, any, any, TEngineType> | [
+            ...Step<string, any, any, any, any, any, TEngineType>[],
+            Step<string, any, TInputSchema, any, any, any, TEngineType>
+        ] | string | string[];
+        context?: TimeTravelContext<any, any, any, any>;
+        nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+        requestContext?: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    timeTravel<TInputSchema extends z.ZodType<any>>(args: {
+        inputData?: z.input<TInputSchema>;
+        resumeData?: any;
+        initialState?: z.input<TState>;
+        step: Step<string, any, TInputSchema, any, any, any, TEngineType> | [
+            ...Step<string, any, any, any, any, any, TEngineType>[],
+            Step<string, any, TInputSchema, any, any, any, TEngineType>
+        ] | string | string[];
+        context?: TimeTravelContext<any, any, any, any>;
+        nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+        requestContext?: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    timeTravelStream<TInputSchema extends z.ZodType<any>>({ inputData, resumeData, initialState, step, context, nestedStepsContext, requestContext, tracingContext, tracingOptions, outputOptions, }: {
+        inputData?: z.input<TInputSchema>;
+        initialState?: z.input<TState>;
+        resumeData?: any;
+        step: Step<string, any, TInputSchema, any, any, any, TEngineType> | [
+            ...Step<string, any, any, any, any, any, TEngineType>[],
+            Step<string, any, TInputSchema, any, any, any, TEngineType>
+        ] | string | string[];
+        context?: TimeTravelContext<any, any, any, any>;
+        nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+        requestContext?: RequestContext;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    /**
+     * @access private
+     * @returns The execution results of the workflow run
+     */
+    _getExecutionResults(): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> | undefined;
+}
+//# sourceMappingURL=workflow.d.ts.map

@@ -1,0 +1,71 @@
+{
+  "name": "@supabase/postgrest-js",
+  "version": "2.76.1",
+  "description": "Isomorphic PostgREST client",
+  "keywords": [
+    "postgrest",
+    "supabase"
+  ],
+  "homepage": "https://github.com/supabase/supabase-js/tree/master/packages/core/postgrest-js",
+  "bugs": "https://github.com/supabase/supabase-js/issues",
+  "license": "MIT",
+  "author": "Supabase",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/wrapper.mjs",
+  "exports": {
+    "import": {
+      "types": "./dist/cjs/index.d.ts",
+      "default": "./dist/esm/wrapper.mjs"
+    },
+    "require": {
+      "types": "./dist/cjs/index.d.ts",
+      "default": "./dist/cjs/index.js"
+    }
+  },
+  "types": "./dist/cjs/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supabase/supabase-js.git",
+    "directory": "packages/core/postgrest-js"
+  },
+  "scripts": {
+    "clean": "rimraf dist docs/v2",
+    "build": "npm run clean && npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc -p tsconfig.json",
+    "build:esm": "cpy wrapper.mjs dist/esm/",
+    "docs": "typedoc src/index.ts --out docs/v2",
+    "docs:json": "typedoc --json docs/v2/spec.json --excludeExternals src/index.ts",
+    "test:ci:postgrest": "npm run db:clean && npm run db:run && npm run test:run && npm run db:clean && npm run test:smoke",
+    "test:run": "jest --runInBand --coverage",
+    "test:smoke": "node test/smoke.cjs && node test/smoke.mjs",
+    "test:update": "npm run db:clean && npm run db:run && npm run db:generate-test-types && jest --runInBand --updateSnapshot && npm run db:clean",
+    "test:types": "npm run build && tstyche",
+    "test:types:ci": "tstyche --target '4.7,5.5,latest'",
+    "test:types:watch": "chokidar 'src/**/*.ts' 'test/**/*.ts' -c 'npm run test:types'",
+    "type-check": "tsc --noEmit --project tsconfig.json",
+    "type-check:test": "tsc --noEmit --project tsconfig.test.json",
+    "db:clean": "cd test/db && docker compose down --volumes",
+    "db:run": "cd test/db && docker compose up --detach && wait-for-localhost 3000",
+    "db:generate-test-types": "cd test/db && docker compose up --detach && wait-for-localhost 8080 && wait-for-localhost 3000 && curl --location 'http://0.0.0.0:8080/generators/typescript?included_schemas=public,personal&detect_one_to_one_relationships=true' > ../types.generated.ts && node ../../scripts/update-json-type.js && cd ../../"
+  },
+  "dependencies": {
+    "@supabase/node-fetch": "2.6.15",
+    "tslib": "2.8.1"
+  },
+  "devDependencies": {
+    "chokidar-cli": "^3.0.0",
+    "cpy-cli": "^5.0.0",
+    "jest": "^28.1.0",
+    "node-abort-controller": "^3.0.1",
+    "prettier": "^2.6.2",
+    "ts-jest": "^28.0.3",
+    "tstyche": "^4.3.0",
+    "type-fest": "^4.32.0",
+    "wait-for-localhost-cli": "^3.0.0",
+    "zod": "^3.25.76"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/values/errors.ts"],
+  "sourcesContent": ["import { Value, stringifyValueForError } from \"./value.js\";\n\nconst IDENTIFYING_FIELD = Symbol.for(\"ConvexError\");\n\nexport class ConvexError<TData extends Value> extends Error {\n  name = \"ConvexError\";\n  data: TData;\n  [IDENTIFYING_FIELD] = true;\n\n  constructor(data: TData) {\n    super(typeof data === \"string\" ? data : stringifyValueForError(data));\n    this.data = data;\n  }\n}\n"],
+  "mappings": ";;;;AAAA;AAAA,SAAgB,8BAA8B;AAE9C,MAAM,oBAAoB,OAAO,IAAI,aAAa;AAE3C,aAAM,qBAAyC,YAGnD,wBAHmD,IAAM;AAAA,EAK1D,YAAY,MAAa;AACvB,UAAM,OAAO,SAAS,WAAW,OAAO,uBAAuB,IAAI,CAAC;AALtE,gCAAO;AACP;AACA,wBAAC,IAAqB;AAIpB,SAAK,OAAO;AAAA,EACd;AACF;",
+  "names": []
+}

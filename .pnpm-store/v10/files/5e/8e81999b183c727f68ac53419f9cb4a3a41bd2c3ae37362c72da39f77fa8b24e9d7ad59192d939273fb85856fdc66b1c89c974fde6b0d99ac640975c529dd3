@@ -1,0 +1,1 @@
+{"version":3,"file":"CREATE.d.ts","sourceRoot":"","sources":["../../../../lib/commands/t-digest/CREATE.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,sCAAsC,CAAC;AACrE,OAAO,EAAE,aAAa,EAAE,iBAAiB,EAAW,MAAM,mCAAmC,CAAC;AAE9F,MAAM,WAAW,oBAAoB;IACnC,WAAW,CAAC,EAAE,MAAM,CAAC;CACtB;;;IAIC;;;;;;OAMG;gDACkB,aAAa,OAAO,aAAa,YAAY,oBAAoB;mCAQxC,kBAAkB,IAAI,CAAC;;AAjBvE,wBAkB6B"}

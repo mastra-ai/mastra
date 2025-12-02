@@ -1,0 +1,343 @@
+/**
+ * Configuration types for Mastra Observability
+ *
+ * These types define the configuration structure for observability,
+ * including tracing configs, sampling strategies, and registry setup.
+ */
+import type { RequestContext } from '@mastra/core/di';
+import type { ObservabilityInstance, ObservabilityExporter, SpanOutputProcessor, ConfigSelector } from '@mastra/core/observability';
+import { z } from 'zod';
+/**
+ * Sampling strategy types
+ */
+export declare enum SamplingStrategyType {
+    ALWAYS = "always",
+    NEVER = "never",
+    RATIO = "ratio",
+    CUSTOM = "custom"
+}
+/**
+ * Options passed when using a custom sampler strategy
+ */
+export interface CustomSamplerOptions {
+    requestContext?: RequestContext;
+    metadata?: Record<string, any>;
+}
+/**
+ * Sampling strategy configuration
+ */
+export type SamplingStrategy = {
+    type: SamplingStrategyType.ALWAYS;
+} | {
+    type: SamplingStrategyType.NEVER;
+} | {
+    type: SamplingStrategyType.RATIO;
+    probability: number;
+} | {
+    type: SamplingStrategyType.CUSTOM;
+    sampler: (options?: CustomSamplerOptions) => boolean;
+};
+/**
+ * Configuration for a single observability instance
+ */
+export interface ObservabilityInstanceConfig {
+    /** Unique identifier for this config in the tracing registry */
+    name: string;
+    /** Service name for tracing */
+    serviceName: string;
+    /** Sampling strategy - controls whether tracing is collected (defaults to ALWAYS) */
+    sampling?: SamplingStrategy;
+    /** Custom exporters */
+    exporters?: ObservabilityExporter[];
+    /** Custom span output processors */
+    spanOutputProcessors?: SpanOutputProcessor[];
+    /** Set to `true` if you want to see spans internal to the operation of mastra */
+    includeInternalSpans?: boolean;
+    /**
+     * RequestContext keys to automatically extract as metadata for all spans
+     * created with this tracing configuration.
+     * Supports dot notation for nested values.
+     */
+    requestContextKeys?: string[];
+}
+/**
+ * Complete Observability registry configuration
+ */
+export interface ObservabilityRegistryConfig {
+    /** Enables default exporters, with sampling: always, and sensitive data filtering */
+    default?: {
+        enabled?: boolean;
+    };
+    /** Map of tracing instance names to their configurations or pre-instantiated instances */
+    configs?: Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>;
+    /** Optional selector function to choose which tracing instance to use */
+    configSelector?: ConfigSelector;
+}
+/**
+ * Zod schema for SamplingStrategy
+ */
+export declare const samplingStrategySchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
+    type: z.ZodLiteral<SamplingStrategyType.ALWAYS>;
+}, "strip", z.ZodTypeAny, {
+    type: SamplingStrategyType.ALWAYS;
+}, {
+    type: SamplingStrategyType.ALWAYS;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<SamplingStrategyType.NEVER>;
+}, "strip", z.ZodTypeAny, {
+    type: SamplingStrategyType.NEVER;
+}, {
+    type: SamplingStrategyType.NEVER;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<SamplingStrategyType.RATIO>;
+    probability: z.ZodNumber;
+}, "strip", z.ZodTypeAny, {
+    type: SamplingStrategyType.RATIO;
+    probability: number;
+}, {
+    type: SamplingStrategyType.RATIO;
+    probability: number;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<SamplingStrategyType.CUSTOM>;
+    sampler: z.ZodFunction<z.ZodTuple<[z.ZodOptional<z.ZodAny>], z.ZodUnknown>, z.ZodBoolean>;
+}, "strip", z.ZodTypeAny, {
+    type: SamplingStrategyType.CUSTOM;
+    sampler: (args_0: any, ...args: unknown[]) => boolean;
+}, {
+    type: SamplingStrategyType.CUSTOM;
+    sampler: (args_0: any, ...args: unknown[]) => boolean;
+}>]>;
+/**
+ * Zod schema for ObservabilityInstanceConfig
+ * Note: exporters, spanOutputProcessors, and configSelector are validated as any
+ * since they're complex runtime objects
+ */
+export declare const observabilityInstanceConfigSchema: z.ZodObject<{
+    name: z.ZodString;
+    serviceName: z.ZodString;
+    sampling: z.ZodOptional<z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
+        type: z.ZodLiteral<SamplingStrategyType.ALWAYS>;
+    }, "strip", z.ZodTypeAny, {
+        type: SamplingStrategyType.ALWAYS;
+    }, {
+        type: SamplingStrategyType.ALWAYS;
+    }>, z.ZodObject<{
+        type: z.ZodLiteral<SamplingStrategyType.NEVER>;
+    }, "strip", z.ZodTypeAny, {
+        type: SamplingStrategyType.NEVER;
+    }, {
+        type: SamplingStrategyType.NEVER;
+    }>, z.ZodObject<{
+        type: z.ZodLiteral<SamplingStrategyType.RATIO>;
+        probability: z.ZodNumber;
+    }, "strip", z.ZodTypeAny, {
+        type: SamplingStrategyType.RATIO;
+        probability: number;
+    }, {
+        type: SamplingStrategyType.RATIO;
+        probability: number;
+    }>, z.ZodObject<{
+        type: z.ZodLiteral<SamplingStrategyType.CUSTOM>;
+        sampler: z.ZodFunction<z.ZodTuple<[z.ZodOptional<z.ZodAny>], z.ZodUnknown>, z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        type: SamplingStrategyType.CUSTOM;
+        sampler: (args_0: any, ...args: unknown[]) => boolean;
+    }, {
+        type: SamplingStrategyType.CUSTOM;
+        sampler: (args_0: any, ...args: unknown[]) => boolean;
+    }>]>>;
+    exporters: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+    spanOutputProcessors: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+    includeInternalSpans: z.ZodOptional<z.ZodBoolean>;
+    requestContextKeys: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
+}, "strip", z.ZodTypeAny, {
+    name: string;
+    serviceName: string;
+    sampling?: {
+        type: SamplingStrategyType.ALWAYS;
+    } | {
+        type: SamplingStrategyType.NEVER;
+    } | {
+        type: SamplingStrategyType.RATIO;
+        probability: number;
+    } | {
+        type: SamplingStrategyType.CUSTOM;
+        sampler: (args_0: any, ...args: unknown[]) => boolean;
+    } | undefined;
+    exporters?: any[] | undefined;
+    spanOutputProcessors?: any[] | undefined;
+    includeInternalSpans?: boolean | undefined;
+    requestContextKeys?: string[] | undefined;
+}, {
+    name: string;
+    serviceName: string;
+    sampling?: {
+        type: SamplingStrategyType.ALWAYS;
+    } | {
+        type: SamplingStrategyType.NEVER;
+    } | {
+        type: SamplingStrategyType.RATIO;
+        probability: number;
+    } | {
+        type: SamplingStrategyType.CUSTOM;
+        sampler: (args_0: any, ...args: unknown[]) => boolean;
+    } | undefined;
+    exporters?: any[] | undefined;
+    spanOutputProcessors?: any[] | undefined;
+    includeInternalSpans?: boolean | undefined;
+    requestContextKeys?: string[] | undefined;
+}>;
+/**
+ * Zod schema for config values in the configs map
+ * This is the config object without the name field
+ */
+export declare const observabilityConfigValueSchema: z.ZodObject<{
+    serviceName: z.ZodString;
+    sampling: z.ZodOptional<z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
+        type: z.ZodLiteral<SamplingStrategyType.ALWAYS>;
+    }, "strip", z.ZodTypeAny, {
+        type: SamplingStrategyType.ALWAYS;
+    }, {
+        type: SamplingStrategyType.ALWAYS;
+    }>, z.ZodObject<{
+        type: z.ZodLiteral<SamplingStrategyType.NEVER>;
+    }, "strip", z.ZodTypeAny, {
+        type: SamplingStrategyType.NEVER;
+    }, {
+        type: SamplingStrategyType.NEVER;
+    }>, z.ZodObject<{
+        type: z.ZodLiteral<SamplingStrategyType.RATIO>;
+        probability: z.ZodNumber;
+    }, "strip", z.ZodTypeAny, {
+        type: SamplingStrategyType.RATIO;
+        probability: number;
+    }, {
+        type: SamplingStrategyType.RATIO;
+        probability: number;
+    }>, z.ZodObject<{
+        type: z.ZodLiteral<SamplingStrategyType.CUSTOM>;
+        sampler: z.ZodFunction<z.ZodTuple<[z.ZodOptional<z.ZodAny>], z.ZodUnknown>, z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        type: SamplingStrategyType.CUSTOM;
+        sampler: (args_0: any, ...args: unknown[]) => boolean;
+    }, {
+        type: SamplingStrategyType.CUSTOM;
+        sampler: (args_0: any, ...args: unknown[]) => boolean;
+    }>]>>;
+    exporters: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+    spanOutputProcessors: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+    includeInternalSpans: z.ZodOptional<z.ZodBoolean>;
+    requestContextKeys: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
+}, "strip", z.ZodTypeAny, {
+    serviceName: string;
+    sampling?: {
+        type: SamplingStrategyType.ALWAYS;
+    } | {
+        type: SamplingStrategyType.NEVER;
+    } | {
+        type: SamplingStrategyType.RATIO;
+        probability: number;
+    } | {
+        type: SamplingStrategyType.CUSTOM;
+        sampler: (args_0: any, ...args: unknown[]) => boolean;
+    } | undefined;
+    exporters?: any[] | undefined;
+    spanOutputProcessors?: any[] | undefined;
+    includeInternalSpans?: boolean | undefined;
+    requestContextKeys?: string[] | undefined;
+}, {
+    serviceName: string;
+    sampling?: {
+        type: SamplingStrategyType.ALWAYS;
+    } | {
+        type: SamplingStrategyType.NEVER;
+    } | {
+        type: SamplingStrategyType.RATIO;
+        probability: number;
+    } | {
+        type: SamplingStrategyType.CUSTOM;
+        sampler: (args_0: any, ...args: unknown[]) => boolean;
+    } | undefined;
+    exporters?: any[] | undefined;
+    spanOutputProcessors?: any[] | undefined;
+    includeInternalSpans?: boolean | undefined;
+    requestContextKeys?: string[] | undefined;
+}>;
+/**
+ * Zod schema for ObservabilityRegistryConfig
+ * Note: Individual configs are validated separately in the constructor to allow for
+ * both plain config objects and pre-instantiated ObservabilityInstance objects.
+ * The schema is permissive to handle edge cases gracefully (arrays, null values).
+ */
+export declare const observabilityRegistryConfigSchema: z.ZodEffects<z.ZodEffects<z.ZodObject<{
+    default: z.ZodNullable<z.ZodOptional<z.ZodObject<{
+        enabled: z.ZodOptional<z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        enabled?: boolean | undefined;
+    }, {
+        enabled?: boolean | undefined;
+    }>>>;
+    configs: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodArray<z.ZodAny, "many">, z.ZodNull]>>;
+    configSelector: z.ZodOptional<z.ZodFunction<z.ZodTuple<[], z.ZodUnknown>, z.ZodUnknown>>;
+}, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+    default: z.ZodNullable<z.ZodOptional<z.ZodObject<{
+        enabled: z.ZodOptional<z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        enabled?: boolean | undefined;
+    }, {
+        enabled?: boolean | undefined;
+    }>>>;
+    configs: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodArray<z.ZodAny, "many">, z.ZodNull]>>;
+    configSelector: z.ZodOptional<z.ZodFunction<z.ZodTuple<[], z.ZodUnknown>, z.ZodUnknown>>;
+}, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+    default: z.ZodNullable<z.ZodOptional<z.ZodObject<{
+        enabled: z.ZodOptional<z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        enabled?: boolean | undefined;
+    }, {
+        enabled?: boolean | undefined;
+    }>>>;
+    configs: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodArray<z.ZodAny, "many">, z.ZodNull]>>;
+    configSelector: z.ZodOptional<z.ZodFunction<z.ZodTuple<[], z.ZodUnknown>, z.ZodUnknown>>;
+}, z.ZodTypeAny, "passthrough">>, z.objectOutputType<{
+    default: z.ZodNullable<z.ZodOptional<z.ZodObject<{
+        enabled: z.ZodOptional<z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        enabled?: boolean | undefined;
+    }, {
+        enabled?: boolean | undefined;
+    }>>>;
+    configs: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodArray<z.ZodAny, "many">, z.ZodNull]>>;
+    configSelector: z.ZodOptional<z.ZodFunction<z.ZodTuple<[], z.ZodUnknown>, z.ZodUnknown>>;
+}, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+    default: z.ZodNullable<z.ZodOptional<z.ZodObject<{
+        enabled: z.ZodOptional<z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        enabled?: boolean | undefined;
+    }, {
+        enabled?: boolean | undefined;
+    }>>>;
+    configs: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodArray<z.ZodAny, "many">, z.ZodNull]>>;
+    configSelector: z.ZodOptional<z.ZodFunction<z.ZodTuple<[], z.ZodUnknown>, z.ZodUnknown>>;
+}, z.ZodTypeAny, "passthrough">>, z.objectOutputType<{
+    default: z.ZodNullable<z.ZodOptional<z.ZodObject<{
+        enabled: z.ZodOptional<z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        enabled?: boolean | undefined;
+    }, {
+        enabled?: boolean | undefined;
+    }>>>;
+    configs: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodArray<z.ZodAny, "many">, z.ZodNull]>>;
+    configSelector: z.ZodOptional<z.ZodFunction<z.ZodTuple<[], z.ZodUnknown>, z.ZodUnknown>>;
+}, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+    default: z.ZodNullable<z.ZodOptional<z.ZodObject<{
+        enabled: z.ZodOptional<z.ZodBoolean>;
+    }, "strip", z.ZodTypeAny, {
+        enabled?: boolean | undefined;
+    }, {
+        enabled?: boolean | undefined;
+    }>>>;
+    configs: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodArray<z.ZodAny, "many">, z.ZodNull]>>;
+    configSelector: z.ZodOptional<z.ZodFunction<z.ZodTuple<[], z.ZodUnknown>, z.ZodUnknown>>;
+}, z.ZodTypeAny, "passthrough">>;
+//# sourceMappingURL=config.d.ts.map

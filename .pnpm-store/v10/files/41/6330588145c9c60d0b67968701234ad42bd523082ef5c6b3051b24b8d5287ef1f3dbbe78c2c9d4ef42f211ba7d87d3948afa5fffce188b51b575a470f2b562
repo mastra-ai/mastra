@@ -1,0 +1,1 @@
+{"version":3,"sources":["io/node/iterable.ts"],"names":[],"mappings":";AAiBA,OAAO,EAAE,QAAQ,EAAE,eAAe,IAAI,gBAAgB,EAAE,MAAM,aAAa,CAAC;AAG5E,cAAc;AACd,KAAK,eAAe,GAAG,gBAAgB,CAAC;AAMxC,cAAc;AACd,wBAAgB,YAAY,CAAC,CAAC,EAAE,MAAM,EAAE,QAAQ,CAAC,CAAC,CAAC,GAAG,aAAa,CAAC,CAAC,CAAC,EAAE,OAAO,CAAC,EAAE,eAAe,GAAG,QAAQ,CAK3G","file":"iterable.d.ts","sourceRoot":"../../src"}

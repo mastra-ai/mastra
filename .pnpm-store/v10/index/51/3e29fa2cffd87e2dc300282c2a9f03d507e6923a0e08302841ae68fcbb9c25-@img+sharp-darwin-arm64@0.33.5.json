@@ -1,0 +1,31 @@
+{
+  "name": "@img/sharp-darwin-arm64",
+  "version": "0.33.5",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662923914,
+      "integrity": "sha512-8ylE0vlLAY9C4BOOuaG33zFFvrHHIV48DgkbsHoIPjwjw3nUeIHaAKUeJE2cNwgRmu/RZYyYjBSHkjx7qTLCRg==",
+      "mode": 420,
+      "size": 10273
+    },
+    "package.json": {
+      "checkedAt": 1764662923915,
+      "integrity": "sha512-KZtAypYxMGtrFFWOU9OySimYYn46RQol5gEzPwssE97NAVxxEeLfbUmUyMkbJOs2B2WBsWoOstdkOgZ2/4FN1Q==",
+      "mode": 420,
+      "size": 886
+    },
+    "README.md": {
+      "checkedAt": 1764662923916,
+      "integrity": "sha512-mbYMBhc5bqHA5I7BxbzHDFUpggCQwVVl5J8vwQfBI7AUda3BUPCZcaoYg/zCTmESBdDs9ivnpGvmp87nTsBA8Q==",
+      "mode": 420,
+      "size": 699
+    },
+    "lib/sharp-darwin-arm64.node": {
+      "checkedAt": 1764662923917,
+      "integrity": "sha512-pDorYWT8d5ctoYjVFn8VSTD3SS/CL0lCWOEwI6kpTqZLvsEXaxqh9Z5pRcX4ZA0ulyeR3I3NaQXScanycFciBg==",
+      "mode": 493,
+      "size": 262120
+    }
+  }
+}

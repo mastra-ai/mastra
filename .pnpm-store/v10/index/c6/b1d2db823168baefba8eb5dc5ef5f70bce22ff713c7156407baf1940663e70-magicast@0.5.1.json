@@ -1,0 +1,61 @@
+{
+  "name": "magicast",
+  "version": "0.5.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662904305,
+      "integrity": "sha512-ltXsF9wL6kTijho/1Te055vFWc4xqwwLpuvmsUbrOcZLgMyLkwDQE+vjqmhYEmb+CLbLjN8S8t5x4OpnaZQSSA==",
+      "mode": 420,
+      "size": 1120
+    },
+    "dist/builders-hKD4IrLX.js": {
+      "checkedAt": 1764662904306,
+      "integrity": "sha512-YMma5jEmiH6ZizUXVtssRyV1yKv4PmUut7/4U26nNtxKNjfvS7UrZ/yDrctg5SJblGBChD65R+4zPKOIkvaehQ==",
+      "mode": 420,
+      "size": 348960
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662904307,
+      "integrity": "sha512-BJB5n/7PjMa+krVkARNHvVKVIQ728k62iBGW4enxx/rGUHNGy5k64tUTKx1Nxfutn4JLhqq7kqMaL948D1u7OA==",
+      "mode": 420,
+      "size": 308
+    },
+    "dist/helpers/index.js": {
+      "checkedAt": 1764662904307,
+      "integrity": "sha512-uVArHxIxH8Rv4sgHNjilVwQXvGqpVTpDtqMfJICYsF6EQlBBdLOrN82YrK2KLQmpEFoREoQgJpyQ5uvtaDWhnQ==",
+      "mode": 420,
+      "size": 5236
+    },
+    "package.json": {
+      "checkedAt": 1764662904308,
+      "integrity": "sha512-LmyYHnUVUlT27zeYc+61oNIGskIguarOT1TY+Lwzn1HSRG8tNVJQ1LGgD19VjnWqaaJZGgGkD3XVxBOKtEWUlQ==",
+      "mode": 420,
+      "size": 1861
+    },
+    "README.md": {
+      "checkedAt": 1764662904308,
+      "integrity": "sha512-5lVcGSR0/TcIH6enHsAoUL5ldxBVaIejY2ZxMJc94ZkdWN2QwNn31mRuTsvmjs83Iqjhtva+OBPVy/Y546H4SA==",
+      "mode": 420,
+      "size": 5726
+    },
+    "dist/helpers/index.d.ts": {
+      "checkedAt": 1764662904309,
+      "integrity": "sha512-ZzrmYcMceA7yhYKExjKIbiPaKQL3BBLvdcdBGAKBSn+EM2wZEoQIOHOzvJv73sl0tU66Cnzr+57un+MVDsZHbw==",
+      "mode": 420,
+      "size": 2617
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662904309,
+      "integrity": "sha512-i2Lwh5plKIIIC8sV74GCcbjKZ5b2OjeusxayA3lSfb7IySUPQiMhdBZBTTq3FG5f7AYQJD09HLoqY9ToIlkOjw==",
+      "mode": 420,
+      "size": 3089
+    },
+    "dist/types-CQa2aD_O.d.ts": {
+      "checkedAt": 1764662904310,
+      "integrity": "sha512-MM9ad3ccb7JAclvZeAGHJ9hp3j02kGzu7O049yVdzaytDQF1X9Id00sx/FLCLTSW5phFC2JJInihnCT7j2NoQA==",
+      "mode": 420,
+      "size": 9710
+    }
+  }
+}

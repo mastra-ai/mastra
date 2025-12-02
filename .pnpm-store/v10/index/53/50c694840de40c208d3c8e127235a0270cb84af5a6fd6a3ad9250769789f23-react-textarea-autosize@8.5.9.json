@@ -1,0 +1,205 @@
+{
+  "name": "react-textarea-autosize",
+  "version": "8.5.9",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662908896,
+      "integrity": "sha512-YrQBK0GyUr1jYjbgtuZI3JpK/iyipuO3cnp3zpxlzPwyfidbSp4TdIh6Bq/OzEl9E/dY+GdC5NOSpzGdetieVg==",
+      "mode": 420,
+      "size": 1078
+    },
+    "dist/react-textarea-autosize.browser.cjs.default.js": {
+      "checkedAt": 1764662908897,
+      "integrity": "sha512-fbFhpIcloz3OlhE5guXLO8NTKwyXlO2hlxJ/GR0WHKagBZftdNCmRwzI++Zfj9DzjXTTs9Qj0uG7Z+Apa3IPsw==",
+      "mode": 420,
+      "size": 80
+    },
+    "dist/react-textarea-autosize.browser.cjs.js": {
+      "checkedAt": 1764662908898,
+      "integrity": "sha512-UpMzhxp3BdhlmUUZ9vzIWMdvniD5dxzgNJ3/+Ob5WbN96liD0+DCahn5xPD5QYm8B0vgdXSxXnKTZ3SMsN29NQ==",
+      "mode": 420,
+      "size": 8691
+    },
+    "dist/react-textarea-autosize.browser.development.cjs.default.js": {
+      "checkedAt": 1764662908900,
+      "integrity": "sha512-TYktWwD1OGijZqP0ZMyinltIuHNBJKjPwF0l5F2Y6kcy+ilPWWkjn2CtVm34kAJQ+dYkstRnKie9dGSHHr9fPA==",
+      "mode": 420,
+      "size": 92
+    },
+    "dist/react-textarea-autosize.browser.development.cjs.js": {
+      "checkedAt": 1764662908902,
+      "integrity": "sha512-ujpG5Klx9EPQ8aJEfBXiLiSR0OmvTZUwBwECM/2396LBIzrKe/qpBgNF99mQH/VEMG4WCdWPDPCJrViWOp5KLg==",
+      "mode": 420,
+      "size": 9032
+    },
+    "dist/react-textarea-autosize.browser.development.esm.js": {
+      "checkedAt": 1764662908903,
+      "integrity": "sha512-C6KuFR+HvIul2HrKhvIYTI+bdMoEq0kZaHN3w6kFOXuNAdZJxoAo8UOutjJG8nY99F6AsGfS1CbbWPjXHFl3Mw==",
+      "mode": 420,
+      "size": 8108
+    },
+    "dist/react-textarea-autosize.browser.esm.js": {
+      "checkedAt": 1764662908905,
+      "integrity": "sha512-YOcEjBsNeK7BEh3cL8vqBVsZnpmIsg7riTX4jf4YzxtBopbicFvPebRXOUnUwM+Vgzn9rdjfnmgMRUXcVSanMg==",
+      "mode": 420,
+      "size": 7767
+    },
+    "dist/react-textarea-autosize.cjs.default.js": {
+      "checkedAt": 1764662908907,
+      "integrity": "sha512-UFgk914gli1W/g4TzbsRzVi9xhGoFefVDcCcJcC5P/2ay/64++j61tpwV30UkmyRD1yNtus4BDcEui3V+/g2mQ==",
+      "mode": 420,
+      "size": 72
+    },
+    "dist/react-textarea-autosize.cjs.js": {
+      "checkedAt": 1764662908908,
+      "integrity": "sha512-17PHGY3/uX0DWzWe7RliJnaPOz4kOvSNcGGHOugrUKi+vmjZ+zOVKl7hU+aoZzYKCuZIF0txuGZGuWYPv6sPbw==",
+      "mode": 420,
+      "size": 8906
+    },
+    "dist/react-textarea-autosize.development.cjs.default.js": {
+      "checkedAt": 1764662908910,
+      "integrity": "sha512-zLemc2O3TEgdiEz2kjYjAmHpBSmTIwwLiwZqUKzESThYYqgmaXk+wCjTgrYglPpXV7C4oW+e7Fk2OxpSZYPMIA==",
+      "mode": 420,
+      "size": 84
+    },
+    "dist/react-textarea-autosize.development.cjs.js": {
+      "checkedAt": 1764662908910,
+      "integrity": "sha512-7vwIz9NcM13qUy355as+v2d30FbR73n7WXYEPqgCO9tWhiNMiX6A1Z7+W85qD+koHKEIcI5D/5Ig1XgAnkXemA==",
+      "mode": 420,
+      "size": 9247
+    },
+    "dist/react-textarea-autosize.development.edge-light.cjs.default.js": {
+      "checkedAt": 1764662908911,
+      "integrity": "sha512-6zLlE29beR2uwZa5vrhYrr3Pa2qkY8XwRNwoknzXb7ZUToAj+T23q9wZvcyr1cMgpAqFgTR2TBhk9RbULbdGxw==",
+      "mode": 420,
+      "size": 95
+    },
+    "dist/react-textarea-autosize.development.edge-light.cjs.js": {
+      "checkedAt": 1764662908914,
+      "integrity": "sha512-P3XG+hEnzExZk5vGUQXPh1oWauEw/Bgxn8l5FI8MPX3nK5cuMjHwNuw5n9EvJDoljrF1SjmAm9QIYrVhY53UXA==",
+      "mode": 420,
+      "size": 2199
+    },
+    "dist/react-textarea-autosize.development.edge-light.esm.js": {
+      "checkedAt": 1764662908914,
+      "integrity": "sha512-O8AjDxUR1DRIy4YdJQFjfLevi++oYMAiyi6L1TkNSLIpshoiEV82zgCDSmNKOxDpcMNLW756plY665PpptRDmA==",
+      "mode": 420,
+      "size": 1386
+    },
+    "dist/react-textarea-autosize.development.esm.js": {
+      "checkedAt": 1764662908915,
+      "integrity": "sha512-xnKyu1DfQUeEWzAQo+JLaA1WILAZuAF/waFiLyYrjHdPkn4Wetm+77eBm4pO8Oe33Tam3wTJAS7sWn4ifVaYoA==",
+      "mode": 420,
+      "size": 8312
+    },
+    "dist/react-textarea-autosize.edge-light.cjs.default.js": {
+      "checkedAt": 1764662908917,
+      "integrity": "sha512-UHUrVt/nSJzDr1xXWWYSnJeMXJyuK2Zd+IRu8voa44FgBszRV3e6PLuetp+q76z5NZ0nAShhI2cBq1YilsYL6Q==",
+      "mode": 420,
+      "size": 83
+    },
+    "dist/react-textarea-autosize.edge-light.cjs.js": {
+      "checkedAt": 1764662908919,
+      "integrity": "sha512-NzDcuZXkZDBeblYDAQJhgz3zEo2nC8VuoXmyxczl1J+x0/vFCiVtC19aMB/52v4KIc3kBiCHXn4OumwB1JgGZA==",
+      "mode": 420,
+      "size": 1858
+    },
+    "dist/react-textarea-autosize.edge-light.esm.js": {
+      "checkedAt": 1764662908922,
+      "integrity": "sha512-dxB6a0YEBnpChVz3X9EpFoGVw7pgTLWLsFgJEyp07q1fXbsby1lii40zn2gIPSXhUnA5/KSqgj9VVwt4RWxMYg==",
+      "mode": 420,
+      "size": 1045
+    },
+    "dist/react-textarea-autosize.esm.js": {
+      "checkedAt": 1764662908924,
+      "integrity": "sha512-Y5PHw1Y2GKVQMYoJjDQAPw8yRLzGo87d5xc2ybq4Gf8neinUPIhmBKG91dSzJu30X0p9g47SHzuHLwXZsa6v4w==",
+      "mode": 420,
+      "size": 7971
+    },
+    "package.json": {
+      "checkedAt": 1764662908924,
+      "integrity": "sha512-GEzHc3PJ7XKf6DxtwEtNt9dziOauf7krCZypZtk+oUGV2JSOk4g01lKmvNo2EQxN+gjCjbe1SK3+V0owPOTkDg==",
+      "mode": 420,
+      "size": 6281
+    },
+    "dist/react-textarea-autosize.cjs.d.mts.map": {
+      "checkedAt": 1764662908925,
+      "integrity": "sha512-LyVV+5bHoCQPMkHn85wyEaCnPkIe3P/tMM0F/EJ9dvDgBez5kYmWEiy5vDj79S9MzjeQrf1expyeBfPDq8WjWw==",
+      "mode": 420,
+      "size": 146
+    },
+    "dist/react-textarea-autosize.cjs.d.ts.map": {
+      "checkedAt": 1764662908926,
+      "integrity": "sha512-pPrTqy9XRcspEXrVezoc2XAipTe6ohn9MJrbaTwPUJrVbD7JrO+8oB4Nswn7S8LXUVqq1ix0OEN46tXlrNl0Rw==",
+      "mode": 420,
+      "size": 145
+    },
+    "README.md": {
+      "checkedAt": 1764662908930,
+      "integrity": "sha512-4SBMvymnnDdwINqmo6TQgcd5TKY5S1TQ+DtTQ0Fue3h9XG9lAxzhJVc8dDSh3iKcs42BEPvznMoNac0ywOPxtA==",
+      "mode": 420,
+      "size": 3860
+    },
+    "dist/react-textarea-autosize.browser.cjs.mjs": {
+      "checkedAt": 1764662908930,
+      "integrity": "sha512-W7lypFCqiybwXry+icO8Z2XnBvS3B+CAlZMcUm17+0tf3qqMMJoM4iO/fewUMNhQ8edHbM8I8wjx6h3QNZK/9A==",
+      "mode": 420,
+      "size": 139
+    },
+    "dist/react-textarea-autosize.browser.development.cjs.mjs": {
+      "checkedAt": 1764662908931,
+      "integrity": "sha512-UogQ4TxlXdEiDadRcimiCTkTFOqqI7nytMAEEBnJ+ovfZZEl2SdE4++8/bJrm10rVkVg3wUHNMR47/38kbGJ+w==",
+      "mode": 420,
+      "size": 163
+    },
+    "dist/react-textarea-autosize.cjs.mjs": {
+      "checkedAt": 1764662908932,
+      "integrity": "sha512-EHdg51HeevVSA9/BH/AhvzUdrGt809LsWOuWeb4DLj2pwvwulZedQVs8+/U/J8nMuHb6IpH+3BSAIYl04wLiKQ==",
+      "mode": 420,
+      "size": 123
+    },
+    "dist/react-textarea-autosize.development.cjs.mjs": {
+      "checkedAt": 1764662908948,
+      "integrity": "sha512-Q45EdyLIczqlpOAaSI1Z/Y3ZLV7tgF3ADvJCD3UXAFsU4kG2+CXfQs5Lor90hiqZbUFRNswXGJSyC39+HLVRTg==",
+      "mode": 420,
+      "size": 147
+    },
+    "dist/react-textarea-autosize.development.edge-light.cjs.mjs": {
+      "checkedAt": 1764662908952,
+      "integrity": "sha512-Ioj2TD+trxl7gbn8iiJpQMKHPmLWYQhVERiGnUywby01WFwR5LMDnjDL/LqzhPYt89LnRMhekn6ZjpTU43QWHw==",
+      "mode": 420,
+      "size": 169
+    },
+    "dist/react-textarea-autosize.edge-light.cjs.mjs": {
+      "checkedAt": 1764662908954,
+      "integrity": "sha512-wU7AatB8n0ia01uYLcP7hlZmEzGh1Nk+imU4ZL3987ioo7fvtKDNcOPlf7o6GE5Pnmct9RvabpbgnK1KSq++cw==",
+      "mode": 420,
+      "size": 145
+    },
+    "dist/react-textarea-autosize.cjs.d.mts": {
+      "checkedAt": 1764662908956,
+      "integrity": "sha512-H/RQUNM05mKKQrWtGwX049ORUlh516f3l9yJ1RK87zJ7inNKjUC5H/E9tH+ksbXaD4tuTRvwqI27I8UsciNmEg==",
+      "mode": 420,
+      "size": 184
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662908958,
+      "integrity": "sha512-JlYFCl4Jpg5wgK46CpyVzqpH3S8s/fem7ylYg9OmDVOZW9xO0smea19A5rb5mYfiVXVZDW6fgkzqzypBhjg52g==",
+      "mode": 420,
+      "size": 684
+    },
+    "dist/react-textarea-autosize.cjs.d.ts": {
+      "checkedAt": 1764662908959,
+      "integrity": "sha512-Gou3G79tm6up8a8Wne+mN8vS+6gdL8znFbswUVSseelURMmKHdaTnNXbgQmgXROXolACFkATZ8wcCpn4Dm2C/g==",
+      "mode": 420,
+      "size": 152
+    },
+    "dist/react-textarea-autosize.cjs.default.d.ts": {
+      "checkedAt": 1764662908960,
+      "integrity": "sha512-Va8Lacg73xbU7KbjjLh4RTwMTfU2mFbYFGAGtVMEpObQ/JYJXfRtBSEiGgqJiVcdHN41GaDap2Ckv8vAK42BOg==",
+      "mode": 420,
+      "size": 66
+    }
+  }
+}

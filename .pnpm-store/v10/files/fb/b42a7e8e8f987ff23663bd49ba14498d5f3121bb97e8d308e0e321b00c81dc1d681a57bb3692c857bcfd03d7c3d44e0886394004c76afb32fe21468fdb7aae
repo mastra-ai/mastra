@@ -1,0 +1,40 @@
+{
+  "author": "Andrew Sliwinski <andrewsliwinski@acm.org>",
+  "name": "sentiment",
+  "description": "AFINN-based sentiment analysis for Node.js",
+  "version": "5.0.2",
+  "license": "MIT",
+  "homepage": "https://github.com/thisandagain/sentiment",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thisandagain/sentiment.git"
+  },
+  "keywords": [
+    "sentiment",
+    "analysis",
+    "nlp",
+    "sentiment analysis"
+  ],
+  "main": "./lib/index.js",
+  "scripts": {
+    "build": "node ./build/build.js",
+    "test:lint": "eslint . --ext=js",
+    "test:unit": "tap test/unit/*.js",
+    "test:integration": "tap test/integration/*.js",
+    "test:benchmark": "node ./test/benchmark/performance.js",
+    "test:validate": "node ./test/benchmark/validate.js",
+    "test:coverage": "tap './test/{integration,unit}/*.js' --coverage --coverage-report=lcov",
+    "test": "npm run test:lint && npm run test:unit && npm run test:integration && npm run test:benchmark && npm run test:validate"
+  },
+  "devDependencies": {
+    "Sentimental": "1.0.1",
+    "async": "^3.1.0",
+    "benchmark": "^2.1.0",
+    "eslint": "^5.0.1",
+    "mock-require": "^3.0.3",
+    "tap": "^14.6.1"
+  },
+  "engines": {
+    "node": ">=8.0"
+  }
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"promiseWithResolvers.d.ts","sourceRoot":"","sources":["../../src/utils/promiseWithResolvers.ts"],"names":[],"mappings":"AAAA,eAAO,MAAM,oBAAoB,GAAa,CAAC;;qBACvB,CAAC,GAAG,WAAW,CAAC,CAAC,CAAC,KAAK,IAAI;sBAC1B,OAAO,KAAK,IAAI;CAOxC,CAAC"}

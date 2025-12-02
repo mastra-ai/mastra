@@ -1,0 +1,18 @@
+import type { QueryResult } from '@mastra/core/vector';
+import type { RankedNode } from '../graph-rag/index.js';
+import type { RerankResult } from '../rerank/index.js';
+type SourceInput = QueryResult | RankedNode | RerankResult;
+/**
+ * Convert an array of source inputs (QueryResult, RankedNode, or RerankResult) to an array of sources.
+ * @param results Array of source inputs to convert.
+ * @returns Array of sources.
+ */
+export declare const convertToSources: (results: SourceInput[]) => {
+    id: string;
+    vector: number[];
+    score: number;
+    metadata: Record<string, any> | undefined;
+    document: string;
+}[];
+export {};
+//# sourceMappingURL=convert-sources.d.ts.map

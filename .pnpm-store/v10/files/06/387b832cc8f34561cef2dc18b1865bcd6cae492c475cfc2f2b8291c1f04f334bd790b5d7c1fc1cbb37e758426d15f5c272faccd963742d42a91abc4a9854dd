@@ -1,0 +1,45 @@
+{
+  "name": "typescript-event-target",
+  "version": "1.1.1",
+  "description": "Strictly typed EventTarget that directly extends EventTarget to function as a drop-in replacement. It works with all Event-Types and accounts for basically no additional bundle-size.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typings": "./dist/index.d.ts",
+  "module": "./dist/index.mjs",
+  "homepage": "https://github.com/DerZade/typescript-event-target#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DerZade/typescript-event-target.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "bugs": {
+    "url": "https://github.com/DerZade/typescript-event-target/issues",
+    "email": "derzade@gmail.com"
+  },
+  "scripts": {
+    "build": "tsup --tsconfig ./tsconfig.json --dts --minify --format cjs,esm ./src/index.ts",
+    "lint": "eslint --ext .js,.ts ./src",
+    "test": "tsd",
+    "fmt": "prettier --write ."
+  },
+  "keywords": [
+    "event-target",
+    "typescript",
+    "EventTarget",
+    "ts",
+    "browser",
+    "typed",
+    "nodejs"
+  ],
+  "author": "Jonas Schade <derzade@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "eslint-config-standard-with-typescript": "^23.0.0",
+    "prettier": "^2.7.1",
+    "tsd": "^0.24.1",
+    "tsup": "^6.3.0",
+    "typescript": "^4.8.4"
+  }
+}

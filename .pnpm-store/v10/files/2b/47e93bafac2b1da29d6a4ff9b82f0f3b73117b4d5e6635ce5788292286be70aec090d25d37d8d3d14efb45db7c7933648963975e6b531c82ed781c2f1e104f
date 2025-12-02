@@ -1,0 +1,20 @@
+import { ReadableStream } from 'stream/web';
+import type { ToolSet } from 'ai-v5';
+import type { OutputSchema } from '../../stream/base/schema.js';
+import type { ChunkType } from '../../stream/types.js';
+import type { LoopRun } from '../types.js';
+/**
+ * Check if a ReadableStreamDefaultController is open and can accept data.
+ *
+ * Note: While the ReadableStream spec indicates desiredSize can be:
+ * - positive (ready), 0 (full but open), or null (closed/errored),
+ * our empirical testing shows that after controller.close(), desiredSize becomes 0.
+ * Therefore, we treat both 0 and null as closed states to prevent
+ * "Invalid state: Controller is already closed" errors.
+ *
+ * @param controller - The ReadableStreamDefaultController to check
+ * @returns true if the controller is open and can accept data
+ */
+export declare function isControllerOpen(controller: ReadableStreamDefaultController<any>): boolean;
+export declare function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({ resumeContext, requireToolApproval, models, toolChoice, modelSettings, _internal, messageId, runId, messageList, startTimestamp, streamState, agentId, toolCallId, ...rest }: LoopRun<Tools, OUTPUT>): ReadableStream<ChunkType<OUTPUT>>;
+//# sourceMappingURL=stream.d.ts.map

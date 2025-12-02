@@ -1,0 +1,86 @@
+{
+  "name": "@inngest/realtime",
+  "version": "0.4.5",
+  "description": "",
+  "main": "./index.js",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json && tsdown --config tsdown.config.ts",
+    "postversion": "pnpm run build",
+    "release": "cross-env DIST_DIR=dist node ../../scripts/release/publish.js && pnpm dlx jsr publish --allow-slow-types --allow-dirty",
+    "release:version": "node ../../scripts/release/jsrVersion.js",
+    "pack": "pnpm run build && mv $(npm pack ./dist --pack-destination . --silent) inngest-realtime.tgz"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./index.d.mts",
+        "default": "./index.mjs"
+      },
+      "require": {
+        "types": "./index.d.ts",
+        "default": "./index.js"
+      }
+    },
+    "./hooks": {
+      "import": {
+        "types": "./hooks.d.mts",
+        "default": "./hooks.mjs"
+      },
+      "require": {
+        "types": "./hooks.d.ts",
+        "default": "./hooks.js"
+      }
+    },
+    "./middleware": {
+      "import": {
+        "types": "./middleware.d.mts",
+        "default": "./middleware.mjs"
+      },
+      "require": {
+        "types": "./middleware.d.ts",
+        "default": "./middleware.js"
+      }
+    }
+  },
+  "keywords": [
+    "inngest",
+    "realtime"
+  ],
+  "homepage": "https://github.com/inngest/inngest-js/tree/main/packages/realtime#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/inngest/inngest-js.git",
+    "directory": "packages/realtime"
+  },
+  "author": "Inngest Inc. <hello@inngest.com>",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.7.0",
+    "@types/debug": "^4.1.12",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "eslint": "^9.18.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "globals": "^15.14.0",
+    "react": "^19.0.0",
+    "tsdown": "^0.15.4",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^7.16.1",
+    "valibot": "1.0.0-rc.3",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@standard-schema/spec": "^1.0.0",
+    "debug": "^4.3.4",
+    "inngest": "^3.42.3",
+    "zod": "^3.25.0 || ^4.0.0"
+  }
+}

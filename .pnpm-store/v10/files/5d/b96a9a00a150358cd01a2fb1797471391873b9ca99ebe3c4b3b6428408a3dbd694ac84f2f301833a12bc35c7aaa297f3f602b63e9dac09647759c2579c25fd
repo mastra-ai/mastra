@@ -1,0 +1,91 @@
+imports:
+  root: ../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    update:
+      path: /v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}
+      method: PATCH
+      auth: false
+      docs: >-
+        Amend the metadata associated with a speaker, such as their voice. Both
+        voice cloning and using voices from the ElevenLabs library are
+        supported.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+        speaker_id:
+          type: string
+          docs: ID of the speaker.
+      display-name: Update Metadata For A Speaker
+      request:
+        name: >-
+          BodyUpdateMetadataForASpeakerV1DubbingResourceDubbingIdSpeakerSpeakerIdPatch
+        body:
+          properties:
+            voice_id:
+              type: optional<string>
+              docs: >-
+                Either the identifier of a voice from the ElevenLabs voice
+                library, or one of ['track-clone', 'clip-clone'].
+            languages:
+              type: optional<list<string>>
+              docs: >-
+                Languages to apply these changes to. If empty, will apply to all
+                languages.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.SpeakerUpdatedResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+            speaker_id: speaker_id
+          request: {}
+          response:
+            body:
+              version: 1
+    similar_voices:
+      path: /v1/dubbing/resource/{dubbing_id}/speaker/{speaker_id}/similar-voices
+      method: GET
+      auth: false
+      docs: >-
+        Fetch the top 10 similar voices to a speaker, including the voice IDs,
+        names, descriptions, and, where possible, a sample audio recording.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+        speaker_id:
+          type: string
+          docs: ID of the speaker.
+      display-name: Search The Elevenlabs Library For Voices Similar To A Speaker.
+      response:
+        docs: Successful Response
+        type: root.SimilarVoicesForSpeakerResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+            speaker_id: speaker_id
+          response:
+            body:
+              voices:
+                - voice_id: voice_id
+                  name: name
+                  category: premade
+                  description: description
+                  preview_url: preview_url
+  source:
+    openapi: openapi.json

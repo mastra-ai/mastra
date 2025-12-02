@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../src/cli/lib/utils/sentry.ts"],
+  "sourcesContent": ["import \"@sentry/tracing\";\nimport { productionProvisionHost, provisionHost } from \"../config.js\";\nimport * as Sentry from \"@sentry/node\";\nimport { version } from \"../../../index.js\";\nimport { stripVTControlCharacters } from \"util\";\n\nexport const SENTRY_DSN =\n  \"https://f9fa0306e3d540079cf40ce8c2ad9644@o1192621.ingest.sentry.io/6390839\";\n\nexport function initSentry() {\n  if (\n    (!process.env.CI || process.env.VERCEL === \"1\") &&\n    provisionHost === productionProvisionHost\n  ) {\n    Sentry.init({\n      dsn: SENTRY_DSN,\n      release: \"cli@\" + version,\n      tracesSampleRate: 0.2,\n      beforeBreadcrumb: (breadcrumb) => {\n        // Strip ANSI color codes from log lines that are sent as breadcrumbs.\n        if (breadcrumb.message) {\n          breadcrumb.message = stripVTControlCharacters(breadcrumb.message);\n        }\n        return breadcrumb;\n      },\n    });\n  }\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,qBAAO;AACP,oBAAuD;AACvD,aAAwB;AACxB,eAAwB;AACxB,kBAAyC;AAElC,MAAM,aACX;AAEK,SAAS,aAAa;AAC3B,OACG,CAAC,QAAQ,IAAI,MAAM,QAAQ,IAAI,WAAW,QAC3C,gCAAkB,uCAClB;AACA,WAAO,KAAK;AAAA,MACV,KAAK;AAAA,MACL,SAAS,SAAS;AAAA,MAClB,kBAAkB;AAAA,MAClB,kBAAkB,CAAC,eAAe;AAEhC,YAAI,WAAW,SAAS;AACtB,qBAAW,cAAU,sCAAyB,WAAW,OAAO;AAAA,QAClE;AACA,eAAO;AAAA,MACT;AAAA,IACF,CAAC;AAAA,EACH;AACF;",
+  "names": []
+}

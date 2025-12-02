@@ -1,0 +1,47 @@
+imports:
+  root: ../../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    request:
+      path: /v1/voices/pvc/{voice_id}/verification
+      method: POST
+      auth: false
+      docs: Request manual verification for a PVC voice.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+      display-name: Request Manual Verification
+      request:
+        name: >-
+          Body_Request_manual_verification_v1_voices_pvc__voice_id__verification_post
+        body:
+          properties:
+            files:
+              type: list<file>
+              docs: Verification documents
+            extra_text:
+              type: optional<string>
+              docs: Extra text to be used in the manual verification process.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.RequestPvcManualVerificationResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          request: {}
+          response:
+            body:
+              status: ok
+  source:
+    openapi: openapi.json

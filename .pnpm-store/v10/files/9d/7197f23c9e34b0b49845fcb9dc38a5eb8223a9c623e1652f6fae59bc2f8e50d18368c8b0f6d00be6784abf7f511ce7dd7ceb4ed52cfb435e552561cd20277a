@@ -1,0 +1,1 @@
+{"version":3,"file":"shallow-node-data.d.ts","sourceRoot":"","sources":["../../src/utils/shallow-node-data.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,QAAQ,EAAE,MAAM,UAAU,CAAC;AAEpC,KAAK,QAAQ,GAAG,IAAI,CAAC,QAAQ,EAAE,IAAI,GAAG,MAAM,GAAG,MAAM,CAAC,CAAC;AAEvD,wBAAgB,eAAe,CAAC,CAAC,EAAE,QAAQ,GAAG,QAAQ,EAAE,GAAG,IAAI,EAAE,CAAC,EAAE,QAAQ,GAAG,QAAQ,EAAE,GAAG,IAAI,WAmB/F"}

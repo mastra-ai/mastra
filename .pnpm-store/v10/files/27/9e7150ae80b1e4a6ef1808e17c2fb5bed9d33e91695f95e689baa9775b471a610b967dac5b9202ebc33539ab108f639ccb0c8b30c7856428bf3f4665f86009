@@ -1,0 +1,16 @@
+import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import { MastraBase } from '../../base.js';
+import type { ChunkType, CreateStream, OnResult } from '../types.js';
+export declare abstract class MastraModelInput extends MastraBase {
+    abstract transform({ runId, stream, controller, }: {
+        runId: string;
+        stream: ReadableStream<LanguageModelV2StreamPart | Record<string, unknown>>;
+        controller: ReadableStreamDefaultController<ChunkType>;
+    }): Promise<void>;
+    initialize({ runId, createStream, onResult }: {
+        createStream: CreateStream;
+        runId: string;
+        onResult: OnResult;
+    }): import("stream/web").ReadableStream<ChunkType>;
+}
+//# sourceMappingURL=input.d.ts.map

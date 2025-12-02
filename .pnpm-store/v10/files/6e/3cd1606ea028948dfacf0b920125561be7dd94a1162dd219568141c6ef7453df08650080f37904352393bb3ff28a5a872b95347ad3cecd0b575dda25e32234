@@ -1,0 +1,24 @@
+{
+  "name": "@changesets/logger",
+  "version": "0.1.1",
+  "description": "Console log alias",
+  "main": "dist/changesets-logger.cjs.js",
+  "module": "dist/changesets-logger.esm.js",
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/changesets-logger.cjs.mjs",
+        "default": "./dist/changesets-logger.cjs.js"
+      },
+      "module": "./dist/changesets-logger.esm.js",
+      "import": "./dist/changesets-logger.cjs.mjs",
+      "default": "./dist/changesets-logger.cjs.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/changesets/changesets/tree/main/packages/logger",
+  "dependencies": {
+    "picocolors": "^1.1.0"
+  }
+}

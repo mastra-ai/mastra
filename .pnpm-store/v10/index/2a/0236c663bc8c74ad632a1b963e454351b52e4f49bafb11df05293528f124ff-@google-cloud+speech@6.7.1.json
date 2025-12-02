@@ -1,0 +1,247 @@
+{
+  "name": "@google-cloud/speech",
+  "version": "6.7.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662928446,
+      "integrity": "sha512-mPa3m3ePewoVQVvXUMOooJfWUFEctOyBFRiOEVxHBT/nAPV4iVwJcFHJvD37YZfCsToV3iAyc+GjIYiE+G6Q6A==",
+      "mode": 436,
+      "size": 11358
+    },
+    "build/src/v1/adaptation_client.js": {
+      "checkedAt": 1764662928446,
+      "integrity": "sha512-fU8DK64uzljRXrCg6UWi+gekBxLKKNO+P3R4w13Ugl/d2WO4UZ2F2U9kWuEchG4RdRzmjSr9qYVGt/VpCBJ7Pg==",
+      "mode": 420,
+      "size": 41102
+    },
+    "build/src/v1p1beta1/adaptation_client.js": {
+      "checkedAt": 1764662928456,
+      "integrity": "sha512-L8DWyxDt67Eue7kU19+AzWIYLu/S4puAxa0kZ6T/L41xktYtgXxaLAGSEEVWwLO5hur2Xv6P6p8VqcRz5eUhrg==",
+      "mode": 420,
+      "size": 41200
+    },
+    "build/src/helpers.js": {
+      "checkedAt": 1764662928457,
+      "integrity": "sha512-aY5R4kzlvjDXeUtTFi8NSPsihH+hHl+/CTLFxuRgzWucGS79LKFCTDGc+bLUhem7MA0XJiUyWtLwB+But8VoZw==",
+      "mode": 420,
+      "size": 4905
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662928457,
+      "integrity": "sha512-Z4m/GPRN2RQ4ODG2aSETjnAPwz/vs7C0fzczK+2Em/HRJ0rW3Dr+D6jDfBuhKt9jIoRxl/nxukSVBAJVG+1E8g==",
+      "mode": 420,
+      "size": 2115
+    },
+    "build/src/v1/index.js": {
+      "checkedAt": 1764662928458,
+      "integrity": "sha512-kXIrGwaif3xIpaGkpFBwA4EdpdQCgo3J2ipYaBcmoqyKgz3A11le28zY1OvzkjYu0mxs11iV4FGftF0ryojrww==",
+      "mode": 420,
+      "size": 1334
+    },
+    "build/src/v1p1beta1/index.js": {
+      "checkedAt": 1764662928458,
+      "integrity": "sha512-kXIrGwaif3xIpaGkpFBwA4EdpdQCgo3J2ipYaBcmoqyKgz3A11le28zY1OvzkjYu0mxs11iV4FGftF0ryojrww==",
+      "mode": 420,
+      "size": 1334
+    },
+    "build/src/v2/index.js": {
+      "checkedAt": 1764662928458,
+      "integrity": "sha512-InY6p0dclua07n6k+qFnYfpN97Maj3KzJx5OgF1LQwOAnuEhqBLKIgwebWlsPhma0xkvhuCgmtcjNUtzIXpbUA==",
+      "mode": 420,
+      "size": 1108
+    },
+    "build/protos/protos.js": {
+      "checkedAt": 1764662928466,
+      "integrity": "sha512-ItpugSXWzzF2sOxvL6N2yLprxsMzMrl+lPqQxhia772/j8AJNZoRfTysFVgJeDVObbO0C3b1TZsoytWkkymX1w==",
+      "mode": 420,
+      "size": 4183291
+    },
+    "build/src/v1/speech_client.js": {
+      "checkedAt": 1764662928469,
+      "integrity": "sha512-5l9leywk3dW5LxerEGja9eygRpJb858L0k4lRprOdDid162fBRTC0LAVmrlt8M/lXrw6VkvpsOoUdWlGSVOf4Q==",
+      "mode": 420,
+      "size": 32362
+    },
+    "build/src/v1p1beta1/speech_client.js": {
+      "checkedAt": 1764662928470,
+      "integrity": "sha512-hun5MaDPpHp1na2wKFdd4xk19dSfy0pJbzCxjNz7fLAUTPZjwf+Jva2FpE6Xwv83kf9fSjgs6vwYrkP05zCLHQ==",
+      "mode": 420,
+      "size": 32474
+    },
+    "build/src/v2/speech_client.js": {
+      "checkedAt": 1764662928471,
+      "integrity": "sha512-BMY4aVhf3SsblGuS4jaAqF0vdV809P7jMzy3xVdVgXTt+yXuSHoGHokWnm6pKDmTPifuZBaPQjXNBj28iFxivQ==",
+      "mode": 420,
+      "size": 101393
+    },
+    "build/src/v1/adaptation_client_config.json": {
+      "checkedAt": 1764662928472,
+      "integrity": "sha512-SaFVLl+2nmzqDWtcFnOXH1CQXkOQZuOct/hM+hVO8U1UUriqDgzDnePRuXx2/jLvehURbm2ugoF+MtBopN33DQ==",
+      "mode": 420,
+      "size": 2445
+    },
+    "build/src/v1p1beta1/adaptation_client_config.json": {
+      "checkedAt": 1764662928474,
+      "integrity": "sha512-sbl2m23hVqYvviUqlU5zhEUc1HS7FJCOanhlkBoPtXsIy0W9GK0nfw32PHVhXCRT9MSOeTKi3ZpgAKL+0hthfg==",
+      "mode": 420,
+      "size": 2452
+    },
+    "package.json": {
+      "checkedAt": 1764662928475,
+      "integrity": "sha512-lBdpGRB86G+rrBDmlcsmZ3YOgCa9E29757msXzKa9uNIaia4iZMSPPYciqFqzVgRB2DEbgBaoNxZ6gjMX01uTg==",
+      "mode": 436,
+      "size": 2115
+    },
+    "build/protos/protos.json": {
+      "checkedAt": 1764662928487,
+      "integrity": "sha512-leKW6XPJZ+TQVg/Q3/NTLHqJJGHm4CJoqkNn7/1qUR31ML/R7zXrD8bNmUig2+sFLRoh/x6lz1j+WiKa0JY5qQ==",
+      "mode": 420,
+      "size": 266365
+    },
+    "build/src/v1/speech_client_config.json": {
+      "checkedAt": 1764662928488,
+      "integrity": "sha512-Q7YLIKq+wjpuOn3zM+Mz/figOUVEK1VlT+Uol8/IEJdpSEAn0qyFAMYeezoNZkeflqt9FTEbKYNnNPUOiTf0+Q==",
+      "mode": 420,
+      "size": 1419
+    },
+    "build/src/v1p1beta1/speech_client_config.json": {
+      "checkedAt": 1764662928489,
+      "integrity": "sha512-og46qESd/56nirjQbfNyFSgiRJ4QisgjNToOVekCDipfd0DxWLhTgvaodEQfOz0WDh8fPOwVI23H+XQT0p71HA==",
+      "mode": 420,
+      "size": 1426
+    },
+    "build/src/v2/speech_client_config.json": {
+      "checkedAt": 1764662928489,
+      "integrity": "sha512-LBVEI87WLY3AIrX1R9tazZ0RxBZg2rku6AAWcUbu1WJFQKCBf9U5QDgPLZq+IRrDJY+vdXZK7otAeNADMhgTZA==",
+      "mode": 420,
+      "size": 5573
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662928490,
+      "integrity": "sha512-LDMwh9PjKAhb6aR0jprrMk4WEdgoPCw8OGxDej7vPhxTCBl3f5orrDTbmA6cHj72NbWNOgmyoEWMHRfYRNbw4g==",
+      "mode": 436,
+      "size": 48866
+    },
+    "README.md": {
+      "checkedAt": 1764662928491,
+      "integrity": "sha512-IUPI6YVr9zIWHlld6F+belRmP5sAlnIAHRVrJ8Yj7Q20gLHVsdD/8cMyX+32ivRzNrGN1M1HG8e1O7K5S/Ql5g==",
+      "mode": 436,
+      "size": 30322
+    },
+    "build/protos/google/cloud/speech/v1/cloud_speech_adaptation.proto": {
+      "checkedAt": 1764662928491,
+      "integrity": "sha512-82isTt2o0bYmuBRSyykClbuUsnpxlHsQfGw+BK6iRvw2sU50IazU2ZanedOt/e5DnRVjybm15Cn7o3vGCyJRdg==",
+      "mode": 420,
+      "size": 14237
+    },
+    "build/protos/google/cloud/speech/v1p1beta1/cloud_speech_adaptation.proto": {
+      "checkedAt": 1764662928492,
+      "integrity": "sha512-PEraF+JbiZn4G53kNsl3yHpxaEjLv2FBlRX54A37kfKXUMpIh/ehuuv8skYvE5nn0TIVO5knTkmRDVSR2+cNRw==",
+      "mode": 420,
+      "size": 14335
+    },
+    "build/protos/google/cloud/speech/v1/cloud_speech.proto": {
+      "checkedAt": 1764662928494,
+      "integrity": "sha512-aFKsca6ikO2Epmtl3Ht4PUpVgzdedBIL59+5bxiMNa8zejIMPjZLbutMtpHRBkUBY0g34dgQ2iIQrqSMakgZRA==",
+      "mode": 420,
+      "size": 44032
+    },
+    "build/protos/google/cloud/speech/v1p1beta1/cloud_speech.proto": {
+      "checkedAt": 1764662928495,
+      "integrity": "sha512-JXwwB9O2HE5gEorNynNYtSPF067OW1u2uaAwh2xSecTt63lxenmV/GS0Tr1HJXbjJKT9Om2T9rhDLbivZulXoA==",
+      "mode": 420,
+      "size": 44328
+    },
+    "build/protos/google/cloud/speech/v2/cloud_speech.proto": {
+      "checkedAt": 1764662928497,
+      "integrity": "sha512-vLooWYNtpydT3Cy7eVaOX1oRA8r1u4UHcLkrrg+J+CBec7fjtLyMkxQ4AHG082FbpUyUjk8T+eoMv9cyaaBRfw==",
+      "mode": 420,
+      "size": 90124
+    },
+    "build/protos/google/cloud/speech/v2/locations_metadata.proto": {
+      "checkedAt": 1764662928498,
+      "integrity": "sha512-Gg4Ld/EB3z4CYHkhdzPvII1S+IZq8y/x008vr+cJOpBn0TZ4wysGfgYIpdCQVl1fOZZ6tyoG86gttNMyPlw8Tg==",
+      "mode": 420,
+      "size": 2925
+    },
+    "build/protos/google/cloud/speech/v1/resource.proto": {
+      "checkedAt": 1764662928500,
+      "integrity": "sha512-Vly7Vykha8T576IZJb0/McfituDVgTFGJstlMiMUPuZW01n2x72lEaYrXXPoeD2B9jWGxfpEOKIFEiemUTxobg==",
+      "mode": 420,
+      "size": 7480
+    },
+    "build/protos/google/cloud/speech/v1p1beta1/resource.proto": {
+      "checkedAt": 1764662928501,
+      "integrity": "sha512-FD1TfYBo3W0xBwTmtL/7qJAJbRzxYvX5efsFdbkQOVS7rkgmMG6GSzBdKHDqcNnn7KHsuULHuqnEj7soHhuIAg==",
+      "mode": 420,
+      "size": 7501
+    },
+    "build/src/v1/adaptation_client.d.ts": {
+      "checkedAt": 1764662928502,
+      "integrity": "sha512-AMqCGncAZ6ezTmO1P4XwG4N69gC+TP4Kyw5f2K1c9ComJB5FUowlX2v2lJzc+JqQzvHc/Wnq30VbxzEgndqvlA==",
+      "mode": 420,
+      "size": 43912
+    },
+    "build/src/v1p1beta1/adaptation_client.d.ts": {
+      "checkedAt": 1764662928504,
+      "integrity": "sha512-XnkTSp/LR28xzStjYHoQewYE7iPBsrz4eIH484aXTryK0VSDDRkZn57triC/xR6cDywHcQV3XKaxk+d0FSXhhg==",
+      "mode": 420,
+      "size": 44849
+    },
+    "build/src/helpers.d.ts": {
+      "checkedAt": 1764662928505,
+      "integrity": "sha512-1/30pd2bBO5goTCO0SARVp9okycMya8r4zMvpH7qS4KoCmT6wQIbx6LbFD87BcMHP1r0tNpnMCsZl8AfqqmUMA==",
+      "mode": 420,
+      "size": 1923
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662928512,
+      "integrity": "sha512-K011oQyv5yf4IFzAFe4PlJIjGxF7P6Veq3mFmdQ/OEFyKB40nPhxqZEzUxAKNEZ/kEHI5hJS9kLNwujvndBsng==",
+      "mode": 420,
+      "size": 634
+    },
+    "build/src/v1/index.d.ts": {
+      "checkedAt": 1764662928517,
+      "integrity": "sha512-rGXRtrp7E4rAfQS89IjQzdW6DJCA5JFx2ly7u0oL3qlgq74zgUmmgUlZp1cD9UfvDM6MO/WchaNnSDgIuJ283A==",
+      "mode": 420,
+      "size": 104
+    },
+    "build/src/v1p1beta1/index.d.ts": {
+      "checkedAt": 1764662928517,
+      "integrity": "sha512-rGXRtrp7E4rAfQS89IjQzdW6DJCA5JFx2ly7u0oL3qlgq74zgUmmgUlZp1cD9UfvDM6MO/WchaNnSDgIuJ283A==",
+      "mode": 420,
+      "size": 104
+    },
+    "build/src/v2/index.d.ts": {
+      "checkedAt": 1764662928518,
+      "integrity": "sha512-YyYJz9fOQ4hi4YN2KRaYDnhDrXK3GwC/Khpw2XwfB9slayoawDwZjDnjWuwQw32tKjw7rQ1LR1RDdobo8ZUtVw==",
+      "mode": 420,
+      "size": 48
+    },
+    "build/protos/protos.d.ts": {
+      "checkedAt": 1764662928524,
+      "integrity": "sha512-KgVWvPp4z3hXsCIrB1WNz/wtcTixGbpn/FjAEzCKQEh0ID7cFLNP457u9tiz10ud8rZtGnI2pONzyOVBeWa6LQ==",
+      "mode": 420,
+      "size": 1422295
+    },
+    "build/src/v1/speech_client.d.ts": {
+      "checkedAt": 1764662928524,
+      "integrity": "sha512-c1R3Qxc3oR8wFlyKoAHKHg5YlxIK+xzoz27r0e4voc63MpY0V9cqoPXyne/LomWwJF06zHpsr7UA3Pz9mG12TQ==",
+      "mode": 420,
+      "size": 22199
+    },
+    "build/src/v1p1beta1/speech_client.d.ts": {
+      "checkedAt": 1764662928526,
+      "integrity": "sha512-iSmXmkRJOSU1vrdedWqrguYP5f5CMQi4LqWfkNizfwdHVLbsj1GCTq+swRtAEcJ+7vXuBFfrH02JwZWdpSJCHQ==",
+      "mode": 420,
+      "size": 22458
+    },
+    "build/src/v2/speech_client.d.ts": {
+      "checkedAt": 1764662928528,
+      "integrity": "sha512-n83reNqLB0FwjPy4WeBNm+sPr4MvuXXKLszyIRM8BVVJhyodd2hP6G7ObZzVwht/U0XmIBxc3IOMJY5RE3j6jQ==",
+      "mode": 420,
+      "size": 110616
+    }
+  }
+}

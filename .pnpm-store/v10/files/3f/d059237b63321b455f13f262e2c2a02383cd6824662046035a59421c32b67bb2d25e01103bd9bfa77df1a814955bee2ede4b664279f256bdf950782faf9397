@@ -1,0 +1,1 @@
+{"version":3,"names":["module","exports","require"],"sources":["../src/cache.cts"],"sourcesContent":["// File moved to ./worker/cache.js\n// TODO: Remove this backward-compat \"proxy file\" in Babel 8\nmodule.exports = require(\"./worker/cache.cjs\");\n"],"mappings":"AAEAA,MAAM,CAACC,OAAO,GAAGC,OAAO,CAAC,oBAAoB,CAAC","ignoreList":[]}

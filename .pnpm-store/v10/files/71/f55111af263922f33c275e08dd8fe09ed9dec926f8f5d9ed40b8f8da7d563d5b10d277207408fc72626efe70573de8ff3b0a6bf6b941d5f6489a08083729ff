@@ -1,0 +1,29 @@
+// src/ui/markdown/code-header.tsx
+import { CheckIcon, CopyIcon } from "lucide-react";
+import { useCopyToClipboard } from "./useCopyToClipboard.mjs";
+import { useThreadConfig } from "../thread-config.mjs";
+import { TooltipIconButton } from "../base/index.mjs";
+import { jsx, jsxs } from "react/jsx-runtime";
+var CodeHeader = ({ language, code }) => {
+  const {
+    strings: {
+      code: { header: { copy: { tooltip = "Copy" } = {} } = {} } = {}
+    } = {}
+  } = useThreadConfig();
+  const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const onCopy = () => {
+    if (!code || isCopied) return;
+    copyToClipboard(code);
+  };
+  return /* @__PURE__ */ jsxs("div", { className: "aui-code-header-root", children: [
+    /* @__PURE__ */ jsx("span", { className: "aui-code-header-language", children: language }),
+    /* @__PURE__ */ jsxs(TooltipIconButton, { tooltip, onClick: onCopy, children: [
+      !isCopied && /* @__PURE__ */ jsx(CopyIcon, {}),
+      isCopied && /* @__PURE__ */ jsx(CheckIcon, {})
+    ] })
+  ] });
+};
+export {
+  CodeHeader
+};
+//# sourceMappingURL=code-header.mjs.map

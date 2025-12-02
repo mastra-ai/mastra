@@ -1,0 +1,353 @@
+import type { WritableStream } from 'stream/web';
+import type { RequestContext } from '../di/index.js';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error/index.js';
+import type { IErrorDefinition } from '../error/index.js';
+import type { MastraScorers } from '../evals/index.js';
+import { SpanType } from '../observability/index.js';
+import type { Span, TracingContext } from '../observability/index.js';
+import type { ChunkType } from '../stream/types.js';
+import type { DynamicArgument } from '../types/index.js';
+import type { ExecutionGraph } from './execution-engine.js';
+import { ExecutionEngine } from './execution-engine.js';
+import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step.js';
+import type { DefaultEngineType, Emitter, RestartExecutionParams, SerializedStepFlowEntry, StepFlowEntry, StepResult, TimeTravelExecutionParams } from './types.js';
+export type ExecutionContext = {
+    workflowId: string;
+    runId: string;
+    executionPath: number[];
+    activeStepsPath: Record<string, number[]>;
+    foreachIndex?: number;
+    suspendedPaths: Record<string, number[]>;
+    resumeLabels: Record<string, {
+        stepId: string;
+        foreachIndex?: number;
+    }>;
+    waitingPaths?: Record<string, number[]>;
+    retryConfig: {
+        attempts: number;
+        delay: number;
+    };
+    format?: 'legacy' | 'vnext' | undefined;
+    state: Record<string, any>;
+};
+/**
+ * Default implementation of the ExecutionEngine
+ */
+export declare class DefaultExecutionEngine extends ExecutionEngine {
+    /**
+     * Preprocesses an error caught during workflow execution.
+     *
+     * - Wraps a non-MastraError exception
+     * - Logs error details
+     */
+    protected preprocessExecutionError(e: unknown, errorDefinition: IErrorDefinition<ErrorDomain, ErrorCategory>, logPrefix: string): MastraError;
+    /**
+     * The retryCounts map is used to keep track of the retry count for each step.
+     * The step id is used as the key and the retry count is the value.
+     */
+    protected retryCounts: Map<string, number>;
+    /**
+     * Get or generate the retry count for a step.
+     * If the step id is not in the map, it will be added and the retry count will be 0.
+     * If the step id is in the map, it will return the retry count.
+     *
+     * @param stepId - The id of the step.
+     * @returns The retry count for the step.
+     */
+    protected getOrGenerateRetryCount(stepId: Step['id']): number;
+    protected fmtReturnValue<TOutput>(emitter: Emitter, stepResults: Record<string, StepResult<any, any, any, any>>, lastOutput: StepResult<any, any, any, any>, error?: Error | string): Promise<TOutput>;
+    /**
+     * Executes a workflow run with the provided execution graph and input
+     * @param graph The execution graph to execute
+     * @param input The input data for the workflow
+     * @returns A promise that resolves to the workflow output
+     */
+    execute<TState, TInput, TOutput>(params: {
+        workflowId: string;
+        runId: string;
+        resourceId?: string;
+        disableScorers?: boolean;
+        graph: ExecutionGraph;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        input?: TInput;
+        initialState?: TState;
+        restart?: RestartExecutionParams;
+        timeTravel?: TimeTravelExecutionParams;
+        resume?: {
+            steps: string[];
+            stepResults: Record<string, StepResult<any, any, any, any>>;
+            resumePayload: any;
+            resumePath: number[];
+            label?: string;
+            forEachIndex?: number;
+        };
+        emitter: Emitter;
+        retryConfig?: {
+            attempts?: number;
+            delay?: number;
+        };
+        requestContext: RequestContext;
+        workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
+        abortController: AbortController;
+        writableStream?: WritableStream<ChunkType>;
+        format?: 'legacy' | 'vnext' | undefined;
+        outputOptions?: {
+            includeState?: boolean;
+            includeResumeLabels?: boolean;
+        };
+    }): Promise<TOutput>;
+    getStepOutput(stepResults: Record<string, any>, step?: StepFlowEntry): any;
+    executeSleep({ workflowId, runId, entry, prevOutput, stepResults, emitter, abortController, requestContext, executionContext, writableStream, tracingContext, }: {
+        workflowId: string;
+        runId: string;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        entry: {
+            type: 'sleep';
+            id: string;
+            duration?: number;
+            fn?: ExecuteFunction<any, any, any, any, any, DefaultEngineType>;
+        };
+        prevStep: StepFlowEntry;
+        prevOutput: any;
+        stepResults: Record<string, StepResult<any, any, any, any>>;
+        resume?: {
+            steps: string[];
+            stepResults: Record<string, StepResult<any, any, any, any>>;
+            resumePayload: any;
+            resumePath: number[];
+        };
+        executionContext: ExecutionContext;
+        emitter: Emitter;
+        abortController: AbortController;
+        requestContext: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        tracingContext: TracingContext;
+    }): Promise<void>;
+    executeSleepUntil({ workflowId, runId, entry, prevOutput, stepResults, emitter, abortController, requestContext, executionContext, writableStream, tracingContext, }: {
+        workflowId: string;
+        runId: string;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        entry: {
+            type: 'sleepUntil';
+            id: string;
+            date?: Date;
+            fn?: ExecuteFunction<any, any, any, any, any, DefaultEngineType>;
+        };
+        prevStep: StepFlowEntry;
+        prevOutput: any;
+        stepResults: Record<string, StepResult<any, any, any, any>>;
+        resume?: {
+            steps: string[];
+            stepResults: Record<string, StepResult<any, any, any, any>>;
+            resumePayload: any;
+            resumePath: number[];
+        };
+        executionContext: ExecutionContext;
+        emitter: Emitter;
+        abortController: AbortController;
+        requestContext: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        tracingContext: TracingContext;
+    }): Promise<void>;
+    executeStep({ workflowId, runId, resourceId, step, stepResults, executionContext, restart, resume, timeTravel, prevOutput, emitter, abortController, requestContext, skipEmits, writableStream, disableScorers, serializedStepGraph, tracingContext, iterationCount, }: {
+        workflowId: string;
+        runId: string;
+        resourceId?: string;
+        step: Step<string, any, any>;
+        stepResults: Record<string, StepResult<any, any, any, any>>;
+        executionContext: ExecutionContext;
+        restart?: RestartExecutionParams;
+        timeTravel?: TimeTravelExecutionParams;
+        resume?: {
+            steps: string[];
+            resumePayload: any;
+            label?: string;
+            forEachIndex?: number;
+        };
+        prevOutput: any;
+        emitter: Emitter;
+        abortController: AbortController;
+        requestContext: RequestContext;
+        skipEmits?: boolean;
+        writableStream?: WritableStream<ChunkType>;
+        disableScorers?: boolean;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        tracingContext: TracingContext;
+        iterationCount?: number;
+    }): Promise<StepResult<any, any, any, any>>;
+    protected runScorers({ scorers, runId, input, output, workflowId, stepId, requestContext, disableScorers, tracingContext, }: {
+        scorers: DynamicArgument<MastraScorers>;
+        runId: string;
+        input: any;
+        output: any;
+        requestContext: RequestContext;
+        workflowId: string;
+        stepId: string;
+        disableScorers?: boolean;
+        tracingContext: TracingContext;
+    }): Promise<void>;
+    executeParallel({ workflowId, runId, resourceId, entry, prevStep, serializedStepGraph, stepResults, resume, restart, timeTravel, executionContext, tracingContext, emitter, abortController, requestContext, writableStream, disableScorers, }: {
+        workflowId: string;
+        runId: string;
+        resourceId?: string;
+        entry: {
+            type: 'parallel';
+            steps: {
+                type: 'step';
+                step: Step;
+            }[];
+        };
+        serializedStepGraph: SerializedStepFlowEntry[];
+        prevStep: StepFlowEntry;
+        stepResults: Record<string, StepResult<any, any, any, any>>;
+        restart?: RestartExecutionParams;
+        timeTravel?: TimeTravelExecutionParams;
+        resume?: {
+            steps: string[];
+            stepResults: Record<string, StepResult<any, any, any, any>>;
+            resumePayload: any;
+            resumePath: number[];
+        };
+        executionContext: ExecutionContext;
+        tracingContext: TracingContext;
+        emitter: Emitter;
+        abortController: AbortController;
+        requestContext: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        disableScorers?: boolean;
+    }): Promise<StepResult<any, any, any, any>>;
+    executeConditional({ workflowId, runId, resourceId, entry, prevOutput, serializedStepGraph, stepResults, resume, restart, timeTravel, executionContext, tracingContext, emitter, abortController, requestContext, writableStream, disableScorers, }: {
+        workflowId: string;
+        runId: string;
+        resourceId?: string;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        entry: {
+            type: 'conditional';
+            steps: {
+                type: 'step';
+                step: Step;
+            }[];
+            conditions: ConditionFunction<any, any, any, any, DefaultEngineType>[];
+        };
+        prevOutput: any;
+        stepResults: Record<string, StepResult<any, any, any, any>>;
+        resume?: {
+            steps: string[];
+            stepResults: Record<string, StepResult<any, any, any, any>>;
+            resumePayload: any;
+            resumePath: number[];
+        };
+        restart?: RestartExecutionParams;
+        timeTravel?: TimeTravelExecutionParams;
+        executionContext: ExecutionContext;
+        tracingContext: TracingContext;
+        emitter: Emitter;
+        abortController: AbortController;
+        requestContext: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        disableScorers?: boolean;
+    }): Promise<StepResult<any, any, any, any>>;
+    executeLoop({ workflowId, runId, resourceId, entry, prevOutput, stepResults, resume, restart, timeTravel, executionContext, tracingContext, emitter, abortController, requestContext, writableStream, disableScorers, serializedStepGraph, }: {
+        workflowId: string;
+        runId: string;
+        resourceId?: string;
+        entry: {
+            type: 'loop';
+            step: Step;
+            condition: LoopConditionFunction<any, any, any, any, DefaultEngineType>;
+            loopType: 'dowhile' | 'dountil';
+        };
+        prevStep: StepFlowEntry;
+        prevOutput: any;
+        stepResults: Record<string, StepResult<any, any, any, any>>;
+        restart?: RestartExecutionParams;
+        timeTravel?: TimeTravelExecutionParams;
+        resume?: {
+            steps: string[];
+            stepResults: Record<string, StepResult<any, any, any, any>>;
+            resumePayload: any;
+            resumePath: number[];
+        };
+        executionContext: ExecutionContext;
+        tracingContext: TracingContext;
+        emitter: Emitter;
+        abortController: AbortController;
+        requestContext: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        disableScorers?: boolean;
+        serializedStepGraph: SerializedStepFlowEntry[];
+    }): Promise<StepResult<any, any, any, any>>;
+    executeForeach({ workflowId, runId, resourceId, entry, prevOutput, stepResults, restart, resume, timeTravel, executionContext, tracingContext, emitter, abortController, requestContext, writableStream, disableScorers, serializedStepGraph, }: {
+        workflowId: string;
+        runId: string;
+        resourceId?: string;
+        entry: {
+            type: 'foreach';
+            step: Step;
+            opts: {
+                concurrency: number;
+            };
+        };
+        prevStep: StepFlowEntry;
+        prevOutput: any;
+        stepResults: Record<string, StepResult<any, any, any, any>>;
+        restart?: RestartExecutionParams;
+        timeTravel?: TimeTravelExecutionParams;
+        resume?: {
+            steps: string[];
+            stepResults: Record<string, StepResult<any, any, any, any>>;
+            resumePayload: any;
+            resumePath: number[];
+            forEachIndex?: number;
+        };
+        executionContext: ExecutionContext;
+        tracingContext: TracingContext;
+        emitter: Emitter;
+        abortController: AbortController;
+        requestContext: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        disableScorers?: boolean;
+        serializedStepGraph: SerializedStepFlowEntry[];
+    }): Promise<StepResult<any, any, any, any>>;
+    protected persistStepUpdate({ workflowId, runId, resourceId, stepResults, serializedStepGraph, executionContext, workflowStatus, result, error, requestContext, }: {
+        workflowId: string;
+        runId: string;
+        resourceId?: string;
+        stepResults: Record<string, StepResult<any, any, any, any>>;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        executionContext: ExecutionContext;
+        workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
+        result?: Record<string, any>;
+        error?: string | Error;
+        requestContext: RequestContext;
+    }): Promise<void>;
+    executeEntry({ workflowId, runId, resourceId, entry, prevStep, serializedStepGraph, stepResults, restart, timeTravel, resume, executionContext, tracingContext, emitter, abortController, requestContext, writableStream, disableScorers, }: {
+        workflowId: string;
+        runId: string;
+        resourceId?: string;
+        entry: StepFlowEntry;
+        prevStep: StepFlowEntry;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        stepResults: Record<string, StepResult<any, any, any, any>>;
+        restart?: RestartExecutionParams;
+        timeTravel?: TimeTravelExecutionParams;
+        resume?: {
+            steps: string[];
+            stepResults: Record<string, StepResult<any, any, any, any>>;
+            resumePayload: any;
+            resumePath: number[];
+        };
+        executionContext: ExecutionContext;
+        tracingContext: TracingContext;
+        emitter: Emitter;
+        abortController: AbortController;
+        requestContext: RequestContext;
+        writableStream?: WritableStream<ChunkType>;
+        disableScorers?: boolean;
+    }): Promise<{
+        result: StepResult<any, any, any, any>;
+        stepResults?: Record<string, StepResult<any, any, any, any>>;
+        executionContext?: ExecutionContext;
+    }>;
+}
+//# sourceMappingURL=default.d.ts.map

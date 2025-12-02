@@ -1,0 +1,2893 @@
+{
+  "name": "compromise",
+  "version": "14.14.4",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662917638,
+      "integrity": "sha512-16b7B6M891isKb7L1v8eF5diFtiNnpiCWZnxAFlMAdpnYTCL+1SZdRGh8wPW4di2Ihcwpu4IWLLgtOzoPKP6Ug==",
+      "mode": 420,
+      "size": 1079
+    },
+    "builds/one/compromise-one.cjs": {
+      "checkedAt": 1764662917638,
+      "integrity": "sha512-m5SC03GpIm2VkOm+X725kmn9WfzV4YKQCEISzQbMIkZ/rmnmL6zBY6zQSOxfbpk26TlT2Lwh8sr8QxX9EOknEg==",
+      "mode": 420,
+      "size": 86322
+    },
+    "builds/three/compromise-three.cjs": {
+      "checkedAt": 1764662917640,
+      "integrity": "sha512-IukKwcQvWMrg44ujclo9Pi/ZXfU6xTFJgrjiAeXG0dTrQULZ01QM3SRmIcVZt+J80wvTEiqaYfhnGestJzpmKw==",
+      "mode": 420,
+      "size": 351120
+    },
+    "builds/two/compromise-two.cjs": {
+      "checkedAt": 1764662917643,
+      "integrity": "sha512-5HJghKTTLhsTHC78DvLyRf5zIcLR4x+28B4YtcL6y+8ZghCxWLMMINWEQwwmZsQqwzrLOB5VKk/m0uCFpiPs/g==",
+      "mode": 420,
+      "size": 290508
+    },
+    "types/one.d.cts": {
+      "checkedAt": 1764662917643,
+      "integrity": "sha512-FxoPevbr4mAJXQf7US3Q2r0ExgfBz/hZpaPIWXn3d0aWU9LmGPpUAz33T7mbDNeknxeWl/CRS2PsMli/vpip1w==",
+      "mode": 420,
+      "size": 42
+    },
+    "types/view/one.d.cts": {
+      "checkedAt": 1764662917644,
+      "integrity": "sha512-mGOvh1f0kM+erDh5lUV2XsUK5ae4LlPXfYp5oqAjl0gTfgecwbXEN6UshahONs3CzUs8sW8a+AFa4XU2xtSJnQ==",
+      "mode": 420,
+      "size": 44
+    },
+    "types/three.d.cts": {
+      "checkedAt": 1764662917645,
+      "integrity": "sha512-uKr5Nh1HE9uSHUK6pDxtE6nVGbrlpqkuJHx2yD87HkZFTDEJpzCdZzsAcTP4bMo5TEJgEYeHRT9OBdILzv8CDQ==",
+      "mode": 420,
+      "size": 44
+    },
+    "types/view/three.d.cts": {
+      "checkedAt": 1764662917646,
+      "integrity": "sha512-OG+X5d0YnOeNQ8t1O6J8BreEmOJkykDEwMyvPs2BIGP/FupQSqapbLgIkalV7LV3kZ15lGQPe9RbM0RBMm4wKw==",
+      "mode": 420,
+      "size": 48
+    },
+    "types/two.d.cts": {
+      "checkedAt": 1764662917646,
+      "integrity": "sha512-Ycunw3UEgPQaEMrc+xJMx51gNO8cG6XF37sfX+MDE23AFKgRNrYHxgiN2+nZGxibZ4LsXlmOkGHBQRviNSaqmg==",
+      "mode": 420,
+      "size": 42
+    },
+    "types/view/two.d.cts": {
+      "checkedAt": 1764662917647,
+      "integrity": "sha512-hBQj/wdsy9dBuNBa/HousMUfoDLg1FRHm6ghUSFPCBBtdAkY65n67POn/jfyd/1L8lula+AiU3+72gvutZdi4g==",
+      "mode": 420,
+      "size": 42
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/_adhoc.js": {
+      "checkedAt": 1764662917647,
+      "integrity": "sha512-UIJXTAsRqqGsnQg/DdTregvbzg7E12+9TeSfugeEUMQ3RQmAMwIEPMX35Nwx7ZuQ+mlr5FA7JE2IRLNb47nxAw==",
+      "mode": 420,
+      "size": 1684
+    },
+    "src/2-two/preTagger/model/clues/_adj.js": {
+      "checkedAt": 1764662917660,
+      "integrity": "sha512-PKY2jfEiMSvpb7nWfl6wuYvnctOGrpSpBgy1SrqL2YlL99auxSkTYZxo4k1yBKytZZgEfanWAEjbWxijpRJh6Q==",
+      "mode": 420,
+      "size": 2060
+    },
+    "src/1-one/output/methods/debug/_color.js": {
+      "checkedAt": 1764662917662,
+      "integrity": "sha512-Dhb8Z1Q2F3o2C7SleZ2OxFj5zDv9OCaHeWe9+iSYTpgGpiMQgYgm+r25vXRUYpHo5kSKFug0q0b2WjHFcY50vw==",
+      "mode": 420,
+      "size": 549
+    },
+    "src/1-one/tag/methods/addTags/_colors.js": {
+      "checkedAt": 1764662917664,
+      "integrity": "sha512-ji81YauFDPtq5rz+YcdEw0Ug4ueNA7Xy0AtAtSgU5bPdorkyBDzHqGEcJjnL6oRsPCMIQnEvo7NtUYZj/jaS0w==",
+      "mode": 420,
+      "size": 282
+    },
+    "src/2-two/preTagger/model/lexicon/_data.js": {
+      "checkedAt": 1764662917665,
+      "integrity": "sha512-BdUqju1Wc+4eFp+B9ZHGdBJfOWutdhQTm2h0zD7agYIuCSIZCkToOdzAKTP1wW4fF8MFOf698GULrchl927NcA==",
+      "mode": 420,
+      "size": 69305
+    },
+    "src/2-two/preTagger/model/models/_data.js": {
+      "checkedAt": 1764662917666,
+      "integrity": "sha512-xVjXsDqqaGfvryG3Jvn/VXlrWsoXN+1M+OL9kx2nctCAKDyLQOLgHNT2UNS9TRGKm/YZA1xa7X3gZJDEzdgXMg==",
+      "mode": 420,
+      "size": 16720
+    },
+    "src/4-four/sense/model/_data.js": {
+      "checkedAt": 1764662917667,
+      "integrity": "sha512-hvdLwa4D4tUCBvvhE6lzcpyYK9ZUjlKJMVssVqUVom2N+FP9BkeOIWHYjbzHxYGkHxjo+9Sd3l4tdavlP2cgNg==",
+      "mode": 420,
+      "size": 3772
+    },
+    "src/2-two/preTagger/compute/tagger/_fastTag.js": {
+      "checkedAt": 1764662917670,
+      "integrity": "sha512-2CfMFZQMnLaBSBp9a63vnWrkplYhPM67tQlIC4dEYc8Z1TIF9Yyis8K3THPzZnwGVa4KOM7VymjpCnsTeLJ8Yw==",
+      "mode": 420,
+      "size": 1100
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/_fillTags.js": {
+      "checkedAt": 1764662917671,
+      "integrity": "sha512-pWOKOoGXD2dN0j3qwrN/XRuTVpN7TXVwKm0YTyCwL1RfnU6L7nTgEktxn0BX9oNASXq+PDW6Jb6FUezQASzQsw==",
+      "mode": 420,
+      "size": 1598
+    },
+    "src/1-one/output/api/_fmts.js": {
+      "checkedAt": 1764662917671,
+      "integrity": "sha512-ohEBCpeD7uQBjtkgyXVt84nyw8VXQCaPG0k2w+lPm4fvIjBxi/EGqM0P+kaH52iGBzDXx63+Ag/jmcXY+2S+Dg==",
+      "mode": 420,
+      "size": 576
+    },
+    "src/1-one/match/methods/match/term/_fuzzy.js": {
+      "checkedAt": 1764662917672,
+      "integrity": "sha512-4q9CF39ON9R/X2T0QG9uRMGx8ADrUwypbtBRwCTkd6/vmRptT0YYOmCV3XcS//O8OKgLwvxqiL5aFRLmDtZmeA==",
+      "mode": 420,
+      "size": 2294
+    },
+    "src/2-two/preTagger/model/clues/_gerund.js": {
+      "checkedAt": 1764662917674,
+      "integrity": "sha512-aHoFuuRt+P5XXsNoCR9bT8kXbA/6dqf2lW+Q8MTgwu3TTEPMsruP0pMrQRw11zINyuEmRICu54ERheC/byG7AQ==",
+      "mode": 420,
+      "size": 1412
+    },
+    "src/2-two/preTagger/methods/transform/verbs/getTense/_guess.js": {
+      "checkedAt": 1764662917674,
+      "integrity": "sha512-GQIMGGsJAjCorqBT96tqhPB6QoE0Jx/JHPGvl29rduqtgTITdx0JSfHkSIndE88LnpP+l2rVmwxAOBL5vAOxvw==",
+      "mode": 420,
+      "size": 1179
+    },
+    "src/1-one/match/api/_lib.js": {
+      "checkedAt": 1764662917675,
+      "integrity": "sha512-sJLklYj8gcB4cxvOM5ZMEtwozhVZheeZ24pp4xYFxOYDYkCFnXup/CkhRqtbX1NIUOqWN70oOwWxs3z1bae59Q==",
+      "mode": 420,
+      "size": 1222
+    },
+    "src/1-one/match/methods/match/_lib.js": {
+      "checkedAt": 1764662917676,
+      "integrity": "sha512-ANXL6FGOY4XF0/STIq8hee5eu23GpN8mGwnr176zyb0HFmZxzxKqjoYlAtK3xlRLYlPxifMS9W5Z1UFeJRdK1g==",
+      "mode": 420,
+      "size": 252
+    },
+    "src/1-one/pointers/api/lib/_lib.js": {
+      "checkedAt": 1764662917677,
+      "integrity": "sha512-kgXoc3YiYKI7rZT/UCaAEYXJ1g/kWWNn3PSWBnfUQbxzXUzgJU3wcTDuavXiwRVxJZHAErzGVCpmMDJvXHV1vw==",
+      "mode": 420,
+      "size": 1481
+    },
+    "src/API/_lib.js": {
+      "checkedAt": 1764662917678,
+      "integrity": "sha512-qDmnlX8GlmwuvwyGMa5ZcZGq+xcrkLko4BexT4YUzkL2RXFBAOeipXpv8phRt6IKSw/yJy35CSYYmcnzje5zDg==",
+      "mode": 420,
+      "size": 423
+    },
+    "src/2-two/postTagger/model/_misc.js": {
+      "checkedAt": 1764662917679,
+      "integrity": "sha512-Lu6QdvMEx+WFnuLDXwWq/VM+XzhGz8tR5BDeXZD5Mf4L7/9gIZka+qDekLFbyhuVtBCdlC7IU0RlJDG3gr8HzA==",
+      "mode": 420,
+      "size": 2715
+    },
+    "src/2-two/preTagger/model/clues/_noun.js": {
+      "checkedAt": 1764662917680,
+      "integrity": "sha512-B7CYQI0KzclP5D9bCYtZ+jOBS+DGidiBqCFAsWbhkzDlbwyT2GCL0/qvQDcoJlplljIeNt9vLmpg7wrREfmStQ==",
+      "mode": 420,
+      "size": 2799
+    },
+    "src/2-two/preTagger/model/clues/_person.js": {
+      "checkedAt": 1764662917681,
+      "integrity": "sha512-ZRRaqn4+6w7YPfkq0MLNmH6QZuVs6KYZDjIe+vxCa5tO7dkGfhWvH3x+WnT7fmfUSASCFXEyRvUzZ3l/xjAgsg==",
+      "mode": 420,
+      "size": 790
+    },
+    "src/2-two/preTagger/methods/transform/nouns/toPlural/_rules.js": {
+      "checkedAt": 1764662917682,
+      "integrity": "sha512-MJyXV1NeKApE8Yr1gHrJN5ZyXg80U6LwaQC30QeIJU0pbFLrpGDqOSFDuNVlh57F/VkypSg3ujZLXPDM0QRI7w==",
+      "mode": 420,
+      "size": 1001
+    },
+    "src/2-two/preTagger/methods/transform/nouns/toSingular/_rules.js": {
+      "checkedAt": 1764662917683,
+      "integrity": "sha512-gRsCH5cikE0Nl/e1yofTdMtXUOhpoZeMeqd9depq/2/sKSJdb2pND/VIv0SndbXqsIRnrtUEm6n2lDYTGfa25A==",
+      "mode": 420,
+      "size": 1007
+    },
+    "src/1-one/change/api/lib/_sort.js": {
+      "checkedAt": 1764662917684,
+      "integrity": "sha512-JeZObsYcIFke+wbeyfsQ3jrd9PjxlG9XZsWpWFmurmuUA0f+rob3KfW8Rj5wnVdbFjQN2mm2K1/0czVe7VT/ig==",
+      "mode": 420,
+      "size": 1245
+    },
+    "src/1-one/contraction-one/compute/contractions/_splice.js": {
+      "checkedAt": 1764662917685,
+      "integrity": "sha512-rksbR+ynwqtbvIXSqoAH7rRxuBd1HW9+3sZeG2aygKPTfkTPcuzC9063KhkhpuBXY1Wg9I+izEJuOf8bGNHdFg==",
+      "mode": 420,
+      "size": 773
+    },
+    "src/2-two/contraction-two/compute/_splice.js": {
+      "checkedAt": 1764662917685,
+      "integrity": "sha512-rksbR+ynwqtbvIXSqoAH7rRxuBd1HW9+3sZeG2aygKPTfkTPcuzC9063KhkhpuBXY1Wg9I+izEJuOf8bGNHdFg==",
+      "mode": 420,
+      "size": 773
+    },
+    "src/1-one/output/api/_text.js": {
+      "checkedAt": 1764662917686,
+      "integrity": "sha512-rar/uOvfriukKvfoRQcHobwU3Tr5XIJJ3NPPkuuAoI9r+Y0sNVxiZv7l7gBSb0jFZ5iBzTeHVY/5XWYmDR3CTw==",
+      "mode": 420,
+      "size": 2912
+    },
+    "src/3-three/numbers/numbers/_toString.js": {
+      "checkedAt": 1764662917687,
+      "integrity": "sha512-Ec3/hHk+bzsP3twgcm5zsej/KEXpqdbtWA1cKgcvN6AyDs3/FVepHCZF22uGLpoRyAkbOPWQ5BpzQzhExAycUQ==",
+      "mode": 420,
+      "size": 516
+    },
+    "src/2-two/preTagger/model/clues/_verb.js": {
+      "checkedAt": 1764662917687,
+      "integrity": "sha512-B3Vp164wMq/1kaJYom6oW2faKRnTuO/4Ot6VndpMfgPft3UvQI4C13VO1q6nVumuy5od+MGK2VujupAtL0BDqQ==",
+      "mode": 420,
+      "size": 2339
+    },
+    "src/_version.js": {
+      "checkedAt": 1764662917688,
+      "integrity": "sha512-FxqNX89BCpg1nC+x5A+hLP6vM5BTmnbIMBVZjDtgJWeD80Sim4k1M0kSMQFgRVaNTBCanrDL2NXrjf1CTmM8LQ==",
+      "mode": 420,
+      "size": 24
+    },
+    "src/2-two/preTagger/compute/tagger/2nd-pass/00-tagSwitch.js": {
+      "checkedAt": 1764662917703,
+      "integrity": "sha512-3WbmWL9M1wq/IFiw7w2W7npZ/L0HcCUSQAB70o/BS15/zbSD2NgYyr4XMvJRCdlMf3akHrXU2n7/l3E9r8Ezxg==",
+      "mode": 420,
+      "size": 509
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/01-acronym.js": {
+      "checkedAt": 1764662917704,
+      "integrity": "sha512-kykunaFXfMmJ8VTGXXffeqyWeo6ypqI2n/5esJNqYJzcyz2qivVra7xa+s4tC7VlIIvrpzzwkUiwRRgCkBW19A==",
+      "mode": 420,
+      "size": 2722
+    },
+    "src/2-two/preTagger/compute/tagger/2nd-pass/01-case.js": {
+      "checkedAt": 1764662917705,
+      "integrity": "sha512-5URb2K8+ts8+iIyLb83/Y6oUy7etcuNJ2l8pkvaCDJDrZRQtlDAZ6QxiJ7mN+R1ai6zCYg1FnIkfPsrYJ4eF4Q==",
+      "mode": 420,
+      "size": 1660
+    },
+    "src/1-one/tokenize/compute/normal/01-cleanup.js": {
+      "checkedAt": 1764662917706,
+      "integrity": "sha512-PxMZI8IKn0yIymK0uvnx33ssPx2FFuJKQwGsKgLg5wU+92m2GIEISPb/Pg9z9ZwU5G+jGlMB+0hXsqBjIjIwJA==",
+      "mode": 420,
+      "size": 842
+    },
+    "src/2-two/preTagger/compute/tagger/1st-pass/01-colons.js": {
+      "checkedAt": 1764662917707,
+      "integrity": "sha512-rYLcDvB1tAIKlRZyfhFFAzrCrbDCnQ8i62fFZ4F1k1aTDMZdN/rSz3wIU02GIU2Njxx8UkKZF+tuzixRSMtLag==",
+      "mode": 420,
+      "size": 598
+    },
+    "src/3-three/chunker/compute/01-easy.js": {
+      "checkedAt": 1764662917707,
+      "integrity": "sha512-WXp8piuJbT5+NrTFHJjFLpjySq7iq4qybd69oyCK8OxGFoH3oPPIcIPKXlTDwmKSXV3Q07MVuzUhMZHU80nNxg==",
+      "mode": 420,
+      "size": 839
+    },
+    "src/1-one/match/methods/match/01-failFast.js": {
+      "checkedAt": 1764662917708,
+      "integrity": "sha512-oJ99+i/F7zH94feBWyak5nP/lm3N933haGfMOBTsh3NWpGoxYQzLctk7nRTjhphCmCinTLdMj8aATY0JEwCh4Q==",
+      "mode": 420,
+      "size": 827
+    },
+    "src/1-one/sweep/methods/sweep/01-getHooks.js": {
+      "checkedAt": 1764662917709,
+      "integrity": "sha512-1cTnf/7y+eTSMVxPErMX/3GhIDWwI53VwxMqKn/89IVPZ94DfbQrFDpl5CfwvBjwDtgkHm/KrBUoptdSZIMBAA==",
+      "mode": 420,
+      "size": 551
+    },
+    "src/1-one/tokenize/methods/02-terms/01-hyphens.js": {
+      "checkedAt": 1764662917710,
+      "integrity": "sha512-dV9Oy28odbkSgC5g60BSLumZJlmlgKK0pxde00JAD0V548sORj63Y/zCCCaw8tD2C7nCl8L6gUFLXTfTT/pnpQ==",
+      "mode": 420,
+      "size": 1303
+    },
+    "src/1-one/sweep/methods/buildNet/01-parse.js": {
+      "checkedAt": 1764662917710,
+      "integrity": "sha512-tTPcSOvhJWfXoWxj7DYY0dgBh1URS+1L+1QXqFmOamwGPJ+Yx/EJnmr2zlsvP4L/334d0hTwb7H81QcJgqSkfw==",
+      "mode": 420,
+      "size": 2001
+    },
+    "src/1-one/match/methods/parseMatch/01-parseBlocks.js": {
+      "checkedAt": 1764662917711,
+      "integrity": "sha512-Izk+nSdiUFx3UWlTnQlEleMCfmiIXcQlFGLnSdxgsKZJBK1WtoyCsTfNY8IGjb1TM2c3AUgn2fm6hzWuA963TA==",
+      "mode": 420,
+      "size": 1176
+    },
+    "src/1-one/tokenize/methods/01-sentences/01-simple-split.js": {
+      "checkedAt": 1764662917712,
+      "integrity": "sha512-QTsvLT0/ntQdGQAzkup6F+p38bTD0uzZKIzoWz3+RKR7pzcqBUjMTJ+gWEObR6U+TMJEJ7zJGX7DoO8I0VyQgQ==",
+      "mode": 420,
+      "size": 887
+    },
+    "src/1-one/tag/methods/addTags/01-validate.js": {
+      "checkedAt": 1764662917712,
+      "integrity": "sha512-5inpyaaLF4VhZ5Pb/gQt5RvOPKyTkc2IF+2Ex3dAVrBDjE72AzACFh4cjxz6Jgu0oN1vjyGlzdEP0EmBHDtMrg==",
+      "mode": 420,
+      "size": 1397
+    },
+    "src/1-one/tokenize/compute/normal/02-acronyms.js": {
+      "checkedAt": 1764662917713,
+      "integrity": "sha512-INy/gJSKeCCLPhb+lHZ3YFiQs3a+oWp1FnRD7hc8IorFXIl4EPqmVvtufEDuwouK7+3iRRei1fkVXW/2bxviPg==",
+      "mode": 420,
+      "size": 724
+    },
+    "src/1-one/tag/methods/addTags/02-fmt.js": {
+      "checkedAt": 1764662917713,
+      "integrity": "sha512-sV0LYSsinKdhIJUcev95LOguEZivbMIrckg07CHrMUkhg7UZkhvEkx9HlIQMKLDFjn9OtopiSRIoF2m+UqaylA==",
+      "mode": 420,
+      "size": 1014
+    },
+    "src/1-one/match/methods/match/02-from-here.js": {
+      "checkedAt": 1764662917714,
+      "integrity": "sha512-/euuv6ZP9gnfkjSvjw7qoCESO25jzxYp8DjmhXvwFKUJH/8ZYCvYHAm90WM+eGJKrhvbJDLwYil2bi+SDbaWIQ==",
+      "mode": 420,
+      "size": 3723
+    },
+    "src/2-two/preTagger/compute/tagger/1st-pass/02-hyphens.js": {
+      "checkedAt": 1764662917715,
+      "integrity": "sha512-pMwGGNj+1yxwgBYz0EdL+mRwWeh3vKj8NK2WGMxR5bO+VS+sBRtVqf75H42TTD16neHimwonmw/WJ7whFCyjQw==",
+      "mode": 420,
+      "size": 590
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/02-neighbours.js": {
+      "checkedAt": 1764662917716,
+      "integrity": "sha512-ea2fnHKwqVDeCaa5SQc0N0y26Yv56tbk0OA+qfCVmq+fJL0H32lJEQqM03EaEOjqL0k47edbpP+OOncOxZbzJQ==",
+      "mode": 420,
+      "size": 1199
+    },
+    "src/3-three/chunker/compute/02-neighbours.js": {
+      "checkedAt": 1764662917717,
+      "integrity": "sha512-XfooDWSgcCf0cSmE50CPlaqFN0sbAa76b+FbAhfYsUZh3wvwqDuIwXzTzaB/xzan5kmmOFh93nyWaLI7ELveFQ==",
+      "mode": 420,
+      "size": 1511
+    },
+    "src/1-one/match/methods/parseMatch/02-parseToken.js": {
+      "checkedAt": 1764662917718,
+      "integrity": "sha512-80qT68NjZfcgz7/LhkXmIIJmJRWxBzDtZVnARPcKk1BSGu64FwfkZJQAsvjywfcNChCeqkS8tdnEowxHBUj+Pw==",
+      "mode": 420,
+      "size": 5620
+    },
+    "src/1-one/tokenize/methods/01-sentences/02-simple-merge.js": {
+      "checkedAt": 1764662917720,
+      "integrity": "sha512-ptfk0UW6hGCHoONu+LL0LtK9ALmMkxbuL0swjFYNjQM3EcpRRvuP4C8kztFOlNlqXwsvo1VbSr+mMorCR6DLJQ==",
+      "mode": 420,
+      "size": 779
+    },
+    "src/1-one/tokenize/methods/02-terms/02-slashes.js": {
+      "checkedAt": 1764662917722,
+      "integrity": "sha512-icf4OQ2letL4gwA18z4qvl9ZQForY7lT5WwwzMDNdCukR7zT2rVpocpKhv2L0KJ80LIz//+yGpXbZ9vzGshs6A==",
+      "mode": 420,
+      "size": 328
+    },
+    "src/2-two/preTagger/compute/tagger/2nd-pass/02-suffix.js": {
+      "checkedAt": 1764662917722,
+      "integrity": "sha512-5TjCJeOnVCWzxPvNu7uBtTqjegTe6/B+LCko/6LTt3yaJwxgyVzkRPRWig9h0kom2qrB72q8ewBLMhRwZwXzCQ==",
+      "mode": 420,
+      "size": 1505
+    },
+    "src/1-one/sweep/methods/sweep/02-trim-down.js": {
+      "checkedAt": 1764662917723,
+      "integrity": "sha512-yPuLlKCGMMSgvSZllZllBX1s7ojOu0MISMzGbOk/NNl7y9u4mU/afT+gSZ9IsB23taj3ILOQ6STuu2OfsNd0qA==",
+      "mode": 420,
+      "size": 860
+    },
+    "src/1-one/match/methods/match/03-getGroup.js": {
+      "checkedAt": 1764662917724,
+      "integrity": "sha512-19kkE+Gldzquax5vN5I0mR39GqXT4hom4g60eCOGWIknC8gXKrVljCkCA5il7ZrE392qhWfm2cW2RiZGN9UShw==",
+      "mode": 420,
+      "size": 641
+    },
+    "src/3-three/chunker/compute/03-matcher.js": {
+      "checkedAt": 1764662917725,
+      "integrity": "sha512-xit+s18lx2BN4E3tk1Q7+TO74+2sQ4NYGQL5VzR/vV6l2CG9Myc+hWQOMlY3lGvQf3Ejp5MkXrxBrjEeb5rwCQ==",
+      "mode": 420,
+      "size": 2832
+    },
+    "src/1-one/match/methods/match/03-notIf.js": {
+      "checkedAt": 1764662917726,
+      "integrity": "sha512-MjzdFRvilWBxtOYtrBmMxuyUeYxsz6C9TlEMuqKa/ZbSXg8I98YqIbRB6iXWpRrTHoPjHbr9Wa33x7oZ1SjLyg==",
+      "mode": 420,
+      "size": 465
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/03-orgWords.js": {
+      "checkedAt": 1764662917727,
+      "integrity": "sha512-O7TG+JU6d/t7hU6xG7rUdKTrK0Bjgat6XylwUy7Dgf8yx24b2NqgLquwEwk3Ubzz9Z+OHjuZXOBvUvShaPCWmw==",
+      "mode": 420,
+      "size": 1221
+    },
+    "src/1-one/tokenize/methods/02-terms/03-ranges.js": {
+      "checkedAt": 1764662917727,
+      "integrity": "sha512-u2gSFz8cV2NNTM3t9h6I9ToMgshcv3WS5bjYleanBokK25t0w/5v1YwtS8vFETrBdREaUIN6oEdBbCoK/V4RcQ==",
+      "mode": 420,
+      "size": 449
+    },
+    "src/2-two/preTagger/compute/tagger/2nd-pass/03-regex.js": {
+      "checkedAt": 1764662917728,
+      "integrity": "sha512-+WH/mT/E+Hio0yvEgvHcqeNCkL8iYvMngAUWffrU5D3/TcF025H4Y08S/wiTDVhkg3pwVRMc/pkxIxA7HR8q9Q==",
+      "mode": 420,
+      "size": 1499
+    },
+    "src/1-one/tokenize/methods/01-sentences/03-smart-merge.js": {
+      "checkedAt": 1764662917728,
+      "integrity": "sha512-2WZ6/M1whJCWiz2VivzwEE7H1e4Oy12H572GD3rkguqxFjdZQX4YHb+YSjEllxGAslMHCVGoFVqozonfn/ftqQ==",
+      "mode": 420,
+      "size": 676
+    },
+    "src/1-one/match/methods/parseMatch/03-splitHyphens.js": {
+      "checkedAt": 1764662917728,
+      "integrity": "sha512-6Oa8eyAiqEah/2z8+HPMXZpA3OoB65vvD7MZxa5vYIlufwNGQNFwgK2nFb8WvFB61ePWM4sZ2kB5WQUhsLe/bw==",
+      "mode": 420,
+      "size": 688
+    },
+    "src/3-three/chunker/compute/04-fallback.js": {
+      "checkedAt": 1764662917730,
+      "integrity": "sha512-ZcpoLpl3Zvuz5y4i55QdfQrBTSlRrTu56HFqPJ+FyzWqZg+n7LZXZJCfYVbXciqA+SbpBb9KOo+tLUzPnvVEqg==",
+      "mode": 420,
+      "size": 1364
+    },
+    "src/1-one/match/methods/parseMatch/04-inflect-root.js": {
+      "checkedAt": 1764662917732,
+      "integrity": "sha512-aENbhBGuCE9Vyy10aHEvxADAemO/jQW/KB6Cv6wyoYnD0ddkRf2J7wOOpLk3F/Clav0cdI3vmscbKmYUaxwU5A==",
+      "mode": 420,
+      "size": 2082
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/04-placeWords.js": {
+      "checkedAt": 1764662917732,
+      "integrity": "sha512-sWPNc2G1jO6nbKtsAI8e53EaLXkwLCjIRzsJTnIfBp5FVQJs05Q6yRvX6QKSJfx+Pk7DSnsstGWc/LBfa33+qg==",
+      "mode": 420,
+      "size": 2258
+    },
+    "src/2-two/preTagger/compute/tagger/2nd-pass/04-prefix.js": {
+      "checkedAt": 1764662917733,
+      "integrity": "sha512-Adg1W0tQMXh2gkJEnwyWmwSzitCkao3cVC0NCcOVXjfcuwpbAeBwkon4KkszUop9tiN5RwWeN9Z4UqIkSIiMeg==",
+      "mode": 420,
+      "size": 926
+    },
+    "src/1-one/tokenize/methods/01-sentences/04-quote-merge.js": {
+      "checkedAt": 1764662917734,
+      "integrity": "sha512-68R7TqukIC5Uh7CQQ8WKuStpLjyjq8kOSPN7ecti2OiJ7hHKSRHXWaPyGYV47tnZ3GB8mi1o1RY/OWBftyGnbA==",
+      "mode": 420,
+      "size": 2573
+    },
+    "src/1-one/sweep/methods/sweep/04-runMatch.js": {
+      "checkedAt": 1764662917734,
+      "integrity": "sha512-rjyhepsGyaVin84ICQIdQ61Y5tNkfD53LTQN1nyZM9Ykk1rpwTkcBfdrQ/VNDtt89+K9E69gnboNaAxCR4R2FA==",
+      "mode": 420,
+      "size": 1673
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/05-fallback.js": {
+      "checkedAt": 1764662917747,
+      "integrity": "sha512-nSleQPqjs53vcb5ABZcJNOOOGYl6ubyPEK8QcpuKyMbF8Xc0HCDbtCry6zLghR6KPPZ0y+/4QHtHsFLOsEWPTQ==",
+      "mode": 420,
+      "size": 620
+    },
+    "src/3-three/chunker/compute/05-fixUp.js": {
+      "checkedAt": 1764662917748,
+      "integrity": "sha512-B+uFBjut9Lzl0WUbQz6OGNEKUvefasRrfPWW6ydFVj5n7qNxSKh2nLNR1OkDfWWC4iUt3280HOqPGMWEUdjwkQ==",
+      "mode": 420,
+      "size": 725
+    },
+    "src/1-one/tokenize/methods/01-sentences/05-parens-merge.js": {
+      "checkedAt": 1764662917750,
+      "integrity": "sha512-ZMSejivty/eFRAYY9E0JSxM0IKkJM8xYBRCrXfJYoYGmZmCSJ5IkQr856VpSe/yMJTqb8DMNIEqkcc0Hb2k0rg==",
+      "mode": 420,
+      "size": 904
+    },
+    "src/1-one/match/methods/parseMatch/05-postProcess.js": {
+      "checkedAt": 1764662917750,
+      "integrity": "sha512-JlmMMfHgRUG7YKTy16uzDPlg3lUCLLdg9v6+hJ+0bYFgV5WdsLD5rb4zfdmIHvUAqPbJ/GZjAvkY01DKyOgcoQ==",
+      "mode": 420,
+      "size": 2380
+    },
+    "src/2-two/preTagger/compute/tagger/2nd-pass/05-year.js": {
+      "checkedAt": 1764662917751,
+      "integrity": "sha512-fxplJWiDNJmHcq+V7tuIrJWjYFWcw9W3/5cpzVI5MZcD4YML02xwVR6/Z9xoRg1iXKrzTZaxKTfuRXdQLG5WxQ==",
+      "mode": 420,
+      "size": 2583
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/06-switches.js": {
+      "checkedAt": 1764662917751,
+      "integrity": "sha512-4aCu/VTavH7RpeTUyo79vP0rhEIslyCD1eiEery1vFgMAaLlxXhfbbDp9W+61T4FBdx4qhdn4+0bCSgHlpgP9Q==",
+      "mode": 420,
+      "size": 2815
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/07-verb-type.js": {
+      "checkedAt": 1764662917752,
+      "integrity": "sha512-mD7DFqWfOKhOV5MflU/q0YH8UEw/1AMwNY1ozRA9w/2sMv3+PIH/MrAnIryuRKSv8q8shhX2PsuvV1Z9byNFbw==",
+      "mode": 420,
+      "size": 431
+    },
+    "src/2-two/preTagger/compute/tagger/3rd-pass/08-imperative.js": {
+      "checkedAt": 1764662917753,
+      "integrity": "sha512-Tqt9QMAK+orGKp0z+dyneRh8MGcd8UrwjfoFKZjcS8NfryLQZHlfb1qVtOQoM9ATn9Cf0//96oSrlH1FQgTtpw==",
+      "mode": 420,
+      "size": 1155
+    },
+    "src/2-two/preTagger/model/clues/actor-verb.js": {
+      "checkedAt": 1764662917753,
+      "integrity": "sha512-6UM8zcrWV0q67jceBnMypI55Pd+GWtX6FHwjNhJw4Ib+R+PYnlU985iYsH0/2xH1KGkmhOxPfB41kyRFTYfn3g==",
+      "mode": 420,
+      "size": 420
+    },
+    "src/2-two/postTagger/model/adjective/adj-adverb.js": {
+      "checkedAt": 1764662917754,
+      "integrity": "sha512-KtvP3x1XlB21GVPFGMGU26ZAYlPLPT+CRtK/3jlwCXweOqF4k3qBHDJ2B6cPap1r+tH1ksZhai0CaHjrkzmIbg==",
+      "mode": 420,
+      "size": 1091
+    },
+    "src/2-two/postTagger/model/adjective/adj-gerund.js": {
+      "checkedAt": 1764662917754,
+      "integrity": "sha512-9RdNMBueAtllum0CgLQ/QWnExiTbLRUS8/3pYlNzmGJ0KbodomLepywS6Vjr65D8SO+2nX7NUfDVZplgkmHptw==",
+      "mode": 420,
+      "size": 2033
+    },
+    "src/2-two/postTagger/model/verbs/adj-gerund.js": {
+      "checkedAt": 1764662917756,
+      "integrity": "sha512-JUwoac1T7pvXsGfmdRv+oDUaQqjWxpnIN8UZ35tasaUYoCFpNguAeAWdpxZ3lADY/qm95CUwwUAK6CtoGIjk9w==",
+      "mode": 420,
+      "size": 505
+    },
+    "src/2-two/preTagger/model/clues/adj-gerund.js": {
+      "checkedAt": 1764662917757,
+      "integrity": "sha512-G88JHKK8BJHYxk7F+ZfDcdCdUupuXFUOrDu82lkfXZEc3kIe76S2HFA1OD+xBfVwc/Hqby0gnR1IQ8tS/PxYTA==",
+      "mode": 420,
+      "size": 1426
+    },
+    "src/2-two/postTagger/model/adjective/adj-noun.js": {
+      "checkedAt": 1764662917759,
+      "integrity": "sha512-OZ85XTaTlWsH6GO+Ia5RkiMZEItitfaQ+rwaiVeyC/XnRon0C1psCPpGRzrkMyRUV7HAW3A//FnL+wfolvCQJQ==",
+      "mode": 420,
+      "size": 2078
+    },
+    "src/2-two/preTagger/model/clues/adj-noun.js": {
+      "checkedAt": 1764662917760,
+      "integrity": "sha512-n97LG4sgnJz/ALzn2YNJqb8Nq+NWM0hx07E1XJST0oN5fkkWxDqY29aWeba3L92PL1QIAScEpmbI00gaBFbe7Q==",
+      "mode": 420,
+      "size": 876
+    },
+    "src/2-two/preTagger/model/clues/adj-past.js": {
+      "checkedAt": 1764662917760,
+      "integrity": "sha512-wKTmSDlBsSHmMKx7S49mCqNm63YmkkfBBSwULVFWoSNDrw8x2eEkNYajODyo89MkSkTCIvAU1da+j9pQ8skloQ==",
+      "mode": 420,
+      "size": 1893
+    },
+    "src/2-two/preTagger/model/clues/adj-present.js": {
+      "checkedAt": 1764662917761,
+      "integrity": "sha512-d9n99ZNxkbhe9zh8xDUi5DlQHDXhYUck+NojFaMmYQK9sl6ffhY/qZVX/Bcf7p5heJoBGYmbMjQohtwJhQ5Qrg==",
+      "mode": 420,
+      "size": 940
+    },
+    "src/2-two/postTagger/model/adjective/adj-verb.js": {
+      "checkedAt": 1764662917762,
+      "integrity": "sha512-8Qgdiss8f2i8hZ9lB1LlCsdRJg4p6fMFGJidK/7CMX9TxRewf6yq4MFMDo8uWyZohKAa+OkVAGdKb8ySQrHqcA==",
+      "mode": 420,
+      "size": 3583
+    },
+    "src/2-two/postTagger/model/adjective/adjective.js": {
+      "checkedAt": 1764662917762,
+      "integrity": "sha512-F3R4/XG2uxCzeO3rv7yHECjo7BqUbk4eLcwsrCBcnWwQxq9S6GIPwQ7fdY5kF3grw4KWThjTEVEvWxG9HM0zYg==",
+      "mode": 420,
+      "size": 2535
+    },
+    "src/4-four/facts/parse/adjective.js": {
+      "checkedAt": 1764662917763,
+      "integrity": "sha512-cs3WV3T870cT7E1ks7vkZztPshqv3ysUKUPvYpJLIVlSEPsrMovKhYI8cbOC/AqCAzFfWk8iWgK62tEhc0kTFw==",
+      "mode": 420,
+      "size": 256
+    },
+    "src/4-four/sense/model/senses/adjective.js": {
+      "checkedAt": 1764662917764,
+      "integrity": "sha512-By/XtE5+gTys8Y8axdgdfR5bStvGRGOL4ejeTOEUxcdGHus1bGUlR6gxPpun7KX0ogpyJtetYZVkGBYMbChVeg==",
+      "mode": 420,
+      "size": 741
+    },
+    "src/2-two/postTagger/model/adverb.js": {
+      "checkedAt": 1764662917766,
+      "integrity": "sha512-hmbosMF0xlkUFaUhM6JK3Ok3F3EOmeGOWLSlIYU8GQ3tIrFQYK54f/9Au9wMKALrrW1lQxsKB7cGZs9d3YSF5w==",
+      "mode": 420,
+      "size": 3258
+    },
+    "src/3-three/verbs/api/parse/adverbs.js": {
+      "checkedAt": 1764662917766,
+      "integrity": "sha512-ZgSqdZHRqqzhiSnZf4V3sfDkYYJtgj3dwfPGMSeGuhZk2rl4YZ9OD5/pNkXSsv7E/DMAyG+2l3Hbqo+YGk196w==",
+      "mode": 420,
+      "size": 563
+    },
+    "src/1-one/tokenize/compute/alias.js": {
+      "checkedAt": 1764662917767,
+      "integrity": "sha512-ixHGae4eaGcXdBm5gWE3o3Eu3g8QKYKcuiFEhjSQUaMIGRRuHu8MmX4K93ITNM6ZrRww45V68VqFLd5hBHEFLQ==",
+      "mode": 420,
+      "size": 1085
+    },
+    "src/1-one/tokenize/model/aliases.js": {
+      "checkedAt": 1764662917768,
+      "integrity": "sha512-ryiqUq8w1an6oNNG94GvCDLA7VrJXQX+7y+c1Gsczih0MyUEFroJis/V0OH0pOdGEiXNbHkTvQOVTW016hXGdA==",
+      "mode": 420,
+      "size": 126
+    },
+    "src/1-one/typeahead/lib/allPrefixes.js": {
+      "checkedAt": 1764662917768,
+      "integrity": "sha512-DaGbHOb9osteWFH2XbbTukvfv/Y2aecSibdOIyqC+8WBqIlWzG7nAkQkisd0W/EuGDHBNcJk84KSx1YZHF5ddA==",
+      "mode": 420,
+      "size": 1058
+    },
+    "src/2-two/postTagger/model/person/ambig-name.js": {
+      "checkedAt": 1764662917771,
+      "integrity": "sha512-grpKrS2bA9eVcmhf04Ywfq89K3QAKr86rLJc22hq4KBBQzxFxmTkSHvx0IBapQ/GKkeuPgALJZmZotdqsxVTzA==",
+      "mode": 420,
+      "size": 2793
+    },
+    "src/1-one/match/methods/match/steps/and-block.js": {
+      "checkedAt": 1764662917772,
+      "integrity": "sha512-q+N0Ye9GBPwinTnqS5I3iehch3cPIKDsAD5pTeAwYwZwnevXErAkKXNZ7sHkgWJ+iZgCTEipMTaTauXhTeaujA==",
+      "mode": 420,
+      "size": 819
+    },
+    "src/1-one/match/methods/match/steps/logic/and-or.js": {
+      "checkedAt": 1764662917773,
+      "integrity": "sha512-+hz80zR6EJw1d6qqulvI81ZE0wjedPi7d1JqJ9yk7YStEF1qU9w6o9AFFyalv6yZVXOdITpsBNEKuRcUnFODSA==",
+      "mode": 420,
+      "size": 2253
+    },
+    "src/1-one/cache/api.js": {
+      "checkedAt": 1764662917773,
+      "integrity": "sha512-XnGERpRw35eyZxRtxo6kbeD4rAY8d0dxscS7WsU291Q76BgXaAY6F7iRERPdlGMeDBBRNM9HWmHRFgqzdU23gQ==",
+      "mode": 420,
+      "size": 308
+    },
+    "src/1-one/sweep/api.js": {
+      "checkedAt": 1764662917773,
+      "integrity": "sha512-XqOQ3bRjuC/eT/61P3FgBvoY2EMZtcNHFYTERPYEd7LE0F36eCxVWyzxFjU2fKPpZzI9q6j3Bp/4URAmGaRDJQ==",
+      "mode": 420,
+      "size": 1085
+    },
+    "src/1-one/typeahead/api.js": {
+      "checkedAt": 1764662917775,
+      "integrity": "sha512-zs8xaOxUkjX4Sm3VIs05Sv3izJlDBYPWaobKhdud/i5HOzkQh2/QHYZAw2ZbpbpscUn9a/IwPmDDGjGMamlYMw==",
+      "mode": 420,
+      "size": 448
+    },
+    "src/2-two/postTagger/api.js": {
+      "checkedAt": 1764662917777,
+      "integrity": "sha512-eG/tOoGbpljqnKfWmkLB+YYVgJm6NBwQnVbDTO7V5Cx9otOSrL22YnU0w2kbl+aiNRefm2k+397op+RxMYIuFA==",
+      "mode": 420,
+      "size": 507
+    },
+    "src/3-three/chunker/api/api.js": {
+      "checkedAt": 1764662917777,
+      "integrity": "sha512-4p+VJl428BBnmJTjnZUMsNjHwo4o7pi8920uD3hsty0x0oCVCwHRQlIM91RdkmkaHwO7C+35H1QCitsBBQxTdw==",
+      "mode": 420,
+      "size": 1029
+    },
+    "src/3-three/normalize/api.js": {
+      "checkedAt": 1764662917778,
+      "integrity": "sha512-zu3dD0bc5Uu/KLOLfxN5Ne53bFa1pfZEbLfYNcRVQ4qma2hqvx+ihkuU37XxBSqinwsuP4Pm4tfkhMGJAUZbfw==",
+      "mode": 420,
+      "size": 813
+    },
+    "src/3-three/nouns/api/api.js": {
+      "checkedAt": 1764662917781,
+      "integrity": "sha512-vUiNCBBpEMIQAWLoCIeLzkIfqFWzXF9sRsFaw5gvLfqcZawqpvqoPH6qB1C5UKcQ6t1NXTlMrPdGMvCFiYk6xw==",
+      "mode": 420,
+      "size": 2370
+    },
+    "src/3-three/numbers/fractions/api.js": {
+      "checkedAt": 1764662917782,
+      "integrity": "sha512-r1oKQK12/EbpGyWo7FZthgfO/DGjPzVseFqwEyEuEB9SjZ2CbjpL73rpJIidr6egcR2Izt0hbeS7ETr8WxHrlg==",
+      "mode": 420,
+      "size": 2114
+    },
+    "src/3-three/numbers/numbers/api.js": {
+      "checkedAt": 1764662917782,
+      "integrity": "sha512-3ETWknzH6xVoe9nwXuJ7AhMeGRySIWoDRGeQL5igSf77k8uyfPnN0v3soTG9WW/XojS0lpqU/SujWijKS9JJ8g==",
+      "mode": 420,
+      "size": 7847
+    },
+    "src/3-three/sentences/api.js": {
+      "checkedAt": 1764662917791,
+      "integrity": "sha512-28zq9IuV3/2R7iAizyLSys7/nqcBvDOMloZZuup6WPYHlt3DOKqPy5YerQXjtTCVoqfHfvpWPctoXQuVV4vc7Q==",
+      "mode": 420,
+      "size": 2829
+    },
+    "src/3-three/topics/orgs/api.js": {
+      "checkedAt": 1764662917796,
+      "integrity": "sha512-SNucMn1aJ5AN/aUeh6McNfADAaHe441BozZByCdrUrK++FJTSV0r6HeeboK4DBLqt+06ApvcgaFWZy0M11H21A==",
+      "mode": 420,
+      "size": 168
+    },
+    "src/3-three/topics/people/api.js": {
+      "checkedAt": 1764662917797,
+      "integrity": "sha512-WP+0Vc7d/igLBDDXJnO32e3XIPkZ5VdnqVft8/TYE+t6MlFXikfAx48VrnzuHUkc1okdiFyJxNyYPf3/FTklqA==",
+      "mode": 420,
+      "size": 1521
+    },
+    "src/3-three/topics/places/api.js": {
+      "checkedAt": 1764662917797,
+      "integrity": "sha512-kgd6K6gpW/JIOyAGEjYZcXJ2BjwZBUZ/INbkUmklYOEb8tN524qs7WXnJkZshUvEysOni1OHoM1LOB/yo4Nudg==",
+      "mode": 420,
+      "size": 227
+    },
+    "src/3-three/verbs/api/api.js": {
+      "checkedAt": 1764662917797,
+      "integrity": "sha512-rAUyBsp4wCC/xBh4vBM/TWCgv09nTtUYk09iKgbsnsnxW4cHpc0F+Xbmr4OCiw1k7UWqYxBRPvkAglc+33WXzQ==",
+      "mode": 420,
+      "size": 4900
+    },
+    "src/4-four/facts/api.js": {
+      "checkedAt": 1764662917798,
+      "integrity": "sha512-Ksm3AHKn3TaT1xOfJAdiYJuaq/X7xZPiiWxiwgiCQydBBMz16jbKKTLaETE+cUvG8U+2PgDBqQa5N2TiTfqcYw==",
+      "mode": 420,
+      "size": 2106
+    },
+    "src/4-four/sense/api/api.js": {
+      "checkedAt": 1764662917798,
+      "integrity": "sha512-CUWeVJZ4X8DpeFF5uEVfV7yo6MJ3Rcwjg1xlXCpJLIw5/vSwNBrQJI+VeYEFfKGzhxIHlNi2uunIq2upgIryag==",
+      "mode": 420,
+      "size": 239
+    },
+    "src/1-one/contraction-one/compute/contractions/apostrophe-d.js": {
+      "checkedAt": 1764662917799,
+      "integrity": "sha512-wROGn+V+XSVmHbx2PYAP29c5HNDA4cq/H98VRw2EAaEgX9jBtPYIEB5WQy5RYXHcCwe+3QdA5M+byZItcnWlhw==",
+      "mode": 420,
+      "size": 1150
+    },
+    "src/2-two/contraction-two/compute/apostrophe-d.js": {
+      "checkedAt": 1764662917799,
+      "integrity": "sha512-sbYgHEojNmNcrxmIWs8R2aZqOGmHoIKfGv4NLpOUWThV+GZ3hpwbGh0D8zNvoSs2kAnnAXSs6tchOeg2MCnfVA==",
+      "mode": 420,
+      "size": 1517
+    },
+    "src/2-two/contraction-two/compute/apostrophe-s.js": {
+      "checkedAt": 1764662917800,
+      "integrity": "sha512-eGbysDEULAdVsPecvw7aUfo3Bf06Jw5N5MO75QNS3PdVcCQjl2li2N+E0X4L8LO1nlVnNkLCR72xMg8zgGNjDw==",
+      "mode": 420,
+      "size": 2028
+    },
+    "src/1-one/contraction-one/compute/contractions/apostrophe-t.js": {
+      "checkedAt": 1764662917800,
+      "integrity": "sha512-hfy82/TvwpYFlVYjvcJ4L0MR5/gWfBxY3Vd4D0TIcParuHofw8Mv5XiZxjzEd4CUtgG1hEiIGU1yO7lA3hiDOQ==",
+      "mode": 420,
+      "size": 277
+    },
+    "src/2-two/contraction-two/compute/apostrophe-t.js": {
+      "checkedAt": 1764662917801,
+      "integrity": "sha512-9PtY4CxtW/rNDsZaUAhtVgpsz/QX3pKU0IQdDWsRNQIi1w2CCmSTL98Bts4hQ3BDprDtMX9rN5CBla86HFV4Lw==",
+      "mode": 420,
+      "size": 1106
+    },
+    "src/1-one/match/methods/match/steps/astrix.js": {
+      "checkedAt": 1764662917801,
+      "integrity": "sha512-cgwlLuevKlHKU1psawa1wKEv7IJvCrte8MxBVuUBaFA80WgDwI43XOcMA6tW+Xb12eqR4fBfXQvHFnPg7XdXuQ==",
+      "mode": 420,
+      "size": 951
+    },
+    "src/2-two/postTagger/model/verbs/auxiliary.js": {
+      "checkedAt": 1764662917801,
+      "integrity": "sha512-MdFjLy0X4DvFO99LzR7agDr+qZ2LOBNVmpLhAeX+ErrCsiEStmeCJ/aL5dGY0X+tyJxmdG4WjgrpQlCNQxnuEg==",
+      "mode": 420,
+      "size": 2978
+    },
+    "src/2-two/preTagger/methods/expand/byTag.js": {
+      "checkedAt": 1764662917803,
+      "integrity": "sha512-oWqfCwBmcv4p4D/1YmBQz1SL1S8yFZi1mXPoO68n2ctGjF3Jehuo4AnLw0vnFa1O8X+rLZrrPwl6mAVbxB2emg==",
+      "mode": 420,
+      "size": 3160
+    },
+    "src/1-one/cache/methods/cacheDoc.js": {
+      "checkedAt": 1764662917804,
+      "integrity": "sha512-QwaaPivUilBXOaUu788SwSklKbUp8EqVIV29hDwy26ftKbjs4gwf2T/OSLMeZOKu8Bz9/SELFHpO/NzMeHyzqw==",
+      "mode": 420,
+      "size": 887
+    },
+    "src/1-one/sweep/methods/tagger/canBe.js": {
+      "checkedAt": 1764662917805,
+      "integrity": "sha512-Lb6fpp0x0nFlTkDPYvmM+C6WOJjSVkC39+fmlkoiJ8q20XGfj7zkhIUGn0omCl40frQx3+8B3MI9GjE9Gj4hZA==",
+      "mode": 420,
+      "size": 494
+    },
+    "src/1-one/tag/methods/canBe.js": {
+      "checkedAt": 1764662917806,
+      "integrity": "sha512-0UH6V7x/o9Ipmn+KN/Q/2z29xaLBBBRIK4yVD3Gxr2V0HA6ithSSnonoaSrDolTMiSgT/lKvOiXCFhTvGyY6pg==",
+      "mode": 420,
+      "size": 369
+    },
+    "src/1-one/change/api/case.js": {
+      "checkedAt": 1764662917807,
+      "integrity": "sha512-LwfEFvYVkN3hTcHPGnEZRfSwj764zPb1spulshTg0JWZyD/0gQkEBGVuLj00tDgq2v/eJiH3FA4LTHxBh5zogw==",
+      "mode": 420,
+      "size": 833
+    },
+    "src/1-one/output/methods/debug/chunks.js": {
+      "checkedAt": 1764662917808,
+      "integrity": "sha512-LQns/yNOil6zRT5QPi4AU+I7gxraPe6YI2ux6sZ/0UmqlNhOSuMbN+KzxWjPDPpgUUF4Z3H0BfIZGp3l56JTPg==",
+      "mode": 420,
+      "size": 775
+    },
+    "src/3-three/chunker/api/chunks.js": {
+      "checkedAt": 1764662917808,
+      "integrity": "sha512-hC5QmkO8MPbf+LOoOsiXQcJJaTIWDWqvqkZqNKGVhHIY0+madgkdh9polul95wrcRPozdoCJsROXUKjZyfFjSg==",
+      "mode": 420,
+      "size": 638
+    },
+    "src/3-three/chunker/api/clauses.js": {
+      "checkedAt": 1764662917810,
+      "integrity": "sha512-6FF95Jy9OI2DNbGicRe6m4RP6AYd3t+yJvKRAFVdZfmZSAVUfWmalL3PmX5fHDbTHQoX8TAZ4I5YIgbmwW2tew==",
+      "mode": 420,
+      "size": 4151
+    },
+    "src/1-one/output/methods/debug/client-side.js": {
+      "checkedAt": 1764662917810,
+      "integrity": "sha512-xdI3MS+pWdGw/GM2kzPLqEYGt58VSAzidDGXong32L8XVy6nJz3pP7anTIqzTwwilS94MWAwOZecSsXhAPYFyA==",
+      "mode": 420,
+      "size": 539
+    },
+    "src/1-one/lookup/api/buildTrie/compress.js": {
+      "checkedAt": 1764662917811,
+      "integrity": "sha512-SCePANSC8W60ATXW/s13bMLPe8ZPzfWyqJShxK+05NcK891DoSJAtqbjIMLrsjXoNsVp4KU1Z11DgJrIzZzl7A==",
+      "mode": 420,
+      "size": 732
+    },
+    "builds/compromise.js": {
+      "checkedAt": 1764662917640,
+      "integrity": "sha512-IukKwcQvWMrg44ujclo9Pi/ZXfU6xTFJgrjiAeXG0dTrQULZ01QM3SRmIcVZt+J80wvTEiqaYfhnGestJzpmKw==",
+      "mode": 420,
+      "size": 351120
+    },
+    "src/1-one/cache/compute.js": {
+      "checkedAt": 1764662917812,
+      "integrity": "sha512-8jcod80KBqrTiKO7pjLXGDSkMPVPIPj/6Olk+2D5P0quvqiqCZpuGdI+Q32QvVPTuzj6c2lZNnXFw3lEKJO2Fw==",
+      "mode": 420,
+      "size": 109
+    },
+    "src/1-one/freeze/compute.js": {
+      "checkedAt": 1764662917812,
+      "integrity": "sha512-H8S6BGmOrIeTzf0AyHSqdYoKFIsa53XIlg+op5JNv1DOHwvc/dcPvWrjnymLi+1N+zsHEVe+xy/u3tNlYj6DxQ==",
+      "mode": 420,
+      "size": 1381
+    },
+    "src/1-one/typeahead/compute.js": {
+      "checkedAt": 1764662917814,
+      "integrity": "sha512-FMeXa2RmVfBI5xsn174xqIzlLS8fbTHN339wtdlu+kvIdKrgIE6Zt3OCjJzda0FvhEdeXQgY0Sv7YauMS+xycg==",
+      "mode": 420,
+      "size": 836
+    },
+    "src/API/methods/compute.js": {
+      "checkedAt": 1764662917816,
+      "integrity": "sha512-0c743BoacNaGoedYClk4XwHOi8PRwqs8BaPouISFDe6xf80WUg44XCfEBXpJUrvc0fRtn9kvwjbAOXqqIitDoA==",
+      "mode": 420,
+      "size": 860
+    },
+    "src/1-one/change/api/concat.js": {
+      "checkedAt": 1764662917817,
+      "integrity": "sha512-tcnXo+oa4aRKCMEE6UoHKZHirXx3mOmvLYR7eMkt2drE2+QpjJta24tCWwwYwS1DrwKm7DFfX63FQmTzPfVrQw==",
+      "mode": 420,
+      "size": 1835
+    },
+    "src/2-two/postTagger/model/conjunctions.js": {
+      "checkedAt": 1764662917817,
+      "integrity": "sha512-NbnMLN8dKWOHC0XG+sp/K6gAo6Rgauo3u9YZEJZjJFitz/Gu6Hjn7jz1DL8LIttNk3nufC2RtYlSbgnA0p86XA==",
+      "mode": 420,
+      "size": 2549
+    },
+    "src/2-two/contraction-two/api/contract.js": {
+      "checkedAt": 1764662917817,
+      "integrity": "sha512-RMP37FtGWA3WukWp6BN/uposFjuIy/iuVEsPJf5wM+FEwc7Y4skQVahH5X32Tm6/pqkObW3CXhnP+HTt3736pA==",
+      "mode": 420,
+      "size": 1690
+    },
+    "src/1-one/match/methods/match/steps/contraction-skip.js": {
+      "checkedAt": 1764662917818,
+      "integrity": "sha512-9alipZ+4vJ5ecJYvkwqPLT3CM/plWwQ9fa27hAksceJtrPMJkMWhnnyBb1lCF5U53PteUS5H3lci1tteOlBPjA==",
+      "mode": 420,
+      "size": 716
+    },
+    "src/1-one/contraction-one/model/contractions.js": {
+      "checkedAt": 1764662917819,
+      "integrity": "sha512-86x7YT88Cr7uJtqYfI9ifk43zMlmA2pRmGjYaF1eyRbDnwS8gmHlcOyfpKMOwcuP1mJMKFvh6VcolGBTLy2lig==",
+      "mode": 420,
+      "size": 2734
+    },
+    "src/3-three/numbers/numbers/format/toText/data.js": {
+      "checkedAt": 1764662917820,
+      "integrity": "sha512-s+LRqYEdi6H+pyqKyKJMQPXSKIvz2A3SDvLe77AY3fQ/tQWF734CWnFNEoqa2D3+3W0BDf+H/I4vzZKiK2eb4w==",
+      "mode": 420,
+      "size": 921
+    },
+    "src/3-three/numbers/numbers/parse/toNumber/data.js": {
+      "checkedAt": 1764662917820,
+      "integrity": "sha512-LBIzJ6HJKLVgBZIkp3KMeQrFJObdhqPtZnAaQyMaHVHW3K7PuZJV8qP1xYHUTge9zp0oRh/IsWbwzEjwPC5uQw==",
+      "mode": 420,
+      "size": 1434
+    },
+    "src/2-two/postTagger/model/dates/date-phrase.js": {
+      "checkedAt": 1764662917821,
+      "integrity": "sha512-3l2A78M6UeoJ/K7cmEYKL+OABa4NceXAVmaCMs+ucXt2EGYOBMH8oDHlEe6dcdXsAEkxUXE2Cn6EUT9Bdxq2oQ==",
+      "mode": 420,
+      "size": 1626
+    },
+    "src/2-two/postTagger/model/dates/date.js": {
+      "checkedAt": 1764662917823,
+      "integrity": "sha512-R/h7DSOceLLr/8SFGvrVbSyf3vlpsmkrz7RCkFE03Y31Y1G0u7gHvIiIFNJ2i7flGBAt2bG4HQXXqpvnp7OKsw==",
+      "mode": 420,
+      "size": 1727
+    },
+    "src/2-two/preTagger/tagSet/dates.js": {
+      "checkedAt": 1764662917823,
+      "integrity": "sha512-DEfxBV0TYqkr0IT9mcRj472NK/5Xi9kGoe34wWUHWjQ7PwD5uueQ1XpDWMYXipXfv7H0No5nBzuNFJ4UKRLfvw==",
+      "mode": 420,
+      "size": 661
+    },
+    "src/1-one/freeze/debug.js": {
+      "checkedAt": 1764662917824,
+      "integrity": "sha512-T3V9KfYZTveEZE95/iKKAXHSX60g4/Cw1eFDi8qOC8/hdqzDRRlTbUxbB7l4uTZHNmrJXirj3fcAG+3Wa/gNVw==",
+      "mode": 420,
+      "size": 537
+    },
+    "src/1-one/output/api/debug.js": {
+      "checkedAt": 1764662917825,
+      "integrity": "sha512-ZcUoUxdJfuens+7FEWDOi8DvOe2kq9ZpTDT5vyePaDHUKo9I7gCjGReV6JgNyxP8YIK00hU0khgnfI+ooPLakw==",
+      "mode": 420,
+      "size": 550
+    },
+    "src/3-three/verbs/api/debug.js": {
+      "checkedAt": 1764662917826,
+      "integrity": "sha512-0ZD8GSG0er3k/01tuIbB57vmF5T45nO1vxUwc2OKVmOIEGdDad54NnNbXUWqlQBzGOyw51JjuIkpSAoWckfMyQ==",
+      "mode": 420,
+      "size": 1226
+    },
+    "src/1-one/pointers/api/lib/difference.js": {
+      "checkedAt": 1764662917827,
+      "integrity": "sha512-1De9xKj3H9qhDvXEZbyIZeu+me56NX/gC5dkykrl58aYasq6c+FbKNbhnjZdpUEb9NVceW7wu84CagUaAUiwnw==",
+      "mode": 420,
+      "size": 455
+    },
+    "src/1-one/match/methods/match/term/doesMatch.js": {
+      "checkedAt": 1764662917827,
+      "integrity": "sha512-e3mXeP+2+ddACdo53Hrpn6ra9LzUkvtwRJHii+zbv65KiACeqRn/DbG7LVLOcvK0UXQwgoM9lK8WzDXmeMSe/A==",
+      "mode": 420,
+      "size": 3539
+    },
+    "src/2-two/preTagger/model/lexicon/emoticons.js": {
+      "checkedAt": 1764662917832,
+      "integrity": "sha512-XLGG3FZkaaj5eyv8Q2zXO21MIeT23afuqaJoD79WYv3iNktFEYvD7M9MJWJMEf1QuIiOXva7os9seOfu0sE9mQ==",
+      "mode": 420,
+      "size": 637
+    },
+    "src/2-two/preTagger/model/patterns/endsWith.js": {
+      "checkedAt": 1764662917832,
+      "integrity": "sha512-ixpi6spWw1uw9MRZl47p4Zqks6y78QUvhNrszXlVD/5VpBntHpwfkeWrjKvQQ5TLFIEbKFunLjEShZlTrcXn6w==",
+      "mode": 420,
+      "size": 3698
+    },
+    "src/1-one/lexicon/methods/expand.js": {
+      "checkedAt": 1764662917834,
+      "integrity": "sha512-a1HK9+TpeODmiQcMjXmRYH857KP8QlimKPd57zkMkdcCUdmfAWBbTRPNC90JVAEug7iQcvpjEBCjOXo+qGTApw==",
+      "mode": 420,
+      "size": 844
+    },
+    "src/2-two/postTagger/model/expressions.js": {
+      "checkedAt": 1764662917848,
+      "integrity": "sha512-e2hPJy+A6P7FYQOSm5FLt4Ku41bGh8gxSd61iuhaXs+78JYfTMVhzMdATQfE/2fqrQoDGwfZIsmX/Q76UIoIvQ==",
+      "mode": 420,
+      "size": 888
+    },
+    "src/API/extend.js": {
+      "checkedAt": 1764662917852,
+      "integrity": "sha512-eQE89mg0B+E7Me267Clhd5luNrua726XOxYPLpHhryT1jA0HHh/Km4iHCIgaf548vOZgMEeK2TfCWaFw64aoLw==",
+      "mode": 420,
+      "size": 2866
+    },
+    "src/3-three/nouns/find.js": {
+      "checkedAt": 1764662917852,
+      "integrity": "sha512-uAM5ikKtsosOiCqgDKaZLaAIXP81WlsluIlyxpwqH/frsDywt8Qk2jLt3CtE6vwU0QLoBkfBLOGk9XKZx1Y+qw==",
+      "mode": 420,
+      "size": 1094
+    },
+    "src/3-three/numbers/fractions/find.js": {
+      "checkedAt": 1764662917853,
+      "integrity": "sha512-QMKosBAs/8AlbJiwiaztAHMqx62mxj/Mv7IeKDbb7ET1M2dJ90gsirxOxXEYhzbdaUB0oF8gLju3wKpliw9g9g==",
+      "mode": 420,
+      "size": 347
+    },
+    "src/3-three/numbers/numbers/find.js": {
+      "checkedAt": 1764662917855,
+      "integrity": "sha512-en9yBMp3kwAxUloakkRA41qUQXeX2lcnt3UzFeME4rWk4prke+XtOHBcaheUzkWGaVY7bP0PyMSTLiAeKnGo6Q==",
+      "mode": 420,
+      "size": 2587
+    },
+    "src/3-three/topics/people/find.js": {
+      "checkedAt": 1764662917855,
+      "integrity": "sha512-CN/PFh2Ku8ttvHT5QJ5Gw0M2yJzUtbpvFpGWaYqvoNnIAOig6dWGBSExW4KSLm69Qod4ATxsR3+viwVc09kNGA==",
+      "mode": 420,
+      "size": 258
+    },
+    "src/3-three/topics/places/find.js": {
+      "checkedAt": 1764662917856,
+      "integrity": "sha512-RMU7dQ8LPst8pPRbYhR+Ix/ndtWquZn3OEpV1uKBc5kszs1eLyuuFnk7MLjbARZxq2Zvzu0ZWzTZcJaj/N+zbg==",
+      "mode": 420,
+      "size": 523
+    },
+    "src/3-three/verbs/find.js": {
+      "checkedAt": 1764662917857,
+      "integrity": "sha512-U9AXqNUiFfcIQhCE77MUMcEl4XWLso6qfHmkpRnHvUIuR/xJb7Wmq8OFIthA3+nRaP+96JGX5B0kkmvZy+k52w==",
+      "mode": 420,
+      "size": 1646
+    },
+    "src/3-three/coreference/compute/findIt.js": {
+      "checkedAt": 1764662917860,
+      "integrity": "sha512-/L3Cncq5cZm+MrswteyddCT+UNcOjaYcykouGONmxYblq7jGHcIC2NEJZXnMZdOPgLad3L55o3OUqeXRTqV9Yg==",
+      "mode": 420,
+      "size": 71
+    },
+    "src/3-three/numbers/numbers/parse/toNumber/findModifiers.js": {
+      "checkedAt": 1764662917861,
+      "integrity": "sha512-p/DnyNsrRnPi/76rMG8zQEwEPPUSEACyfiYnETduaSDLxbEhlcW/pDDC6OhdbNoVDN3IYXFMoWQPK6+FuhD8Pw==",
+      "mode": 420,
+      "size": 630
+    },
+    "src/3-three/coreference/compute/findPerson.js": {
+      "checkedAt": 1764662917863,
+      "integrity": "sha512-r9SRFJLxvayjJ2FeVSNIbwdIKGCdT7zFbzRlX4/2YT3IX+OidQfm0yRUYcrDwcWkCP5I46pLWOZh/eYTcRsz7Q==",
+      "mode": 420,
+      "size": 884
+    },
+    "src/3-three/coreference/compute/findThey.js": {
+      "checkedAt": 1764662917865,
+      "integrity": "sha512-WKTvKBNcX59heYMdJrYi3fe/CfHloFyktmZk6mMWfp5W3Teaf6r0lzBqGRK5WXlZxkzhC180aAYy6Xki4qBU1g==",
+      "mode": 420,
+      "size": 727
+    },
+    "src/3-three/misc/parentheses/fns.js": {
+      "checkedAt": 1764662917868,
+      "integrity": "sha512-liMKqtRYcHKV2UcSJfkDl7rA5beXiSmi5vBJ+waz8mFA8/h518AWeozzNLhOvZhPSeNCCZ/g/ygv0sAbrABZiQ==",
+      "mode": 420,
+      "size": 993
+    },
+    "src/3-three/misc/quotations/fns.js": {
+      "checkedAt": 1764662917869,
+      "integrity": "sha512-8k9EO7QdrPoebvgC8TFMjVMQH3A1eJjp0L7qIsZk4IVoqD8NmLyEWRIV5IFG1lk7KndDkHPZeFf/fYSSvzcGGA==",
+      "mode": 420,
+      "size": 2159
+    },
+    "src/3-three/verbs/api/parse/grammar/forms.js": {
+      "checkedAt": 1764662917870,
+      "integrity": "sha512-VJGTtHN/GZp3nHQJLVhAhsMUmKIrfRaEFCRVsXNOOBuyTVqTvN31QUGn8VhXf3gUt7E8IvxQtBk9p26GfWK47w==",
+      "mode": 420,
+      "size": 4488
+    },
+    "src/four.js": {
+      "checkedAt": 1764662917870,
+      "integrity": "sha512-AMqPFLeA/9ghyxNt+dDobxiYTdFNVlX5MFRPAcTUAiOR27WafyW1JS5gg23XsYtA+SlT72CSNFMxuLaefVYSqQ==",
+      "mode": 420,
+      "size": 176
+    },
+    "src/2-two/postTagger/model/numbers/fractions.js": {
+      "checkedAt": 1764662917871,
+      "integrity": "sha512-14ETywibSr4VkbqvH4VyhSj8NJ0xyrh1tVeL67nLHNoiiqH6fPbSAhsvHEaZs7s2zi2RwlddwqLyHqBZe+sakQ==",
+      "mode": 420,
+      "size": 1287
+    },
+    "src/1-one/contraction-one/compute/contractions/french.js": {
+      "checkedAt": 1764662917871,
+      "integrity": "sha512-Q00yLEFiqnKb8wFQQT2V03CEtxDkEgbYXtFFDulXelfhjaIJi+qMOcsgWyEk9GcmY1HoNlHLArvRFLDILrXb9w==",
+      "mode": 420,
+      "size": 861
+    },
+    "src/1-one/tokenize/compute/freq.js": {
+      "checkedAt": 1764662917873,
+      "integrity": "sha512-Q8JsNSqaTTQT6DOQu4Qlya8mez82t96X0z265yBngytCF5asJZtOvROSMsqHOFYdKg0slTxSaHGCbUxAYb4nTg==",
+      "mode": 420,
+      "size": 600
+    },
+    "src/2-two/preTagger/methods/transform/adjectives/conjugate/fromAdverb.js": {
+      "checkedAt": 1764662917874,
+      "integrity": "sha512-TjYEmG9L/uEVY9CrqPbxf2tqm4ZGyvI6ipfOu3tWWdRygOxUyZ8c4Oippbae5ihndrrcgeRqijlj6dbSaZHRWA==",
+      "mode": 420,
+      "size": 2516
+    },
+    "src/2-two/preTagger/model/lexicon/frozenLex.js": {
+      "checkedAt": 1764662917875,
+      "integrity": "sha512-HJF0vMm62YncmKN7k+mocqECPvou4QLXbha4lfktU5zlmh5BfLY+lhqJSVRD7cXWk8UK3QE59pIvho1QLCOF0w==",
+      "mode": 420,
+      "size": 2840
+    },
+    "src/3-three/topics/people/gender.js": {
+      "checkedAt": 1764662917875,
+      "integrity": "sha512-Ryk3maLf8gKErymhPvDO3ivOos+02FXGMxpiHBl+COz2rw4Qj8JVgrV3IctH0KVPikqyrRdFGqXg+TCAMtr5Ow==",
+      "mode": 420,
+      "size": 1732
+    },
+    "src/1-one/pointers/methods/getDoc.js": {
+      "checkedAt": 1764662917876,
+      "integrity": "sha512-1kxs+G+uPIEvWAeOnvtfnZU35k4tm6fCo0k4Hpoic53LFEtdRWXDoYjQxmYPgOBLZcszdqvzbRDjoqqDjIEX5A==",
+      "mode": 420,
+      "size": 2232
+    },
+    "src/3-three/verbs/api/parse/getSubject.js": {
+      "checkedAt": 1764662917876,
+      "integrity": "sha512-Uma9nnVOaoyJ8uGa/b9b2NtGDp18Cv3Oj1RVRNK49oMby8l2j0LiWmGy2KbshnBj4G0qfX9oga4DvvX+idnBlQ==",
+      "mode": 420,
+      "size": 2159
+    },
+    "src/1-one/match/methods/match/steps/greedy-match.js": {
+      "checkedAt": 1764662917877,
+      "integrity": "sha512-fddl9pNTMJgcNjyqqA8oqye1cCvWno6BcoyBZRoLZc/ZmkZmeeKYuHCctI4zlKbEFk9KgtSJqz8dr36w62fCcQ==",
+      "mode": 420,
+      "size": 653
+    },
+    "src/1-one/match/methods/match/steps/logic/greedy.js": {
+      "checkedAt": 1764662917878,
+      "integrity": "sha512-1DqTn5BZRXa2Sle7ox/bKbhtvbzkVuumIeQWKn8hVIZCQy42DohqxBlgrR49CEEMzaCHl+mCf7hIyB24CyaErQ==",
+      "mode": 420,
+      "size": 2062
+    },
+    "src/1-one/change/api/harden.js": {
+      "checkedAt": 1764662917878,
+      "integrity": "sha512-361b/vw47ryO/OT1xtXzFr3T/2AdRDb2VYrdk3fMrcN/hUmDIGl0XwlSFxFHfX1xTWsikhYzhD3citoDMjREpQ==",
+      "mode": 420,
+      "size": 341
+    },
+    "src/1-one/output/methods/hash.js": {
+      "checkedAt": 1764662917879,
+      "integrity": "sha512-D150LG4I7iAXChjFIiANpKj3DrNrNxE9KuxJSQdF5Ncd4sUS1aW0LNV0o68WNRb3q1KMjB39SwXiPNA+HBm9eA==",
+      "mode": 420,
+      "size": 1290
+    },
+    "src/3-three/nouns/api/hasPlural.js": {
+      "checkedAt": 1764662917879,
+      "integrity": "sha512-FWq0Sfj57R6itmu3tgo3Zy2iQr2LWtQTKSYMA2bcUppGmKzwxcNRKNuqo1OJlt1qqikxGsL1XhXDPSqRM1R7MA==",
+      "mode": 420,
+      "size": 174
+    },
+    "src/1-one/output/methods/debug/highlight.js": {
+      "checkedAt": 1764662917880,
+      "integrity": "sha512-l81Fhuqvq1KeyBW1G+vz2/cBvk9wvPnqltPMdbBQZP83nNs0D5hUOgCZVuiyD2XQzrfBfYDR17+15WrQN0DX2A==",
+      "mode": 420,
+      "size": 1110
+    },
+    "src/1-one/tokenize/model/abbreviations/honorifics.js": {
+      "checkedAt": 1764662917880,
+      "integrity": "sha512-0GNAVKmbWcHLw+UT2/rAIC2heMp8yGwnAjFB+AfbrCTqxdJNmye5Mcg9iXokkMllLd7gwUu+B3Qx//4NHWXcpg==",
+      "mode": 420,
+      "size": 437
+    },
+    "src/1-one/output/api/html.js": {
+      "checkedAt": 1764662917881,
+      "integrity": "sha512-nVBuA+BGuczjdNbf+IjA7jbQ+ACH4suegVBzjTEtLSsvJsSZZ6TGlbfwfGD8aigdSt6TEbSkIX5YxMHiy6Coyw==",
+      "mode": 420,
+      "size": 1787
+    },
+    "src/2-two/postTagger/model/verbs/imperative.js": {
+      "checkedAt": 1764662917881,
+      "integrity": "sha512-ozsnhFvGr95bFKpTpPh0LWzJ0iVHH8/vc2znWl79QKV3NCupsAkEKhqLfhi3rvNX938ylktvaBNDof24yWcTTw==",
+      "mode": 420,
+      "size": 4362
+    },
+    "src/1-one/cache/methods/index.js": {
+      "checkedAt": 1764662917882,
+      "integrity": "sha512-hfVyJ0wdJ5rnfWJpM6K5MWk7YZ8hCVWMLsXWVV75Ql2URsRV8pQZvL82QP9ZqIpjXooDiQfW31H7bSjauXCBAw==",
+      "mode": 420,
+      "size": 85
+    },
+    "src/1-one/change/api/index.js": {
+      "checkedAt": 1764662917894,
+      "integrity": "sha512-IcxadLy+rFJ3pNyNf7QiKNfJ2fjqcIB/3RA4l+ka9qa7PjLxcwb+64l7W904Ybjk4wHHiYUgQOqE3SUDWJc9lw==",
+      "mode": 420,
+      "size": 471
+    },
+    "src/1-one/change/compute/index.js": {
+      "checkedAt": 1764662917895,
+      "integrity": "sha512-+r8WPL6wpjib39iMnXwBBf3dHzVbZZJ4Qluw94Uc7yVfovzDncSjc3YcpidtqMmpEI3hJqsc+eAROjs8C95ByA==",
+      "mode": 420,
+      "size": 309
+    },
+    "src/1-one/contraction-one/compute/contractions/index.js": {
+      "checkedAt": 1764662917900,
+      "integrity": "sha512-3GS5cIomMVsitr/5zbPwJRF6+qvob5w8/Yi9wmpyw1NFqo1xTy/ruMjEhW7xZxAGTD1mHSy92uLeayazioXA/A==",
+      "mode": 420,
+      "size": 4208
+    },
+    "src/1-one/contraction-one/compute/index.js": {
+      "checkedAt": 1764662917901,
+      "integrity": "sha512-vA0LJUkuP+GE42epbP5Dc+XlxX/3iH1Zi4iSaeKko4zFgqyAXkAFgyY2y6mgAeH7HuAehjbQbcumdK0GYo5M3g==",
+      "mode": 420,
+      "size": 84
+    },
+    "src/1-one/contraction-one/model/index.js": {
+      "checkedAt": 1764662917902,
+      "integrity": "sha512-08P2AEVAv813H3P11iiEXSel91xw7/5E0/r263F8az2+YSo07IT/GMevIGuifgG+2H7wYId6cs6rAQS/TYbArg==",
+      "mode": 420,
+      "size": 163
+    },
+    "src/1-one/lexicon/compute/index.js": {
+      "checkedAt": 1764662917907,
+      "integrity": "sha512-RMqePcg+pNaWQS96rTmutyWC7c+CftXSz9yeMU/ZjPgUk1u6ORh3o5PUDwHc/B68RYkpNijP3N7eQEWtghyiDA==",
+      "mode": 420,
+      "size": 616
+    },
+    "src/1-one/lexicon/methods/index.js": {
+      "checkedAt": 1764662917909,
+      "integrity": "sha512-YT0QcGe2j9IMmvUluQPSYr1aHoXdSo+7lk26PiwVs84LbYg+MkVJn7qnHc29olhCJ/Tf0+opGKuA85VdmbX4bQ==",
+      "mode": 420,
+      "size": 91
+    },
+    "src/1-one/lookup/api/buildTrie/index.js": {
+      "checkedAt": 1764662917910,
+      "integrity": "sha512-JnGvxjq8FUjNwGSE5gugbvhzV9rDbbEfera3UTKfopu3fYRwmrcPCoaTXIUKWm5FSX5CV2HXfMh7FkUZtal5Mg==",
+      "mode": 420,
+      "size": 2047
+    },
+    "src/1-one/lookup/api/index.js": {
+      "checkedAt": 1764662917910,
+      "integrity": "sha512-iqocCSCLO1qH7fR7Z0GArRnCXKbUoXR/37XAC444Chrj4d7gVnHqe3I9zErsg2qetnTSHZL8r/LQXAdK+MgqFQ==",
+      "mode": 420,
+      "size": 560
+    },
+    "src/1-one/match/api/index.js": {
+      "checkedAt": 1764662917911,
+      "integrity": "sha512-NNKHdqmoMP9nWzE8fw2MQmfAxkm8cx1nScR/Uz7Ou6gRqCqx2hr6V6kvB4WfQgl9GHrMv+H3E51ih5G/Qyus1w==",
+      "mode": 420,
+      "size": 483
+    },
+    "src/1-one/match/methods/index.js": {
+      "checkedAt": 1764662917911,
+      "integrity": "sha512-SlqK+B1VTH0ytj0GWsZhomkU7x4eEyTH+XablOPEyhfswa2YYYWj/GgPH1zqNlJSRIIy0TfLoLkLFGdAEWidRA==",
+      "mode": 420,
+      "size": 230
+    },
+    "src/1-one/match/methods/match/index.js": {
+      "checkedAt": 1764662917912,
+      "integrity": "sha512-Tcnu67HJIK0NxL4XLWfk20pTRCiTToFG5nVlFMSkC8/cLJLGwY140VB7OzcqyLTFkHLA8Y52V/a+KBGsSD02nQ==",
+      "mode": 420,
+      "size": 2569
+    },
+    "src/1-one/match/methods/parseMatch/index.js": {
+      "checkedAt": 1764662917914,
+      "integrity": "sha512-sAde0n09U3S0owF7wATRMBSDSCyC+gYBWJGRiAfG/dqWiR6+DybpwZNSGsuBEvkuqOo/ODDkN52HfJysoaEjvQ==",
+      "mode": 420,
+      "size": 867
+    },
+    "src/1-one/output/api/index.js": {
+      "checkedAt": 1764662917914,
+      "integrity": "sha512-DJGm8Cbb0tjh5Pu4CZe+/2qvZ97dTvxYDtefA5LsspPhAuxMBGzkspYuFxB14b7iXgXHXe4auLiNUbVzxcx6GQ==",
+      "mode": 420,
+      "size": 271
+    },
+    "src/1-one/output/methods/debug/index.js": {
+      "checkedAt": 1764662917915,
+      "integrity": "sha512-SI4wxApprBlZNGVJXD/7z7CNcvlwQshjN/u1UlkXtFlujgxF8zB0X/gWJHy7RbuhrXuC4hvLllyJ/uHnr5oxVw==",
+      "mode": 420,
+      "size": 228
+    },
+    "src/1-one/output/methods/index.js": {
+      "checkedAt": 1764662917915,
+      "integrity": "sha512-w8318zu13Jv6fTIpddZMzEBSnkynuSY63GczYSPUiGtSIcyGEMRXDLkuHfdNewKAr3m39KIr1kRIqnGm/RfmSg==",
+      "mode": 420,
+      "size": 90
+    },
+    "src/1-one/pointers/api/index.js": {
+      "checkedAt": 1764662917916,
+      "integrity": "sha512-yeT/ivwqKzFcbK/dACSO1NLJyUThZhTkoPLxLemfyn8cS2TSQSbhykZ0wnHItZIb+dTjPFXG3wjkfFn0sW2d/w==",
+      "mode": 420,
+      "size": 1936
+    },
+    "src/1-one/pointers/methods/index.js": {
+      "checkedAt": 1764662917917,
+      "integrity": "sha512-H5ahltGTnPXGUQHAuYxGOJ6/TaUAKBHVSnWkkbj3oPR6hX+xmVfCVPQgaXAhIOvXnTG5Pq61Nic4bR3ACE1KCA==",
+      "mode": 420,
+      "size": 472
+    },
+    "src/1-one/sweep/methods/buildNet/index.js": {
+      "checkedAt": 1764662917918,
+      "integrity": "sha512-Yx4VhT4GMHr72YpOa1/QjxiFwJ61xLSBMzSJlkVVy9VCOXCS/ry8V5zMQvxHNKowxHhrUtMujKnPHnAr/vZY+g==",
+      "mode": 420,
+      "size": 1030
+    },
+    "src/1-one/sweep/methods/index.js": {
+      "checkedAt": 1764662917918,
+      "integrity": "sha512-AJnFMuX8IwA9owpLmx3Q1YMuSrqvcY1Sx6NtT5vPw9pfmBY8XsHd9c8bW0RbXAh08ahdWkVJ14MjWDK+8xCSAw==",
+      "mode": 420,
+      "size": 184
+    },
+    "src/1-one/sweep/methods/sweep/index.js": {
+      "checkedAt": 1764662917919,
+      "integrity": "sha512-eL4bLvCUqML2QblDdmq8sX18MU+txf6CyjglQpAut6zQgvjoIZ/4fJWP8rDvtPxOnZHpBBpQY5T1004B+lRLLw==",
+      "mode": 420,
+      "size": 1176
+    },
+    "src/1-one/sweep/methods/tagger/index.js": {
+      "checkedAt": 1764662917920,
+      "integrity": "sha512-UHedtTvEZDSkI8R8p48sg2xEsui6wEXyeraqYm5qfI3gsisPNDBL3TPeTyf0Hpangfu63xLFmKu+DYSAXmJdSg==",
+      "mode": 420,
+      "size": 1819
+    },
+    "src/1-one/tag/api/index.js": {
+      "checkedAt": 1764662917920,
+      "integrity": "sha512-92x1QyLV8LoXA/4Jrf78jQPgqLdZZJ/Eu22Zt87P8/HCNeI4n9ZRUjLgLIsUtLBJ3VX2GSa3VsLfYnR4Y00DWw==",
+      "mode": 420,
+      "size": 122
+    },
+    "src/1-one/tag/methods/addTags/index.js": {
+      "checkedAt": 1764662917921,
+      "integrity": "sha512-5oxjR8iHaO7QatuSwW+VMcdEV9qd7ItiNLYW72AUvsJ40Dra2lY2joWsslPLphZ9C5xMAvlUuQkQXkb84XWpxA==",
+      "mode": 420,
+      "size": 1104
+    },
+    "src/1-one/tag/methods/index.js": {
+      "checkedAt": 1764662917921,
+      "integrity": "sha512-W8Atnti3834X2EbQ2tYe0lZfOxNuWhoMoyUm4D9x/hOi/CFh9Fe1SgU9WWQrpstiwIqU+PwjXywN4h5BCHb4Fg==",
+      "mode": 420,
+      "size": 217
+    },
+    "src/1-one/tokenize/compute/index.js": {
+      "checkedAt": 1764662917922,
+      "integrity": "sha512-2ebw9lSEaOzcOzEKaS241Xb8qqenLihfbQQIvWTG3JbyE5/S6cF/6MIA1BXv77zIg7P4qmMXLftlgYjsbBu87g==",
+      "mode": 420,
+      "size": 691
+    },
+    "src/1-one/tokenize/compute/normal/index.js": {
+      "checkedAt": 1764662917923,
+      "integrity": "sha512-Kph+aV2aEM+0f3bO+om1gj4hQJjLmWgpsvuTq+03tdJxctIoVQERq/CHISvPfy5kodz8ab7twOOkwCvWzFa2WQ==",
+      "mode": 420,
+      "size": 465
+    },
+    "src/1-one/tokenize/methods/01-sentences/index.js": {
+      "checkedAt": 1764662917924,
+      "integrity": "sha512-GHSKkPoBw94OXArGYJILDSgP03YuruUSk/bXEgXfaBWd5NH6+J4X6d/BdQOWXEythUQSffl+8laFkvTd0HgEIA==",
+      "mode": 420,
+      "size": 1626
+    },
+    "src/1-one/tokenize/methods/02-terms/index.js": {
+      "checkedAt": 1764662917925,
+      "integrity": "sha512-ImE1zeDyz1giVez0pfLozHrhOMUh5mTtw9p6g2ur9UxoDmuvhzuvaNVQIqV0Oe94J06wMC2sc/Rz1luS/nQ/iw==",
+      "mode": 420,
+      "size": 2068
+    },
+    "src/1-one/tokenize/methods/03-whitespace/index.js": {
+      "checkedAt": 1764662917925,
+      "integrity": "sha512-O5D5OBzZS1Uzdd91SctJopGQh8F5wZR0bt4EA9KlnQnijSs/KIgiz8dzOtPz3kSsCUvyFmR272CtWatpr7U3dQ==",
+      "mode": 420,
+      "size": 297
+    },
+    "src/1-one/tokenize/methods/index.js": {
+      "checkedAt": 1764662917925,
+      "integrity": "sha512-BJFLIEiEeCaR0LjZBtWIdgpgl/tFMXv1LmHjhHvyL0IshcYHYgt1p5rhzucFYHH5FY4TVf4hVTkp0bsj0j4F4A==",
+      "mode": 420,
+      "size": 456
+    },
+    "src/1-one/tokenize/model/index.js": {
+      "checkedAt": 1764662917926,
+      "integrity": "sha512-r0xZemoTklGB66WNsnrsukbISJA/xCatZubFYFC0FMBB7wdUgEaSewktoyKLRPbMqR+PJwfY69sEF1uIzEsC4Q==",
+      "mode": 420,
+      "size": 475
+    },
+    "src/1-one/typeahead/lib/index.js": {
+      "checkedAt": 1764662917926,
+      "integrity": "sha512-Zs3m+aTl44+VBrXSS2n5zeDQF55EJRlyt9zTwa+nidGUu+IgDjmSGyRGeNwTuH/oOKdx9DkEvczhMWyCYg0NCA==",
+      "mode": 420,
+      "size": 805
+    },
+    "src/2-two/contraction-two/api/index.js": {
+      "checkedAt": 1764662917927,
+      "integrity": "sha512-oDZgYKuQa/4ObEKia2Fv2bix/WiS80I/TboALYs5etsvxdN2O1U++rAMzqSO9FEJt/AsopYaeWjNB8fCPgx2qQ==",
+      "mode": 420,
+      "size": 1324
+    },
+    "src/2-two/contraction-two/compute/index.js": {
+      "checkedAt": 1764662917929,
+      "integrity": "sha512-b0KEU7E2G318PyiJds0ebQ/Lx8iuz+udMm36kcC4ja3fPUiN7M1pvbBn9Op9HKoI33TJXQWZWM1S7h/99uhJWQ==",
+      "mode": 420,
+      "size": 2219
+    },
+    "src/2-two/postTagger/compute/index.js": {
+      "checkedAt": 1764662917929,
+      "integrity": "sha512-HoQTxLak9V0hnuVyweud/deeg0QyXoD/HF/s5vpUOZMNeBu8bqTqWcLugF1KEHABXpX6KVbKE/XH+0wVKrVNqw==",
+      "mode": 420,
+      "size": 750
+    },
+    "src/2-two/postTagger/model/index.js": {
+      "checkedAt": 1764662917930,
+      "integrity": "sha512-yAB3BFSX9MWQxhC6/zogjcI9bN4J4Xw+G5YhwadZnyJ+7K1nOQ+pRe3lHsErPJHoluQqYU0WsOOjqR6F9T+NTg==",
+      "mode": 420,
+      "size": 1593
+    },
+    "src/2-two/preTagger/compute/index.js": {
+      "checkedAt": 1764662917930,
+      "integrity": "sha512-ZkjmdIjxWgfDQ66yCpkcgeu06vqmVkKybFasOM517b9tYzPUfTvCYkYF4rsmg22EgMAG+YK3Xl227liPXZS7vQ==",
+      "mode": 420,
+      "size": 142
+    },
+    "src/2-two/preTagger/compute/tagger/index.js": {
+      "checkedAt": 1764662917931,
+      "integrity": "sha512-OL4NCXS1AgBrOb3dyKvhAdR4Cj6umc+Pr3rVwHL3hOttL0VW5GM6uhBDoIjckIVRWmaHUpn4pCjBblKb0FZE/w==",
+      "mode": 420,
+      "size": 3548
+    },
+    "src/2-two/preTagger/methods/expand/index.js": {
+      "checkedAt": 1764662917932,
+      "integrity": "sha512-DXCYEKOBOQlnEKkZw73QcmDa4O5s5POS1HNZi3rH+inv9TuRXkoJg2jGEY+1EZeHNCBMRKX2mBEP0yKvfSF3Og==",
+      "mode": 420,
+      "size": 1076
+    },
+    "src/2-two/preTagger/methods/index.js": {
+      "checkedAt": 1764662917933,
+      "integrity": "sha512-z1UdnKtFtsJ36G5OqlfmvgetjAwsjFacHq1qud4AVqhA0rev/TwSUMwX6Vn7lxn9G0AqUpIWnNUjaPqovufdOw==",
+      "mode": 420,
+      "size": 276
+    },
+    "src/2-two/preTagger/methods/transform/adjectives/index.js": {
+      "checkedAt": 1764662917935,
+      "integrity": "sha512-y4NHcstSA1txYc6oTS8Q13Mn26l6vQG9xFX3S/vYE8jDlSNDqwINBE3q3fJ7Hn8wIU7SbqGAT+1tnb9Gy341ng==",
+      "mode": 420,
+      "size": 603
+    },
+    "src/2-two/preTagger/methods/transform/index.js": {
+      "checkedAt": 1764662917935,
+      "integrity": "sha512-2sosTq1+hcGVi/SlgmlRbp2bQNE0RXPqLV2qJ1yR+JH66LtYdzgEfLeCG1Bzi29GVoJem3T/IauF3t0Cq+Hwgw==",
+      "mode": 420,
+      "size": 195
+    },
+    "src/2-two/preTagger/methods/transform/nouns/index.js": {
+      "checkedAt": 1764662917936,
+      "integrity": "sha512-gIi4u55jdewEfBfIW6oVyUfuhQsTO8NAajH6SULDevtFQRE7blbgiq7cyYY5TKCTgqNWVcBMs4fVJH+uFtaQ9g==",
+      "mode": 420,
+      "size": 348
+    },
+    "src/2-two/preTagger/methods/transform/nouns/toPlural/index.js": {
+      "checkedAt": 1764662917937,
+      "integrity": "sha512-fuBaLJU4mClvq1vPOEG4Bcl1cBpdEv1QB5ku/mH9XehawjPdLNvFLdxf3+eNZ/aVxjF0hZ+h+rwKhhBYkjV+HA==",
+      "mode": 420,
+      "size": 1006
+    },
+    "src/2-two/preTagger/methods/transform/nouns/toSingular/index.js": {
+      "checkedAt": 1764662917949,
+      "integrity": "sha512-DWkAV9aSX/Lly91F4DVE1lFQixYZejoVdBvgIp0I+OHWgHrZsvjCQx5biPh0w8UxVXqS6gxNBsFJ0XwVE5NPbA==",
+      "mode": 420,
+      "size": 657
+    },
+    "src/2-two/preTagger/methods/transform/verbs/conjugate/index.js": {
+      "checkedAt": 1764662917950,
+      "integrity": "sha512-Q3KV7nJgGHifNgZrHWlyHRADWdyOFXHrPskWO28aq58Oj1Yf3ZS/9Jn+J4NYKeBEpyXwa41qOBiroS5P5FutSA==",
+      "mode": 420,
+      "size": 1620
+    },
+    "src/2-two/preTagger/methods/transform/verbs/getTense/index.js": {
+      "checkedAt": 1764662917951,
+      "integrity": "sha512-7KfkrTD0S11mtrU9A9nC9CHDags++KPejgh/biD6GDRfBDudEukCKqVFH4B3Ypb/VBz/O4KSjx90Vi7ONYHu+A==",
+      "mode": 420,
+      "size": 481
+    },
+    "src/2-two/preTagger/methods/transform/verbs/index.js": {
+      "checkedAt": 1764662917951,
+      "integrity": "sha512-v7vzaBMbbalYZSWHhsSv4T+u8CGZKC4N696pbdEcP+/Icr/lrFXYq/Sp+03r7RJwcideLWuJ/21tRpvqMiNlWg==",
+      "mode": 420,
+      "size": 287
+    },
+    "src/2-two/preTagger/methods/transform/verbs/toInfinitive/index.js": {
+      "checkedAt": 1764662917952,
+      "integrity": "sha512-8svapm4RpzNfqa5dUL/B+U3VmkrpyZuZvvorD9l4vTBz3GZMxRiO3DiDjN/Ci7xq0yFWeOAAMl6+dh5HSkbwog==",
+      "mode": 420,
+      "size": 1589
+    },
+    "src/2-two/preTagger/model/_expand/index.js": {
+      "checkedAt": 1764662917952,
+      "integrity": "sha512-1VtkeBo1xyjFcRjcEeGpwLVmjh9ovhiFbn7h2gRgzac6ikqOpxvkte1j17kdhkHsCGjRt99DJeOwdlVnzbUbIQ==",
+      "mode": 420,
+      "size": 4147
+    },
+    "src/2-two/preTagger/model/clues/index.js": {
+      "checkedAt": 1764662917953,
+      "integrity": "sha512-Iu5JqGzadv4A0vHE6/sIbAO/UpW+MSBggySIpGm8OIJYsyOhkzRLivd+ciXTQkHjgqIUEHc044qk15MTYRKbVg==",
+      "mode": 420,
+      "size": 1927
+    },
+    "src/2-two/preTagger/model/index.js": {
+      "checkedAt": 1764662917953,
+      "integrity": "sha512-L4lhUatMaqTAE2cJsnk9nMwGniVCTXPb+0fnsQNJMK7H0cTZQjBv7dqDSU9w13hZr78X7VAwM36EWB+Sq6uryQ==",
+      "mode": 420,
+      "size": 1088
+    },
+    "src/2-two/preTagger/model/lexicon/index.js": {
+      "checkedAt": 1764662917954,
+      "integrity": "sha512-tRQ8sUtbIQSvIgrCC61K0OUIUL5F7fWd+3UZtlnzBTsJQkYEY8uC9SbzhmQRGncxtrhw1BEtd0mxDM/3MsqMdQ==",
+      "mode": 420,
+      "size": 1285
+    },
+    "src/2-two/preTagger/model/models/index.js": {
+      "checkedAt": 1764662917954,
+      "integrity": "sha512-+DrGZ0M26PQW3PWhtjYkBnEeFUVgkRU+8TZYUheWbzhYCfh+uFKtm/9Hn77nU6i6ZeVh3kvds23NDgIShnEEiA==",
+      "mode": 420,
+      "size": 1090
+    },
+    "src/2-two/preTagger/tagSet/index.js": {
+      "checkedAt": 1764662917955,
+      "integrity": "sha512-xvkhGgiKLbl7MhzRWAZ9SG0iBAP9EfcUN8nWx8BpnHvztWeLe7zQNdN6ytwacWf9S5CV3FoKAzYRzJ+g1bWq/w==",
+      "mode": 420,
+      "size": 281
+    },
+    "src/3-three/chunker/compute/index.js": {
+      "checkedAt": 1764662917955,
+      "integrity": "sha512-6KKwR6XOUjDAxmGbokzUi2CtlEZ8CeYIkeaDyDJ/xRADn9XYSoOKhvFTmW7bcq7f42qZR0R8Kd1GXgR9rJ35XQ==",
+      "mode": 420,
+      "size": 547
+    },
+    "src/3-three/coreference/compute/index.js": {
+      "checkedAt": 1764662917956,
+      "integrity": "sha512-nBcMkGJKsq7Y0x0tymM+uMid16yhu8jgrdWH8dT5b0BgPhGgRT6f6kyQOlJF7xaTzVbcJQl9UBD1rbFpT35LCQ==",
+      "mode": 420,
+      "size": 1308
+    },
+    "src/3-three/misc/acronyms/index.js": {
+      "checkedAt": 1764662917958,
+      "integrity": "sha512-R/gBzjL/7hQfHgr7qicjZ+0jVMaTSHmaeEm4xjftYOSds8R7t9LxzFWzYc3/6zJ0u90FHQ/eXpr2YeYlSz71YQ==",
+      "mode": 420,
+      "size": 1021
+    },
+    "src/3-three/misc/parentheses/index.js": {
+      "checkedAt": 1764662917958,
+      "integrity": "sha512-oV4EiWmbhaNvGwLS/5ZVMmoK/FqTyEUuKdd1M2zRVW6PHUC3Kvf8VwKetWVoqLMATfQTG1EAnjprM21iR8FS3g==",
+      "mode": 420,
+      "size": 445
+    },
+    "src/3-three/misc/possessives/index.js": {
+      "checkedAt": 1764662917959,
+      "integrity": "sha512-eTHPn+aa1Mhvi2Nl8Q1LgjVLiciCxRaJGvFU1HG2Q035Kd7p40U5ySJ0t/V0j7GImki0dylfqwo1iJ6E8DveWQ==",
+      "mode": 420,
+      "size": 978
+    },
+    "src/3-three/misc/quotations/index.js": {
+      "checkedAt": 1764662917959,
+      "integrity": "sha512-9fpQDkzYH14ldQVTkPfMPwfkNvnDjwTxQXfMMRniq96hFX3obHnNJkmu16pcLz+3M7QtCJ+nnmPXq31ozmpMig==",
+      "mode": 420,
+      "size": 443
+    },
+    "src/3-three/misc/selections/index.js": {
+      "checkedAt": 1764662917960,
+      "integrity": "sha512-A9Si6nkrEOiPmCvOpCqoRQT4pExQE8uzo43jALCXopskzEI876jw7ZLJzVA0WyOkgEPHL48kUTNumPR4fBk1sw==",
+      "mode": 420,
+      "size": 1094
+    },
+    "src/3-three/misc/slashes/index.js": {
+      "checkedAt": 1764662917960,
+      "integrity": "sha512-39GPd7BkdQqCNDMyqzh878AWevkQ7a/c7YN7Hdv/ZjhLA6mTEenw7D5TwiRnLTAel1/fscd5G8VBIQ339wae6Q==",
+      "mode": 420,
+      "size": 605
+    },
+    "src/3-three/numbers/numbers/format/index.js": {
+      "checkedAt": 1764662917961,
+      "integrity": "sha512-foRR4sKnXLR3h61quCyXUh0uVtEwB+RBI249DSYOdqqN8JyAfRGuJJWkRROOVCupX0tz86I5CzUf+GGn1yNcWQ==",
+      "mode": 420,
+      "size": 730
+    },
+    "src/3-three/numbers/numbers/format/toText/index.js": {
+      "checkedAt": 1764662917961,
+      "integrity": "sha512-+9GMggP9P+AKOYGMhLzTuHBnxaFGIkRUPAEKe2XQgF+kekzwkrLUBmZBeMU0vYf4VRibTzNyVfpxSMkMOZD6hQ==",
+      "mode": 420,
+      "size": 2674
+    },
+    "src/3-three/numbers/numbers/parse/index.js": {
+      "checkedAt": 1764662917962,
+      "integrity": "sha512-aROVP6bXGAS7fH2O25VJiAup5z1SMEOUXvON6/viRnKQVf//LcY0G1z+WWTbfz0e3jToHJuG4QHc4rnTHe+IFQ==",
+      "mode": 420,
+      "size": 2461
+    },
+    "src/3-three/numbers/numbers/parse/toNumber/index.js": {
+      "checkedAt": 1764662917963,
+      "integrity": "sha512-rQMBp518agk7rECThYYH3f9BC2ZOVd1tmKdtlVeVfCYUpvQVWHDNpaUOfy74Xj+8OHmKLxI2JFaz0XTJt7PqQw==",
+      "mode": 420,
+      "size": 3809
+    },
+    "src/3-three/sentences/parse/index.js": {
+      "checkedAt": 1764662917964,
+      "integrity": "sha512-GaJMXV1glEdKFit8VFb5Pv5TY6eYyc7yP4oAtWf/TS7199yhjLBYixjtVkL7e5BR9GwF5PE+kexxCw0Xii83Jw==",
+      "mode": 420,
+      "size": 940
+    },
+    "src/3-three/verbs/api/parse/grammar/index.js": {
+      "checkedAt": 1764662917964,
+      "integrity": "sha512-fSibzzoILEUCJWJFja06n6hQfTxVPW0kQi4MT0bIiUVCaRKXzuc+mJklpYyEbCwRPAVDZxDcLP44Pz38sVH2Ug==",
+      "mode": 420,
+      "size": 1633
+    },
+    "src/3-three/verbs/api/parse/index.js": {
+      "checkedAt": 1764662917966,
+      "integrity": "sha512-8kqUOhjBqWL6rdmwKqsB/DfaVRrHKAmRHIzn/DVObjS/KN2JTjY3U/EkQo0O2ELFfZesuwEhL6g5Qs/3pyGs3g==",
+      "mode": 420,
+      "size": 1037
+    },
+    "src/4-four/facts/parse/index.js": {
+      "checkedAt": 1764662917966,
+      "integrity": "sha512-0T37TvZ6LXzprHiuEZjHSoGE3b9rZMj/2O+CZBDpznhndjxlZd4yKJyYvu3FIpULHeETLdJ/Weta+iboeLmkNQ==",
+      "mode": 420,
+      "size": 2300
+    },
+    "src/4-four/facts/parse/statement/index.js": {
+      "checkedAt": 1764662917966,
+      "integrity": "sha512-s5HjhM/HJw5u6xZUZUUCDJoSYEx7mkDIyrTzafTtV2Pi3RO6EYfQRicBatFozvHs7TgyR9z3BE7hSzpcMqc7RA==",
+      "mode": 420,
+      "size": 1269
+    },
+    "src/4-four/sense/compute/index.js": {
+      "checkedAt": 1764662917967,
+      "integrity": "sha512-SqpZ9yo64H+ZeTw0Gml2gdneS+8lIMPfd0V33p0AL+VdNfCTUbe0OMsf3tLn6IdOYNgza7HGJn5g9W5k3f2C0A==",
+      "mode": 420,
+      "size": 1175
+    },
+    "src/4-four/sense/model/index.js": {
+      "checkedAt": 1764662917967,
+      "integrity": "sha512-s6Rpuh61ZydjfkO9q3gBnYDQdWf0N4CVoOBMX5BLcUQv2WZkSYJ4kqVSMFy4ZhIghQ9aRPCgjTnkI1RK1iICEA==",
+      "mode": 420,
+      "size": 230
+    },
+    "src/4-four/sense/model/senses/index.js": {
+      "checkedAt": 1764662917968,
+      "integrity": "sha512-qVIr24dOaIlGWT4fbR/5pf4Q6MrLjRLHuNg2sfo+AuDi5aBr4rA6+CrISp8kRFJ3iJmXYwZqhTsRDFt7zTSjLg==",
+      "mode": 420,
+      "size": 728
+    },
+    "src/API/methods/index.js": {
+      "checkedAt": 1764662917968,
+      "integrity": "sha512-wlSiwrj4IWEqXMR6esuouWkgoa0D9F8kgPErbuImJBvYM5UMg6QbSqWYQm3tL4LMEZTAn8ht2ScXY5IBXjsPsg==",
+      "mode": 420,
+      "size": 213
+    },
+    "src/2-two/preTagger/methods/transform/adjectives/inflect.js": {
+      "checkedAt": 1764662917969,
+      "integrity": "sha512-Irh0bWIC+zGVpRNhbadwCsrq//IxD1mzRaXGaw9ODPz7eALmUEPoX0A87sF3KYjwlplzIOSstOFEGy3cKnXLcA==",
+      "mode": 420,
+      "size": 771
+    },
+    "src/API/inputs.js": {
+      "checkedAt": 1764662917969,
+      "integrity": "sha512-R9dh1xlR6t4s2weJiSMs20akJAfkOl9tme4pivIK44uNpT6d+JLozoSpImvxCqYUgslh2JR7sH/yEZt0uZGstA==",
+      "mode": 420,
+      "size": 1583
+    },
+    "src/1-one/change/api/insert.js": {
+      "checkedAt": 1764662917970,
+      "integrity": "sha512-dd0Nj2vv0UTZp4mPB35rkWtpBL0UXS7RHCNoNQSLH0pRmEQIc1iqsWV3/QoeXWF/ArjDd4NLEldgLdm78IyMtQ==",
+      "mode": 420,
+      "size": 2631
+    },
+    "src/1-one/change/api/lib/insert.js": {
+      "checkedAt": 1764662917973,
+      "integrity": "sha512-SkJ4tZdCIWBgZMiPbCaSeNOAi0axmHQTD61hv1SP0MAEUzbkhkOmlL1DjL3UVKVWbivx1rdUpUzBVWB6m70MgQ==",
+      "mode": 420,
+      "size": 3026
+    },
+    "src/1-one/pointers/api/lib/intersection.js": {
+      "checkedAt": 1764662917974,
+      "integrity": "sha512-XCWehQPjylz1+N0hDf2f+9bZjho6ybzNOOBAjsF5ngs0bhC3c3Wz1na8ZF3MhoJt1ZfrciXyBzbkuvyOGBkVNg==",
+      "mode": 420,
+      "size": 888
+    },
+    "src/2-two/preTagger/model/_expand/irregulars.js": {
+      "checkedAt": 1764662917975,
+      "integrity": "sha512-dhs8amFVnWuiyaA2I96FGMHOx0wsrTQuUny+Pje3VZZwnIom1/qkCIx5bIT8hdd5ae247bb0gD7aw2EZ/eu+wA==",
+      "mode": 420,
+      "size": 419
+    },
+    "src/1-one/tokenize/methods/01-sentences/is-sentence.js": {
+      "checkedAt": 1764662917977,
+      "integrity": "sha512-WqILa51bi2t656dg2BDAfktnFHxMvHb78zhDpC3V9Qf0QuPbVYIeGOdOKuuWQWRtup20MruUu80QOjvDcrGffg==",
+      "mode": 420,
+      "size": 1095
+    },
+    "src/3-three/nouns/api/isPlural.js": {
+      "checkedAt": 1764662917978,
+      "integrity": "sha512-U548Sdgd9y/9gBlF5Pzd+k+iXBVTFPXbnwSil9vU9JDWxp0mmEunaqchTU7d+K6/59/yPc0/AK89gQwa2JO80w==",
+      "mode": 420,
+      "size": 705
+    },
+    "src/2-two/contraction-two/compute/isPossessive.js": {
+      "checkedAt": 1764662917978,
+      "integrity": "sha512-8cSGea8r0hUMP1YkrOmJRjGALz7Px7upe9fgjyeWCJEa1a3PGhtT5lLQbYRJZ0NW8FLJNgXIN9WYMrATP5n+GA==",
+      "mode": 420,
+      "size": 3764
+    },
+    "src/3-three/nouns/api/isSubordinate.js": {
+      "checkedAt": 1764662917979,
+      "integrity": "sha512-RwM9KlpSEPRjxd8Dj2tDTXGhCAs5Vv5Jzv5Z6Qh5WI35YFIX1kiJUsRf6eLc1V1AibTAaQ6/yddxmTDLLfayMA==",
+      "mode": 420,
+      "size": 890
+    },
+    "src/3-three/numbers/numbers/isUnit.js": {
+      "checkedAt": 1764662917980,
+      "integrity": "sha512-/RfeyKFL3XzkU52w1md8/TNRRJL4gUiaefazSCj+vG55bJU2DsNfi6XsEhVO97693TN1m14tumBXNiBCG1ufmw==",
+      "mode": 420,
+      "size": 738
+    },
+    "src/1-one/match/api/join.js": {
+      "checkedAt": 1764662917982,
+      "integrity": "sha512-nFIQnFLLE9/C1HuN5xlZOue/Xvz4XIIUkAimcH3riYyRupSSWCllB38MgjFTe+xJPdloLQtrekYlv8SCFi488g==",
+      "mode": 420,
+      "size": 1609
+    },
+    "src/1-one/output/api/json.js": {
+      "checkedAt": 1764662917983,
+      "integrity": "sha512-TbfdySpYo+8WLKnfWVvxvXZx5JRGNZ30tQmfBI6wOoSJJ3rzZqdOXwZWonV2/9SIsIjCoPDnDyFgNykGPakRtQ==",
+      "mode": 420,
+      "size": 2117
+    },
+    "src/2-two/lazy/lazyParse.js": {
+      "checkedAt": 1764662917984,
+      "integrity": "sha512-gz98p8T7QVy6B6WIYyuhxMJTrqzqAeT/9cT1zAKYdXSmw27WFlfIBk/i8IOkYcG89tqTVVN3HgPC8Qj2jHsDew==",
+      "mode": 420,
+      "size": 421
+    },
+    "src/1-one/tokenize/model/lexicon.js": {
+      "checkedAt": 1764662917985,
+      "integrity": "sha512-9r+OraZ8aSy5IlHXfR30bngqbR6FIIQyACI9DqykSvcKbyzvm+ki91NF9IUJ6M+CtJRSSWr+KqKlwWGFPFI7SA==",
+      "mode": 420,
+      "size": 936
+    },
+    "src/1-one/lexicon/lib.js": {
+      "checkedAt": 1764662917986,
+      "integrity": "sha512-Ve7cwbuhEjQLMgMFS3Q9GlkBHUBMz2wfVXXVsMell0utXtqj38Wb7M4sowXsgsRRECMZeMccTzbd6YH4W7MYRg==",
+      "mode": 420,
+      "size": 1097
+    },
+    "src/1-one/match/lib.js": {
+      "checkedAt": 1764662917987,
+      "integrity": "sha512-uPRVrsYztVjky83rW1LCWK9NLWGZMSdYmFnwlcGB1ktSZ/JHoARfk/IelnKObORXpKExT6ayQMaYwU6MpoJPqA==",
+      "mode": 420,
+      "size": 306
+    },
+    "src/1-one/sweep/lib.js": {
+      "checkedAt": 1764662917988,
+      "integrity": "sha512-6yGtKzXVV8/996kSj/1TTgd5YZcYhwDnY+bBY4zwFxKGl29iJqiBM3phTnH55s4I94Pi3Miy85vFTTdHiigKQQ==",
+      "mode": 420,
+      "size": 232
+    },
+    "src/1-one/tag/lib.js": {
+      "checkedAt": 1764662918001,
+      "integrity": "sha512-Sn40bUQEH/sF31H0fLDIXr7jhaeBFkG71+SWsUjulXC+zoz8QcwkkAUp4K57HOagX44M/Nb8asgDqmFdUCU5ow==",
+      "mode": 420,
+      "size": 278
+    },
+    "src/2-two/preTagger/methods/transform/adjectives/conjugate/lib.js": {
+      "checkedAt": 1764662918004,
+      "integrity": "sha512-O9khvU5yThl5WYNs/8f0FimSm4e3CWweopyn2jaPwzENJfb2kiOJGeEVKrfjwx+B8fOu0aqjx8ufaIHqjlb5tQ==",
+      "mode": 420,
+      "size": 464
+    },
+    "src/3-three/coreference/compute/lib.js": {
+      "checkedAt": 1764662918006,
+      "integrity": "sha512-9ofktKnAJ19qIirx4HS2K0mSHYVDj8iWvyt5LvI3j92Csfrm8t1ZraZgnl0CxC+rvCHKYJDPWLn9lK7KwvkOmw==",
+      "mode": 420,
+      "size": 490
+    },
+    "src/3-three/verbs/api/lib.js": {
+      "checkedAt": 1764662918006,
+      "integrity": "sha512-7S2d/Ik1R1SPz8Fu0HI77VDXF7bOGju+n6wSKRQNzSzDqCauXFRTTV6kZFua4UZLAu3eh/hJWGtiRS2Gln6Qtw==",
+      "mode": 420,
+      "size": 1902
+    },
+    "src/1-one/match/api/lookaround.js": {
+      "checkedAt": 1764662918007,
+      "integrity": "sha512-I2uV4aJA8qFxnQLQ991SO38tSwktHURhxBq9CjhrqTCunYA/LBqbQdcEtfDdHH4j6VOop2TDqo62VEYxZP2AKA==",
+      "mode": 420,
+      "size": 2195
+    },
+    "src/2-two/preTagger/methods/looksPlural.js": {
+      "checkedAt": 1764662918008,
+      "integrity": "sha512-crAAZxAAtbxSOejbCvxygvUaRx5QxdMny69T+YOW24abWo6Kwmz7EtGjEbi/FJ6FooqItYHLsAzJ991eSLcXMw==",
+      "mode": 420,
+      "size": 1545
+    },
+    "src/API/methods/loops.js": {
+      "checkedAt": 1764662918009,
+      "integrity": "sha512-kJacGvDqfq1rlGE5rG2y7BfCkuS8SshKrixtPELKNzEIkSLZAqPPXCerZQtWRO5budEmScDdhtcP9vsQqBNb1w==",
+      "mode": 420,
+      "size": 1938
+    },
+    "src/1-one/tokenize/compute/machine.js": {
+      "checkedAt": 1764662918010,
+      "integrity": "sha512-iIyIjjRQ3aGoiwxw8/nU/QrK15nPS1re8SdueGz6W4ArDqdVH1jD8++enY6fLjKe2pj7tA83bg3+3Wy8WYXKpQ==",
+      "mode": 420,
+      "size": 639
+    },
+    "src/3-three/sentences/parse/mainClause.js": {
+      "checkedAt": 1764662918010,
+      "integrity": "sha512-2xxvpsbM7E844uJJ5+EDG/ssOO//Cx/Odi3ByNhM+8AQ+pX8vadeA2nHSAdG0F6u4UiX7urasWPY+m7nXz3JqQ==",
+      "mode": 420,
+      "size": 1285
+    },
+    "src/1-one/match/api/match.js": {
+      "checkedAt": 1764662918011,
+      "integrity": "sha512-KEH5SOZ77Jk6442XMFTyQLYNG59DgIaTKH6VOX6SVrd7HtmJLx/gIH7fe/CO46QvwinEr1zy2LVAUKrCnQ6ojA==",
+      "mode": 420,
+      "size": 3358
+    },
+    "src/2-two/lazy/maybeMatch.js": {
+      "checkedAt": 1764662918011,
+      "integrity": "sha512-XACzQt5jn3B5aFfhLa7Jj2Jo+Tnrb4iDgzfA25JRFdqZXYFk/KSYoLQ7QctH2Btxx0szyVpqhQSVQkE3TSswpw==",
+      "mode": 420,
+      "size": 518
+    },
+    "src/3-three/normalize/methods.js": {
+      "checkedAt": 1764662918012,
+      "integrity": "sha512-mfOd7qskz8esrJM7oQJkgGz+Vb9MO7dcXr1XRRk+z/Fzoh52L4Uqv2kELIjh8uYVijNPqP+RWjDRKYUBXnoseA==",
+      "mode": 420,
+      "size": 3164
+    },
+    "src/1-one/tokenize/model/abbreviations/misc.js": {
+      "checkedAt": 1764662918012,
+      "integrity": "sha512-gJ6m9dFDRB9f+uLcNPsSzbPL+rwj3zrGkMtz0KWHfEkhH5OmJGSGhO2gXvE8rWcdt4BlNAsZ9UAcDegPaaUmwg==",
+      "mode": 420,
+      "size": 811
+    },
+    "src/2-two/preTagger/model/lexicon/misc.js": {
+      "checkedAt": 1764662918012,
+      "integrity": "sha512-uVbBdLBQtlkauAy86xXkrrKHfntiiaRy3aZRu34N7o3IiupXx/EYeiZT27PpQ39YIYRygdZ/Wb5buLpWhpr0/Q==",
+      "mode": 420,
+      "size": 2087
+    },
+    "src/2-two/preTagger/tagSet/misc.js": {
+      "checkedAt": 1764662918013,
+      "integrity": "sha512-0j2ZBtu+/afg/+TXQ2OS3tNw/SBfplew+Rz2JyzUlyxnrsOKkDWny8wXrPf7p2fi98hr+o3erJleISAXAv9iEw==",
+      "mode": 420,
+      "size": 1950
+    },
+    "src/2-two/postTagger/model/numbers/money.js": {
+      "checkedAt": 1764662918014,
+      "integrity": "sha512-jOBRPbYoaC8srO9Hual5d58I3SSua5Dh1oyQkG1NiZ2PNgVKmGYrzHIErHewnKFso3XpmFdNZr91pTwtT6YeJw==",
+      "mode": 420,
+      "size": 520
+    },
+    "src/1-one/tokenize/model/abbreviations/months.js": {
+      "checkedAt": 1764662918014,
+      "integrity": "sha512-i+XcJiLE0/jLZMitGh+J+KYTTqlJTbICmL2zpYRs6XuQHDJGny2oI8pppOEPrrgdkpW0NCh2dmWwHEQkFWAxFg==",
+      "mode": 420,
+      "size": 101
+    },
+    "src/4-four/sense/model/more.js": {
+      "checkedAt": 1764662918018,
+      "integrity": "sha512-9q6oZI+lRZnFp0VPnM4PV//Lm0s7//9TJ+lObvKxQq4JIjgVg52NXIEFS4w3QA8DH1INE1hB7CdwjEwfdczvNQ==",
+      "mode": 420,
+      "size": 3879
+    },
+    "src/1-one/lexicon/compute/multi-word.js": {
+      "checkedAt": 1764662918021,
+      "integrity": "sha512-5EyR0V3H4GlGum7zZJBESefiaBDB/7+dItpch48lxjJ+hzaXEMqmI+yjivuff2YxxtXYWQwKvaGSrCvhJxUJWw==",
+      "mode": 420,
+      "size": 1203
+    },
+    "src/1-one/match/methods/match/steps/logic/negative-greedy.js": {
+      "checkedAt": 1764662918022,
+      "integrity": "sha512-F5k0UtoAXGZC8rJUGzESmDXdxPNUfOR219YTv9z/NqLAIBfewIqV+e9xfgcgwLrkemsEkx48PP2i0m00eLZlyQ==",
+      "mode": 420,
+      "size": 936
+    },
+    "src/1-one/match/methods/match/steps/negative.js": {
+      "checkedAt": 1764662918022,
+      "integrity": "sha512-xfxSuJi+Ub837vGW7mMtWc0drV0+yqku00jIF6xm6Jb40gdk5Jv4ADRa5qCoOeriwzIl3s3XQ8vGXN5I3cQ4yg==",
+      "mode": 420,
+      "size": 1444
+    },
+    "src/2-two/preTagger/model/patterns/neighbours.js": {
+      "checkedAt": 1764662918022,
+      "integrity": "sha512-RiKkDQz5mx5StIbIqTRV3f8ghy47tBuehGy0B8wF8AsIA7/xzxa4Z1eTg15gwe9m7x1Cau3bstrB9LBYplVVsw==",
+      "mode": 420,
+      "size": 1230
+    },
+    "src/nlp.js": {
+      "checkedAt": 1764662918023,
+      "integrity": "sha512-3MT/mvxtF3mB8tRN1qHfU87OL9e8UV5MnenrvZORSkiNBBRilxGQXIlcd1qMD88Lu4QFleLfL6luHPReUb9ZQg==",
+      "mode": 420,
+      "size": 1514
+    },
+    "src/2-two/postTagger/model/verbs/noun-gerund.js": {
+      "checkedAt": 1764662918024,
+      "integrity": "sha512-RLM5m8el4aqVuu6HLAZ3ivEa0f6cD5ieUdpouWW7RW8SIyWRxVxRjOsG+Um89vCTOq/BVk++kPzXLdOGqvqBOQ==",
+      "mode": 420,
+      "size": 1686
+    },
+    "src/2-two/preTagger/model/clues/noun-gerund.js": {
+      "checkedAt": 1764662918024,
+      "integrity": "sha512-7AdTiJYRJzcp2YR8muPjjVdPwyV4OQ5X7WvTLE0ed9KZ2TMBJPEqXqUImz5RSrQXdqYXyiMN6DMSMwCuu5bKnw==",
+      "mode": 420,
+      "size": 1164
+    },
+    "src/2-two/preTagger/model/clues/noun-verb.js": {
+      "checkedAt": 1764662918025,
+      "integrity": "sha512-dobSHip5UvTMbvvcvxmh/z+OWPGTI0p5tNOOOlB5+EClYhg2T3e1xBDDdFil/jS2komeDngLKW5FAkimqM9ccA==",
+      "mode": 420,
+      "size": 984
+    },
+    "src/4-four/facts/parse/noun.js": {
+      "checkedAt": 1764662918025,
+      "integrity": "sha512-Y0BHU9eaqiQr6iB1zlh7DCGLHfwlYzrNf+1OMQVSPvtyTNo7wxAiUx29ZSGBADEuos0RZdEsxRlCwgc28ubjOA==",
+      "mode": 420,
+      "size": 247
+    },
+    "src/4-four/sense/model/senses/noun.js": {
+      "checkedAt": 1764662918025,
+      "integrity": "sha512-ED1jqEjXytuRO2nVCPUjjyGSh8RsUOC3oJXuerjqVMqsJj5qUPngzTJArFgiT1rJpJFVkX/pQI0/4XkY90fpPA==",
+      "mode": 420,
+      "size": 2058
+    },
+    "src/1-one/tokenize/model/abbreviations/nouns.js": {
+      "checkedAt": 1764662918027,
+      "integrity": "sha512-PXpYruRCsSSlUD9MF0xt5nKUusLLHhS+s4xA4ij8A4Xkx4z082GsW0cEcmdsaHXVFWRR1gVobQbtTtbw3f4wiA==",
+      "mode": 420,
+      "size": 162
+    },
+    "src/2-two/postTagger/model/nouns/nouns.js": {
+      "checkedAt": 1764662918037,
+      "integrity": "sha512-E154qgZ2yH0ptTaVAs/dRpr7R+8SXD0EQcKbPR3/dAC44Svhf81lGGCQO0vk4EHBLuLIJa/nbqn40Tqjy3WLzA==",
+      "mode": 420,
+      "size": 8439
+    },
+    "src/2-two/preTagger/tagSet/nouns.js": {
+      "checkedAt": 1764662918045,
+      "integrity": "sha512-nr8QnjBW6Q/x60accpRq75JakwQJnf7sikYgVv5fJ9tzWIXrBC75Gm/297mLgQFi/gGsvHFyNMESwukGOf7ncg==",
+      "mode": 420,
+      "size": 1893
+    },
+    "src/1-one/contraction-one/compute/contractions/number-range.js": {
+      "checkedAt": 1764662918045,
+      "integrity": "sha512-Rw5e0lFydra1i1hvM1Hx79L1ZZ/NYH1iTmuZcrVBhJOvAqw0QxZ4zserJyQjL/iK3aCp3D93mcPPwyEaIISrRQ==",
+      "mode": 420,
+      "size": 714
+    },
+    "src/1-one/contraction-one/model/number-suffix.js": {
+      "checkedAt": 1764662918046,
+      "integrity": "sha512-CLN8u5deAtJR3C4lrw3TIrT17icDGqYdjqgLRS557treTSUURFZJ6tOmiKfM+VE/4Nczvi8kb+aSiYgzmuvxtQ==",
+      "mode": 420,
+      "size": 291
+    },
+    "src/1-one/contraction-one/compute/contractions/number-unit.js": {
+      "checkedAt": 1764662918046,
+      "integrity": "sha512-MXaPKJ9CLYfxNjU70ZLu6VLH32U85fvaQaDNoj7P/7fnEHni86oivhXVtnMGddZCGJRQigF1I/Y1iTpE7WEwOQ==",
+      "mode": 420,
+      "size": 531
+    },
+    "src/2-two/postTagger/model/numbers/numbers.js": {
+      "checkedAt": 1764662918046,
+      "integrity": "sha512-2l+JMsLJuH4jLR+hOAwbPx+/aqLeb+WfOzNK/QpjHZXpOIMd9prCQ3hNCiKhsQCNvBafleZVs4uyx6vU6vkclA==",
+      "mode": 420,
+      "size": 2470
+    },
+    "src/3-three/numbers/numbers/format/toOrdinal/numOrdinal.js": {
+      "checkedAt": 1764662918047,
+      "integrity": "sha512-+7Qi48ucKDn8e97haJ8hnuP+WWxN7QuuZs4yENU5ti26XU+ndH7xOgxjwIgrD8lVPecGBHjaeoebygZOXUBpBA==",
+      "mode": 420,
+      "size": 613
+    },
+    "src/1-one/tokenize/compute/offset.js": {
+      "checkedAt": 1764662918047,
+      "integrity": "sha512-0dLF7+novJ2eQ8f5wiXgLp0zd8lygU3uZDp8rgXS2KtzunAMHsUqR3LD4snw6rQoGQxnh32F/auDZYmeT83MnA==",
+      "mode": 420,
+      "size": 535
+    },
+    "src/one.js": {
+      "checkedAt": 1764662918048,
+      "integrity": "sha512-lfaLsgseeS3Dlwe8yGRzmMUBf0RTL49DWIprkwCjif0qKZi4Mbw8wZakxDXIRuDTy+E102REfr3K8QcFqqzrzA==",
+      "mode": 420,
+      "size": 1035
+    },
+    "src/1-one/match/methods/match/steps/optional-match.js": {
+      "checkedAt": 1764662918062,
+      "integrity": "sha512-1A7ELqCMbv0MKp+w/Yga0I2lPGpqUO9b617x1iWqMYn8fqJMG4Gqj5tg+Md3OAUIzYfHgJ7I0GMBZniSWWrTiw==",
+      "mode": 420,
+      "size": 683
+    },
+    "src/1-one/match/methods/match/steps/or-block.js": {
+      "checkedAt": 1764662918068,
+      "integrity": "sha512-VwEGvc+BI9n0Q52Ag7fih9skZG7bRz7L3c5hafsANM6S8KHTmHjO30Wtsh9PxuEB0Wt3ra7C3j19oXZsweEEeQ==",
+      "mode": 420,
+      "size": 821
+    },
+    "src/1-one/tokenize/model/abbreviations/organizations.js": {
+      "checkedAt": 1764662918069,
+      "integrity": "sha512-bmt+hSVkBoRIlnayRhK0zy6yhW77u9a+O3c/Bvl6jmCrpK18/3ina65fgxWUpXVR+WDdVknC38F8issqZA+C4A==",
+      "mode": 420,
+      "size": 68
+    },
+    "src/2-two/postTagger/model/nouns/organizations.js": {
+      "checkedAt": 1764662918070,
+      "integrity": "sha512-2kDOMCrBesFH0nlSz3msO41CGnluPuQ7M79Ixdds5W8C0sUQng+t7OIN9H6CgDvKyGJ5cq9XC3/yAhtMmtp4MQ==",
+      "mode": 420,
+      "size": 3003
+    },
+    "src/2-two/preTagger/model/orgWords.js": {
+      "checkedAt": 1764662918074,
+      "integrity": "sha512-TGN7MrjJdM9xpxtbsXYh5CRWGPDRVCoxSIvIeVz3u28EzbAblmW6HkTeVq/UFaVNVYeaanHSxhfkHvYhq1CsWw==",
+      "mode": 420,
+      "size": 2715
+    },
+    "src/1-one/output/api/out.js": {
+      "checkedAt": 1764662918075,
+      "integrity": "sha512-7qaLm197Elw1VBDVn5lGH4r5Z9eg7KfsN8wWWvPO+GsXbZ/MSNyAmkr6yayQ8F4WG1whTfUTS09IOqkgrsS1vg==",
+      "mode": 420,
+      "size": 2299
+    },
+    "src/1-one/tokenize/methods/parse.js": {
+      "checkedAt": 1764662918075,
+      "integrity": "sha512-pajbatiCgWgvtG5kKVzKI+/d4igdpcaLWvqPVCkGStByWVdIz3aCYxvlNnFbuL6BYdsjZG5BWYTwclysUGGTgw==",
+      "mode": 420,
+      "size": 706
+    },
+    "src/3-three/nouns/api/parse.js": {
+      "checkedAt": 1764662918076,
+      "integrity": "sha512-So94PJQDRtQL06DqJvuXlqCPzURXFVvLJoKNX/Zdh4c0PGysywijwc2OxcQhz/DlKg2PLIM9uN5UUGhdKgHl6g==",
+      "mode": 420,
+      "size": 631
+    },
+    "src/3-three/numbers/fractions/parse.js": {
+      "checkedAt": 1764662918076,
+      "integrity": "sha512-W/QpIiFzlzkyMPYB4H+FPx+WGsuQw09eMhMhvbowI/fqW3hQmWRAIe5AUBtV6FiRvGJg9zYcxoAIor6/lHiAmw==",
+      "mode": 420,
+      "size": 3144
+    },
+    "src/3-three/topics/people/parse.js": {
+      "checkedAt": 1764662918077,
+      "integrity": "sha512-NjDsp9/3qscrJ0pN8SL8S9FQU9iIhw0NSbNisyTCypE1HcM2lBfDZ9B8pECvsIlYLPRlVjrAZZ58LShi8v9pFA==",
+      "mode": 420,
+      "size": 489
+    },
+    "src/3-three/numbers/numbers/parse/toNumber/parseDecimals.js": {
+      "checkedAt": 1764662918077,
+      "integrity": "sha512-yUdAAgLB/p8O6Xllt1oyTJaU3mwmktznZSzFi7IxGXkMpcQmm3vi5uIVTdJiKFpdDrTwFfzIZADzIcsXJqqSpA==",
+      "mode": 420,
+      "size": 592
+    },
+    "src/3-three/numbers/numbers/parse/toNumber/parseNumeric.js": {
+      "checkedAt": 1764662918077,
+      "integrity": "sha512-9aAc6vMLUeUtiP0bveDXt4n2kfK+dEc2dWhyztjln6I8E9In2qUMneauIdMVBrHBS6+0VDNAHLqPCdC3H7oAVw==",
+      "mode": 420,
+      "size": 558
+    },
+    "src/2-two/postTagger/model/verbs/passive.js": {
+      "checkedAt": 1764662918078,
+      "integrity": "sha512-q64Wpp8dfR5+Gmu9h0fqUs8Y46zKymR1fSiFpBZDLgqV0vZ8ttMsUr5YTsxpw/dErFZdMTyb/HnxQ5W4bh3RYg==",
+      "mode": 420,
+      "size": 716
+    },
+    "src/2-two/preTagger/compute/penn.js": {
+      "checkedAt": 1764662918079,
+      "integrity": "sha512-+tPLIn+l6zmXKuugfJcz2W5npRp/vqd1Jyvn9LXA+zRwefc94J3Uu0mLAL9g09xHsMsY/AVYkhq/W5E94VQHsA==",
+      "mode": 420,
+      "size": 1945
+    },
+    "src/2-two/preTagger/model/clues/person-adj.js": {
+      "checkedAt": 1764662918079,
+      "integrity": "sha512-fM/bu42wua3spCWZZbguVoKcKQXHTviei9QASh0omMbneD2luz/OEyVNkavg7y2YQ8rPAGgZBi+2qNkr+roB6A==",
+      "mode": 420,
+      "size": 408
+    },
+    "src/2-two/preTagger/model/clues/person-date.js": {
+      "checkedAt": 1764662918080,
+      "integrity": "sha512-7SU5EIQaK3VQOL75SPvjf0t5P4qgtHQsSxknX9J/fSJPLYS1Aw4Q+DgyZVSzGC+oSw4QITg9YLw6uM8PSkm/vg==",
+      "mode": 420,
+      "size": 919
+    },
+    "src/2-two/preTagger/model/clues/person-noun.js": {
+      "checkedAt": 1764662918080,
+      "integrity": "sha512-hkHBMKwBJKb7tZWDkthOzx2ch9GwS5bRuv4liE9WccCJTQuJwWaLUcn8gDQys1QlPCfuGr38SYllzBdeBVYrxA==",
+      "mode": 420,
+      "size": 455
+    },
+    "src/2-two/postTagger/model/person/person-phrase.js": {
+      "checkedAt": 1764662918081,
+      "integrity": "sha512-P/xLHQJN7syVcav52YoVzGEjCtujWPynTVfNONtNHAIK0xXnJCZlqu4mMX7icj84ZfmC0nfHmBmPHBfawMSPqw==",
+      "mode": 420,
+      "size": 4786
+    },
+    "src/2-two/preTagger/model/clues/person-place.js": {
+      "checkedAt": 1764662918081,
+      "integrity": "sha512-9Www/nciBEHbcSWmOZjGG+WXTud3r7fbV3+b5PqCHZMISgWX6aUpI70QfQzZSmNSDAUupfSsi+tHStGz4exIaQ==",
+      "mode": 420,
+      "size": 736
+    },
+    "src/2-two/preTagger/model/clues/person-verb.js": {
+      "checkedAt": 1764662918082,
+      "integrity": "sha512-uGdN6JSV4Qals+9FBk32YmskNjr6YcgqOeOwWNzqnqpAcD9aG0alwskNGEJfDFLNViwiiOZccu8BDy7ctEIzUQ==",
+      "mode": 420,
+      "size": 549
+    },
+    "src/2-two/preTagger/model/personWords.js": {
+      "checkedAt": 1764662918082,
+      "integrity": "sha512-ib9mw9x9s/wQi6+7oGQdq02JcEb3TXEm1MrCPGvu50t5ht3UPG8oL/OpZX7aRWV/FmTZf1wMHwaz9LiRAiQsKw==",
+      "mode": 420,
+      "size": 90
+    },
+    "src/2-two/postTagger/model/verbs/phrasal.js": {
+      "checkedAt": 1764662918083,
+      "integrity": "sha512-6Xg+1LaduOSx5CLzeC8cCjoJ+a2wo/d04Hlrj+kMs38noRGAazRNOw9SPNb1zBGp4ZHvity6cSKCPR2VYYs7SQ==",
+      "mode": 420,
+      "size": 1593
+    },
+    "src/4-four/facts/parse/pivot.js": {
+      "checkedAt": 1764662918083,
+      "integrity": "sha512-+dJ3wAI4is4GcJqJATRMQeKvq0QpZ6xZNC+QKvvbUmp+FZFU+0Zo5hS2r6TkT3xg694QhczduxOJnWupc/mEUg==",
+      "mode": 420,
+      "size": 232
+    },
+    "src/1-one/tokenize/model/abbreviations/places.js": {
+      "checkedAt": 1764662918083,
+      "integrity": "sha512-5skJr6P1bYtsbJbO44eVT2b/434zVdChr3ZChDD6jGaeKY0jY97hAOAYebT7AFXhpIEXaEJfrcRVKTz7qIrtuA==",
+      "mode": 420,
+      "size": 438
+    },
+    "src/2-two/postTagger/model/nouns/places.js": {
+      "checkedAt": 1764662918084,
+      "integrity": "sha512-W6qfKEwTyFxA2dOtHycBTCQfKjBi3QeMxzulrR/nzsFex5TRVhbryEuFhUYDj/6Y+gJibEXjKTkel4NpQX6Gyg==",
+      "mode": 420,
+      "size": 1663
+    },
+    "src/2-two/preTagger/model/placeWords.js": {
+      "checkedAt": 1764662918084,
+      "integrity": "sha512-lpOIojg7lW+ZM8zwlFPkFs7j5Xa3xvZZerE3OS+2WEtYdfWpdaeZoveBlIUfGyMBmoFCcsdOyUhSUtDxnALYrQ==",
+      "mode": 420,
+      "size": 2646
+    },
+    "src/1-one/cache/plugin.js": {
+      "checkedAt": 1764662918085,
+      "integrity": "sha512-/A9uHHzwy59iP2GrP1+pmxskBcrSpOpDHYfQ/RkuMoT1m7KrbJv3bLAuydDtjdNDLHQX4QLJ/j4uv3E4zI2xXQ==",
+      "mode": 420,
+      "size": 152
+    },
+    "src/1-one/change/plugin.js": {
+      "checkedAt": 1764662918085,
+      "integrity": "sha512-fB2nvQHV21ioYQ5MPAR6k4oIjXIhbfOV6rWxDLMeiXBLfgoSFm4cMcft3OjhjSvRG541FEN3evE7wks4bZcVKQ==",
+      "mode": 420,
+      "size": 112
+    },
+    "src/1-one/contraction-one/plugin.js": {
+      "checkedAt": 1764662918085,
+      "integrity": "sha512-TrulWB74bYgbrCnLYqqYVPnCxp4bd39oK53AJG0rENLa16R4C5hHFCbzvMXWdwjn8DL1lGDShPUVYdW9cwkBtA==",
+      "mode": 420,
+      "size": 183
+    },
+    "src/1-one/freeze/plugin.js": {
+      "checkedAt": 1764662918087,
+      "integrity": "sha512-7ssoxtO4DxJxwwlsVQ53bynlabNm4FfKPailYCMrMosKnQAGINA9qAMc/hJiX2jT4p5u2IboTwlH/TTCHNBdvQ==",
+      "mode": 420,
+      "size": 935
+    },
+    "src/1-one/lexicon/plugin.js": {
+      "checkedAt": 1764662918087,
+      "integrity": "sha512-7rAS/ALqUUPLQuX3fbOrVFQrYuvQtxwbZ/5QxdwCDONNey+bQuU57ilbAjxysCvVOiVJkbxxJo6QgXSQ7qimMQ==",
+      "mode": 420,
+      "size": 315
+    },
+    "src/1-one/lookup/plugin.js": {
+      "checkedAt": 1764662918088,
+      "integrity": "sha512-rb+yEjFfSTzkvugJEKxGbeKOKcGYsLMezbgtv6VqcKp6DDmzkSD+Evk/wT8Co1AdHX6Gnbs9HcVqlMYynjqt7w==",
+      "mode": 420,
+      "size": 428
+    },
+    "src/1-one/match/plugin.js": {
+      "checkedAt": 1764662918088,
+      "integrity": "sha512-pCou3C7tGjkRBXEJ08ZGy0eqwQ04pNPcyh7CBCFvQqIAOHc733GSkz7biTdQ8FZry+U4WfnXMMbpoZVU7cpx6w==",
+      "mode": 420,
+      "size": 146
+    },
+    "src/1-one/output/plugin.js": {
+      "checkedAt": 1764662918089,
+      "integrity": "sha512-H3ZA/7DjB+U9d/5vLdeLyDFUtbvVoiERSMM95XU5IHFsIiNR/nMulWKTrC+UpB3wdoORnHykOphmB/3yKEeENw==",
+      "mode": 420,
+      "size": 170
+    },
+    "src/1-one/pointers/plugin.js": {
+      "checkedAt": 1764662918089,
+      "integrity": "sha512-Q9c0bD9WuM1UwCCDMUEwqXnYmutaxxPGK8DyCqHo0MmWOwxX9KvSzkB4ae6qeB5x9mulTia18u5uLVQuxj72eg==",
+      "mode": 420,
+      "size": 112
+    },
+    "src/1-one/sweep/plugin.js": {
+      "checkedAt": 1764662918089,
+      "integrity": "sha512-FMHYDWAIqSjI84zDoAxU0Yg/3djsUF69Md/AYejIm6hW4tqLLqhUK0d3SAupBAry45ICEK28P/1iDVb5SXS9aw==",
+      "mode": 420,
+      "size": 163
+    },
+    "src/1-one/tag/plugin.js": {
+      "checkedAt": 1764662918090,
+      "integrity": "sha512-/LwBWayICuJA+si/kJAezrKXxQma6Udd9RPvExvfn8JX10R0q/hJdpjEm6XnUH7OYian7Vl70D0LKEeKGTs0og==",
+      "mode": 420,
+      "size": 259
+    },
+    "src/1-one/tokenize/plugin.js": {
+      "checkedAt": 1764662918090,
+      "integrity": "sha512-tSVdI3+BkFABtRhEvW3582Oulw+XJnc3M4emAKFIcZYcUCpe/IO9YXznUNYANUSvGKrdSrJnojwaeOQUhse9xA==",
+      "mode": 420,
+      "size": 588
+    },
+    "src/1-one/typeahead/plugin.js": {
+      "checkedAt": 1764662918091,
+      "integrity": "sha512-I+j5U6fk+Px0IhnBMZB8f5a/jIXbycAmswn39+vCiTl+mhVKyOw9UkjOqsjfKLqNZtwQPh+3YGK4eYQL1F547A==",
+      "mode": 420,
+      "size": 244
+    },
+    "src/2-two/contraction-two/plugin.js": {
+      "checkedAt": 1764662918091,
+      "integrity": "sha512-jf7xeq1cvBcy/0rNgHCgcBpjxxr2tsDmBVrOC4yONa5kOt2fiGSsh+g5efHR5rW5J/paEKvdbY2lZGZd//2R9A==",
+      "mode": 420,
+      "size": 139
+    },
+    "src/2-two/lazy/plugin.js": {
+      "checkedAt": 1764662918092,
+      "integrity": "sha512-rIlOuIcblq51Hw2UFJrDaEYkdYxDa+oHR9Qa+XOAk8eQuyK/8glKHCf5EvxXV71/n0tGPw3UBMJiEZCpmEHVyw==",
+      "mode": 420,
+      "size": 75
+    },
+    "src/2-two/postTagger/plugin.js": {
+      "checkedAt": 1764662918092,
+      "integrity": "sha512-OhHZZluLWI633l4XOHsDYtGS2wmDm6E+Z/SAVmsmv3mTxLDokiSItc5vJGVpYPMBHJQeaJ/mGQVhYYQnE1N4GA==",
+      "mode": 420,
+      "size": 200
+    },
+    "src/2-two/preTagger/plugin.js": {
+      "checkedAt": 1764662918092,
+      "integrity": "sha512-5b69mFLXkFdc2tUGAcw4pxsWAfyGNiHiRkqY7Z9+HqSooz3s0kNpKQQwZ+N0Y64ESaqbI3vRSiA/nMFEihNK1g==",
+      "mode": 420,
+      "size": 239
+    },
+    "src/2-two/swap/plugin.js": {
+      "checkedAt": 1764662918093,
+      "integrity": "sha512-e5AwOhupFfeDrn8WffIHaNXb3lo7q3BjZgr0lnJxQOSsrODpSaydVX4zMrom7dHw2WoQK6utbBJ9xjfnec8w5w==",
+      "mode": 420,
+      "size": 120
+    },
+    "src/3-three/adjectives/plugin.js": {
+      "checkedAt": 1764662918093,
+      "integrity": "sha512-g5DzNERuFLl/1HrJqnirTMrP1GjtQTwiQ3C2xy5f3s7jEQGm56xcbsZ/P/oCOIGcYm3YEZbRs2TPCBh0stk3GA==",
+      "mode": 420,
+      "size": 3173
+    },
+    "src/3-three/adverbs/plugin.js": {
+      "checkedAt": 1764662918094,
+      "integrity": "sha512-YkOrYwhdlBuMwg11RTeUZATSktRXE3SDyuGFnScut7zKv6cwZPbjMEOPwzVTEOcwte249w94a6Juviq/7dBNVQ==",
+      "mode": 420,
+      "size": 1049
+    },
+    "src/3-three/chunker/plugin.js": {
+      "checkedAt": 1764662918094,
+      "integrity": "sha512-VMuuqBwFayvs2NLUfA0N/l0gZ+VsEPWc5x4R4HWrKK9pQ7q6ES5eJl4M8zp3IajhcYj2F9fWajdrMYdw3TFBsA==",
+      "mode": 420,
+      "size": 145
+    },
+    "src/3-three/coreference/plugin.js": {
+      "checkedAt": 1764662918095,
+      "integrity": "sha512-+7LUA8URvB+PId8XrHVzDe9Gszhiwa3lXGQbJXRrGwMM/6KwApxOjqwXvWer53eT3RVvuA0wia/W07Z+zToutw==",
+      "mode": 420,
+      "size": 134
+    },
+    "src/3-three/misc/plugin.js": {
+      "checkedAt": 1764662918096,
+      "integrity": "sha512-D8paMNmJDxeXzpNbAkGtT6nlI1j0/WCpkC7jUsszRnbPGWAw2VUnnkfvd9hBZn7XR6Qm8Dv8JsBoAlraBUHRNw==",
+      "mode": 420,
+      "size": 484
+    },
+    "src/3-three/normalize/plugin.js": {
+      "checkedAt": 1764662918096,
+      "integrity": "sha512-mpi5fI1ZnvneLJd8XkZpgoqKz7EPTPbjZeELB1dh4rUxMU/NoNVcRhuxflbws5PBJMmdSzzX2QnfCvUqTLzAig==",
+      "mode": 420,
+      "size": 52
+    },
+    "src/3-three/nouns/plugin.js": {
+      "checkedAt": 1764662918097,
+      "integrity": "sha512-J9R1rAESzUl2oPwas7/T3EpyJUsvypWIxok61/t+eYSYz0NYrVD1uHGRXnjzcehEDfgafJIkB0JLvH8KRIacdQ==",
+      "mode": 420,
+      "size": 58
+    },
+    "src/3-three/numbers/plugin.js": {
+      "checkedAt": 1764662918097,
+      "integrity": "sha512-GVQ+x/bBGGALRQN4p2snPVK+qywE5Jty18XR/iaJcJpmtq9d1OwRZYSBZyv5NWVaonqIn8ZxDJ5+yRmEg+gPyg==",
+      "mode": 420,
+      "size": 440
+    },
+    "src/3-three/redact/plugin.js": {
+      "checkedAt": 1764662918098,
+      "integrity": "sha512-GGtW5W6MfTh23/7m7Oj2Wf1GYXmxpCS961gwOjQrosIuKJazEHsJ9Ms5vg8JTLH12QtvQMbejlswDV/cdsyZXQ==",
+      "mode": 420,
+      "size": 694
+    },
+    "src/3-three/sentences/plugin.js": {
+      "checkedAt": 1764662918098,
+      "integrity": "sha512-Ah0MhdCWYNmQtfwlsBnJonF769ZhWHAcb4uIAaQop1NemuyxNadk1I3c35wSR6SZR0A/7H4fLLOs5nOYPUanOg==",
+      "mode": 420,
+      "size": 51
+    },
+    "src/3-three/topics/plugin.js": {
+      "checkedAt": 1764662918099,
+      "integrity": "sha512-c000EQWkFpgMiORQW7c0hT+bDIPg6UearVQgTZ96JEiZmqvrm4YMYrVe+qvigGB8egoXN1HiPrurbVafUX0pbQ==",
+      "mode": 420,
+      "size": 254
+    },
+    "src/3-three/verbs/plugin.js": {
+      "checkedAt": 1764662918097,
+      "integrity": "sha512-J9R1rAESzUl2oPwas7/T3EpyJUsvypWIxok61/t+eYSYz0NYrVD1uHGRXnjzcehEDfgafJIkB0JLvH8KRIacdQ==",
+      "mode": 420,
+      "size": 58
+    },
+    "src/4-four/facts/plugin.js": {
+      "checkedAt": 1764662918096,
+      "integrity": "sha512-mpi5fI1ZnvneLJd8XkZpgoqKz7EPTPbjZeELB1dh4rUxMU/NoNVcRhuxflbws5PBJMmdSzzX2QnfCvUqTLzAig==",
+      "mode": 420,
+      "size": 52
+    },
+    "src/4-four/sense/plugin.js": {
+      "checkedAt": 1764662918099,
+      "integrity": "sha512-d4ObkRddfLrkBP6BH9hYIN30erGjQHrLmnNNTpBIGgGG/Ygvcz7NUrN8W5b6H/E4/cj58zxWHXLaLvnJNt69ug==",
+      "mode": 420,
+      "size": 188
+    },
+    "src/2-two/preTagger/model/irregulars/plurals.js": {
+      "checkedAt": 1764662918100,
+      "integrity": "sha512-lzgusj63lRCvoXIUcRsKZ2J0+btdgNVxz2WKdGbW/j8aJSMJtJijOOF+cCXAD1PaDmZ/vxNxuBpGly6YrGGGEA==",
+      "mode": 420,
+      "size": 2083
+    },
+    "src/4-four/facts/parse/postProcess.js": {
+      "checkedAt": 1764662918100,
+      "integrity": "sha512-mc/HewwqPYExK3SgEVFgGMY/xeefX7Z7uJn1Ksj8cwwww/p9hWCgcp4xIj1igdFkHE6ath0u+tqmOI90Jg5bOQ==",
+      "mode": 420,
+      "size": 419
+    },
+    "src/1-one/tokenize/model/prefixes.js": {
+      "checkedAt": 1764662918101,
+      "integrity": "sha512-VKf9mHLLUaffY7no18RMc/NwKLVsg3uleP8oknccIPet285v8LZS6xWd4KSfZmIHr5THSR7CfflSPadgg2N4zg==",
+      "mode": 420,
+      "size": 620
+    },
+    "src/2-two/preTagger/model/patterns/prefixes.js": {
+      "checkedAt": 1764662918101,
+      "integrity": "sha512-mBA0rEQt9A6WMseW/BYQKBTAkGEUdOvonyl9qG3J5P4++hGaqpf2FjkZm97iwmcPlYOvN5G1KEzEJGJgJXLqFw==",
+      "mode": 420,
+      "size": 1163
+    },
+    "src/3-three/coreference/api/pronouns.js": {
+      "checkedAt": 1764662918102,
+      "integrity": "sha512-bS0rOp2M1a6+BhibMz43fwGpAyRB0DiQ3z8w7awfcieQmIR9hX5i7O81EMgHkRkGJjkNDVa1zLdWAfmYskleYg==",
+      "mode": 420,
+      "size": 1102
+    },
+    "src/1-one/tokenize/model/punctuation.js": {
+      "checkedAt": 1764662918117,
+      "integrity": "sha512-aNC0pBsmkLVIDI1xyvMnZKWDRYjP4H4+WcNyZxsSQY+FyPUqs51NaIzxJvnPf3Fgns7vJIWgOEkHmNlp87UjoQ==",
+      "mode": 420,
+      "size": 841
+    },
+    "src/3-three/sentences/questions.js": {
+      "checkedAt": 1764662918118,
+      "integrity": "sha512-HxKvxP/essHAkPBnV0ItpTO/GeUmbboJLyK6OCPklJryNUheVcZJwWcH04LV8jCzoMVykB3Gs1lhdlmVcbzbsg==",
+      "mode": 420,
+      "size": 2045
+    },
+    "src/2-two/preTagger/methods/quickSplit.js": {
+      "checkedAt": 1764662918119,
+      "integrity": "sha512-Wj6CkDLtmwnk6v7xaX/BZF+MCze4x1mn/6QLruZSwH9gfqXH2ab6rhxcYpW/eC4rAu3q1PFcHzfWYKNRSU3Rdg==",
+      "mode": 420,
+      "size": 1521
+    },
+    "src/2-two/preTagger/model/regex/regex-normal.js": {
+      "checkedAt": 1764662918120,
+      "integrity": "sha512-8ZfJLGXtZ60T7P5Ig/mt8QWU8vqDRTVje7s3K7WMwRMH24Ln+G28OEnkVR2oGwKmTz0lscSJbQhIJmKND1pCZQ==",
+      "mode": 420,
+      "size": 836
+    },
+    "src/2-two/preTagger/model/regex/regex-numbers.js": {
+      "checkedAt": 1764662918121,
+      "integrity": "sha512-xXSx3EMdWAfZo3BiMLKmudewTflWjeiAb2m7FDWbOVFvYkpTU28NRxxdUy4Xxpssn6Gza2ePiVEDwyV64WU0WQ==",
+      "mode": 420,
+      "size": 2284
+    },
+    "src/2-two/preTagger/model/regex/regex-text.js": {
+      "checkedAt": 1764662918121,
+      "integrity": "sha512-OiiLazD371ZDBqE0HvSG7kugJwNBLlJZbtPOPVCJu1OWjnDYVHAZK0zUb7iHv2bBEQFYmcl3VsHNSIdb9RoHGg==",
+      "mode": 420,
+      "size": 702
+    },
+    "src/1-one/tokenize/compute/reindex.js": {
+      "checkedAt": 1764662918123,
+      "integrity": "sha512-xBcA06ETiIimq07Ksc1T2DSIasv4e5f+MgDTHqg90/rux95Rgy77TZry9fs8FXjtBCGYj5RQoZO1qBBtMO2vOQ==",
+      "mode": 420,
+      "size": 585
+    },
+    "src/1-one/change/api/lib/remove.js": {
+      "checkedAt": 1764662918123,
+      "integrity": "sha512-nimjcBwoLqo/oHFgsW4b6RBsAjjtla8PEsz/ZTqlpZ1TzFruiY2dZiH81PW/w1l9mccU8k40AXgvdhh4nXQw7g==",
+      "mode": 420,
+      "size": 1502
+    },
+    "src/1-one/change/api/remove.js": {
+      "checkedAt": 1764662918124,
+      "integrity": "sha512-8jz5s/mroPDmko7mBph0kAO03Ea0xJHkPAGNvsYvvT9lAtkM7Ajt6M4tsS0Sy1geApjSzCiYIYq6XV92wpBkcA==",
+      "mode": 420,
+      "size": 2200
+    },
+    "src/1-one/change/api/replace.js": {
+      "checkedAt": 1764662918125,
+      "integrity": "sha512-BAWWdtudGOQSPuGz7t09yYOvtiBDfxDUtN/1svfBTnGNlB+2BC/00xLQ4iDYeuNlEmg5HKHY3a495nE+JBAOsw==",
+      "mode": 420,
+      "size": 3608
+    },
+    "src/2-two/preTagger/compute/root.js": {
+      "checkedAt": 1764662918126,
+      "integrity": "sha512-bnkC06p7XnsDx75Ia6Pv27Z8jP++Z0Z4mEOIa8Og3zJ1mKx0w9GCL8Y5mWspNX0V9JQ+l6vAh0UC9FS8rX7UWA==",
+      "mode": 420,
+      "size": 2238
+    },
+    "src/3-three/verbs/api/parse/root.js": {
+      "checkedAt": 1764662918128,
+      "integrity": "sha512-AylLii6WVpv2w0EgbQUSLP6h7MJr9soqUxlbVKG04uRQeEPs3rAi3HrYmFMgCutb30ypXythK9OcWwDtr4mjXw==",
+      "mode": 420,
+      "size": 519
+    },
+    "src/1-one/lookup/api/scan.js": {
+      "checkedAt": 1764662918129,
+      "integrity": "sha512-NirIeNuRhW74/1LIyC391stSMLzSIk94hsMtoLM0/Eqx1hVC/lN3uqeqcr0rETWsFMCHovctH94wveLMZXmRvw==",
+      "mode": 420,
+      "size": 1702
+    },
+    "src/1-one/tag/methods/setTag.js": {
+      "checkedAt": 1764662918131,
+      "integrity": "sha512-ixwjqPySXDR67CfCRzfCpyOJ0wq2NXHH0mtZ/j4xRwO3AOGpv3xPySjMLM7q1He1zczf4duaW6VGLUQ3rNLBaQ==",
+      "mode": 420,
+      "size": 3217
+    },
+    "src/1-one/match/methods/match/steps/simple-match.js": {
+      "checkedAt": 1764662918132,
+      "integrity": "sha512-UKNCjVVKexmjuRlPKGbZZdjVX9Akn8PHGlKEbJVz9uQVh7bsbaZalb++neA1QUOS5rfO/3jl40eK80PDKo8eEw==",
+      "mode": 420,
+      "size": 1668
+    },
+    "src/1-one/lexicon/compute/single-word.js": {
+      "checkedAt": 1764662918132,
+      "integrity": "sha512-1uJ7Aak7OamlZbgNuTv09uRr7N5giYytGxvWTFG1qKnhxxU/5ldQEQCAt6avm7C77B/kHNMbby1gcA2O40LnnQ==",
+      "mode": 420,
+      "size": 1397
+    },
+    "src/1-one/change/api/sort.js": {
+      "checkedAt": 1764662918133,
+      "integrity": "sha512-fpbbrYMgm0C74HnhQstBP4+vppcjjsKO4XPl/E3uK0p0WngpBWyo9QX7N7S6PR2KAvivbhiJLLJf8wGiVfzP1Q==",
+      "mode": 420,
+      "size": 2175
+    },
+    "src/1-one/match/api/split.js": {
+      "checkedAt": 1764662918133,
+      "integrity": "sha512-XXfRkEY+PU+5WP2gKMvdawTDVYJeQqD/8eDb/rHUJuWJeIlXH83tOtzONpYnzPjg00+Hu/QRW+CCZXsyuU8xwQ==",
+      "mode": 420,
+      "size": 2710
+    },
+    "src/1-one/pointers/api/lib/split.js": {
+      "checkedAt": 1764662918138,
+      "integrity": "sha512-f6SnnFT/MvpL7NhbSHQQRHTEhyZC/w0djbzxuI/xbUyDQqJZmbNSQY2MLBr6Y1v8D4OKJIex2tviNHW3g2/6jg==",
+      "mode": 420,
+      "size": 1392
+    },
+    "src/3-three/numbers/numbers/format/suffix.js": {
+      "checkedAt": 1764662918139,
+      "integrity": "sha512-p4Vho8myxxZj601OXPBehvqdE2MsTLqIEokcSAcvpvS8gYrsSemqUr0B9fFgkhEWUN1aXgnDbeiazUgzUTyeIg==",
+      "mode": 420,
+      "size": 948
+    },
+    "src/1-one/tokenize/model/suffixes.js": {
+      "checkedAt": 1764662918140,
+      "integrity": "sha512-964yOZdx7tZjQT2I/1bbQczQzfCW/lNxnlfCegtTMjvPFTZJzeTokZEHRyP52+sCt7eSioDlLhN53JuekSwB0A==",
+      "mode": 420,
+      "size": 240
+    },
+    "src/2-two/preTagger/model/patterns/suffixes.js": {
+      "checkedAt": 1764662918141,
+      "integrity": "sha512-dri6ddl4IbMrGFBOLmpHNFjjird5L5n4F98ZQexzH9oBM1Mmd/9fHy2TdarLXFeIHMCczgGm8Pb0pH8kq/bj/w==",
+      "mode": 420,
+      "size": 4445
+    },
+    "src/2-two/swap/api/swap-verb.js": {
+      "checkedAt": 1764662918141,
+      "integrity": "sha512-ZhYhQeBctBJkYjxmF7PAxrsaq9SEVhBDMSdWrxBSt/cgl7WjcB3BCrpIh8doqB0AJ1FuRRBK7Wk3IsADOPbVJg==",
+      "mode": 420,
+      "size": 595
+    },
+    "src/2-two/swap/api/swap.js": {
+      "checkedAt": 1764662918142,
+      "integrity": "sha512-VSjIE5z9+ESAWXkPBH9OCELoWYVaZ8e79rQqrmRGhZGar5O4A4A8JLU54EUXJH62Yw1b2EVwprt318t3axDJbQ==",
+      "mode": 420,
+      "size": 1327
+    },
+    "src/1-one/tag/api/tag.js": {
+      "checkedAt": 1764662918142,
+      "integrity": "sha512-7YMEp2qXyMIeyoVqQ+ycSrPKACFrERfiqG/bA0a7/7bCfg3oI414TBbF8arjn++KR8Bww57Y2B1f71HRXMimjg==",
+      "mode": 420,
+      "size": 1998
+    },
+    "src/1-one/tag/compute/tagRank.js": {
+      "checkedAt": 1764662918143,
+      "integrity": "sha512-eDrs/8XIbscT521SXfQbBwEa8tpgcfNQTsM3TEUmnacJCOBmRJ5Uu8nFetV17jkX5I5D0cVf7r8e8btWi6Lakw==",
+      "mode": 420,
+      "size": 798
+    },
+    "src/1-one/output/methods/debug/tags.js": {
+      "checkedAt": 1764662918143,
+      "integrity": "sha512-4vw0AlKgpxpIcXxDIJ319FGkhQ3/WCVc5wmsTpOd5EZFO/vvMK59soX4ySdXPuDjtJXRRvXQJGubnawtmXm+mA==",
+      "mode": 420,
+      "size": 1237
+    },
+    "src/1-one/match/methods/termMethods.js": {
+      "checkedAt": 1764662918144,
+      "integrity": "sha512-yaHB3MY7H6JIWJON2oPU5jDTMhwVt6yWgjEoknLYNTDkaaAQ2Qp+YJwhosNz7n2Kz8yYQvZnujmirSMzUT4s3w==",
+      "mode": 420,
+      "size": 2269
+    },
+    "src/1-one/output/api/text.js": {
+      "checkedAt": 1764662918144,
+      "integrity": "sha512-8iwU79/fTIrIyCTlGC1G8Y2xS2GUAXbM7PEFVD9eWuw7I/1GlL5yuooCdjT+UbB9tglHtu3SIjGJ9m/Bk9hnUQ==",
+      "mode": 420,
+      "size": 1005
+    },
+    "src/3-three/numbers/numbers/format/toOrdinal/textOrdinal.js": {
+      "checkedAt": 1764662918145,
+      "integrity": "sha512-1qV6QRZ3FyllcdKyU9sLq2KoG2l2HrJ4BmYf+gVcIRoqeAiNzxCFQKKRSqLiWoSMlDJjP6rNzcIT6FPMXg42YQ==",
+      "mode": 420,
+      "size": 826
+    },
+    "src/three.js": {
+      "checkedAt": 1764662918145,
+      "integrity": "sha512-C2oQ+yqsuW0EVYHm153t0N3ptSp71kZTYCR1NLVPbUf1ZVVKGoBpw5zkVJBxRJJ6C6nvKln+r/8TTasRPpBtoA==",
+      "mode": 420,
+      "size": 927
+    },
+    "src/2-two/preTagger/methods/transform/adjectives/conjugate/toAdverb.js": {
+      "checkedAt": 1764662918146,
+      "integrity": "sha512-hr0YVvP8ujsp1q2hFyIsbd6wxd3PpL1ycjA7AVNRzOLrrG3iNWijl2CyCkfzV7UOGCAhAAbS9ifjt5Lq7Pq90A==",
+      "mode": 420,
+      "size": 920
+    },
+    "src/3-three/numbers/fractions/convert/toCardinal.js": {
+      "checkedAt": 1764662918146,
+      "integrity": "sha512-Y7eld48Tk97H3d4SN2XaptiGWZ7ufXFt9j7H4lV46LT4Yr1Z+QnVWkyo+xB42zm8nrbClYsp+k5kpkvRT7Dljw==",
+      "mode": 420,
+      "size": 297
+    },
+    "src/3-three/sentences/conjugate/toFuture.js": {
+      "checkedAt": 1764662918147,
+      "integrity": "sha512-ax6nJzSNT5ZIYeUvnYWBmhFQTTf1SwxzZ2g2F/5cEl87U3oWtM3XrUu/VXvG0Wl/Ejle3bBv9kysurAMmn5D+g==",
+      "mode": 420,
+      "size": 1519
+    },
+    "src/3-three/verbs/api/conjugate/toFuture.js": {
+      "checkedAt": 1764662918147,
+      "integrity": "sha512-FhgyIiXvLvNkpxIw+TGPH81ZjiLqzcInNgggG4ffm5Z17Ff1MASBRlC4TohS5+7XBPpXCR4yvvXG5ofK38k9DQ==",
+      "mode": 420,
+      "size": 3778
+    },
+    "src/3-three/verbs/api/conjugate/toGerund.js": {
+      "checkedAt": 1764662918148,
+      "integrity": "sha512-JpmmYyzNKFnBAq4o0yN+5OZlRK1fdwcqgsU58txrdzd8Xf+bgUg/1e5yUevtMai7NBOwWN5dNFKjIh2BpPyEKw==",
+      "mode": 420,
+      "size": 945
+    },
+    "src/3-three/sentences/conjugate/toInfinitive.js": {
+      "checkedAt": 1764662918149,
+      "integrity": "sha512-//e4ifdpgMHN2Yue4odw6XOuuC8kOjYuW8E+aYVAVaby9NBHdBuQ0P2+jiKszp9aIs74QIygxV3SzeTTa/BXXQ==",
+      "mode": 420,
+      "size": 128
+    },
+    "src/3-three/verbs/api/conjugate/toInfinitive.js": {
+      "checkedAt": 1764662918149,
+      "integrity": "sha512-QvyaIK3zXe3DkyB7/WzQjeJL4XvRzuYrKEGbPiFI5b4ynhL+ykHcd4K7QfyD6yXxU8Dzi9cb9NC4IsUfsmzU9Q==",
+      "mode": 420,
+      "size": 877
+    },
+    "src/3-three/nouns/api/toJSON.js": {
+      "checkedAt": 1764662918150,
+      "integrity": "sha512-SDsRFc89lNeKPBnzE3K4QD+bKbDaFw5MmQBFq0pkmpXiWFNW4XjYL+KndgP0CXjnKoAmaVjWUi/z1PriNgBZ7Q==",
+      "mode": 420,
+      "size": 647
+    },
+    "src/3-three/verbs/api/toJSON.js": {
+      "checkedAt": 1764662918150,
+      "integrity": "sha512-gZi/mMtEsTQMwKov4FC9vYmzEFTiAsw9SUHoxJbBIRbYvZhkU7ulN2W7GJz0aTko5uEA11X9v+QNV6+6ED12Kg==",
+      "mode": 420,
+      "size": 1042
+    },
+    "src/1-one/tokenize/methods/03-whitespace/tokenize.js": {
+      "checkedAt": 1764662918151,
+      "integrity": "sha512-zH16VDOEr5kd3O6Jwd7o0FvGoQTD7Ccy1lBs5Rz4SKKVho51uThoBoN3vODLfFwudVnsonTtZpn2LLAx2HyXyg==",
+      "mode": 420,
+      "size": 2278
+    },
+    "src/3-three/sentences/conjugate/toNegative.js": {
+      "checkedAt": 1764662918151,
+      "integrity": "sha512-abn8UK/vktM9yD0v+ZqVGdd0EnLsVXu73gYS79A2oAN8wVVcsjELm/tmqO+kxJ+crKpLXnZvPqk2MAPPff+VCA==",
+      "mode": 420,
+      "size": 229
+    },
+    "src/3-three/verbs/api/conjugate/toNegative.js": {
+      "checkedAt": 1764662918152,
+      "integrity": "sha512-mQOX6u2+8mRVf4gaGE48/z8vbdy6K4VXGNGbhBXgOXQuNQk3HGsW/LBM8cXdSZzrWko+/3vsyGz+JKf5klunTA==",
+      "mode": 420,
+      "size": 2811
+    },
+    "src/3-three/numbers/fractions/convert/toOrdinal.js": {
+      "checkedAt": 1764662918152,
+      "integrity": "sha512-t9RaOwSn0B3ed7ccG/NlhXVuCN4/gBjxnI1isDmZpSg7M4FXOK9oA/v2U3BuFN4PVGAihS62qa9a5Q02rzBtaA==",
+      "mode": 420,
+      "size": 611
+    },
+    "src/3-three/verbs/api/conjugate/toParticiple.js": {
+      "checkedAt": 1764662918153,
+      "integrity": "sha512-5tWGqJDvDFJY0cetto15SWcuhVjQ/iQpinlJ9q4PUEpgTmLHLcvMCGJzDkjvDIV3u4pRKNbU/GPdoFhBMbw2qA==",
+      "mode": 420,
+      "size": 2957
+    },
+    "src/3-three/sentences/conjugate/toPast.js": {
+      "checkedAt": 1764662918153,
+      "integrity": "sha512-ijs+fGZnWFdStzr4IkDyXc13sIhCzf1Rcw6bHUJB3qL5aar0goDT+nkpYl/r/R8lYj7LiqPfzZLUSQdB2rjz5Q==",
+      "mode": 420,
+      "size": 820
+    },
+    "src/3-three/verbs/api/conjugate/toPast.js": {
+      "checkedAt": 1764662918154,
+      "integrity": "sha512-hkj6g3GFD6o539Jqmsm9f66hwXescGiQ4cNggBnTcCKTnNuthtEYR75ifZcfOMf4VJLVoaZKpkpe07RtrVeBWA==",
+      "mode": 420,
+      "size": 4954
+    },
+    "src/3-three/topics/topics.js": {
+      "checkedAt": 1764662918154,
+      "integrity": "sha512-rhMsgLdO3TNPLhiIdGKh85pyVnx/uJ5W2OTjlQgGgXCESu5+CDiji1WxW+qMtIMEF+HJS93gL04qVxUdRMmyqg==",
+      "mode": 420,
+      "size": 470
+    },
+    "src/3-three/nouns/api/toPlural.js": {
+      "checkedAt": 1764662918155,
+      "integrity": "sha512-ppDcX8OhPWLxK8vCCzk7/ytfA3ilgpYTgjLtIIAu7KQmIVbppmGqV64zFgXXtJakTi/kUIi+b2L+1SZDoBseRA==",
+      "mode": 420,
+      "size": 1176
+    },
+    "src/3-three/sentences/conjugate/toPresent.js": {
+      "checkedAt": 1764662918155,
+      "integrity": "sha512-BwxrR5t6qD0qy8Rhem1HHMhk/JMPjB+6Dk8nCGWMLSaqBUlHOb71uhHEgqI1wGyCS+mGpdsD2BpIJlysLtjIYQ==",
+      "mode": 420,
+      "size": 856
+    },
+    "src/3-three/verbs/api/conjugate/toPresent.js": {
+      "checkedAt": 1764662918156,
+      "integrity": "sha512-OouK1QshAaunIlrN5wzz594HSPbVqhUFGhqyDru0Pqc3Yi2vb6SoKmJ1GS7F30gfmXG3VnWjJfI1EuAyxyZ5xQ==",
+      "mode": 420,
+      "size": 6015
+    },
+    "src/3-three/nouns/api/toSingular.js": {
+      "checkedAt": 1764662918156,
+      "integrity": "sha512-j9ZjSYnQAV0NjPjjbsDHDGDcE5qRQE0/NJdnoZ0kWrBdkQ68BbORrGwsS9PJMGsU0IZyyBZuKfVFEJ7Cg48ESg==",
+      "mode": 420,
+      "size": 514
+    },
+    "src/two.js": {
+      "checkedAt": 1764662918157,
+      "integrity": "sha512-qScH+k45R+a80Y6UwMi4gNJbobgsZXIlvwsyrgegkHPf0sWb0QEQmdptSCe9rVDEVGydkNFqrBECjfn1HTQndQ==",
+      "mode": 420,
+      "size": 421
+    },
+    "src/1-one/tokenize/methods/unicode.js": {
+      "checkedAt": 1764662918157,
+      "integrity": "sha512-KmaDPSWOlV9sbFXLPplq+MGyipcoRwxqj+e2R+KkLiD2lFjN+mzrQ+DVv9NGqjB9pAgktONN9NCk3J0RYeDuWQ==",
+      "mode": 420,
+      "size": 304
+    },
+    "src/1-one/tokenize/model/unicode.js": {
+      "checkedAt": 1764662918158,
+      "integrity": "sha512-Db2YtBQPGi571YSQFcFjjdGpLKhn8vxID7cU9GuAiqvsOe5ELeapCTr18kJUYVfp9i8nqSS7G+QvvNpvZbFBng==",
+      "mode": 420,
+      "size": 2127
+    },
+    "src/1-one/pointers/api/lib/union.js": {
+      "checkedAt": 1764662918158,
+      "integrity": "sha512-a3Nx4FAvE3OILK2/8zoZUmjwBtx9FONxnXNoRaNlGuLnID9ZbV04KFpeacD8KCqoEn3qu/DJg1U/QIpdeRrPQg==",
+      "mode": 420,
+      "size": 924
+    },
+    "src/2-two/preTagger/model/clues/unit-noun.js": {
+      "checkedAt": 1764662918174,
+      "integrity": "sha512-e3uv8WbyjERd2HL5nD6rowYJTp0j1d9G36JQfK6dyhZ4zSeIV25o6SI3BOkz47rslf/m2KgwscFYZvTE4T1hVg==",
+      "mode": 420,
+      "size": 361
+    },
+    "src/1-one/tokenize/model/abbreviations/units.js": {
+      "checkedAt": 1764662918175,
+      "integrity": "sha512-QUh/+XSrTSGbHUaM/c9ZzuTTv+JlgyOHa7Hg/iG4r8ZVzRI0uDDt/79Iwi7/SNXBk96tGkCW+GInMvKoLXosLw==",
+      "mode": 420,
+      "size": 610
+    },
+    "src/1-one/tag/methods/unTag.js": {
+      "checkedAt": 1764662918177,
+      "integrity": "sha512-3w5JnwIevEmD8DoKD8uAEFVBekLo5mNogpgKMux4Dlcmz/jGOT/hj0Oy6Zdq4sPuPvs0e2KYrOXYty0+wiYbaQ==",
+      "mode": 420,
+      "size": 767
+    },
+    "src/API/methods/utils.js": {
+      "checkedAt": 1764662918177,
+      "integrity": "sha512-A3QzaT91KAalnKtTQvKN6q8p0j5b+mFimsasRfVn3yrGxpybASzS6jtm05jZBNmAKEXFmOOyWfu7xlKp1lF3pQ==",
+      "mode": 420,
+      "size": 3853
+    },
+    "src/1-one/change/compute/uuid.js": {
+      "checkedAt": 1764662918178,
+      "integrity": "sha512-USe0ww2euaulEOnq/Y2A41ti6JNXd7AVRiJ7KSIQaTph6z+ap0IoJ68RfTB3gJBRE9LqjC2UGdYAInzSxbdSpw==",
+      "mode": 420,
+      "size": 1382
+    },
+    "src/3-three/numbers/numbers/parse/toNumber/validate.js": {
+      "checkedAt": 1764662918178,
+      "integrity": "sha512-oFUg7n93K318sGExk6ysRpFtBsg9hmc69wI4xDNrNbp+KKf2atuqq4O+THmu/WGmxINOMMecNxRIzwO+LBLV9g==",
+      "mode": 420,
+      "size": 485
+    },
+    "src/2-two/preTagger/tagSet/values.js": {
+      "checkedAt": 1764662918180,
+      "integrity": "sha512-D6P0AWXlfLAMZQ7yC1IPlVCt6vC4qaRkGG01yMVcrGmn/5bjiHnbXwiUArFCTvu5IE1FRDtWWRX1mVnq5FYhNg==",
+      "mode": 420,
+      "size": 554
+    },
+    "src/2-two/postTagger/model/verbs/verb-noun.js": {
+      "checkedAt": 1764662918181,
+      "integrity": "sha512-vA2z0XLQCVYg+YziTd4irrmy/Yx2Bl0M9zkA66TX3GHjbYkUetLLUs3cZbyAwOWbUq1mHqz3M9EBERCFpl4wIQ==",
+      "mode": 420,
+      "size": 10849
+    },
+    "src/4-four/facts/parse/verb.js": {
+      "checkedAt": 1764662918182,
+      "integrity": "sha512-mAwnX/FiTEuMyrr+sF++Dxqqzzpi0AhEmX7LBoFf+7c6qj5i3S9w9IKu3SNN1P5kkJSix6uYUMq01PlLTPeU7g==",
+      "mode": 420,
+      "size": 439
+    },
+    "src/4-four/sense/model/senses/verb.js": {
+      "checkedAt": 1764662918182,
+      "integrity": "sha512-4g0dgWFz/6755F4IcOGQi6PGBQUFyHZwii5iV46On2TDhUsyT7UO9ZIQu2FFJuG20VBFdbLBNwflcLG4Rj3vwQ==",
+      "mode": 420,
+      "size": 714
+    },
+    "src/2-two/postTagger/model/verbs/verbs.js": {
+      "checkedAt": 1764662918183,
+      "integrity": "sha512-hhepC3YZAxTAgAPndasPFLlKit29QCsRRkeKYiR3MTaA1jQvFqK31A865c0kOBJm35SYNcIseEVba5wdsYDBjw==",
+      "mode": 420,
+      "size": 4499
+    },
+    "src/2-two/preTagger/tagSet/verbs.js": {
+      "checkedAt": 1764662918183,
+      "integrity": "sha512-25tg7GMcCWODXdRHuvT73CP6punMEm3UZz4AbDACynQs5rwTf1w95pXKiOycSL4sDzljoJVfQoccF4ushhzqqw==",
+      "mode": 420,
+      "size": 1182
+    },
+    "src/API/View.js": {
+      "checkedAt": 1764662918184,
+      "integrity": "sha512-4Rquvai2zhPxsvzNDjKxQNx05fF/YbYyqzY8/Fn8ITOduEHKVaR6Qc1DpHgQ1O4qKTBTv8d5YRofVyE4OWhCBA==",
+      "mode": 420,
+      "size": 3392
+    },
+    "src/1-one/change/api/whitespace.js": {
+      "checkedAt": 1764662918184,
+      "integrity": "sha512-wWXcO7NQl6FQuECrbgBrw7X3C7HmgvuOKX55RNjUlXq63ufFXhFbqtTMfjzywaujJ55NiCiz2eX5NS9E57o2Zg==",
+      "mode": 420,
+      "size": 2521
+    },
+    "src/1-one/tokenize/compute/wordCount.js": {
+      "checkedAt": 1764662918184,
+      "integrity": "sha512-UWIIoWv858wo7hRZ0PNf51EwS/reTGKrLT8Wyq66Hal0rdmcUAnybmtW0WGWqGA2wByP9dhvnmz58/vqo+Z0gA==",
+      "mode": 420,
+      "size": 333
+    },
+    "src/API/world.js": {
+      "checkedAt": 1764662918185,
+      "integrity": "sha512-//+A0sTiG4/CNRzyCsRI0BuunbcvvZ/NxtsqbFo7wKEom6WdwQYLuPwhmNyoG6DwZNnqmwCsf7BBA/78LeeBaw==",
+      "mode": 420,
+      "size": 200
+    },
+    "src/1-one/output/api/wrap.js": {
+      "checkedAt": 1764662918185,
+      "integrity": "sha512-Z9K9EYq+1jE6QTZaTkmC4jzILfq70rjV3XUNuPiXUcgRfhwFGBFJJIPLe9pdCxTsQRBqpXB7sUPngXQPYWuO4Q==",
+      "mode": 420,
+      "size": 933
+    },
+    "one/package.json": {
+      "checkedAt": 1764662918186,
+      "integrity": "sha512-TeVqPFMN129ww8NUh0p11ulgvUWqAolKKsoGYRt+K2flV7TgIDqIqBk7PWaLi/KjIfQoKeaOL432KGlkms6Hww==",
+      "mode": 420,
+      "size": 578
+    },
+    "package.json": {
+      "checkedAt": 1764662918186,
+      "integrity": "sha512-Yp4qyirTsDu+sCqEJs/0DHGOs5EdJN1rCbnn9KzAKdlVYvCLzfJb7iSy0zVt64+MYFkEEcKnoqP/zzwwvX4xTA==",
+      "mode": 420,
+      "size": 3808
+    },
+    "three/package.json": {
+      "checkedAt": 1764662918187,
+      "integrity": "sha512-zZaG3oVgaRSR3zgiTQyUdT2HwjLeejHEo7snUhFOjVVN7qCOQW7SXd0i5lAIwAKBQ74UKnYtZGVTk47EeFPAFA==",
+      "mode": 420,
+      "size": 598
+    },
+    "tokenize/package.json": {
+      "checkedAt": 1764662918187,
+      "integrity": "sha512-wUg9bBa5d6a62IaDAiZwg25Dtv4Zq3t7BHr09DmaVbc/YlYtHsOl8sJaEYECvz3MduOT0aPSnyNxYnonAFvzEQ==",
+      "mode": 420,
+      "size": 584
+    },
+    "two/package.json": {
+      "checkedAt": 1764662918188,
+      "integrity": "sha512-zypUkTABkoBDEsXBz5LuV8gO8ilLQh/l0lzTwouYZFDICtm1RhpK0QV+39UjsAgPwGrb6MMrezZTWGa+aN7Q5Q==",
+      "mode": 420,
+      "size": 578
+    },
+    "README.md": {
+      "checkedAt": 1764662918188,
+      "integrity": "sha512-jzGSuqyZP20FKJDyFI2fj+7OjmdPrOVJMKtFi5y6INUbdeC8W+l0vccKtF1chXm2UHBIsXptnmzG9Joh+9HHsw==",
+      "mode": 420,
+      "size": 61513
+    },
+    "builds/one/compromise-one.mjs": {
+      "checkedAt": 1764662918189,
+      "integrity": "sha512-b583z41Sx7LD4pFQGYXD0uLpcP3z2W7zY7KhlGd8/gMyCfTUqyQdO6iI21xJjuC7THaNt3+QbyNZT7qA9+0aJg==",
+      "mode": 420,
+      "size": 86305
+    },
+    "builds/three/compromise-three.mjs": {
+      "checkedAt": 1764662918190,
+      "integrity": "sha512-RiA2wCBKGbEh/cBiFvOQEfHHRoNoXXql6DECS1pgW10nzEprmyToH9LZ3NmMBRxW7ek9ln+ThxOkqVYvkw+4+w==",
+      "mode": 420,
+      "size": 351208
+    },
+    "builds/two/compromise-two.mjs": {
+      "checkedAt": 1764662918191,
+      "integrity": "sha512-Yuk8lCv14ZkRwkDYNymzF+enS7fNciweOG+3CbKcQ5d9ZaNcfdsqbXhvWaaj8cobFRd46O93CDaf4sY64aY13A==",
+      "mode": 420,
+      "size": 290527
+    },
+    "types/misc.d.ts": {
+      "checkedAt": 1764662918191,
+      "integrity": "sha512-80bSfmcybi815uPnM2ysf0yZfDxxlJkQy0hcxjlI5IMRQHg0nq222ZW8/Olf/42z9TVOfEbl7TQTEB1AIlzwag==",
+      "mode": 420,
+      "size": 2099
+    },
+    "types/one.d.ts": {
+      "checkedAt": 1764662918192,
+      "integrity": "sha512-zv8TgV4+RYgpsLShf9BD5m1mRGZxU5FL1ylSS3XcGwXeigSfL/Oz5Nr0kunMqtB8d35hGcxi/9aCImXfaH/aAw==",
+      "mode": 420,
+      "size": 1898
+    },
+    "types/view/one.d.ts": {
+      "checkedAt": 1764662918192,
+      "integrity": "sha512-YguFudsHNsAx5zk7AzYBdD3bFO1sLW5UTvNUmCTTiT2sXV293bKivymLu9n7XiHRGg/YycJDsGhzXzxiARSrkQ==",
+      "mode": 420,
+      "size": 10252
+    },
+    "types/three.d.ts": {
+      "checkedAt": 1764662918193,
+      "integrity": "sha512-wFJwpGlchI+z+jeyQmUoXmnTtR408vz3l+USfAzL9OhlhUMVFMyvbve1UEyNs+XYwGpZFjeRSv3pX/QnttGWIQ==",
+      "mode": 420,
+      "size": 1922
+    },
+    "types/view/three.d.ts": {
+      "checkedAt": 1764662918194,
+      "integrity": "sha512-cGgbW6MavIBfd3j7Vhqii1mZetN0j/3RnMZ76GGfNl804kn1OD6EyU7H6N6ob8mp+c6gu3OPKG8uQM5L/45Gqg==",
+      "mode": 420,
+      "size": 8404
+    },
+    "types/two.d.ts": {
+      "checkedAt": 1764662918195,
+      "integrity": "sha512-qtmL4gAmtCRmbXOkJjZfxx25F8tUesxyho4p1nWsqBgjSI1INawrWIxc3OtrAoV0EAHp28EJCJqwuCcFk4BHiA==",
+      "mode": 420,
+      "size": 1882
+    },
+    "types/view/two.d.ts": {
+      "checkedAt": 1764662918198,
+      "integrity": "sha512-iZjYR42AdTiqo/un7+RnG/jlNI+p/yycYc2mAMbpblufs7xQRpwmkm6k/aS6GTy1XaAJFI/mR/z2H6p/+YpDxg==",
+      "mode": 420,
+      "size": 539
+    }
+  }
+}

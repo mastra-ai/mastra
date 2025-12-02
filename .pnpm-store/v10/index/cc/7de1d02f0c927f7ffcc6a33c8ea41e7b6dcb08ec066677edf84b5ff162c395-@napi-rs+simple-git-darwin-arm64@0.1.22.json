@@ -1,0 +1,25 @@
+{
+  "name": "@napi-rs/simple-git-darwin-arm64",
+  "version": "0.1.22",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662905498,
+      "integrity": "sha512-uGtuin/O3d4h+2Pudd7uUrODC5oHflIPfpQMMX+xnJlbbRrKZWYg2Q0frq0492yzykKnedbrDrR9rD2fF59/FQ==",
+      "mode": 420,
+      "size": 361
+    },
+    "README.md": {
+      "checkedAt": 1764662905499,
+      "integrity": "sha512-gYpHsLiakb/32x7LeVU565TqTUPgJr+4isyzqzmtMULfuv5FwpsAcnQ5kJCJghBExk7lvMlxuknTmdlkMMaRHA==",
+      "mode": 420,
+      "size": 108
+    },
+    "simple-git.darwin-arm64.node": {
+      "checkedAt": 1764662905510,
+      "integrity": "sha512-quzDkDIBQNx4kg7hALSyB7wGkB36gN7A9y0vosZDyiU7sKJQgX16fkeSPEuSfGtd9d6p13d9qqN443M0kYswdA==",
+      "mode": 420,
+      "size": 4890880
+    }
+  }
+}

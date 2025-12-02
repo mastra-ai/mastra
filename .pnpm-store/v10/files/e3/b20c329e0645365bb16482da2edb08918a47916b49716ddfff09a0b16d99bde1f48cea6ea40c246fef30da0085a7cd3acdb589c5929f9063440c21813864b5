@@ -1,0 +1,12 @@
+import type { RequestParams, RequestResponse, HTTPClient } from "../types";
+export default class NodeHTTPClient implements HTTPClient {
+    private agent;
+    private baseUrl;
+    private origin;
+    private apiKey;
+    readonly userAgent: string;
+    private compression;
+    constructor(baseUrl: string, apiKey: string, connectTimeout: number, idleTimeout: number, warmConnections: number, compression: boolean);
+    doRequest<T>({ method, path, query, body, compress, retryable, }: RequestParams): RequestResponse<T>;
+}
+//# sourceMappingURL=node.d.ts.map

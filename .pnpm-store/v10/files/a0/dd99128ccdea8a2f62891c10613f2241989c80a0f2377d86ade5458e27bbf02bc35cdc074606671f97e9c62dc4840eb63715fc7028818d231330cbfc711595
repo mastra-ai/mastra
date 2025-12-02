@@ -1,0 +1,248 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
+import type { EmbeddingModel, AssistantContent, UserContent, CoreMessage } from '../ai-sdk.types.d.ts';
+import type { MastraDBMessage } from '../agent/message-list/index.js';
+import { MastraBase } from '../base.js';
+import type { Mastra } from '../mastra/index.js';
+import type { MastraStorage, StorageListMessagesInput, StorageListThreadsByResourceIdInput, StorageListThreadsByResourceIdOutput } from '../storage/index.js';
+import type { ToolAction } from '../tools/index.js';
+import type { MastraVector } from '../vector/index.js';
+import type { SharedMemoryConfig, StorageThreadType, MemoryConfig, MastraMessageV1, WorkingMemoryTemplate, MessageDeleteInput } from './types.js';
+export type MemoryProcessorOpts = {
+    systemMessage?: string;
+    memorySystemMessage?: string;
+    newMessages?: CoreMessage[];
+};
+/**
+ * Interface for message processors that can filter or transform messages
+ * before they're sent to the LLM.
+ */
+export declare abstract class MemoryProcessor extends MastraBase {
+    /**
+     * Process a list of messages and return a filtered or transformed list.
+     * @param messages The messages to process
+     * @returns The processed messages
+     */
+    process(messages: CoreMessage[], _opts: MemoryProcessorOpts): CoreMessage[] | Promise<CoreMessage[]>;
+}
+export declare const memoryDefaultOptions: {
+    lastMessages: number;
+    semanticRecall: false;
+    generateTitle: false;
+    workingMemory: {
+        enabled: false;
+        template: string;
+    };
+};
+/**
+ * Abstract base class for implementing conversation memory systems.
+ *
+ * Key features:
+ * - Thread-based conversation organization with resource association
+ * - Optional vector database integration for semantic similarity search
+ * - Working memory templates for structured conversation state
+ * - Handles memory processors to manipulate messages before they are sent to the LLM
+ */
+export declare abstract class MastraMemory extends MastraBase {
+    #private;
+    MAX_CONTEXT_TOKENS?: number;
+    protected _storage?: MastraStorage;
+    vector?: MastraVector;
+    embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
+    private processors;
+    protected threadConfig: MemoryConfig;
+    constructor(config: {
+        name: string;
+    } & SharedMemoryConfig);
+    /**
+     * Internal method used by Mastra to register itself with the memory.
+     * @param mastra The Mastra instance.
+     * @internal
+     */
+    __registerMastra(mastra: Mastra): void;
+    protected _hasOwnStorage: boolean;
+    get hasOwnStorage(): boolean;
+    get storage(): MastraStorage;
+    setStorage(storage: MastraStorage): void;
+    setVector(vector: MastraVector): void;
+    setEmbedder(embedder: EmbeddingModel<string>): void;
+    /**
+     * Get a system message to inject into the conversation.
+     * This will be called before each conversation turn.
+     * Implementations can override this to inject custom system messages.
+     */
+    getSystemMessage(_input: {
+        threadId: string;
+        resourceId?: string;
+        memoryConfig?: MemoryConfig;
+    }): Promise<string | null>;
+    /**
+     * Get tools that should be available to the agent.
+     * This will be called when converting tools for the agent.
+     * Implementations can override this to provide additional tools.
+     */
+    listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>>;
+    protected createEmbeddingIndex(dimensions?: number, config?: MemoryConfig): Promise<{
+        indexName: string;
+    }>;
+    getMergedThreadConfig(config?: MemoryConfig): MemoryConfig;
+    /**
+     * Apply all configured message processors to a list of messages.
+     * @param messages The messages to process
+     * @returns The processed messages
+     */
+    protected applyProcessors(messages: CoreMessage[], opts: {
+        processors?: MemoryProcessor[];
+    } & MemoryProcessorOpts): Promise<CoreMessage[]>;
+    processMessages({ messages, processors, ...opts }: {
+        messages: CoreMessage[];
+        processors?: MemoryProcessor[];
+    } & MemoryProcessorOpts): Promise<CoreMessage[]>;
+    estimateTokens(text: string): number;
+    /**
+     * Retrieves a specific thread by its ID
+     * @param threadId - The unique identifier of the thread
+     * @returns Promise resolving to the thread or null if not found
+     */
+    abstract getThreadById({ threadId }: {
+        threadId: string;
+    }): Promise<StorageThreadType | null>;
+    /**
+     * Lists all threads that belong to the specified resource.
+     * @param args.resourceId - The unique identifier of the resource
+     * @param args.offset - The number of threads to skip (for pagination)
+     * @param args.limit - The maximum number of threads to return
+     * @param args.orderBy - Optional sorting configuration with `field` (`'createdAt'` or `'updatedAt'`)
+     *                       and `direction` (`'ASC'` or `'DESC'`);
+     *                       defaults to `{ field: 'createdAt', direction: 'DESC' }`
+     * @returns Promise resolving to paginated thread results with metadata;
+     *          resolves to an empty array if the resource has no threads
+     */
+    abstract listThreadsByResourceId(args: StorageListThreadsByResourceIdInput): Promise<StorageListThreadsByResourceIdOutput>;
+    /**
+     * Saves or updates a thread
+     * @param thread - The thread data to save
+     * @returns Promise resolving to the saved thread
+     */
+    abstract saveThread({ thread, memoryConfig, }: {
+        thread: StorageThreadType;
+        memoryConfig?: MemoryConfig;
+    }): Promise<StorageThreadType>;
+    /**
+     * Saves messages to a thread
+     * @param messages - Array of messages to save
+     * @returns Promise resolving to the saved messages
+     */
+    abstract saveMessages(args: {
+        messages: MastraDBMessage[];
+        memoryConfig?: MemoryConfig | undefined;
+    }): Promise<{
+        messages: MastraDBMessage[];
+    }>;
+    /**
+     * Retrieves messages for a specific thread with optional semantic recall
+     * @param threadId - The unique identifier of the thread
+     * @param resourceId - Optional resource ID for validation
+     * @param vectorSearchString - Optional search string for semantic recall
+     * @param config - Optional memory configuration
+     * @returns Promise resolving to array of messages in mastra-db format
+     */
+    abstract recall(args: StorageListMessagesInput & {
+        threadConfig?: MemoryConfig;
+        vectorSearchString?: string;
+    }): Promise<{
+        messages: MastraDBMessage[];
+    }>;
+    /**
+     * Helper method to create a new thread
+     * @param title - Optional title for the thread
+     * @param metadata - Optional metadata for the thread
+     * @returns Promise resolving to the created thread
+     */
+    createThread({ threadId, resourceId, title, metadata, memoryConfig, saveThread, }: {
+        resourceId: string;
+        threadId?: string;
+        title?: string;
+        metadata?: Record<string, unknown>;
+        memoryConfig?: MemoryConfig;
+        saveThread?: boolean;
+    }): Promise<StorageThreadType>;
+    /**
+     * Helper method to delete a thread
+     * @param threadId - the id of the thread to delete
+     */
+    abstract deleteThread(threadId: string): Promise<void>;
+    /**
+     * Helper method to add a single message to a thread
+     * @param threadId - The thread to add the message to
+     * @param content - The message content
+     * @param role - The role of the message sender
+     * @param type - The type of the message
+     * @param toolNames - Optional array of tool names that were called
+     * @param toolCallArgs - Optional array of tool call arguments
+     * @param toolCallIds - Optional array of tool call ids
+     * @returns Promise resolving to the saved message
+     * @deprecated use saveMessages instead
+     */
+    addMessage(_params: {
+        threadId: string;
+        resourceId: string;
+        config?: MemoryConfig;
+        content: UserContent | AssistantContent;
+        role: 'user' | 'assistant';
+        type: 'text' | 'tool-call' | 'tool-result';
+        toolNames?: string[];
+        toolCallArgs?: Record<string, unknown>[];
+        toolCallIds?: string[];
+    }): Promise<MastraMessageV1>;
+    /**
+     * Generates a unique identifier
+     * @returns A unique string ID
+     */
+    generateId(): string;
+    /**
+     * Retrieves working memory for a specific thread
+     * @param threadId - The unique identifier of the thread
+     * @param resourceId - The unique identifier of the resource
+     * @param memoryConfig - Optional memory configuration
+     * @returns Promise resolving to working memory data or null if not found
+     */
+    abstract getWorkingMemory({ threadId, resourceId, memoryConfig, }: {
+        threadId: string;
+        resourceId?: string;
+        memoryConfig?: MemoryConfig;
+    }): Promise<string | null>;
+    /**
+     * Retrieves working memory template for a specific thread
+     * @param memoryConfig - Optional memory configuration
+     * @returns Promise resolving to working memory template or null if not found
+     */
+    abstract getWorkingMemoryTemplate({ memoryConfig, }?: {
+        memoryConfig?: MemoryConfig;
+    }): Promise<WorkingMemoryTemplate | null>;
+    abstract updateWorkingMemory({ threadId, resourceId, workingMemory, memoryConfig, }: {
+        threadId: string;
+        resourceId?: string;
+        workingMemory: string;
+        memoryConfig?: MemoryConfig;
+    }): Promise<void>;
+    /**
+     * @warning experimental! can be removed or changed at any time
+     */
+    abstract __experimental_updateWorkingMemoryVNext({ threadId, resourceId, workingMemory, searchString, memoryConfig, }: {
+        threadId: string;
+        resourceId?: string;
+        workingMemory: string;
+        searchString?: string;
+        memoryConfig?: MemoryConfig;
+    }): Promise<{
+        success: boolean;
+        reason: string;
+    }>;
+    /**
+     * Deletes multiple messages by their IDs
+     * @param messageIds - Array of message IDs to delete
+     * @returns Promise that resolves when all messages are deleted
+     */
+    abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
+}
+//# sourceMappingURL=memory.d.ts.map

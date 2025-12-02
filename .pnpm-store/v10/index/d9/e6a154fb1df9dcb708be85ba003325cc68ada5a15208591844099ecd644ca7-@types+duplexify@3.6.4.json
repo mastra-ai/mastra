@@ -1,0 +1,31 @@
+{
+  "name": "@types/duplexify",
+  "version": "3.6.4",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662928431,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662928432,
+      "integrity": "sha512-7jDOJvgOWNUihbT6lJyNBGbscPvjjqMlfkS9ajGpLXqq4YUET/WHRJb40/aRkXKqMew/D3/kwQmrxeAJnrAtSg==",
+      "mode": 420,
+      "size": 1485
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662928434,
+      "integrity": "sha512-UrASN8rz6CUxSht1/PdTNap1r8UwZPUFJgYdpsnbm3cBRLB6ZZ+cd5DLRthBlegtF5+JnzK2D5eKirgZ4pJs+A==",
+      "mode": 420,
+      "size": 840
+    },
+    "package.json": {
+      "checkedAt": 1764662928434,
+      "integrity": "sha512-6sOZ1zfIE1YbAijKx8Du4am0OVQvio2jcEfLASSfU9AakLDeFdHVfMRaxCxoEDylntX8jmtKFGQwIemDQwOWcg==",
+      "mode": 420,
+      "size": 821
+    }
+  }
+}

@@ -1,0 +1,406 @@
+---
+title: API Reference
+---
+
+import {Steps, LinkCard, Card, CardGrid} from '@astrojs/starlight/components';
+
+`jscodeshift` has around 25 APIs to help developers easily detect and transform any JS/TS code.
+
+Generally, creating a codemod involves two main tasks: **detection** and **transformation**.
+
+<Steps>
+  1. **Detection**
+
+      Detecting a specific pattern in a large codebase can be expensive, so this task is often divided into two passes.
+
+      <Steps>
+        1. **First pass**
+
+            In the first pass, we perform an initial scope reduction of the AST nodes to significantly reduce the search space and produce a collection of AST nodes to process.
+        2. **Second pass**
+
+            In the second pass, we process and filter the nodes collection to pinpoint the specific AST nodes that need transformation.
+      </Steps>
+
+  2. **Transformation**
+
+      Once we detect the desired nodes, we transform the AST and produce the modified code.
+</Steps>
+
+For jscodeshift, we have a set of APIs for each part of the codemod process (initial traversal, filtering, transformation), as detailed below. jscodeshift accepts `—parser` as argument. We can select from the list of parser that are currently supported, all those parsers should be compatible with `estree` spec and have same AST grammar. It's important to know the AST grammar for describing the nodes in the codemod.
+
+Refer to the [`jscodeshift` node types](/build/ast-grammar/).
+
+## Building jscodeshift codemods
+
+<CardGrid>
+  <LinkCard title="Core API" href="#core-api"/>
+  <LinkCard title="Node Traversal APIs" href="#node-traversal-apis"/>
+  <LinkCard title="Node Transformation APIs" href="#node-transformation-apis"/>
+</CardGrid>
+
+## Core API
+
+### **`jscodeshift`**
+
+The main function that returns the jscodeshift instance.
+
+**Parameters**: `source` (String): The source code to be transformed.
+
+**Example**:
+
+```jsx
+const jscodeshift = require('jscodeshift');
+const sourceCode = `const a = 1;`;
+const j = jscodeshift(sourceCode);
+```
+
+## Node Traversal APIs
+
+Below are APIs that often used in the **initial scope reduction** phase ([source](https://github.com/facebook/jscodeshift/blob/4851fc8a01036868efb4cf9676f3e97836097376/src/collections/Node.js#L139)). The input is usually the whole file, and the output is a collection of nodes.
+
+### **`find`**
+
+Finds nodes that match the provided type.
+
+**Parameters**: `type` (String or Function): The type of nodes to find.
+
+**Example**:
+
+```jsx
+const variableDeclarations = j.find(j.VariableDeclaration);
+```
+
+### **`closestScope`**
+
+Finds the closest enclosing scope of a node. Useful for determining the scope context of variables and functions.
+
+**Example**:
+
+```jsx
+const closestScopes = j.find(j.Identifier).closestScope();
+```
+
+### **`closest`**
+
+Finds the nearest parent node that matches the specified type. The child node must be obtained from a previous function call, such as find.
+
+**Parameters**:`type` (String or Function): The type of ancestor to find.
+
+```jsx
+const closestFunction = j.find(j.Identifier).closest(j.FunctionDeclaration);
+```
+
+### **`getVariableDeclarators`**
+
+Retrieves variable declarators from the current collection. If the callback function returns a falsy value, the element is not included in the result.
+
+**Parameters**:`callback` (Function): A function that returns the name of the variable to find.
+
+**Example**:
+
+```jsx
+const variableDeclarators = j.find(j.Identifier).getVariableDeclarators(path => path.value.name);
+```
+
+### **`findVariableDeclarators` ([source](https://github.com/facebook/jscodeshift/blob/main/src/collections/VariableDeclarator.js))**
+
+Finds variable declarators by name.
+
+**Parameters**: `name` (String): The name of the variable to find.
+
+**Example**:
+
+```jsx
+const variableDeclarators = j.findVariableDeclarators('a');
+```
+
+Below are the APIs that are often used in the second phase, which is the **detailed node filtering** ([source](https://github.com/facebook/jscodeshift/blob/4851fc8a01036868efb4cf9676f3e97836097376/src/Collection.js)). The input of this phase is usually a collection of nodes, and the output, is specific nodes to transform.
+
+### **`filter`**
+
+Filters nodes based on a predicate function.
+
+**Parameters**: `predicate` (Function): A function to test each element.
+
+**Example**:
+
+```jsx
+const constDeclarations = j.find(j.VariableDeclaration)
+  .filter(path => path.node.kind === 'const');
+```
+
+### **`forEach`**
+
+Iterates over each node in the collection.
+
+**Parameters**: `callback` (Function): A function to call for each node.
+
+**Example**:
+
+```jsx
+j.find(j.VariableDeclaration).forEach(path => {
+  console.log(path.node);
+});
+```
+
+### `some`
+
+`some` checks if at least one element in the collection passes the test implemented by the provided function.
+
+**Parameters:** `callback`: A function that tests each element. The callback function takes three arguments:
+
+- `path`: The current element being processed.
+- `index`: The index of the current element.
+- `array`: The array `some` was called upon.
+
+**Example:**
+
+```jsx
+const j = require('jscodeshift');
+
+const root = j(`const a = 1; const b = 2; const c = 3;`);
+
+const hasVariableA = root.find(j.VariableDeclarator).some(path => path.node.id.name === 'a');
+console.log(hasVariableA); // true
+
+```
+
+### `every`
+
+`every` checks if all elements in the collection pass the test implemented by the provided function.
+
+**Parameters:** `callback`: A function that tests each element. The callback function takes three arguments:
+
+- `path`: The current element being processed.
+- `index`: The index of the current element.
+- `array`: The array `every` was called upon.
+
+**Example:**
+
+```jsx
+const j = require('jscodeshift');
+
+const root = j(`const a = 1; const b = 2; const c = 3;`);
+
+const allAreConst = root.find(j.VariableDeclaration).every(path => path.node.kind === 'const');
+console.log(allAreConst); // true
+
+```
+
+### **`map`**
+
+Maps each node in the collection to a new value.
+
+**Parameters**:`callback` (Function): A function to call for each node.
+
+**Example**:
+
+```jsx
+const variableNames = j.find(j.VariableDeclaration)
+  .map(path => path.node.declarations.map(decl => decl.id.name));
+```
+
+### **`size`**
+
+Returns the number of nodes in the collection.
+
+**Example**:
+
+```jsx
+const numberOfNodes = j.find(j.VariableDeclaration).size();
+```
+
+### `length`
+
+`length` returns the number of elements in the collection.
+
+**Example:**
+
+```jsx
+const j = require('jscodeshift');
+
+const root = j(`const a = 1; const b = 2; const c = 3;`);
+
+const varCount = root.find(j.VariableDeclarator).length;
+console.log(varCount); // 3
+
+```
+
+### **`nodes`**
+
+Returns the AST nodes in the collection.
+
+**Example**:
+
+```jsx
+const nodes = j.find(j.VariableDeclaration).nodes();
+```
+
+### **`paths`**
+
+Returns the paths of the found nodes.
+
+**Example**:
+
+```jsx
+const paths = j.find(j.VariableDeclaration).paths();
+```
+
+### `getAST`
+
+`getAST` returns the root AST node of the collection.
+
+**Example:**
+
+```jsx
+const j = require('jscodeshift');
+
+const root = j(`const a = 1;`);
+
+const ast = root.getAST();
+console.log(ast.type); // File
+
+```
+
+### **`get`**
+
+Gets the first node in the collection.
+
+**Example**:
+
+```jsx
+const firstVariableDeclaration = j.find(j.VariableDeclaration).get();
+```
+
+### **`at`**
+
+Navigates to a specific path in the AST.
+
+**Parameters**: `index` (Number): The index of the path to navigate to.
+
+**Example**:
+
+```jsx
+const secondVariableDeclaration = j.find(j.VariableDeclaration).at(1);
+```
+
+### `getTypes`
+
+`getTypes` returns the set of node types present in the collection.
+
+**Example:**
+
+```jsx
+const j = require('jscodeshift');
+
+const root = j(`const a = 1; const b = 2;`);
+
+const types = root.find(j.VariableDeclarator).getTypes();
+console.log(types); // Set { 'VariableDeclarator' }
+
+```
+
+### `isOfType`
+
+`isOfType` checks if the node in the collection is of a specific type.
+
+**Parameters:** `type`: The type to check against.
+
+**Example:**
+
+```jsx
+const j = require('jscodeshift');
+
+const root = j(`const a = 1;`);
+
+const isVariableDeclarator = root.find(j.VariableDeclarator).at(0).isOfType('VariableDeclarator');
+console.log(isVariableDeclarator); // true
+
+```
+
+## Node Transformation APIs
+
+Below are the APIs used in node transformations. ([source](https://github.com/facebook/jscodeshift/blob/4851fc8a01036868efb4cf9676f3e97836097376/src/collections/Node.js#L139))
+
+### **`replaceWith`**
+
+Replaces the current node(s) with a new node.
+
+**Parameters**: `newNode` (Node or Function): The new node or a function that returns a new node.
+
+**Example**:
+
+```jsx
+j.find(j.Identifier)
+  .replaceWith(path => j.identifier(path.node.name.toUpperCase()));
+```
+
+### **`insertBefore`**
+
+Inserts a node before the current node.
+
+**Parameters**: `newNode` (Node): The node to insert.
+
+**Example**:
+
+```jsx
+j.find(j.FunctionDeclaration)
+  .insertBefore(j.expressionStatement(j.stringLiteral('Inserted before')));
+```
+
+### **`insertAfter`**
+
+Inserts a node after the current node.
+
+**Parameters**: `newNode` (Node): The node to insert.
+
+**Example**:
+
+```jsx
+j.find(j.FunctionDeclaration)
+  .insertAfter(j.expressionStatement(j.stringLiteral('Inserted after')));
+```
+
+### **`remove`**
+
+Removes the current node(s).
+
+**Example**:
+
+```jsx
+j.find(j.VariableDeclaration).remove();
+```
+
+### `renameTo` ([source](https://github.com/facebook/jscodeshift/blob/main/src/collections/VariableDeclarator.js))
+
+`renameTo` renames the nodes in the collection to a new name.
+
+**Parameters:** `newName`: The new name to rename to.
+
+**Example:**
+
+```jsx
+const j = require('jscodeshift');
+
+const root = j(`const a = 1; const b = 2;`);
+
+root.find(j.Identifier, { name: 'a' }).renameTo('x');
+
+console.log(root.toSource()); // const x = 1; const b = 2;
+
+```
+
+These descriptions and examples should give you a clear understanding of how to use each of these jscodeshift APIs.
+
+### **`toSource`**
+
+Converts the transformed AST back to source code.
+
+**Parameters**: `options` (Object): Optional formatting options.
+
+**Example**:
+
+```jsx
+const transformedSource = j.toSource({ quote: 'single' });
+```

@@ -1,0 +1,23 @@
+{
+  "bugs": {
+    "url": "http://www.couchbase.com/issues/browse/JSCBC"
+  },
+  "homepage": "http://www.couchbase.com/communities/nodejs",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/couchbase/couchnode.git"
+  },
+  "version": "4.6.0",
+  "engines": {
+    "node": ">=16"
+  },
+  "name": "@couchbase/couchbase-darwin-arm64-napi",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "descripton": "Couchbase Node.js SDK platform specific binary for napi runtime on darwin OS with arm64 architecture and boringssl."
+}

@@ -1,0 +1,49 @@
+{
+  "name": "workerd",
+  "version": "1.20251118.0",
+  "requiresBuild": true,
+  "files": {
+    "bin/workerd": {
+      "checkedAt": 1764662923928,
+      "integrity": "sha512-GPESn6C+SYbrgQVjPB4dhZQvvnWfJ+A30k6K6L1C60AwqMcqRI/9Edmcp5ZqSh1QxL2c3by8ZX02az76ZTJYGg==",
+      "mode": 493,
+      "size": 5716
+    },
+    "workerd.capnp": {
+      "checkedAt": 1764662923929,
+      "integrity": "sha512-7UNcQQ4KFj6lSPSbqv4cjqBbKKIIP8CTk+1saJNZZjxhky7rx5s4Iw6ohHIfnG8TzSw0uUeYuUnJiQ8IiGXbhA==",
+      "mode": 420,
+      "size": 45333
+    },
+    "install.js": {
+      "checkedAt": 1764662923937,
+      "integrity": "sha512-GpBzv6d8xQE9+7VPZsp4Iy1s+iQRMaYZd6l/XjEeaYpKdI5jNhQ+7mC/u7I3Wh0zZx3Ba7Lrp26nhgKf4DMIrA==",
+      "mode": 420,
+      "size": 9267
+    },
+    "lib/main.js": {
+      "checkedAt": 1764662923940,
+      "integrity": "sha512-RUH9uWbweF9gmQIzOwk3HJRJ0Xvc3h5gK289YIU7y00Ckht2I2SPrwYAyjY4XQuaVqnOpkA9fZgSsuS9OYFgeQ==",
+      "mode": 493,
+      "size": 6308
+    },
+    "package.json": {
+      "checkedAt": 1764662923940,
+      "integrity": "sha512-WnSIayPPUC1RVVp/wuRogK6PwzLeckaZ8JWQJleTUCHDWM8ZCQ/pZVs//K+ZcuLgaKKCaMHlagwO766ghc0thw==",
+      "mode": 420,
+      "size": 676
+    },
+    "README.md": {
+      "checkedAt": 1764662923942,
+      "integrity": "sha512-5l/w2/EJOaXsJOq8YXZgq4UL3AtoMWfjvmIIz8eNEOe5RIv37lEQqcp2Y7KW4h5MTSEV6FJZc3BFRVPO7nOwfQ==",
+      "mode": 420,
+      "size": 238
+    },
+    "worker.mjs": {
+      "checkedAt": 1764662923952,
+      "integrity": "sha512-lPiTjn7P9O2g8F53vQ5x15wdJmEuPKP56U7wUr1PYAM/J5FZNSKBSxXeQJYc0oaUrBc+uNF9x/msJ2nzx6bskw==",
+      "mode": 493,
+      "size": 4515108
+    }
+  }
+}

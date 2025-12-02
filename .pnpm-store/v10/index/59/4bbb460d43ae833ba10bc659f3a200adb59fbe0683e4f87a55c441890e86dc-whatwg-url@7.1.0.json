@@ -1,0 +1,79 @@
+{
+  "name": "whatwg-url",
+  "version": "7.1.0",
+  "requiresBuild": false,
+  "files": {
+    "lib/infra.js": {
+      "checkedAt": 1764662906030,
+      "integrity": "sha512-o4kVgzh98vn9aqqtuOLhgUOgIUCI+VhVIu46Aq2rrqQIS+Y61BuDLBHP2ilWaQCXF/IN6beq+heR2ommTOs4+g==",
+      "mode": 438,
+      "size": 453
+    },
+    "lib/public-api.js": {
+      "checkedAt": 1764662906033,
+      "integrity": "sha512-5tV5ewJu4hIPMvUt0hKHdyvpIJCmoEnzwzGI6bF/mHVWlkGuV8R3nNJl80KDTeFeQgeDj/VUoywZMMe/PBUYZw==",
+      "mode": 438,
+      "size": 862
+    },
+    "lib/URL-impl.js": {
+      "checkedAt": 1764662906034,
+      "integrity": "sha512-UYoo/8kcnyq1LiXIMNWbjxl3n1+dzZvxAWFjxJH4zIc20IYkYOfyDqg4f+imiCBujdpk5UpHMhFLCMjbnaIL6Q==",
+      "mode": 438,
+      "size": 4535
+    },
+    "lib/url-state-machine.js": {
+      "checkedAt": 1764662906036,
+      "integrity": "sha512-zi62HjZq5iSsXNvomm4KQKivFTXMNUi9mHNcIKDyEVyyS1b4Bl/UCz1sUKWMXdBpnDG6SP48JCHIYcLCoQGQiw==",
+      "mode": 438,
+      "size": 32789
+    },
+    "lib/URL.js": {
+      "checkedAt": 1764662906037,
+      "integrity": "sha512-4zt2FfT8k8nDfIDSEvbuoPZewzLVdyuowApHQ+/7EvyqZG4mIhSqG2ymUO/J+e6N+U1FlDMVo7GhWMoA8DPP3w==",
+      "mode": 438,
+      "size": 8508
+    },
+    "lib/urlencoded.js": {
+      "checkedAt": 1764662906037,
+      "integrity": "sha512-DFh/IzNtK9lzmAA97EEyEYPNx+94u1uNw5v1RXBBgsd2p4WYjwA/utxDlGt0GV0qNj/DIxYX7QJ0ZqhOkJMxFg==",
+      "mode": 438,
+      "size": 3340
+    },
+    "lib/URLSearchParams-impl.js": {
+      "checkedAt": 1764662906038,
+      "integrity": "sha512-XH+qvrtm+SHP4PWrM7Ivb9HE5hhQj1fFXUCYofuU7iwQmOcoaC7dRxWpprBPerfRmaK1rOG/tl47sMP5Odj0gQ==",
+      "mode": 438,
+      "size": 2678
+    },
+    "lib/URLSearchParams.js": {
+      "checkedAt": 1764662906038,
+      "integrity": "sha512-ckB2WhY1uR/CYV5V1dO7UNZnxA2uVfwTtcIdXn4r4s2OSL3VR1uhm3BaJe2MreEIDnPZ9ZC5CHcEQyneFiPNJQ==",
+      "mode": 438,
+      "size": 12656
+    },
+    "lib/utils.js": {
+      "checkedAt": 1764662906039,
+      "integrity": "sha512-NI7mYcFbCRA/rfcE4zd0fS+8tT7u073e7QGAarcAHCcdteRs7lkMj67N+AU0LWK0Hy5E+9B1S2IrVwIXIKmRRA==",
+      "mode": 438,
+      "size": 3503
+    },
+    "package.json": {
+      "checkedAt": 1764662906039,
+      "integrity": "sha512-TI3YGxT9JC2fM/mAVIYH8lBUTG9B4qhbuP2Wy1kq8lIDhsN548LwB8Mpa2Q0PS/wtDj1GWJs5v0C8dqaX3kIxQ==",
+      "mode": 438,
+      "size": 1521
+    },
+    "README.md": {
+      "checkedAt": 1764662906040,
+      "integrity": "sha512-HI1hWRY6z8i9njQtK0i0A/G7st0jAL1S1j/SXZS2uxg5Jfoy5ViUgNAsreUSzPI9C3QU8D4apMXQi7YS9rm/ig==",
+      "mode": 438,
+      "size": 6495
+    },
+    "LICENSE.txt": {
+      "checkedAt": 1764662906040,
+      "integrity": "sha512-rkt6HfaFVoYAToPPXabowsgGiGsMm+dnexcV3eP8ibFICdkdtdHDlBWCJzAzOtTrghr9ef3pa7BVJvKhXOvH6g==",
+      "mode": 438,
+      "size": 1088
+    }
+  }
+}

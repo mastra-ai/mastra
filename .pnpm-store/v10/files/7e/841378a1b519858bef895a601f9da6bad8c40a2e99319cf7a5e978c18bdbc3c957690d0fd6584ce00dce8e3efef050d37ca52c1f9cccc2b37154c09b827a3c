@@ -1,0 +1,13 @@
+import { z } from 'zod/v4';
+import { FieldConfig } from '@autoform/core';
+
+interface FieldConfigMeta {
+    fieldConfig: FieldConfig<any, any, any, any>;
+    [key: string]: unknown;
+}
+declare const fieldConfigRegistry: z.core.$ZodRegistry<FieldConfigMeta, z.core.$ZodType<unknown, unknown, z.core.$ZodTypeInternals<unknown, unknown>>>;
+type FieldConfigReturn = [typeof fieldConfigRegistry, FieldConfigMeta];
+declare function fieldConfig<AdditionalRenderable = null, FieldTypes = string, FieldWrapper = any, CustomData = Record<string, any>>(config: FieldConfig<AdditionalRenderable, FieldTypes, FieldWrapper, CustomData>): FieldConfigReturn;
+declare function getFieldConfigInZodStack(schema: z.ZodType): FieldConfig | undefined;
+
+export { fieldConfig, getFieldConfigInZodStack };

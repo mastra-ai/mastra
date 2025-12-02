@@ -1,0 +1,10 @@
+{
+    "object": "magic_auth",
+    "id": "magic_auth_01H5JQDV7R7ATEYZDEG0W5PRYS",
+    "user_id": "user_01H5JQDV7R7ATEYZDEG0W5PRYS",
+    "email": "dane@workos.com",
+    "expires_at": "2023-07-18T02:07:19.911Z",
+    "code": "123456",
+    "created_at": "2023-07-18T02:07:19.911Z",
+    "updated_at": "2023-07-18T02:07:19.911Z"
+}

@@ -1,0 +1,12 @@
+'use strict';
+
+var chunkKP42JLXE_cjs = require('../chunk-KP42JLXE.cjs');
+
+
+
+Object.defineProperty(exports, "loop", {
+  enumerable: true,
+  get: function () { return chunkKP42JLXE_cjs.loop; }
+});
+//# sourceMappingURL=index.cjs.map
+//# sourceMappingURL=index.cjs.map

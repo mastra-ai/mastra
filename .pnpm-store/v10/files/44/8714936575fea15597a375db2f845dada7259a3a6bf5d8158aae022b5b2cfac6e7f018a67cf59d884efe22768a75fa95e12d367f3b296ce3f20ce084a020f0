@@ -1,0 +1,313 @@
+import { ReadableStream } from 'stream/web';
+import { MessageList } from '../../agent/message-list/index.js';
+import { MastraBase } from '../../base.js';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/index.js';
+import { ProcessorRunner } from '../../processors/runner.js';
+import type { WorkflowRunStatus } from '../../workflows/index.js';
+import type { ConsumeStreamOptions } from '../aisdk/v5/compat/index.js';
+import { AISDKV5OutputStream } from '../aisdk/v5/output.js';
+import type { ChunkType, LanguageModelUsage, LLMStepResult, MastraModelOutputOptions } from '../types.js';
+import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema.js';
+/**
+ * Helper function to create a destructurable version of MastraModelOutput.
+ * This wraps the output to ensure properties maintain their context when destructured.
+ */
+export declare function createDestructurableOutput<OUTPUT extends OutputSchema = undefined>(output: MastraModelOutput<OUTPUT>): MastraModelOutput<OUTPUT>;
+export declare class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
+    #private;
+    /**
+     * Unique identifier for this execution run.
+     */
+    runId: string;
+    /**
+     * The processor runner for this stream.
+     */
+    processorRunner?: ProcessorRunner;
+    /**
+     * The message list for this stream.
+     */
+    messageList: MessageList;
+    /**
+     * Trace ID used on the execution (if the execution was traced).
+     */
+    traceId?: string;
+    messageId: string;
+    constructor({ model: _model, stream, messageList, options, messageId, initialState, }: {
+        model: {
+            modelId: string | undefined;
+            provider: string | undefined;
+            version: 'v1' | 'v2';
+        };
+        stream: ReadableStream<ChunkType<OUTPUT>>;
+        messageList: MessageList;
+        options: MastraModelOutputOptions<OUTPUT>;
+        messageId: string;
+        initialState?: any;
+    });
+    /**
+     * Resolves to the complete text response after streaming completes.
+     */
+    get text(): Promise<string>;
+    /**
+     * Resolves to reasoning parts array for models that support reasoning.
+     */
+    get reasoning(): Promise<import("../types").ReasoningChunk[]>;
+    /**
+     * Resolves to complete reasoning text for models that support reasoning.
+     */
+    get reasoningText(): Promise<string | undefined>;
+    get sources(): Promise<import("../types").SourceChunk[]>;
+    get files(): Promise<import("../types").FileChunk[]>;
+    get steps(): Promise<LLMStepResult[]>;
+    get suspendPayload(): Promise<any>;
+    /**
+     * Stream of all chunks. Provides complete control over stream processing.
+     */
+    get fullStream(): ReadableStream<ChunkType<OUTPUT>>;
+    /**
+     * Resolves to the reason generation finished.
+     */
+    get finishReason(): Promise<string | undefined>;
+    /**
+     * Resolves to array of all tool calls made during execution.
+     */
+    get toolCalls(): Promise<import("../types").ToolCallChunk[]>;
+    /**
+     * Resolves to array of all tool execution results.
+     */
+    get toolResults(): Promise<import("../types").ToolResultChunk[]>;
+    /**
+     * Resolves to token usage statistics including inputTokens, outputTokens, and totalTokens.
+     */
+    get usage(): Promise<LanguageModelUsage>;
+    /**
+     * Resolves to array of all warnings generated during execution.
+     */
+    get warnings(): Promise<import("@ai-sdk/provider-v5").LanguageModelV2CallWarning[]>;
+    /**
+     * Resolves to provider metadata generated during execution.
+     */
+    get providerMetadata(): Promise<import("@ai-sdk/provider-v5").SharedV2ProviderMetadata | undefined>;
+    /**
+     * Resolves to the complete response from the model.
+     */
+    get response(): Promise<{
+        [key: string]: unknown;
+        headers?: Record<string, string>;
+        messages?: import("ai-v5").StepResult<import("ai-v5").ToolSet>["response"]["messages"];
+        uiMessages?: import("ai-v5").UIMessage<OUTPUT extends OutputSchema ? {
+            structuredOutput?: InferSchemaOutput<OUTPUT> | undefined;
+        } & Record<string, unknown> : unknown, import("ai-v5").UIDataTypes, import("ai-v5").UITools>[] | undefined;
+        id?: string;
+        timestamp?: Date;
+        modelId?: string;
+    }>;
+    /**
+     * Resolves to the complete request sent to the model.
+     */
+    get request(): Promise<{
+        body?: unknown;
+    }>;
+    /**
+     * Resolves to an error if an error occurred during streaming.
+     */
+    get error(): Error | undefined;
+    updateUsageCount(usage: Partial<LanguageModelUsage>): void;
+    populateUsageCount(usage: Partial<LanguageModelUsage>): void;
+    consumeStream(options?: ConsumeStreamOptions): Promise<void>;
+    /**
+     * Returns complete output including text, usage, tool calls, and all metadata.
+     */
+    getFullOutput(): Promise<{
+        traceId: string | undefined;
+        scoringData?: {
+            input: Omit<ScorerRunInputForAgent, "runId">;
+            output: ScorerRunOutputForAgent;
+        } | undefined;
+        text: string;
+        usage: LanguageModelUsage;
+        steps: LLMStepResult[];
+        finishReason: string | undefined;
+        warnings: import("@ai-sdk/provider-v5").LanguageModelV2CallWarning[];
+        providerMetadata: import("@ai-sdk/provider-v5").SharedV2ProviderMetadata | undefined;
+        request: {
+            body?: unknown;
+        };
+        reasoning: import("../types").ReasoningChunk[];
+        reasoningText: string | undefined;
+        toolCalls: import("../types").ToolCallChunk[];
+        toolResults: import("../types").ToolResultChunk[];
+        sources: import("../types").SourceChunk[];
+        files: import("../types").FileChunk[];
+        response: {
+            [key: string]: unknown;
+            headers?: Record<string, string>;
+            messages?: import("ai-v5").StepResult<import("ai-v5").ToolSet>["response"]["messages"];
+            uiMessages?: import("ai-v5").UIMessage<OUTPUT extends OutputSchema ? {
+                structuredOutput?: InferSchemaOutput<OUTPUT> | undefined;
+            } & Record<string, unknown> : unknown, import("ai-v5").UIDataTypes, import("ai-v5").UITools>[] | undefined;
+            id?: string;
+            timestamp?: Date;
+            modelId?: string;
+        };
+        totalUsage: LanguageModelUsage;
+        object: Awaited<InferSchemaOutput<OUTPUT>>;
+        error: Error | undefined;
+        tripwire: boolean;
+        tripwireReason: string;
+    }>;
+    /**
+     * The tripwire flag is set when the stream is aborted due to an output processor blocking the content.
+     */
+    get tripwire(): boolean;
+    /**
+     * The reason for the tripwire.
+     */
+    get tripwireReason(): string;
+    /**
+     * The total usage of the stream.
+     */
+    get totalUsage(): Promise<LanguageModelUsage>;
+    get content(): Promise<({
+        type: "text";
+        text: string;
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    } | import("ai-v5").ReasoningOutput | ({
+        type: "source";
+    } & import("@ai-sdk/provider-v5").LanguageModelV2Source) | {
+        type: "file";
+        file: import("ai-v5").Experimental_GeneratedImage;
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    } | ({
+        type: "tool-call";
+    } & (import("ai-v5").TypedToolCall<import("ai-v5").ToolSet> & {
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    })) | ({
+        type: "tool-result";
+    } & (import("ai-v5").TypedToolResult<import("ai-v5").ToolSet> & {
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    })) | ({
+        type: "tool-error";
+    } & (import("ai-v5").TypedToolError<import("ai-v5").ToolSet> & {
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    })))[]>;
+    /**
+     * Other output stream formats.
+     */
+    get aisdk(): {
+        /**
+         * The AI SDK v5 output stream format.
+         */
+        v5: AISDKV5OutputStream<OUTPUT>;
+    };
+    /**
+     * Stream of valid JSON chunks. The final JSON result is validated against the output schema when the stream ends.
+     *
+     * @example
+     * ```typescript
+     * const stream = await agent.stream("Extract data", {
+     *   structuredOutput: {
+     *     schema: z.object({ name: z.string(), age: z.number() }),
+     *     model: 'gpt-4o-mini' // optional to use a model for structuring json output
+     *   }
+     * });
+     * // partial json chunks
+     * for await (const data of stream.objectStream) {
+     *   console.log(data); // { name: 'John' }, { name: 'John', age: 30 }
+     * }
+     * ```
+     */
+    get objectStream(): ReadableStream<PartialSchemaOutput<OUTPUT>>;
+    /**
+     * Stream of individual array elements when output schema is an array type.
+     */
+    get elementStream(): ReadableStream<InferSchemaOutput<OUTPUT> extends Array<infer T> ? T : never>;
+    /**
+     * Stream of only text content, filtering out metadata and other chunk types.
+     */
+    get textStream(): ReadableStream<string>;
+    /**
+     * Resolves to the complete object response from the model. Validated against the 'output' schema when the stream ends.
+     *
+     * @example
+     * ```typescript
+     * const stream = await agent.stream("Extract data", {
+     *   structuredOutput: {
+     *     schema: z.object({ name: z.string(), age: z.number() }),
+     *     model: 'gpt-4o-mini' // optionally use a model for structuring json output
+     *   }
+     * });
+     * // final validated json
+     * const data = await stream.object // { name: 'John', age: 30 }
+     * ```
+     */
+    get object(): Promise<InferSchemaOutput<OUTPUT>>;
+    /** @internal */
+    _getImmediateToolCalls(): import("../types").ToolCallChunk[];
+    /** @internal */
+    _getImmediateToolResults(): import("../types").ToolResultChunk[];
+    /** @internal */
+    _getImmediateText(): string;
+    /** @internal */
+    _getImmediateObject(): InferSchemaOutput<OUTPUT> | undefined;
+    /** @internal */
+    _getImmediateUsage(): LanguageModelUsage;
+    /** @internal */
+    _getImmediateWarnings(): import("@ai-sdk/provider-v5").LanguageModelV2CallWarning[];
+    /** @internal */
+    _getImmediateFinishReason(): string | undefined;
+    /** @internal  */
+    _getBaseStream(): ReadableStream<ChunkType<OUTPUT>>;
+    get status(): WorkflowRunStatus;
+    serializeState(): {
+        status: WorkflowRunStatus;
+        bufferedSteps: LLMStepResult[];
+        bufferedReasoningDetails: Record<string, import("../types").ReasoningChunk>;
+        bufferedByStep: LLMStepResult;
+        bufferedText: string[];
+        bufferedTextChunks: Record<string, string[]>;
+        bufferedSources: import("../types").SourceChunk[];
+        bufferedReasoning: import("../types").ReasoningChunk[];
+        bufferedFiles: import("../types").FileChunk[];
+        toolCallArgsDeltas: Record<string, string[]>;
+        toolCallDeltaIdNameMap: Record<string, string>;
+        toolCalls: import("../types").ToolCallChunk[];
+        toolResults: import("../types").ToolResultChunk[];
+        warnings: import("@ai-sdk/provider-v5").LanguageModelV2CallWarning[];
+        finishReason: string | undefined;
+        request: {
+            body?: unknown;
+        };
+        usageCount: LanguageModelUsage;
+        tripwire: boolean;
+        tripwireReason: string;
+        messageList: {
+            messages: {
+                createdAt: string;
+                id: string;
+                role: "user" | "assistant" | "system";
+                threadId?: string;
+                resourceId?: string;
+                type?: string;
+                content: import("../../agent").MastraMessageContentV2;
+            }[];
+            systemMessages: import("ai").CoreSystemMessage[];
+            taggedSystemMessages: Record<string, import("ai").CoreSystemMessage[]>;
+            memoryInfo: {
+                threadId: string;
+                resourceId?: string;
+            } | null;
+            _agentNetworkAppend: boolean;
+            memoryMessages: string[];
+            newUserMessages: string[];
+            newResponseMessages: string[];
+            userContextMessages: string[];
+            memoryMessagesPersisted: string[];
+            newUserMessagesPersisted: string[];
+            newResponseMessagesPersisted: string[];
+            userContextMessagesPersisted: string[];
+        };
+    };
+    deserializeState(state: any): void;
+}
+//# sourceMappingURL=output.d.ts.map

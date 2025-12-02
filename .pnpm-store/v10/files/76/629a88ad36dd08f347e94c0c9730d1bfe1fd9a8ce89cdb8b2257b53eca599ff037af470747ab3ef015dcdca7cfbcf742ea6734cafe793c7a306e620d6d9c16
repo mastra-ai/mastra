@@ -1,0 +1,88 @@
+export { getErrorFromUnknown } from './utils.js';
+export declare enum ErrorDomain {
+    TOOL = "TOOL",
+    AGENT = "AGENT",
+    MCP = "MCP",
+    AGENT_NETWORK = "AGENT_NETWORK",
+    MASTRA_SERVER = "MASTRA_SERVER",
+    MASTRA_OBSERVABILITY = "MASTRA_OBSERVABILITY",
+    MASTRA_WORKFLOW = "MASTRA_WORKFLOW",
+    MASTRA_VOICE = "MASTRA_VOICE",
+    MASTRA_VECTOR = "MASTRA_VECTOR",
+    LLM = "LLM",
+    EVAL = "EVAL",
+    SCORER = "SCORER",
+    A2A = "A2A",
+    MASTRA_INSTANCE = "MASTRA_INSTANCE",
+    MASTRA = "MASTRA",
+    DEPLOYER = "DEPLOYER",
+    STORAGE = "STORAGE",
+    MODEL_ROUTER = "MODEL_ROUTER"
+}
+export declare enum ErrorCategory {
+    UNKNOWN = "UNKNOWN",
+    USER = "USER",
+    SYSTEM = "SYSTEM",
+    THIRD_PARTY = "THIRD_PARTY"
+}
+type Scalar = null | boolean | number | string;
+type Json<T> = [T] extends [Scalar | undefined] ? Scalar : [T] extends [{
+    [x: number]: unknown;
+}] ? {
+    [K in keyof T]: Json<T[K]>;
+} : never;
+/**
+ * Defines the structure for an error's metadata.
+ * This is used to create instances of MastraError.
+ */
+export interface IErrorDefinition<D, C> {
+    /** Unique identifier for the error. */
+    id: Uppercase<string>;
+    /**
+     * Optional custom error message that overrides the original error message.
+     * If not provided, the original error message will be used, or 'Unknown error' if no error is provided.
+     */
+    text?: string;
+    /**
+     * Functional domain of the error (e.g., CONFIG, BUILD, API).
+     */
+    domain: D;
+    /** Broad category of the error (e.g., USER, SYSTEM, THIRD_PARTY). */
+    category: C;
+    details?: Record<string, Json<Scalar>>;
+}
+/**
+ * Base error class for the Mastra ecosystem.
+ * It standardizes error reporting and can be extended for more specific error types.
+ */
+export declare class MastraBaseError<D, C> extends Error {
+    readonly id: Uppercase<string>;
+    readonly domain: D;
+    readonly category: C;
+    readonly details?: Record<string, Json<Scalar>>;
+    readonly message: string;
+    constructor(errorDefinition: IErrorDefinition<D, C>, originalError?: string | Error | MastraBaseError<D, C> | unknown);
+    /**
+     * Returns a structured representation of the error, useful for logging or API responses.
+     */
+    toJSONDetails(): {
+        message: string;
+        domain: D;
+        category: C;
+        details: Record<string, Scalar> | undefined;
+    };
+    toJSON(): {
+        message: string;
+        details: {
+            message: string;
+            domain: D;
+            category: C;
+            details: Record<string, Scalar> | undefined;
+        };
+        code: Uppercase<string>;
+    };
+    toString(): string;
+}
+export declare class MastraError extends MastraBaseError<`${ErrorDomain}`, `${ErrorCategory}`> {
+}
+//# sourceMappingURL=index.d.ts.map

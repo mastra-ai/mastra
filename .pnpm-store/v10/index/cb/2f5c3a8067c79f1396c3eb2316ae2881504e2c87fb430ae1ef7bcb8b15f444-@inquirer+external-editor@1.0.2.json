@@ -1,0 +1,157 @@
+{
+  "name": "@inquirer/external-editor",
+  "version": "1.0.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662904182,
+      "integrity": "sha512-bhxBgkKTd2DAmgMqLkrEWOGttK136cUyL/Jd0C4qpIy+Hf1h+c/n/0Fvp1/7EyVEtq5XUjPjRdpWIuBzlxk6IA==",
+      "mode": 420,
+      "size": 1058
+    },
+    "dist/commonjs/errors/CreateFileError.js": {
+      "checkedAt": 1764662904182,
+      "integrity": "sha512-0aqOSacrlE1Rg10umfIN9+T2satYRRfSlDl4/FT9bl6JJzl/NJIDKtaqQ+qkSFb3+89nZcAaP7zDwNrXkcHJ7w==",
+      "mode": 420,
+      "size": 455
+    },
+    "dist/esm/errors/CreateFileError.js": {
+      "checkedAt": 1764662904183,
+      "integrity": "sha512-lIUagpEdX1q/6mUHZARkWaD7wkfAi15y1P9Rs7Mr6WOyUfZMz3nyV42k1HuUjKwnqtr54f3x2x6jUKCHT5EvsQ==",
+      "mode": 420,
+      "size": 308
+    },
+    "dist/commonjs/index.js": {
+      "checkedAt": 1764662904184,
+      "integrity": "sha512-VM6ZSjJk4GETvlJfmnBJqsornaduftdBu4Jw/9dlZxxmjkda2nvi3FHIIMK5BrDOR3zRhRQYb9BvgG/AyVRg/w==",
+      "mode": 420,
+      "size": 7767
+    },
+    "dist/esm/index.js": {
+      "checkedAt": 1764662904185,
+      "integrity": "sha512-1kdf4jhaseO5/WEL9fohdyUiEQDAYumsY21GadOusq08Buszuf4Hj3u1Owa+U2ex7/g/Wh2MzvWg5XYw+lVlxA==",
+      "mode": 420,
+      "size": 6473
+    },
+    "dist/commonjs/errors/LaunchEditorError.js": {
+      "checkedAt": 1764662904186,
+      "integrity": "sha512-4EWY0VCPSZm6XNYLdEIyA1fSf5M8jEqIFciMxG2eswe8Vlyos7YnxFSRBuA3zUsQUu9z4qUI/TQ9FdBCp5fPEg==",
+      "mode": 420,
+      "size": 455
+    },
+    "dist/esm/errors/LaunchEditorError.js": {
+      "checkedAt": 1764662904187,
+      "integrity": "sha512-Cl+VRgtE1W9M6rDZH3ZmT+8LXburj7rXOefK7NVMNvSQDPvEDBi6zS5Uz43B0hN/aqkwqAAdGuPSnyR7ANcl8A==",
+      "mode": 420,
+      "size": 302
+    },
+    "dist/commonjs/errors/ReadFileError.js": {
+      "checkedAt": 1764662904188,
+      "integrity": "sha512-HiK1yaNOcWQQH8PvfpdVDS1Fi+P597i+ZPCHan9Pez4dufh7mkcY0zJsd6Kt4Phif146oVjLPsx+ISXZWM8D8A==",
+      "mode": 420,
+      "size": 445
+    },
+    "dist/esm/errors/ReadFileError.js": {
+      "checkedAt": 1764662904189,
+      "integrity": "sha512-R+Q+kQlks0pBX5bpd1iX/M3dWww4jJGQHzQY4OrkoEqjnSwJsv2+p+t1QsJ2tcf60JPC6npAlsXc2RUSTq8hcA==",
+      "mode": 420,
+      "size": 304
+    },
+    "dist/commonjs/errors/RemoveFileError.js": {
+      "checkedAt": 1764662904190,
+      "integrity": "sha512-jwoWIng7dugy0QUqq5D0/iVRfvv1ghgs2kj4KvKdk+QzXB2d7P4J+sHTbBN7NsrEUL4zODleWLEy5XSXtAbdIA==",
+      "mode": 420,
+      "size": 455
+    },
+    "dist/esm/errors/RemoveFileError.js": {
+      "checkedAt": 1764662904191,
+      "integrity": "sha512-K/kinJDJaKPgOgrtoc6ZYjSuzbE2Wd2VGpAGii+ayU3Oc40zZHnOEB5ojSVVFArhhMHVQOWQaenPcHeaPey3wA==",
+      "mode": 420,
+      "size": 308
+    },
+    "dist/commonjs/package.json": {
+      "checkedAt": 1764662904192,
+      "integrity": "sha512-bFiTnaWPm3Fik6gyj3o2SbbiQr8jX64ABVoMx5+yeI5Kmd+qQi4M+tvoTg1eM7g29oYn5qQJZUh37cRDuU0ExA==",
+      "mode": 420,
+      "size": 25
+    },
+    "dist/esm/package.json": {
+      "checkedAt": 1764662904192,
+      "integrity": "sha512-nTI0IMxjxr7nncxdtfDxj2uOBz2q+P+lRZ4R8t5ZqfXowXjXf6kq/J3dNSYj3sNixi//hZxxovq5Px4hcsSYfw==",
+      "mode": 420,
+      "size": 23
+    },
+    "package.json": {
+      "checkedAt": 1764662904193,
+      "integrity": "sha512-/8Pn8IhL1FNhFt+9zJkfBV9ANn9KMkMKfkxxK/3cTWNaTbZI7bGHStOFRFCpNqEUiso7TasqGBxF50x/XKjniw==",
+      "mode": 420,
+      "size": 2276
+    },
+    "README.md": {
+      "checkedAt": 1764662904194,
+      "integrity": "sha512-+p/GsQqfGMNltHuIKY/99X+sRko2g6s6cszuSGutR3UK+bHeCNhz/DrYxuBlQ0brkw/cl64GVu1zGZ0pCuh37Q==",
+      "mode": 420,
+      "size": 5488
+    },
+    "dist/commonjs/errors/CreateFileError.d.ts": {
+      "checkedAt": 1764662904194,
+      "integrity": "sha512-3jRNx7qn+sAqzK5KaOHp4jvo+jDJn2a/AKuHz/hy9IrtINa+TPGS/MelODVVgg+BCrAs2oZH2b+eUb7i0Wv9NA==",
+      "mode": 420,
+      "size": 203
+    },
+    "dist/esm/errors/CreateFileError.d.ts": {
+      "checkedAt": 1764662904194,
+      "integrity": "sha512-3jRNx7qn+sAqzK5KaOHp4jvo+jDJn2a/AKuHz/hy9IrtINa+TPGS/MelODVVgg+BCrAs2oZH2b+eUb7i0Wv9NA==",
+      "mode": 420,
+      "size": 203
+    },
+    "dist/commonjs/index.d.ts": {
+      "checkedAt": 1764662904195,
+      "integrity": "sha512-cFpkOUUK+M+AzkENrnXZ63E2Wu48HjiD0+M98Rp4Xr913oGpHBFcoBT0SF8bHSWlCSbG1ZM0gNKbvfe69szckg==",
+      "mode": 420,
+      "size": 1426
+    },
+    "dist/esm/index.d.ts": {
+      "checkedAt": 1764662904195,
+      "integrity": "sha512-cFpkOUUK+M+AzkENrnXZ63E2Wu48HjiD0+M98Rp4Xr913oGpHBFcoBT0SF8bHSWlCSbG1ZM0gNKbvfe69szckg==",
+      "mode": 420,
+      "size": 1426
+    },
+    "dist/commonjs/errors/LaunchEditorError.d.ts": {
+      "checkedAt": 1764662904197,
+      "integrity": "sha512-ZKfZ7Hmd6xtWtNRB0xunb//2tNTCFsb28IcK8FhM5nlZXUSEHXiis1pWzPRhvK5i3c6DJHrON1x5dZC5pOob3A==",
+      "mode": 420,
+      "size": 205
+    },
+    "dist/esm/errors/LaunchEditorError.d.ts": {
+      "checkedAt": 1764662904197,
+      "integrity": "sha512-ZKfZ7Hmd6xtWtNRB0xunb//2tNTCFsb28IcK8FhM5nlZXUSEHXiis1pWzPRhvK5i3c6DJHrON1x5dZC5pOob3A==",
+      "mode": 420,
+      "size": 205
+    },
+    "dist/commonjs/errors/ReadFileError.d.ts": {
+      "checkedAt": 1764662904198,
+      "integrity": "sha512-1SoRCScxF1QHsVrgcvLfzmC6Fg2ild3QhEqRAUT4zjGNqnYs3+WCm6D7m81Oh3OuNV2FiiDSTvLMPojhOdSLVA==",
+      "mode": 420,
+      "size": 201
+    },
+    "dist/esm/errors/ReadFileError.d.ts": {
+      "checkedAt": 1764662904198,
+      "integrity": "sha512-1SoRCScxF1QHsVrgcvLfzmC6Fg2ild3QhEqRAUT4zjGNqnYs3+WCm6D7m81Oh3OuNV2FiiDSTvLMPojhOdSLVA==",
+      "mode": 420,
+      "size": 201
+    },
+    "dist/commonjs/errors/RemoveFileError.d.ts": {
+      "checkedAt": 1764662904198,
+      "integrity": "sha512-s8SaEWljjUWGHpJWyeTn1Cv3r/Q3hukUwsoriHjOiYLpdfZSOPFtJMeR9Ro8xoGKhNYl/KFv1GrbqOwrdhPIOQ==",
+      "mode": 420,
+      "size": 203
+    },
+    "dist/esm/errors/RemoveFileError.d.ts": {
+      "checkedAt": 1764662904198,
+      "integrity": "sha512-s8SaEWljjUWGHpJWyeTn1Cv3r/Q3hukUwsoriHjOiYLpdfZSOPFtJMeR9Ro8xoGKhNYl/KFv1GrbqOwrdhPIOQ==",
+      "mode": 420,
+      "size": 203
+    }
+  }
+}

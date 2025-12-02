@@ -1,0 +1,160 @@
+#!/usr/bin/env node
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// npm/lib/node-path.ts
+var node_path_exports = {};
+__export(node_path_exports, {
+  compatibilityDate: () => compatibilityDate,
+  default: () => node_path_default,
+  version: () => version
+});
+module.exports = __toCommonJS(node_path_exports);
+
+// npm/lib/node-platform.ts
+var import_fs = __toESM(require("fs"));
+var import_os = __toESM(require("os"));
+var import_path = __toESM(require("path"));
+var knownPackages = {
+  "darwin arm64 LE": "@cloudflare/workerd-darwin-arm64",
+  "darwin x64 LE": "@cloudflare/workerd-darwin-64",
+  "linux arm64 LE": "@cloudflare/workerd-linux-arm64",
+  "linux x64 LE": "@cloudflare/workerd-linux-64",
+  "win32 x64 LE": "@cloudflare/workerd-windows-64"
+};
+var maybeExeExtension = process.platform === "win32" ? ".exe" : "";
+function pkgAndSubpathForCurrentPlatform() {
+  let pkg;
+  let subpath;
+  let platformKey = `${process.platform} ${import_os.default.arch()} ${import_os.default.endianness()}`;
+  if (platformKey in knownPackages) {
+    pkg = knownPackages[platformKey];
+    subpath = `bin/workerd${maybeExeExtension}`;
+  } else {
+    throw new Error(`Unsupported platform: ${platformKey}`);
+  }
+  return { pkg, subpath };
+}
+function pkgForSomeOtherPlatform() {
+  const libMain = require.resolve("workerd");
+  const nodeModulesDirectory = import_path.default.dirname(
+    import_path.default.dirname(import_path.default.dirname(libMain))
+  );
+  if (import_path.default.basename(nodeModulesDirectory) === "node_modules") {
+    for (const unixKey in knownPackages) {
+      try {
+        const pkg = knownPackages[unixKey];
+        if (import_fs.default.existsSync(import_path.default.join(nodeModulesDirectory, pkg))) return pkg;
+      } catch {
+      }
+    }
+  }
+  return null;
+}
+function downloadedBinPath(pkg, subpath) {
+  const libDir = import_path.default.dirname(require.resolve("workerd"));
+  return import_path.default.join(libDir, `downloaded-${pkg.replace("/", "-")}-${import_path.default.basename(subpath)}${maybeExeExtension}`);
+}
+function generateBinPath() {
+  const { pkg, subpath } = pkgAndSubpathForCurrentPlatform();
+  let binPath2;
+  try {
+    binPath2 = require.resolve(`${pkg}/${subpath}`);
+  } catch (e) {
+    binPath2 = downloadedBinPath(pkg, subpath);
+    if (!import_fs.default.existsSync(binPath2)) {
+      try {
+        require.resolve(pkg);
+      } catch {
+        const otherPkg = pkgForSomeOtherPlatform();
+        if (otherPkg) {
+          throw new Error(`
+You installed workerd on another platform than the one you're currently using.
+This won't work because workerd is written with native code and needs to
+install a platform-specific binary executable.
+
+Specifically the "${otherPkg}" package is present but this platform
+needs the "${pkg}" package instead. People often get into this
+situation by installing workerd on macOS and copying "node_modules"
+into a Docker image that runs Linux.
+
+If you are installing with npm, you can try not copying the "node_modules"
+directory when you copy the files over, and running "npm ci" or "npm install"
+on the destination platform after the copy. Or you could consider using yarn
+instead which has built-in support for installing a package on multiple
+platforms simultaneously.
+
+If you are installing with yarn, you can try listing both this platform and the
+other platform in your ".yarnrc.yml" file using the "supportedArchitectures"
+feature: https://yarnpkg.com/configuration/yarnrc/#supportedArchitectures
+Keep in mind that this means multiple copies of workerd will be present.
+`);
+        }
+        throw new Error(`The package "${pkg}" could not be found, and is needed by workerd.
+
+If you are installing workerd with npm, make sure that you don't specify the
+"--no-optional" flag. The "optionalDependencies" package.json feature is used
+by workerd to install the correct binary executable for your current platform.`);
+      }
+      throw e;
+    }
+  }
+  let pnpapi;
+  try {
+    pnpapi = require("pnpapi");
+  } catch (e) {
+  }
+  if (pnpapi) {
+    const root = pnpapi.getPackageInformation(pnpapi.topLevel).packageLocation;
+    const binTargetPath = import_path.default.join(
+      root,
+      "node_modules",
+      ".cache",
+      "workerd",
+      `pnpapi-${pkg.replace("/", "-")}-${"1.20251118.0"}-${import_path.default.basename(subpath)}`
+    );
+    if (!import_fs.default.existsSync(binTargetPath)) {
+      import_fs.default.mkdirSync(import_path.default.dirname(binTargetPath), { recursive: true });
+      import_fs.default.copyFileSync(binPath2, binTargetPath);
+      import_fs.default.chmodSync(binTargetPath, 493);
+    }
+    return { binPath: binTargetPath };
+  }
+  return { binPath: binPath2 };
+}
+
+// npm/lib/node-path.ts
+var { binPath } = generateBinPath();
+var node_path_default = binPath;
+var compatibilityDate = "2025-11-18";
+var version = "1.20251118.0";
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  compatibilityDate,
+  version
+});

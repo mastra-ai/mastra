@@ -1,0 +1,30 @@
+{
+    "name": "@types/cookie",
+    "version": "0.5.4",
+    "description": "TypeScript definitions for cookie",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/cookie",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Pine Mizune",
+            "githubUsername": "pine",
+            "url": "https://github.com/pine"
+        },
+        {
+            "name": "Piotr Błażejewicz",
+            "githubUsername": "peterblazejewicz",
+            "url": "https://github.com/peterblazejewicz"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/cookie"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "38c54ab0b5b29d15b167b0c79bb77187eaa259a5fc60cd15713bdfe2231f28f7",
+    "typeScriptVersion": "4.5"
+}

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "iron-webcrypto",
+  "version": "0.2.8",
+  "description": "a cryptographic utility for sealing-unsealing a JSON object using symmetric key encryption with message integrity verification",
+  "keywords": [
+    "authentication",
+    "data integrity",
+    "encryption",
+    "webcrypto"
+  ],
+  "bugs": {
+    "url": "https://github.com/brc-dd/iron-webcrypto",
+    "email": "brc-dd@hotmail.com"
+  },
+  "repository": "github:brc-dd/iron-webcrypto",
+  "funding": "https://github.com/sponsors/brc-dd",
+  "license": "MIT",
+  "author": "Divyansh Singh <brc-dd@hotmail.com> (https://github.com/brc-dd)",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/*"
+  ],
+  "scripts": {
+    "build": "shx rm -rf dist && tsup ./src/index.ts --dts --format esm,cjs --minify --treeshake",
+    "lint": "lefthook run pre-commit",
+    "prerelease": "pnpm i && pnpm lint && pnpm build && pnpm test",
+    "release": "pnpm prerelease && release-it",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "buffer": "^6"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "latest",
+    "@commitlint/config-conventional": "latest",
+    "@peculiar/webcrypto": "latest",
+    "@release-it/conventional-changelog": "latest",
+    "@tsconfig/node12": "latest",
+    "@types/node": "latest",
+    "@typescript-eslint/eslint-plugin": "latest",
+    "@typescript-eslint/parser": "latest",
+    "eslint": "latest",
+    "eslint-config-airbnb-base": "latest",
+    "eslint-config-airbnb-typescript": "latest",
+    "eslint-config-prettier": "latest",
+    "eslint-import-resolver-node": "latest",
+    "eslint-import-resolver-typescript": "latest",
+    "eslint-plugin-eslint-comments": "latest",
+    "eslint-plugin-import": "latest",
+    "eslint-plugin-prettier": "latest",
+    "eslint-plugin-security": "latest",
+    "lefthook": "latest",
+    "prettier": "latest",
+    "prettier-plugin-packagejson": "latest",
+    "release-it": "latest",
+    "replace": "latest",
+    "shx": "latest",
+    "ts-node": "latest",
+    "tsup": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  },
+  "packageManager": "pnpm@7.16.1",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  }
+}

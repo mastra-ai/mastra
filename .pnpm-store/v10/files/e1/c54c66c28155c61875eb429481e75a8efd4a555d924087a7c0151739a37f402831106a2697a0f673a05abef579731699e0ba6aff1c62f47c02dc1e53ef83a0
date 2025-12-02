@@ -1,0 +1,1 @@
+{"version":3,"file":"FCALL.js","sourceRoot":"","sources":["../../../lib/commands/FCALL.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;AACA,+CAAkD;AAElD,kBAAe;IACb,YAAY,EAAE,KAAK;IACnB;;;;;OAKG;IACH,YAAY,CAAC,GAAG,IAA2C;QACzD,IAAI,CAAC,CAAC,CAAC,CAAC,IAAI,CAAC,OAAO,CAAC,CAAC;QACtB,IAAA,yBAAkB,EAAC,GAAG,IAAI,CAAC,CAAC;IAC9B,CAAC;IACD,cAAc,EAAE,cAAI,CAAC,cAAc;CACT,CAAC"}

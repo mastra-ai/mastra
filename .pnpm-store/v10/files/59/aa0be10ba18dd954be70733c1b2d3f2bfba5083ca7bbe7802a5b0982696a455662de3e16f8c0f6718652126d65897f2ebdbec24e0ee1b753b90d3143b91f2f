@@ -1,0 +1,311 @@
+import { ExceptionOptionType as __ExceptionOptionType } from "@smithy/smithy-client";
+import { DocumentType as __DocumentType } from "@smithy/types";
+import { S3VectorsServiceException as __BaseException } from "./S3VectorsServiceException";
+export declare class AccessDeniedException extends __BaseException {
+  readonly name: "AccessDeniedException";
+  readonly $fault: "client";
+  constructor(
+    opts: __ExceptionOptionType<AccessDeniedException, __BaseException>
+  );
+}
+export declare class ConflictException extends __BaseException {
+  readonly name: "ConflictException";
+  readonly $fault: "client";
+  constructor(opts: __ExceptionOptionType<ConflictException, __BaseException>);
+}
+export declare const DataType: {
+  readonly FLOAT32: "float32";
+};
+export type DataType = (typeof DataType)[keyof typeof DataType];
+export declare const DistanceMetric: {
+  readonly COSINE: "cosine";
+  readonly EUCLIDEAN: "euclidean";
+};
+export type DistanceMetric =
+  (typeof DistanceMetric)[keyof typeof DistanceMetric];
+export interface MetadataConfiguration {
+  nonFilterableMetadataKeys: string[] | undefined;
+}
+export interface CreateIndexInput {
+  vectorBucketName?: string | undefined;
+  vectorBucketArn?: string | undefined;
+  indexName: string | undefined;
+  dataType: DataType | undefined;
+  dimension: number | undefined;
+  distanceMetric: DistanceMetric | undefined;
+  metadataConfiguration?: MetadataConfiguration | undefined;
+}
+export interface CreateIndexOutput {}
+export declare class InternalServerException extends __BaseException {
+  readonly name: "InternalServerException";
+  readonly $fault: "server";
+  $retryable: {};
+  constructor(
+    opts: __ExceptionOptionType<InternalServerException, __BaseException>
+  );
+}
+export declare class NotFoundException extends __BaseException {
+  readonly name: "NotFoundException";
+  readonly $fault: "client";
+  constructor(opts: __ExceptionOptionType<NotFoundException, __BaseException>);
+}
+export declare class ServiceQuotaExceededException extends __BaseException {
+  readonly name: "ServiceQuotaExceededException";
+  readonly $fault: "client";
+  constructor(
+    opts: __ExceptionOptionType<ServiceQuotaExceededException, __BaseException>
+  );
+}
+export declare class ServiceUnavailableException extends __BaseException {
+  readonly name: "ServiceUnavailableException";
+  readonly $fault: "server";
+  $retryable: {};
+  constructor(
+    opts: __ExceptionOptionType<ServiceUnavailableException, __BaseException>
+  );
+}
+export declare class TooManyRequestsException extends __BaseException {
+  readonly name: "TooManyRequestsException";
+  readonly $fault: "client";
+  $retryable: {
+    throttling: boolean;
+  };
+  constructor(
+    opts: __ExceptionOptionType<TooManyRequestsException, __BaseException>
+  );
+}
+export interface ValidationExceptionField {
+  path: string | undefined;
+  message: string | undefined;
+}
+export declare class ValidationException extends __BaseException {
+  readonly name: "ValidationException";
+  readonly $fault: "client";
+  fieldList?: ValidationExceptionField[] | undefined;
+  constructor(
+    opts: __ExceptionOptionType<ValidationException, __BaseException>
+  );
+}
+export declare const SseType: {
+  readonly AES256: "AES256";
+  readonly AWS_KMS: "aws:kms";
+};
+export type SseType = (typeof SseType)[keyof typeof SseType];
+export interface EncryptionConfiguration {
+  sseType?: SseType | undefined;
+  kmsKeyArn?: string | undefined;
+}
+export interface CreateVectorBucketInput {
+  vectorBucketName: string | undefined;
+  encryptionConfiguration?: EncryptionConfiguration | undefined;
+}
+export interface CreateVectorBucketOutput {}
+export interface DeleteIndexInput {
+  vectorBucketName?: string | undefined;
+  indexName?: string | undefined;
+  indexArn?: string | undefined;
+}
+export interface DeleteIndexOutput {}
+export interface DeleteVectorBucketInput {
+  vectorBucketName?: string | undefined;
+  vectorBucketArn?: string | undefined;
+}
+export interface DeleteVectorBucketOutput {}
+export interface DeleteVectorBucketPolicyInput {
+  vectorBucketName?: string | undefined;
+  vectorBucketArn?: string | undefined;
+}
+export interface DeleteVectorBucketPolicyOutput {}
+export interface DeleteVectorsInput {
+  vectorBucketName?: string | undefined;
+  indexName?: string | undefined;
+  indexArn?: string | undefined;
+  keys: string[] | undefined;
+}
+export interface DeleteVectorsOutput {}
+export declare class KmsDisabledException extends __BaseException {
+  readonly name: "KmsDisabledException";
+  readonly $fault: "client";
+  constructor(
+    opts: __ExceptionOptionType<KmsDisabledException, __BaseException>
+  );
+}
+export declare class KmsInvalidKeyUsageException extends __BaseException {
+  readonly name: "KmsInvalidKeyUsageException";
+  readonly $fault: "client";
+  constructor(
+    opts: __ExceptionOptionType<KmsInvalidKeyUsageException, __BaseException>
+  );
+}
+export declare class KmsInvalidStateException extends __BaseException {
+  readonly name: "KmsInvalidStateException";
+  readonly $fault: "client";
+  constructor(
+    opts: __ExceptionOptionType<KmsInvalidStateException, __BaseException>
+  );
+}
+export declare class KmsNotFoundException extends __BaseException {
+  readonly name: "KmsNotFoundException";
+  readonly $fault: "client";
+  constructor(
+    opts: __ExceptionOptionType<KmsNotFoundException, __BaseException>
+  );
+}
+export interface GetIndexInput {
+  vectorBucketName?: string | undefined;
+  indexName?: string | undefined;
+  indexArn?: string | undefined;
+}
+export interface Index {
+  vectorBucketName: string | undefined;
+  indexName: string | undefined;
+  indexArn: string | undefined;
+  creationTime: Date | undefined;
+  dataType: DataType | undefined;
+  dimension: number | undefined;
+  distanceMetric: DistanceMetric | undefined;
+  metadataConfiguration?: MetadataConfiguration | undefined;
+}
+export interface GetIndexOutput {
+  index: Index | undefined;
+}
+export type VectorData = VectorData.Float32Member | VectorData.$UnknownMember;
+export declare namespace VectorData {
+  interface Float32Member {
+    float32: number[];
+    $unknown?: never;
+  }
+  interface $UnknownMember {
+    float32?: never;
+    $unknown: [string, any];
+  }
+  interface Visitor<T> {
+    float32: (value: number[]) => T;
+    _: (name: string, value: any) => T;
+  }
+  const visit: <T>(value: VectorData, visitor: Visitor<T>) => T;
+}
+export interface GetOutputVector {
+  key: string | undefined;
+  data?: VectorData | undefined;
+  metadata?: __DocumentType | undefined;
+}
+export interface GetVectorBucketInput {
+  vectorBucketName?: string | undefined;
+  vectorBucketArn?: string | undefined;
+}
+export interface VectorBucket {
+  vectorBucketName: string | undefined;
+  vectorBucketArn: string | undefined;
+  creationTime: Date | undefined;
+  encryptionConfiguration?: EncryptionConfiguration | undefined;
+}
+export interface GetVectorBucketOutput {
+  vectorBucket: VectorBucket | undefined;
+}
+export interface GetVectorBucketPolicyInput {
+  vectorBucketName?: string | undefined;
+  vectorBucketArn?: string | undefined;
+}
+export interface GetVectorBucketPolicyOutput {
+  policy?: string | undefined;
+}
+export interface GetVectorsInput {
+  vectorBucketName?: string | undefined;
+  indexName?: string | undefined;
+  indexArn?: string | undefined;
+  keys: string[] | undefined;
+  returnData?: boolean | undefined;
+  returnMetadata?: boolean | undefined;
+}
+export interface GetVectorsOutput {
+  vectors: GetOutputVector[] | undefined;
+}
+export interface ListIndexesInput {
+  vectorBucketName?: string | undefined;
+  vectorBucketArn?: string | undefined;
+  maxResults?: number | undefined;
+  nextToken?: string | undefined;
+  prefix?: string | undefined;
+}
+export interface IndexSummary {
+  vectorBucketName: string | undefined;
+  indexName: string | undefined;
+  indexArn: string | undefined;
+  creationTime: Date | undefined;
+}
+export interface ListIndexesOutput {
+  nextToken?: string | undefined;
+  indexes: IndexSummary[] | undefined;
+}
+export interface ListVectorsInput {
+  vectorBucketName?: string | undefined;
+  indexName?: string | undefined;
+  indexArn?: string | undefined;
+  maxResults?: number | undefined;
+  nextToken?: string | undefined;
+  segmentCount?: number | undefined;
+  segmentIndex?: number | undefined;
+  returnData?: boolean | undefined;
+  returnMetadata?: boolean | undefined;
+}
+export interface ListOutputVector {
+  key: string | undefined;
+  data?: VectorData | undefined;
+  metadata?: __DocumentType | undefined;
+}
+export interface ListVectorsOutput {
+  nextToken?: string | undefined;
+  vectors: ListOutputVector[] | undefined;
+}
+export interface PutInputVector {
+  key: string | undefined;
+  data: VectorData | undefined;
+  metadata?: __DocumentType | undefined;
+}
+export interface PutVectorsInput {
+  vectorBucketName?: string | undefined;
+  indexName?: string | undefined;
+  indexArn?: string | undefined;
+  vectors: PutInputVector[] | undefined;
+}
+export interface PutVectorsOutput {}
+export interface QueryVectorsInput {
+  vectorBucketName?: string | undefined;
+  indexName?: string | undefined;
+  indexArn?: string | undefined;
+  topK: number | undefined;
+  queryVector: VectorData | undefined;
+  filter?: __DocumentType | undefined;
+  returnMetadata?: boolean | undefined;
+  returnDistance?: boolean | undefined;
+}
+export interface QueryOutputVector {
+  key: string | undefined;
+  data?: VectorData | undefined;
+  metadata?: __DocumentType | undefined;
+  distance?: number | undefined;
+}
+export interface QueryVectorsOutput {
+  vectors: QueryOutputVector[] | undefined;
+}
+export interface ListVectorBucketsInput {
+  maxResults?: number | undefined;
+  nextToken?: string | undefined;
+  prefix?: string | undefined;
+}
+export interface VectorBucketSummary {
+  vectorBucketName: string | undefined;
+  vectorBucketArn: string | undefined;
+  creationTime: Date | undefined;
+}
+export interface ListVectorBucketsOutput {
+  nextToken?: string | undefined;
+  vectorBuckets: VectorBucketSummary[] | undefined;
+}
+export interface PutVectorBucketPolicyInput {
+  vectorBucketName?: string | undefined;
+  vectorBucketArn?: string | undefined;
+  policy: string | undefined;
+}
+export interface PutVectorBucketPolicyOutput {}

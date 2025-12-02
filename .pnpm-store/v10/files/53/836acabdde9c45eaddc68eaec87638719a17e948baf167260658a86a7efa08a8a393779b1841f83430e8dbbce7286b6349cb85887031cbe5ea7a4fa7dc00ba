@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/cli/logout.ts"],
+  "sourcesContent": ["import { Command } from \"@commander-js/extra-typings\";\nimport { oneoffContext } from \"../bundler/context.js\";\nimport { logFinishedStep } from \"../bundler/log.js\";\nimport { recursivelyDelete } from \"./lib/fsUtils.js\";\nimport { globalConfigPath } from \"./lib/utils/globalConfig.js\";\n\nexport const logout = new Command(\"logout\")\n  .description(\"Log out of Convex on this machine\")\n  .allowExcessArguments(false)\n  .action(async () => {\n    const ctx = await oneoffContext({\n      url: undefined,\n      adminKey: undefined,\n      envFile: undefined,\n    });\n\n    if (ctx.fs.exists(globalConfigPath())) {\n      recursivelyDelete(ctx, globalConfigPath());\n    }\n\n    logFinishedStep(\n      \"You have been logged out of Convex.\\n  Run `npx convex dev` to log in.\",\n    );\n  });\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,2BAAwB;AACxB,qBAA8B;AAC9B,iBAAgC;AAChC,qBAAkC;AAClC,0BAAiC;AAE1B,MAAM,SAAS,IAAI,6BAAQ,QAAQ,EACvC,YAAY,mCAAmC,EAC/C,qBAAqB,KAAK,EAC1B,OAAO,YAAY;AAClB,QAAM,MAAM,UAAM,8BAAc;AAAA,IAC9B,KAAK;AAAA,IACL,UAAU;AAAA,IACV,SAAS;AAAA,EACX,CAAC;AAED,MAAI,IAAI,GAAG,WAAO,sCAAiB,CAAC,GAAG;AACrC,0CAAkB,SAAK,sCAAiB,CAAC;AAAA,EAC3C;AAEA;AAAA,IACE;AAAA,EACF;AACF,CAAC;",
+  "names": []
+}

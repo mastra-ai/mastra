@@ -1,0 +1,30 @@
+{
+  "name": "temporal-spec",
+  "version": "0.2.4",
+  "title": "TypeScript types for Temporal",
+  "author": {
+    "name": "Adam Shaw",
+    "email": "arshaw@users.noreply.github.com",
+    "url": "http://arshaw.com/"
+  },
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fullcalendar/temporal-polyfill.git",
+    "directory": "packages/temporal-spec"
+  },
+  "type": "module",
+  "main": "./index.cjs",
+  "types": "./index.d.ts",
+  "module": "./index.js",
+  "exports": {
+    ".": {
+      "require": "./index.cjs",
+      "import": "./index.js"
+    },
+    "./global": {
+      "require": "./global.cjs",
+      "import": "./global.js"
+    }
+  }
+}

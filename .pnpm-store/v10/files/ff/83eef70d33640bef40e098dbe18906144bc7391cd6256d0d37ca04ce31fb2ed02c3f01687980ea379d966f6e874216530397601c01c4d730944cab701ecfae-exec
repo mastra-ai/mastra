@@ -1,0 +1,670 @@
+#!/bin/sh
+#---------------------------------------------
+#   xdg-open
+#
+#   Utility script to open a URL in the registered default application.
+#
+#   Refer to the usage() function below for usage.
+#
+#   Copyright 2009-2010, Fathi Boudra <fabo@freedesktop.org>
+#   Copyright 2009-2016, Rex Dieter <rdieter@fedoraproject.org>
+#   Copyright 2006, Kevin Krammer <kevin.krammer@gmx.at>
+#   Copyright 2006, Jeremy White <jwhite@codeweavers.com>
+#
+#   LICENSE:
+#
+#---------------------------------------------
+
+manualpage()
+{
+cat << _MANUALPAGE
+_MANUALPAGE
+}
+
+usage()
+{
+cat << _USAGE
+_USAGE
+}
+
+#@xdg-utils-common@
+
+# This handles backslashes but not quote marks.
+last_word()
+{
+    # Backslash handling is intended, not using `first` too
+    # shellcheck disable=SC2162,SC2034
+    read first rest
+    echo "$rest"
+}
+
+# Get the value of a key in a desktop file's Desktop Entry group.
+# Example: Use get_key foo.desktop Exec
+# to get the values of the Exec= key for the Desktop Entry group.
+get_key()
+{
+    local file="${1}"
+    local key="${2}"
+    local desktop_entry=""
+
+    IFS_="${IFS}"
+    IFS=""
+    # No backslash handling here, first_word and last_word do that
+    while read -r line
+    do
+        case "$line" in
+            "[Desktop Entry]")
+                desktop_entry="y"
+            ;;
+            # Reset match flag for other groups
+            "["*)
+                desktop_entry=""
+            ;;
+            "${key}="*)
+                # Only match Desktop Entry group
+                if [ -n "${desktop_entry}" ]
+                then
+                    echo "${line}" | cut -d= -f 2-
+                fi
+        esac
+    done < "${file}"
+    IFS="${IFS_}"
+}
+
+has_url_scheme()
+{
+    echo "$1" | LC_ALL=C grep -Eq '^[[:alpha:]][[:alpha:][:digit:]+\.\-]*:'
+}
+
+# Returns true if argument is a file:// URL or path
+is_file_url_or_path()
+{
+    if echo "$1" | grep -q '^file://' || ! has_url_scheme "$1" ; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+get_hostname() {
+    if [ -z "$HOSTNAME" ]; then
+        if command -v hostname > /dev/null; then
+            HOSTNAME=$(hostname)
+        else
+            HOSTNAME=$(uname -n)
+        fi
+    fi
+}
+
+# If argument is a file URL, convert it to a (percent-decoded) path.
+# If not, leave it as it is.
+file_url_to_path()
+{
+    local file="$1"
+    get_hostname
+    if echo "$file" | grep -q '^file://'; then
+        file=${file#file://localhost}
+        file=${file#file://"$HOSTNAME"}
+        file=${file#file://}
+        if ! echo "$file" | grep -q '^/'; then
+            echo "$file"
+            return
+        fi
+        file=${file%%#*}
+        file=${file%%\?*}
+        local printf=printf
+        if [ -x /usr/bin/printf ]; then
+            printf=/usr/bin/printf
+        fi
+        file=$($printf "$(echo "$file" | sed -e 's@%\([a-f0-9A-F]\{2\}\)@\\x\1@g')")
+    fi
+    echo "$file"
+}
+
+open_cygwin()
+{
+    cygstart "$1"
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_darwin()
+{
+    open "$1"
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_kde()
+{
+    if [ -n "${KDE_SESSION_VERSION}" ]; then
+      case "${KDE_SESSION_VERSION}" in
+        4)
+          kde-open "$1"
+        ;;
+        5)
+          "kde-open${KDE_SESSION_VERSION}" "$1"
+        ;;
+        6)
+          kde-open "$1"
+        ;;
+      esac
+    else
+        kfmclient exec "$1"
+        kfmclient_fix_exit_code $?
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_deepin()
+{
+    if dde-open -version >/dev/null 2>&1; then
+        dde-open "$1"
+    else
+        open_generic "$1"
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_gnome3()
+{
+    if gio help open 2>/dev/null 1>&2; then
+        gio open "$1"
+    elif gvfs-open --help 2>/dev/null 1>&2; then
+        gvfs-open "$1"
+    else
+        open_generic "$1"
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_gnome()
+{
+    if gio help open 2>/dev/null 1>&2; then
+        gio open "$1"
+    elif gvfs-open --help 2>/dev/null 1>&2; then
+        gvfs-open "$1"
+    elif gnome-open --help 2>/dev/null 1>&2; then
+        gnome-open "$1"
+    else
+        open_generic "$1"
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_mate()
+{
+    if gio help open 2>/dev/null 1>&2; then
+        gio open "$1"
+    elif gvfs-open --help 2>/dev/null 1>&2; then
+        gvfs-open "$1"
+    elif mate-open --help 2>/dev/null 1>&2; then
+        mate-open "$1"
+    else
+        open_generic "$1"
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_xfce()
+{
+    if exo-open --help 2>/dev/null 1>&2; then
+        exo-open "$1"
+    elif gio help open 2>/dev/null 1>&2; then
+        gio open "$1"
+    elif gvfs-open --help 2>/dev/null 1>&2; then
+        gvfs-open "$1"
+    else
+        open_generic "$1"
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_enlightenment()
+{
+    if enlightenment_open --help 2>/dev/null 1>&2; then
+        enlightenment_open "$1"
+    else
+        open_generic "$1"
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_flatpak()
+{
+    if is_file_url_or_path "$1"; then
+        local file
+        file="$(file_url_to_path "$1")"
+
+        check_input_file "$file"
+
+        gdbus call --session \
+            --dest org.freedesktop.portal.Desktop \
+            --object-path /org/freedesktop/portal/desktop \
+            --method org.freedesktop.portal.OpenURI.OpenFile \
+            --timeout 5 \
+            "" "3" {} 3< "$file"
+    else
+        # $1 contains an URI
+
+        gdbus call --session \
+            --dest org.freedesktop.portal.Desktop \
+            --object-path /org/freedesktop/portal/desktop \
+            --method org.freedesktop.portal.OpenURI.OpenURI \
+            --timeout 5 \
+            "" "$1" {}
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+#-----------------------------------------
+# Recursively search .desktop file
+
+#(application, directory, target file, target_url)
+search_desktop_file()
+{
+    local default="$1"
+    local dir="$2"
+    local target="$3"
+    local target_uri="$4"
+
+    local file=""
+    # look for both vendor-app.desktop, vendor/app.desktop
+    if [ -r "$dir/$default" ]; then
+      file="$dir/$default"
+    elif [ -r "$dir/$(echo "$default" | sed -e 's|-|/|')" ]; then
+      file="$dir/$(echo "$default" | sed -e 's|-|/|')"
+    fi
+
+    if [ -r "$file" ] ; then
+        command="$(get_key "${file}" "Exec" | first_word)"
+        if command -v "$command" >/dev/null; then
+            icon="$(get_key "${file}" "Icon")"
+            # FIXME: Actually LC_MESSAGES should be used as described in
+            # http://standards.freedesktop.org/desktop-entry-spec/latest/ar01s04.html
+            localised_name="$(get_key "${file}" "Name")"
+            #shellcheck disable=SC2046 # Splitting is intentional here
+            set -- $(get_key "${file}" "Exec" | last_word)
+            # We need to replace any occurrence of "%f", "%F" and
+            # the like by the target file. We examine each
+            # argument and append the modified argument to the
+            # end then shift.
+            local args=$#
+            local replaced=0
+            while [ $args -gt 0 ]; do
+                case $1 in
+                    %[c])
+                        replaced=1
+                        arg="${localised_name}"
+                        shift
+                        set -- "$@" "$arg"
+                        ;;
+                    %[fF])
+                        # if there is only a target_url return,
+                        # this application can't handle it.
+                        [ -n "$target" ] || return
+                        replaced=1
+                        arg="$target"
+                        shift
+                        set -- "$@" "$arg"
+                        ;;
+                    %[uU])
+                        replaced=1
+                        # When an URI is requested use it,
+                        # otherwise fall back to the filepath.
+                        arg="${target_uri:-$target}"
+                        shift
+                        set -- "$@" "$arg"
+                        ;;
+                    %[i])
+                        replaced=1
+                        shift
+                        set -- "$@" "--icon" "$icon"
+                        ;;
+                    *)
+                        arg="$1"
+                        shift
+                        set -- "$@" "$arg"
+                        ;;
+                esac
+                args=$(( args - 1 ))
+            done
+            [ $replaced -eq 1 ] || set -- "$@" "${target:-$target_uri}"
+            env "$command" "$@"
+            exit_success
+        fi
+    fi
+
+    for d in "$dir/"*/; do
+        [ -d "$d" ] && search_desktop_file "$default" "$d" "$target" "$target_uri"
+    done
+}
+
+# (file (or empty), mimetype, optional url)
+open_generic_xdg_mime()
+{
+    filetype="$2"
+    default="$(xdg-mime query default "$filetype")"
+    if [ -n "$default" ] ; then
+        xdg_user_dir="$XDG_DATA_HOME"
+        [ -n "$xdg_user_dir" ] || xdg_user_dir="$HOME/.local/share"
+
+        xdg_system_dirs="$XDG_DATA_DIRS"
+        [ -n "$xdg_system_dirs" ] || xdg_system_dirs=/usr/local/share/:/usr/share/
+
+        search_dirs="$xdg_user_dir:$xdg_system_dirs"
+        DEBUG 3 "$search_dirs"
+        old_ifs="$IFS"
+        IFS=:
+        for x in $search_dirs ; do
+            IFS="$old_ifs"
+            search_desktop_file "$default" "$x/applications/" "$1" "$3"
+        done
+    fi
+}
+
+open_generic_xdg_x_scheme_handler()
+{
+    scheme="$(echo "$1" | LC_ALL=C sed -n 's/\(^[[:alpha:]][[:alnum:]+\.-]*\):.*$/\1/p')"
+    if [ -n "$scheme" ]; then
+        filetype="x-scheme-handler/$scheme"
+        open_generic_xdg_mime "" "$filetype" "$1"
+    fi
+}
+
+has_single_argument()
+{
+  test $# = 1
+}
+
+open_envvar()
+{
+    local oldifs="$IFS"
+    local browser
+
+    IFS=":"
+    for browser in $BROWSER; do
+        IFS="$oldifs"
+
+        if [ -z "$browser" ]; then
+            continue
+        fi
+
+        if echo "$browser" | grep -q %s; then
+            # Avoid argument injection.
+            # See https://bugs.freedesktop.org/show_bug.cgi?id=103807
+            # URIs don't have IFS characters spaces anyway.
+            # shellcheck disable=SC2086,SC2091,SC2059
+            # All the scary things here are intentional
+            has_single_argument $1 && $(printf "$browser" "$1")
+        else
+            $browser "$1"
+        fi
+
+        if [ $? -eq 0 ]; then
+            exit_success
+        fi
+    done
+}
+
+open_wsl()
+{
+    local win_path
+    if has_url_scheme "$1"; then
+        win_path="$1"
+    else
+        win_path="$(wslpath -aw "$1")"
+        [ $? -eq 0 ] || exit_failure_operation_failed
+    fi
+    explorer.exe "${win_path}"
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_generic()
+{
+    if is_file_url_or_path "$1"; then
+        local file
+        file="$(file_url_to_path "$1")"
+
+        check_input_file "$file"
+
+        if has_display; then
+            filetype="$(xdg-mime query filetype "$file" | sed "s/;.*//")"
+            # passing a path a url is okay too,
+            # see desktop file specification for '%u'
+            open_generic_xdg_mime "$file" "$filetype" "$1"
+        fi
+
+        if command -v run-mailcap >/dev/null; then
+            run-mailcap --action=view "$file"
+            if [ $? -eq 0 ]; then
+                exit_success
+            fi
+        fi
+
+        if has_display && mimeopen -v 2>/dev/null 1>&2; then
+            mimeopen -L -n "$file"
+            if [ $? -eq 0 ]; then
+                exit_success
+            fi
+        fi
+    fi
+
+    if has_display; then
+        open_generic_xdg_x_scheme_handler "$1"
+    fi
+
+    if [ -n "$BROWSER" ]; then
+        open_envvar "$1"
+    fi
+
+    # if BROWSER variable is not set, check some well known browsers instead
+    if [ x"$BROWSER" = x"" ]; then
+        BROWSER=www-browser:links2:elinks:links:lynx:w3m
+        if has_display; then
+            BROWSER=x-www-browser:firefox:iceweasel:seamonkey:mozilla:epiphany:konqueror:chromium:chromium-browser:google-chrome:$BROWSER
+        fi
+    fi
+
+    open_envvar "$1"
+
+    exit_failure_operation_impossible "no method available for opening '$1'"
+}
+
+open_lxde()
+{
+
+    # pcmanfm only knows how to handle file:// urls and filepaths, it seems.
+    if pcmanfm --help >/dev/null 2>&1 && is_file_url_or_path "$1"; then
+        local file
+        file="$(file_url_to_path "$1")"
+
+        # handle relative paths
+        if ! echo "$file" | grep -q ^/; then
+            file="$(pwd)/$file"
+        fi
+
+        pcmanfm "$file"
+    else
+        open_generic "$1"
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+open_lxqt()
+{
+    if qtxdg-mat open --help 2>/dev/null 1>&2; then
+        qtxdg-mat open "$1"
+    else
+        exit_failure_operation_impossible "no method available for opening '$1'"
+    fi
+
+    if [ $? -eq 0 ]; then
+        exit_success
+    else
+        exit_failure_operation_failed
+    fi
+}
+
+[ x"$1" != x"" ] || exit_failure_syntax
+
+url=
+while [ $# -gt 0 ] ; do
+    parm="$1"
+    shift
+
+    case "$parm" in
+      -*)
+        exit_failure_syntax "unexpected option '$parm'"
+        ;;
+
+      *)
+        if [ -n "$url" ] ; then
+            exit_failure_syntax "unexpected argument '$parm'"
+        fi
+        url="$parm"
+        ;;
+    esac
+done
+
+if [ -z "${url}" ] ; then
+    exit_failure_syntax "file or URL argument missing"
+fi
+
+detectDE
+
+if [ x"$DE" = x"" ]; then
+    DE=generic
+fi
+
+DEBUG 2 "Selected DE $DE"
+
+# sanitize BROWSER (avoid calling ourselves in particular)
+case "${BROWSER}" in
+    *:"xdg-open"|"xdg-open":*)
+        BROWSER="$(echo "$BROWSER" | sed -e 's|:xdg-open||g' -e 's|xdg-open:||g')"
+        ;;
+    "xdg-open")
+        BROWSER=
+        ;;
+esac
+
+case "$DE" in
+    kde)
+    open_kde "$url"
+    ;;
+
+    deepin)
+    open_deepin "$url"
+    ;;
+
+    gnome3|cinnamon)
+    open_gnome3 "$url"
+    ;;
+
+    gnome)
+    open_gnome "$url"
+    ;;
+
+    mate)
+    open_mate "$url"
+    ;;
+
+    xfce)
+    open_xfce "$url"
+    ;;
+
+    lxde)
+    open_lxde "$url"
+    ;;
+
+    lxqt)
+    open_lxqt "$url"
+    ;;
+
+    enlightenment)
+    open_enlightenment "$url"
+    ;;
+
+    cygwin)
+    open_cygwin "$url"
+    ;;
+
+    darwin)
+    open_darwin "$url"
+    ;;
+
+    flatpak)
+    open_flatpak "$url"
+    ;;
+
+    wsl)
+    open_wsl "$url"
+    ;;
+
+    generic)
+    open_generic "$url"
+    ;;
+
+    *)
+    exit_failure_operation_impossible "no method available for opening '$url'"
+    ;;
+esac

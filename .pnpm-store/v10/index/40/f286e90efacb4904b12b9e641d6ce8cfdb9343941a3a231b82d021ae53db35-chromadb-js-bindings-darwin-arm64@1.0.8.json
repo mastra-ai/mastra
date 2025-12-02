@@ -1,0 +1,25 @@
+{
+  "name": "chromadb-js-bindings-darwin-arm64",
+  "version": "1.0.8",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662924257,
+      "integrity": "sha512-z82Awtcy8fF3fB0qf4gQIn7tPTwMkFHgB3a/3CLSkXZ/Qkv0Uvo4Zx76v7SJo5sShW+PsdBje97rkCHGvXtFCw==",
+      "mode": 420,
+      "size": 396
+    },
+    "README.md": {
+      "checkedAt": 1764662924260,
+      "integrity": "sha512-Z1iWVi7138EdVBKOKtpNf6xxAvhKM5pBQHCVxipCkGmW41a7845dtouChivmZjlnEc5gmXK/rv2bz+2DwF0b0Q==",
+      "mode": 420,
+      "size": 110
+    },
+    "chromadb-js-bindings.darwin-arm64.node": {
+      "checkedAt": 1764662924330,
+      "integrity": "sha512-wxnXp2RxR6ker3RX7baIuR8V79wtFNqenCY9SndPQ4k14nqKtxiy0Mzw9EmZBCwjgu/Y1seR7u5XzCfFv3l4yQ==",
+      "mode": 420,
+      "size": 41371088
+    }
+  }
+}

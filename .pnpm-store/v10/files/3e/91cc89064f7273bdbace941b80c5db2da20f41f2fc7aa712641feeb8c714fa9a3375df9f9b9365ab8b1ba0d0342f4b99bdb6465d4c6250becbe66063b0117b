@@ -1,0 +1,33 @@
+{
+    "name": "@types/pumpify",
+    "version": "1.4.4",
+    "description": "TypeScript definitions for pumpify",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/pumpify",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Justin Beckwith",
+            "githubUsername": "JustinBeckwith",
+            "url": "https://github.com/JustinBeckwith"
+        },
+        {
+            "name": "Ankur Oberoi",
+            "githubUsername": "aoberoi",
+            "url": "https://github.com/aoberoi"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/pumpify"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/duplexify": "*",
+        "@types/node": "*"
+    },
+    "typesPublisherContentHash": "5a19c2273a5c21ef6885152f26b2970273767644d35f5804814f854cf49a87d7",
+    "typeScriptVersion": "4.5"
+}

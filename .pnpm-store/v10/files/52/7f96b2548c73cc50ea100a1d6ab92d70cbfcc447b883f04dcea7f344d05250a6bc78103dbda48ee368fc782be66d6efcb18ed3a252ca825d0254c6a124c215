@@ -1,0 +1,81 @@
+{
+  "name": "@fastify/busboy",
+  "version": "3.2.0",
+  "private": false,
+  "author": "Brian White <mscdex@mscdex.net>",
+  "contributors": [
+    {
+      "name": "Igor Savin",
+      "email": "kibertoad@gmail.com",
+      "url": "https://github.com/kibertoad"
+    },
+    {
+      "name": "Aras Abbasi",
+      "email": "aras.abbasi@gmail.com",
+      "url": "https://github.com/uzlopak"
+    }
+  ],
+  "description": "A streaming parser for HTML form data for node.js",
+  "main": "lib/main",
+  "type": "commonjs",
+  "types": "lib/main.d.ts",
+  "scripts": {
+    "bench:busboy": "cd benchmarks && npm install && npm run benchmark-fastify",
+    "bench:dicer": "node bench/dicer/dicer-bench-multipart-parser.js",
+    "coveralls": "nyc report --reporter=lcov",
+    "lint": "npm run lint:standard",
+    "lint:fix": "standard --fix",
+    "lint:standard": "standard --verbose | snazzy",
+    "test:unit": "c8 --statements 98 --branches 97 --functions 96 --lines 98 node --test",
+    "test:types": "tsd",
+    "test": "npm run test:unit && npm run test:types"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.8",
+    "busboy": "^1.6.0",
+    "c8": "^10.1.2",
+    "photofinish": "^1.8.0",
+    "snazzy": "^9.0.0",
+    "standard": "^17.1.0",
+    "tinybench": "^4.0.1",
+    "tsd": "^0.32.0",
+    "tslib": "^2.8.1",
+    "typescript": "~5.9.2"
+  },
+  "keywords": [
+    "uploads",
+    "forms",
+    "multipart",
+    "form-data"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fastify/busboy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fastify/busboy/issues"
+  },
+  "homepage": "https://github.com/fastify/busboy#readme",
+  "tsd": {
+    "directory": "test-types"
+  },
+  "standard": {
+    "globals": [
+      "describe",
+      "it"
+    ],
+    "ignore": [
+      "bench"
+    ]
+  },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "lib/*",
+    "deps/encoding/*",
+    "deps/dicer/lib",
+    "deps/streamsearch/",
+    "deps/dicer/LICENSE"
+  ]
+}

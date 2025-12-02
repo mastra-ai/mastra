@@ -1,0 +1,54 @@
+/// <reference types="node" />
+import type { NfsFsClient, Nfsv4Client } from './types';
+import * as misc from 'memfs/lib/node/types/misc';
+import * as opts from 'memfs/lib/node/types/options';
+import * as structs from '../structs';
+export declare class Nfsv4FsClient implements NfsFsClient {
+    readonly fs: Nfsv4Client;
+    constructor(fs: Nfsv4Client);
+    private readonly openOwnerSeqids;
+    private readonly defaultOpenOwnerId;
+    private makeOpenOwnerKey;
+    private nextOpenOwnerSeqid;
+    private createDefaultOpenOwner;
+    private attrNumsToBitmap;
+    private parsePath;
+    private navigateToParent;
+    private navigateToPath;
+    private encodeData;
+    private decodeData;
+    readonly closeStateid: (openOwner: structs.Nfsv4OpenOwner, stateid: structs.Nfsv4Stateid) => Promise<void>;
+    readonly readFile: (id: misc.TFileHandle, options?: opts.IReadFileOptions | string) => Promise<misc.TDataOut>;
+    readonly writeFile: (id: misc.TFileHandle, data: misc.TPromisesData, options?: opts.IWriteFileOptions) => Promise<void>;
+    readonly stat: (path: misc.PathLike, options?: opts.IStatOptions) => Promise<misc.IStats>;
+    readonly lstat: (path: misc.PathLike, options?: opts.IStatOptions) => Promise<misc.IStats>;
+    readonly mkdir: (path: misc.PathLike, options?: misc.TMode | opts.IMkdirOptions) => Promise<string | undefined>;
+    readonly readdir: (path: misc.PathLike, options?: opts.IReaddirOptions | string) => Promise<misc.TDataOut[] | misc.IDirent[]>;
+    readonly appendFile: (path: misc.TFileHandle, data: misc.TData, options?: opts.IAppendFileOptions | string) => Promise<void>;
+    readonly truncate: (path: misc.PathLike, len?: number) => Promise<void>;
+    readonly unlink: (path: misc.PathLike) => Promise<void>;
+    readonly rmdir: (path: misc.PathLike, options?: opts.IRmdirOptions) => Promise<void>;
+    readonly rm: (path: misc.PathLike, options?: opts.IRmOptions) => Promise<void>;
+    readonly access: (path: misc.PathLike, mode?: number) => Promise<void>;
+    readonly rename: (oldPath: misc.PathLike, newPath: misc.PathLike) => Promise<void>;
+    readonly copyFile: (src: misc.PathLike, dest: misc.PathLike, flags?: misc.TFlagsCopy) => Promise<void>;
+    readonly realpath: (path: misc.PathLike, options?: opts.IRealpathOptions | string) => Promise<misc.TDataOut>;
+    readonly link: (existingPath: misc.PathLike, newPath: misc.PathLike) => Promise<void>;
+    readonly symlink: (target: misc.PathLike, path: misc.PathLike, type?: misc.symlink.Type) => Promise<void>;
+    readonly utimes: (path: misc.PathLike, atime: misc.TTime, mtime: misc.TTime) => Promise<void>;
+    readonly readlink: (path: misc.PathLike, options?: opts.IOptions) => Promise<misc.TDataOut>;
+    readonly opendir: (path: misc.PathLike, options?: opts.IOpendirOptions) => Promise<misc.IDir>;
+    readonly mkdtemp: (prefix: string, options?: opts.IOptions) => Promise<misc.TDataOut>;
+    readonly chmod: (path: misc.PathLike, mode: misc.TMode) => Promise<void>;
+    readonly chown: (path: misc.PathLike, uid: number, gid: number) => Promise<void>;
+    readonly lchmod: (path: misc.PathLike, mode: misc.TMode) => Promise<void>;
+    readonly lchown: (path: misc.PathLike, uid: number, gid: number) => Promise<void>;
+    readonly lutimes: (path: misc.PathLike, atime: misc.TTime, mtime: misc.TTime) => Promise<void>;
+    readonly open: (path: misc.PathLike, flags?: misc.TFlags, mode?: misc.TMode) => Promise<misc.IFileHandle>;
+    readonly statfs: (path: misc.PathLike, options?: opts.IStatOptions) => Promise<misc.IStatFs>;
+    readonly watch: (filename: misc.PathLike, options?: opts.IWatchOptions) => AsyncIterableIterator<{
+        eventType: string;
+        filename: string | Buffer;
+    }>;
+    readonly glob: (pattern: string, options?: opts.IGlobOptions) => Promise<string[]>;
+}

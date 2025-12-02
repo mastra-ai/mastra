@@ -1,0 +1,1 @@
+import{isBuiltin as i}from"module";var o=async(a,e,u)=>{let r=await u(a,e);if(r.url===import.meta.url||i(r.url)||!e.parentURL)return r;let t=new URL(e.parentURL).searchParams.get("id");if(t===null)return r;let l=new URL(r.url);return l.searchParams.set("id",t),{...r,url:`${l}`}};export{o as resolve};

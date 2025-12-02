@@ -1,0 +1,15 @@
+option(COUCHBASE_CXX_CLIENT_PROFILER "Build with profiler (gperftools) support" FALSE)
+
+if(COUCHBASE_CXX_CLIENT_PROFILER)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(LIBPROFILER REQUIRED libprofiler)
+  if(NOT LIBPROFILER_FOUND)
+    message(FATAL_ERROR "COUCHBASE_CXX_CLIENT_PROFILER requested, but libprofiler (gperftools) is not found")
+  endif()
+endif()
+
+function(enable_profiler target)
+  if(COUCHBASE_CXX_CLIENT_PROFILER)
+    target_link_libraries(${target} PRIVATE ${LIBPROFILER_LIBRARIES})
+  endif()
+endfunction()

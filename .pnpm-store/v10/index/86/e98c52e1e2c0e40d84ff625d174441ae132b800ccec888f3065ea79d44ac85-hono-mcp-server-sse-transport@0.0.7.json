@@ -1,0 +1,67 @@
+{
+  "name": "hono-mcp-server-sse-transport",
+  "version": "0.0.7",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662918854,
+      "integrity": "sha512-9jORdJaqhmEn6Xykex0khkKeXpLnxhFb8opQYnrAXMTEsOKOChhtqzfrysN2f6tpP41/Fy9ROCnZNgSvZqkDKA==",
+      "mode": 420,
+      "size": 1073
+    },
+    "build/index.js": {
+      "checkedAt": 1764662918855,
+      "integrity": "sha512-KU4EMtBGf3dO8SmCXeqTeIp+bNbGy+gKG8tPicETQrb+J80FSgWHs+D9c17vveb8nB6O/2haSr4cO8h5L/yMJw==",
+      "mode": 420,
+      "size": 26
+    },
+    "build/sse.js": {
+      "checkedAt": 1764662918855,
+      "integrity": "sha512-4JC9iG7tX3g8l5RuBaobb5xJDH2LLm7Cf49pu9j8ZIbrYr/masKrWWYajn9tRzkMfgJXFKuG2LVmQ3rCIIz33g==",
+      "mode": 420,
+      "size": 3106
+    },
+    "package.json": {
+      "checkedAt": 1764662918856,
+      "integrity": "sha512-Hgljk/TL6YPflVtCnzH5634ksVT/KOT5REwarYmGgOpr3iFkwVTXcIv2RW/VBphoA/Kc2D+QOzLtC7yFdRhmjA==",
+      "mode": 420,
+      "size": 943
+    },
+    "tsconfig.json": {
+      "checkedAt": 1764662918856,
+      "integrity": "sha512-Ahd1wujBfuA+ipHrku66i1K45t8d/rv+rCTkO4nUi4aZJEsjQ2C5FQWw0TyNEyI+s9ocVei1SQp0PESyHr5aoQ==",
+      "mode": 420,
+      "size": 218
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662918857,
+      "integrity": "sha512-RkHzcpdeRc154ZkaDvF5ka1+2q9sP/ylQnfB+ZQ95UE0tkPreksDDVFO8yLmHVkDMGOZMORclmgwyGB9JVhIZA==",
+      "mode": 420,
+      "size": 449
+    },
+    "README.md": {
+      "checkedAt": 1764662918858,
+      "integrity": "sha512-9QWkug5AC9M7dntqIeACaxLP6c7E80i+QyrkIvfIiZov5tLfWgNEbHtAsRA643EeUhRpuLWTvBsu8Si162gnBA==",
+      "mode": 420,
+      "size": 2419
+    },
+    "build/index.d.ts": {
+      "checkedAt": 1764662918855,
+      "integrity": "sha512-KU4EMtBGf3dO8SmCXeqTeIp+bNbGy+gKG8tPicETQrb+J80FSgWHs+D9c17vveb8nB6O/2haSr4cO8h5L/yMJw==",
+      "mode": 420,
+      "size": 26
+    },
+    "build/sse.d.ts": {
+      "checkedAt": 1764662918860,
+      "integrity": "sha512-KyUWdpc9utS34MYO3UWJinRmVGNiwEvCgup6B879gXpCvCjg+be0ZTTCgrcuBRM7r/c8yz3ko6B0meVBehqgXA==",
+      "mode": 420,
+      "size": 1085
+    },
+    ".github/workflows/release.yml": {
+      "checkedAt": 1764662918863,
+      "integrity": "sha512-76xIuVrR/kskjxqc3lmEXN9dgugFzP1DFMoE3WRMlSJiFVl7JACm/iP2VQlXtVI0WbFrqjxYcU29+6hFdcsdag==",
+      "mode": 420,
+      "size": 965
+    }
+  }
+}

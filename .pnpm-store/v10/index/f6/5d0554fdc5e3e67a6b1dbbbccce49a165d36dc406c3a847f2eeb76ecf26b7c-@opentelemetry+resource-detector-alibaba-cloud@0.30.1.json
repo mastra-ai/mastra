@@ -1,0 +1,133 @@
+{
+  "name": "@opentelemetry/resource-detector-alibaba-cloud",
+  "version": "0.30.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662929735,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "build/esm/detectors/AlibabaCloudEcsDetector.js": {
+      "checkedAt": 1764662929743,
+      "integrity": "sha512-5Xb2bytsXe0AqsXhw9g5oazWagCBnYhJWPlcDh8t6xSk3rGPtmBTlyOpx5RjPBm56x07Klg1XkcXSWtsIFoKZw==",
+      "mode": 420,
+      "size": 10576
+    },
+    "build/src/detectors/AlibabaCloudEcsDetector.js": {
+      "checkedAt": 1764662929747,
+      "integrity": "sha512-7HSWVP3pY6DvI13P1PmlnTGhuRkFc49bsmAasGs3ElwOkBtPL16iaFh4rbsuvNNvMFQuyVD3OU1hdUYVAEE0pA==",
+      "mode": 420,
+      "size": 5607
+    },
+    "build/esm/detectors/index.js": {
+      "checkedAt": 1764662929748,
+      "integrity": "sha512-/NQXphCHRXLciS7H8RfoGTfUe9BG6PgDkcfmFnKHsNaQ+jdujf7ze4rEx3wnUYwJwVzM9bX6c6GsNxrlIKyl6A==",
+      "mode": 420,
+      "size": 708
+    },
+    "build/esm/index.js": {
+      "checkedAt": 1764662929749,
+      "integrity": "sha512-nPd/h41eLl1SKwABZeYc7ZB+CYVNeU+WycFNtO3qSvctN/jSPP2p+zTFHNvE9N6utv1XYnzPkgCOBABWGo1NMQ==",
+      "mode": 420,
+      "size": 694
+    },
+    "build/src/detectors/index.js": {
+      "checkedAt": 1764662929749,
+      "integrity": "sha512-1kKDuwgX+r8kmmePxBnh3tqMFLlBWGYJJYyvwPDimFWjXtFqEMAD4o0/bBkB0Q1TXsM6iIyradn7Cp1E4FbCIQ==",
+      "mode": 420,
+      "size": 989
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662929750,
+      "integrity": "sha512-mQxF2m6P7gfizaOt3F2zB9ETFijy24+eZqXER/robnEYVDcZXgmgTdm/3v3YVQkyf8bUIgmYR+ZBhVo81ZS+qg==",
+      "mode": 420,
+      "size": 947
+    },
+    "package.json": {
+      "checkedAt": 1764662929751,
+      "integrity": "sha512-yyEJ9cUdLjTE+Be4XbI5Sn339AJ1bfNdZMzMTLGsIoryDla+EGFNAFHD2nePMrw0bgM2/NPbMBJ6Q65C1nvpjA==",
+      "mode": 420,
+      "size": 2030
+    },
+    "build/esm/detectors/AlibabaCloudEcsDetector.js.map": {
+      "checkedAt": 1764662929755,
+      "integrity": "sha512-iwx8olgeIO0r6CCPxgNR6fct4IdDq5eipot/lx97efhOkdoaLr/yqNpFxA78af/3y361IjStl7yqwfjqliTkQw==",
+      "mode": 420,
+      "size": 8835
+    },
+    "build/src/detectors/AlibabaCloudEcsDetector.js.map": {
+      "checkedAt": 1764662929755,
+      "integrity": "sha512-TqXwex9NRM+VPoKkslzK6U1Z/8fXgxBPbzTc6eCEURFdST8j/4iSwcCOq7eWF09SXQCl3RvyWejeH2Wf5sVyOA==",
+      "mode": 420,
+      "size": 8550
+    },
+    "build/esm/detectors/index.js.map": {
+      "checkedAt": 1764662929757,
+      "integrity": "sha512-0mPzUMVKIWsZOfwsiQoCVUaUFdY5UGU5P95an79WEbI6HfujBz76vyzwGuZ8Hqs+/xvVTg+uxp4ZBy/klu9MiA==",
+      "mode": 420,
+      "size": 903
+    },
+    "build/esm/index.js.map": {
+      "checkedAt": 1764662929757,
+      "integrity": "sha512-+Gb1MF99hEaqPygN01TbuFxxkdyvML0hqux8B1iMDGu+HYD58sZxiQ3vAJaBCCsH7EnabWCRnIR4/Q2NzQYx8A==",
+      "mode": 420,
+      "size": 874
+    },
+    "build/src/detectors/index.js.map": {
+      "checkedAt": 1764662929758,
+      "integrity": "sha512-8qSgpCVh6QqbiGiP/im+UJUDK46vyNc92JoXocW6HVfsBGi6rgEiUajmcrCLm/EDSEQIcG+0ITzymfvIM+s4YA==",
+      "mode": 420,
+      "size": 898
+    },
+    "build/src/index.js.map": {
+      "checkedAt": 1764662929758,
+      "integrity": "sha512-PkhmorqqX/YrjvVpXzKFIS67fB2FKzO4WeNMAXRwKpQjMXbeGjSNKqr+tDPm0qXRyDDu8+RO/328Ht3E+KT9Ug==",
+      "mode": 420,
+      "size": 871
+    },
+    "README.md": {
+      "checkedAt": 1764662929759,
+      "integrity": "sha512-jU4FzQ6qjX9WOBPithZLRL339xnumGVLtg1pKxQO67c+teWRVS495R5/Rt1N9ZlrFv0uluPpiTaZwMshZt+kDg==",
+      "mode": 420,
+      "size": 2623
+    },
+    "build/esm/detectors/AlibabaCloudEcsDetector.d.ts": {
+      "checkedAt": 1764662929760,
+      "integrity": "sha512-YybRbnnBV2KCo6B3UchkRKRmpltGxyi1VCIuSe+OBRB3Y7hneiLcIzUpyPa134nmiJHTXK3O4AMiP6On4ynZ3A==",
+      "mode": 420,
+      "size": 1892
+    },
+    "build/src/detectors/AlibabaCloudEcsDetector.d.ts": {
+      "checkedAt": 1764662929760,
+      "integrity": "sha512-YybRbnnBV2KCo6B3UchkRKRmpltGxyi1VCIuSe+OBRB3Y7hneiLcIzUpyPa134nmiJHTXK3O4AMiP6On4ynZ3A==",
+      "mode": 420,
+      "size": 1892
+    },
+    "build/esm/detectors/index.d.ts": {
+      "checkedAt": 1764662929764,
+      "integrity": "sha512-mAQUS2pTxdL3Jc7ZzfRyz5JX/V5W6545o1rA6egqRlu4srhEDHE3gFaBvEJJnHpApMJ6OqmJHmMHv4xq6LB7Ew==",
+      "mode": 420,
+      "size": 104
+    },
+    "build/esm/index.d.ts": {
+      "checkedAt": 1764662929766,
+      "integrity": "sha512-vxRReBzbSOnpB7ligctSB7l44FJ3qbw+Yt76EWegXJdFKM7szX/VuYCuTUnEA0uKAjkxh6OmUudM3cio1F4yvg==",
+      "mode": 420,
+      "size": 90
+    },
+    "build/src/detectors/index.d.ts": {
+      "checkedAt": 1764662929764,
+      "integrity": "sha512-mAQUS2pTxdL3Jc7ZzfRyz5JX/V5W6545o1rA6egqRlu4srhEDHE3gFaBvEJJnHpApMJ6OqmJHmMHv4xq6LB7Ew==",
+      "mode": 420,
+      "size": 104
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662929766,
+      "integrity": "sha512-vxRReBzbSOnpB7ligctSB7l44FJ3qbw+Yt76EWegXJdFKM7szX/VuYCuTUnEA0uKAjkxh6OmUudM3cio1F4yvg==",
+      "mode": 420,
+      "size": 90
+    }
+  }
+}

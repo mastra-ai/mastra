@@ -1,0 +1,12 @@
+import { MastraBundler } from '../chunk-TQTAMPSC.js';
+
+// src/deployer/index.ts
+var MastraDeployer = class extends MastraBundler {
+  constructor({ name }) {
+    super({ component: "DEPLOYER", name });
+  }
+};
+
+export { MastraDeployer };
+//# sourceMappingURL=index.js.map
+//# sourceMappingURL=index.js.map

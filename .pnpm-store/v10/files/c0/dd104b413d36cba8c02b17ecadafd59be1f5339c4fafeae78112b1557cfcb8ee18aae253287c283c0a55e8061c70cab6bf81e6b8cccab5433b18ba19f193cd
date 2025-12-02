@@ -1,0 +1,203 @@
+# Single const declarations without types
+
+const zero = 0
+const one, two = 1, 2
+const three, four, five = 3, 4, 5
+
+==>
+
+SourceFile(
+  ConstDecl(const,ConstSpec(DefName,Number)),
+  ConstDecl(const,ConstSpec(DefName,DefName,Number,Number)),
+  ConstDecl(const,ConstSpec(DefName,DefName,DefName,Number,Number,Number)))
+
+# Single const declarations with types
+
+const zero int = 0
+const one, two uint64 = 1, 2
+
+==>
+
+SourceFile(
+  ConstDecl(const,ConstSpec(DefName,TypeName,Number)),
+  ConstDecl(const,ConstSpec(DefName,DefName,TypeName,Number,Number)))
+
+# Grouped const declarations
+
+const (
+  zero = 0
+  one = 1
+)
+
+==>
+
+SourceFile(ConstDecl(const,SpecList(ConstSpec(DefName,Number),ConstSpec(DefName,Number))))
+
+# Const declarations with implicit values
+
+const (
+  zero = iota
+  one
+  two
+)
+
+==>
+
+SourceFile(ConstDecl(const,SpecList(ConstSpec(DefName,VariableName),ConstSpec(DefName),ConstSpec(DefName))))
+
+# Var declarations without types
+
+var zero = 0
+var one, two = 1, 2
+var three, four, five = 3, 4, 5
+
+==>
+
+SourceFile(
+  VarDecl(var,VarSpec(DefName,Number)),
+  VarDecl(var,VarSpec(DefName,DefName,Number,Number)),
+  VarDecl(var,VarSpec(DefName,DefName,DefName,Number,Number,Number)))
+
+# Var declarations with types
+
+var zero int = 0
+var one, two uint64 = 1, 2
+
+==>
+
+SourceFile(
+  VarDecl(var,VarSpec(DefName,TypeName,Number)),
+  VarDecl(var,VarSpec(DefName,DefName,TypeName,Number,Number)))
+
+# Var declarations with no expressions
+
+var zero int
+var one, two uint64
+
+==>
+
+SourceFile(
+  VarDecl(var,VarSpec(DefName,TypeName)),
+  VarDecl(var,VarSpec(DefName,DefName,TypeName)))
+
+# Grouped var declarations
+
+var (
+  zero = 0
+  one = 1
+)
+
+==>
+
+SourceFile(VarDecl(var,SpecList(VarSpec(DefName,Number),VarSpec(DefName,Number))))
+
+# Function declarations
+
+func f1() {}
+func f2(a File, b, c, d Thing) int {}
+func f2() (File, Thing) {}
+func f2() (result int, err error) {}
+func f(x ... int, y ... int)
+func g1[T, U any, V interface{}, W Foo[Bar[T]]](a Foo[T]) {}
+func g2(a foo.bar[int]) {}
+func f[A int|string, B ~int, C ~int|~string]()
+func f2(a File, b, c, d Thing) int {}
+
+==>
+
+SourceFile(
+  FunctionDecl(func,DefName,Parameters,Block),
+  FunctionDecl(func,DefName,Parameters(
+    Parameter(DefName,TypeName),
+    Parameter(DefName,DefName,DefName,TypeName)
+  ),TypeName,Block),
+  FunctionDecl(func,DefName,Parameters,Parameters(Parameter(TypeName),Parameter(TypeName)),Block),
+  FunctionDecl(func,DefName,Parameters,Parameters(
+    Parameter(DefName,TypeName),
+    Parameter(DefName,TypeName)
+  ),Block),
+  FunctionDecl(func,DefName,Parameters(Parameter(DefName,TypeName),Parameter(DefName,TypeName))),
+  FunctionDecl(func,DefName,TypeParams(
+    TypeParam(TypeName,TypeName,TypeName),
+    TypeParam(TypeName,InterfaceType(interface,InterfaceBody)),
+    TypeParam(TypeName,ParameterizedType(TypeName,TypeArgs(ParameterizedType(TypeName,TypeArgs(TypeName)))))
+  ),Parameters(Parameter(DefName,ParameterizedType(TypeName,TypeArgs(TypeName)))),Block),
+  FunctionDecl(func,DefName,Parameters(
+    Parameter(DefName,ParameterizedType(QualifiedType(VariableName,TypeName),TypeArgs(TypeName)))
+  ),Block),
+  FunctionDecl(func,DefName,TypeParams(
+    TypeParam(TypeName,TypeElem(TypeName,LogicOp,TypeName)),
+    TypeParam(TypeName,UnderlyingType(TypeName)),
+    TypeParam(TypeName,TypeElem(UnderlyingType(TypeName),LogicOp,UnderlyingType(TypeName)))
+  ),Parameters),
+  FunctionDecl(func,DefName,Parameters(
+    Parameter(DefName,TypeName),
+    Parameter(DefName,DefName,DefName,TypeName)
+  ),TypeName,Block))
+
+# Single-line function declarations
+
+func f1() { a() }
+func f2() { a(); b() }
+func f3() { a(); b(); }
+
+==>
+
+SourceFile(
+  FunctionDecl(func,DefName,Parameters,Block(
+    ExprStatement(CallExpr(VariableName,Arguments)))),
+  FunctionDecl(func,DefName,Parameters,Block(
+    ExprStatement(CallExpr(VariableName,Arguments)),
+    ExprStatement(CallExpr(VariableName,Arguments)))),
+  FunctionDecl(func,DefName,Parameters,Block(
+    ExprStatement(CallExpr(VariableName,Arguments)),
+    ExprStatement(CallExpr(VariableName,Arguments)))))
+
+# Variadic function declarations
+
+func f1(a ...*int) {}
+func f2(a int, b ...int) {}
+func f3(...bool) {}
+
+==>
+
+SourceFile(
+  FunctionDecl(func,DefName,Parameters(
+    Parameter(DefName,"...",PointerType(TypeName))
+  ),Block),
+  FunctionDecl(func,DefName,Parameters(
+    Parameter(DefName,TypeName),
+    Parameter(DefName,"...",TypeName)
+  ),Block),
+  FunctionDecl(func,DefName,Parameters(Parameter("...",TypeName)),Block))
+
+# Method declarations
+
+func (self Person) Equals(other Person) bool {}
+func (v *Value) ObjxMap(optionalDefault ...(Map)) Map {}
+func (p *T1) M1()
+
+==>
+
+SourceFile(
+  MethodDecl(func,Parameters(Parameter(DefName,TypeName)),FieldName,
+    Parameters(Parameter(DefName,TypeName)),TypeName,Block),
+  MethodDecl(func,Parameters(Parameter(DefName,PointerType(TypeName))),FieldName,
+    Parameters(Parameter(DefName,"...",ParenthesizedType(TypeName))),TypeName,Block),
+  MethodDecl(func,Parameters(Parameter(DefName,PointerType(TypeName))),FieldName,Parameters))
+
+# Type declarations
+
+type a b
+type (
+  a b
+  c d
+)
+type a = d[e]
+
+==>
+
+SourceFile(
+  TypeDecl(type,TypeSpec(DefName,TypeName)),
+  TypeDecl(type,SpecList(TypeSpec(DefName,TypeName),TypeSpec(DefName,TypeName))),
+  TypeDecl(type,TypeSpec(DefName,ParameterizedType(TypeName,TypeArgs(TypeName)))))

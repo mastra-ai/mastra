@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/cli/codegen_templates/common.ts"],
+  "sourcesContent": ["export function header(oneLineDescription: string) {\n  return `/* eslint-disable */\n  /**\n   * ${oneLineDescription}\n   *\n   * THIS CODE IS AUTOMATICALLY GENERATED.\n   *\n   * To regenerate, run \\`npx convex dev\\`.\n   * @module\n   */\n  `;\n}\n\nexport function apiComment(\n  apiName: string,\n  type: \"public\" | \"internal\" | undefined,\n) {\n  return `\n  /**\n     * A utility for referencing Convex functions in your app's${type ? ` ${type}` : \"\"} API.\n     *\n     * Usage:\n     * \\`\\`\\`js\n     * const myFunctionReference = ${apiName}.myModule.myFunction;\n     * \\`\\`\\`\n     */`;\n}\n\n/**\n * Comparison function for sorting strings alphabetically.\n * Uses localeCompare for consistent, locale-aware sorting.\n *\n * Usage: array.sort(compareStrings)\n * or with entries: Object.entries(obj).sort(([a], [b]) => compareStrings(a, b))\n */\nexport function compareStrings(a: string, b: string): number {\n  return a.localeCompare(b);\n}\n"],
+  "mappings": ";AAAO,gBAAS,OAAO,oBAA4B;AACjD,SAAO;AAAA;AAAA,OAEF,kBAAkB;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAQzB;AAEO,gBAAS,WACd,SACA,MACA;AACA,SAAO;AAAA;AAAA,iEAEwD,OAAO,IAAI,IAAI,KAAK,EAAE;AAAA;AAAA;AAAA;AAAA,qCAIlD,OAAO;AAAA;AAAA;AAG5C;AASO,gBAAS,eAAe,GAAW,GAAmB;AAC3D,SAAO,EAAE,cAAc,CAAC;AAC1B;",
+  "names": []
+}

@@ -1,0 +1,41 @@
+{
+    "id": "01JATCMZJY26PQ59XT9BNT0FNN",
+    "user": {
+        "object": "user",
+        "id": "01JATCHZVEC5EPANDPEZVM68Y9",
+        "email": "jane@foocorp.com",
+        "first_name": "Jane",
+        "last_name": "Doe",
+        "email_verified": true,
+        "profile_picture_url": "https://example.com/jane.jpg",
+        "created_at": "2024-10-22T17:12:50.746Z",
+        "updated_at": "2024-10-22T17:12:50.746Z"
+    },
+    "ip_address": "50.141.123.10",
+    "user_agent": "Mozilla/5.0",
+    "device_fingerprint": "notafingerprint",
+    "issuer": "test",
+    "object": "authentication_action_context",
+    "organization": {
+        "object": "organization",
+        "id": "01JATCMZJY26PQ59XT9BNT0FNN",
+        "name": "Foo Corp",
+        "allow_profiles_outside_organization": false,
+        "domains": [],
+        "lookup_key": "my-key",
+        "created_at": "2024-10-22T17:12:50.746Z",
+        "updated_at": "2024-10-22T17:12:50.746Z"
+    },
+    "organization_membership": {
+        "object": "organization_membership",
+        "id": "01JATCNVYCHT1SZGENR4QTXKRK",
+        "user_id": "01JATCHZVEC5EPANDPEZVM68Y9",
+        "organization_id": "01JATCMZJY26PQ59XT9BNT0FNN",
+        "role": {
+            "slug": "member"
+        },
+        "status": "active",
+        "created_at": "2024-10-22T17:12:50.746Z",
+        "updated_at": "2024-10-22T17:12:50.746Z"
+    }
+}

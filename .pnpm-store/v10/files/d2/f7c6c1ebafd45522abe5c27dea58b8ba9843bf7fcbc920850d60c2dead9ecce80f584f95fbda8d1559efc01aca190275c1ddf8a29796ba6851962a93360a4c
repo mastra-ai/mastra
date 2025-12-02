@@ -1,0 +1,352 @@
+types:
+  PronunciationDictionaryAddFromFileRequestWorkspaceAccess:
+    enum:
+      - admin
+      - editor
+      - viewer
+    inline: true
+    source:
+      openapi: openapi.json
+  BodyAddAPronunciationDictionaryV1PronunciationDictionariesAddFromRulesPostRulesItem:
+    discriminant: type
+    base-properties: {}
+    union:
+      alias:
+        type: root.PronunciationDictionaryAliasRuleRequestModel
+      phoneme:
+        type: root.PronunciationDictionaryPhonemeRuleRequestModel
+    source:
+      openapi: openapi.json
+  BodyAddAPronunciationDictionaryV1PronunciationDictionariesAddFromRulesPostWorkspaceAccess:
+    enum:
+      - admin
+      - editor
+      - viewer
+    inline: true
+    source:
+      openapi: openapi.json
+  PronunciationDictionaryRule:
+    discriminant: type
+    base-properties: {}
+    union:
+      alias:
+        type: root.PronunciationDictionaryAliasRuleRequestModel
+      phoneme:
+        type: root.PronunciationDictionaryPhonemeRuleRequestModel
+    source:
+      openapi: openapi.json
+  PronunciationDictionaryGetAllRequestSort:
+    enum:
+      - creation_time_unix
+      - name
+    source:
+      openapi: openapi.json
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    add_from_file:
+      path: /v1/pronunciation-dictionaries/add-from-file
+      method: POST
+      auth: false
+      docs: Creates a new pronunciation dictionary from a lexicon .PLS file
+      source:
+        openapi: openapi.json
+      display-name: Create a pronunciation dictionary
+      request:
+        name: >-
+          Body_Add_a_pronunciation_dictionary_v1_pronunciation_dictionaries_add_from_file_post
+        body:
+          properties:
+            name:
+              type: string
+              docs: >-
+                The name of the pronunciation dictionary, used for
+                identification only.
+            file:
+              type: optional<file>
+              docs: >-
+                A lexicon .pls file which we will use to initialize the project
+                with.
+            description:
+              type: optional<string>
+              docs: >-
+                A description of the pronunciation dictionary, used for
+                identification only.
+            workspace_access:
+              type: >-
+                optional<PronunciationDictionaryAddFromFileRequestWorkspaceAccess>
+              docs: >-
+                Should be one of 'admin', 'editor' or 'viewer'. If not provided,
+                defaults to no access.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.AddPronunciationDictionaryResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            name: name
+          response:
+            body:
+              id: 5xM3yVvZQKV0EfqQpLrJ
+              name: My Dictionary
+              created_by: ar6633Es2kUjFXBdR1iVc9ztsXl1
+              creation_time_unix: 1714156800
+              version_id: 5xM3yVvZQKV0EfqQpLrJ
+              version_rules_num: 1
+              description: This is a test dictionary
+              permission_on_resource: admin
+    add_from_rules:
+      path: /v1/pronunciation-dictionaries/add-from-rules
+      method: POST
+      auth: false
+      docs: Creates a new pronunciation dictionary from provided rules.
+      source:
+        openapi: openapi.json
+      display-name: Add A Pronunciation Dictionary
+      request:
+        name: >-
+          BodyAddAPronunciationDictionaryV1PronunciationDictionariesAddFromRulesPost
+        body:
+          properties:
+            rules:
+              docs: |-
+                List of pronunciation rules. Rule can be either:
+                    an alias rule: {'string_to_replace': 'a', 'type': 'alias', 'alias': 'b', }
+                    or a phoneme rule: {'string_to_replace': 'a', 'type': 'phoneme', 'phoneme': 'b', 'alphabet': 'ipa' }
+              type: >-
+                list<BodyAddAPronunciationDictionaryV1PronunciationDictionariesAddFromRulesPostRulesItem>
+            name:
+              type: string
+              docs: >-
+                The name of the pronunciation dictionary, used for
+                identification only.
+            description:
+              type: optional<string>
+              docs: >-
+                A description of the pronunciation dictionary, used for
+                identification only.
+            workspace_access:
+              type: >-
+                optional<BodyAddAPronunciationDictionaryV1PronunciationDictionariesAddFromRulesPostWorkspaceAccess>
+              docs: >-
+                Should be one of 'admin', 'editor' or 'viewer'. If not provided,
+                defaults to no access.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddPronunciationDictionaryResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            rules:
+              - string_to_replace: Thailand
+                alias: tie-land
+                type: alias
+            name: My Dictionary
+          response:
+            body:
+              id: 5xM3yVvZQKV0EfqQpLrJ
+              name: My Dictionary
+              created_by: ar6633Es2kUjFXBdR1iVc9ztsXl1
+              creation_time_unix: 1714156800
+              version_id: 5xM3yVvZQKV0EfqQpLrJ
+              version_rules_num: 1
+              description: This is a test dictionary
+              permission_on_resource: admin
+    add_rules:
+      path: /v1/pronunciation-dictionaries/{pronunciation_dictionary_id}/add-rules
+      method: POST
+      auth: false
+      docs: Add rules to the pronunciation dictionary
+      source:
+        openapi: openapi.json
+      path-parameters:
+        pronunciation_dictionary_id:
+          type: string
+          docs: The id of the pronunciation dictionary
+      display-name: Add pronunciation dictionary rules
+      request:
+        name: PronunciationDictionary
+        body:
+          properties:
+            rules:
+              docs: |-
+                List of pronunciation rules. Rule can be either:
+                    an alias rule: {'string_to_replace': 'a', 'type': 'alias', 'alias': 'b', }
+                    or a phoneme rule: {'string_to_replace': 'a', 'type': 'phoneme', 'phoneme': 'b', 'alphabet': 'ipa' }
+              type: list<PronunciationDictionaryRule>
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.PronunciationDictionaryRulesResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            pronunciation_dictionary_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            rules:
+              - string_to_replace: Thailand
+                alias: tie-land
+                type: alias
+          response:
+            body:
+              id: 5xM3yVvZQKV0EfqQpLrJ
+              version_id: 5xM3yVvZQKV0EfqQpLr2
+              version_rules_num: 1
+    remove_rules:
+      path: >-
+        /v1/pronunciation-dictionaries/{pronunciation_dictionary_id}/remove-rules
+      method: POST
+      auth: false
+      docs: Remove rules from the pronunciation dictionary
+      source:
+        openapi: openapi.json
+      path-parameters:
+        pronunciation_dictionary_id:
+          type: string
+          docs: The id of the pronunciation dictionary
+      display-name: Remove pronunciation dictionary rules
+      request:
+        name: RemovePronunciationDictionaryRulesRequest
+        body:
+          properties:
+            rule_strings:
+              docs: List of strings to remove from the pronunciation dictionary.
+              type: list<string>
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.PronunciationDictionaryRulesResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            pronunciation_dictionary_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            rule_strings:
+              - rule_strings
+          response:
+            body:
+              id: 5xM3yVvZQKV0EfqQpLrJ
+              version_id: 5xM3yVvZQKV0EfqQpLr2
+              version_rules_num: 1
+    download:
+      path: /v1/pronunciation-dictionaries/{dictionary_id}/{version_id}/download
+      method: GET
+      auth: false
+      docs: Get a PLS file with a pronunciation dictionary version rules
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dictionary_id:
+          type: string
+          docs: The id of the pronunciation dictionary
+        version_id:
+          type: string
+          docs: The id of the version of the pronunciation dictionary
+      display-name: Get pronunciation dictionary by version
+      response:
+        docs: The PLS file containing pronunciation dictionary rules
+        type: file
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+    get:
+      path: /v1/pronunciation-dictionaries/{pronunciation_dictionary_id}/
+      method: GET
+      auth: false
+      docs: Get metadata for a pronunciation dictionary
+      source:
+        openapi: openapi.json
+      path-parameters:
+        pronunciation_dictionary_id:
+          type: string
+          docs: The id of the pronunciation dictionary
+      display-name: Get pronunciation dictionary
+      response:
+        docs: Successful Response
+        type: root.GetPronunciationDictionaryMetadataResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            pronunciation_dictionary_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              id: 5xM3yVvZQKV0EfqQpLrJ
+              latest_version_id: 5xM3yVvZQKV0EfqQpLr2
+              latest_version_rules_num: 2
+              name: My Dictionary
+              permission_on_resource: admin
+              created_by: ar6633Es2kUjFXBdR1iVc9ztsXl1
+              creation_time_unix: 1714156800
+              archived_time_unix: 1
+              description: This is a test dictionary
+    get_all:
+      path: /v1/pronunciation-dictionaries/
+      method: GET
+      auth: false
+      docs: >-
+        Get a list of the pronunciation dictionaries you have access to and
+        their metadata
+      source:
+        openapi: openapi.json
+      display-name: List pronunciation dictionaries
+      request:
+        name: PronunciationDictionaryGetAllRequest
+        query-parameters:
+          cursor:
+            type: optional<string>
+            docs: Used for fetching next page. Cursor is returned in the response.
+          page_size:
+            type: optional<integer>
+            default: 30
+            docs: >-
+              How many pronunciation dictionaries to return at maximum. Can not
+              exceed 100, defaults to 30.
+            validation:
+              min: 1
+              max: 100
+          sort:
+            type: optional<PronunciationDictionaryGetAllRequestSort>
+            docs: Which field to sort by, one of 'created_at_unix' or 'name'.
+          sort_direction:
+            type: optional<string>
+            docs: >-
+              Which direction to sort the voices in. 'ascending' or
+              'descending'.
+      response:
+        docs: Successful Response
+        type: root.GetPronunciationDictionariesMetadataResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              pronunciation_dictionaries:
+                - id: 5xM3yVvZQKV0EfqQpLrJ
+                  latest_version_id: 5xM3yVvZQKV0EfqQpLr2
+                  latest_version_rules_num: 2
+                  name: My Dictionary
+                  permission_on_resource: admin
+                  created_by: ar6633Es2kUjFXBdR1iVc9ztsXl1
+                  creation_time_unix: 1714156800
+                  archived_time_unix: 1
+                  description: This is a test dictionary
+              next_cursor: 5xM3yVvZQKV0EfqQpLr2
+              has_more: false
+  source:
+    openapi: openapi.json

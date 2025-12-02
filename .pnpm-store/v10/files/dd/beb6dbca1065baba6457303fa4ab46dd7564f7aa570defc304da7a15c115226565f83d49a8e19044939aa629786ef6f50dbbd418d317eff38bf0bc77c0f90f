@@ -1,0 +1,69 @@
+.aui-root {
+  @apply text-aui-foreground;
+}
+
+.aui-root * {
+  @apply border-aui-border;
+}
+
+/* shadcn-ui/button */
+.aui-button {
+  @apply focus-visible:ring-aui-ring inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0;
+}
+
+.aui-button-primary {
+  @apply bg-aui-primary text-aui-primary-foreground hover:bg-aui-primary/90 shadow;
+}
+
+.aui-button-outline {
+  @apply border-aui-input bg-aui-background hover:bg-aui-accent hover:text-aui-accent-foreground border shadow-sm;
+}
+
+.aui-button-ghost {
+  @apply hover:bg-aui-accent hover:text-aui-accent-foreground;
+}
+
+.aui-button-medium {
+  @apply h-9 px-4 py-2;
+}
+
+/** tooltip icon button */
+.aui-button-icon {
+  @apply size-6 p-1;
+}
+
+.aui-sr-only {
+  @apply sr-only;
+}
+
+/* shadcn-ui/avatar */
+
+.aui-avatar-root {
+  @apply relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full;
+}
+
+.aui-avatar-image {
+  @apply aspect-square h-full w-full object-cover;
+}
+
+.aui-avatar-fallback {
+  @apply bg-aui-muted flex h-full w-full items-center justify-center rounded-full;
+}
+
+/* shadcn-ui/tooltip */
+
+.aui-tooltip-content {
+  @apply bg-aui-primary text-aui-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 overflow-hidden rounded-md px-3 py-1.5 text-xs;
+}
+
+/* shadcn-ui/dialog */
+
+.aui-dialog-overlay {
+  @apply data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/80;
+}
+
+.aui-dialog-content {
+  @apply data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] fixed left-[50%] top-[50%] z-50;
+  @apply grid translate-x-[-50%] translate-y-[-50%] shadow-lg duration-200;
+  /* @apply w-full bg-aui-background max-w-lg gap-4 border p-6 sm:rounded-lg; */
+}

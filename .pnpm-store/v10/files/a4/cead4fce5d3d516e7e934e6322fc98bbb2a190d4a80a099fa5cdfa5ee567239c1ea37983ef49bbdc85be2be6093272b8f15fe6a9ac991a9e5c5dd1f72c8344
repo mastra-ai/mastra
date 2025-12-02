@@ -1,0 +1,49 @@
+{
+  "name": "callguard",
+  "version": "2.0.0",
+  "description": "Callback exception guard",
+  "author": "Gustaf Räntilä",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/grantila/callguard/issues"
+  },
+  "homepage": "https://github.com/grantila/callguard#readme",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "directories": {},
+  "scripts": {
+    "build": "./node_modules/.bin/rimraf dist && ./node_modules/.bin/tsc -p .",
+    "test": "node_modules/.bin/jest --coverage",
+    "buildtest": "npm run build && npm run test",
+    "cz": "git-cz"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grantila/callguard.git"
+  },
+  "keywords": [
+    "callguard",
+    "call",
+    "guard",
+    "error",
+    "exception",
+    "handler"
+  ],
+  "devDependencies": {
+    "@types/jest": "^26.0.13",
+    "@types/node": "14.6.4",
+    "cz-conventional-changelog": "3.3.0",
+    "jest": "^26.4.2",
+    "rimraf": "3.0.2",
+    "ts-jest": "^26.3.0",
+    "typescript": "4.0.2"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  }
+}

@@ -1,0 +1,84 @@
+{
+    "name": "@types/fs-extra",
+    "version": "11.0.4",
+    "description": "TypeScript definitions for fs-extra",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/fs-extra",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Alan Agius",
+            "githubUsername": "alan-agius4",
+            "url": "https://github.com/alan-agius4"
+        },
+        {
+            "name": "midknight41",
+            "githubUsername": "midknight41",
+            "url": "https://github.com/midknight41"
+        },
+        {
+            "name": "Brendan Forster",
+            "githubUsername": "shiftkey",
+            "url": "https://github.com/shiftkey"
+        },
+        {
+            "name": "Mees van Dijk",
+            "githubUsername": "mees-",
+            "url": "https://github.com/mees-"
+        },
+        {
+            "name": "Justin Rockwood",
+            "githubUsername": "jrockwood",
+            "url": "https://github.com/jrockwood"
+        },
+        {
+            "name": "Sang Dang",
+            "githubUsername": "sangdth",
+            "url": "https://github.com/sangdth"
+        },
+        {
+            "name": "Florian Keller",
+            "githubUsername": "ffflorian",
+            "url": "https://github.com/ffflorian"
+        },
+        {
+            "name": "Piotr Błażejewicz",
+            "githubUsername": "peterblazejewicz",
+            "url": "https://github.com/peterblazejewicz"
+        },
+        {
+            "name": "Tiger Oakes",
+            "githubUsername": "NotWoods",
+            "url": "https://github.com/NotWoods"
+        },
+        {
+            "name": "BendingBender",
+            "githubUsername": "BendingBender",
+            "url": "https://github.com/BendingBender"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./index.d.ts"
+        },
+        "./esm": {
+            "types": {
+                "import": "./esm.d.mts"
+            }
+        },
+        "./package.json": "./package.json"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/fs-extra"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/jsonfile": "*",
+        "@types/node": "*"
+    },
+    "typesPublisherContentHash": "2929b595f5fdba90096984c89127b1a93f583ee50680a2ad02fad15b1f571bb0",
+    "typeScriptVersion": "4.5"
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/browser/query_options.ts"],
+  "sourcesContent": ["/**\n * Query options are a potential new API for a variety of functions, but in particular a new overload of the React hook for queries.\n *\n * Inspired by https://tanstack.com/query/v5/docs/framework/react/guides/query-options\n */\nimport type { FunctionArgs, FunctionReference } from \"../server/api.js\";\n\n// TODO if this type can encompass all use cases we can add not requiring args for queries\n// that don't take arguments. Goal would be that queryOptions allows leaving out args,\n// but queryOptions returns an object that always contains args. Helpers, \"middleware,\"\n// anything that intercepts these arguments\n/**\n * Query options.\n */\nexport type ConvexQueryOptions<Query extends FunctionReference<\"query\">> = {\n  query: Query;\n  args: FunctionArgs<Query>;\n  extendSubscriptionFor?: number;\n};\n\n// This helper helps more once we have more inference happening.\nexport function convexQueryOptions<Query extends FunctionReference<\"query\">>(\n  options: ConvexQueryOptions<Query>,\n): ConvexQueryOptions<Query> {\n  return options;\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAqBO,SAAS,mBACd,SAC2B;AAC3B,SAAO;AACT;",
+  "names": []
+}

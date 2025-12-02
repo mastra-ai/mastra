@@ -1,0 +1,151 @@
+"use strict";
+"use client";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/thread.tsx
+var thread_exports = {};
+__export(thread_exports, {
+  default: () => thread_default
+});
+module.exports = __toCommonJS(thread_exports);
+var import_react = require("react");
+var import_lucide_react = require("lucide-react");
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_composer = __toESM(require("./composer.js"));
+var import_thread_welcome = __toESM(require("./thread-welcome.js"));
+var import_tooltip_icon_button = require("./base/tooltip-icon-button.js");
+var import_assistant_message = __toESM(require("./assistant-message.js"));
+var import_user_message = __toESM(require("./user-message.js"));
+var import_edit_composer = __toESM(require("./edit-composer.js"));
+var import_thread_config = require("./thread-config.js");
+var import_react2 = require("@assistant-ui/react");
+var import_jsx_runtime = require("react/jsx-runtime");
+var Thread = (config) => {
+  const {
+    components: {
+      Composer: ComposerComponent = import_composer.default,
+      ThreadWelcome: ThreadWelcomeComponent = import_thread_welcome.default,
+      MessagesFooter,
+      ...messageComponents
+    } = {}
+  } = config;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadRoot, { config, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(ThreadViewport, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadWelcomeComponent, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      ThreadMessages,
+      {
+        MessagesFooter,
+        components: messageComponents
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadFollowupSuggestions, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(ThreadViewportFooter, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadScrollToBottom, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerComponent, {})
+    ] })
+  ] }) });
+};
+var ThreadRootStyled = (0, import_withDefaults.withDefaults)(import_react2.ThreadPrimitive.Root, {
+  className: "aui-root aui-thread-root"
+});
+var ThreadRoot = (0, import_react.forwardRef)(
+  ({ config, ...props }, ref) => {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_thread_config.ThreadConfigProvider, { config, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadRootStyled, { ...props, ref }) });
+  }
+);
+ThreadRoot.displayName = "ThreadRoot";
+var ThreadViewport = (0, import_withDefaults.withDefaults)(import_react2.ThreadPrimitive.Viewport, {
+  className: "aui-thread-viewport"
+});
+ThreadViewport.displayName = "ThreadViewport";
+var ThreadViewportFooter = (0, import_withDefaults.withDefaults)("div", {
+  className: "aui-thread-viewport-footer"
+});
+ThreadViewportFooter.displayName = "ThreadViewportFooter";
+var ThreadMessages = ({
+  components,
+  MessagesFooter,
+  unstable_flexGrowDiv: flexGrowDiv = true,
+  ...rest
+}) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      import_react2.ThreadPrimitive.Messages,
+      {
+        components: {
+          ...components,
+          UserMessage: components?.UserMessage ?? import_user_message.default,
+          AssistantMessage: components?.AssistantMessage ?? import_assistant_message.default,
+          EditComposer: components?.EditComposer ?? import_edit_composer.default
+        },
+        ...rest
+      }
+    ),
+    MessagesFooter && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MessagesFooter, {}),
+    flexGrowDiv && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ThreadPrimitive.If, { empty: false, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flexGrow: 1 } }) })
+  ] });
+};
+ThreadMessages.displayName = "ThreadMessages";
+var ThreadFollowupSuggestions = () => {
+  const suggestions = (0, import_react2.useThread)((t) => t.suggestions);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ThreadPrimitive.If, { empty: false, running: false, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "aui-thread-followup-suggestions", children: suggestions?.map((suggestion, idx) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    import_react2.ThreadPrimitive.Suggestion,
+    {
+      className: "aui-thread-followup-suggestion",
+      prompt: suggestion.prompt,
+      method: "replace",
+      autoSend: true,
+      children: suggestion.prompt
+    },
+    idx
+  )) }) });
+};
+var ThreadScrollToBottomIconButton = (0, import_withDefaults.withDefaults)(import_tooltip_icon_button.TooltipIconButton, {
+  variant: "outline",
+  className: "aui-thread-scroll-to-bottom"
+});
+var ThreadScrollToBottom = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: {
+      thread: { scrollToBottom: { tooltip = "Scroll to bottom" } = {} } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ThreadPrimitive.ScrollToBottom, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadScrollToBottomIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ArrowDownIcon, {}) }) });
+});
+ThreadScrollToBottom.displayName = "ThreadScrollToBottom";
+var exports2 = {
+  Root: ThreadRoot,
+  Viewport: ThreadViewport,
+  Messages: ThreadMessages,
+  FollowupSuggestions: ThreadFollowupSuggestions,
+  ScrollToBottom: ThreadScrollToBottom,
+  ViewportFooter: ThreadViewportFooter
+};
+var thread_default = Object.assign(Thread, exports2);
+//# sourceMappingURL=thread.js.map

@@ -1,0 +1,54 @@
+{
+  "name": "suffix-thumb",
+  "description": "learn transformations between two sets of words",
+  "version": "5.0.2",
+  "author": "Spencer Kelly <spencermountain@gmail.com> (http://spencermounta.in)",
+  "main": "./src/index.js",
+  "unpkg": "./builds/suffix-thumb-client.js",
+  "types": "/builds/types.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "import": "./src/index.js",
+      "require": "./builds/suffix-thumb.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/spencermountain/suffix-thumb.git"
+  },
+  "scripts": {
+    "test": "tape \"./tests/**/*.test.js\" | tap-dancer  --color always",
+    "testb": "TESTENV=prod tape \"./tests/**/*.test.js\" | tap-dancer  --color always",
+    "size": "node scripts/filesizes.js",
+    "watch": "amble ./scratch.js",
+    "build": "rollup -c --silent"
+  },
+  "prettier": {
+    "trailingComma": "es5",
+    "tabWidth": 2,
+    "semi": false,
+    "singleQuote": true,
+    "printWidth": 100
+  },
+  "files": [
+    "src/",
+    "builds/"
+  ],
+  "eslintIgnore": [
+    "builds/*.js"
+  ],
+  "dependencies": {},
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "21.0.1",
+    "@rollup/plugin-node-resolve": "13.1.3",
+    "amble": "1.3.0",
+    "rollup": "2.67.2",
+    "rollup-plugin-filesize-check": "0.0.1",
+    "rollup-plugin-terser": "7.0.2",
+    "tap-dancer": "0.3.4",
+    "tape": "5.5.2"
+  },
+  "license": "MIT"
+}

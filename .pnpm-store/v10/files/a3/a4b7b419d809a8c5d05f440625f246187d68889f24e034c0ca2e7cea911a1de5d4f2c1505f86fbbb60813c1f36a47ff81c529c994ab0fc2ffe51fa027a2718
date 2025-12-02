@@ -1,0 +1,89 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.cloud.texttospeech.v1beta1;
+
+import "google/api/annotations.proto";
+import "google/api/client.proto";
+import "google/api/field_behavior.proto";
+import "google/cloud/texttospeech/v1beta1/cloud_tts.proto";
+import "google/longrunning/operations.proto";
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Google.Cloud.TextToSpeech.V1Beta1";
+option go_package = "cloud.google.com/go/texttospeech/apiv1beta1/texttospeechpb;texttospeechpb";
+option java_multiple_files = true;
+option java_outer_classname = "TextToSpeechLongAudioSynthesisProto";
+option java_package = "com.google.cloud.texttospeech.v1beta1";
+option php_namespace = "Google\\Cloud\\TextToSpeech\\V1beta1";
+option ruby_package = "Google::Cloud::TextToSpeech::V1beta1";
+
+// Service that implements Google Cloud Text-to-Speech API.
+service TextToSpeechLongAudioSynthesize {
+  option (google.api.default_host) = "texttospeech.googleapis.com";
+  option (google.api.oauth_scopes) =
+      "https://www.googleapis.com/auth/cloud-platform";
+
+  // Synthesizes long form text asynchronously.
+  rpc SynthesizeLongAudio(SynthesizeLongAudioRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1beta1/{parent=projects/*/locations/*}:synthesizeLongAudio"
+      body: "*"
+    };
+    option (google.longrunning.operation_info) = {
+      response_type: "google.cloud.texttospeech.v1beta1.SynthesizeLongAudioResponse"
+      metadata_type: "google.cloud.texttospeech.v1beta1.SynthesizeLongAudioMetadata"
+    };
+  }
+}
+
+// The top-level message sent by the client for the
+// `SynthesizeLongAudio` method.
+message SynthesizeLongAudioRequest {
+  // The resource states of the request in the form of
+  // `projects/*/locations/*`.
+  string parent = 1;
+
+  // Required. The Synthesizer requires either plain text or SSML as input.
+  SynthesisInput input = 2 [(google.api.field_behavior) = REQUIRED];
+
+  // Required. The configuration of the synthesized audio.
+  AudioConfig audio_config = 3 [(google.api.field_behavior) = REQUIRED];
+
+  // Required. Specifies a Cloud Storage URI for the synthesis results. Must be
+  // specified in the format: `gs://bucket_name/object_name`, and the bucket
+  // must already exist.
+  string output_gcs_uri = 4 [(google.api.field_behavior) = REQUIRED];
+
+  // Required. The desired voice of the synthesized audio.
+  VoiceSelectionParams voice = 5 [(google.api.field_behavior) = REQUIRED];
+}
+
+// The message returned to the client by the `SynthesizeLongAudio` method.
+message SynthesizeLongAudioResponse {}
+
+// Metadata for response returned by the `SynthesizeLongAudio` method.
+message SynthesizeLongAudioMetadata {
+  // Time when the request was received.
+  google.protobuf.Timestamp start_time = 1;
+
+  // Deprecated. Do not use.
+  google.protobuf.Timestamp last_update_time = 2 [deprecated = true];
+
+  // The progress of the most recent processing update in percentage, ie. 70.0%.
+  double progress_percentage = 3;
+}

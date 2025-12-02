@@ -1,0 +1,35 @@
+import { type KyOptionsRegistry } from '../types/options.js';
+export declare const supportsRequestStreams: boolean;
+export declare const supportsAbortController: boolean;
+export declare const supportsAbortSignal: boolean;
+export declare const supportsResponseStreams: boolean;
+export declare const supportsFormData: boolean;
+export declare const requestMethods: readonly ["get", "post", "put", "patch", "head", "delete"];
+export declare const responseTypes: {
+    readonly json: "application/json";
+    readonly text: "text/*";
+    readonly formData: "multipart/form-data";
+    readonly arrayBuffer: "*/*";
+    readonly blob: "*/*";
+    readonly bytes: "*/*";
+};
+export declare const maxSafeTimeout = 2147483647;
+export declare const usualFormBoundarySize: number;
+export declare const stop: unique symbol;
+export declare const kyOptionKeys: KyOptionsRegistry;
+export declare const requestOptionsRegistry: {
+    readonly method: true;
+    readonly headers: true;
+    readonly body: true;
+    readonly mode: true;
+    readonly credentials: true;
+    readonly cache: true;
+    readonly redirect: true;
+    readonly referrer: true;
+    readonly referrerPolicy: true;
+    readonly integrity: true;
+    readonly keepalive: true;
+    readonly signal: true;
+    readonly window: true;
+    readonly duplex: true;
+};

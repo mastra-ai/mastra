@@ -1,0 +1,292 @@
+import type { MastraMessageContentV2, MastraDBMessage } from '../agent/index.js';
+import { MastraBase } from '../base.js';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals/index.js';
+import type { StorageThreadType } from '../memory/types.js';
+import type { TracingStorageStrategy } from '../observability/index.js';
+import type { StepResult, WorkflowRunState } from '../workflows/types.js';
+import type { TABLE_NAMES } from './constants.js';
+import type { ScoresStorage, StoreOperations, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains/index.js';
+import type { PaginationInfo, StorageColumn, StorageResourceType, StoragePagination, WorkflowRun, WorkflowRuns, SpanRecord, TraceRecord, TracesPaginatedArg, CreateIndexOptions, IndexInfo, StorageIndexStats, UpdateSpanRecord, CreateSpanRecord, StorageListMessagesInput, StorageListMessagesOutput, StorageListWorkflowRunsInput, StorageListThreadsByResourceIdInput, StorageListThreadsByResourceIdOutput } from './types.js';
+export type StorageDomains = {
+    operations: StoreOperations;
+    workflows: WorkflowsStorage;
+    scores: ScoresStorage;
+    memory: MemoryStorage;
+    observability?: ObservabilityStorage;
+};
+export declare function ensureDate(date: Date | string | undefined): Date | undefined;
+export declare function serializeDate(date: Date | string | undefined): string | undefined;
+/**
+ * Normalizes perPage input for pagination queries.
+ *
+ * @param perPageInput - The raw perPage value from the user
+ * @param defaultValue - The default perPage value to use when undefined (typically 40 for messages, 100 for threads)
+ * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER, negative values fall back to default)
+ */
+export declare function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number;
+/**
+ * Calculates pagination offset and prepares perPage value for response.
+ * When perPage is false (fetch all), offset is always 0 regardless of page.
+ *
+ * @param page - The page number (0-indexed)
+ * @param perPageInput - The original perPage input (number, false for all, or undefined)
+ * @param normalizedPerPage - The normalized perPage value (from normalizePerPage)
+ * @returns Object with offset for query and perPage for response
+ */
+export declare function calculatePagination(page: number, perPageInput: number | false | undefined, normalizedPerPage: number): {
+    offset: number;
+    perPage: number | false;
+};
+export declare abstract class MastraStorage extends MastraBase {
+    protected hasInitialized: null | Promise<boolean>;
+    protected shouldCacheInit: boolean;
+    id: string;
+    stores?: StorageDomains;
+    constructor({ id, name }: {
+        id: string;
+        name: string;
+    });
+    get supports(): {
+        selectByIncludeResourceScope: boolean;
+        resourceWorkingMemory: boolean;
+        hasColumn: boolean;
+        createTable: boolean;
+        deleteMessages: boolean;
+        observabilityInstance?: boolean;
+        indexManagement?: boolean;
+        listScoresBySpan?: boolean;
+    };
+    protected ensureDate(date: Date | string | undefined): Date | undefined;
+    protected serializeDate(date: Date | string | undefined): string | undefined;
+    protected getSqlType(type: StorageColumn['type']): string;
+    protected getDefaultValue(type: StorageColumn['type']): string;
+    abstract createTable({ tableName }: {
+        tableName: TABLE_NAMES;
+        schema: Record<string, StorageColumn>;
+    }): Promise<void>;
+    abstract clearTable({ tableName }: {
+        tableName: TABLE_NAMES;
+    }): Promise<void>;
+    abstract dropTable({ tableName }: {
+        tableName: TABLE_NAMES;
+    }): Promise<void>;
+    abstract alterTable(args: {
+        tableName: TABLE_NAMES;
+        schema: Record<string, StorageColumn>;
+        ifNotExists: string[];
+    }): Promise<void>;
+    abstract insert({ tableName, record }: {
+        tableName: TABLE_NAMES;
+        record: Record<string, any>;
+    }): Promise<void>;
+    abstract batchInsert({ tableName, records, }: {
+        tableName: TABLE_NAMES;
+        records: Record<string, any>[];
+    }): Promise<void>;
+    abstract load<R>({ tableName, keys }: {
+        tableName: TABLE_NAMES;
+        keys: Record<string, any>;
+    }): Promise<R | null>;
+    abstract getThreadById({ threadId }: {
+        threadId: string;
+    }): Promise<StorageThreadType | null>;
+    abstract saveThread({ thread }: {
+        thread: StorageThreadType;
+    }): Promise<StorageThreadType>;
+    abstract updateThread({ id, title, metadata, }: {
+        id: string;
+        title: string;
+        metadata: Record<string, unknown>;
+    }): Promise<StorageThreadType>;
+    abstract deleteThread({ threadId }: {
+        threadId: string;
+    }): Promise<void>;
+    getResourceById(_: {
+        resourceId: string;
+    }): Promise<StorageResourceType | null>;
+    saveResource(_: {
+        resource: StorageResourceType;
+    }): Promise<StorageResourceType>;
+    updateResource(_: {
+        resourceId: string;
+        workingMemory?: string;
+        metadata?: Record<string, unknown>;
+    }): Promise<StorageResourceType>;
+    abstract saveMessages(args: {
+        messages: MastraDBMessage[];
+    }): Promise<{
+        messages: MastraDBMessage[];
+    }>;
+    listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+    listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns>;
+    listThreadsByResourceId(args: StorageListThreadsByResourceIdInput): Promise<StorageListThreadsByResourceIdOutput>;
+    listMessagesById({ messageIds }: {
+        messageIds: string[];
+    }): Promise<{
+        messages: MastraDBMessage[];
+    }>;
+    abstract updateMessages(args: {
+        messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+            id: string;
+            content?: Partial<MastraMessageContentV2>;
+        })[];
+    }): Promise<MastraDBMessage[]>;
+    deleteMessages(_messageIds: string[]): Promise<void>;
+    init(): Promise<void>;
+    persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot, }: {
+        workflowName: string;
+        runId: string;
+        resourceId?: string;
+        snapshot: WorkflowRunState;
+    }): Promise<void>;
+    abstract updateWorkflowResults({ workflowName, runId, stepId, result, }: {
+        workflowName: string;
+        runId: string;
+        stepId: string;
+        result: StepResult<any, any, any, any>;
+        requestContext: Record<string, any>;
+    }): Promise<Record<string, StepResult<any, any, any, any>>>;
+    abstract updateWorkflowState({ workflowName, runId, opts, }: {
+        workflowName: string;
+        runId: string;
+        opts: {
+            status: string;
+            result?: StepResult<any, any, any, any>;
+            error?: string;
+            suspendedPaths?: Record<string, number[]>;
+            waitingPaths?: Record<string, number[]>;
+        };
+    }): Promise<WorkflowRunState | undefined>;
+    loadWorkflowSnapshot({ workflowName, runId, }: {
+        workflowName: string;
+        runId: string;
+    }): Promise<WorkflowRunState | null>;
+    /**
+     * SCORERS
+     */
+    abstract getScoreById({ id }: {
+        id: string;
+    }): Promise<ScoreRowData | null>;
+    abstract saveScore(score: ValidatedSaveScorePayload): Promise<{
+        score: ScoreRowData;
+    }>;
+    abstract listScoresByScorerId({ scorerId, source, entityId, entityType, pagination, }: {
+        scorerId: string;
+        pagination: StoragePagination;
+        entityId?: string;
+        entityType?: string;
+        source?: ScoringSource;
+    }): Promise<{
+        pagination: PaginationInfo;
+        scores: ScoreRowData[];
+    }>;
+    abstract listScoresByRunId({ runId, pagination, }: {
+        runId: string;
+        pagination: StoragePagination;
+    }): Promise<{
+        pagination: PaginationInfo;
+        scores: ScoreRowData[];
+    }>;
+    abstract listScoresByEntityId({ entityId, entityType, pagination, }: {
+        pagination: StoragePagination;
+        entityId: string;
+        entityType: string;
+    }): Promise<{
+        pagination: PaginationInfo;
+        scores: ScoreRowData[];
+    }>;
+    listScoresBySpan({ traceId, spanId, pagination: _pagination, }: {
+        traceId: string;
+        spanId: string;
+        pagination: StoragePagination;
+    }): Promise<{
+        pagination: PaginationInfo;
+        scores: ScoreRowData[];
+    }>;
+    abstract getWorkflowRunById(args: {
+        runId: string;
+        workflowName?: string;
+    }): Promise<WorkflowRun | null>;
+    /**
+     * OBSERVABILITY
+     */
+    /**
+     * Provides hints for tracing strategy selection by the DefaultExporter.
+     * Storage adapters can override this to specify their preferred and supported strategies.
+     */
+    get tracingStrategy(): {
+        preferred: TracingStorageStrategy;
+        supported: TracingStorageStrategy[];
+    };
+    /**
+     * Creates a single Span record in the storage provider.
+     */
+    createSpan(span: CreateSpanRecord): Promise<void>;
+    /**
+     * Updates a single Span with partial data. Primarily used for realtime trace creation.
+     */
+    updateSpan(params: {
+        spanId: string;
+        traceId: string;
+        updates: Partial<UpdateSpanRecord>;
+    }): Promise<void>;
+    /**
+     * Retrieves a single trace with all its associated spans.
+     */
+    getTrace(traceId: string): Promise<TraceRecord | null>;
+    /**
+     * Retrieves a paginated list of traces with optional filtering.
+     */
+    getTracesPaginated(args: TracesPaginatedArg): Promise<{
+        pagination: PaginationInfo;
+        spans: SpanRecord[];
+    }>;
+    /**
+     * Creates multiple Spans in a single batch.
+     */
+    batchCreateSpans(args: {
+        records: CreateSpanRecord[];
+    }): Promise<void>;
+    /**
+     * Updates multiple Spans in a single batch.
+     */
+    batchUpdateSpans(args: {
+        records: {
+            traceId: string;
+            spanId: string;
+            updates: Partial<UpdateSpanRecord>;
+        }[];
+    }): Promise<void>;
+    /**
+     * Deletes multiple traces and all their associated spans in a single batch operation.
+     */
+    batchDeleteTraces(args: {
+        traceIds: string[];
+    }): Promise<void>;
+    /**
+     * DATABASE INDEX MANAGEMENT
+     * These methods delegate to the operations store for index management.
+     * Storage adapters that support indexes should implement these in their operations class.
+     */
+    /**
+     * Creates a database index on specified columns
+     * @throws {MastraError} if not supported by the storage adapter
+     */
+    createIndex(options: CreateIndexOptions): Promise<void>;
+    /**
+     * Drops a database index by name
+     * @throws {MastraError} if not supported by the storage adapter
+     */
+    dropIndex(indexName: string): Promise<void>;
+    /**
+     * Lists database indexes for a table or all tables
+     * @throws {MastraError} if not supported by the storage adapter
+     */
+    listIndexes(tableName?: string): Promise<IndexInfo[]>;
+    /**
+     * Gets detailed statistics for a specific index
+     * @throws {MastraError} if not supported by the storage adapter
+     */
+    describeIndex(indexName: string): Promise<StorageIndexStats>;
+}
+//# sourceMappingURL=base.d.ts.map

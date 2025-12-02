@@ -1,0 +1,55 @@
+{
+  "name": "fastembed",
+  "version": "1.14.4",
+  "description": "NodeJS implementation of @Qdrant/fastembed",
+  "keywords": [
+    "embeddings",
+    "fastembed",
+    "onnxruntime",
+    "semantic",
+    "search"
+  ],
+  "repository": "github:Anush008/fastembed-js",
+  "license": "MIT",
+  "author": "Anush008 <anushshetty90@gmail.com>",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./lib/esm/index.d.ts",
+        "default": "./lib/esm/index.js"
+      },
+      "require": {
+        "types": "./lib/cjs/index.d.ts",
+        "default": "./lib/cjs/index.js"
+      }
+    }
+  },
+  "main": "./lib/cjs/index.js",
+  "module": "./lib/esm/index.js",
+  "types": "./lib/cjs/index.d.ts",
+  "files": [
+    "lib/"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "prepublishOnly": "npm run tsc",
+    "test": "npm run tsc && vitest",
+    "tsc": "tsc -p tsconfig.json && tsc -p tsconfig-cjs.json",
+    "posttsc": "echo '{\"type\": \"module\"}' > ./lib/esm/package.json"
+  },
+  "dependencies": {
+    "@anush008/tokenizers": "^0.0.0",
+    "onnxruntime-node": "1.21.0",
+    "progress": "^2.0.3",
+    "tar": "^6.2.0"
+  },
+  "devDependencies": {
+    "@types/progress": "^2.0.5",
+    "@types/tar": "^6.1.6",
+    "typescript": "^5.2.2",
+    "vitest": "^0.34.4"
+  },
+  "publishConfig": {
+    "provenance": true
+  }
+}

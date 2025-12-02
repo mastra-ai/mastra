@@ -1,0 +1,30 @@
+import type { ProviderDefinedTool } from '@internal/external-types';
+import { MastraBase } from '../../base.js';
+import type { ToolOptions } from '../../utils/index.js';
+import type { CoreTool, ToolAction, VercelTool, VercelToolV5 } from '../types.js';
+/**
+ * Types that can be converted to Mastra tools.
+ * Includes provider-defined tools from external packages via ProviderDefinedTool.
+ */
+export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5 | ProviderDefinedTool;
+export type LogType = 'tool' | 'toolset' | 'client-tool';
+export declare class CoreToolBuilder extends MastraBase {
+    private originalTool;
+    private options;
+    private logType?;
+    constructor(input: {
+        originalTool: ToolToConvert;
+        options: ToolOptions;
+        logType?: LogType;
+    });
+    private getParameters;
+    private getOutputSchema;
+    private getResumeSchema;
+    private getSuspendSchema;
+    private buildProviderTool;
+    private createLogMessageOptions;
+    private createExecute;
+    buildV5(): VercelToolV5;
+    build(): CoreTool;
+}
+//# sourceMappingURL=builder.d.ts.map

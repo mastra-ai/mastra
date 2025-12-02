@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../src/cli/lib/utils/stdin.ts"],
+  "sourcesContent": ["export async function readFromStdin(): Promise<string> {\n  return new Promise((resolve, reject) => {\n    let data = \"\";\n\n    process.stdin.setEncoding(\"utf8\");\n\n    process.stdin.on(\"readable\", () => {\n      let chunk;\n      while (null !== (chunk = process.stdin.read())) {\n        data += chunk;\n      }\n    });\n\n    process.stdin.on(\"end\", () => {\n      // Remove trailing newline if present\n      resolve(data.replace(/\\n$/, \"\"));\n    });\n\n    process.stdin.on(\"error\", (err) => {\n      reject(err);\n    });\n  });\n}\n"],
+  "mappings": ";AAAA,sBAAsB,gBAAiC;AACrD,SAAO,IAAI,QAAQ,CAAC,SAAS,WAAW;AACtC,QAAI,OAAO;AAEX,YAAQ,MAAM,YAAY,MAAM;AAEhC,YAAQ,MAAM,GAAG,YAAY,MAAM;AACjC,UAAI;AACJ,aAAO,UAAU,QAAQ,QAAQ,MAAM,KAAK,IAAI;AAC9C,gBAAQ;AAAA,MACV;AAAA,IACF,CAAC;AAED,YAAQ,MAAM,GAAG,OAAO,MAAM;AAE5B,cAAQ,KAAK,QAAQ,OAAO,EAAE,CAAC;AAAA,IACjC,CAAC;AAED,YAAQ,MAAM,GAAG,SAAS,CAAC,QAAQ;AACjC,aAAO,GAAG;AAAA,IACZ,CAAC;AAAA,EACH,CAAC;AACH;",
+  "names": []
+}

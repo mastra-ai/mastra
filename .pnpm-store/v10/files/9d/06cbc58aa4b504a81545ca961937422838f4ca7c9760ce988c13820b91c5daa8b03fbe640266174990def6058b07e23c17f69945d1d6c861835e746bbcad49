@@ -1,0 +1,55 @@
+{
+  "name": "@opentelemetry/propagation-utils",
+  "version": "0.30.16",
+  "description": "Propagation utilities for opentelemetry instrumentations",
+  "main": "build/src/index.js",
+  "types": "build/src/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "tsc --build --clean tsconfig.json tsconfig.esm.json",
+    "compile": "tsc --build tsconfig.json tsconfig.esm.json",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "prepublishOnly": "npm run compile",
+    "prewatch": "npm run precompile",
+    "tdd": "npm run test -- --watch-extensions ts --watch",
+    "test": "nyc mocha 'test/**/*.test.ts'",
+    "watch": "tsc --build --watch tsconfig.json tsconfig.esm.json"
+  },
+  "repository": "open-telemetry/opentelemetry-js-contrib",
+  "keywords": [
+    "tracing",
+    "instrumentation"
+  ],
+  "files": [
+    "build/**/*.js",
+    "build/**/*.js.map",
+    "build/**/*.d.ts"
+  ],
+  "author": "OpenTelemetry Authors",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=14"
+  },
+  "bugs": {
+    "url": "https://github.com/open-telemetry/opentelemetry-js-contrib/issues"
+  },
+  "homepage": "https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/opentelemetry-propagation-utils#readme",
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.0.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.0.0",
+    "@opentelemetry/contrib-test-utils": "^0.45.1",
+    "@types/mocha": "^9.1.1",
+    "@types/node": "18.18.14",
+    "@types/sinon": "^10.0.11",
+    "expect": "29.2.0",
+    "nyc": "15.1.0",
+    "sinon": "15.2.0",
+    "typescript": "4.4.4"
+  },
+  "gitHead": "1eb77007669bae87fe5664d68ba6533b95275d52"
+}

@@ -1,0 +1,159 @@
+imports:
+  root: ../../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    create:
+      path: /v1/voices/pvc/{voice_id}/samples
+      method: POST
+      auth: false
+      docs: Add audio samples to a PVC voice
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+      display-name: Add Samples To Pvc Voice
+      request:
+        name: Body_Add_samples_to_PVC_voice_v1_voices_pvc__voice_id__samples_post
+        body:
+          properties:
+            files:
+              type: list<file>
+              docs: Audio files used to create the voice.
+            remove_background_noise:
+              type: optional<boolean>
+              docs: >-
+                If set will remove background noise for voice samples using our
+                audio isolation model. If the samples do not include background
+                noise, it can make the quality worse.
+              default: false
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: list<root.VoiceSample>
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          request: {}
+          response:
+            body:
+              - sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                file_name: sample.mp3
+                mime_type: audio/mpeg
+                size_bytes: 1000000
+                hash: '1234567890'
+                duration_secs: 1.1
+                remove_background_noise: true
+                has_isolated_audio: true
+                has_isolated_audio_preview: true
+                speaker_separation:
+                  voice_id: DCwhRBWXzGAHq8TQ4Fs18
+                  sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                  status: not_started
+                  speakers:
+                    key:
+                      speaker_id: DCwhRBWXzGAHq8TQ4Fs18
+                      duration_secs: 5
+                  selected_speaker_ids:
+                    - selected_speaker_ids
+                trim_start: 1
+                trim_end: 1
+    update:
+      path: /v1/voices/pvc/{voice_id}/samples/{sample_id}
+      method: POST
+      auth: false
+      docs: Update a PVC voice sample - apply noise removal, or select speaker.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+        sample_id:
+          type: string
+          docs: Sample ID to be used
+      display-name: Update Pvc Voice Sample
+      request:
+        name: BodyUpdatePvcVoiceSampleV1VoicesPvcVoiceIdSamplesSampleIdPost
+        body:
+          properties:
+            remove_background_noise:
+              type: optional<boolean>
+              docs: >-
+                If set will remove background noise for voice samples using our
+                audio isolation model. If the samples do not include background
+                noise, it can make the quality worse.
+              default: false
+            selected_speaker_ids:
+              type: optional<list<string>>
+              docs: >-
+                Speaker IDs to be used for PVC training. Make sure you send all
+                the speaker IDs you want to use for PVC training in one request
+                because the last request will override the previous ones.
+            trim_start_time:
+              type: optional<integer>
+              docs: >-
+                The start time of the audio to be used for PVC training. Time
+                should be in milliseconds
+            trim_end_time:
+              type: optional<integer>
+              docs: >-
+                The end time of the audio to be used for PVC training. Time
+                should be in milliseconds
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddVoiceResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+            sample_id: VW7YKqPnjY4h39yTbx2L
+          request: {}
+          response:
+            body:
+              voice_id: b38kUX8pkfYO2kHyqfFy
+    delete:
+      path: /v1/voices/pvc/{voice_id}/samples/{sample_id}
+      method: DELETE
+      auth: false
+      docs: Delete a sample from a PVC voice.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+        sample_id:
+          type: string
+          docs: Sample ID to be used
+      display-name: Delete Pvc Voice Sample
+      response:
+        docs: Successful Response
+        type: root.DeleteVoiceSampleResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+            sample_id: VW7YKqPnjY4h39yTbx2L
+          response:
+            body:
+              status: ok
+  source:
+    openapi: openapi.json

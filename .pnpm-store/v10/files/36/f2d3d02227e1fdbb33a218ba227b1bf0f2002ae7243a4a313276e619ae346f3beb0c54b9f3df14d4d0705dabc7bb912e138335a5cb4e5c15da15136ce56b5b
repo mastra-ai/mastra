@@ -1,0 +1,59 @@
+# Async function
+
+async fn abc() {}
+
+async fn main() {
+    let x = futures.await?;
+}
+
+==>
+
+SourceFile(
+  FunctionItem(async, fn,
+    BoundIdentifier,
+    ParamList,
+    Block),
+  FunctionItem(async, fn, BoundIdentifier, ParamList,
+    Block(
+      LetDeclaration(let,BoundIdentifier, TryExpression(
+        AwaitExpression(Identifier, await))))))
+
+# Await expression
+
+futures.await;
+futures.await?;
+futures.await?.await?;
+futures.await?.function().await?;
+
+==>
+
+SourceFile(
+  ExpressionStatement(AwaitExpression(Identifier, await)),
+  ExpressionStatement(TryExpression(
+    AwaitExpression(Identifier, await))),
+  ExpressionStatement(TryExpression(
+    AwaitExpression(
+      TryExpression(
+        AwaitExpression(Identifier, await)), await))),
+  ExpressionStatement(TryExpression(
+    AwaitExpression(
+      CallExpression(
+        FieldExpression(
+          TryExpression(
+            AwaitExpression(Identifier, await)),
+          FieldIdentifier),
+        ArgList), await))))
+
+
+# Async Block
+
+async {}
+async { let x = 10; }
+async move {}
+
+==>
+
+SourceFile(
+  ExpressionStatement(AsyncBlock(async, Block)),
+  ExpressionStatement(AsyncBlock(async, Block(LetDeclaration(let, BoundIdentifier, Integer)))),
+  ExpressionStatement(AsyncBlock(async, move, Block)))

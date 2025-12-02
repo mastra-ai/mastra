@@ -1,0 +1,6 @@
+This is a copy of some files from node-gyp, with some minor modifications.
+
+Currently based on v10.0.1
+
+node-gyp has a decent strategy for finding Visual Studio, and has a lot more developer time behind them to make a good and robust solution.
+We may as well benefit from their solution than reinvent it

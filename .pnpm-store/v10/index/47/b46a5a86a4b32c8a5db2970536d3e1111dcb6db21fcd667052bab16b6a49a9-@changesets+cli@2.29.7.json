@@ -1,0 +1,181 @@
+{
+  "name": "@changesets/cli",
+  "version": "2.29.7",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662903882,
+      "integrity": "sha512-JRv+CHsNZgaeURvdv2o6m+uue55aaI3hFD6w3/6TW6IsWHejxPDHqkKt+i2zIMlejIRYF1unahFxGpXdC9mlxw==",
+      "mode": 420,
+      "size": 1068
+    },
+    "bin.js": {
+      "checkedAt": 1764662903883,
+      "integrity": "sha512-d4tkRbyFnfms1Ten1PTrHt6b35hMTpUfUGL3Dk5NP28Q+2hbaioTU+5XYL48akDtBlI2+PG3q8Zh6E4JxX+ZJQ==",
+      "mode": 493,
+      "size": 50
+    },
+    "changelog/dist/changesets-cli-changelog.cjs.default.js": {
+      "checkedAt": 1764662903883,
+      "integrity": "sha512-kd/QtIspJCPgczk456iQtEtJj1pWXc2CmFrM6eEsFQwm4SJGnc53Kp0Vo7HMI/2agpskaWYRDLyXR5lkaSj2Hg==",
+      "mode": 420,
+      "size": 73
+    },
+    "changelog/dist/changesets-cli-changelog.cjs.js": {
+      "checkedAt": 1764662903884,
+      "integrity": "sha512-bn2e14nf1uYfgTWaZJAPH6ZrL5RBhN88UGuIt2ASwq7NRVQhX29t/hlqGZT8v115yxvBnW77ZqumSdI76lXXGg==",
+      "mode": 420,
+      "size": 425
+    },
+    "changelog/dist/changesets-cli-changelog.esm.js": {
+      "checkedAt": 1764662903886,
+      "integrity": "sha512-UAQqnP7dkoE2913B7BQTVUhvR4tIDpLmtYQYuFi+4Lp/xjNa9nRTJ20Vf9zfmhksxmEfkSMDm0Hg2EApVgckbA==",
+      "mode": 420,
+      "size": 53
+    },
+    "commit/dist/changesets-cli-commit.cjs.default.js": {
+      "checkedAt": 1764662903887,
+      "integrity": "sha512-CGl3OIe4En/Sn7dDFGDW2IDiUz2e78xO8wL0P70QFDXrGlH3t7QdEBRo9MJzNr2X29PAyAdz4+gRIhxqFeaHEg==",
+      "mode": 420,
+      "size": 70
+    },
+    "commit/dist/changesets-cli-commit.cjs.js": {
+      "checkedAt": 1764662903887,
+      "integrity": "sha512-yCldxkyajZx6SkR1PrSNTOBl8a+xNavk0rMks6J+i4yux0VZmLeqhneDOscmy+VIoV5z1jqnPOU7B4bpkyIdVQ==",
+      "mode": 420,
+      "size": 1176
+    },
+    "commit/dist/changesets-cli-commit.esm.js": {
+      "checkedAt": 1764662903889,
+      "integrity": "sha512-Wjt0PFGTEvb1pW2wvDIBbCgF7rq4vwN8R9Ii6lg8Ahwrj83GXbxK3XpLnAzn0cYckTMJyJY8Y0BJfVKBaRagrA==",
+      "mode": 420,
+      "size": 1098
+    },
+    "dist/changesets-cli.cjs.js": {
+      "checkedAt": 1764662903890,
+      "integrity": "sha512-OBJrOZisnySOovQ9u+iLkW+fsBy859Vsbkh42gbkiJgfKnFNy9W1WU7QSIaYw3zegdzNdI/RGPTCS0tRqA7kmg==",
+      "mode": 420,
+      "size": 58570
+    },
+    "dist/changesets-cli.esm.js": {
+      "checkedAt": 1764662903891,
+      "integrity": "sha512-Q5A5Tzso9Z/l7A+tYjjRGPOibMKuWkDzGi+PDp097V2+7BEhCj6UE8ABBLvcCI1peBRuksoZMEpr5wThiA0pzA==",
+      "mode": 420,
+      "size": 53773
+    },
+    "changelog/package.json": {
+      "checkedAt": 1764662903892,
+      "integrity": "sha512-5vocOqY0B25dSLWD74UefW54VvRL1Lx7xAJ0yXHL/RBsabmLmtZOVeVE3BX/KA9fgwJib/DSvpS85igjDvDBsg==",
+      "mode": 420,
+      "size": 105
+    },
+    "commit/package.json": {
+      "checkedAt": 1764662903892,
+      "integrity": "sha512-xAQq0JWNKzQBpxirnVxIhtH5qK8UpSvpXJokIg5/XbNWdywhj5NtcxuP57FZ5icBxGp7E/56OfjBf2SXlDZplQ==",
+      "mode": 420,
+      "size": 99
+    },
+    "package.json": {
+      "checkedAt": 1764662903893,
+      "integrity": "sha512-v+ShluCwrlVcqc047Vyu7838sXn9AtE51WlCSs7g79O+xlk+xF/Yj7RGTaDR3pLXJIFqqXvzJmwARRpRfC5f7g==",
+      "mode": 420,
+      "size": 3238
+    },
+    "default-files/README.md": {
+      "checkedAt": 1764662903893,
+      "integrity": "sha512-BQYoiEyc73nXyLbIHVBVHxKR7J6hR9r7oLAtb2P6iKw7cYu6nAY8QOfuCAMx9JbdJGTp5r/vrONP04nwExqecA==",
+      "mode": 420,
+      "size": 510
+    },
+    "README.md": {
+      "checkedAt": 1764662903895,
+      "integrity": "sha512-XM4LCkx+tUANLcKKFzZPvZIeDtDJsIJUc+H93qy7P0gWikzrt/qA3zuXtUDpBRE2fjYSbXZPIX5efCKgUEOC7A==",
+      "mode": 420,
+      "size": 7178
+    },
+    "changelog/dist/changesets-cli-changelog.cjs.mjs": {
+      "checkedAt": 1764662903897,
+      "integrity": "sha512-vxxJl7PlY4luh9X/Gfj8IpyPcwPImCM1DfXWAFij+5d/VejmovU5VC9qIOE6vL15i6GCAHvK67r8cCtSYy+9qA==",
+      "mode": 420,
+      "size": 125
+    },
+    "commit/dist/changesets-cli-commit.cjs.mjs": {
+      "checkedAt": 1764662903897,
+      "integrity": "sha512-1gIcJXKO0Vycetp70WjGrABFLq2l6+jcgdRT2PwqRoNc7lKI2OCunsH8RybFCSZRbwkbVbspcyoVW0uFqOXxow==",
+      "mode": 420,
+      "size": 119
+    },
+    "dist/changesets-cli.cjs.mjs": {
+      "checkedAt": 1764662903898,
+      "integrity": "sha512-DtWhYplO6h6QgTvOKDc25WTEdguqtwYHuFcRKhCEwJiqo3EwTE7LRaFSm3C/YpMek+5MjyvNCu2svQbUYh1/sw==",
+      "mode": 420,
+      "size": 34
+    },
+    "changelog/dist/changesets-cli-changelog.cjs.d.mts": {
+      "checkedAt": 1764662903898,
+      "integrity": "sha512-unv/pHTHG5/mtIU4f2QmvPeaEtMh4Jd4inFo5Y3lDOGmlS+PWnG9jWEGMXpcArmkDiJFU5AdEwt5brHxVAyRKA==",
+      "mode": 420,
+      "size": 416
+    },
+    "commit/dist/changesets-cli-commit.cjs.d.mts": {
+      "checkedAt": 1764662903900,
+      "integrity": "sha512-galKpWG8+eLTnOlz0iBeFWtSRFSi+IGNBIqsuDbRKPuH3EburFGpb/56msDuqdj3AKMrfCi2+QzNsiC7BCVkGg==",
+      "mode": 420,
+      "size": 416
+    },
+    "dist/changesets-cli.cjs.d.mts": {
+      "checkedAt": 1764662903901,
+      "integrity": "sha512-v1kes3D+rXCPqne810zkOcBaU2m3VHWjh0W5FvDdAHJaCJi4hGJ+JPUV4A9I8NTtWZM/f2gbBGmK3LiAADISXQ==",
+      "mode": 420,
+      "size": 294
+    },
+    "dist/declarations/src/changelog.d.ts": {
+      "checkedAt": 1764662903902,
+      "integrity": "sha512-imgdGTQRUQYilndTUiKHIOBi6MqqHEgPVGHi30tRCvsEqlIS7f5JdxwCSO7akgqn5FrYshTHxTxVnjB+Uq1hhg==",
+      "mode": 420,
+      "size": 53
+    },
+    "changelog/dist/changesets-cli-changelog.cjs.d.ts": {
+      "checkedAt": 1764662903903,
+      "integrity": "sha512-7mXYXjLp3ieGRXAiEDo5UARDShi5aVfPHQKqIVyTNwIHccfiL2MP+DOHUZ5nOva7rK96WyOw9D6Kv2dl3hNyog==",
+      "mode": 420,
+      "size": 403
+    },
+    "changelog/dist/changesets-cli-changelog.cjs.default.d.ts": {
+      "checkedAt": 1764662903903,
+      "integrity": "sha512-Ofdrmr3eQAswWIJvxzQsyvHgRQipLODNi2HsWIPL/2BR7urZE6KELaGJ9acg/6HJMdiPxaojk/pv5dLWawWdZg==",
+      "mode": 420,
+      "size": 79
+    },
+    "commit/dist/changesets-cli-commit.cjs.d.ts": {
+      "checkedAt": 1764662903905,
+      "integrity": "sha512-64T89aEZBT3dnxISUpwsTJpWOizt2seXc+uttA9QonBNcvta2E6DP8yrvCk1D2zD07g/abBZvGV0x+qj3uWCSQ==",
+      "mode": 420,
+      "size": 409
+    },
+    "commit/dist/changesets-cli-commit.cjs.default.d.ts": {
+      "checkedAt": 1764662903906,
+      "integrity": "sha512-aCnRaDLAW4HZzlUtranu8GVUTkxLEWSXyFow1fc/lBO7lYQSmIe6gc3hwA0Jfwl4lQE8IoHeRUefi0Moq1+yFw==",
+      "mode": 420,
+      "size": 82
+    },
+    "dist/changesets-cli.cjs.d.ts": {
+      "checkedAt": 1764662903907,
+      "integrity": "sha512-j26QlEHuAfkx4DquL4NCqUTI2sFyZ/SZo3cDjjf09IuJRXihkHpEjeyUc5SYzWveXaCTnQAKfDpU/F5ldXwW5w==",
+      "mode": 420,
+      "size": 290
+    },
+    "dist/declarations/src/commit/index.d.ts": {
+      "checkedAt": 1764662903908,
+      "integrity": "sha512-OMU/fHEVfYll3j9K2JXqGDDdah+cusshBQtCdO8SNZ8+Rr6Q2GSdiCBBjDdjqex8QKK/eI6w2p7bFo/45p8x/w==",
+      "mode": 420,
+      "size": 157
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662903908,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    }
+  }
+}

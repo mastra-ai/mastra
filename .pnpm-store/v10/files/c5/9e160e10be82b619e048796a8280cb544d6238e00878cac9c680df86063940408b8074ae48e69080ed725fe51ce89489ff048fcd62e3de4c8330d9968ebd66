@@ -1,0 +1,1 @@
+{"version":3,"file":"HandshakePayload.d.ts","sourceRoot":"","sources":["../../../src/api/resources/HandshakePayload.ts"],"names":[],"mappings":"AAAA,MAAM,MAAM,oBAAoB,GAAG;IACjC,UAAU,EAAE,MAAM,EAAE,CAAC;CACtB,CAAC;AAEF,qBAAa,gBAAgB;IACf,QAAQ,CAAC,UAAU,EAAE,MAAM,EAAE;gBAApB,UAAU,EAAE,MAAM,EAAE;IAEzC,MAAM,CAAC,QAAQ,CAAC,IAAI,EAAE,oBAAoB,GAAG,gBAAgB;CAG9D"}

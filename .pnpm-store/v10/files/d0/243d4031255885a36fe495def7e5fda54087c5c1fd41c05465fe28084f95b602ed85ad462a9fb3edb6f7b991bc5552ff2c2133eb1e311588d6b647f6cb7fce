@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/browser/sync/function_result.ts"],
+  "sourcesContent": ["import { Value } from \"../../values/index.js\";\n\n/**\n * The result of running a function on the server.\n *\n * If the function hit an exception it will have an `errorMessage`. Otherwise\n * it will produce a `Value`.\n *\n * @public\n */\nexport type FunctionResult = FunctionSuccess | FunctionFailure;\nexport type FunctionSuccess = {\n  success: true;\n  value: Value;\n  logLines: string[];\n};\nexport type FunctionFailure = {\n  success: false;\n  errorMessage: string;\n  errorData?: Value | undefined;\n  logLines: string[];\n};\n"],
+  "mappings": ";;;;;;;;;;;;;;AAAA;AAAA;",
+  "names": []
+}

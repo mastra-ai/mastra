@@ -1,0 +1,71 @@
+{
+  "name": "@vercel/functions",
+  "description": "Runtime functions to be used with your Vercel Functions",
+  "homepage": "https://vercel.com",
+  "files": [
+    "**/*.js",
+    "**/*.d.ts",
+    "**/*.md"
+  ],
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "require": "./index.js"
+    },
+    "./headers": {
+      "import": "./headers.js",
+      "require": "./headers.js"
+    },
+    "./oidc": {
+      "import": "./oidc/index.js",
+      "require": "./oidc/index.js"
+    },
+    "./middleware": {
+      "import": "./middleware.js",
+      "require": "./middleware.js"
+    }
+  },
+  "version": "1.6.0",
+  "repository": {
+    "directory": "packages/functions",
+    "type": "git",
+    "url": "git+https://github.com/vercel/vercel.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vercel/vercel/issues"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "3.609.0",
+    "@aws-sdk/credential-provider-web-identity": "3.609.0",
+    "@smithy/types": "3.3.0",
+    "tinyspawn": "1.3.1",
+    "typedoc": "0.24.6",
+    "typedoc-plugin-markdown": "4.1.2",
+    "typedoc-plugin-mdn-links": "3.2.3",
+    "typescript": "4.9.5",
+    "vitest": "2.0.1"
+  },
+  "peerDependencies": {
+    "@aws-sdk/credential-provider-web-identity": "*"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/credential-provider-web-identity": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">= 16"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "pretest": "pnpm run build:code",
+    "test": "vitest",
+    "build": "pnpm run build:code && pnpm run build:docs",
+    "build:code": "node ../../utils/build.mjs",
+    "build:docs": "typedoc && prettier --write docs/**/*.md docs/*.md"
+  }
+}

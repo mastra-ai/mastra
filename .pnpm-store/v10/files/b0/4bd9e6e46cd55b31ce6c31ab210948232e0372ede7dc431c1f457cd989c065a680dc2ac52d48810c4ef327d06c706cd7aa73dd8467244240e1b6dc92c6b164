@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/server/impl/validate.ts"],
+  "sourcesContent": ["export function validateArg(\n  arg: any,\n  idx: number,\n  method: string,\n  argName: string,\n) {\n  if (arg === undefined) {\n    throw new TypeError(\n      `Must provide arg ${idx} \\`${argName}\\` to \\`${method}\\``,\n    );\n  }\n}\n\nexport function validateArgIsInteger(\n  arg: any,\n  idx: number,\n  method: string,\n  argName: string,\n) {\n  if (!Number.isInteger(arg)) {\n    throw new TypeError(\n      `Arg ${idx} \\`${argName}\\` to \\`${method}\\` must be an integer`,\n    );\n  }\n}\n\nexport function validateArgIsNonNegativeInteger(\n  arg: any,\n  idx: number,\n  method: string,\n  argName: string,\n) {\n  if (!Number.isInteger(arg) || arg < 0) {\n    throw new TypeError(\n      `Arg ${idx} \\`${argName}\\` to \\`${method}\\` must be a non-negative integer`,\n    );\n  }\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAO,SAAS,YACd,KACA,KACA,QACA,SACA;AACA,MAAI,QAAQ,QAAW;AACrB,UAAM,IAAI;AAAA,MACR,oBAAoB,GAAG,MAAM,OAAO,WAAW,MAAM;AAAA,IACvD;AAAA,EACF;AACF;AAEO,SAAS,qBACd,KACA,KACA,QACA,SACA;AACA,MAAI,CAAC,OAAO,UAAU,GAAG,GAAG;AAC1B,UAAM,IAAI;AAAA,MACR,OAAO,GAAG,MAAM,OAAO,WAAW,MAAM;AAAA,IAC1C;AAAA,EACF;AACF;AAEO,SAAS,gCACd,KACA,KACA,QACA,SACA;AACA,MAAI,CAAC,OAAO,UAAU,GAAG,KAAK,MAAM,GAAG;AACrC,UAAM,IAAI;AAAA,MACR,OAAO,GAAG,MAAM,OAAO,WAAW,MAAM;AAAA,IAC1C;AAAA,EACF;AACF;",
+  "names": []
+}

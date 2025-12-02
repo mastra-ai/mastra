@@ -1,0 +1,9 @@
+{
+  "name": "@changesets/types",
+  "version": "4.1.0",
+  "description": "Common types shared between changeset packages",
+  "main": "dist/types.cjs.js",
+  "module": "dist/types.esm.js",
+  "license": "MIT",
+  "repository": "https://github.com/changesets/changesets/tree/main/packages/types"
+}

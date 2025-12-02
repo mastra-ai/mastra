@@ -1,0 +1,64 @@
+{
+  "name": "gel",
+  "version": "2.1.1",
+  "description": "The official Node.js client library for Gel",
+  "homepage": "https://geldata.com/docs",
+  "author": "Gel <info@geldata.com>",
+  "engines": {
+    "node": ">= 18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/geldata/gel-js.git",
+    "directory": "packages/gel"
+  },
+  "main": "./dist/index.node.js",
+  "types": "./dist/index.node.d.ts",
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "files": [
+    "/dist"
+  ],
+  "browser": {
+    "./dist/index.node.js": "./dist/index.browser.js"
+  },
+  "bin": "./dist/cli.mjs",
+  "devDependencies": {
+    "@js-temporal/polyfill": "0.4.3",
+    "@repo/tsconfig": "*",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.10.2",
+    "@types/semver": "^7.5.8",
+    "@types/shell-quote": "^1.7.5",
+    "@types/which": "^3.0.3",
+    "fast-check": "^3.19.0",
+    "get-stdin": "^9.0.0",
+    "globby": "^14.0.1",
+    "jest": "29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "ts-jest": "29.1.4",
+    "tsx": "^4.11.0",
+    "typescript": "^5.5.2"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "build": "echo 'Building gel driver...' && rm -rf dist && yarn build:cjs && yarn build:cli",
+    "build:cli": "tsc -p tsconfig.cli.json",
+    "build:cjs": "tsc -p tsconfig.json",
+    "lint": "eslint --quiet",
+    "lint:fix": "eslint --fix",
+    "test": "NODE_OPTIONS='--experimental-global-webcrypto' npx jest --detectOpenHandles",
+    "ci:test": "yarn test",
+    "gen-errors": "edb gen-errors-json --client | node genErrors.mjs",
+    "watch": "nodemon -e js,ts,tsx --ignore dist -x ",
+    "dev": "yarn tsc --project tsconfig.json --incremental"
+  },
+  "dependencies": {
+    "@petamoriken/float16": "^3.8.7",
+    "debug": "^4.3.4",
+    "env-paths": "^3.0.0",
+    "semver": "^7.6.2",
+    "shell-quote": "^1.8.1",
+    "which": "^4.0.0"
+  }
+}

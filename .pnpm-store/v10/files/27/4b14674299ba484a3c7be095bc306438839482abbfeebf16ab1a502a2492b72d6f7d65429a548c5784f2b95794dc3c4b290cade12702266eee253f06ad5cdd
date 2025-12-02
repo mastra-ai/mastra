@@ -1,0 +1,5 @@
+const unpin = {
+    describe: 'unpin current package manager',
+    conflicts: ['use', 'pin']
+};
+export default unpin;

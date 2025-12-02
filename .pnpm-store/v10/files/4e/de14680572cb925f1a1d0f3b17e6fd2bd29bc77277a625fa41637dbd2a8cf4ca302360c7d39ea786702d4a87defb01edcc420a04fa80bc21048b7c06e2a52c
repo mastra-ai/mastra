@@ -1,0 +1,1295 @@
+# Modules
+
+mod english;
+
+mod english {}
+
+mod english {
+    mod greetings {}
+    mod farewells {}
+}
+
+pub mod english;
+
+==>
+
+SourceFile(
+  ModItem(mod,BoundIdentifier),
+  ModItem(mod,BoundIdentifier, DeclarationList),
+  ModItem(mod,BoundIdentifier, DeclarationList(
+    ModItem(mod,BoundIdentifier, DeclarationList),
+    ModItem(mod,BoundIdentifier, DeclarationList))),
+  ModItem(Vis(pub),mod, BoundIdentifier))
+
+
+# Extern crate declarations
+
+extern crate std;
+extern crate std as ruststd;
+pub extern crate futures;
+
+==>
+
+SourceFile(
+  ExternCrateDeclaration(extern,crate, BoundIdentifier),
+  ExternCrateDeclaration(extern,crate, Identifier, as, BoundIdentifier),
+  ExternCrateDeclaration(Vis(pub),extern, crate, BoundIdentifier))
+
+
+# Function declarations
+
+fn main() {}
+
+fn add(x: i32, y: i32) -> i32 {
+    return x + y;
+}
+
+fn takes_slice(slice: &str) {
+    println!("Got: {}", slice);
+}
+
+fn foo() -> [u32; 2] {
+    return [1, 2];
+}
+
+fn foo() -> (u32, u16) {
+    return (1, 2);
+}
+
+fn foo() {
+    return
+}
+
+fn foo(x: impl FnOnce() -> result::Result<T, E>) {}
+
+fn foo(#[attr] x: i32, #[attr] x: i64) {}
+
+fn accumulate(self) -> Machine<{State::Accumulate}> {}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList,
+    Block),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(
+        BoundIdentifier,
+        TypeIdentifier),
+      Parameter(
+        BoundIdentifier,
+        TypeIdentifier)),
+    TypeIdentifier,
+    Block(
+      ExpressionStatement(ReturnExpression(return,
+        BinaryExpression(
+          Identifier,
+          ArithOp,
+          Identifier))))),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(
+        BoundIdentifier,
+        ReferenceType(
+          TypeIdentifier))),
+    Block(
+      MacroInvocation(
+        Identifier,
+        ParenthesizedTokens(
+          String,
+          Identifier)))),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList,
+    ArrayType(
+      TypeIdentifier,
+      Integer),
+    Block(
+      ExpressionStatement(ReturnExpression(return,
+        ArrayExpression(
+          Integer,
+          Integer))))),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList,
+    TupleType(
+      TypeIdentifier,
+      TypeIdentifier),
+    Block(
+      ExpressionStatement(ReturnExpression(return,
+        TupleExpression(
+          Integer,
+          Integer))))),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList,
+    Block(
+      ExpressionStatement(ReturnExpression(return)))),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(
+        BoundIdentifier,
+        AbstractType(
+          impl,
+          FunctionType(
+            TypeIdentifier,
+            ParamList,
+            GenericType(
+              ScopedTypeIdentifier(
+                ScopeIdentifier,
+                TypeIdentifier),
+              TypeArgList(
+                TypeIdentifier,
+                TypeIdentifier)))))),
+    Block),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Attribute(
+        MetaItem(
+          Identifier)),
+      Parameter(
+        BoundIdentifier,
+        TypeIdentifier),
+      Attribute(
+        MetaItem(
+          Identifier)),
+      Parameter(
+        BoundIdentifier,
+        TypeIdentifier)),
+    Block),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      SelfParameter(
+        self)),
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(
+        Block(
+          ExpressionStatement(ScopedIdentifier(
+            ScopeIdentifier,
+            Identifier))))),
+    Block))
+
+
+# Const function declarations
+
+const fn main() {}
+
+==>
+
+SourceFile(
+  FunctionItem(const, fn, BoundIdentifier, ParamList, Block))
+
+
+# Functions with abstract return types
+
+fn triples(a: impl B) -> impl Iterator<Item=(usize)> {
+}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(
+        BoundIdentifier,
+        AbstractType(impl, TypeIdentifier))),
+    AbstractType(impl, GenericType(
+      TypeIdentifier,
+      TypeArgList(TypeBinding(TypeIdentifier, TupleType(TypeIdentifier))))),
+    Block))
+
+
+# Diverging functions
+
+fn aborts() -> ! {
+}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList,
+    EmptyType,
+    Block))
+
+
+# Extern function declarations
+
+extern "C" fn foo() {}
+extern "C" fn printf(
+    c: *const c_char,
+    ...,
+) {}
+
+==>
+
+SourceFile(
+  FunctionItem(extern, String, fn,
+    BoundIdentifier,
+    ParamList,
+    Block),
+  FunctionItem(extern, String, fn,
+    BoundIdentifier,
+    ParamList(Parameter(BoundIdentifier, PointerType(const, TypeIdentifier)), VariadicParameter),
+    Block))
+
+
+# Use declarations
+
+use abc;
+use phrases::japanese;
+use sayings::english::greetings;
+use sayings::english::greetings as en_greetings ;
+use phrases::english::{greetings,farewells};
+use sayings::japanese::farewells::*;
+pub use self::greetings::hello;
+use sayings::english::{self, greetings as en_greetings, farewells as en_farewells};
+use three::{ dot::{one, four} };
+use my::{ some::* };
+use my::{*};
+
+==>
+
+SourceFile(
+  UseDeclaration(use,
+    BoundIdentifier),
+  UseDeclaration(use,
+    ScopedIdentifier(
+      ScopeIdentifier,
+      BoundIdentifier)),
+  UseDeclaration(use,
+    ScopedIdentifier(
+      ScopeIdentifier,
+      ScopeIdentifier,
+      BoundIdentifier)),
+  UseDeclaration(use,
+    UseAsClause(
+      ScopedIdentifier(
+        ScopeIdentifier,
+        ScopeIdentifier,
+        Identifier),
+      as,
+      BoundIdentifier)),
+  UseDeclaration(use,
+    ScopedUseList(
+      ScopeIdentifier,
+      ScopeIdentifier,
+      UseList(
+        BoundIdentifier,
+        BoundIdentifier))),
+  UseDeclaration(use,
+    UseWildcard(
+      ScopeIdentifier,
+      ScopeIdentifier,
+      ScopeIdentifier)),
+  UseDeclaration(Vis(pub), use,
+    ScopedIdentifier(
+      self,
+      ScopeIdentifier,
+      BoundIdentifier)),
+  UseDeclaration(use,
+    ScopedUseList(
+      ScopeIdentifier,
+      ScopeIdentifier,
+      UseList(
+        self,
+        UseAsClause(
+          Identifier,
+          as,
+          BoundIdentifier),
+        UseAsClause(
+          Identifier,
+          as,
+          BoundIdentifier)))),
+  UseDeclaration(use,
+    ScopedUseList(
+      ScopeIdentifier,
+      UseList(
+        ScopedUseList(
+          ScopeIdentifier,
+          UseList(
+            BoundIdentifier,
+            BoundIdentifier))))),
+  UseDeclaration(use,
+    ScopedUseList(
+      ScopeIdentifier,
+      UseList(
+        UseWildcard(
+          ScopeIdentifier)))),
+  UseDeclaration(use,
+    ScopedUseList(
+      ScopeIdentifier,
+      UseList(
+        UseWildcard))))
+
+
+# Variable bindings
+
+let x;
+let x = 42;
+let x: i32;
+let x: i8 = 42;
+let mut x = 5;
+let y: bool = false;
+let bool: bool = false;
+let u32: str = "";
+
+==>
+
+SourceFile(
+  LetDeclaration(let,BoundIdentifier),
+  LetDeclaration(let,BoundIdentifier, Integer),
+  LetDeclaration(let,BoundIdentifier, TypeIdentifier),
+  LetDeclaration(let,BoundIdentifier, TypeIdentifier, Integer),
+  LetDeclaration(let,mut, BoundIdentifier, Integer),
+  LetDeclaration(let,BoundIdentifier, TypeIdentifier, Boolean),
+  LetDeclaration(let,BoundIdentifier, TypeIdentifier, Boolean),
+  LetDeclaration(let,BoundIdentifier, TypeIdentifier, String))
+
+
+# Structs
+
+struct Proton;
+struct Electron {}
+struct Person {pub name: String, pub age: u32}
+struct Point {
+  x: i32,
+
+  #[attribute1]
+  y: i32,
+}
+struct Color(pub i32, i32, i32);
+struct Inches(i32);
+
+==>
+
+SourceFile(
+  StructItem(struct,TypeIdentifier),
+  StructItem(struct,TypeIdentifier, FieldDeclarationList),
+  StructItem(struct,TypeIdentifier, FieldDeclarationList(
+    FieldDeclaration(Vis(pub), FieldIdentifier, TypeIdentifier),
+    FieldDeclaration(Vis(pub), FieldIdentifier, TypeIdentifier))),
+  StructItem(struct,TypeIdentifier, FieldDeclarationList(
+    FieldDeclaration(FieldIdentifier, TypeIdentifier),
+    Attribute(MetaItem(Identifier)),
+    FieldDeclaration(FieldIdentifier, TypeIdentifier))),
+  StructItem(struct,TypeIdentifier, OrderedFieldDeclarationList(
+    Vis(pub), TypeIdentifier, TypeIdentifier, TypeIdentifier)),
+  StructItem(struct,TypeIdentifier, OrderedFieldDeclarationList(
+    TypeIdentifier)))
+
+
+# Unions
+
+pub union in6_addr__bindgen_ty_1 {
+    pub __u6_addr8: [__uint8_t; 16usize],
+    pub __u6_addr16: [__uint16_t; 8usize],
+    pub __u6_addr32: [__uint32_t; 4usize],
+    _bindgen_union_align: [u32; 4usize],
+}
+
+==>
+
+SourceFile(
+  UnionItem(Vis(pub), union, TypeIdentifier, FieldDeclarationList(
+    FieldDeclaration(Vis(pub), FieldIdentifier, ArrayType(TypeIdentifier, Integer)),
+    FieldDeclaration(Vis(pub), FieldIdentifier, ArrayType(TypeIdentifier, Integer)),
+    FieldDeclaration(Vis(pub), FieldIdentifier, ArrayType(TypeIdentifier, Integer)),
+    FieldDeclaration(FieldIdentifier, ArrayType(TypeIdentifier, Integer)))))
+
+
+# Generic structs
+
+struct A<B> {}
+struct C<'a, 'b> {}
+struct C<'a,> {}
+struct D<const SIZE: usize> {}
+
+==>
+
+SourceFile(
+  StructItem(struct,
+    TypeIdentifier,
+    TypeParamList(
+      TypeIdentifier),
+    FieldDeclarationList),
+  StructItem(struct,
+    TypeIdentifier,
+    TypeParamList(
+      Lifetime,
+      Lifetime),
+    FieldDeclarationList),
+  StructItem(struct,
+    TypeIdentifier,
+    TypeParamList(
+      Lifetime),
+    FieldDeclarationList),
+  StructItem(struct,
+    TypeIdentifier,
+    TypeParamList(
+      ConstParameter(const,
+        BoundIdentifier,
+        TypeIdentifier)),
+    FieldDeclarationList))
+
+
+# Enums
+
+pub enum Option<T> {
+    None,
+    Some(T),
+}
+
+pub enum Node<T: Item> {
+    Internal {
+        children: Vec<Tree<T>>,
+        height: u16
+    },
+    #[attribute1]
+    #[attribute2]
+    Leaf {
+        value: T
+    }
+}
+
+==>
+
+SourceFile(
+  EnumItem(Vis(pub), enum,
+    TypeIdentifier,
+    TypeParamList(TypeIdentifier),
+    EnumVariantList(
+      EnumVariant(Identifier),
+      EnumVariant(Identifier, OrderedFieldDeclarationList(TypeIdentifier)))),
+  EnumItem(Vis(pub), enum,
+    TypeIdentifier,
+    TypeParamList(ConstrainedTypeParameter(
+      TypeIdentifier,
+      TraitBounds(TypeIdentifier))),
+    EnumVariantList(
+      EnumVariant(
+        Identifier,
+        FieldDeclarationList(
+          FieldDeclaration(FieldIdentifier, GenericType(
+            TypeIdentifier,
+            TypeArgList(
+              GenericType(TypeIdentifier, TypeArgList(TypeIdentifier))))),
+          FieldDeclaration(FieldIdentifier, TypeIdentifier))),
+      Attribute(MetaItem(Identifier)),
+      Attribute(MetaItem(Identifier)),
+      EnumVariant(
+        Identifier,
+        FieldDeclarationList(
+          FieldDeclaration(FieldIdentifier, TypeIdentifier))))))
+
+
+# Enums with values specified
+
+pub enum c_style_enum {
+    val1 = 1,
+    val2 = 2
+}
+
+==>
+
+SourceFile(
+  EnumItem(Vis(pub), enum,
+    TypeIdentifier,
+    EnumVariantList(
+      EnumVariant(Identifier, Integer),
+      EnumVariant(Identifier, Integer))))
+
+
+# Generic functions
+
+pub fn splice<T: Into<Text>>(&mut self, old_range: Range<usize>, new_text: T) {
+}
+pub fn uninit_array<const LEN: usize>() -> [Self; LEN] {}
+
+==>
+
+SourceFile(
+  FunctionItem(Vis(pub), fn,
+    BoundIdentifier,
+    TypeParamList(
+      ConstrainedTypeParameter(
+        TypeIdentifier,
+        TraitBounds(
+          GenericType(
+            TypeIdentifier,
+            TypeArgList(
+              TypeIdentifier))))),
+    ParamList(
+      SelfParameter(
+        mut,
+        self),
+      Parameter(
+        BoundIdentifier,
+        GenericType(
+          TypeIdentifier,
+          TypeArgList(
+            TypeIdentifier))),
+      Parameter(
+        BoundIdentifier,
+        TypeIdentifier)),
+    Block),
+  FunctionItem(Vis(pub), fn,
+    BoundIdentifier,
+    TypeParamList(
+      ConstParameter(const,
+        BoundIdentifier,
+        TypeIdentifier)),
+    ParamList,
+    ArrayType(
+      TypeIdentifier,
+      Identifier),
+    Block))
+
+
+# Functions with mutable parameters
+
+fn foo(mut x : u32) {
+}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(Parameter(mut, BoundIdentifier, TypeIdentifier)),
+    Block))
+
+
+# Functions with destructured parameters
+
+fn f1([x, y]: [u32; 2]) {}
+fn f2(&x: &Y) {}
+fn f3((x, y): (T, U)) {}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(
+        SlicePattern(BoundIdentifier, BoundIdentifier),
+        ArrayType(TypeIdentifier, Integer))),
+    Block),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(
+        ReferencePattern(BoundIdentifier),
+        ReferenceType(TypeIdentifier))),
+    Block),
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList(
+      Parameter(
+        TuplePattern(BoundIdentifier, BoundIdentifier),
+        TupleType(TypeIdentifier, TypeIdentifier))),
+    Block))
+
+
+# Functions with custom types for self
+
+trait Callback {
+    fn call(self: Box<Self>);
+}
+
+==>
+
+SourceFile(
+  TraitItem(trait,
+    TypeIdentifier,
+    DeclarationList(
+      FunctionItem(fn,
+        BoundIdentifier,
+        ParamList(
+          Parameter(
+            SelfPattern(self),
+            GenericType(TypeIdentifier, TypeArgList(TypeIdentifier))))))))
+
+
+# Constant items
+
+const N: i32 = 5;
+
+trait Foo {
+    const X: u8;
+}
+
+==>
+
+SourceFile(
+  ConstItem(const,BoundIdentifier, TypeIdentifier, Integer),
+  TraitItem(trait,
+    TypeIdentifier,
+    DeclarationList(ConstItem(const,BoundIdentifier, TypeIdentifier))))
+
+
+# Static items
+
+static N: i32 = 5;
+static mut __progname: *mut ::c_char;
+
+==>
+
+SourceFile(
+  StaticItem(static,
+    BoundIdentifier,
+    TypeIdentifier,
+    Integer),
+  StaticItem(static,
+    mut,
+    BoundIdentifier,
+    PointerType(mut, ScopedTypeIdentifier(TypeIdentifier))))
+
+
+# Static 'ref' items using lazy_static
+
+static ref ONE: usize = 0;
+
+==>
+
+SourceFile(
+  StaticItem(static,ref,BoundIdentifier, TypeIdentifier, Integer))
+
+
+# Type aliases
+
+type Inch = u64;
+type Name<T> = Vec<T>;
+
+==>
+
+SourceFile(
+  TypeItem(type,TypeIdentifier, TypeIdentifier),
+  TypeItem(type,TypeIdentifier, TypeParamList(TypeIdentifier), GenericType(TypeIdentifier, TypeArgList(TypeIdentifier))))
+
+
+# Empty statements
+
+fn main() {
+    ;
+}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,BoundIdentifier, ParamList, Block(
+    EmptyStatement)))
+
+
+# Attributes
+
+#![allow(clippy::useless_transmute)]
+
+#[test]
+fn test_foo() {}
+
+#[derive(Debug)]
+struct Baz;
+
+#[derive(Debug, Eq,)]
+struct Foo;
+
+#[cfg(target_os = "macos")]
+#[clippy::cyclomatic_complexity = "100"]
+#[a = b]
+mod macos_only {}
+
+==>
+
+SourceFile(
+  InnerAttribute(MetaItem(
+    Identifier,
+    ParenthesizedTokens(Identifier,Identifier))),
+
+  AttributeItem(
+    Attribute(MetaItem(Identifier)),
+    FunctionItem(fn,
+      BoundIdentifier,
+      ParamList,
+      Block)),
+
+  AttributeItem(
+    Attribute(MetaItem(
+      Identifier,
+      ParenthesizedTokens(Identifier))),
+    StructItem(struct,TypeIdentifier)),
+
+  AttributeItem(
+    Attribute(MetaItem(
+      Identifier,
+      ParenthesizedTokens(Identifier, Identifier))),
+   StructItem(struct,TypeIdentifier)),
+
+  AttributeItem(
+    Attribute(MetaItem(
+      Identifier,
+      ParenthesizedTokens(Identifier, String))),
+    Attribute(MetaItem(
+      ScopedIdentifier(ScopeIdentifier, Identifier),
+      String)),
+    Attribute(MetaItem(Identifier, Identifier)),
+    ModItem(mod,
+      BoundIdentifier,
+      DeclarationList)))
+
+# Inner attributes
+
+mod macos_only {
+  #![cfg(target_os = "macos")]
+}
+
+==>
+
+SourceFile(
+  ModItem(mod,
+    BoundIdentifier,
+    DeclarationList(
+      InnerAttribute(MetaItem(
+        Identifier,
+        ParenthesizedTokens(
+          Identifier,
+          String))))))
+
+# Attributes and Expressions
+
+fn foo() {
+   bar(x,
+       #[cfg(foo = "bar")]
+       y);
+   let z = [#![hello] 2, 7, 8];
+   let t = (#![hello] 2, 7, 8);
+}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList,
+    Block(
+      ExpressionStatement(CallExpression(
+        Identifier,
+        ArgList(
+          Identifier,
+            Attribute(MetaItem(
+              Identifier,
+              ParenthesizedTokens(Identifier, String))),
+            Identifier))),
+      LetDeclaration(let,
+        BoundIdentifier,
+        ArrayExpression(
+          InnerAttribute(MetaItem(Identifier)),
+          Integer,
+          Integer,
+          Integer)),
+      LetDeclaration(let,
+        BoundIdentifier,
+        TupleExpression(
+          InnerAttribute(MetaItem(Identifier)),
+          Integer,
+          Integer,
+          Integer)))))
+
+
+# Inherent Impls
+
+impl Person {
+  const leg_count : u32 = 2;
+
+  fn walk(self) {}
+  fn walk_mut(mut self) {}
+  fn talk(& self) {}
+  fn talk_mut(&'a mut self) {}
+}
+
+impl Machine<{State::Init}> {}
+
+==>
+
+SourceFile(
+  ImplItem(impl,
+    TypeIdentifier,
+    DeclarationList(
+      ConstItem(const,
+        BoundIdentifier,
+        TypeIdentifier,
+        Integer),
+      FunctionItem(fn,
+        BoundIdentifier,
+        ParamList(
+          SelfParameter(
+            self)),
+        Block),
+      FunctionItem(fn,
+        BoundIdentifier,
+        ParamList(
+          SelfParameter(
+            mut,
+            self)),
+        Block),
+      FunctionItem(fn,
+        BoundIdentifier,
+        ParamList(
+          SelfParameter(
+            self)),
+        Block),
+      FunctionItem(fn,
+        BoundIdentifier,
+        ParamList(
+          SelfParameter(
+            Lifetime,
+            mut,
+            self)),
+        Block))),
+  ImplItem(impl,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(
+        Block(
+          ExpressionStatement(ScopedIdentifier(
+            ScopeIdentifier,
+            Identifier))))),
+    DeclarationList))
+
+
+# Trait impls
+
+impl<'a> iter::Iterator for Self::Iter<'a> {
+}
+
+impl ConvertTo<i64> for i32 {
+    fn convert(&self) -> i64 { *self as i64 }
+}
+
+==>
+
+SourceFile(
+  ImplItem(impl,
+    TypeParamList(Lifetime),
+    ScopedTypeIdentifier(
+      ScopeIdentifier,
+      TypeIdentifier),
+    for,
+    GenericType(
+      ScopedTypeIdentifier(
+        ScopeIdentifier,
+        TypeIdentifier),
+      TypeArgList(Lifetime)),
+    DeclarationList),
+  ImplItem(impl,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(TypeIdentifier)),
+    for,
+    TypeIdentifier,
+    DeclarationList(
+      FunctionItem(fn,
+        BoundIdentifier,
+        ParamList(SelfParameter(self)),
+        TypeIdentifier,
+        Block(
+          ExpressionStatement(TypeCastExpression(
+            UnaryExpression(DerefOp, self),
+            as,
+            TypeIdentifier)))))))
+
+
+# Unsafe impls
+
+unsafe impl Foo {
+}
+
+==>
+
+SourceFile(ImplItem(unsafe, impl,TypeIdentifier, DeclarationList))
+
+
+# Impls with default functions
+
+impl Foo {
+  const default fn bar() -> i32 {
+    // Make 'default' still works as an identifier
+    default.bar();
+  }
+}
+
+==>
+
+SourceFile(
+  ImplItem(impl,TypeIdentifier, DeclarationList(
+    FunctionItem(const, default, fn,
+      BoundIdentifier,
+      ParamList,
+      TypeIdentifier,
+      Block(
+        LineComment,
+        ExpressionStatement(CallExpression(
+          FieldExpression(Identifier, FieldIdentifier),
+          ArgList)))))))
+
+
+# Trait declarations
+
+pub trait Item: Clone + Eq + fmt::Debug {
+    fn summarize(&self) -> Self::Summary;
+}
+
+unsafe trait Foo { }
+
+==>
+
+SourceFile(
+  TraitItem(Vis(pub), trait,
+    TypeIdentifier,
+    TraitBounds(
+      TypeIdentifier,
+      TypeIdentifier,
+      ScopedTypeIdentifier(ScopeIdentifier, TypeIdentifier)),
+    DeclarationList(
+      FunctionItem(fn,
+        BoundIdentifier,
+        ParamList(SelfParameter(self)),
+        ScopedTypeIdentifier(ScopeIdentifier, TypeIdentifier)))),
+   TraitItem(unsafe, trait,TypeIdentifier, DeclarationList))
+
+
+# Trait declarations with optional type parameters
+
+trait Add<RHS=Self> {
+    type Output;
+    fn add(self, rhs: RHS) -> Self::Output;
+}
+
+==>
+
+SourceFile(
+  TraitItem(trait,
+    TypeIdentifier,
+    TypeParamList(OptionalTypeParameter(TypeIdentifier, TypeIdentifier)),
+    DeclarationList(
+      AssociatedType(type,TypeIdentifier),
+      FunctionItem(
+        fn,
+        BoundIdentifier,
+        ParamList(SelfParameter(self), Parameter(BoundIdentifier, TypeIdentifier)),
+        ScopedTypeIdentifier(ScopeIdentifier, TypeIdentifier)))))
+
+
+# Unsized types in trait bounds
+
+trait Foo<T: ?Sized> {
+}
+
+==>
+
+SourceFile(
+  TraitItem(trait,
+    TypeIdentifier,
+    TypeParamList(
+      ConstrainedTypeParameter(
+        TypeIdentifier,
+        TraitBounds(RemovedTraitBound(TypeIdentifier)))),
+    DeclarationList))
+
+
+# Macro invocations inside trait declarations
+
+pub trait A: B + C + D {
+    private_decl!{}
+    fn f(&self);
+}
+
+==>
+
+SourceFile(
+  TraitItem(Vis(pub), trait,
+    TypeIdentifier,
+    TraitBounds(TypeIdentifier, TypeIdentifier, TypeIdentifier),
+    DeclarationList(
+      MacroInvocation(Identifier, BracedTokens),
+      FunctionItem(fn, BoundIdentifier, ParamList(SelfParameter(self))))))
+
+
+# Associated Types
+
+pub trait Graph {
+    type N: fmt::Display;
+    type E;
+}
+
+==>
+
+SourceFile(
+  TraitItem(Vis(pub), trait,
+    TypeIdentifier,
+    DeclarationList(
+      AssociatedType(type,TypeIdentifier, TraitBounds(ScopedTypeIdentifier(ScopeIdentifier, TypeIdentifier))),
+      AssociatedType(type,TypeIdentifier))))
+
+
+# Higher-ranked types
+
+trait T: for<'a> AddAssign<&'a usize> {
+}
+
+==>
+
+SourceFile(
+  TraitItem(trait,
+    TypeIdentifier,
+    TraitBounds(
+      HigherRankedTraitBound(for,
+        TypeParamList(Lifetime),
+        GenericType(TypeIdentifier, TypeArgList(ReferenceType(Lifetime, TypeIdentifier))))),
+    DeclarationList))
+
+
+# Visibility modifiers
+
+pub fn a() {}
+pub(super) fn b() {}
+pub(self) fn c() {}
+pub(crate) fn c() {}
+pub(in crate::d) fn e() {}
+
+==>
+
+SourceFile(
+  FunctionItem(Vis(pub), fn, BoundIdentifier, ParamList, Block),
+  FunctionItem(Vis(pub, super), fn, BoundIdentifier, ParamList, Block),
+  FunctionItem(Vis(pub, self), fn, BoundIdentifier, ParamList, Block),
+  FunctionItem(Vis(pub, crate), fn, BoundIdentifier, ParamList, Block),
+  FunctionItem(Vis(pub, in, ScopedIdentifier(crate, Identifier)), fn,
+    BoundIdentifier,
+    ParamList,
+    Block))
+
+
+# Function parameter names that match built-in type names
+
+fn foo(str: *const c_char) {}
+fn bar(bool: bool) {}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,BoundIdentifier, ParamList(Parameter(BoundIdentifier, PointerType(const, TypeIdentifier))), Block),
+  FunctionItem(fn,BoundIdentifier, ParamList(Parameter(BoundIdentifier, TypeIdentifier)), Block))
+
+# Where clauses
+
+fn walk<F>(&self, it: &mut F) -> bool
+    where F: FnMut(&Pat) -> bool
+{
+  return false
+}
+
+impl<'a, T: 'a + Item> Iterator for Iter<'a, T> where Self: 'a {
+}
+
+impl<T> A for B<T>
+    where C<T>: D,
+          T: 'c,
+          'c: 'b,
+{
+}
+
+impl<'a, E> Read
+where &'a E: Read,
+{
+}
+
+impl<T> A for B<T> where (T, T, T): C, {}
+
+impl<T> A for B<T>
+    where for<'a> D<T>: E<'a>,
+{
+}
+
+pub trait A<B> where B: C,
+{
+}
+
+fn foo<A>() where A: B + As<f64>, f64: As<A> {}
+
+impl<A> Default for B<A> where *mut A: C + D {}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    TypeParamList(TypeIdentifier),
+    ParamList(
+      SelfParameter(self),
+      Parameter(
+        BoundIdentifier,
+        ReferenceType(
+          mut,
+          TypeIdentifier))),
+    TypeIdentifier,
+    WhereClause(where, TypeBoundClause(
+      TypeIdentifier,
+      TraitBounds(FunctionType(TypeIdentifier,ParamList(
+        Parameter(ReferenceType(TypeIdentifier))),TypeIdentifier)))),
+    Block(ExpressionStatement(ReturnExpression(return,Boolean)))),
+
+  ImplItem(impl,
+    TypeParamList(
+      Lifetime,
+      ConstrainedTypeParameter(
+        TypeIdentifier,
+        TraitBounds(Lifetime, TypeIdentifier))),
+    TypeIdentifier,
+    for,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(
+        Lifetime,
+        TypeIdentifier)),
+    WhereClause(where,TypeBoundClause(TypeIdentifier,TraitBounds(Lifetime))),
+    DeclarationList),
+
+  ImplItem(impl,
+    TypeParamList(TypeIdentifier),
+    TypeIdentifier,
+    for,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(TypeIdentifier)),
+    WhereClause(where,
+      TypeBoundClause(GenericType(TypeIdentifier,TypeArgList(TypeIdentifier)),TraitBounds(TypeIdentifier)),
+      TypeBoundClause(TypeIdentifier,TraitBounds(Lifetime)),
+      LifetimeClause(Lifetime,Lifetime)),
+    DeclarationList),
+
+  ImplItem(impl,
+    TypeParamList(
+      Lifetime,
+      TypeIdentifier),
+    TypeIdentifier,
+    WhereClause(where,TypeBoundClause(ReferenceType(Lifetime,TypeIdentifier),TraitBounds(TypeIdentifier))),
+    DeclarationList),
+
+  ImplItem(impl,
+    TypeParamList(TypeIdentifier),
+    TypeIdentifier,
+    for,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(TypeIdentifier)),
+    WhereClause(where,
+      TypeBoundClause(TupleType(TypeIdentifier,TypeIdentifier,TypeIdentifier),TraitBounds(TypeIdentifier))),
+    DeclarationList),
+
+  ImplItem(impl,
+    TypeParamList(TypeIdentifier),
+    TypeIdentifier,
+    for,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(TypeIdentifier)),
+    WhereClause(where,
+      TypeBoundClause(HigherRankedTraitBound(for,
+        TypeParamList(Lifetime),
+        GenericType(TypeIdentifier,TypeArgList(TypeIdentifier))),
+        TraitBounds(GenericType(TypeIdentifier,TypeArgList(Lifetime))))),
+    DeclarationList),
+
+  TraitItem(Vis(pub), trait,
+    TypeIdentifier,
+    TypeParamList(TypeIdentifier),
+    WhereClause(where,TypeBoundClause(TypeIdentifier,TraitBounds(TypeIdentifier))),
+    DeclarationList),
+
+  FunctionItem(fn,
+    BoundIdentifier,
+    TypeParamList(TypeIdentifier),
+    ParamList,
+    WhereClause(where,
+      TypeBoundClause(TypeIdentifier,TraitBounds(
+        TypeIdentifier,GenericType(TypeIdentifier,TypeArgList(TypeIdentifier)))),
+      TypeBoundClause(TypeIdentifier,TraitBounds(GenericType(TypeIdentifier,TypeArgList(TypeIdentifier))))),
+    Block),
+
+  ImplItem(impl,
+    TypeParamList(TypeIdentifier),
+    TypeIdentifier,
+    for,
+    GenericType(
+      TypeIdentifier,
+      TypeArgList(TypeIdentifier)),
+    WhereClause(where,TypeBoundClause(PointerType(mut,TypeIdentifier),TraitBounds(TypeIdentifier,TypeIdentifier))),
+    DeclarationList))
+
+# External Modules
+
+pub extern {
+  pub fn napi_module_register(mod_: *mut napi_module);
+}
+
+extern "C" {}
+
+==>
+
+SourceFile(
+  ForeignModItem(Vis(pub), extern, DeclarationList(
+    FunctionItem(Vis(pub), fn, BoundIdentifier, ParamList(Parameter(BoundIdentifier, PointerType(mut, TypeIdentifier)))))),
+  ForeignModItem(extern, String, DeclarationList))
+
+
+# Crate visibility
+
+crate mod foo;
+crate struct Foo(crate crate::Bar);
+crate fn foo() { }
+crate const X: u32 = 0;
+
+==>
+
+SourceFile(
+  ModItem(Vis(crate), mod, BoundIdentifier),
+  StructItem(Vis(crate), struct,
+    TypeIdentifier,
+    OrderedFieldDeclarationList(Vis(crate), ScopedTypeIdentifier(crate, TypeIdentifier))),
+  FunctionItem(Vis(crate), fn, BoundIdentifier, ParamList, Block),
+  ConstItem(Vis(crate), const,
+    BoundIdentifier, TypeIdentifier, Integer))
+
+# Greek letters in identifiers
+
+const σ1 : Σ = 0;
+const ψ_2 : Ψ = 1;
+
+==>
+
+SourceFile(
+  ConstItem(const,BoundIdentifier, TypeIdentifier, Integer),
+  ConstItem(const,BoundIdentifier, TypeIdentifier, Integer))
+
+# Allows keywords in attributes
+
+#[foo(mut)]
+const a: i32 = 5;
+
+==>
+
+SourceFile(AttributeItem(
+  Attribute(MetaItem(Identifier,ParenthesizedTokens(Identifier))),
+  ConstItem(const,BoundIdentifier,TypeIdentifier,Integer)))

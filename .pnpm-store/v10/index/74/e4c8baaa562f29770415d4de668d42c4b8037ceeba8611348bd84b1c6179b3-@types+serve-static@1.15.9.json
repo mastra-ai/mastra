@@ -1,0 +1,31 @@
+{
+  "name": "@types/serve-static",
+  "version": "1.15.9",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662907128,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662907136,
+      "integrity": "sha512-Wji/oAEwnAU57R7etfwFQyyb60Qbs2n+M44mwEQEyKZhi9flkKOL3nS65NLnGW0i/UKQ5eyg3prZ47BjeyG68A==",
+      "mode": 420,
+      "size": 814
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662907136,
+      "integrity": "sha512-Gtvp4j2zp3j1sX5CV39cbATzmb4mcJ8N4rCc2jMqe350/R3Vx26mkLTCHpDULgBEch8UwVL7KvyfdumWPjCCNA==",
+      "mode": 420,
+      "size": 4679
+    },
+    "package.json": {
+      "checkedAt": 1764662907138,
+      "integrity": "sha512-g85L46+HJz5hQxIWuDagYDc1J5dBZ9lNW8yYYKoIM/vQlXtCdv0qjkh9mBhmOKu2NaArCz652ntKWveVv2M9bQ==",
+      "mode": 420,
+      "size": 1397
+    }
+  }
+}

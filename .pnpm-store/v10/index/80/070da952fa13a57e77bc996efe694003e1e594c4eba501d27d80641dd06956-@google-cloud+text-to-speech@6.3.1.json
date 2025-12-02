@@ -1,0 +1,211 @@
+{
+  "name": "@google-cloud/text-to-speech",
+  "version": "6.3.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662928686,
+      "integrity": "sha512-mPa3m3ePewoVQVvXUMOooJfWUFEctOyBFRiOEVxHBT/nAPV4iVwJcFHJvD37YZfCsToV3iAyc+GjIYiE+G6Q6A==",
+      "mode": 420,
+      "size": 11358
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662928688,
+      "integrity": "sha512-wWfrSQBT4dhxhzzEuBuWe4uwJvRVFqTvx5cul8GdC7qWbPIYrgrzJPU5vSZBujv7FPV4Dl9wHnBqzW96JBi94w==",
+      "mode": 420,
+      "size": 1544
+    },
+    "build/src/v1/index.js": {
+      "checkedAt": 1764662928691,
+      "integrity": "sha512-YX27DMN8EdpdkYdCeyqCQ3PH23uiqla3isw9dwxVJA5P6lCt+PuPJZOG7r/aOjZKrT+2PIPXu9VLk/nXqNq2Gg==",
+      "mode": 420,
+      "size": 1517
+    },
+    "build/src/v1beta1/index.js": {
+      "checkedAt": 1764662928691,
+      "integrity": "sha512-YX27DMN8EdpdkYdCeyqCQ3PH23uiqla3isw9dwxVJA5P6lCt+PuPJZOG7r/aOjZKrT+2PIPXu9VLk/nXqNq2Gg==",
+      "mode": 420,
+      "size": 1517
+    },
+    "build/protos/protos.js": {
+      "checkedAt": 1764662928695,
+      "integrity": "sha512-Z/pX2kesF7igKXzdU7YDF9xzf+l+plvgwVcYDGk/6g5MZByoOafMyG6ffoWxC9sir+Hl73e4sGLr/A9pCaEOoA==",
+      "mode": 420,
+      "size": 2058197
+    },
+    "build/src/v1/text_to_speech_client.js": {
+      "checkedAt": 1764662928695,
+      "integrity": "sha512-YLtWkQ7AM8Uka86qeY7L501klmIpF8VfZ9Lv+HrRSxXs98+BWD7J/UYeYu97J+15+nt26eSqfWPK5IPbaPuArw==",
+      "mode": 420,
+      "size": 20481
+    },
+    "build/src/v1beta1/text_to_speech_client.js": {
+      "checkedAt": 1764662928697,
+      "integrity": "sha512-1YCmWIRRa7eYYSQw/a8n+/x0k9k9SenMkRd9GTuguxm9OJcXHYnbUm+Em3ysXV8UXGuM7T4rQG5ljp3If7YqEQ==",
+      "mode": 420,
+      "size": 20531
+    },
+    "build/src/v1/text_to_speech_long_audio_synthesize_client.js": {
+      "checkedAt": 1764662928698,
+      "integrity": "sha512-0D2h3F+6+lGZv/gZFIx3gG1CPcHDsI95kHLggy4DlNA9jmZuxhq8/s5LzCIiy2D87qPqCGYHiElzftm20o8uIQ==",
+      "mode": 420,
+      "size": 26325
+    },
+    "build/src/v1beta1/text_to_speech_long_audio_synthesize_client.js": {
+      "checkedAt": 1764662928699,
+      "integrity": "sha512-o9/QLpZSv8UGZMy9mAIg89hFG7Q5egZhCHL8mvyD4hH5DHAqyOVpDjOLiNo8f5+nAtqmzQljevk8gZx9szSnLg==",
+      "mode": 420,
+      "size": 26385
+    },
+    "build/src/v1/gapic_metadata.json": {
+      "checkedAt": 1764662928700,
+      "integrity": "sha512-3tYToYgNCdGoc/PEDvdCViy6D4lFinbPvnfW7nw4yO1DHoN9weuWFoJGPIVyzseX8+KgaKBLVm3/fnh2XHseTw==",
+      "mode": 420,
+      "size": 2486
+    },
+    "build/src/v1beta1/gapic_metadata.json": {
+      "checkedAt": 1764662928701,
+      "integrity": "sha512-N3/EWhPT5gH1Plcbit6dxp06iOxyJ6u7EAIccAw2KXYd4+kAiBZTnJiZmGR0YMLSq8suO+PtvN6Vys3jVVjOZA==",
+      "mode": 420,
+      "size": 2491
+    },
+    "package.json": {
+      "checkedAt": 1764662928704,
+      "integrity": "sha512-PmOnGBip7aQe2eP460iDG+mrYAewHXMKq8GgTSt8CNtMahFVugOzGKLgfkth5NXxRfcHB1GDoO3QE9ecJLC+9w==",
+      "mode": 420,
+      "size": 1947
+    },
+    "build/protos/protos.json": {
+      "checkedAt": 1764662928705,
+      "integrity": "sha512-kzo1wTTkLs4KfwclZ/5ZTPWs0C57BpUciwSiTuIPGYS6pHpdAcbIZzGvherlO62aYSNItq3aYHXV2H9H8WrjuQ==",
+      "mode": 420,
+      "size": 120725
+    },
+    "build/src/v1/text_to_speech_client_config.json": {
+      "checkedAt": 1764662928705,
+      "integrity": "sha512-QGw34EHSKVwWvObuuZf6eStpebSLTMaQP+/oJ8iMna0LzuhLjhQj9nw4c4jhSkcbNrL9yqKyrjNW0L5YbyVlaw==",
+      "mode": 420,
+      "size": 1422
+    },
+    "build/src/v1beta1/text_to_speech_client_config.json": {
+      "checkedAt": 1764662928706,
+      "integrity": "sha512-MJDbqo9ug/10h+GZOzi/icegk6Gz6+vtywVWWy8SQ5UGyAJB+galNShe8pvfDTDHujyaVANFwbHTMojasiOszA==",
+      "mode": 420,
+      "size": 1427
+    },
+    "build/src/v1/text_to_speech_long_audio_synthesize_client_config.json": {
+      "checkedAt": 1764662928707,
+      "integrity": "sha512-+sGC8Qwq4zLoVYrbGqyjXd5FFDWAKPlrI1EnWcGD7iBnDLU8aZeJXQH7jwo1DE0qMHiVA+VQ0V5JW7OppNOT2Q==",
+      "mode": 420,
+      "size": 1036
+    },
+    "build/src/v1beta1/text_to_speech_long_audio_synthesize_client_config.json": {
+      "checkedAt": 1764662928708,
+      "integrity": "sha512-mkalAZFrFrX4IV9PMmX5/XTDJeku4n6KrahkT4cXsVEU9JZEX4ZuWOIH5K4Xtbcalq+3TcIxMOIpMrPbqz4rdw==",
+      "mode": 420,
+      "size": 1041
+    },
+    "build/src/v1/text_to_speech_long_audio_synthesize_proto_list.json": {
+      "checkedAt": 1764662928708,
+      "integrity": "sha512-CXw6j9dK3XR1s9MEYlgtJAsjL0v0RHRGvkNGwJq8Y6zXBWDKxzVpAP0rOkKqrZmnBQxVY0gSanAZ8beHPImyOQ==",
+      "mode": 420,
+      "size": 137
+    },
+    "build/src/v1beta1/text_to_speech_long_audio_synthesize_proto_list.json": {
+      "checkedAt": 1764662928709,
+      "integrity": "sha512-l09cO2rwIcRwPN2bcuBUJrQNg8B3sjSXfAtb/G/pu+1B6TBNLRahPnZR/UqihcPUcI8NxsH7lDCvmiz07M4gcg==",
+      "mode": 420,
+      "size": 147
+    },
+    "build/src/v1/text_to_speech_proto_list.json": {
+      "checkedAt": 1764662928708,
+      "integrity": "sha512-CXw6j9dK3XR1s9MEYlgtJAsjL0v0RHRGvkNGwJq8Y6zXBWDKxzVpAP0rOkKqrZmnBQxVY0gSanAZ8beHPImyOQ==",
+      "mode": 420,
+      "size": 137
+    },
+    "build/src/v1beta1/text_to_speech_proto_list.json": {
+      "checkedAt": 1764662928709,
+      "integrity": "sha512-l09cO2rwIcRwPN2bcuBUJrQNg8B3sjSXfAtb/G/pu+1B6TBNLRahPnZR/UqihcPUcI8NxsH7lDCvmiz07M4gcg==",
+      "mode": 420,
+      "size": 147
+    },
+    "README.md": {
+      "checkedAt": 1764662928711,
+      "integrity": "sha512-4VIPSuKcxvcyJ63q6+TDgATRDJRg6KapMv4qE5gCGVnIuX6Fa6kPwimor5arQ80UztqZk8wGn2eaizyUwIK18A==",
+      "mode": 420,
+      "size": 6760
+    },
+    "build/protos/google/cloud/texttospeech/v1/cloud_tts_lrs.proto": {
+      "checkedAt": 1764662928711,
+      "integrity": "sha512-Ks3sDo9aE7C/gc2iZjijXwtzsMmYgysBboETgUimP+djdBhpZuoo+jHM6166jsrXqzWWo9mK02RwxGaT49zF4w==",
+      "mode": 420,
+      "size": 3524
+    },
+    "build/protos/google/cloud/texttospeech/v1beta1/cloud_tts_lrs.proto": {
+      "checkedAt": 1764662928712,
+      "integrity": "sha512-o6S3tBnYCajF0F9EBiXyRhh9aIifJOA0wMoufOqRGh3l1PLBUF+G+7tggTwfNqR/+BxSnJlKsPwv/lH6AnonGA==",
+      "mode": 420,
+      "size": 3574
+    },
+    "build/protos/google/cloud/texttospeech/v1/cloud_tts.proto": {
+      "checkedAt": 1764662928720,
+      "integrity": "sha512-ppN3NdJaDAWc2GqtXALc6K9YSDTlw/shXVSXep4vYwixzPkblzNQWWh4JpcvKFBshdtPZ81UZxxapoo/P515lw==",
+      "mode": 420,
+      "size": 23106
+    },
+    "build/protos/google/cloud/texttospeech/v1beta1/cloud_tts.proto": {
+      "checkedAt": 1764662928721,
+      "integrity": "sha512-T1Mn9IqcPaKjNpZ7eDr7h0q+EdTpLG+nphRB6zqCVgANHGVgW7Eo7PARBeRO7XUDXfYg6gonNj5TtB7UM415QA==",
+      "mode": 420,
+      "size": 24207
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662928723,
+      "integrity": "sha512-h+YOru9IlHsOKLLyQQIZH6jx0VYff52Zr+L6B3lE8WKeBbuU1q1mdEObCfFjAcDXXrkHEfSGJYgL0BnBc6Kw2w==",
+      "mode": 420,
+      "size": 762
+    },
+    "build/src/v1/index.d.ts": {
+      "checkedAt": 1764662928724,
+      "integrity": "sha512-iR4xYVkW16ek4uH92EqvXe46ScBt1bfpo1xs1UM6JQal8quQyeYPfhlHrANUOR4yRuvRvJQCJXOhvTfqmBr8BA==",
+      "mode": 420,
+      "size": 165
+    },
+    "build/src/v1beta1/index.d.ts": {
+      "checkedAt": 1764662928724,
+      "integrity": "sha512-iR4xYVkW16ek4uH92EqvXe46ScBt1bfpo1xs1UM6JQal8quQyeYPfhlHrANUOR4yRuvRvJQCJXOhvTfqmBr8BA==",
+      "mode": 420,
+      "size": 165
+    },
+    "build/protos/protos.d.ts": {
+      "checkedAt": 1764662928726,
+      "integrity": "sha512-oYL2qH0iNItG+OH+rEi71+gvtlEVeAMw7kg+chddRl/z5hajwj0I5Q1z+ZYZ6JOhWsSwaIKBSejpSlB+k2adtw==",
+      "mode": 420,
+      "size": 675577
+    },
+    "build/src/v1/text_to_speech_client.d.ts": {
+      "checkedAt": 1764662928726,
+      "integrity": "sha512-ujaGnzj1lA3MCuS3HSHCYQFOCNIFJ3cNh1IYDIbimNaWuaSbpLRNvGwJaJvIBt1XYRXiRFUMFJFRZoXrmHSx9g==",
+      "mode": 420,
+      "size": 12556
+    },
+    "build/src/v1beta1/text_to_speech_client.d.ts": {
+      "checkedAt": 1764662928727,
+      "integrity": "sha512-wLnxtmuW/8IjrnYdWu9ClgFtQhkIoK39k843EpsU67j1nNOhuwXXVsrGUss5t99D3QrDKw39Zd/+K6NhvEFXSg==",
+      "mode": 420,
+      "size": 12840
+    },
+    "build/src/v1/text_to_speech_long_audio_synthesize_client.d.ts": {
+      "checkedAt": 1764662928728,
+      "integrity": "sha512-jzaB8mdaoWMcj/sNCc6pOa1ybc4/pd4Vd7D09t+JWqYxfwFZQhB2h1F+m+SYxTwzNslNWu4rwcyXaQhZ1Ckqlw==",
+      "mode": 420,
+      "size": 16593
+    },
+    "build/src/v1beta1/text_to_speech_long_audio_synthesize_client.d.ts": {
+      "checkedAt": 1764662928729,
+      "integrity": "sha512-+Mxwa9jJQkCAkpB3QVi9ajTXxituK9Yqfb51Be6npWmxYFHMZ2Ja/lAOzzDifTK28x2cDhUsLG6f7M4nyibvCQ==",
+      "mode": 420,
+      "size": 16688
+    }
+  }
+}

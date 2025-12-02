@@ -1,0 +1,59 @@
+{
+	"name": "@drizzle-team/brocli",
+	"type": "module",
+	"author": "Drizzle Team",
+	"version": "0.10.2",
+	"description": "Modern type-safe way of building CLIs",
+	"license": "Apache-2.0",
+	"sideEffects": false,
+	"publishConfig": {
+		"provenance": true
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/drizzle-team/brocli.git"
+	},
+	"homepage": "https://github.com/drizzle-team/brocli",
+	"scripts": {
+		"build": "pnpm tsx scripts/build.ts",
+		"b": "pnpm build",
+		"pack": "(cd dist && npm pack --pack-destination ..) && rm -f package.tgz && mv *.tgz package.tgz",
+		"publish": "npm publish package.tgz",
+		"test": "vitest run && npx tsc --noEmit",
+		"mtest": "npx tsx tests/manual.ts",
+		"lint": "dprint check --list-different"
+	},
+	"devDependencies": {
+		"@arethetypeswrong/cli": "^0.15.3",
+		"@originjs/vite-plugin-commonjs": "^1.0.3",
+		"@types/clone": "^2.1.4",
+		"@types/node": "^20.12.13",
+		"@types/shell-quote": "^1.7.5",
+		"clone": "^2.1.2",
+		"dprint": "^0.46.2",
+		"shell-quote": "^1.8.1",
+		"tsup": "^8.1.0",
+		"tsx": "^4.7.0",
+		"typescript": "latest",
+		"vite-tsconfig-paths": "^4.3.2",
+		"vitest": "^1.6.0",
+		"zx": "^8.1.2"
+	},
+	"main": "./index.cjs",
+	"module": "./index.js",
+	"types": "./index.d.ts",
+	"exports": {
+		".": {
+			"import": {
+				"types": "./index.d.ts",
+				"default": "./index.js"
+			},
+			"require": {
+				"types": "./index.d.cjs",
+				"default": "./index.cjs"
+			},
+			"types": "./index.d.ts",
+			"default": "./index.js"
+		}
+	}
+}

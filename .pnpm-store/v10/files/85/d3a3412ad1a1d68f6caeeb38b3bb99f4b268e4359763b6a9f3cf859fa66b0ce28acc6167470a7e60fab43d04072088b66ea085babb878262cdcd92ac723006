@@ -1,0 +1,11 @@
+import Spinnies from 'spinnies';
+const spinner = {
+    interval: 50,
+    frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+};
+const options = {
+    succeedColor: 'green',
+    failColor: 'red',
+    spinner
+};
+export const spinnies = new Spinnies(options);

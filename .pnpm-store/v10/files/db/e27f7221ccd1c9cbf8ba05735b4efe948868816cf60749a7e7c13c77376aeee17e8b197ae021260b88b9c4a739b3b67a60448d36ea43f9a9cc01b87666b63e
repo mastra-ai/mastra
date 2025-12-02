@@ -1,0 +1,6 @@
+import { FieldConfig } from '@autoform/core';
+import { z } from 'zod/v4';
+
+declare function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig): string;
+
+export { inferFieldType };

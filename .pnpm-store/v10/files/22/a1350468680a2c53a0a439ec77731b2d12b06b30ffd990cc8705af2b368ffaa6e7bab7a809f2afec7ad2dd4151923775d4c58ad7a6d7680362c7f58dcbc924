@@ -1,0 +1,2052 @@
+import { MessageList } from './chunk-YDFX3JR2.js';
+import { MastraError } from './chunk-JJ5O45LH.js';
+import { MastraBase } from './chunk-S6URFGCZ.js';
+
+// src/storage/constants.ts
+var TABLE_WORKFLOW_SNAPSHOT = "mastra_workflow_snapshot";
+var TABLE_MESSAGES = "mastra_messages";
+var TABLE_THREADS = "mastra_threads";
+var TABLE_TRACES = "mastra_traces";
+var TABLE_RESOURCES = "mastra_resources";
+var TABLE_SCORERS = "mastra_scorers";
+var TABLE_SPANS = "mastra_ai_spans";
+var SCORERS_SCHEMA = {
+  id: { type: "text", nullable: false, primaryKey: true },
+  scorerId: { type: "text" },
+  traceId: { type: "text", nullable: true },
+  spanId: { type: "text", nullable: true },
+  runId: { type: "text" },
+  scorer: { type: "jsonb" },
+  preprocessStepResult: { type: "jsonb", nullable: true },
+  extractStepResult: { type: "jsonb", nullable: true },
+  analyzeStepResult: { type: "jsonb", nullable: true },
+  score: { type: "float" },
+  reason: { type: "text", nullable: true },
+  metadata: { type: "jsonb", nullable: true },
+  preprocessPrompt: { type: "text", nullable: true },
+  extractPrompt: { type: "text", nullable: true },
+  generateScorePrompt: { type: "text", nullable: true },
+  generateReasonPrompt: { type: "text", nullable: true },
+  analyzePrompt: { type: "text", nullable: true },
+  // Deprecated
+  reasonPrompt: { type: "text", nullable: true },
+  input: { type: "jsonb" },
+  output: { type: "jsonb" },
+  // MESSAGE OUTPUT
+  additionalContext: { type: "jsonb", nullable: true },
+  // DATA FROM THE CONTEXT PARAM ON AN AGENT
+  requestContext: { type: "jsonb", nullable: true },
+  // THE EVALUATE Request Context FOR THE RUN
+  /**
+   * Things you can evaluate
+   */
+  entityType: { type: "text", nullable: true },
+  // WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entity: { type: "jsonb", nullable: true },
+  // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entityId: { type: "text", nullable: true },
+  source: { type: "text" },
+  resourceId: { type: "text", nullable: true },
+  threadId: { type: "text", nullable: true },
+  createdAt: { type: "timestamp" },
+  updatedAt: { type: "timestamp" }
+};
+var SPAN_SCHEMA = {
+  // Composite primary key of traceId and spanId
+  traceId: { type: "text", nullable: false },
+  spanId: { type: "text", nullable: false },
+  parentSpanId: { type: "text", nullable: true },
+  name: { type: "text", nullable: false },
+  scope: { type: "jsonb", nullable: true },
+  // Mastra package info {"core-version": "0.1.0"}
+  spanType: { type: "text", nullable: false },
+  // WORKFLOW_RUN, WORKFLOW_STEP, AGENT_RUN, AGENT_STEP, TOOL_RUN, TOOL_STEP, etc.
+  attributes: { type: "jsonb", nullable: true },
+  metadata: { type: "jsonb", nullable: true },
+  links: { type: "jsonb", nullable: true },
+  input: { type: "jsonb", nullable: true },
+  output: { type: "jsonb", nullable: true },
+  error: { type: "jsonb", nullable: true },
+  startedAt: { type: "timestamp", nullable: false },
+  // When the span started
+  endedAt: { type: "timestamp", nullable: true },
+  // When the span ended
+  createdAt: { type: "timestamp", nullable: false },
+  // The time the database record was created
+  updatedAt: { type: "timestamp", nullable: true },
+  // The time the database record was last updated
+  isEvent: { type: "boolean", nullable: false }
+};
+var TABLE_SCHEMAS = {
+  [TABLE_WORKFLOW_SNAPSHOT]: {
+    workflow_name: {
+      type: "text"
+    },
+    run_id: {
+      type: "text"
+    },
+    resourceId: { type: "text", nullable: true },
+    snapshot: {
+      type: "text"
+    },
+    createdAt: {
+      type: "timestamp"
+    },
+    updatedAt: {
+      type: "timestamp"
+    }
+  },
+  [TABLE_SCORERS]: SCORERS_SCHEMA,
+  [TABLE_THREADS]: {
+    id: { type: "text", nullable: false, primaryKey: true },
+    resourceId: { type: "text", nullable: false },
+    title: { type: "text", nullable: false },
+    metadata: { type: "text", nullable: true },
+    createdAt: { type: "timestamp", nullable: false },
+    updatedAt: { type: "timestamp", nullable: false }
+  },
+  [TABLE_MESSAGES]: {
+    id: { type: "text", nullable: false, primaryKey: true },
+    thread_id: { type: "text", nullable: false },
+    content: { type: "text", nullable: false },
+    role: { type: "text", nullable: false },
+    type: { type: "text", nullable: false },
+    createdAt: { type: "timestamp", nullable: false },
+    resourceId: { type: "text", nullable: true }
+  },
+  [TABLE_SPANS]: SPAN_SCHEMA,
+  [TABLE_TRACES]: {
+    id: { type: "text", nullable: false, primaryKey: true },
+    parentSpanId: { type: "text", nullable: true },
+    name: { type: "text", nullable: false },
+    traceId: { type: "text", nullable: false },
+    scope: { type: "text", nullable: false },
+    kind: { type: "integer", nullable: false },
+    attributes: { type: "jsonb", nullable: true },
+    status: { type: "jsonb", nullable: true },
+    events: { type: "jsonb", nullable: true },
+    links: { type: "jsonb", nullable: true },
+    other: { type: "text", nullable: true },
+    startTime: { type: "bigint", nullable: false },
+    endTime: { type: "bigint", nullable: false },
+    createdAt: { type: "timestamp", nullable: false }
+  },
+  [TABLE_RESOURCES]: {
+    id: { type: "text", nullable: false, primaryKey: true },
+    workingMemory: { type: "text", nullable: true },
+    metadata: { type: "jsonb", nullable: true },
+    createdAt: { type: "timestamp", nullable: false },
+    updatedAt: { type: "timestamp", nullable: false }
+  }
+};
+
+// src/storage/base.ts
+function ensureDate(date) {
+  if (!date) return void 0;
+  return date instanceof Date ? date : new Date(date);
+}
+function serializeDate(date) {
+  if (!date) return void 0;
+  const dateObj = ensureDate(date);
+  return dateObj?.toISOString();
+}
+function normalizePerPage(perPageInput, defaultValue) {
+  if (perPageInput === false) {
+    return Number.MAX_SAFE_INTEGER;
+  } else if (perPageInput === 0) {
+    return 0;
+  } else if (typeof perPageInput === "number" && perPageInput > 0) {
+    return perPageInput;
+  }
+  return defaultValue;
+}
+function calculatePagination(page, perPageInput, normalizedPerPage) {
+  return {
+    offset: perPageInput === false ? 0 : page * normalizedPerPage,
+    perPage: perPageInput === false ? false : normalizedPerPage
+  };
+}
+var MastraStorage = class extends MastraBase {
+  hasInitialized = null;
+  shouldCacheInit = true;
+  id;
+  stores;
+  constructor({ id, name }) {
+    if (!id || typeof id !== "string" || id.trim() === "") {
+      throw new Error(`${name}: id must be provided and cannot be empty.`);
+    }
+    super({
+      component: "STORAGE",
+      name
+    });
+    this.id = id;
+  }
+  get supports() {
+    return {
+      selectByIncludeResourceScope: false,
+      resourceWorkingMemory: false,
+      hasColumn: false,
+      createTable: false,
+      deleteMessages: false,
+      observabilityInstance: false,
+      indexManagement: false,
+      listScoresBySpan: false
+    };
+  }
+  ensureDate(date) {
+    return ensureDate(date);
+  }
+  serializeDate(date) {
+    return serializeDate(date);
+  }
+  getSqlType(type) {
+    switch (type) {
+      case "text":
+        return "TEXT";
+      case "timestamp":
+        return "TIMESTAMP";
+      case "float":
+        return "FLOAT";
+      case "integer":
+        return "INTEGER";
+      case "bigint":
+        return "BIGINT";
+      case "jsonb":
+        return "JSONB";
+      default:
+        return "TEXT";
+    }
+  }
+  getDefaultValue(type) {
+    switch (type) {
+      case "text":
+      case "uuid":
+        return "DEFAULT ''";
+      case "timestamp":
+        return "DEFAULT '1970-01-01 00:00:00'";
+      case "integer":
+      case "float":
+      case "bigint":
+        return "DEFAULT 0";
+      case "jsonb":
+        return "DEFAULT '{}'";
+      default:
+        return "DEFAULT ''";
+    }
+  }
+  async getResourceById(_) {
+    throw new Error(
+      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). To use per-resource working memory, switch to one of these supported storage adapters.`
+    );
+  }
+  async saveResource(_) {
+    throw new Error(
+      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). To use per-resource working memory, switch to one of these supported storage adapters.`
+    );
+  }
+  async updateResource(_) {
+    throw new Error(
+      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). To use per-resource working memory, switch to one of these supported storage adapters.`
+    );
+  }
+  async listMessages(args) {
+    if (this.stores?.memory) {
+      return this.stores.memory.listMessages(args);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_LIST_MESSAGES_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`
+    });
+  }
+  async listWorkflowRuns(args) {
+    if (this.stores?.workflows) {
+      return this.stores.workflows.listWorkflowRuns(args);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_LIST_WORKFLOW_RUNS_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Listing workflow runs is not implemented by this storage adapter (${this.constructor.name})`
+    });
+  }
+  async listThreadsByResourceId(args) {
+    if (this.stores?.memory) {
+      return this.stores.memory.listThreadsByResourceId(args);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_LIST_THREADS_BY_RESOURCE_ID_PAGINATED_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Listing threads by resource ID paginated is not implemented by this storage adapter (${this.constructor.name})`
+    });
+  }
+  async listMessagesById({ messageIds }) {
+    if (this.stores?.memory) {
+      const result = await this.stores.memory.listMessagesById({ messageIds });
+      return result;
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_LIST_MESSAGES_BY_ID_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Listing messages by ID is not implemented by this storage adapter (${this.constructor.name})`
+    });
+  }
+  async deleteMessages(_messageIds) {
+    throw new Error(
+      `Message deletion is not supported by this storage adapter (${this.constructor.name}). The deleteMessages method needs to be implemented in the storage adapter.`
+    );
+  }
+  async init() {
+    if (this.shouldCacheInit && await this.hasInitialized) {
+      return;
+    }
+    const tableCreationTasks = [
+      this.createTable({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT]
+      }),
+      this.createTable({
+        tableName: TABLE_THREADS,
+        schema: TABLE_SCHEMAS[TABLE_THREADS]
+      }),
+      this.createTable({
+        tableName: TABLE_MESSAGES,
+        schema: TABLE_SCHEMAS[TABLE_MESSAGES]
+      }),
+      this.createTable({
+        tableName: TABLE_TRACES,
+        schema: TABLE_SCHEMAS[TABLE_TRACES]
+      }),
+      this.createTable({
+        tableName: TABLE_SCORERS,
+        schema: TABLE_SCHEMAS[TABLE_SCORERS]
+      })
+    ];
+    if (this.supports.resourceWorkingMemory) {
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_RESOURCES,
+          schema: TABLE_SCHEMAS[TABLE_RESOURCES]
+        })
+      );
+    }
+    if (this.supports.observabilityInstance) {
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_SPANS,
+          schema: TABLE_SCHEMAS[TABLE_SPANS]
+        })
+      );
+    }
+    this.hasInitialized = Promise.all(tableCreationTasks).then(() => true);
+    await this.hasInitialized;
+    await this?.alterTable?.({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ["resourceId"]
+    });
+    await this?.alterTable?.({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      ifNotExists: ["resourceId"]
+    });
+    await this?.alterTable?.({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ["spanId", "requestContext"]
+    });
+  }
+  async persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    resourceId,
+    snapshot
+  }) {
+    await this.init();
+    const data = {
+      workflow_name: workflowName,
+      run_id: runId,
+      resourceId,
+      snapshot,
+      createdAt: /* @__PURE__ */ new Date(),
+      updatedAt: /* @__PURE__ */ new Date()
+    };
+    this.logger.debug("Persisting workflow snapshot", { workflowName, runId, data });
+    await this.insert({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      record: data
+    });
+  }
+  async loadWorkflowSnapshot({
+    workflowName,
+    runId
+  }) {
+    if (!this.hasInitialized) {
+      await this.init();
+    }
+    this.logger.debug("Loading workflow snapshot", { workflowName, runId });
+    const d = await this.load({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      keys: { workflow_name: workflowName, run_id: runId }
+    });
+    return d ? d.snapshot : null;
+  }
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination: _pagination
+  }) {
+    throw new MastraError({
+      id: "SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      details: { traceId, spanId }
+    });
+  }
+  /**
+   * OBSERVABILITY
+   */
+  /**
+   * Provides hints for tracing strategy selection by the DefaultExporter.
+   * Storage adapters can override this to specify their preferred and supported strategies.
+   */
+  get tracingStrategy() {
+    if (this.stores?.observability) {
+      return this.stores.observability.tracingStrategy;
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_TRACING_STRATEGY_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `tracing is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Creates a single Span record in the storage provider.
+   */
+  async createSpan(span) {
+    if (this.stores?.observability) {
+      return this.stores.observability.createSpan(span);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_CREATE_AI_SPAN_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `tracing is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Updates a single Span with partial data. Primarily used for realtime trace creation.
+   */
+  async updateSpan(params) {
+    if (this.stores?.observability) {
+      return this.stores.observability.updateSpan(params);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_UPDATE_AI_SPAN_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `tracing is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Retrieves a single trace with all its associated spans.
+   */
+  async getTrace(traceId) {
+    if (this.stores?.observability) {
+      return this.stores.observability.getTrace(traceId);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_GET_TRACE_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `tracing is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Retrieves a paginated list of traces with optional filtering.
+   */
+  async getTracesPaginated(args) {
+    if (this.stores?.observability) {
+      return this.stores.observability.getTracesPaginated(args);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_GET_TRACES_PAGINATED_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `tracing is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Creates multiple Spans in a single batch.
+   */
+  async batchCreateSpans(args) {
+    if (this.stores?.observability) {
+      return this.stores.observability.batchCreateSpans(args);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_BATCH_CREATE_AI_SPANS_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `tracing is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Updates multiple Spans in a single batch.
+   */
+  async batchUpdateSpans(args) {
+    if (this.stores?.observability) {
+      return this.stores.observability.batchUpdateSpans(args);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_BATCH_UPDATE_AI_SPANS_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `tracing is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Deletes multiple traces and all their associated spans in a single batch operation.
+   */
+  async batchDeleteTraces(args) {
+    if (this.stores?.observability) {
+      return this.stores.observability.batchDeleteTraces(args);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_BATCH_DELETE_TRACES_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `tracing is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * DATABASE INDEX MANAGEMENT
+   * These methods delegate to the operations store for index management.
+   * Storage adapters that support indexes should implement these in their operations class.
+   */
+  /**
+   * Creates a database index on specified columns
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async createIndex(options) {
+    if (this.stores?.operations) {
+      return this.stores.operations.createIndex(options);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_CREATE_INDEX_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Drops a database index by name
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async dropIndex(indexName) {
+    if (this.stores?.operations) {
+      return this.stores.operations.dropIndex(indexName);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_DROP_INDEX_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Lists database indexes for a table or all tables
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async listIndexes(tableName) {
+    if (this.stores?.operations) {
+      return this.stores.operations.listIndexes(tableName);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_LIST_INDEXES_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+  /**
+   * Gets detailed statistics for a specific index
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async describeIndex(indexName) {
+    if (this.stores?.operations) {
+      return this.stores.operations.describeIndex(indexName);
+    }
+    throw new MastraError({
+      id: "MASTRA_STORAGE_DESCRIBE_INDEX_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`
+    });
+  }
+};
+
+// src/storage/utils.ts
+function safelyParseJSON(input) {
+  if (input && typeof input === "object") return input;
+  if (input == null) return {};
+  if (typeof input === "string") {
+    try {
+      return JSON.parse(input);
+    } catch {
+      return input;
+    }
+  }
+  return {};
+}
+
+// src/storage/domains/memory/base.ts
+var MemoryStorage = class extends MastraBase {
+  constructor() {
+    super({
+      component: "STORAGE",
+      name: "MEMORY"
+    });
+  }
+  async deleteMessages(_messageIds) {
+    throw new Error(
+      `Message deletion is not supported by this storage adapter (${this.constructor.name}). The deleteMessages method needs to be implemented in the storage adapter.`
+    );
+  }
+  async getResourceById(_) {
+    throw new Error(
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). This is likely a bug - all Mastra storage adapters should implement resource support. Please report this issue at https://github.com/mastra-ai/mastra/issues`
+    );
+  }
+  async saveResource(_) {
+    throw new Error(
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). This is likely a bug - all Mastra storage adapters should implement resource support. Please report this issue at https://github.com/mastra-ai/mastra/issues`
+    );
+  }
+  async updateResource(_) {
+    throw new Error(
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). This is likely a bug - all Mastra storage adapters should implement resource support. Please report this issue at https://github.com/mastra-ai/mastra/issues`
+    );
+  }
+  parseOrderBy(orderBy, defaultDirection = "DESC") {
+    return {
+      field: orderBy?.field && orderBy.field in THREAD_ORDER_BY_SET ? orderBy.field : "createdAt",
+      direction: orderBy?.direction && orderBy.direction in THREAD_THREAD_SORT_DIRECTION_SET ? orderBy.direction : defaultDirection
+    };
+  }
+};
+var THREAD_ORDER_BY_SET = {
+  createdAt: true,
+  updatedAt: true
+};
+var THREAD_THREAD_SORT_DIRECTION_SET = {
+  ASC: true,
+  DESC: true
+};
+
+// src/storage/domains/memory/inmemory.ts
+var InMemoryMemory = class extends MemoryStorage {
+  collection;
+  operations;
+  constructor({
+    collection,
+    operations
+  }) {
+    super();
+    this.collection = collection;
+    this.operations = operations;
+  }
+  async getThreadById({ threadId }) {
+    this.logger.debug(`MockStore: getThreadById called for ${threadId}`);
+    const thread = this.collection.threads.get(threadId);
+    return thread ? { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata } : null;
+  }
+  async saveThread({ thread }) {
+    this.logger.debug(`MockStore: saveThread called for ${thread.id}`);
+    const key = thread.id;
+    this.collection.threads.set(key, thread);
+    return thread;
+  }
+  async updateThread({
+    id,
+    title,
+    metadata
+  }) {
+    this.logger.debug(`MockStore: updateThread called for ${id}`);
+    const thread = this.collection.threads.get(id);
+    if (!thread) {
+      throw new Error(`Thread with id ${id} not found`);
+    }
+    if (thread) {
+      thread.title = title;
+      thread.metadata = { ...thread.metadata, ...metadata };
+      thread.updatedAt = /* @__PURE__ */ new Date();
+    }
+    return thread;
+  }
+  async deleteThread({ threadId }) {
+    this.logger.debug(`MockStore: deleteThread called for ${threadId}`);
+    this.collection.threads.delete(threadId);
+    this.collection.messages.forEach((msg, key) => {
+      if (msg.thread_id === threadId) {
+        this.collection.messages.delete(key);
+      }
+    });
+  }
+  async listMessages({
+    threadId,
+    resourceId,
+    include,
+    filter,
+    perPage: perPageInput,
+    page = 0,
+    orderBy
+  }) {
+    this.logger.debug(`MockStore: listMessages called for thread ${threadId}`);
+    if (!threadId.trim()) throw new Error("threadId must be a non-empty string");
+    const { field, direction } = this.parseOrderBy(orderBy, "ASC");
+    const perPage = normalizePerPage(perPageInput, 40);
+    if (page < 0) {
+      throw new Error("page must be >= 0");
+    }
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error("page value too large");
+    }
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    let threadMessages = Array.from(this.collection.messages.values()).filter((msg) => {
+      if (msg.thread_id !== threadId) return false;
+      if (resourceId && msg.resourceId !== resourceId) return false;
+      return true;
+    });
+    if (filter?.dateRange) {
+      const { start: from, end: to } = filter.dateRange;
+      threadMessages = threadMessages.filter((msg) => {
+        const msgDate = new Date(msg.createdAt);
+        const fromDate = from ? new Date(from) : null;
+        const toDate = to ? new Date(to) : null;
+        if (fromDate && msgDate < fromDate) return false;
+        if (toDate && msgDate > toDate) return false;
+        return true;
+      });
+    }
+    threadMessages.sort((a, b) => {
+      const isDateField = field === "createdAt" || field === "updatedAt";
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return direction === "ASC" ? aValue - bValue : bValue - aValue;
+      }
+      return direction === "ASC" ? String(aValue).localeCompare(String(bValue)) : String(bValue).localeCompare(String(aValue));
+    });
+    const totalThreadMessages = threadMessages.length;
+    const start = offset;
+    const end = start + perPage;
+    const paginatedThreadMessages = threadMessages.slice(start, end);
+    const messages = [];
+    const messageIds = /* @__PURE__ */ new Set();
+    for (const msg of paginatedThreadMessages) {
+      const convertedMessage = this.parseStoredMessage(msg);
+      messages.push(convertedMessage);
+      messageIds.add(msg.id);
+    }
+    if (include && include.length > 0) {
+      for (const includeItem of include) {
+        const targetMessage = this.collection.messages.get(includeItem.id);
+        if (targetMessage) {
+          const convertedMessage = {
+            id: targetMessage.id,
+            threadId: targetMessage.thread_id,
+            content: safelyParseJSON(targetMessage.content),
+            role: targetMessage.role,
+            type: targetMessage.type,
+            createdAt: targetMessage.createdAt,
+            resourceId: targetMessage.resourceId
+          };
+          if (!messageIds.has(convertedMessage.id)) {
+            messages.push(convertedMessage);
+            messageIds.add(convertedMessage.id);
+          }
+          if (includeItem.withPreviousMessages) {
+            const allThreadMessages = Array.from(this.collection.messages.values()).filter((msg) => msg.thread_id === (includeItem.threadId || threadId)).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            const targetIndex = allThreadMessages.findIndex((msg) => msg.id === includeItem.id);
+            if (targetIndex !== -1) {
+              const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages || 0));
+              for (let i = startIndex; i < targetIndex; i++) {
+                const message = allThreadMessages[i];
+                if (message && !messageIds.has(message.id)) {
+                  const convertedPrevMessage = {
+                    id: message.id,
+                    threadId: message.thread_id,
+                    content: safelyParseJSON(message.content),
+                    role: message.role,
+                    type: message.type,
+                    createdAt: message.createdAt,
+                    resourceId: message.resourceId
+                  };
+                  messages.push(convertedPrevMessage);
+                  messageIds.add(message.id);
+                }
+              }
+            }
+          }
+          if (includeItem.withNextMessages) {
+            const allThreadMessages = Array.from(this.collection.messages.values()).filter((msg) => msg.thread_id === (includeItem.threadId || threadId)).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            const targetIndex = allThreadMessages.findIndex((msg) => msg.id === includeItem.id);
+            if (targetIndex !== -1) {
+              const endIndex = Math.min(
+                allThreadMessages.length,
+                targetIndex + (includeItem.withNextMessages || 0) + 1
+              );
+              for (let i = targetIndex + 1; i < endIndex; i++) {
+                const message = allThreadMessages[i];
+                if (message && !messageIds.has(message.id)) {
+                  const convertedNextMessage = {
+                    id: message.id,
+                    threadId: message.thread_id,
+                    content: safelyParseJSON(message.content),
+                    role: message.role,
+                    type: message.type,
+                    createdAt: message.createdAt,
+                    resourceId: message.resourceId
+                  };
+                  messages.push(convertedNextMessage);
+                  messageIds.add(message.id);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    messages.sort((a, b) => {
+      const isDateField = field === "createdAt" || field === "updatedAt";
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return direction === "ASC" ? aValue - bValue : bValue - aValue;
+      }
+      return direction === "ASC" ? String(aValue).localeCompare(String(bValue)) : String(bValue).localeCompare(String(aValue));
+    });
+    let hasMore;
+    if (include && include.length > 0) {
+      const returnedThreadMessageIds = new Set(messages.filter((m) => m.threadId === threadId).map((m) => m.id));
+      hasMore = returnedThreadMessageIds.size < totalThreadMessages;
+    } else {
+      hasMore = end < totalThreadMessages;
+    }
+    return {
+      messages,
+      total: totalThreadMessages,
+      page,
+      perPage: perPageForResponse,
+      hasMore
+    };
+  }
+  parseStoredMessage(message) {
+    const { resourceId, content, role, thread_id, ...rest } = message;
+    let parsedContent = safelyParseJSON(content);
+    if (typeof parsedContent === "string") {
+      parsedContent = {
+        format: 2,
+        content: parsedContent,
+        parts: [{ type: "text", text: parsedContent }]
+      };
+    }
+    return {
+      ...rest,
+      threadId: thread_id,
+      ...message.resourceId && { resourceId: message.resourceId },
+      content: parsedContent,
+      role
+    };
+  }
+  async listMessagesById({ messageIds }) {
+    this.logger.debug(`MockStore: listMessagesById called`);
+    const rawMessages = messageIds.map((id) => this.collection.messages.get(id)).filter((message) => !!message);
+    const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), "memory");
+    return { messages: list.get.all.db() };
+  }
+  async saveMessages(args) {
+    const { messages } = args;
+    this.logger.debug(`MockStore: saveMessages called with ${messages.length} messages`);
+    if (messages.some((msg) => msg.id === "error-message" || msg.resourceId === null)) {
+      throw new Error("Simulated error for testing");
+    }
+    const threadIds = new Set(messages.map((msg) => msg.threadId).filter((id) => Boolean(id)));
+    for (const threadId of threadIds) {
+      const thread = this.collection.threads.get(threadId);
+      if (thread) {
+        thread.updatedAt = /* @__PURE__ */ new Date();
+      }
+    }
+    for (const message of messages) {
+      const key = message.id;
+      const storageMessage = {
+        id: message.id,
+        thread_id: message.threadId || "",
+        content: JSON.stringify(message.content),
+        role: message.role || "user",
+        type: message.type || "text",
+        createdAt: message.createdAt,
+        resourceId: message.resourceId || null
+      };
+      this.collection.messages.set(key, storageMessage);
+    }
+    const list = new MessageList().add(messages, "memory");
+    return { messages: list.get.all.db() };
+  }
+  async updateMessages(args) {
+    const updatedMessages = [];
+    for (const update of args.messages) {
+      const storageMsg = this.collection.messages.get(update.id);
+      if (!storageMsg) continue;
+      const oldThreadId = storageMsg.thread_id;
+      const newThreadId = update.threadId || oldThreadId;
+      let threadIdChanged = false;
+      if (update.threadId && update.threadId !== oldThreadId) {
+        threadIdChanged = true;
+      }
+      if (update.role !== void 0) storageMsg.role = update.role;
+      if (update.type !== void 0) storageMsg.type = update.type;
+      if (update.createdAt !== void 0) storageMsg.createdAt = update.createdAt;
+      if (update.resourceId !== void 0) storageMsg.resourceId = update.resourceId;
+      if (update.content !== void 0) {
+        let oldContent = safelyParseJSON(storageMsg.content);
+        let newContent = update.content;
+        if (typeof newContent === "object" && typeof oldContent === "object") {
+          newContent = { ...oldContent, ...newContent };
+          if (oldContent.metadata && newContent.metadata) {
+            newContent.metadata = { ...oldContent.metadata, ...newContent.metadata };
+          }
+        }
+        storageMsg.content = JSON.stringify(newContent);
+      }
+      if (threadIdChanged) {
+        storageMsg.thread_id = newThreadId;
+        const base = Date.now();
+        let oldThreadNewTime;
+        const oldThread = this.collection.threads.get(oldThreadId);
+        if (oldThread) {
+          const prev = new Date(oldThread.updatedAt).getTime();
+          oldThreadNewTime = Math.max(base, prev + 1);
+          oldThread.updatedAt = new Date(oldThreadNewTime);
+        }
+        const newThread = this.collection.threads.get(newThreadId);
+        if (newThread) {
+          const prev = new Date(newThread.updatedAt).getTime();
+          let newThreadNewTime = Math.max(base + 1, prev + 1);
+          if (oldThreadNewTime !== void 0 && newThreadNewTime <= oldThreadNewTime) {
+            newThreadNewTime = oldThreadNewTime + 1;
+          }
+          newThread.updatedAt = new Date(newThreadNewTime);
+        }
+      } else {
+        const thread = this.collection.threads.get(oldThreadId);
+        if (thread) {
+          const prev = new Date(thread.updatedAt).getTime();
+          let newTime = Date.now();
+          if (newTime <= prev) newTime = prev + 1;
+          thread.updatedAt = new Date(newTime);
+        }
+      }
+      this.collection.messages.set(update.id, storageMsg);
+      updatedMessages.push({
+        id: storageMsg.id,
+        threadId: storageMsg.thread_id,
+        content: safelyParseJSON(storageMsg.content),
+        role: storageMsg.role === "user" || storageMsg.role === "assistant" ? storageMsg.role : "user",
+        type: storageMsg.type,
+        createdAt: storageMsg.createdAt,
+        resourceId: storageMsg.resourceId === null ? void 0 : storageMsg.resourceId
+      });
+    }
+    return updatedMessages;
+  }
+  async deleteMessages(messageIds) {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+    this.logger.debug(`MockStore: deleteMessages called for ${messageIds.length} messages`);
+    const threadIds = /* @__PURE__ */ new Set();
+    for (const messageId of messageIds) {
+      const message = this.collection.messages.get(messageId);
+      if (message && message.thread_id) {
+        threadIds.add(message.thread_id);
+      }
+      this.collection.messages.delete(messageId);
+    }
+    const now = /* @__PURE__ */ new Date();
+    for (const threadId of threadIds) {
+      const thread = this.collection.threads.get(threadId);
+      if (thread) {
+        thread.updatedAt = now;
+      }
+    }
+  }
+  async listThreadsByResourceId(args) {
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
+    const perPage = normalizePerPage(perPageInput, 100);
+    if (page < 0) {
+      throw new Error("page must be >= 0");
+    }
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error("page value too large");
+    }
+    this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
+    const threads = Array.from(this.collection.threads.values()).filter((t) => t.resourceId === resourceId);
+    const sortedThreads = this.sortThreads(threads, field, direction);
+    const clonedThreads = sortedThreads.map((thread) => ({
+      ...thread,
+      metadata: thread.metadata ? { ...thread.metadata } : thread.metadata
+    }));
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    return {
+      threads: clonedThreads.slice(offset, offset + perPage),
+      total: clonedThreads.length,
+      page,
+      perPage: perPageForResponse,
+      hasMore: offset + perPage < clonedThreads.length
+    };
+  }
+  async getResourceById({ resourceId }) {
+    this.logger.debug(`MockStore: getResourceById called for ${resourceId}`);
+    const resource = this.collection.resources.get(resourceId);
+    return resource ? { ...resource, metadata: resource.metadata ? { ...resource.metadata } : resource.metadata } : null;
+  }
+  async saveResource({ resource }) {
+    this.logger.debug(`MockStore: saveResource called for ${resource.id}`);
+    this.collection.resources.set(resource.id, resource);
+    return resource;
+  }
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata
+  }) {
+    this.logger.debug(`MockStore: updateResource called for ${resourceId}`);
+    let resource = this.collection.resources.get(resourceId);
+    if (!resource) {
+      resource = {
+        id: resourceId,
+        workingMemory,
+        metadata: metadata || {},
+        createdAt: /* @__PURE__ */ new Date(),
+        updatedAt: /* @__PURE__ */ new Date()
+      };
+    } else {
+      resource = {
+        ...resource,
+        workingMemory: workingMemory !== void 0 ? workingMemory : resource.workingMemory,
+        metadata: {
+          ...resource.metadata,
+          ...metadata
+        },
+        updatedAt: /* @__PURE__ */ new Date()
+      };
+    }
+    this.collection.resources.set(resourceId, resource);
+    return resource;
+  }
+  sortThreads(threads, field, direction) {
+    return threads.sort((a, b) => {
+      const isDateField = field === "createdAt" || field === "updatedAt";
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        if (direction === "ASC") {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      }
+      return direction === "ASC" ? String(aValue).localeCompare(String(bValue)) : String(bValue).localeCompare(String(aValue));
+    });
+  }
+};
+
+// src/storage/domains/observability/base.ts
+var ObservabilityStorage = class extends MastraBase {
+  constructor() {
+    super({
+      component: "STORAGE",
+      name: "OBSERVABILITY"
+    });
+  }
+  /**
+   * Provides hints for tracing strategy selection by the DefaultExporter.
+   * Storage adapters can override this to specify their preferred and supported strategies.
+   */
+  get tracingStrategy() {
+    return {
+      preferred: "batch-with-updates",
+      // Default for most SQL stores
+      supported: ["realtime", "batch-with-updates", "insert-only"]
+    };
+  }
+  /**
+   * Creates a single Span record in the storage provider.
+   */
+  createSpan(_span) {
+    throw new MastraError({
+      id: "OBSERVABILITY_CREATE_SPAN_NOT_IMPLEMENTED",
+      domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: "This storage provider does not support creating spans"
+    });
+  }
+  /**
+   * Updates a single Span with partial data. Primarily used for realtime trace creation.
+   */
+  updateSpan(_params) {
+    throw new MastraError({
+      id: "OBSERVABILITY_STORAGE_UPDATE_SPAN_NOT_IMPLEMENTED",
+      domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: "This storage provider does not support updating spans"
+    });
+  }
+  /**
+   * Retrieves a single trace with all its associated spans.
+   */
+  getTrace(_traceId) {
+    throw new MastraError({
+      id: "OBSERVABILITY_STORAGE_GET_TRACE_NOT_IMPLEMENTED",
+      domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: "This storage provider does not support getting traces"
+    });
+  }
+  /**
+   * Retrieves a paginated list of traces with optional filtering.
+   */
+  getTracesPaginated(_args) {
+    throw new MastraError({
+      id: "OBSERVABILITY_STORAGE_GET_TRACES_PAGINATED_NOT_IMPLEMENTED",
+      domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: "This storage provider does not support getting traces paginated"
+    });
+  }
+  /**
+   * Creates multiple Spans in a single batch.
+   */
+  batchCreateSpans(_args) {
+    throw new MastraError({
+      id: "OBSERVABILITY_STORAGE_BATCH_CREATE_SPAN_NOT_IMPLEMENTED",
+      domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: "This storage provider does not support batch creating spans"
+    });
+  }
+  /**
+   * Updates multiple Spans in a single batch.
+   */
+  batchUpdateSpans(_args) {
+    throw new MastraError({
+      id: "OBSERVABILITY_STORAGE_BATCH_UPDATE_SPANS_NOT_IMPLEMENTED",
+      domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: "This storage provider does not support batch updating spans"
+    });
+  }
+  /**
+   * Deletes multiple traces and all their associated spans in a single batch operation.
+   */
+  batchDeleteTraces(_args) {
+    throw new MastraError({
+      id: "OBSERVABILITY_STORAGE_BATCH_DELETE_TRACES_NOT_IMPLEMENTED",
+      domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: "This storage provider does not support batch deleting traces"
+    });
+  }
+};
+
+// src/storage/domains/observability/inmemory.ts
+var ObservabilityInMemory = class extends ObservabilityStorage {
+  operations;
+  collection;
+  constructor({ collection, operations }) {
+    super();
+    this.collection = collection;
+    this.operations = operations;
+  }
+  get tracingStrategy() {
+    return {
+      preferred: "realtime",
+      supported: ["realtime", "batch-with-updates", "insert-only"]
+    };
+  }
+  async createSpan(span) {
+    this.validateCreateSpan(span);
+    const id = this.generateId(span);
+    const record = span;
+    record.createdAt = /* @__PURE__ */ new Date();
+    record.updatedAt = record.createdAt;
+    this.collection.set(id, record);
+  }
+  async batchCreateSpans(args) {
+    for (const record of args.records) {
+      await this.createSpan(record);
+    }
+  }
+  validateCreateSpan(record) {
+    if (!record.spanId) {
+      throw new MastraError({
+        id: "OBSERVABILITY_SPAN_ID_REQUIRED",
+        domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+        category: "SYSTEM" /* SYSTEM */,
+        text: "Span ID is required for creating a span"
+      });
+    }
+    if (!record.traceId) {
+      throw new MastraError({
+        id: "OBSERVABILITY_TRACE_ID_REQUIRED",
+        domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+        category: "SYSTEM" /* SYSTEM */,
+        text: "Trace ID is required for creating a span"
+      });
+    }
+  }
+  generateId({ traceId, spanId }) {
+    return `${traceId}-${spanId}`;
+  }
+  async getTrace(traceId) {
+    const spans = Array.from(this.collection.values()).filter((span) => span.traceId === traceId);
+    if (spans.length === 0) {
+      return null;
+    }
+    spans.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+    return {
+      traceId,
+      spans
+    };
+  }
+  async getTracesPaginated({
+    filters,
+    pagination
+  }) {
+    const allRootSpans = this.filterForRootSpans(Array.from(this.collection.values()));
+    const filteredRootSpans = this.filterSpansByFilter(allRootSpans, filters);
+    const startDate = pagination?.dateRange?.start;
+    const endDate = pagination?.dateRange?.end;
+    const filteredRootSpansByDate = this.filterSpansByDate(filteredRootSpans, startDate, endDate);
+    const total = filteredRootSpansByDate.length;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
+    const start = page * perPage;
+    const end = start + perPage;
+    const paged = this.filterSpansByPagination(filteredRootSpansByDate, pagination);
+    return {
+      spans: paged,
+      pagination: { total, page, perPage, hasMore: end < total }
+    };
+  }
+  filterForRootSpans(spans) {
+    return spans.filter((span) => span.parentSpanId === null);
+  }
+  filterSpansByDate(spans, startDate, endDate) {
+    return spans.filter((span) => {
+      if (startDate && span.startedAt < startDate) return false;
+      if (endDate && span.startedAt > endDate) return false;
+      return true;
+    });
+  }
+  filterSpansByFilter(spans, filter) {
+    return spans.filter((span) => {
+      if (filter?.name && span.name !== filter.name) return false;
+      if (filter?.spanType && span.spanType !== filter.spanType) return false;
+      if (filter?.entityType === "agent" && filter.entityId !== span.attributes?.agentId) return false;
+      if (filter?.entityType === "workflow" && filter.entityId !== span.attributes?.workflowId) return false;
+      return true;
+    });
+  }
+  filterSpansByPagination(spans, pagination) {
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
+    const start = page * perPage;
+    const end = start + perPage;
+    return spans.slice(start, end);
+  }
+  async updateSpan(params) {
+    const id = this.generateId(params);
+    const span = this.collection.get(id);
+    if (!span) {
+      throw new MastraError({
+        id: "OBSERVABILITY_UPDATE_SPAN_NOT_FOUND",
+        domain: "MASTRA_OBSERVABILITY" /* MASTRA_OBSERVABILITY */,
+        category: "SYSTEM" /* SYSTEM */,
+        text: "Span not found for update"
+      });
+    }
+    this.collection.set(id, { ...span, ...params.updates, updatedAt: /* @__PURE__ */ new Date() });
+  }
+  async batchUpdateSpans(args) {
+    for (const record of args.records) {
+      await this.updateSpan(record);
+    }
+  }
+  async batchDeleteTraces(args) {
+    for (const traceId of args.traceIds) {
+      const spans = Array.from(this.collection.values()).filter((span) => span.traceId === traceId);
+      for (const span of spans) {
+        this.collection.delete(this.generateId(span));
+      }
+    }
+  }
+};
+
+// src/storage/domains/operations/base.ts
+var StoreOperations = class extends MastraBase {
+  constructor() {
+    super({
+      component: "STORAGE",
+      name: "OPERATIONS"
+    });
+  }
+  getSqlType(type) {
+    switch (type) {
+      case "text":
+        return "TEXT";
+      case "timestamp":
+        return "TIMESTAMP";
+      case "float":
+        return "FLOAT";
+      case "integer":
+        return "INTEGER";
+      case "bigint":
+        return "BIGINT";
+      case "jsonb":
+        return "JSONB";
+      default:
+        return "TEXT";
+    }
+  }
+  getDefaultValue(type) {
+    switch (type) {
+      case "text":
+      case "uuid":
+        return "DEFAULT ''";
+      case "timestamp":
+        return "DEFAULT '1970-01-01 00:00:00'";
+      case "integer":
+      case "bigint":
+      case "float":
+        return "DEFAULT 0";
+      case "jsonb":
+        return "DEFAULT '{}'";
+      default:
+        return "DEFAULT ''";
+    }
+  }
+  /**
+   * DATABASE INDEX MANAGEMENT
+   * Optional methods for database index management.
+   * Storage adapters can override these to provide index management capabilities.
+   */
+  /**
+   * Creates a database index on specified columns
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async createIndex(_options) {
+    throw new MastraError({
+      id: "MASTRA_STORAGE_CREATE_INDEX_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Index management is not supported by this storage adapter`
+    });
+  }
+  /**
+   * Drops a database index by name
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async dropIndex(_indexName) {
+    throw new MastraError({
+      id: "MASTRA_STORAGE_DROP_INDEX_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Index management is not supported by this storage adapter`
+    });
+  }
+  /**
+   * Lists database indexes for a table or all tables
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async listIndexes(_tableName) {
+    throw new MastraError({
+      id: "MASTRA_STORAGE_LIST_INDEXES_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Index management is not supported by this storage adapter`
+    });
+  }
+  /**
+   * Gets detailed statistics for a specific index
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async describeIndex(_indexName) {
+    throw new MastraError({
+      id: "MASTRA_STORAGE_DESCRIBE_INDEX_NOT_SUPPORTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      text: `Index management is not supported by this storage adapter`
+    });
+  }
+  /**
+   * Returns definitions for automatic performance indexes
+   * Storage adapters can override this to define indexes that should be created during initialization
+   * @returns Array of index definitions to create automatically
+   */
+  getAutomaticIndexDefinitions() {
+    return [];
+  }
+};
+
+// src/storage/domains/operations/inmemory.ts
+var StoreOperationsInMemory = class extends StoreOperations {
+  data;
+  constructor() {
+    super();
+    this.data = {
+      mastra_workflow_snapshot: /* @__PURE__ */ new Map(),
+      mastra_messages: /* @__PURE__ */ new Map(),
+      mastra_threads: /* @__PURE__ */ new Map(),
+      mastra_traces: /* @__PURE__ */ new Map(),
+      mastra_resources: /* @__PURE__ */ new Map(),
+      mastra_scorers: /* @__PURE__ */ new Map(),
+      mastra_ai_spans: /* @__PURE__ */ new Map()
+    };
+  }
+  getDatabase() {
+    return this.data;
+  }
+  async insert({ tableName, record }) {
+    const table = this.data[tableName];
+    let key = record.id;
+    if ([TABLE_WORKFLOW_SNAPSHOT].includes(tableName) && !record.id && record.run_id) {
+      key = record.workflow_name ? `${record.workflow_name}-${record.run_id}` : record.run_id;
+      record.id = key;
+    } else if (!record.id) {
+      key = `auto-${Date.now()}-${Math.random()}`;
+      record.id = key;
+    }
+    table.set(key, record);
+  }
+  async batchInsert({ tableName, records }) {
+    const table = this.data[tableName];
+    for (const record of records) {
+      let key = record.id;
+      if ([TABLE_WORKFLOW_SNAPSHOT].includes(tableName) && !record.id && record.run_id) {
+        key = record.run_id;
+        record.id = key;
+      } else if (!record.id) {
+        key = `auto-${Date.now()}-${Math.random()}`;
+        record.id = key;
+      }
+      table.set(key, record);
+    }
+  }
+  async load({ tableName, keys }) {
+    this.logger.debug(`MockStore: load called for ${tableName} with keys`, keys);
+    const table = this.data[tableName];
+    const records = Array.from(table.values());
+    return records.filter((record) => Object.keys(keys).every((key) => record[key] === keys[key]))?.[0];
+  }
+  async createTable({
+    tableName,
+    schema
+  }) {
+    this.logger.debug(`MockStore: createTable called for ${tableName} with schema`, schema);
+    this.data[tableName] = /* @__PURE__ */ new Map();
+  }
+  async clearTable({ tableName }) {
+    this.logger.debug(`MockStore: clearTable called for ${tableName}`);
+    this.data[tableName].clear();
+  }
+  async dropTable({ tableName }) {
+    this.logger.debug(`MockStore: dropTable called for ${tableName}`);
+    this.data[tableName].clear();
+  }
+  async alterTable({
+    tableName,
+    schema
+  }) {
+    this.logger.debug(`MockStore: alterTable called for ${tableName} with schema`, schema);
+  }
+  async hasColumn(table, column) {
+    this.logger.debug(`MockStore: hasColumn called for ${table} with column ${column}`);
+    return true;
+  }
+};
+
+// src/storage/domains/scores/base.ts
+var ScoresStorage = class extends MastraBase {
+  constructor() {
+    super({
+      component: "STORAGE",
+      name: "SCORES"
+    });
+  }
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination: _pagination
+  }) {
+    throw new MastraError({
+      id: "SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED",
+      domain: "STORAGE" /* STORAGE */,
+      category: "SYSTEM" /* SYSTEM */,
+      details: { traceId, spanId }
+    });
+  }
+};
+
+// src/storage/domains/scores/inmemory.ts
+var ScoresInMemory = class extends ScoresStorage {
+  scores;
+  constructor({ collection }) {
+    super();
+    this.scores = collection;
+  }
+  async getScoreById({ id }) {
+    return this.scores.get(id) ?? null;
+  }
+  async saveScore(score) {
+    const newScore = { id: crypto.randomUUID(), createdAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date(), ...score };
+    this.scores.set(newScore.id, newScore);
+    return { score: newScore };
+  }
+  async listScoresByScorerId({
+    scorerId,
+    pagination,
+    entityId,
+    entityType,
+    source
+  }) {
+    const scores = Array.from(this.scores.values()).filter((score) => {
+      let baseFilter = score.scorerId === scorerId;
+      if (entityId) {
+        baseFilter = baseFilter && score.entityId === entityId;
+      }
+      if (entityType) {
+        baseFilter = baseFilter && score.entityType === entityType;
+      }
+      if (source) {
+        baseFilter = baseFilter && score.source === source;
+      }
+      return baseFilter;
+    });
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+    return {
+      scores: scores.slice(start, end),
+      pagination: {
+        total: scores.length,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end
+      }
+    };
+  }
+  async listScoresByRunId({
+    runId,
+    pagination
+  }) {
+    const scores = Array.from(this.scores.values()).filter((score) => score.runId === runId);
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+    return {
+      scores: scores.slice(start, end),
+      pagination: {
+        total: scores.length,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end
+      }
+    };
+  }
+  async listScoresByEntityId({
+    entityId,
+    entityType,
+    pagination
+  }) {
+    const scores = Array.from(this.scores.values()).filter((score) => {
+      const baseFilter = score.entityId === entityId && score.entityType === entityType;
+      return baseFilter;
+    });
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+    return {
+      scores: scores.slice(start, end),
+      pagination: {
+        total: scores.length,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end
+      }
+    };
+  }
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination
+  }) {
+    const scores = Array.from(this.scores.values()).filter(
+      (score) => score.traceId === traceId && score.spanId === spanId
+    );
+    scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+    return {
+      scores: scores.slice(start, end),
+      pagination: {
+        total: scores.length,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end
+      }
+    };
+  }
+};
+
+// src/storage/domains/workflows/base.ts
+var WorkflowsStorage = class extends MastraBase {
+  constructor() {
+    super({
+      component: "STORAGE",
+      name: "WORKFLOWS"
+    });
+  }
+};
+
+// src/storage/domains/workflows/inmemory.ts
+var WorkflowsInMemory = class extends WorkflowsStorage {
+  operations;
+  collection;
+  constructor({ collection, operations }) {
+    super();
+    this.collection = collection;
+    this.operations = operations;
+  }
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext
+  }) {
+    this.logger.debug(`MockStore: updateWorkflowResults called for ${workflowName} ${runId} ${stepId}`, result);
+    const run = this.collection.get(`${workflowName}-${runId}`);
+    if (!run) {
+      return {};
+    }
+    let snapshot;
+    if (!run.snapshot) {
+      snapshot = {
+        context: {},
+        activePaths: [],
+        activeStepsPath: {},
+        timestamp: Date.now(),
+        suspendedPaths: {},
+        resumeLabels: {},
+        serializedStepGraph: [],
+        value: {},
+        waitingPaths: {},
+        status: "pending",
+        runId: run.run_id
+      };
+      this.collection.set(`${workflowName}-${runId}`, {
+        ...run,
+        snapshot
+      });
+    }
+    snapshot = typeof run.snapshot === "string" ? JSON.parse(run.snapshot) : run.snapshot;
+    if (!snapshot || !snapshot?.context) {
+      throw new Error(`Snapshot not found for runId ${runId}`);
+    }
+    snapshot.context[stepId] = result;
+    snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+    this.collection.set(`${workflowName}-${runId}`, {
+      ...run,
+      snapshot
+    });
+    return JSON.parse(JSON.stringify(snapshot.context));
+  }
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts
+  }) {
+    const run = this.collection.get(`${workflowName}-${runId}`);
+    if (!run) {
+      return;
+    }
+    let snapshot;
+    if (!run.snapshot) {
+      snapshot = {
+        context: {},
+        activePaths: [],
+        activeStepsPath: {},
+        timestamp: Date.now(),
+        suspendedPaths: {},
+        resumeLabels: {},
+        serializedStepGraph: [],
+        value: {},
+        waitingPaths: {},
+        status: "pending",
+        runId: run.run_id
+      };
+      this.collection.set(`${workflowName}-${runId}`, {
+        ...run,
+        snapshot
+      });
+    } else {
+      snapshot = typeof run.snapshot === "string" ? JSON.parse(run.snapshot) : run.snapshot;
+    }
+    if (!snapshot || !snapshot?.context) {
+      throw new Error(`Snapshot not found for runId ${runId}`);
+    }
+    snapshot = { ...snapshot, ...opts };
+    this.collection.set(`${workflowName}-${runId}`, {
+      ...run,
+      snapshot
+    });
+    return snapshot;
+  }
+  async persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    resourceId,
+    snapshot
+  }) {
+    const data = {
+      workflow_name: workflowName,
+      run_id: runId,
+      resourceId,
+      snapshot,
+      createdAt: /* @__PURE__ */ new Date(),
+      updatedAt: /* @__PURE__ */ new Date()
+    };
+    await this.operations.insert({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      record: data
+    });
+  }
+  async loadWorkflowSnapshot({
+    workflowName,
+    runId
+  }) {
+    this.logger.debug("Loading workflow snapshot", { workflowName, runId });
+    const d = await this.operations.load({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      keys: { workflow_name: workflowName, run_id: runId }
+    });
+    return d ? JSON.parse(JSON.stringify(d.snapshot)) : null;
+  }
+  async listWorkflowRuns({
+    workflowName,
+    fromDate,
+    toDate,
+    perPage,
+    page,
+    resourceId,
+    status
+  } = {}) {
+    if (page !== void 0 && page < 0) {
+      throw new Error("page must be >= 0");
+    }
+    let runs = Array.from(this.collection.values());
+    if (workflowName) runs = runs.filter((run) => run.workflow_name === workflowName);
+    if (status) {
+      runs = runs.filter((run) => {
+        let snapshot = run?.snapshot;
+        if (!snapshot) {
+          return false;
+        }
+        if (typeof snapshot === "string") {
+          try {
+            snapshot = JSON.parse(snapshot);
+          } catch (error) {
+            return false;
+          }
+        } else {
+          snapshot = JSON.parse(JSON.stringify(snapshot));
+        }
+        return snapshot.status === status;
+      });
+    }
+    if (fromDate && toDate) {
+      runs = runs.filter(
+        (run) => new Date(run.createdAt).getTime() >= fromDate.getTime() && new Date(run.createdAt).getTime() <= toDate.getTime()
+      );
+    } else if (fromDate) {
+      runs = runs.filter((run) => new Date(run.createdAt).getTime() >= fromDate.getTime());
+    } else if (toDate) {
+      runs = runs.filter((run) => new Date(run.createdAt).getTime() <= toDate.getTime());
+    }
+    if (resourceId) runs = runs.filter((run) => run.resourceId === resourceId);
+    const total = runs.length;
+    runs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (perPage !== void 0 && page !== void 0) {
+      const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+      const offset = page * normalizedPerPage;
+      const start = offset;
+      const end = start + normalizedPerPage;
+      runs = runs.slice(start, end);
+    }
+    const parsedRuns = runs.map((run) => ({
+      ...run,
+      snapshot: typeof run.snapshot === "string" ? JSON.parse(run.snapshot) : JSON.parse(JSON.stringify(run.snapshot)),
+      createdAt: new Date(run.createdAt),
+      updatedAt: new Date(run.updatedAt),
+      runId: run.run_id,
+      workflowName: run.workflow_name,
+      resourceId: run.resourceId
+    }));
+    return { runs: parsedRuns, total };
+  }
+  async getWorkflowRunById({
+    runId,
+    workflowName
+  }) {
+    const runs = Array.from(this.collection.values()).filter((r) => r.run_id === runId);
+    let run = runs.find((r) => r.workflow_name === workflowName);
+    if (!run) return null;
+    const parsedRun = {
+      ...run,
+      snapshot: typeof run.snapshot === "string" ? JSON.parse(run.snapshot) : JSON.parse(JSON.stringify(run.snapshot)),
+      createdAt: new Date(run.createdAt),
+      updatedAt: new Date(run.updatedAt),
+      runId: run.run_id,
+      workflowName: run.workflow_name,
+      resourceId: run.resourceId
+    };
+    return parsedRun;
+  }
+};
+
+// src/storage/mock.ts
+var InMemoryStore = class extends MastraStorage {
+  stores;
+  constructor({ id = "in-memory" } = {}) {
+    super({ id, name: "InMemoryStorage" });
+    this.hasInitialized = Promise.resolve(true);
+    const operationsStorage = new StoreOperationsInMemory();
+    const database = operationsStorage.getDatabase();
+    const scoresStorage = new ScoresInMemory({
+      collection: database.mastra_scorers
+    });
+    const workflowsStorage = new WorkflowsInMemory({
+      collection: database.mastra_workflow_snapshot,
+      operations: operationsStorage
+    });
+    const memoryStorage = new InMemoryMemory({
+      collection: {
+        threads: database.mastra_threads,
+        resources: database.mastra_resources,
+        messages: database.mastra_messages
+      },
+      operations: operationsStorage
+    });
+    const observabilityStorage = new ObservabilityInMemory({
+      collection: database.mastra_ai_spans,
+      operations: operationsStorage
+    });
+    this.stores = {
+      operations: operationsStorage,
+      workflows: workflowsStorage,
+      scores: scoresStorage,
+      memory: memoryStorage,
+      observability: observabilityStorage
+    };
+  }
+  get supports() {
+    return {
+      selectByIncludeResourceScope: false,
+      resourceWorkingMemory: false,
+      hasColumn: false,
+      createTable: false,
+      deleteMessages: true,
+      observabilityInstance: true,
+      indexManagement: false,
+      listScoresBySpan: true
+    };
+  }
+  async persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    resourceId,
+    snapshot
+  }) {
+    await this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
+  }
+  async loadWorkflowSnapshot({
+    workflowName,
+    runId
+  }) {
+    return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
+  }
+  async createTable({
+    tableName,
+    schema
+  }) {
+    await this.stores.operations.createTable({ tableName, schema });
+  }
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists
+  }) {
+    await this.stores.operations.alterTable({ tableName, schema, ifNotExists });
+  }
+  async clearTable({ tableName }) {
+    await this.stores.operations.clearTable({ tableName });
+  }
+  async dropTable({ tableName }) {
+    await this.stores.operations.dropTable({ tableName });
+  }
+  async insert({ tableName, record }) {
+    await this.stores.operations.insert({ tableName, record });
+  }
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext
+  }) {
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
+  }
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts
+  }) {
+    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
+  }
+  async batchInsert({ tableName, records }) {
+    await this.stores.operations.batchInsert({ tableName, records });
+  }
+  async load({ tableName, keys }) {
+    return this.stores.operations.load({ tableName, keys });
+  }
+  async getThreadById({ threadId }) {
+    return this.stores.memory.getThreadById({ threadId });
+  }
+  async saveThread({ thread }) {
+    return this.stores.memory.saveThread({ thread });
+  }
+  async updateThread({
+    id,
+    title,
+    metadata
+  }) {
+    return this.stores.memory.updateThread({ id, title, metadata });
+  }
+  async deleteThread({ threadId }) {
+    return this.stores.memory.deleteThread({ threadId });
+  }
+  async getResourceById({ resourceId }) {
+    return this.stores.memory.getResourceById({ resourceId });
+  }
+  async saveResource({ resource }) {
+    return this.stores.memory.saveResource({ resource });
+  }
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata
+  }) {
+    return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
+  }
+  async listMessagesById({ messageIds }) {
+    return this.stores.memory.listMessagesById({ messageIds });
+  }
+  async saveMessages(args) {
+    return this.stores.memory.saveMessages(args);
+  }
+  async updateMessages(args) {
+    return this.stores.memory.updateMessages(args);
+  }
+  async deleteMessages(messageIds) {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+  async getScoreById({ id }) {
+    return this.stores.scores.getScoreById({ id });
+  }
+  async saveScore(score) {
+    return this.stores.scores.saveScore(score);
+  }
+  async listScoresByScorerId({
+    scorerId,
+    entityId,
+    entityType,
+    source,
+    pagination
+  }) {
+    return this.stores.scores.listScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
+  }
+  async listScoresByRunId({
+    runId,
+    pagination
+  }) {
+    return this.stores.scores.listScoresByRunId({ runId, pagination });
+  }
+  async listScoresByEntityId({
+    entityId,
+    entityType,
+    pagination
+  }) {
+    return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
+  }
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination
+  }) {
+    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
+  }
+  async getWorkflowRunById({
+    runId,
+    workflowName
+  }) {
+    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
+  }
+  async createSpan(span) {
+    return this.stores.observability.createSpan(span);
+  }
+  async updateSpan(params) {
+    return this.stores.observability.updateSpan(params);
+  }
+  async getTrace(traceId) {
+    return this.stores.observability.getTrace(traceId);
+  }
+  async batchCreateSpans(args) {
+    return this.stores.observability.batchCreateSpans(args);
+  }
+  async batchUpdateSpans(args) {
+    return this.stores.observability.batchUpdateSpans(args);
+  }
+  async batchDeleteTraces(args) {
+    return this.stores.observability.batchDeleteTraces(args);
+  }
+};
+var MockStore = InMemoryStore;
+
+export { InMemoryMemory, InMemoryStore, MastraStorage, MemoryStorage, MockStore, ObservabilityInMemory, ObservabilityStorage, SCORERS_SCHEMA, SPAN_SCHEMA, ScoresInMemory, ScoresStorage, StoreOperations, StoreOperationsInMemory, TABLE_MESSAGES, TABLE_RESOURCES, TABLE_SCHEMAS, TABLE_SCORERS, TABLE_SPANS, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT, WorkflowsInMemory, WorkflowsStorage, calculatePagination, ensureDate, normalizePerPage, safelyParseJSON, serializeDate };
+//# sourceMappingURL=chunk-ZTTMSCLU.js.map
+//# sourceMappingURL=chunk-ZTTMSCLU.js.map

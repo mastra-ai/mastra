@@ -1,0 +1,170 @@
+{
+  "schema": "1.0",
+  "comment": "This file maps proto services/RPCs to the corresponding library clients/methods",
+  "language": "typescript",
+  "protoPackage": "google.firestore.v1",
+  "libraryPackage": "@google-cloud/firestore",
+  "services": {
+    "Firestore": {
+      "clients": {
+        "grpc": {
+          "libraryClient": "FirestoreClient",
+          "rpcs": {
+            "GetDocument": {
+              "methods": [
+                "getDocument"
+              ]
+            },
+            "UpdateDocument": {
+              "methods": [
+                "updateDocument"
+              ]
+            },
+            "DeleteDocument": {
+              "methods": [
+                "deleteDocument"
+              ]
+            },
+            "BeginTransaction": {
+              "methods": [
+                "beginTransaction"
+              ]
+            },
+            "Commit": {
+              "methods": [
+                "commit"
+              ]
+            },
+            "Rollback": {
+              "methods": [
+                "rollback"
+              ]
+            },
+            "BatchWrite": {
+              "methods": [
+                "batchWrite"
+              ]
+            },
+            "CreateDocument": {
+              "methods": [
+                "createDocument"
+              ]
+            },
+            "BatchGetDocuments": {
+              "methods": [
+                "batchGetDocuments"
+              ]
+            },
+            "RunQuery": {
+              "methods": [
+                "runQuery"
+              ]
+            },
+            "RunAggregationQuery": {
+              "methods": [
+                "runAggregationQuery"
+              ]
+            },
+            "Write": {
+              "methods": [
+                "write"
+              ]
+            },
+            "Listen": {
+              "methods": [
+                "listen"
+              ]
+            },
+            "ListDocuments": {
+              "methods": [
+                "listDocuments",
+                "listDocumentsStream",
+                "listDocumentsAsync"
+              ]
+            },
+            "PartitionQuery": {
+              "methods": [
+                "partitionQuery",
+                "partitionQueryStream",
+                "partitionQueryAsync"
+              ]
+            },
+            "ListCollectionIds": {
+              "methods": [
+                "listCollectionIds",
+                "listCollectionIdsStream",
+                "listCollectionIdsAsync"
+              ]
+            }
+          }
+        },
+        "grpc-fallback": {
+          "libraryClient": "FirestoreClient",
+          "rpcs": {
+            "GetDocument": {
+              "methods": [
+                "getDocument"
+              ]
+            },
+            "UpdateDocument": {
+              "methods": [
+                "updateDocument"
+              ]
+            },
+            "DeleteDocument": {
+              "methods": [
+                "deleteDocument"
+              ]
+            },
+            "BeginTransaction": {
+              "methods": [
+                "beginTransaction"
+              ]
+            },
+            "Commit": {
+              "methods": [
+                "commit"
+              ]
+            },
+            "Rollback": {
+              "methods": [
+                "rollback"
+              ]
+            },
+            "BatchWrite": {
+              "methods": [
+                "batchWrite"
+              ]
+            },
+            "CreateDocument": {
+              "methods": [
+                "createDocument"
+              ]
+            },
+            "ListDocuments": {
+              "methods": [
+                "listDocuments",
+                "listDocumentsStream",
+                "listDocumentsAsync"
+              ]
+            },
+            "PartitionQuery": {
+              "methods": [
+                "partitionQuery",
+                "partitionQueryStream",
+                "partitionQueryAsync"
+              ]
+            },
+            "ListCollectionIds": {
+              "methods": [
+                "listCollectionIds",
+                "listCollectionIdsStream",
+                "listCollectionIdsAsync"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`with "onWeekNumberClick" prop it should return a button element 1`] = `
+<button
+  aria-label="Week n. 10"
+  class="rdp-button_reset rdp-button rdp-weeknumber"
+  name="week-number"
+  type="button"
+>
+  10
+</button>
+`;
+
+exports[`without "onWeekNumberClick" prop it should return a span element 1`] = `
+<span
+  class="rdp-weeknumber"
+>
+  10
+</span>
+`;

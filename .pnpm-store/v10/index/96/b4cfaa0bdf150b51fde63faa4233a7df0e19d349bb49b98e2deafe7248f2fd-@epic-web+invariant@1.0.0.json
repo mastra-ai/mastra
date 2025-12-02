@@ -1,0 +1,31 @@
+{
+  "name": "@epic-web/invariant",
+  "version": "1.0.0",
+  "requiresBuild": false,
+  "files": {
+    "dist/index.js": {
+      "checkedAt": 1764662918780,
+      "integrity": "sha512-F1eP2yRQo50afqmHbEo2pT51oTdJTCIfUW61Ljx017RMiIm3HWDdGiXlOGbG8Q2FJIRrjCoMcLIQFrHAhUZBmw==",
+      "mode": 420,
+      "size": 1647
+    },
+    "package.json": {
+      "checkedAt": 1764662918780,
+      "integrity": "sha512-AFIfTPjxpt1M78rRo33t/3eabB1KlQ5NjMwaOxVuUYM+KTFxoRcBWChdZCgEkijIy0roCjrJFX2VbK/B3Y5uyg==",
+      "mode": 420,
+      "size": 1450
+    },
+    "README.md": {
+      "checkedAt": 1764662918781,
+      "integrity": "sha512-lfE1NqKiJIoLbZVJofkwFonQGngAmuErmUgZxTN37QKZHHrT8fP+1hofppsIWS6bkaxSEiPwhed9LNuB9FSQvA==",
+      "mode": 420,
+      "size": 6297
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662918781,
+      "integrity": "sha512-UWVLQeC5yNeNRo3r+Bm9riRD9TGNiSxLy5FdB2b40XrUxrbwXHyhQzfk2rPsd4BjifNW3cWgkpLWtqHgxgddQw==",
+      "mode": 420,
+      "size": 1401
+    }
+  }
+}

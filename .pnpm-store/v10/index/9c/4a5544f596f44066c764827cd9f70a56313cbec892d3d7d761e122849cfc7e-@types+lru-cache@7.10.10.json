@@ -1,0 +1,25 @@
+{
+  "name": "@types/lru-cache",
+  "version": "7.10.10",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662918809,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 511,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662918811,
+      "integrity": "sha512-klpLGx5MGf1WnZpnxroHFtxct7EIdZpVXW7j+INKt+kcc2vmLV2aGt5LolPVoruf33UafTtFyqAUNaawuCWS1w==",
+      "mode": 511,
+      "size": 195
+    },
+    "package.json": {
+      "checkedAt": 1764662918812,
+      "integrity": "sha512-7GPaOmVH5QRK4hZQv5t1x/D+B5jnBtXMr5nhlM3V92PVPI0/pjynH6nbY91ffQc+6ygfgSJn5wOT6+4M9C7yqQ==",
+      "mode": 511,
+      "size": 322
+    }
+  }
+}

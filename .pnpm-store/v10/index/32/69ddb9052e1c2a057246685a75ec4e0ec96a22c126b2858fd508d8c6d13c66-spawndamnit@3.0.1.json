@@ -1,0 +1,43 @@
+{
+  "name": "spawndamnit",
+  "version": "3.0.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662904088,
+      "integrity": "sha512-PVQetIBWfNaJAtpRpXyDWJe8UFB1uPvwdSpguc41NEqUjqULXMK72aUYnu47L7sn5vcQ+iG4vnpvYiia18hONA==",
+      "mode": 420,
+      "size": 1084
+    },
+    "promise.js.flow": {
+      "checkedAt": 1764662904089,
+      "integrity": "sha512-+X5FLxRTWBSlikjjDctnyK5fDhhz9XsHBHkoHQUCl53PXJWj5ZYiFxSiRck7gIDSS4Tg+Ls0l89rwPmH94d69A==",
+      "mode": 420,
+      "size": 323
+    },
+    "index.js": {
+      "checkedAt": 1764662904089,
+      "integrity": "sha512-YPJ97UNnUBGbkICyNpXJt4Bh0rPwjHUy5p9ifKc4UHyGX2m0egABqzvXuELaBmFpGIDDXaOxeGJ6wCQVnmCXuQ==",
+      "mode": 420,
+      "size": 1316
+    },
+    "promise.js": {
+      "checkedAt": 1764662904091,
+      "integrity": "sha512-PbEoYVeoAlrbwrzQXqp61Gk3a949e0Ch0hr049XCQVG38ZTKbcWcFXF8no217OFVFHRy9hXRYk5MEfRXPTpYig==",
+      "mode": 420,
+      "size": 388
+    },
+    "package.json": {
+      "checkedAt": 1764662904093,
+      "integrity": "sha512-u+EGlORn4fDfaoOdhc41JdS1QW9y6OXY/a/istfaaB21tyRBsOpGO8Cl8N79szm7N8NvQfWKOwf2pZFKKI0jRw==",
+      "mode": 420,
+      "size": 709
+    },
+    "README.md": {
+      "checkedAt": 1764662904093,
+      "integrity": "sha512-EH+eEBX6FBRw7vhB8KtffCbzm22QGIVFkkznh4orsPPWdj1Wd8qCcVPyXHJg7oyhMPVOrtiAaxdJP5bLVJNANA==",
+      "mode": 420,
+      "size": 658
+    }
+  }
+}

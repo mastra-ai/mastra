@@ -1,0 +1,133 @@
+{
+  "name": "youch",
+  "description": "Pretty print JavaScript errors on the Web and the Terminal",
+  "version": "4.1.0-beta.10",
+  "type": "module",
+  "files": [
+    "build",
+    "!build/bin",
+    "!build/examples",
+    "!build/tests"
+  ],
+  "main": "build/index.js",
+  "exports": {
+    ".": "./build/index.js",
+    "./types": "./build/src/types.js",
+    "./templates/*": "./build/src/templates/*/main.js"
+  },
+  "scripts": {
+    "pretest": "npm run lint",
+    "test": "c8 npm run quick:test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "precompile": "npm run lint",
+    "copy:assets": "copyfiles --up=1 src/public/**/* build",
+    "compile": "tsup-node && tsc --emitDeclarationOnly --declaration",
+    "build": "npm run compile && npm run copy:assets",
+    "version": "npm run build",
+    "prepublishOnly": "npm run build",
+    "release": "release-it",
+    "quick:test": "node --import=@poppinss/ts-exec --enable-source-maps bin/test.ts"
+  },
+  "devDependencies": {
+    "@adonisjs/eslint-config": "^3.0.0-next.0",
+    "@adonisjs/prettier-config": "^1.4.5",
+    "@adonisjs/tsconfig": "^2.0.0-next.0",
+    "@aws-sdk/client-s3": "^3.842.0",
+    "@aws-sdk/s3-request-presigner": "^3.842.0",
+    "@japa/assert": "^4.0.1",
+    "@japa/expect": "^3.0.4",
+    "@japa/expect-type": "^2.0.3",
+    "@japa/file-system": "^2.3.2",
+    "@japa/runner": "^4.2.0",
+    "@japa/snapshot": "^2.0.8",
+    "@poppinss/exception": "^1.2.2",
+    "@poppinss/ts-exec": "^1.4.0",
+    "@release-it/conventional-changelog": "^10.0.1",
+    "@types/cookie": "^1.0.0",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^24.0.10",
+    "@types/pg": "^8.15.4",
+    "axios": "^1.10.0",
+    "c8": "^10.1.3",
+    "copyfiles": "^2.4.1",
+    "eslint": "^9.30.1",
+    "flydrive": "^1.3.0",
+    "jsdom": "^26.1.0",
+    "pg": "^8.16.3",
+    "prettier": "^3.6.2",
+    "release-it": "^19.0.3",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@poppinss/colors": "^4.1.5",
+    "@poppinss/dumper": "^0.6.4",
+    "@speed-highlight/core": "^1.2.7",
+    "cookie": "^1.0.2",
+    "youch-core": "^0.3.3"
+  },
+  "homepage": "https://github.com/poppinss/youch#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/poppinss/youch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/poppinss/youch/issues"
+  },
+  "keywords": [],
+  "author": "Harminder Virk <virk@adonisjs.com>",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "tsup": {
+    "entry": [
+      "index.ts",
+      "src/types.ts",
+      "src/templates/**/*.ts"
+    ],
+    "outDir": "./build",
+    "clean": true,
+    "format": "esm",
+    "dts": false,
+    "sourcemap": false,
+    "target": "esnext"
+  },
+  "release-it": {
+    "git": {
+      "requireCleanWorkingDir": true,
+      "requireUpstream": true,
+      "commitMessage": "chore(release): ${version}",
+      "tagAnnotation": "v${version}",
+      "push": true,
+      "tagName": "v${version}"
+    },
+    "github": {
+      "release": true
+    },
+    "npm": {
+      "publish": true,
+      "skipChecks": true
+    },
+    "plugins": {
+      "@release-it/conventional-changelog": {
+        "preset": {
+          "name": "angular"
+        }
+      }
+    }
+  },
+  "c8": {
+    "reporter": [
+      "text",
+      "html"
+    ],
+    "exclude": [
+      "tests/**"
+    ]
+  },
+  "prettier": "@adonisjs/prettier-config"
+}

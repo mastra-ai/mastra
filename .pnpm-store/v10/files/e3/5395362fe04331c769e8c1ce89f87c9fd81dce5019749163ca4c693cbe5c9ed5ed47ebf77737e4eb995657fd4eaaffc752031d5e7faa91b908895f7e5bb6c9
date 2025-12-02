@@ -1,0 +1,68 @@
+{
+  "name": "@bufbuild/protobuf",
+  "version": "2.10.0",
+  "license": "(Apache-2.0 AND BSD-3-Clause)",
+  "description": "A complete implementation of Protocol Buffers in TypeScript, suitable for web browsers and Node.js.",
+  "keywords": ["protobuf", "schema", "typescript", "ecmascript"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bufbuild/protobuf-es.git",
+    "directory": "packages/protobuf"
+  },
+  "scripts": {
+    "prebuild": "rm -rf ./dist/*",
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "../../node_modules/typescript/bin/tsc --project tsconfig.json --module commonjs --verbatimModuleSyntax false --moduleResolution node10 --outDir ./dist/cjs && echo >./dist/cjs/package.json '{\"type\":\"commonjs\"}'",
+    "build:esm": "../../node_modules/typescript/bin/tsc --project tsconfig.json --outDir ./dist/esm",
+    "bootstrap": "npm run bootstrap:inject && npm run bootstrap:wkt",
+    "bootstrap:inject": "node scripts/bootstrap-inject.mjs src",
+    "bootstrap:wkt": "protoc --es_out=src/wkt/gen --es_opt=bootstrap_wkt=true,target=ts,import_extension=js,json_types=true --proto_path $(upstream-include wkt) $(upstream-files wkt)",
+    "postbootstrap:wkt": "license-header src/wkt/gen",
+    "format": "biome format --write",
+    "license-header": "license-header --ignore 'src/wire/varint.ts'",
+    "lint": "biome lint --error-on-warnings",
+    "attw": "attw --pack"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/cjs/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./codegenv1": {
+      "import": "./dist/esm/codegenv1/index.js",
+      "require": "./dist/cjs/codegenv1/index.js"
+    },
+    "./codegenv2": {
+      "import": "./dist/esm/codegenv2/index.js",
+      "require": "./dist/cjs/codegenv2/index.js"
+    },
+    "./reflect": {
+      "import": "./dist/esm/reflect/index.js",
+      "require": "./dist/cjs/reflect/index.js"
+    },
+    "./wkt": {
+      "import": "./dist/esm/wkt/index.js",
+      "require": "./dist/cjs/wkt/index.js"
+    },
+    "./wire": {
+      "import": "./dist/esm/wire/index.js",
+      "require": "./dist/cjs/wire/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "codegenv1": ["./dist/cjs/codegenv1/index.d.ts"],
+      "codegenv2": ["./dist/cjs/codegenv2/index.d.ts"],
+      "reflect": ["./dist/cjs/reflect/index.d.ts"],
+      "wkt": ["./dist/cjs/wkt/index.d.ts"],
+      "wire": ["./dist/cjs/wire/index.d.ts"]
+    }
+  },
+  "devDependencies": {
+    "upstream-protobuf": "*"
+  },
+  "files": ["dist/**"]
+}

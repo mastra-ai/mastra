@@ -1,0 +1,14 @@
+// src/v4/field-config.ts
+import { z } from "zod/v4";
+var fieldConfigRegistry = z.registry();
+function fieldConfig(config) {
+  return [fieldConfigRegistry, { fieldConfig: config }];
+}
+function getFieldConfigInZodStack(schema) {
+  return fieldConfigRegistry.get(schema)?.fieldConfig;
+}
+
+export {
+  fieldConfig,
+  getFieldConfigInZodStack
+};

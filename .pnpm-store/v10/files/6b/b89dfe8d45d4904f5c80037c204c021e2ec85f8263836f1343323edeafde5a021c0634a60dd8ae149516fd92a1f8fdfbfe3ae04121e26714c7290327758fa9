@@ -1,0 +1,18 @@
+import type { StepFlowEntry } from '../../index.js';
+import type { PubSub } from '../../../events/index.js';
+import type { StepExecutor } from '../step-executor.js';
+import type { ProcessorArgs } from '.';
+export declare function processWorkflowParallel({ workflowId, runId, executionPath, stepResults, activeSteps, resumeSteps, timeTravel, prevResult, resumeData, parentWorkflow, requestContext, }: ProcessorArgs, { pubsub, step, }: {
+    pubsub: PubSub;
+    step: Extract<StepFlowEntry, {
+        type: 'parallel';
+    }>;
+}): Promise<void>;
+export declare function processWorkflowConditional({ workflowId, runId, executionPath, stepResults, activeSteps, resumeSteps, timeTravel, prevResult, resumeData, parentWorkflow, requestContext, }: ProcessorArgs, { pubsub, stepExecutor, step, }: {
+    pubsub: PubSub;
+    stepExecutor: StepExecutor;
+    step: Extract<StepFlowEntry, {
+        type: 'conditional';
+    }>;
+}): Promise<void>;
+//# sourceMappingURL=parallel.d.ts.map

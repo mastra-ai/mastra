@@ -1,0 +1,1 @@
+{"version":3,"file":"MEMORY_PURGE.js","sourceRoot":"","sources":["../../../lib/commands/MEMORY_PURGE.ts"],"names":[],"mappings":";;AAGA,kBAAe;IACb,iBAAiB,EAAE,IAAI;IACvB,YAAY,EAAE,KAAK;IACnB;;;;;OAKG;IACH,YAAY,CAAC,MAAqB;QAChC,MAAM,CAAC,IAAI,CAAC,QAAQ,EAAE,OAAO,CAAC,CAAC;IACjC,CAAC;IACD,cAAc,EAAE,SAAqD;CAC3C,CAAC"}

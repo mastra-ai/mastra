@@ -1,0 +1,37 @@
+{
+  "name": "@redis/search",
+  "version": "5.8.3",
+  "license": "MIT",
+  "main": "./dist/lib/index.js",
+  "types": "./dist/lib/index.d.ts",
+  "files": [
+    "dist/",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
+  "scripts": {
+    "test": "nyc -r text-summary -r lcov mocha -r tsx './lib/**/*.spec.ts'",
+    "test-sourcemap": "mocha -r ts-node/register/transpile-only './lib/**/*.spec.ts'",
+    "release": "release-it"
+  },
+  "peerDependencies": {
+    "@redis/client": "^5.8.3"
+  },
+  "devDependencies": {
+    "@redis/test-utils": "*"
+  },
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/redis/node-redis.git"
+  },
+  "bugs": {
+    "url": "https://github.com/redis/node-redis/issues"
+  },
+  "homepage": "https://github.com/redis/node-redis/tree/master/packages/search",
+  "keywords": [
+    "redis",
+    "RediSearch"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "bent",
+  "version": "7.3.12",
+  "description": "Functional HTTP client for Node.js w/ async/await.",
+  "main": "src/nodejs.js",
+  "browser": "src/browser.js",
+  "scripts": {
+    "lint": "standard",
+    "test:node": "hundreds mocha --timeout=5000 test/test-*.js",
+    "test:browser": "polendina --cleanup --service-worker --worker test/test-*.js",
+    "test": "npm run lint && npm run test:node && npm run test:browser",
+    "coverage": "nyc --reporter=html mocha test/test-*.js && npx http-server coverage"
+  },
+  "keywords": [],
+  "author": "Mikeal Rogers <mikeal.rogers@gmail.com> (http://www.mikealrogers.com)",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "bytesish": "^0.4.1",
+    "caseless": "~0.12.0",
+    "is-stream": "^2.0.0"
+  },
+  "devDependencies": {
+    "hundreds": "0.0.2",
+    "mocha": "^7.0.1",
+    "polendina": "1.0.0",
+    "standard": "^14.3.1",
+    "tsame": "^2.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mikeal/bent.git"
+  }
+}

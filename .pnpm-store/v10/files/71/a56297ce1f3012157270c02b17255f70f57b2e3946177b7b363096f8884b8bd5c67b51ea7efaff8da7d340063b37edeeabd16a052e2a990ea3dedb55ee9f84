@@ -1,0 +1,1 @@
+{"version":3,"file":"ThreadListItemTitle.d.ts","sourceRoot":"","sources":["../../../src/primitives/threadListItem/ThreadListItemTitle.tsx"],"names":[],"mappings":"AAEA,OAAO,KAAK,EAAE,EAAE,EAAE,SAAS,EAAE,MAAM,OAAO,CAAC;AAG3C,yBAAiB,4BAA4B,CAAC;IAC5C,KAAY,KAAK,GAAG;QAClB,QAAQ,CAAC,EAAE,SAAS,CAAC;KACtB,CAAC;CACH;AAED,eAAO,MAAM,4BAA4B,EAAE,EAAE,CAC3C,4BAA4B,CAAC,KAAK,CAInC,CAAC"}

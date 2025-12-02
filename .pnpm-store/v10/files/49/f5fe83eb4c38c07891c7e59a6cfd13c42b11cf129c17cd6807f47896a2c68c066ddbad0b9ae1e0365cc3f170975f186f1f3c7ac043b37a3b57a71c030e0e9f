@@ -1,0 +1,1 @@
+{"version":3,"file":"token.d.ts","sourceRoot":"","sources":["../../../lib/authx/token.ts"],"names":[],"mappings":"AAAA;;GAEG;AACH,qBAAa,KAAK,CAAC,CAAC;aAEA,KAAK,EAAE,CAAC;aAER,WAAW,EAAE,MAAM;aAEnB,YAAY,EAAE,MAAM;gBAJpB,KAAK,EAAE,CAAC,EAER,WAAW,EAAE,MAAM,EAEnB,YAAY,EAAE,MAAM;IAGtC;;;OAGG;IACH,QAAQ,CAAC,GAAG,EAAE,MAAM,GAAG,MAAM;CAM9B"}

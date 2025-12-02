@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../src/core/utils/Counter.ts"],"sourcesContent":["export class Counter {\n  public value = -1;\n\n  up() {\n    return ++this.value;\n  }\n}\n"],"mappings":";AAAO,IAAM,UAAN,MAAc;AAAA,EACZ,QAAQ;AAAA,EAEf,KAAK;AACH,WAAO,EAAE,KAAK;AAAA,EAChB;AACF;","names":[]}

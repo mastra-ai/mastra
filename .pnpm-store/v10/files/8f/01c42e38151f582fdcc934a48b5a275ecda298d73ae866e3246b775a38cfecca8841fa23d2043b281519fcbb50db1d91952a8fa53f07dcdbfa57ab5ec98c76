@@ -1,0 +1,31 @@
+{
+  "name": "memory-stream",
+  "version": "1.0.0",
+  "description": "Node.js streams implementation for buffered memory writes",
+  "main": "index.js",
+  "scripts": {
+    "test": "./node_modules/tape/bin/tape test/tests/*.js | tap-spec"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/doanythingfordethklok/memory-stream.git"
+  },
+  "keywords": [
+    "streams",
+    "memory",
+    "buffer"
+  ],
+  "author": "Tommy Messbauer",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/doanythingfordethklok/memory-stream/issues"
+  },
+  "homepage": "https://github.com/doanythingfordethklok/memory-stream",
+  "dependencies": {
+    "readable-stream": "^3.4.0"
+  },
+  "devDependencies": {
+    "tap-spec": "^5.0.0",
+    "tape": "^4.11.0"
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "name": "@inngest/ai",
+  "version": "0.1.7",
+  "description": "",
+  "main": "dist/index.js",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint",
+    "postversion": "pnpm run build",
+    "release": "node ../../scripts/release/publish.js && pnpm dlx jsr publish --allow-slow-types --allow-dirty",
+    "release:version": "node ../../scripts/release/jsrVersion.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "vitest run --config vitest.smoke.config.ts",
+    "test:openai": "vitest run --config vitest.smoke.config.ts -- --openai",
+    "test:openai-tools": "vitest run --config vitest.smoke.config.ts -t 'Tool Calling.*GPT-5' test/smoke/openai-responses.smoke.test.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./models": {
+      "require": "./dist/models/index.js",
+      "import": "./dist/models/index.js",
+      "types": "./dist/models/index.d.ts"
+    },
+    "./adapters": {
+      "require": "./dist/adapters/index.js",
+      "import": "./dist/adapters/index.js",
+      "types": "./dist/adapters/index.d.ts"
+    }
+  },
+  "keywords": [
+    "inngest",
+    "ai"
+  ],
+  "homepage": "https://github.com/inngest/inngest-js/tree/main/packages/ai#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/inngest/inngest-js.git",
+    "directory": "packages/ai"
+  },
+  "author": "Inngest Inc. <hello@inngest.com>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.7.0",
+    "dotenv": "^17.0.1",
+    "eslint": "^9.18.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "globals": "^15.14.0",
+    "typescript-eslint": "^8.44.1",
+    "vitest": "^2.1.8"
+  }
+}

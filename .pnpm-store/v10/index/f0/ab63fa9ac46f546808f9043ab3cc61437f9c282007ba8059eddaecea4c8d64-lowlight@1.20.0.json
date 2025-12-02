@@ -1,0 +1,43 @@
+{
+  "name": "lowlight",
+  "version": "1.20.0",
+  "requiresBuild": false,
+  "files": {
+    "license": {
+      "checkedAt": 1764662919640,
+      "integrity": "sha512-cQvy4TvDNGTww5W7wo7SHRjv/0G8g3u/v8V2BhwwrAM+M5M2Z7W8hy+cQrU+e4exnULY2LrZ0EQqBk6Fj/Sdrw==",
+      "mode": 420,
+      "size": 1099
+    },
+    "lib/core.js": {
+      "checkedAt": 1764662919640,
+      "integrity": "sha512-T7zYiuetBxyZgQYRxlsQWYgWoCbogo2iz9BpHxM2oXpac82Nncvw9qoAUygVwsgObez6kiOB5qJklVVIQAUr9A==",
+      "mode": 420,
+      "size": 4530
+    },
+    "index.js": {
+      "checkedAt": 1764662919641,
+      "integrity": "sha512-ZetMzjcC0Qg231s+L5XR5g0dCPy/6F+9/tf+oWpn1AdHF+0HBl0ZCQfevCNIxbAJa6KXAMRWuSb0xDqvGIClaQ==",
+      "mode": 420,
+      "size": 14899
+    },
+    "package.json": {
+      "checkedAt": 1764662919641,
+      "integrity": "sha512-R0w710FC/tEM60YE8d+cSZQ4Sow57oxjDOkhgz2iqMdsAb29y6sKfQgRA5C6Mt3pgDoi8oIzC1MCF4ajq5FMZQ==",
+      "mode": 420,
+      "size": 2382
+    },
+    "changelog.md": {
+      "checkedAt": 1764662919642,
+      "integrity": "sha512-p4tvo5Goa/a3dNiX5nnTvzVeFCniupxNAxmlwx0rZRpP1b+JTMRKW2yBcV2qx8Sj2ZgfMq0FBLPuSHdxQnqudw==",
+      "mode": 420,
+      "size": 121
+    },
+    "readme.md": {
+      "checkedAt": 1764662919642,
+      "integrity": "sha512-RxBNaOI+shRg4gk1pF43AX095Thvyxi8lqwXlrtBUXdTY6LjKN6wEccqzIYQTf+IYcgj4FnPcrvDHvnvTyGaBA==",
+      "mode": 420,
+      "size": 8107
+    }
+  }
+}

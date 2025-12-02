@@ -1,0 +1,319 @@
+# Returning braced initializer lists
+
+T main() {
+  return {0, 5};
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    TypeIdentifier,
+    FunctionDeclarator(Identifier, ParameterList),
+    CompoundStatement(
+      ReturnStatement(return, InitializerList(Number, Number)))))
+
+
+# Range-based for loops
+
+T main() {
+  for (Value &value : values) {
+    cout << value;
+  }
+
+  for (const auto &value : values) {
+    cout << value;
+  }
+
+  for (const auto &value : {1, 2, 3}) {
+    cout << value;
+  }
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    TypeIdentifier,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList),
+    CompoundStatement(
+      ForRangeLoop(for,
+        TypeIdentifier,
+        ReferenceDeclarator(Identifier),
+        Identifier,
+        CompoundStatement(
+          ExpressionStatement(BinaryExpression(
+            Identifier,
+            BitOp,
+            Identifier)))),
+      ForRangeLoop(for,
+        const,
+        auto,
+        ReferenceDeclarator(Identifier),
+        Identifier,
+        CompoundStatement(
+          ExpressionStatement(BinaryExpression(
+            Identifier,
+            BitOp,
+            Identifier)))),
+      ForRangeLoop(for,
+        const,
+        auto,
+        ReferenceDeclarator(Identifier),
+        InitializerList(Number, Number, Number),
+        CompoundStatement(
+          ExpressionStatement(BinaryExpression(
+            Identifier,
+            BitOp,
+            Identifier)))))))
+
+
+# Constexpr if statements
+
+T f() {
+  if constexpr (std::is_pointer_v<T>)
+    return *t;
+  else
+    return t;
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    TypeIdentifier,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList),
+    CompoundStatement(
+      IfStatement(
+        if, constexpr,
+        ConditionClause(
+          TemplateFunction(
+            ScopedIdentifier(
+              NamespaceIdentifier,
+              Identifier),
+            TemplateArgumentList(
+              TypeDescriptor(TypeIdentifier)))),
+        ReturnStatement(return,
+          PointerExpression(Identifier)),
+        else,
+        ReturnStatement(return, Identifier)))))
+
+
+# If statements with declarations
+
+void f() {
+  if (const int x = foo()) { }
+  if (const int x { foo() }) { }
+  if (const int x = foo(); x != 0) { }
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList),
+    CompoundStatement(
+      IfStatement(if,
+        ConditionClause(
+          Declaration(
+            const,
+            PrimitiveType,
+            Identifier,
+            CallExpression(
+              Identifier,
+              ArgumentList))),
+        CompoundStatement),
+      IfStatement(if,
+        ConditionClause(
+          Declaration(
+            const,
+            PrimitiveType,
+            Identifier,
+          InitializerList(CallExpression(Identifier, ArgumentList)))),
+        CompoundStatement),
+      IfStatement(if,
+        ConditionClause(
+          Declaration(
+            const,
+            PrimitiveType,
+            InitDeclarator(
+              Identifier,
+              CallExpression(Identifier, ArgumentList))),
+          BinaryExpression(Identifier, CompareOp, Number)),
+        CompoundStatement))))
+
+
+# Try/catch statements
+
+void main() {
+  try {
+      f();
+  } catch (const std::overflow_error) {
+      // f() throws std::overflow_error (same type rule)
+  } catch (const exception &e) {
+      // f() throws std::logic_error (base class rule)
+  } catch (...) {
+      // f() throws std::string or int or any other unrelated type
+  }
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList),
+    CompoundStatement(
+      TryStatement(try,
+        CompoundStatement(
+          ExpressionStatement(CallExpression(Identifier, ArgumentList))),
+        CatchClause(catch,
+          ParameterList(ParameterDeclaration(const, ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier))),
+          CompoundStatement(LineComment)),
+        CatchClause(catch,
+          ParameterList(ParameterDeclaration(const, TypeIdentifier, ReferenceDeclarator(Identifier))),
+          CompoundStatement(LineComment)),
+        CatchClause(catch,
+          ParameterList,
+          CompoundStatement(LineComment))))))
+
+
+# Throw statements
+
+void main() {
+     throw e;
+     throw x + 1;
+     throw "exception";
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList),
+      CompoundStatement(
+        ThrowStatement(throw, Identifier),
+        ThrowStatement(throw, BinaryExpression(Identifier, ArithOp, Number)),
+        ThrowStatement(throw, String))))
+
+
+# Noexcept specifier
+
+void foo() noexcept;
+void foo() noexcept(true);
+template<class T> T foo() noexcept(sizeof(T) < 4);
+
+==>
+
+Program(
+  Declaration(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList,
+      Noexcept(noexcept))),
+  Declaration(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList,
+      Noexcept(noexcept, True))),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TypeParameterDeclaration(class, TypeIdentifier)),
+    Declaration(
+      TypeIdentifier,
+      FunctionDeclarator(Identifier, ParameterList,
+        Noexcept(noexcept,
+          BinaryExpression(SizeofExpression(sizeof, TypeDescriptor(TypeIdentifier)), CompareOp, Number))))))
+
+
+# Throw specifier
+
+void foo() throw();
+void foo() throw(int);
+void foo() throw(std::string, char *);
+void foo() throw(float) { }
+
+==>
+
+Program(
+  Declaration(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList,
+      ThrowSpecifier(throw))),
+  Declaration(
+  PrimitiveType,
+  FunctionDeclarator(Identifier, ParameterList,
+    ThrowSpecifier(throw, TypeDescriptor(PrimitiveType)))),
+  Declaration(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList,
+      ThrowSpecifier(throw,
+        TypeDescriptor(ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier)),
+        TypeDescriptor(PrimitiveType, AbstractPointerDeclarator)))),
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList,
+      ThrowSpecifier(throw, TypeDescriptor(PrimitiveType))),
+      CompoundStatement))
+
+
+# Assignment
+
+a::b::c = 1;
+
+==>
+
+Program(
+  ExpressionStatement(
+    AssignmentExpression(
+      ScopedNamespaceIdentifier(
+        ScopedNamespaceIdentifier(NamespaceIdentifier, NamespaceIdentifier),
+        NamespaceIdentifier),
+      Number)))
+
+# Switch statement
+
+string xyzzy(Bar s) {
+  switch (s) {
+    case Bar::OK:
+      return "OK";
+    case Bar::NotOK:
+      return "NOT OK";
+    default:
+      return "AHA";
+  }
+}
+
+==>
+
+Program(FunctionDefinition(TypeIdentifier,FunctionDeclarator(
+  Identifier,
+  ParameterList(ParameterDeclaration(TypeIdentifier,Identifier))),
+  CompoundStatement(
+    SwitchStatement(switch,ConditionClause(Identifier),CompoundStatement(
+      CaseStatement(case,ScopedIdentifier(NamespaceIdentifier,Identifier),
+        ReturnStatement(return,String)),
+      CaseStatement(case,ScopedIdentifier(NamespaceIdentifier,Identifier),
+        ReturnStatement(return,String)),
+      CaseStatement(default,ReturnStatement(return,String)))))))
+
+# For loop
+
+for (int x = 1; x < 5; x++, y++) {
+}
+
+==>
+
+Program(ForStatement(for,
+  Declaration(PrimitiveType,InitDeclarator(Identifier,Number)),
+  BinaryExpression(Identifier,CompareOp,Number),
+  CommaExpression(UpdateExpression(Identifier, UpdateOp),UpdateExpression(Identifier, UpdateOp)),
+  CompoundStatement))

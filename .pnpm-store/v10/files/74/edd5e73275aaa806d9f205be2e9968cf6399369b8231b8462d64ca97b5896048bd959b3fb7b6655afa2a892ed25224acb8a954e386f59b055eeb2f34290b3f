@@ -1,0 +1,124 @@
+# Type names
+
+<?php
+function a(): A {}
+function b(): A\B {}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  FunctionDefinition(function,
+    Name, ParamList,
+    NamedType(Name),
+    Block),
+  FunctionDefinition(function,
+    Name, ParamList,
+    NamedType(QualifiedName(NamespaceName, Name)),
+    Block))
+
+# Primitive types
+
+<?php
+function a(): int {}
+function b(): callable {}
+function c(): iterable {}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  FunctionDefinition(function,
+    Name, ParamList,
+    NamedType(Name),
+    Block),
+  FunctionDefinition(function,
+    Name, ParamList,
+    NamedType(Name),
+    Block),
+  FunctionDefinition(function,
+    Name, ParamList,
+    NamedType(Name),
+    Block))
+
+# Optional types
+
+<?php
+
+function a(): ?array {}
+function b(): ?Something {}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  FunctionDefinition(function,
+    Name, ParamList,
+    OptionalType(LogicOp, NamedType(array)),
+    Block),
+  FunctionDefinition(function,
+    Name, ParamList,
+    OptionalType(LogicOp, NamedType(Name)),
+    Block))
+
+# Union types
+
+<?php
+
+function a(int|string|null $var) : ?int|MyClass {}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  FunctionDefinition(function,
+    Name,
+    ParamList(
+      Parameter(
+        UnionType(NamedType(Name),LogicOp,NamedType(Name),LogicOp,NamedType(null)),
+        VariableName)),
+    UnionType(OptionalType(LogicOp, NamedType(Name)),LogicOp,NamedType(Name)),
+    Block))
+
+# Mixed type
+
+<?php
+
+function a(mixed|string $var) : mixed {
+
+}
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  FunctionDefinition(function,
+    Name,
+    ParamList(
+      Parameter(
+        UnionType(NamedType(Name),LogicOp,NamedType(Name)),
+        VariableName
+      )
+    ),
+    NamedType(Name),
+    Block
+  )
+)
+
+# Static type
+
+<?php
+
+function a(string $var) : static {
+
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  FunctionDefinition(function,
+    Name,
+    ParamList(
+      Parameter(NamedType(Name),VariableName)),
+    NamedType(Name),
+    Block))

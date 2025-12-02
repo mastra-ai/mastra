@@ -1,0 +1,59 @@
+{
+  "bugs": {
+    "url": "https://github.com/nodejs/node-api-headers/issues"
+  },
+  "contributors": [
+    {
+      "name": "Gabriel Schulhof",
+      "url": "https://github.com/gabrielschulhof"
+    },
+    {
+      "name": "Jim Schlight",
+      "url": "https://github.com/jschlight"
+    },
+    {
+      "name": "Kevin Eady",
+      "url": "https://github.com/KevinEady"
+    },
+    {
+      "name": "legendecas",
+      "url": "https://github.com/legendecas"
+    },
+    {
+      "name": "Leonid Pospelov",
+      "url": "https://github.com/Pospelove"
+    },
+    {
+      "name": "Michael Dawson",
+      "url": "https://github.com/mhdawson"
+    },
+    {
+      "name": "Nicola Del Gobbo",
+      "url": "https://github.com/NickNaso"
+    }
+  ],
+  "description": "Node-API headers",
+  "devDependencies": {
+    "acorn": "^8.12.1"
+  },
+  "directories": {},
+  "gypfile": false,
+  "homepage": "https://github.com/nodejs/node-api-headers",
+  "keywords": [],
+  "license": "MIT",
+  "main": "index.js",
+  "name": "node-api-headers",
+  "readme": "README.md",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/nodejs/node-api-headers.git"
+  },
+  "scripts": {
+    "update-headers": "node --no-warnings scripts/update-headers.js",
+    "write-symbols": "node --no-warnings scripts/write-symbols.js",
+    "write-win32-def": "node --no-warnings scripts/write-win32-def.js",
+    "test": "node test/parse-utils.js "
+  },
+  "version": "1.6.0",
+  "support": true
+}

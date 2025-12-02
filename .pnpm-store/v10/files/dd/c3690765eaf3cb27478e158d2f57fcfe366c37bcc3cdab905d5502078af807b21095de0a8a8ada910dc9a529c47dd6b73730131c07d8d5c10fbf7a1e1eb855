@@ -1,0 +1,289 @@
+types:
+  TextToSpeechOutputFormat:
+    enum:
+      - mp3_22050_32
+      - mp3_44100_32
+      - mp3_44100_64
+      - mp3_44100_96
+      - mp3_44100_128
+      - mp3_44100_192
+      - pcm_8000
+      - pcm_16000
+      - pcm_22050
+      - pcm_24000
+      - pcm_44100
+      - ulaw_8000
+      - alaw_8000
+      - opus_48000_32
+      - opus_48000_64
+      - opus_48000_96
+      - opus_48000_128
+      - opus_48000_192
+    docs: The output audio format
+    source:
+      openapi: asyncapi.yml
+  TextToSpeechApplyTextNormalization:
+    enum:
+      - auto
+      - 'on'
+      - 'off'
+    docs: >-
+      This parameter controls text normalization with three modes - 'auto',
+      'on', and 'off'. When set to 'auto', the system will automatically decide
+      whether to apply text normalization (e.g., spelling out numbers). With
+      'on', text normalization will always be applied, while with 'off', it will
+      be skipped. Cannot be turned on for 'eleven_turbo_v2_5' or
+      'eleven_flash_v2_5' models. Defaults to 'auto'.
+    default: auto
+    source:
+      openapi: asyncapi.yml
+  sendMessageMulti:
+    discriminated: false
+    docs: Send messages to the multi-context WebSocket.
+    union:
+      - root.InitializeConnectionMulti
+      - root.InitialiseContext
+      - root.SendTextMulti
+      - root.FlushContext
+      - root.CloseContext
+      - root.CloseSocket
+      - root.KeepContextAlive
+    source:
+      openapi: asyncapi.yml
+  receiveMessageMulti:
+    discriminated: false
+    docs: Receive messages from the multi-context WebSocket.
+    union:
+      - root.AudioOutputMulti
+      - root.FinalOutputMulti
+    source:
+      openapi: asyncapi.yml
+channel:
+  path: /v1/text-to-speech/{voice_id}/multi-stream-input
+  url: WSS
+  auth: false
+  docs: >
+    The Multi-Context Text-to-Speech WebSockets API allows for generating audio
+    from text input
+
+    while managing multiple independent audio generation streams (contexts) over
+    a single WebSocket connection.
+
+    This is useful for scenarios requiring concurrent or interleaved audio
+    generations, such as dynamic
+
+    conversational AI applications.
+
+
+    Each context, identified by a `context_id`, maintains its own state. You can
+    send text to specific
+
+    contexts, flush them, or close them independently. A `close_socket` message
+    can be used to terminate
+
+    the entire connection gracefully.
+
+
+    For more information on how to use this API for conversational agents see
+    the [conversational agents
+    guide](/docs/best-practices/conversational-agents).
+  path-parameters:
+    voice_id:
+      type: string
+      docs: The unique identifier for the voice to use in the TTS process.
+  query-parameters:
+    authorization:
+      type: optional<string>
+      docs: Your authorization bearer token.
+    model_id:
+      type: optional<string>
+      docs: The model ID to use.
+    language_code:
+      type: optional<string>
+      docs: The ISO 639-1 language code (for specific models).
+    enable_logging:
+      type: optional<boolean>
+      default: true
+      docs: Whether to enable logging of the request.
+    enable_ssml_parsing:
+      type: optional<boolean>
+      default: false
+      docs: Whether to enable SSML parsing.
+    output_format:
+      type: optional<TextToSpeechOutputFormat>
+      docs: The output audio format
+    inactivity_timeout:
+      type: optional<integer>
+      default: 20
+      docs: >-
+        Timeout for inactivity before a context is closed (seconds), can be up
+        to 180 seconds.
+    sync_alignment:
+      type: optional<boolean>
+      default: false
+      docs: Whether to include timing data with every audio chunk.
+    auto_mode:
+      type: optional<boolean>
+      default: false
+      docs: >-
+        Reduces latency by disabling chunk schedule and buffers. Recommended for
+        full sentences/phrases.
+    apply_text_normalization:
+      type: optional<TextToSpeechApplyTextNormalization>
+      default: auto
+      docs: >-
+        This parameter controls text normalization with three modes - 'auto',
+        'on', and 'off'. When set to 'auto', the system will automatically
+        decide whether to apply text normalization (e.g., spelling out numbers).
+        With 'on', text normalization will always be applied, while with 'off',
+        it will be skipped. Cannot be turned on for 'eleven_turbo_v2_5' or
+        'eleven_flash_v2_5' models. Defaults to 'auto'.
+    seed:
+      type: optional<integer>
+      docs: >-
+        If specified, system will best-effort sample deterministically. Integer
+        between 0 and 4294967295.
+      validation:
+        min: 0
+  messages:
+    publish:
+      origin: client
+      body:
+        type: sendMessageMulti
+        docs: Send messages to the multi-context WebSocket.
+    subscribe:
+      origin: server
+      body:
+        type: receiveMessageMulti
+        docs: Receive messages from the multi-context WebSocket.
+  examples:
+    - messages:
+        - type: publish
+          body:
+            text: ' '
+            voice_settings:
+              stability: 0.5
+              similarity_boost: 0.8
+            context_id: conv_1
+        - type: publish
+          body:
+            text: 'Hello from conversation one. '
+            context_id: conv_1
+        - type: publish
+          body:
+            context_id: conv_1
+            text: 'This is added to the buffer of text to flush. '
+            flush: true
+        - type: subscribe
+          body:
+            audio: Y3VyaW91cyBtaW5kcyB0aGluayBhbGlrZSA6KQ==
+            normalizedAlignment:
+              charStartTimesMs:
+                - 0
+                - 3
+                - 7
+                - 9
+                - 11
+                - 12
+                - 13
+                - 15
+                - 17
+                - 19
+                - 21
+              charsDurationsMs:
+                - 3
+                - 4
+                - 2
+                - 2
+                - 1
+                - 1
+                - 2
+                - 2
+                - 2
+                - 2
+                - 3
+              chars:
+                - H
+                - e
+                - l
+                - l
+                - o
+                - ' '
+                - w
+                - o
+                - r
+                - l
+                - d
+            alignment:
+              charStartTimesMs:
+                - 0
+                - 3
+                - 7
+                - 9
+                - 11
+                - 12
+                - 13
+                - 15
+                - 17
+                - 19
+                - 21
+              charsDurationsMs:
+                - 3
+                - 4
+                - 2
+                - 2
+                - 1
+                - 1
+                - 2
+                - 2
+                - 2
+                - 2
+                - 3
+              chars:
+                - H
+                - e
+                - l
+                - l
+                - o
+                - ' '
+                - w
+                - o
+                - r
+                - l
+                - d
+            context_id: conv_1
+        - type: publish
+          body:
+            text: 'Hi this is a new context with different settings! '
+            voice_settings:
+              stability: 0.2
+              similarity_boost: 0.9
+            context_id: interruption_context
+        - type: publish
+          body:
+            context_id: conv_1
+            close_context: true
+        - type: publish
+          body:
+            context_id: interruption_context
+            flush: true
+        - type: subscribe
+          body:
+            audio: Y3VyaW91cyBtaW5kcyB0aGluayBhbGlrZSA6KQ==
+            context_id: interruption_context
+        - type: subscribe
+          body:
+            isFinal: true
+            context_id: interruption_context
+        - type: publish
+          body:
+            text: ''
+            context_id: interruption_context
+        - type: publish
+          body:
+            close_socket: true
+      docs: Demonstrates initializing two contexts, sending text, and managing them.
+      query-parameters:
+        seed: 12345
+imports:
+  root: __package__.yml

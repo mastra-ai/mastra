@@ -1,0 +1,85 @@
+{
+  "name": "@aws-sdk/endpoint-cache",
+  "version": "3.893.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662924800,
+      "integrity": "sha512-cQVWrqot1RUxvVDsYu1IZupgPASenQGDICjThhFpTPRq3i0si2nIUTpoVhq8JP7ocfGTBw78MQY77z1w9sIprQ==",
+      "mode": 420,
+      "size": 11352
+    },
+    "dist-es/Endpoint.js": {
+      "checkedAt": 1764662924803,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "dist-es/EndpointCache.js": {
+      "checkedAt": 1764662924803,
+      "integrity": "sha512-n7/6uFa1NFL1LiplZDlJsEXhvnaah7N5z5w4FPLLg/lOob7I/pKTURG4/AiBK2DAOP0GfKti90g1/tm21VkZrQ==",
+      "mode": 420,
+      "size": 1551
+    },
+    "dist-cjs/index.js": {
+      "checkedAt": 1764662924804,
+      "integrity": "sha512-s+meyeVkXWLv8g+dRA+TAmiQbygkyDzn2OIRFLjTNXzkepxqedTG294mxNozLIBZ3NvknNv5CwnSdVdMgFhqAg==",
+      "mode": 420,
+      "size": 4074
+    },
+    "dist-es/index.js": {
+      "checkedAt": 1764662924804,
+      "integrity": "sha512-Cn5uicReZYDpFvxElETF9oxtPrWR9TjCk4WoA3JoGftr9ZHPVEX2dWifF2C9QlFsa672JTw2ZQQFq6hvFCqVfA==",
+      "mode": 420,
+      "size": 61
+    },
+    "package.json": {
+      "checkedAt": 1764662924806,
+      "integrity": "sha512-SZGG4x/K9hOyJ3KFebRZZOAiAdoUUOfyBCXgG+IyNr5SZRz9VOotmsrIyPQQ2G3DxD5lGgrBZPFSFpTibBCfXA==",
+      "mode": 420,
+      "size": 1587
+    },
+    "README.md": {
+      "checkedAt": 1764662924813,
+      "integrity": "sha512-SoD7V5WKJFaM0B/9zb+eKQ8hsr9dviO7QT+zKW01k28MY6ipJ8PRT2aZPv3UIGvx1KrzATFQg/8InGMLhHcnvA==",
+      "mode": 420,
+      "size": 746
+    },
+    "dist-types/Endpoint.d.ts": {
+      "checkedAt": 1764662924816,
+      "integrity": "sha512-7ruEFxYgYxIkWeHyLz5N9gAfrjJV1XWn7RkkOsHHSHtDPc2fpKqrBNxF21yxw0uWQXwfge9hsFTjGOrjpOThXg==",
+      "mode": 420,
+      "size": 225
+    },
+    "dist-types/ts3.4/Endpoint.d.ts": {
+      "checkedAt": 1764662924820,
+      "integrity": "sha512-FUi/LkcRhMu9OuqwoEO2dyR8prHDYLPU+2JifUvB6BGVRVjIDwrM5DvGCtYsuJQAM33goEu2LP7Y8ti0ry1+DA==",
+      "mode": 420,
+      "size": 81
+    },
+    "dist-types/EndpointCache.d.ts": {
+      "checkedAt": 1764662924822,
+      "integrity": "sha512-2hom7MlymBWAHd+t/DZJEIPL5WP8VymqgdjPFkg15+FNzAj2uMo11BPr8avlRMd3ZaKGtqeDrt2ecpMX/A+hVQ==",
+      "mode": 420,
+      "size": 1427
+    },
+    "dist-types/ts3.4/EndpointCache.d.ts": {
+      "checkedAt": 1764662924822,
+      "integrity": "sha512-l+DqL/kLmABYoN2dwEyyLObky+C+jZuePoDuOH5oUiJbEqhgkS4L9f5HYDFWCI75uLCr0dN9M5A0EHflPMKYTw==",
+      "mode": 420,
+      "size": 456
+    },
+    "dist-types/index.d.ts": {
+      "checkedAt": 1764662924825,
+      "integrity": "sha512-baiR94oSWWMQTnXeS8CX2wxyXeng3rysIOSVuQvh5zMzy2uS5I8pw7zZuGkKHbKRA5rPUwvGnDIMONFyAgF+jg==",
+      "mode": 420,
+      "size": 103
+    },
+    "dist-types/ts3.4/index.d.ts": {
+      "checkedAt": 1764662924804,
+      "integrity": "sha512-Cn5uicReZYDpFvxElETF9oxtPrWR9TjCk4WoA3JoGftr9ZHPVEX2dWifF2C9QlFsa672JTw2ZQQFq6hvFCqVfA==",
+      "mode": 420,
+      "size": 61
+    }
+  }
+}

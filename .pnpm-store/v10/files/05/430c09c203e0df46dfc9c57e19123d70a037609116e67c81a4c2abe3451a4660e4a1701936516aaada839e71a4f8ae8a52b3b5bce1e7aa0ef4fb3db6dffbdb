@@ -1,0 +1,7 @@
+/**
+ * OpenTelemetry output messages schema
+ * As of 10/14/2025, this schema is still in draft status.
+ * https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-output-messages.json
+ */
+export {};
+//# sourceMappingURL=opentelemetryOutputMessages.js.map

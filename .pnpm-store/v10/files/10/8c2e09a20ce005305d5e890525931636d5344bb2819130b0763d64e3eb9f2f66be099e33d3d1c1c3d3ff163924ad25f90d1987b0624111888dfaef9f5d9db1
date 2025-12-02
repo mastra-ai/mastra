@@ -1,0 +1,1 @@
+{"version":3,"sources":["../rsc-client.ts"],"sourcesContent":["export {\n  readStreamableValue,\n  useStreamableValue,\n  useUIState,\n  useAIState,\n  useActions,\n  useSyncUIState,\n} from './rsc-shared.mjs';\n"],"mappings":";AAAA;AAAA,EACE;AAAA,EACA;AAAA,EACA;AAAA,EACA;AAAA,EACA;AAAA,EACA;AAAA,OACK;","names":[]}

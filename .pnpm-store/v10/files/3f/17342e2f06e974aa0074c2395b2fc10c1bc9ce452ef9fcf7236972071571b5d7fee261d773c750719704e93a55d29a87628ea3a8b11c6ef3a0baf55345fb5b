@@ -1,0 +1,7 @@
+/**
+ * OpenTelemetry input messages schema
+ * As of 10/14/2025, this schema is still in draft status.
+ * https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-input-messages.json
+ */
+export {};
+//# sourceMappingURL=opentelemetryInputMessages.js.map

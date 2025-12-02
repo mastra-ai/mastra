@@ -1,0 +1,298 @@
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV1Message, LanguageModelV1Prompt, CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '../../ai-sdk.types.d.ts';
+import type * as AIV4Type from '../../ai-sdk.types.d.ts';
+import * as AIV5 from 'ai-v5';
+import type { AIV5Type } from './types.js';
+type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
+export type AIV5ResponseMessage = AIV5Type.AssistantModelMessage | AIV5Type.ToolModelMessage;
+type MastraMessageShared = {
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    createdAt: Date;
+    threadId?: string;
+    resourceId?: string;
+    type?: string;
+};
+export type MastraMessageContentV2 = {
+    format: 2;
+    parts: (UIMessageV4['parts'][number] & {
+        providerMetadata?: AIV5Type.ProviderMetadata;
+    })[];
+    experimental_attachments?: UIMessageV4['experimental_attachments'];
+    content?: UIMessageV4['content'];
+    toolInvocations?: UIMessageV4['toolInvocations'];
+    reasoning?: UIMessageV4['reasoning'];
+    annotations?: UIMessageV4['annotations'];
+    metadata?: Record<string, unknown>;
+    providerMetadata?: AIV5Type.ProviderMetadata;
+};
+export type MastraDBMessage = MastraMessageShared & {
+    content: MastraMessageContentV2;
+};
+export type MastraMessageV1 = {
+    id: string;
+    content: string | CoreMessageV4['content'];
+    role: 'system' | 'user' | 'assistant' | 'tool';
+    createdAt: Date;
+    threadId?: string;
+    resourceId?: string;
+    toolCallIds?: string[];
+    toolCallArgs?: Record<string, unknown>[];
+    toolNames?: string[];
+    type: 'text' | 'tool-call' | 'tool-result';
+};
+export type UIMessageWithMetadata = UIMessageV4 & {
+    metadata?: Record<string, unknown>;
+};
+export type MessageInput = AIV5Type.UIMessage | AIV5Type.ModelMessage | UIMessageWithMetadata | AIV4Type.Message | CoreMessageV4 | MastraMessageV1 | MastraDBMessage;
+export { convertMessages } from './utils/convert-messages.js';
+export type { OutputFormat } from './utils/convert-messages.js';
+type MessageSource = 'memory' | 'response' | 'input' | 'system' | 'context' | 'user';
+type MemoryInfo = {
+    threadId: string;
+    resourceId?: string;
+};
+export type MessageListInput = string | string[] | MessageInput | MessageInput[];
+export declare class MessageList {
+    private messages;
+    private systemMessages;
+    private taggedSystemMessages;
+    private memoryInfo;
+    private memoryMessages;
+    private newUserMessages;
+    private newResponseMessages;
+    private userContextMessages;
+    private memoryMessagesPersisted;
+    private newUserMessagesPersisted;
+    private newResponseMessagesPersisted;
+    private userContextMessagesPersisted;
+    private generateMessageId?;
+    private _agentNetworkAppend;
+    constructor({ threadId, resourceId, generateMessageId, _agentNetworkAppend, }?: {
+        threadId?: string;
+        resourceId?: string;
+        generateMessageId?: AIV4Type.IdGenerator;
+    });
+    add(messages: MessageListInput, messageSource: MessageSource): this;
+    private serializeSet;
+    private deserializeSet;
+    private serializeMessage;
+    private deserializeMessage;
+    serialize(): {
+        messages: {
+            createdAt: string;
+            id: string;
+            role: "user" | "assistant" | "system";
+            threadId?: string;
+            resourceId?: string;
+            type?: string;
+            content: MastraMessageContentV2;
+        }[];
+        systemMessages: AIV4Type.CoreSystemMessage[];
+        taggedSystemMessages: Record<string, AIV4Type.CoreSystemMessage[]>;
+        memoryInfo: MemoryInfo | null;
+        _agentNetworkAppend: boolean;
+        memoryMessages: string[];
+        newUserMessages: string[];
+        newResponseMessages: string[];
+        userContextMessages: string[];
+        memoryMessagesPersisted: string[];
+        newUserMessagesPersisted: string[];
+        newResponseMessagesPersisted: string[];
+        userContextMessagesPersisted: string[];
+    };
+    deserialize(state: ReturnType<typeof this.serialize>): this;
+    getLatestUserContent(): string | null;
+    get get(): {
+        all: {
+            db: () => MastraDBMessage[];
+            v1: () => MastraMessageV1[];
+            aiV5: {
+                model: () => AIV5Type.ModelMessage[];
+                ui: () => AIV5Type.UIMessage[];
+                prompt: () => AIV5Type.ModelMessage[];
+                llmPrompt: (options?: {
+                    downloadConcurrency?: number;
+                    downloadRetries?: number;
+                    supportedUrls?: Record<string, RegExp[]>;
+                }) => Promise<LanguageModelV2Prompt>;
+            };
+            prompt: () => CoreMessageV4[];
+            ui: () => UIMessageWithMetadata[];
+            core: () => CoreMessageV4[];
+            aiV4: {
+                ui: () => UIMessageWithMetadata[];
+                core: () => CoreMessageV4[];
+                prompt: () => CoreMessageV4[];
+                llmPrompt: () => LanguageModelV1Prompt;
+            };
+        };
+        remembered: {
+            db: () => MastraDBMessage[];
+            v1: () => import("../../memory").MastraMessageV1[];
+            aiV5: {
+                model: () => AIV5.ModelMessage[];
+                ui: () => AIV5Type.UIMessage[];
+            };
+            ui: () => UIMessageWithMetadata[];
+            core: () => CoreMessageV4[];
+            aiV4: {
+                ui: () => UIMessageWithMetadata[];
+                core: () => CoreMessageV4[];
+            };
+        };
+        input: {
+            db: () => MastraDBMessage[];
+            v1: () => import("../../memory").MastraMessageV1[];
+            aiV5: {
+                model: () => AIV5.ModelMessage[];
+                ui: () => AIV5Type.UIMessage[];
+            };
+            ui: () => UIMessageWithMetadata[];
+            core: () => CoreMessageV4[];
+            aiV4: {
+                ui: () => UIMessageWithMetadata[];
+                core: () => CoreMessageV4[];
+            };
+        };
+        response: {
+            db: () => MastraDBMessage[];
+            v1: () => MastraMessageV1[];
+            aiV5: {
+                ui: () => AIV5Type.UIMessage[];
+                model: () => AIV5ResponseMessage[];
+                modelContent: (stepNumber?: number) => AIV5Type.StepResult<any>["content"];
+                stepContent: (message?: AIV5Type.ModelMessage) => AIV5Type.StepResult<any>["content"];
+            };
+            aiV4: {
+                ui: () => UIMessageWithMetadata[];
+                core: () => CoreMessageV4[];
+            };
+        };
+    };
+    get getPersisted(): {
+        remembered: {
+            db: () => MastraDBMessage[];
+            v1: () => import("../../memory").MastraMessageV1[];
+            ui: () => UIMessageWithMetadata[];
+            core: () => CoreMessageV4[];
+        };
+        input: {
+            db: () => MastraDBMessage[];
+            v1: () => MastraMessageV1[];
+            ui: () => UIMessageWithMetadata[];
+            core: () => CoreMessageV4[];
+        };
+        taggedSystemMessages: Record<string, AIV4Type.CoreSystemMessage[]>;
+        response: {
+            db: () => MastraDBMessage[];
+            ui: () => UIMessageWithMetadata[];
+        };
+    };
+    get clear(): {
+        input: {
+            db: () => MastraDBMessage[];
+        };
+        response: {
+            db: () => MastraDBMessage[];
+        };
+    };
+    private all;
+    private remembered;
+    private rememberedPersisted;
+    private input;
+    private inputPersisted;
+    private response;
+    private responsePersisted;
+    drainUnsavedMessages(): MastraDBMessage[];
+    getEarliestUnsavedMessageTimestamp(): number | undefined;
+    getSystemMessages(tag?: string): CoreMessageV4[];
+    addSystem(messages: CoreMessageV4 | CoreMessageV4[] | AIV5Type.ModelMessage | AIV5Type.ModelMessage[] | MastraDBMessage | MastraDBMessage[] | string | string[] | null, tag?: string): this;
+    private aiV4UIMessagesToAIV4CoreMessages;
+    private sanitizeAIV4UIMessages;
+    /**
+     * Converts various message formats to AIV4 CoreMessage format for system messages
+     * @param message - The message to convert (can be string, MastraDBMessage, or AI SDK message types)
+     * @returns AIV4 CoreMessage in the proper format
+     */
+    private systemMessageToAICore;
+    private addOneSystem;
+    private isDuplicateSystem;
+    private static mastraDBMessageToAIV4UIMessage;
+    /**
+     * Converts a MastraDBMessage system message directly to AIV4 CoreMessage format
+     * This is more efficient than converting to UI message first and then to core
+     * @param message - The MastraDBMessage message to convert
+     * @returns AIV4 CoreMessage with system role
+     */
+    private static mastraDBMessageSystemToV4Core;
+    private getMessageById;
+    private shouldReplaceMessage;
+    private addOne;
+    private pushMessageToSource;
+    /**
+     * Pushes a new message part to the latest message.
+     * @param latestMessage - The latest message to push the part to.
+     * @param newMessage - The new message to push the part from.
+     * @param part - The part to push.
+     * @param insertAt - The index at which to insert the part. Optional.
+     */
+    private pushNewMessagePart;
+    /**
+     * Upserts parts of messageV2 into latestMessage based on the anchorMap.
+     * This is used when appending a message to the last assistant message to ensure that parts are inserted in the correct order.
+     * @param latestMessage - The latest message to upsert parts into.
+     * @param messageV2 - The message to upsert parts from.
+     * @param anchorMap - The anchor map to use for upserting parts.
+     */
+    private addPartsToLatestMessage;
+    private inputToMastraDBMessage;
+    private lastCreatedAt?;
+    private generateCreatedAt;
+    private newMessageId;
+    private mastraMessageV1ToMastraDBMessage;
+    private hydrateMastraDBMessageFields;
+    private aiV4UIMessageToMastraDBMessage;
+    private aiV4CoreMessageToMastraDBMessage;
+    static isAIV4UIMessage(msg: MessageInput): msg is UIMessageV4;
+    static isAIV5CoreMessage(msg: MessageInput): msg is AIV5Type.ModelMessage;
+    static isAIV4CoreMessage(msg: MessageInput): msg is CoreMessageV4;
+    static isMastraMessage(msg: MessageInput): msg is MastraDBMessage | MastraMessageV1;
+    static isMastraMessageV1(msg: MessageInput): msg is MastraMessageV1;
+    static isMastraDBMessage(msg: MessageInput): msg is MastraDBMessage;
+    private static getRole;
+    private static cacheKeyFromAIV4Parts;
+    static coreContentToString(content: CoreMessageV4['content']): string;
+    private static cacheKeyFromAIV4CoreMessageContent;
+    private static messagesAreEqual;
+    static aiV4CoreMessageToV1PromptMessage(coreMessage: CoreMessageV4): LanguageModelV1Message;
+    static aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMessage): AIV5LanguageModelV2Message;
+    /**
+     * Direct conversion from MastraDBMessage to AIV5 UIMessage
+     */
+    static mastraDBMessageToAIV5UIMessage(dbMsg: MastraDBMessage): AIV5Type.UIMessage;
+    /**
+     * Direct conversion from AIV5 UIMessage to MastraDBMessage
+     * Combines logic from aiV5UIMessageToMastraMessageV3 + mastraMessageV3ToV2
+     */
+    private static aiV5UIMessageToMastraDBMessage;
+    /**
+     * Convert image or file to data URI or URL for V2 file part
+     */
+    private static getDataStringFromAIV5DataPart;
+    /**
+     * Direct conversion from AIV5 ModelMessage to MastraDBMessage
+     * Combines logic from aiV5ModelMessageToMastraMessageV3 + mastraMessageV3ToV2
+     */
+    private static aiV5ModelMessageToMastraDBMessage;
+    private aiV4CoreMessagesToAIV5ModelMessages;
+    private aiV5UIMessagesToAIV5ModelMessages;
+    private addStartStepPartsForAIV5;
+    private sanitizeV5UIMessages;
+    static hasAIV5UIMessageCharacteristics(msg: AIV5Type.UIMessage | UIMessageV4 | AIV4Type.Message): msg is AIV5Type.UIMessage;
+    static isAIV5UIMessage(msg: MessageInput): msg is AIV5Type.UIMessage;
+    static hasAIV5CoreMessageCharacteristics(msg: CoreMessageV4 | AIV5Type.ModelMessage | AIV4Type.Message): msg is AIV5Type.ModelMessage;
+    private static cacheKeyFromAIV5Parts;
+    private static cacheKeyFromAIV5ModelMessageContent;
+}
+//# sourceMappingURL=index.d.ts.map

@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/workers/email/constants.ts", "../../../../src/workers/email/email.worker.ts"],
+  "mappings": ";AAAO,IAAM,YAAY;;;ACWzB,IAAM,eAAN,MAA+C;AAAA,EACvC,YACU,MACA,IACR,KACP;AAHe;AACA;AACR;AAQR,WAAO;AAAA,MACN;AAAA,MACA;AAAA;AAAA,MAEA,CAAC,SAAS,GAAG;AAAA,IACd;AAAA,EACD;AACD,GACO,uBAAQ;AAAA,EACd;AACD;",
+  "names": []
+}

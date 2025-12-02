@@ -1,0 +1,12 @@
+{
+    // This determines the configuration used by your editor
+    "extends": "./tsconfig-test.json",
+    "compilerOptions": {
+        "noEmit": true
+    },
+    "include": [
+        "scripts",
+        "src",
+        "test"
+    ]
+}

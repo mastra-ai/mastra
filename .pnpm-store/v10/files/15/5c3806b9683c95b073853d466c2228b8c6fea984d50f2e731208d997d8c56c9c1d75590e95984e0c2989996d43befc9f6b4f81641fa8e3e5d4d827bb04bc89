@@ -1,0 +1,1 @@
+{"version":3,"file":"ACL_SETUSER.d.ts","sourceRoot":"","sources":["../../../lib/commands/ACL_SETUSER.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,aAAa,EAAE,iBAAiB,EAAW,MAAM,eAAe,CAAC;AAC1E,OAAO,EAAE,qBAAqB,EAAE,MAAM,wBAAwB,CAAC;;;;IAK7D;;;;;OAKG;gDACkB,aAAa,YAAY,aAAa,QAAQ,qBAAqB;mCAI1C,kBAAkB,IAAI,CAAC;;AAbvE,wBAc6B"}

@@ -1,0 +1,22 @@
+import type { AudioSpeechFormat, VoiceLanguage, VoiceLanguageServer, VoiceModel, VoiceModelServer, VoicesListEntry, VoicesListEntryServer } from "./types.js";
+export interface QueryParams {
+    baseUrl: string;
+    url: string;
+    token: string;
+    options?: RequestInit;
+    jsonPayload?: Record<string, unknown>;
+}
+/**
+ * Error class that represents Speechify API server errors.
+ * @property statusCode - The HTTP status code of the error.
+ */
+export declare class SpeechifyError extends Error {
+    statusCode: number;
+    constructor(message: string, statusCode: number);
+}
+export declare const queryAPI: ({ baseUrl, url, token, jsonPayload, options: initialOptions, }: QueryParams) => Promise<Response>;
+export declare const fetchJSON: ({ baseUrl, url, token, jsonPayload, options, }: QueryParams) => Promise<any>;
+export declare const mapLanguage: (lang: VoiceLanguageServer) => VoiceLanguage;
+export declare const mapModel: (model: VoiceModelServer) => VoiceModel;
+export declare const mapVoice: (voice: VoicesListEntryServer) => VoicesListEntry;
+export declare const audioFormatToMime: (format: AudioSpeechFormat) => "audio/mpeg" | "audio/wav" | "audio/ogg" | "audio/aac";

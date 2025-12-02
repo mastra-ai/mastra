@@ -1,0 +1,31 @@
+{
+  "name": "@types/express-serve-static-core",
+  "version": "5.1.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662907805,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662907805,
+      "integrity": "sha512-lvLszLff8o9F/FFAqlKcjD0q20padEwBmOFw3pzKp8GiH4RUewaNXu+NOzSaTz3wRi0O85bC0lXLG5RUy2lcTQ==",
+      "mode": 420,
+      "size": 928
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662907808,
+      "integrity": "sha512-6GmPBFaFpc61gRnV3GBxoYwWOXnWN+vo5bXs0vFa/MOuJlNgdn98bl7sfTTmILM5aip0BCUJZc2elfKRE5j9Xw==",
+      "mode": 420,
+      "size": 41089
+    },
+    "package.json": {
+      "checkedAt": 1764662907808,
+      "integrity": "sha512-k0LRjJWSXkoBaNUrthnFudAQL4z/rAtIY0KGnk9RaW8DuxoogFnN1l4JpJmBmuqBRevF23GWOfE1ZHKsIEBHqA==",
+      "mode": 420,
+      "size": 1621
+    }
+  }
+}

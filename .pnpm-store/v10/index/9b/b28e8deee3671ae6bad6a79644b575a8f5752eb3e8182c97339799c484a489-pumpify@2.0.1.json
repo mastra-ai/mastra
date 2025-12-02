@@ -1,0 +1,43 @@
+{
+  "name": "pumpify",
+  "version": "2.0.1",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662928442,
+      "integrity": "sha512-cOhuuJdhxAt22gi6nkGKEb6GonoCKFtUidovBTEStbnpH1fg5mgJQmFpKTODKfJVYOo+h3r9aNxBch+qvRF+GQ==",
+      "mode": 420,
+      "size": 780
+    },
+    ".travis.yml": {
+      "checkedAt": 1764662928454,
+      "integrity": "sha512-2FwPLkOazOQQGUZ4u9nmaWp6s2htg/i2EdzESrsyOtA+cBj7OEq1TXjx2Osxb/cOOrApXYnYIkQc0AZthPA+2Q==",
+      "mode": 420,
+      "size": 59
+    },
+    "index.js": {
+      "checkedAt": 1764662928457,
+      "integrity": "sha512-OMW05GbCj5MF7vFrgPwBif1mLIQc8hW9KJtpU4IpXBSz8mlqIkmJfAZOz3C7VUpWRw3b+vaNfZ8oBm2qUffSUQ==",
+      "mode": 420,
+      "size": 1758
+    },
+    "LICENSE": {
+      "checkedAt": 1764662928458,
+      "integrity": "sha512-tSuhQwQoEtbdEDGhKUav3bbo+Ou8cWnFnBONFqr8XiYarpL+ax6pSj2A450kFcSyGXEO9Gk5ot8TXbJKDPcS+w==",
+      "mode": 420,
+      "size": 1078
+    },
+    "README.md": {
+      "checkedAt": 1764662928458,
+      "integrity": "sha512-Ts2MfuxPzIf76oDn3BXholSPfk2z8nMPydOfH1jNoICSCxOg4nJXSorm2JMwLMGljbAJrGem8J7aoT5e7we97Q==",
+      "mode": 420,
+      "size": 1904
+    },
+    "test.js": {
+      "checkedAt": 1764662928458,
+      "integrity": "sha512-MUlJmjkXasTALk5pJ3h8T04tiuvu2cot6wcnj7S0uC4Fx8D/LpaXWc/Uqs5kPlHRxt/PPpbylg78oWpBKpTYpg==",
+      "mode": 420,
+      "size": 4629
+    }
+  }
+}

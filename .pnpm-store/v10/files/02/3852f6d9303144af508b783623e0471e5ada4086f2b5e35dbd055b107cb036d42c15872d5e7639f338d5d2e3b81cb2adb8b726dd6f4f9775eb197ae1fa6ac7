@@ -1,0 +1,2 @@
+export declare const convertGenAISpanAttributesToOpenInferenceSpanAttributes: import("./types.js").SafeFunction<(spanAttributes: import("@opentelemetry/api").Attributes) => import("@opentelemetry/api").Attributes>;
+//# sourceMappingURL=index.d.ts.map

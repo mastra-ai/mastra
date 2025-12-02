@@ -1,0 +1,720 @@
+# Scoped function calls
+
+int main() {
+  abc::def("hello", "world");
+}
+
+==>
+
+Program(FunctionDefinition(
+  PrimitiveType,
+  FunctionDeclarator(Identifier, ParameterList),
+  CompoundStatement(
+    ExpressionStatement(CallExpression(
+      ScopedIdentifier(NamespaceIdentifier, Identifier),
+      ArgumentList(
+        String,
+        String))))))
+
+
+# Compound literals without parentheses
+
+T x = T{0};
+U<V> y = U<V>{0};
+
+==>
+
+Program(
+  Declaration(
+    TypeIdentifier,
+    InitDeclarator(
+      Identifier,
+      CompoundLiteralExpression(
+        TypeIdentifier,
+        InitializerList(Number)))),
+  Declaration(
+    TemplateType(TypeIdentifier, TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+    InitDeclarator(
+      Identifier,
+      CompoundLiteralExpression(
+        TemplateType(TypeIdentifier, TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+        InitializerList(Number)))))
+
+
+# Explicit destructor calls
+
+int main() {
+  foo.~Foo();
+  bar->~Bar();
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList),
+    CompoundStatement(
+      ExpressionStatement(CallExpression(
+        FieldExpression(Identifier, DestructorName),
+        ArgumentList)),
+      ExpressionStatement(CallExpression(
+        FieldExpression(Identifier, DestructorName),
+        ArgumentList)))))
+
+
+# New and Delete expressions
+
+int main() {
+  auto a = new T();
+  auto b = new U::V<W, X>{};
+  auto c = new (&d) T;
+  auto d = new T[5][3]();
+  auto e = new int[5];
+  d = new(2, f) T;
+  delete a;
+  ::delete[] c;
+  ::new (foo(x)) T(this, x);
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList),
+    CompoundStatement(
+      Declaration(
+        auto,
+        InitDeclarator(
+          Identifier,
+          NewExpression(new, TypeIdentifier, ArgumentList))),
+      Declaration(
+        auto,
+        InitDeclarator(
+          Identifier,
+          NewExpression(
+            new,
+            TemplateType(
+              ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+              TemplateArgumentList(
+                TypeDescriptor(TypeIdentifier),
+                TypeDescriptor(TypeIdentifier))),
+            InitializerList))),
+      Declaration(
+        auto,
+        InitDeclarator(
+          Identifier,
+          NewExpression(
+            new,
+            ArgumentList(PointerExpression(Identifier)),
+            TypeIdentifier))),
+      Declaration(
+        auto,
+        InitDeclarator(
+          Identifier,
+          NewExpression(
+            new,
+            TypeIdentifier,
+            NewDeclarator(Number, NewDeclarator(Number)),
+            ArgumentList))),
+      Declaration(
+        auto,
+        InitDeclarator(
+          Identifier,
+          NewExpression(new, PrimitiveType, NewDeclarator(Number)))),
+      ExpressionStatement(AssignmentExpression(
+        Identifier,
+        NewExpression(new, ArgumentList(Number, Identifier), TypeIdentifier))),
+      ExpressionStatement(DeleteExpression(delete, Identifier)),
+      ExpressionStatement(DeleteExpression(delete, Identifier)),
+      ExpressionStatement(NewExpression(
+        new,
+        ArgumentList(CallExpression(Identifier, ArgumentList(Identifier))),
+        TypeIdentifier, ArgumentList(this, Identifier))))))
+
+
+
+# Initializer lists as arguments
+
+int main() {
+  pairs.push_back({true, false});
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList),
+    CompoundStatement(
+      ExpressionStatement(CallExpression(
+        FieldExpression(Identifier, FieldIdentifier),
+        ArgumentList(InitializerList(True, False)))))))
+
+
+# Lambda expressions
+
+auto f = [&](int x) -> bool {
+  return true;
+};
+
+auto g = [x, y](int z) {
+  return false;
+};
+
+auto h = [] {
+  return false;
+};
+
+==>
+
+Program(
+  Declaration(
+    auto,
+    InitDeclarator(
+      Identifier,
+      LambdaExpression(
+        LambdaCaptureSpecifier,
+        AbstractFunctionDeclarator(
+          ParameterList(ParameterDeclaration(PrimitiveType, Identifier)),
+          TrailingReturnType(PrimitiveType)),
+        CompoundStatement(ReturnStatement(return, True))))),
+  Declaration(
+    auto,
+    InitDeclarator(
+      Identifier,
+      LambdaExpression(
+        LambdaCaptureSpecifier(Identifier, Identifier),
+        AbstractFunctionDeclarator(
+          ParameterList(ParameterDeclaration(PrimitiveType, Identifier))),
+        CompoundStatement(ReturnStatement(return, False))))),
+  Declaration(
+    auto,
+    InitDeclarator(
+      Identifier,
+      LambdaExpression(
+        LambdaCaptureSpecifier,
+        CompoundStatement(ReturnStatement(return, False))))))
+
+
+# Nested template calls
+
+class A {
+  B<C::D<E, F>>::G field;
+
+  H<I<J>> method() {
+    K::L<M<N>> variable1 = K::L<M<N>>{};
+  }
+};
+
+==>
+
+Program(
+  ClassSpecifier(class, TypeIdentifier, FieldDeclarationList(
+    FieldDeclaration(
+      ScopedTypeIdentifier(
+        TemplateType(
+          TypeIdentifier,
+          TemplateArgumentList(
+            TypeDescriptor(TemplateType(
+              ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+              TemplateArgumentList(
+                TypeDescriptor(TypeIdentifier), TypeDescriptor(TypeIdentifier)))))),
+        TypeIdentifier),
+      FieldIdentifier),
+    FunctionDefinition(
+      TemplateType(
+        TypeIdentifier,
+        TemplateArgumentList(TypeDescriptor(
+          TemplateType(
+            TypeIdentifier,
+            TemplateArgumentList(TypeDescriptor(TypeIdentifier)))))),
+      FunctionDeclarator(FieldIdentifier, ParameterList),
+      CompoundStatement(
+        Declaration(
+          TemplateType(
+            ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+            TemplateArgumentList(TypeDescriptor(
+              TemplateType(TypeIdentifier, TemplateArgumentList(TypeDescriptor(TypeIdentifier)))))),
+          InitDeclarator(
+            Identifier,
+            CompoundLiteralExpression(
+              TemplateType(
+                ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+                TemplateArgumentList(TypeDescriptor(
+                  TemplateType(
+                    TypeIdentifier,
+                    TemplateArgumentList(TypeDescriptor(TypeIdentifier)))))),
+              InitializerList))))))))
+
+
+# Comma expressions at the start of blocks
+
+int main() { a(), b(); }
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList),
+    CompoundStatement(
+      ExpressionStatement(CommaExpression(
+        CallExpression(Identifier, ArgumentList),
+        CallExpression(Identifier, ArgumentList))))))
+
+
+# Nullptr
+
+void *x = nullptr;
+
+==>
+
+Program(
+  Declaration(PrimitiveType, InitDeclarator(PointerDeclarator(Identifier), nullptr)))
+
+
+# Raw string literals
+
+const char *s1 = R"(
+  This is a string. It ends with ')' and a quote.
+)";
+
+const char *s2 = R"FOO(
+  This is a string. It ends with ')FOO' and a quote.
+)FOO";
+
+const char *s3 = uR"FOO(
+  This is a string. It ends with ')FOO' and a quote.
+)FOO";
+
+const char *s4 = UR"FOO(
+  This is a string. It ends with ')FOO' and a quote.
+)FOO";
+
+const char *s5 = u8R"FOO(
+  This is a string. It ends with ')FOO' and a quote.
+)FOO";
+
+const char *s6 = LR"FOO(
+  This is a string. It ends with ')FOO' and a quote.
+)FOO";
+
+==>
+
+Program(
+  Declaration(
+    const,
+    PrimitiveType,
+    InitDeclarator(
+      PointerDeclarator(Identifier),
+      RawString)),
+  Declaration(
+    const,
+    PrimitiveType,
+    InitDeclarator(
+      PointerDeclarator(Identifier),
+      RawString)),
+  Declaration(
+    const,
+    PrimitiveType,
+    InitDeclarator(
+      PointerDeclarator(Identifier),
+      RawString)),
+  Declaration(
+    const,
+    PrimitiveType,
+    InitDeclarator(
+      PointerDeclarator(Identifier),
+      RawString)),
+  Declaration(
+    const,
+    PrimitiveType,
+    InitDeclarator(
+      PointerDeclarator(Identifier),
+      RawString)),
+  Declaration(
+    const,
+    PrimitiveType,
+    InitDeclarator(
+      PointerDeclarator(Identifier),
+      RawString)))
+
+
+# Template calls
+
+int main() {
+  // '<' and '>' as template argument list delimiters
+  if (a<b && c>()) {}
+
+  // '<' and '>' as binary operators
+  if (a < b && c >= d) {}
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+  PrimitiveType,
+  FunctionDeclarator(Identifier, ParameterList),
+  CompoundStatement(
+    LineComment,
+    IfStatement(if,
+      ConditionClause(
+        CallExpression(
+          TemplateFunction(
+            Identifier,
+            TemplateArgumentList(BinaryExpression(Identifier, LogicOp, Identifier))),
+          ArgumentList)),
+      CompoundStatement),
+    LineComment,
+    IfStatement(if,
+      ConditionClause(
+        BinaryExpression(
+          BinaryExpression(Identifier, CompareOp, Identifier),
+          LogicOp,
+          BinaryExpression(Identifier, CompareOp, Identifier))),
+      CompoundStatement))))
+
+# Parameter pack expansions
+
+container<A,B,C...> t1;
+container<C...,A,B> t2;
+
+typedef Tuple<Pair<Args1, Args2>...> type;
+
+f(&args...); // expands to f(&E1, &E2, &E3)
+f(n, ++args...); // expands to f(n, ++E1, ++E2, ++E3);
+f(++args..., n); // expands to f(++E1, ++E2, ++E3, n);
+f(const_cast<const Args*>(&args)...); // f(const_cast<const E1*>(&X1), const_cast<const E2*>(&X2), const_cast<const E3*>(&X3))
+f(h(args...) + args...); // expands to f(h(E1,E2,E3) + E1, h(E1,E2,E3) + E2, h(E1,E2,E3) + E3)
+
+const int size = sizeof...(args) + 2;
+int res[size] = {1,args...,2};
+int dummy[sizeof...(Ts)] = { (std::cout << args, 0)... };
+
+auto lm = [&, args...] { return g(args...); };
+
+class X : public Mixins... {
+public:
+    X(const Mixins&... mixins) : Mixins(mixins)... { }
+};
+
+template <typename... Args>
+void wrap(Args&&... args) {
+    f(forward<Args>(args)...);
+}
+
+void f(T...) {}
+
+==>
+
+Program(
+  Declaration(
+    TemplateType(
+      TypeIdentifier,
+      TemplateArgumentList(
+        TypeDescriptor(
+          TypeIdentifier),
+        TypeDescriptor(
+          TypeIdentifier),
+        ParameterPackExpansion(
+          TypeDescriptor(
+            TypeIdentifier)))),
+    Identifier),
+  Declaration(
+    TemplateType(
+      TypeIdentifier,
+      TemplateArgumentList(
+        ParameterPackExpansion(
+          TypeDescriptor(
+            TypeIdentifier)),
+        TypeDescriptor(
+          TypeIdentifier),
+        TypeDescriptor(
+          TypeIdentifier))),
+    Identifier),
+  TypeDefinition(
+    typedef,
+    TemplateType(
+      TypeIdentifier,
+      TemplateArgumentList(
+        ParameterPackExpansion(
+          TypeDescriptor(
+            TemplateType(
+              TypeIdentifier,
+              TemplateArgumentList(
+                TypeDescriptor(
+                  TypeIdentifier),
+                TypeDescriptor(
+                  TypeIdentifier))))))),
+    TypeIdentifier),
+  ExpressionStatement(
+    CallExpression(
+      Identifier,
+      ArgumentList(
+        ParameterPackExpansion(
+          PointerExpression(
+            Identifier))))),
+  LineComment,
+  ExpressionStatement(
+    CallExpression(
+      Identifier,
+      ArgumentList(
+        Identifier,
+        ParameterPackExpansion(
+          UpdateExpression(UpdateOp, Identifier))))),
+  LineComment,
+  ExpressionStatement(
+    CallExpression(
+      Identifier,
+      ArgumentList(
+        ParameterPackExpansion(
+          UpdateExpression(UpdateOp, Identifier)),
+        Identifier))),
+  LineComment,
+  ExpressionStatement(
+    CallExpression(
+      Identifier,
+      ArgumentList(
+        ParameterPackExpansion(
+          CallExpression(
+            TemplateFunction(
+              Identifier,
+              TemplateArgumentList(
+                TypeDescriptor(
+                  const,
+                  TypeIdentifier,
+                  AbstractPointerDeclarator))),
+            ArgumentList(
+              PointerExpression(Identifier))))))),
+  LineComment,
+  ExpressionStatement(
+    CallExpression(
+      Identifier,
+      ArgumentList(
+        ParameterPackExpansion(
+          BinaryExpression(
+            CallExpression(
+              Identifier,
+              ArgumentList(
+                ParameterPackExpansion(Identifier))),
+            ArithOp,
+            Identifier))))),
+  LineComment,
+  Declaration(
+    const,
+    PrimitiveType,
+    InitDeclarator(
+      Identifier,
+      BinaryExpression(
+          SizeofExpression(sizeof, Identifier),
+          ArithOp,
+          Number))),
+  Declaration(
+    PrimitiveType,
+    InitDeclarator(
+      ArrayDeclarator(
+        Identifier,
+        Identifier),
+      InitializerList(
+        Number,
+        ParameterPackExpansion(Identifier),
+        Number))),
+  Declaration(
+    PrimitiveType,
+    InitDeclarator(
+      ArrayDeclarator(
+        Identifier,
+        SizeofExpression(sizeof, Identifier)),
+      InitializerList(
+        ParameterPackExpansion(
+          ParenthesizedExpression(
+            CommaExpression(
+              BinaryExpression(
+                ScopedIdentifier(
+                  NamespaceIdentifier,
+                  Identifier),
+                BitOp,
+                Identifier),
+              Number)))))),
+  Declaration(
+    auto,
+    InitDeclarator(
+      Identifier,
+      LambdaExpression(
+        LambdaCaptureSpecifier(
+          ParameterPackExpansion(Identifier)),
+        CompoundStatement(
+          ReturnStatement(
+            return,
+            CallExpression(
+              Identifier,
+              ArgumentList(
+                ParameterPackExpansion(Identifier)))))))),
+  ClassSpecifier(
+    class, TypeIdentifier,
+    BaseClassClause(
+      Access, TypeIdentifier),
+    FieldDeclarationList(
+      AccessSpecifier(Access),
+      FunctionDefinition(
+        FunctionDeclarator(
+          Identifier,
+          ParameterList(
+            VariadicParameterDeclaration(
+              const,
+              TypeIdentifier,
+              ReferenceDeclarator(
+                VariadicDeclarator(Identifier))))),
+        FieldInitializerList(
+          FieldInitializer(
+            FieldIdentifier,
+            ArgumentList(Identifier))),
+        CompoundStatement))),
+  TemplateDeclaration(
+    template,
+    TemplateParameterList(VariadicTypeParameterDeclaration(typename, TypeIdentifier)),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(
+        Identifier,
+        ParameterList(
+          VariadicParameterDeclaration(
+            TypeIdentifier,
+            ReferenceDeclarator(VariadicDeclarator(Identifier))))),
+      CompoundStatement(
+        ExpressionStatement(
+          CallExpression(
+            Identifier,
+            ArgumentList(
+              ParameterPackExpansion(
+                CallExpression(
+                  TemplateFunction(
+                    Identifier,
+                    TemplateArgumentList(
+                      TypeDescriptor(TypeIdentifier))),
+                  ArgumentList(Identifier))))))))),
+  FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(
+        Identifier,
+        ParameterList(
+          VariadicParameterDeclaration(
+            TypeIdentifier,
+            VariadicDeclarator))),
+      CompoundStatement))
+
+
+# Concatenated string literals
+
+"a" "b" "c";
+R"(a)" R"(b)" R"(c)";
+"a" R"(b)" L"c" R"FOO(d)FOO";
+==>
+
+Program(
+  ExpressionStatement(ConcatenatedString(String, String, String)),
+  ExpressionStatement(ConcatenatedString(RawString, RawString, RawString)),
+  ExpressionStatement(ConcatenatedString(String, RawString, String, RawString)))
+
+
+# Primitive types ctor
+
+x = int(1);
+x = new int(1);
+x = (int(1) + float(2));
+
+==>
+
+Program(
+  ExpressionStatement(
+    AssignmentExpression(
+      Identifier,
+      CallExpression(PrimitiveType, ArgumentList(Number)))),
+  ExpressionStatement(
+    AssignmentExpression(
+      Identifier,
+      NewExpression(new, PrimitiveType, ArgumentList(Number)))),
+  ExpressionStatement(
+    AssignmentExpression(
+      Identifier,
+      ParenthesizedExpression(
+        BinaryExpression(
+          CallExpression(PrimitiveType, ArgumentList(Number)),
+          ArithOp,
+          CallExpression(PrimitiveType, ArgumentList(Number)))))))
+
+
+# Array assignment expression
+
+array_[i] = s[i];
+
+==>
+
+Program(
+  ExpressionStatement(
+    AssignmentExpression(
+      SubscriptExpression(
+        Identifier,
+        Identifier),
+      SubscriptExpression(
+        Identifier,
+        Identifier))))
+
+# Reference arg
+
+void x() {
+  x_->Y(A(this, &B::C<D, 2>));
+}
+
+==>
+
+Program(FunctionDefinition(PrimitiveType, FunctionDeclarator(Identifier, ParameterList), CompoundStatement(
+  ExpressionStatement(CallExpression(FieldExpression(Identifier, FieldIdentifier), ArgumentList(
+    CallExpression(Identifier, ArgumentList(
+      this,
+      PointerExpression(TemplateFunction(
+        ScopedIdentifier(NamespaceIdentifier, Identifier),
+        TemplateArgumentList(TypeDescriptor(TypeIdentifier), Number)))))))))))
+
+# Numbers
+
+void f() {
+  return 2 + 2.5 + 2u + 2ul + 2uLl + 4e-10;
+}
+
+==>
+
+Program(FunctionDefinition(PrimitiveType,FunctionDeclarator(Identifier,ParameterList()),CompoundStatement(
+  ReturnStatement(return,BinaryExpression(
+    BinaryExpression(BinaryExpression(
+      BinaryExpression(BinaryExpression(Number,ArithOp,Number),ArithOp,Number),
+      ArithOp,Number),ArithOp,Number),ArithOp,Number)))))
+
+# Initializer list
+
+Bar({
+  .a = a, 
+  .b = b.Bar(), 
+  .c = c->Baz
+});
+
+==>
+
+Program(ExpressionStatement(CallExpression(Identifier,ArgumentList(InitializerList(
+  InitializerPair(FieldDesignator(FieldIdentifier),Identifier),
+  InitializerPair(FieldDesignator(FieldIdentifier),CallExpression(FieldExpression(Identifier,FieldIdentifier),ArgumentList)),
+  InitializerPair(FieldDesignator(FieldIdentifier),FieldExpression(Identifier,FieldIdentifier)))))))
+
+# Assignment with Initializer List
+
+void findNextMove() {
+  bestMoveSoFar = {nextMove, second};
+}
+
+==>
+
+Program(FunctionDefinition(PrimitiveType,FunctionDeclarator(Identifier,ParameterList),CompoundStatement(
+  ExpressionStatement(AssignmentExpression(Identifier,InitializerList(Identifier,Identifier))))))

@@ -1,0 +1,32 @@
+import { z } from 'zod';
+import type { MastraMemory } from '../../../memory/memory.js';
+import type { MemoryConfig } from '../../../memory/types.js';
+import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream/index.js';
+import type { OutputSchema } from '../../../stream/base/schema.js';
+import type { SaveQueueManager } from '../../save-queue/index.js';
+import type { AgentMethodType } from '../../types.js';
+import type { AgentCapabilities } from './schema.js';
+interface StreamStepOptions {
+    capabilities: AgentCapabilities;
+    runId: string;
+    returnScorerData?: boolean;
+    requireToolApproval?: boolean;
+    resumeContext?: {
+        resumeData: any;
+        snapshot: any;
+    };
+    agentId: string;
+    toolCallId?: string;
+    methodType: AgentMethodType;
+    saveQueueManager?: SaveQueueManager;
+    memoryConfig?: MemoryConfig;
+    memory?: MastraMemory;
+    resourceId?: string;
+}
+export declare function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({ capabilities, runId, returnScorerData, requireToolApproval, resumeContext, agentId, toolCallId, methodType, saveQueueManager, memoryConfig, memory, resourceId, }: StreamStepOptions): import("../../../workflows").Step<"stream-text-step", z.ZodObject<any, z.UnknownKeysParam, z.ZodTypeAny, {
+    [x: string]: any;
+}, {
+    [x: string]: any;
+}>, z.ZodAny, z.ZodUnion<[z.ZodType<MastraModelOutput<OUTPUT | undefined>, z.ZodTypeDef, MastraModelOutput<OUTPUT | undefined>>, z.ZodType<AISDKV5OutputStream<OUTPUT | undefined>, z.ZodTypeDef, AISDKV5OutputStream<OUTPUT | undefined>>]>, z.ZodType<any, z.ZodTypeDef, any>, z.ZodType<any, z.ZodTypeDef, any>, import("../../../workflows").DefaultEngineType>;
+export {};
+//# sourceMappingURL=stream-step.d.ts.map

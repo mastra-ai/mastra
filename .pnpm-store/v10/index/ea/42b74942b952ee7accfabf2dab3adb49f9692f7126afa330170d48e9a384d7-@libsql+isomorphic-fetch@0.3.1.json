@@ -1,0 +1,49 @@
+{
+  "name": "@libsql/isomorphic-fetch",
+  "version": "0.3.1",
+  "requiresBuild": false,
+  "files": {
+    "node.cjs": {
+      "checkedAt": 1764662925649,
+      "integrity": "sha512-BbPzH5lxu9LUnTAPfPysMK4tk+Fua1wTqtNd4CUUER3Rl+5g658Ju7Hef1twht4DwJB3AEyZEyHMdebJOb/TWQ==",
+      "mode": 420,
+      "size": 165
+    },
+    "web.cjs": {
+      "checkedAt": 1764662925657,
+      "integrity": "sha512-RPZOUWfbxpdNWg1HQqki2sUmbzoiOL3UQLVEF52peM6UcOXpiAgHg+fP/iMdPDRjoWf2X6Bnft8t2BMfVDFs2A==",
+      "mode": 420,
+      "size": 112
+    },
+    "node.js": {
+      "checkedAt": 1764662925661,
+      "integrity": "sha512-+eZ/byfiLuJOKKnK7GDKyE7xR8fqRyBW5X9jSgRrN/COL9BsuOQt4HJBCM7w8i8d3Gk20t5YFIPOnLKgRNPBfQ==",
+      "mode": 420,
+      "size": 145
+    },
+    "web.js": {
+      "checkedAt": 1764662925662,
+      "integrity": "sha512-vCU1o8cpTHzUvDzoUUmkVCpgtZLBfLeLBMp0IMY8dZCnIz1lKpb2g5ygovxCuaCvJF00YaCF9wmZYc1LWKcVLA==",
+      "mode": 420,
+      "size": 157
+    },
+    "package.json": {
+      "checkedAt": 1764662925664,
+      "integrity": "sha512-K6xPqxLF4dbo8oe6T69KT3LBZgHwHQ/Lar+x8+TtiRbYB+5q54cO1CzmZhpMfpehsEbwqvoutVCQTSbnpbSNyQ==",
+      "mode": 420,
+      "size": 1069
+    },
+    "README.md": {
+      "checkedAt": 1764662925667,
+      "integrity": "sha512-G4U+4mgaMDAidMoArCLq/H5w36CwXAhp1tDIe10hUeobRusrNTnJzYGT/lmiYp++lg5MjCgzGvh0EdUwWt71Xw==",
+      "mode": 420,
+      "size": 393
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662925669,
+      "integrity": "sha512-jHMsWFhsKD/Euwpys+x49goTweq22TI0QRuS+QyF4SUC7dfJscL+J28Kk+blq2VeaJohwwGHQGpnaTypLoBLNQ==",
+      "mode": 420,
+      "size": 1473
+    }
+  }
+}

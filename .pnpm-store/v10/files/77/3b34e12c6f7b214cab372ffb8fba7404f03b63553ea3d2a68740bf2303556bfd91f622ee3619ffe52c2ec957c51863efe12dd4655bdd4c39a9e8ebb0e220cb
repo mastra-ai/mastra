@@ -1,0 +1,589 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.firestore.v1;
+
+import "google/api/field_behavior.proto";
+import "google/firestore/v1/document.proto";
+import "google/protobuf/wrappers.proto";
+
+option csharp_namespace = "Google.Cloud.Firestore.V1";
+option go_package = "cloud.google.com/go/firestore/apiv1/firestorepb;firestorepb";
+option java_multiple_files = true;
+option java_outer_classname = "QueryProto";
+option java_package = "com.google.firestore.v1";
+option objc_class_prefix = "GCFS";
+option php_namespace = "Google\\Cloud\\Firestore\\V1";
+option ruby_package = "Google::Cloud::Firestore::V1";
+
+// A Firestore query.
+//
+// The query stages are executed in the following order:
+// 1. from
+// 2. where
+// 3. select
+// 4. order_by + start_at + end_at
+// 5. offset
+// 6. limit
+message StructuredQuery {
+  // A selection of a collection, such as `messages as m1`.
+  message CollectionSelector {
+    // The collection ID.
+    // When set, selects only collections with this ID.
+    string collection_id = 2;
+
+    // When false, selects only collections that are immediate children of
+    // the `parent` specified in the containing `RunQueryRequest`.
+    // When true, selects all descendant collections.
+    bool all_descendants = 3;
+  }
+
+  // A filter.
+  message Filter {
+    // The type of filter.
+    oneof filter_type {
+      // A composite filter.
+      CompositeFilter composite_filter = 1;
+
+      // A filter on a document field.
+      FieldFilter field_filter = 2;
+
+      // A filter that takes exactly one argument.
+      UnaryFilter unary_filter = 3;
+    }
+  }
+
+  // A filter that merges multiple other filters using the given operator.
+  message CompositeFilter {
+    // A composite filter operator.
+    enum Operator {
+      // Unspecified. This value must not be used.
+      OPERATOR_UNSPECIFIED = 0;
+
+      // Documents are required to satisfy all of the combined filters.
+      AND = 1;
+
+      // Documents are required to satisfy at least one of the combined filters.
+      OR = 2;
+    }
+
+    // The operator for combining multiple filters.
+    Operator op = 1;
+
+    // The list of filters to combine.
+    //
+    // Requires:
+    //
+    // * At least one filter is present.
+    repeated Filter filters = 2;
+  }
+
+  // A filter on a specific field.
+  message FieldFilter {
+    // A field filter operator.
+    enum Operator {
+      // Unspecified. This value must not be used.
+      OPERATOR_UNSPECIFIED = 0;
+
+      // The given `field` is less than the given `value`.
+      //
+      // Requires:
+      //
+      // * That `field` come first in `order_by`.
+      LESS_THAN = 1;
+
+      // The given `field` is less than or equal to the given `value`.
+      //
+      // Requires:
+      //
+      // * That `field` come first in `order_by`.
+      LESS_THAN_OR_EQUAL = 2;
+
+      // The given `field` is greater than the given `value`.
+      //
+      // Requires:
+      //
+      // * That `field` come first in `order_by`.
+      GREATER_THAN = 3;
+
+      // The given `field` is greater than or equal to the given `value`.
+      //
+      // Requires:
+      //
+      // * That `field` come first in `order_by`.
+      GREATER_THAN_OR_EQUAL = 4;
+
+      // The given `field` is equal to the given `value`.
+      EQUAL = 5;
+
+      // The given `field` is not equal to the given `value`.
+      //
+      // Requires:
+      //
+      // * No other `NOT_EQUAL`, `NOT_IN`, `IS_NOT_NULL`, or `IS_NOT_NAN`.
+      // * That `field` comes first in the `order_by`.
+      NOT_EQUAL = 6;
+
+      // The given `field` is an array that contains the given `value`.
+      ARRAY_CONTAINS = 7;
+
+      // The given `field` is equal to at least one value in the given array.
+      //
+      // Requires:
+      //
+      // * That `value` is a non-empty `ArrayValue`, subject to disjunction
+      //   limits.
+      // * No `NOT_IN` filters in the same query.
+      IN = 8;
+
+      // The given `field` is an array that contains any of the values in the
+      // given array.
+      //
+      // Requires:
+      //
+      // * That `value` is a non-empty `ArrayValue`, subject to disjunction
+      //   limits.
+      // * No other `ARRAY_CONTAINS_ANY` filters within the same disjunction.
+      // * No `NOT_IN` filters in the same query.
+      ARRAY_CONTAINS_ANY = 9;
+
+      // The value of the `field` is not in the given array.
+      //
+      // Requires:
+      //
+      // * That `value` is a non-empty `ArrayValue` with at most 10 values.
+      // * No other `OR`, `IN`, `ARRAY_CONTAINS_ANY`, `NOT_IN`, `NOT_EQUAL`,
+      //   `IS_NOT_NULL`, or `IS_NOT_NAN`.
+      // * That `field` comes first in the `order_by`.
+      NOT_IN = 10;
+    }
+
+    // The field to filter by.
+    FieldReference field = 1;
+
+    // The operator to filter by.
+    Operator op = 2;
+
+    // The value to compare to.
+    Value value = 3;
+  }
+
+  // A filter with a single operand.
+  message UnaryFilter {
+    // A unary operator.
+    enum Operator {
+      // Unspecified. This value must not be used.
+      OPERATOR_UNSPECIFIED = 0;
+
+      // The given `field` is equal to `NaN`.
+      IS_NAN = 2;
+
+      // The given `field` is equal to `NULL`.
+      IS_NULL = 3;
+
+      // The given `field` is not equal to `NaN`.
+      //
+      // Requires:
+      //
+      // * No other `NOT_EQUAL`, `NOT_IN`, `IS_NOT_NULL`, or `IS_NOT_NAN`.
+      // * That `field` comes first in the `order_by`.
+      IS_NOT_NAN = 4;
+
+      // The given `field` is not equal to `NULL`.
+      //
+      // Requires:
+      //
+      // * A single `NOT_EQUAL`, `NOT_IN`, `IS_NOT_NULL`, or `IS_NOT_NAN`.
+      // * That `field` comes first in the `order_by`.
+      IS_NOT_NULL = 5;
+    }
+
+    // The unary operator to apply.
+    Operator op = 1;
+
+    // The argument to the filter.
+    oneof operand_type {
+      // The field to which to apply the operator.
+      FieldReference field = 2;
+    }
+  }
+
+  // An order on a field.
+  message Order {
+    // The field to order by.
+    FieldReference field = 1;
+
+    // The direction to order by. Defaults to `ASCENDING`.
+    Direction direction = 2;
+  }
+
+  // A sort direction.
+  enum Direction {
+    // Unspecified.
+    DIRECTION_UNSPECIFIED = 0;
+
+    // Ascending.
+    ASCENDING = 1;
+
+    // Descending.
+    DESCENDING = 2;
+  }
+
+  // A reference to a field in a document, ex: `stats.operations`.
+  message FieldReference {
+    // A reference to a field in a document.
+    //
+    // Requires:
+    //
+    // * MUST be a dot-delimited (`.`) string of segments, where each segment
+    // conforms to [document field name][google.firestore.v1.Document.fields]
+    // limitations.
+    string field_path = 2;
+  }
+
+  // The projection of document's fields to return.
+  message Projection {
+    // The fields to return.
+    //
+    // If empty, all fields are returned. To only return the name
+    // of the document, use `['__name__']`.
+    repeated FieldReference fields = 2;
+  }
+
+  // Nearest Neighbors search config. The ordering provided by FindNearest
+  // supersedes the order_by stage. If multiple documents have the same vector
+  // distance, the returned document order is not guaranteed to be stable
+  // between queries.
+  message FindNearest {
+    // The distance measure to use when comparing vectors.
+    enum DistanceMeasure {
+      // Should not be set.
+      DISTANCE_MEASURE_UNSPECIFIED = 0;
+
+      // Measures the EUCLIDEAN distance between the vectors. See
+      // [Euclidean](https://en.wikipedia.org/wiki/Euclidean_distance) to learn
+      // more. The resulting distance decreases the more similar two vectors
+      // are.
+      EUCLIDEAN = 1;
+
+      // COSINE distance compares vectors based on the angle between them, which
+      // allows you to measure similarity that isn't based on the vectors
+      // magnitude. We recommend using DOT_PRODUCT with unit normalized vectors
+      // instead of COSINE distance, which is mathematically equivalent with
+      // better performance. See [Cosine
+      // Similarity](https://en.wikipedia.org/wiki/Cosine_similarity) to learn
+      // more about COSINE similarity and COSINE distance. The resulting
+      // COSINE distance decreases the more similar two vectors are.
+      COSINE = 2;
+
+      // Similar to cosine but is affected by the magnitude of the vectors. See
+      // [Dot Product](https://en.wikipedia.org/wiki/Dot_product) to learn more.
+      // The resulting distance increases the more similar two vectors are.
+      DOT_PRODUCT = 3;
+    }
+
+    // Required. An indexed vector field to search upon. Only documents which
+    // contain vectors whose dimensionality match the query_vector can be
+    // returned.
+    FieldReference vector_field = 1 [(google.api.field_behavior) = REQUIRED];
+
+    // Required. The query vector that we are searching on. Must be a vector of
+    // no more than 2048 dimensions.
+    Value query_vector = 2 [(google.api.field_behavior) = REQUIRED];
+
+    // Required. The distance measure to use, required.
+    DistanceMeasure distance_measure = 3
+        [(google.api.field_behavior) = REQUIRED];
+
+    // Required. The number of nearest neighbors to return. Must be a positive
+    // integer of no more than 1000.
+    google.protobuf.Int32Value limit = 4
+        [(google.api.field_behavior) = REQUIRED];
+
+    // Optional. Optional name of the field to output the result of the vector
+    // distance calculation. Must conform to [document field
+    // name][google.firestore.v1.Document.fields] limitations.
+    string distance_result_field = 5 [(google.api.field_behavior) = OPTIONAL];
+
+    // Optional. Option to specify a threshold for which no less similar
+    // documents will be returned. The behavior of the specified
+    // `distance_measure` will affect the meaning of the distance threshold.
+    // Since DOT_PRODUCT distances increase when the vectors are more similar,
+    // the comparison is inverted.
+    //
+    // For EUCLIDEAN, COSINE: WHERE distance <= distance_threshold
+    // For DOT_PRODUCT:       WHERE distance >= distance_threshold
+    google.protobuf.DoubleValue distance_threshold = 6
+        [(google.api.field_behavior) = OPTIONAL];
+  }
+
+  // Optional sub-set of the fields to return.
+  //
+  // This acts as a [DocumentMask][google.firestore.v1.DocumentMask] over the
+  // documents returned from a query. When not set, assumes that the caller
+  // wants all fields returned.
+  Projection select = 1;
+
+  // The collections to query.
+  repeated CollectionSelector from = 2;
+
+  // The filter to apply.
+  Filter where = 3;
+
+  // The order to apply to the query results.
+  //
+  // Firestore allows callers to provide a full ordering, a partial ordering, or
+  // no ordering at all. In all cases, Firestore guarantees a stable ordering
+  // through the following rules:
+  //
+  //  * The `order_by` is required to reference all fields used with an
+  //    inequality filter.
+  //  * All fields that are required to be in the `order_by` but are not already
+  //    present are appended in lexicographical ordering of the field name.
+  //  * If an order on `__name__` is not specified, it is appended by default.
+  //
+  // Fields are appended with the same sort direction as the last order
+  // specified, or 'ASCENDING' if no order was specified. For example:
+  //
+  //  * `ORDER BY a` becomes `ORDER BY a ASC, __name__ ASC`
+  //  * `ORDER BY a DESC` becomes `ORDER BY a DESC, __name__ DESC`
+  //  * `WHERE a > 1` becomes `WHERE a > 1 ORDER BY a ASC, __name__ ASC`
+  //  * `WHERE __name__ > ... AND a > 1` becomes
+  //     `WHERE __name__ > ... AND a > 1 ORDER BY a ASC, __name__ ASC`
+  repeated Order order_by = 4;
+
+  // A potential prefix of a position in the result set to start the query at.
+  //
+  // The ordering of the result set is based on the `ORDER BY` clause of the
+  // original query.
+  //
+  // ```
+  // SELECT * FROM k WHERE a = 1 AND b > 2 ORDER BY b ASC, __name__ ASC;
+  // ```
+  //
+  // This query's results are ordered by `(b ASC, __name__ ASC)`.
+  //
+  // Cursors can reference either the full ordering or a prefix of the location,
+  // though it cannot reference more fields than what are in the provided
+  // `ORDER BY`.
+  //
+  // Continuing off the example above, attaching the following start cursors
+  // will have varying impact:
+  //
+  // - `START BEFORE (2, /k/123)`: start the query right before `a = 1 AND
+  //    b > 2 AND __name__ > /k/123`.
+  // - `START AFTER (10)`: start the query right after `a = 1 AND b > 10`.
+  //
+  // Unlike `OFFSET` which requires scanning over the first N results to skip,
+  // a start cursor allows the query to begin at a logical position. This
+  // position is not required to match an actual result, it will scan forward
+  // from this position to find the next document.
+  //
+  // Requires:
+  //
+  // * The number of values cannot be greater than the number of fields
+  //   specified in the `ORDER BY` clause.
+  Cursor start_at = 7;
+
+  // A potential prefix of a position in the result set to end the query at.
+  //
+  // This is similar to `START_AT` but with it controlling the end position
+  // rather than the start position.
+  //
+  // Requires:
+  //
+  // * The number of values cannot be greater than the number of fields
+  //   specified in the `ORDER BY` clause.
+  Cursor end_at = 8;
+
+  // The number of documents to skip before returning the first result.
+  //
+  // This applies after the constraints specified by the `WHERE`, `START AT`, &
+  // `END AT` but before the `LIMIT` clause.
+  //
+  // Requires:
+  //
+  // * The value must be greater than or equal to zero if specified.
+  int32 offset = 6;
+
+  // The maximum number of results to return.
+  //
+  // Applies after all other constraints.
+  //
+  // Requires:
+  //
+  // * The value must be greater than or equal to zero if specified.
+  google.protobuf.Int32Value limit = 5;
+
+  // Optional. A potential nearest neighbors search.
+  //
+  // Applies after all other filters and ordering.
+  //
+  // Finds the closest vector embeddings to the given query vector.
+  FindNearest find_nearest = 9 [(google.api.field_behavior) = OPTIONAL];
+}
+
+// Firestore query for running an aggregation over a
+// [StructuredQuery][google.firestore.v1.StructuredQuery].
+message StructuredAggregationQuery {
+  // Defines an aggregation that produces a single result.
+  message Aggregation {
+    // Count of documents that match the query.
+    //
+    // The `COUNT(*)` aggregation function operates on the entire document
+    // so it does not require a field reference.
+    message Count {
+      // Optional. Optional constraint on the maximum number of documents to
+      // count.
+      //
+      // This provides a way to set an upper bound on the number of documents
+      // to scan, limiting latency, and cost.
+      //
+      // Unspecified is interpreted as no bound.
+      //
+      // High-Level Example:
+      //
+      // ```
+      // AGGREGATE COUNT_UP_TO(1000) OVER ( SELECT * FROM k );
+      // ```
+      //
+      // Requires:
+      //
+      // * Must be greater than zero when present.
+      google.protobuf.Int64Value up_to = 1
+          [(google.api.field_behavior) = OPTIONAL];
+    }
+
+    // Sum of the values of the requested field.
+    //
+    // * Only numeric values will be aggregated. All non-numeric values
+    // including `NULL` are skipped.
+    //
+    // * If the aggregated values contain `NaN`, returns `NaN`. Infinity math
+    // follows IEEE-754 standards.
+    //
+    // * If the aggregated value set is empty, returns 0.
+    //
+    // * Returns a 64-bit integer if all aggregated numbers are integers and the
+    // sum result does not overflow. Otherwise, the result is returned as a
+    // double. Note that even if all the aggregated values are integers, the
+    // result is returned as a double if it cannot fit within a 64-bit signed
+    // integer. When this occurs, the returned value will lose precision.
+    //
+    // * When underflow occurs, floating-point aggregation is non-deterministic.
+    // This means that running the same query repeatedly without any changes to
+    // the underlying values could produce slightly different results each
+    // time. In those cases, values should be stored as integers over
+    // floating-point numbers.
+    message Sum {
+      // The field to aggregate on.
+      StructuredQuery.FieldReference field = 1;
+    }
+
+    // Average of the values of the requested field.
+    //
+    // * Only numeric values will be aggregated. All non-numeric values
+    // including `NULL` are skipped.
+    //
+    // * If the aggregated values contain `NaN`, returns `NaN`. Infinity math
+    // follows IEEE-754 standards.
+    //
+    // * If the aggregated value set is empty, returns `NULL`.
+    //
+    // * Always returns the result as a double.
+    message Avg {
+      // The field to aggregate on.
+      StructuredQuery.FieldReference field = 1;
+    }
+
+    // The type of aggregation to perform, required.
+    oneof operator {
+      // Count aggregator.
+      Count count = 1;
+
+      // Sum aggregator.
+      Sum sum = 2;
+
+      // Average aggregator.
+      Avg avg = 3;
+    }
+
+    // Optional. Optional name of the field to store the result of the
+    // aggregation into.
+    //
+    // If not provided, Firestore will pick a default name following the format
+    // `field_<incremental_id++>`. For example:
+    //
+    // ```
+    // AGGREGATE
+    //   COUNT_UP_TO(1) AS count_up_to_1,
+    //   COUNT_UP_TO(2),
+    //   COUNT_UP_TO(3) AS count_up_to_3,
+    //   COUNT(*)
+    // OVER (
+    //   ...
+    // );
+    // ```
+    //
+    // becomes:
+    //
+    // ```
+    // AGGREGATE
+    //   COUNT_UP_TO(1) AS count_up_to_1,
+    //   COUNT_UP_TO(2) AS field_1,
+    //   COUNT_UP_TO(3) AS count_up_to_3,
+    //   COUNT(*) AS field_2
+    // OVER (
+    //   ...
+    // );
+    // ```
+    //
+    // Requires:
+    //
+    // * Must be unique across all aggregation aliases.
+    // * Conform to [document field name][google.firestore.v1.Document.fields]
+    // limitations.
+    string alias = 7 [(google.api.field_behavior) = OPTIONAL];
+  }
+
+  // The base query to aggregate over.
+  oneof query_type {
+    // Nested structured query.
+    StructuredQuery structured_query = 1;
+  }
+
+  // Optional. Series of aggregations to apply over the results of the
+  // `structured_query`.
+  //
+  // Requires:
+  //
+  // * A minimum of one and maximum of five aggregations per query.
+  repeated Aggregation aggregations = 3
+      [(google.api.field_behavior) = OPTIONAL];
+}
+
+// A position in a query result set.
+message Cursor {
+  // The values that represent a position, in the order they appear in
+  // the order by clause of a query.
+  //
+  // Can contain fewer values than specified in the order by clause.
+  repeated Value values = 1;
+
+  // If the position is just before or just after the given values, relative
+  // to the sort order defined by the query.
+  bool before = 2;
+}

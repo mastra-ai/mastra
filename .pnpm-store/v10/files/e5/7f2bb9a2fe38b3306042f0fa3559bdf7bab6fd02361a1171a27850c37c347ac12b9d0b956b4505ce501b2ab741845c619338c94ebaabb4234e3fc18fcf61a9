@@ -1,0 +1,6 @@
+import {
+  inferFieldType
+} from "../chunk-CRJAZYP4.mjs";
+export {
+  inferFieldType
+};

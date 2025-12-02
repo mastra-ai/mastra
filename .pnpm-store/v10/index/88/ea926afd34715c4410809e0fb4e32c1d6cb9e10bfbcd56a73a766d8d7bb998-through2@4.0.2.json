@@ -1,0 +1,31 @@
+{
+  "name": "through2",
+  "version": "4.0.2",
+  "requiresBuild": false,
+  "files": {
+    "through2.js": {
+      "checkedAt": 1764662923561,
+      "integrity": "sha512-5h5k8D+ts594tzdoTqQ0y/c3DDCeXRxddMdaA7cfzF7uSZU4/n2CdrRyMP5eJvPt9iJ3LKn4bsdUrgBgSchX7w==",
+      "mode": 436,
+      "size": 1852
+    },
+    "package.json": {
+      "checkedAt": 1764662923561,
+      "integrity": "sha512-fXDVNfJXl+TwXLJ+ijJYXse93NtIaH1g1/dUrmqQiuxGveMF1R6sSo47NmiRXvqeZpB/0+rXzg5rQzhZc8IeXQ==",
+      "mode": 436,
+      "size": 1133
+    },
+    "LICENSE.md": {
+      "checkedAt": 1764662923562,
+      "integrity": "sha512-kbNbAqmGVG7FAI/fPNGZAjDn6F47V6OeMgr+NTz2HfXzA6Vu+uHzZFNF9WV3+5yE+shYb0O6TpE4a+tHrIiuTQ==",
+      "mode": 420,
+      "size": 1128
+    },
+    "README.md": {
+      "checkedAt": 1764662923563,
+      "integrity": "sha512-xVjmDfKVWHoyNagFy7vzGqsxr9Abc7vBAp2FZRWIf7gIGCgSU4MjY/oxuQJosO36Cj0FJiVTQS9F23kO4ytq+Q==",
+      "mode": 436,
+      "size": 5233
+    }
+  }
+}

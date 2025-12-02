@@ -1,0 +1,1 @@
+{"version":3,"file":"ACL_WHOAMI.js","sourceRoot":"","sources":["../../../lib/commands/ACL_WHOAMI.ts"],"names":[],"mappings":";;AAGA,kBAAe;IACb,iBAAiB,EAAE,IAAI;IACvB,YAAY,EAAE,IAAI;IAClB;;;OAGG;IACH,YAAY,CAAC,MAAqB;QAChC,MAAM,CAAC,IAAI,CAAC,KAAK,EAAE,QAAQ,CAAC,CAAC;IAC/B,CAAC;IACD,cAAc,EAAE,SAA6C;CACnC,CAAC"}

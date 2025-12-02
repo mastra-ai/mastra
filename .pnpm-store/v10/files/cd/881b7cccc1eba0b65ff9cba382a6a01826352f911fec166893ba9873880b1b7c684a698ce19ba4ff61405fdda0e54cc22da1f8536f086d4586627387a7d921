@@ -1,0 +1,30 @@
+{
+    "name": "@types/use-sync-external-store",
+    "version": "0.0.6",
+    "description": "TypeScript definitions for use-sync-external-store",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/use-sync-external-store",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "eps1lon",
+            "githubUsername": "eps1lon",
+            "url": "https://github.com/eps1lon"
+        },
+        {
+            "name": "Mark Erikson",
+            "githubUsername": "markerikson",
+            "url": "https://github.com/markerikson"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/use-sync-external-store"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "c048e9b12d49a82481404fb3bc099a0aa28adff9fc0d9755b69bbc54901ea2fb",
+    "typeScriptVersion": "4.5"
+}

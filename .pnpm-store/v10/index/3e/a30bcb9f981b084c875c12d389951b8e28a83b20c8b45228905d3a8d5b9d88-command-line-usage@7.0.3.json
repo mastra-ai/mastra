@@ -1,0 +1,61 @@
+{
+  "name": "command-line-usage",
+  "version": "7.0.3",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662925205,
+      "integrity": "sha512-TFOaGOCifA2cY+9TEUjEwrdjaqf/rSHsfmVhFCIqcCxLbi8tE+BzDkvHz1H8Vvn3MRHaiRjcIdcYlKFuejxWfA==",
+      "mode": 420,
+      "size": 1103
+    },
+    "dist/index.cjs": {
+      "checkedAt": 1764662925209,
+      "integrity": "sha512-vTphjVu2BLmuEn/AAn5KPuBfsw4j3EFWqgg1+xjpC6ezz3o6p7JRotGAvNbjcclVz1iXo6Qucg5jcv8gbSvHHw==",
+      "mode": 420,
+      "size": 102766
+    },
+    "lib/chalk-format.js": {
+      "checkedAt": 1764662925211,
+      "integrity": "sha512-Uzid6CFCz0sfhQaFyjmb6X3cWupQJr4eVLeyeBB6PK2XiJWI8D6YcEMU8QbqImxqnQ5P4bA5z60ECH5U566qCg==",
+      "mode": 420,
+      "size": 240
+    },
+    "lib/section/content.js": {
+      "checkedAt": 1764662925212,
+      "integrity": "sha512-JcDfHUctX6JMgxgblCsnaSJRaB0UxpjxkkRmR9XAbj13KeaTcVnfPukiOsO4LsLxn4Qr0bXtgQhG3g/Tt+PLrQ==",
+      "mode": 420,
+      "size": 4913
+    },
+    "index.js": {
+      "checkedAt": 1764662925213,
+      "integrity": "sha512-4rtxNwhAAALWx+1m0DEdNIX8BuMH3lXAaS+hDxO8hbrib8+fSLN5Ct624aSCNk6ElMKqwJLbmeGuiwGo8uq/Rw==",
+      "mode": 420,
+      "size": 845
+    },
+    "lib/section/option-list.js": {
+      "checkedAt": 1764662925214,
+      "integrity": "sha512-ZDWCa1zYD+xs5xMvcdi6lXXtJyl9K8t9mt4rkbS8tn9K7hFLLjKb192TywOFgUygfBLOAeOyMPv5FOpjy3YfxA==",
+      "mode": 420,
+      "size": 4536
+    },
+    "lib/section.js": {
+      "checkedAt": 1764662925215,
+      "integrity": "sha512-A/hcSQ6ZbvHEFl/Wy8+yIjQBytqqKSMbVGgsGqlixeyJy7yqS9oTX8ihi7BucwaMFctR3UmRZk7FYAqhAf/+xw==",
+      "mode": 420,
+      "size": 480
+    },
+    "package.json": {
+      "checkedAt": 1764662925216,
+      "integrity": "sha512-/o712W8Gzujk0rnDPJhLBFGt+VNpVDULCT6nO9EXMa2bBaoi1wjFdpfYl8xdR3XwGXecYPpkBvSoVtWXxtSWcw==",
+      "mode": 420,
+      "size": 1278
+    },
+    "README.md": {
+      "checkedAt": 1764662925217,
+      "integrity": "sha512-0M52+pPuln4BJhHEeveifgj/fH8+/eGqe0Fh9iuW8wPRpcKb/c3DBTakZV+AaE3Bt6safc9mYwRnp7W9IS9PMg==",
+      "mode": 420,
+      "size": 6612
+    }
+  }
+}

@@ -1,0 +1,607 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get_dubbing_resource:
+      path: /v1/dubbing/resource/{dubbing_id}
+      method: GET
+      auth: false
+      docs: >-
+        Given a dubbing ID generated from the '/v1/dubbing' endpoint with studio
+        enabled, returns the dubbing resource.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+      display-name: Get dubbing resource
+      response:
+        docs: Successful Response
+        type: root.DubbingResource
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+          response:
+            body:
+              id: id
+              version: 1
+              source_language: source_language
+              target_languages:
+                - target_languages
+              input:
+                src: src
+                content_type: content_type
+                bucket_name: bucket_name
+                random_path_slug: random_path_slug
+                duration_secs: 1.1
+                is_audio: true
+                url: url
+              background:
+                src: src
+                content_type: content_type
+                bucket_name: bucket_name
+                random_path_slug: random_path_slug
+                duration_secs: 1.1
+                is_audio: true
+                url: url
+              foreground:
+                src: src
+                content_type: content_type
+                bucket_name: bucket_name
+                random_path_slug: random_path_slug
+                duration_secs: 1.1
+                is_audio: true
+                url: url
+              speaker_tracks:
+                key:
+                  id: id
+                  media_ref:
+                    src: src
+                    content_type: content_type
+                    bucket_name: bucket_name
+                    random_path_slug: random_path_slug
+                    duration_secs: 1.1
+                    is_audio: true
+                    url: url
+                  speaker_name: speaker_name
+                  voices:
+                    key: value
+                  segments:
+                    - segments
+              speaker_segments:
+                key:
+                  id: id
+                  start_time: 1.1
+                  end_time: 1.1
+                  text: text
+                  dubs:
+                    key:
+                      start_time: 1.1
+                      end_time: 1.1
+                      audio_stale: true
+              renders:
+                key:
+                  id: id
+                  version: 1
+                  language: language
+                  type: mp4
+                  media_ref:
+                    src: src
+                    content_type: content_type
+                    bucket_name: bucket_name
+                    random_path_slug: random_path_slug
+                    duration_secs: 1.1
+                    is_audio: true
+                    url: url
+                  status: complete
+    add_language_to_resource:
+      path: /v1/dubbing/resource/{dubbing_id}/language
+      method: POST
+      auth: false
+      docs: >-
+        Adds the given ElevenLab Turbo V2/V2.5 language code to the resource.
+        Does not automatically generate transcripts/translations/audio.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+      display-name: Add language to dubbing resource
+      request:
+        name: BodyAddALanguageToTheResourceV1DubbingResourceDubbingIdLanguagePost
+        body:
+          properties:
+            language:
+              type: optional<string>
+              docs: The Target language.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.LanguageAddedResponse
+        status-code: 201
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+          request: {}
+          response:
+            body:
+              version: 1
+    update_segment_language:
+      path: /v1/dubbing/resource/{dubbing_id}/segment/{segment_id}/{language}
+      method: PATCH
+      auth: false
+      docs: >-
+        Modifies a single segment with new text and/or start/end times. Will
+        update the values for only a specific language of a segment. Does not
+        automatically regenerate the dub.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+        segment_id:
+          type: string
+          docs: ID of the segment
+        language:
+          type: string
+          docs: ID of the language.
+      display-name: Modify a segment
+      request:
+        name: SegmentUpdatePayload
+        body:
+          properties:
+            start_time:
+              type: optional<double>
+            end_time:
+              type: optional<double>
+            text:
+              type: optional<string>
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.SegmentUpdateResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+            segment_id: segment_id
+            language: language
+          request: {}
+          response:
+            body:
+              version: 1
+    delete_segment:
+      path: /v1/dubbing/resource/{dubbing_id}/segment/{segment_id}
+      method: DELETE
+      auth: false
+      docs: Deletes a single segment from the dubbing.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+        segment_id:
+          type: string
+          docs: ID of the segment
+      display-name: Delete a segment
+      response:
+        docs: Successful Response
+        type: root.SegmentDeleteResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+            segment_id: segment_id
+          response:
+            body:
+              version: 1
+    transcribe_segments:
+      path: /v1/dubbing/resource/{dubbing_id}/transcribe
+      method: POST
+      auth: false
+      docs: >-
+        Regenerate the transcriptions for the specified segments. Does not
+        automatically regenerate translations or dubs.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+      display-name: Transcribe segments
+      request:
+        name: BodyTranscribesSegmentsV1DubbingResourceDubbingIdTranscribePost
+        body:
+          properties:
+            segments:
+              docs: Transcribe this specific list of segments.
+              type: list<string>
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.SegmentTranscriptionResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+          request:
+            segments:
+              - segments
+          response:
+            body:
+              version: 1
+    translate_segments:
+      path: /v1/dubbing/resource/{dubbing_id}/translate
+      method: POST
+      auth: false
+      docs: >-
+        Regenerate the translations for either the entire resource or the
+        specified segments/languages. Will automatically transcribe missing
+        transcriptions. Will not automatically regenerate the dubs.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+      display-name: Translate segments
+      request:
+        name: >-
+          BodyTranslatesAllOrSomeSegmentsAndLanguagesV1DubbingResourceDubbingIdTranslatePost
+        body:
+          properties:
+            segments:
+              docs: Translate only this list of segments.
+              type: list<string>
+            languages:
+              type: optional<list<string>>
+              docs: Translate only these languages for each segment.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.SegmentTranslationResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+          request:
+            segments:
+              - segments
+          response:
+            body:
+              version: 1
+    dub_segments:
+      path: /v1/dubbing/resource/{dubbing_id}/dub
+      method: POST
+      auth: false
+      docs: >-
+        Regenerate the dubs for either the entire resource or the specified
+        segments/languages. Will automatically transcribe and translate any
+        missing transcriptions and translations.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+      display-name: Dub segments
+      request:
+        name: BodyDubsAllOrSomeSegmentsAndLanguagesV1DubbingResourceDubbingIdDubPost
+        body:
+          properties:
+            segments:
+              docs: Dub only this list of segments.
+              type: list<string>
+            languages:
+              type: optional<list<string>>
+              docs: Dub only these languages for each segment.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.SegmentDubResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+          request:
+            segments:
+              - segments
+          response:
+            body:
+              version: 1
+    render_dub:
+      path: /v1/dubbing/resource/{dubbing_id}/render/{language}
+      method: POST
+      auth: false
+      docs: >-
+        Regenerate the dubs for either the entire resource or the specified
+        segments/languages. Will automatically transcribe and translate any
+        missing transcriptions and translations.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+        language:
+          type: string
+          docs: Render this language
+      display-name: Render Audio Or Video For The Given Language
+      request:
+        name: >-
+          BodyRenderAudioOrVideoForTheGivenLanguageV1DubbingResourceDubbingIdRenderLanguagePost
+        body:
+          properties:
+            render_type:
+              type: root.RenderType
+              docs: >-
+                The type of the render. One of ['mp4', 'aac', 'mp3', 'wav',
+                'aaf', 'tracks_zip', 'clips_zip']
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.DubbingRenderResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+            language: language
+          request:
+            render_type: mp4
+          response:
+            body:
+              version: 1
+              render_id: render_id
+    dub_a_video_or_an_audio_file:
+      path: /v1/dubbing
+      method: POST
+      auth: false
+      docs: Dubs a provided audio or video file into given language.
+      source:
+        openapi: openapi.json
+      display-name: Dub a video or audio file
+      request:
+        name: Body_Dub_a_video_or_an_audio_file_v1_dubbing_post
+        body:
+          properties:
+            file:
+              type: optional<file>
+              docs: >-
+                A list of file paths to audio recordings intended for voice
+                cloning
+            csv_file:
+              type: optional<file>
+              docs: CSV file containing transcription/translation metadata
+            foreground_audio_file:
+              type: optional<file>
+              docs: For use only with csv input
+            background_audio_file:
+              type: optional<file>
+              docs: For use only with csv input
+            name:
+              type: optional<string>
+              docs: Name of the dubbing project.
+            source_url:
+              type: optional<string>
+              docs: URL of the source video/audio file.
+            source_lang:
+              type: optional<string>
+              docs: Source language.
+              default: auto
+            target_lang:
+              type: optional<string>
+              docs: The Target language to dub the content into.
+            num_speakers:
+              type: optional<integer>
+              docs: >-
+                Number of speakers to use for the dubbing. Set to 0 to
+                automatically detect the number of speakers
+              default: 0
+            watermark:
+              type: optional<boolean>
+              docs: Whether to apply watermark to the output video.
+              default: false
+            start_time:
+              type: optional<integer>
+              docs: Start time of the source video/audio file.
+            end_time:
+              type: optional<integer>
+              docs: End time of the source video/audio file.
+            highest_resolution:
+              type: optional<boolean>
+              docs: Whether to use the highest resolution available.
+              default: false
+            drop_background_audio:
+              type: optional<boolean>
+              docs: >-
+                An advanced setting. Whether to drop background audio from the
+                final dub. This can improve dub quality where it's known that
+                audio shouldn't have a background track such as for speeches or
+                monologues.
+              default: false
+            use_profanity_filter:
+              type: optional<boolean>
+              docs: >-
+                [BETA] Whether transcripts should have profanities censored with
+                the words '[censored]'
+            dubbing_studio:
+              type: optional<boolean>
+              docs: >-
+                Whether to prepare dub for edits in dubbing studio or edits as a
+                dubbing resource.
+              default: false
+            disable_voice_cloning:
+              type: optional<boolean>
+              docs: >-
+                [BETA] Instead of using a voice clone in dubbing, use a similar
+                voice from the ElevenLabs Voice Library.
+              default: false
+            mode:
+              type: optional<string>
+              docs: >-
+                automatic or manual. Manual mode is only supported when creating
+                a dubbing studio project
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.DoDubbingResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request: {}
+          response:
+            body:
+              dubbing_id: 21m00Tcm4TlvDq8ikWAM
+              expected_duration_sec: 127.5
+    get_dubbing_project_metadata:
+      path: /v1/dubbing/{dubbing_id}
+      method: GET
+      auth: false
+      docs: >-
+        Returns metadata about a dubbing project, including whether it's still
+        in progress or not
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+      display-name: Get dubbing
+      response:
+        docs: Successful Response
+        type: root.DubbingMetadataResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+          response:
+            body:
+              dubbing_id: 21m00Tcm4TlvDq8ikWAM
+              name: My Dubbing Project
+              status: dubbed
+              target_languages:
+                - es
+                - fr
+                - de
+              media_metadata:
+                content_type: video/mp4
+                duration: 127.5
+              error: error
+    delete_dubbing_project:
+      path: /v1/dubbing/{dubbing_id}
+      method: DELETE
+      auth: false
+      docs: Deletes a dubbing project.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+      display-name: Delete dubbing
+      response:
+        docs: Successful Response
+        type: root.DeleteDubbingResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            dubbing_id: dubbing_id
+          response:
+            body:
+              status: ok
+    get_dubbed_file:
+      path: /v1/dubbing/{dubbing_id}/audio/{language_code}
+      method: GET
+      auth: false
+      docs: >-
+        Returns dubbed file as a streamed file. Videos will be returned in MP4
+        format and audio only dubs will be returned in MP3.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+        language_code:
+          type: string
+          docs: ID of the language.
+      display-name: Get dubbed audio
+      response:
+        docs: The dubbed audio or video file
+        type: file
+        status-code: 200
+      errors:
+        - root.ForbiddenError
+        - root.NotFoundError
+        - root.UnprocessableEntityError
+        - root.TooEarlyError
+    get_transcript_for_dub:
+      path: /v1/dubbing/{dubbing_id}/transcript/{language_code}
+      method: GET
+      auth: false
+      docs: Returns transcript for the dub as an SRT or WEBVTT file.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        dubbing_id:
+          type: string
+          docs: ID of the dubbing project.
+        language_code:
+          type: string
+          docs: ID of the language.
+      display-name: Get dubbed transcript
+      request:
+        name: DubbingGetTranscriptForDubRequest
+        query-parameters:
+          format_type:
+            type: optional<DubbingGetTranscriptForDubRequestFormatType>
+            default: srt
+            docs: Format to use for the subtitle file, either 'srt' or 'webvtt'
+      response:
+        docs: Successful Response
+        type: text
+        status-code: 200
+      errors:
+        - root.ForbiddenError
+        - root.NotFoundError
+        - root.UnprocessableEntityError
+        - root.TooEarlyError
+  source:
+    openapi: openapi.json
+types:
+  DubbingGetTranscriptForDubRequestFormatType:
+    enum:
+      - srt
+      - webvtt
+    docs: Format to use for the subtitle file, either 'srt' or 'webvtt'
+    default: srt
+    source:
+      openapi: openapi.json

@@ -1,0 +1,121 @@
+{
+  "name": "canonicalize",
+  "version": "1.0.8",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662922738,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "lib/canonicalize.js": {
+      "checkedAt": 1764662922740,
+      "integrity": "sha512-QgKpZ6nREq1AY1bCSuCgFjdGUzfJzcO8DdgXgYCXkqLrDHIIq8kxpPXE0CP51R76E5p5sj6P13wM1akfkMFXuQ==",
+      "mode": 420,
+      "size": 792
+    },
+    "examples/example.js": {
+      "checkedAt": 1764662922743,
+      "integrity": "sha512-pFfaEV5cg6ISEB8n3qTSHJY9JkfO4XESDfaZ7mPStJ5wS53QKENWIrZ9Mnz/JqQAB1GQO2LcH6wnQEzqMMuPug==",
+      "mode": 420,
+      "size": 316
+    },
+    "test/simpletests.js": {
+      "checkedAt": 1764662922744,
+      "integrity": "sha512-M+99lJ2ivI3nP1THKPIrAYN0HRU7chkXeMAAdc1SXgbNyhPAp4EUy5KpCuRrU6NBgv7zWev/cxV6y9C1s2H09A==",
+      "mode": 420,
+      "size": 2771
+    },
+    "test/test.js": {
+      "checkedAt": 1764662922748,
+      "integrity": "sha512-7dZs/5HoSaWI9avRBw3iv3sz7ysihFeaKvP5XJ23YyuW7pA12YKyKE2yCP07ZnErR9ABY0DCOU7YZTsGTMl21A==",
+      "mode": 420,
+      "size": 1488
+    },
+    "test/testdata/input/arrays.json": {
+      "checkedAt": 1764662922748,
+      "integrity": "sha512-EGbKcCiyMRM5ab7K8/2Go2bR8LChxb2zIa7tLHHAU4zO+mObj156LojNxeilh0XVpy+FruUl0MTbRQ0GwVeJpw==",
+      "mode": 493,
+      "size": 62
+    },
+    "test/testdata/output/arrays.json": {
+      "checkedAt": 1764662922749,
+      "integrity": "sha512-Go0ezb0huelAyub8nbKGpJtBwLkSX2oBDnmKcnkaTDF5gP8qEPLjGk3O2J9lWz6Nxaiq/70NjygSwA3RE2R4Fw==",
+      "mode": 493,
+      "size": 32
+    },
+    "test/testdata/input/french.json": {
+      "checkedAt": 1764662922751,
+      "integrity": "sha512-CS8hr1SyLstr0Ki9DI2SqDVRWe4CABexj4WuRqxeqTagvNSOHr5fzpdf5824dpljBtLfT/AbTpXm0aBc4HqZYg==",
+      "mode": 493,
+      "size": 150
+    },
+    "test/testdata/output/french.json": {
+      "checkedAt": 1764662922752,
+      "integrity": "sha512-bnukl24c+Ayc+H8gS9nGzs2J+MXV/WBRaxvtPI9p/2JBLOJ9i2ck7oq95lP/Q7VB6/9bsCKk3P26BXzvdpkIuA==",
+      "mode": 493,
+      "size": 130
+    },
+    "package.json": {
+      "checkedAt": 1764662922754,
+      "integrity": "sha512-vukQ+6JHU19JSnVp2t31Ul7dmil4A0VHqGJoUe6vGNKaf5HFfK6FbxuF84ipEHpCv4up8GwfgKC6CAv2sBAA4Q==",
+      "mode": 420,
+      "size": 1164
+    },
+    "test/testdata/input/structures.json": {
+      "checkedAt": 1764662922756,
+      "integrity": "sha512-1/7z9TG5bigPFLpW53Ar9mflGx3RD+vdId2q0I5TTEZn5l+bnaVqJItp7C9wlPzWcEhOLKeEIHvleXo6QSsmoA==",
+      "mode": 493,
+      "size": 148
+    },
+    "test/testdata/output/structures.json": {
+      "checkedAt": 1764662922765,
+      "integrity": "sha512-heLdw6k/JPSuyJOgkZ4tNxq8QZ1xcPEVvrpKg4RSucoHlvwRwXaMu4vlqes9bkQEb20+RfaMIeJpZbzgVBnBFg==",
+      "mode": 493,
+      "size": 108
+    },
+    "test/testdata/input/values.json": {
+      "checkedAt": 1764662922768,
+      "integrity": "sha512-qks2+wYpxwipbvc/JHgSiq98sAXli1nRC9pFxlW5HMhSQOlBFe+7UZt0EpKOs0Tz4rk7HO5wUQGHRe/PqGX+gg==",
+      "mode": 493,
+      "size": 182
+    },
+    "test/testdata/output/values.json": {
+      "checkedAt": 1764662922769,
+      "integrity": "sha512-9WjKFKYS05m/pI+BSYoV5ATWaI5E8PHiM41jj+PxudXAPQCI5oZeahmoo+RXYR8v298MOCefkZpD7izOOodtjA==",
+      "mode": 493,
+      "size": 118
+    },
+    "test/testdata/input/weird.json": {
+      "checkedAt": 1764662922770,
+      "integrity": "sha512-aIZTVtFwaXPgYi9yDNLaRv01l64tVhDTI1DRRQ1bp6PLulEQ4H1gONwzJOo/MZsGHvSVdH8Y3r+oYAIWCWXd6A==",
+      "mode": 493,
+      "size": 217
+    },
+    "test/testdata/output/weird.json": {
+      "checkedAt": 1764662922771,
+      "integrity": "sha512-7hJt97E26IB9TTe3epYKgm+qXjZfGff3MmbZNDTQVPm7g2/1WM+eubLKHDC284XKDvtftde81daIO3fB93Yvgg==",
+      "mode": 493,
+      "size": 175
+    },
+    "README.md": {
+      "checkedAt": 1764662922772,
+      "integrity": "sha512-YIqeAvG6HZo10v1wsYPUGFcDNTN+WT2zVrnW+9IZSzKD7blFkvRgYVrXSdjnzxxtA0YLXVYRCGhpfamc7yOxoA==",
+      "mode": 420,
+      "size": 1233
+    },
+    "lib/canonicalize.d.ts": {
+      "checkedAt": 1764662922772,
+      "integrity": "sha512-PkRIXUf8zJ//jH9zjBCEaaD/+RgMALSfFqpSmZGVlu7PxCm7z3J0p7Du2Av6nerxLr5peN2iu/wXib+4SD7pDg==",
+      "mode": 420,
+      "size": 71
+    },
+    ".travis.yml": {
+      "checkedAt": 1764662922775,
+      "integrity": "sha512-2YHdwAIBZVOq2Cz5wsJKzRkHxm2+M8PH5gBDK4Efd70PvIsohgkn+aIBNeNHnUAxytkFUzmB//VO4jrVCo/iSA==",
+      "mode": 420,
+      "size": 145
+    }
+  }
+}

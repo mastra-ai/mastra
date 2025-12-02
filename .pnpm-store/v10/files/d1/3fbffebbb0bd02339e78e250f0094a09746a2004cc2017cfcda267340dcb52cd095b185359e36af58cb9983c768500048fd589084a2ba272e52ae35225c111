@@ -1,0 +1,361 @@
+# Include
+
+nav ul {
+  @include horizontal-list;
+}
+
+==>
+
+StyleSheet(RuleSet(DescendantSelector(TagSelector(TagName),TagSelector(TagName)),Block(
+  IncludeStatement(include,ValueName))))
+
+# Line comment
+
+foo { // blah
+  // Something
+  color: green;
+}
+
+==>
+
+StyleSheet(RuleSet(TagSelector(TagName),Block(LineComment,LineComment,Declaration(PropertyName,ValueName))))
+
+# Top level properties
+
+$color: red;
+
+==>
+
+StyleSheet(Declaration(SassVariableName,ValueName))
+
+# Interpolation
+
+#{$prefix} {
+  border-#{$stuff}-#{$side}: #{$value};
+}
+
+==>
+
+StyleSheet(RuleSet(Interpolation(InterpolationStart,SassVariableName,InterpolationEnd),Block(
+  Declaration(Interpolation(InterpolationStart,SassVariableName,InterpolationContinue,SassVariableName,InterpolationEnd),
+    Interpolation(InterpolationStart,SassVariableName,InterpolationEnd)))))
+
+# Mixin
+
+@mixin reset-list {
+  padding: 0;
+}
+
+@mixin horizontal-list {
+  @include reset-list;
+  li {
+    display: inline-block;
+    margin: {
+      left: -2px;
+      right: 2em;
+    }
+  }
+}
+
+==>
+
+StyleSheet(
+  MixinStatement(mixin,ValueName,Block(Declaration(PropertyName,NumberLiteral))),
+  MixinStatement(mixin,ValueName,Block(
+    IncludeStatement(include,ValueName),
+    RuleSet(TagSelector(TagName),Block(
+      Declaration(PropertyName,ValueName),
+      Declaration(PropertyName,Block(
+        Declaration(PropertyName,NumberLiteral(Unit)),
+        Declaration(PropertyName,NumberLiteral(Unit)))))))))
+
+# Forward
+
+@forward "src/list" hide list-reset, $horizontal-list-gap;
+@forward "module" as m-*;
+
+==>
+
+StyleSheet(
+  ForwardStatement(forward,StringLiteral,Keyword,ValueName,SassVariableName),
+  ForwardStatement(forward,StringLiteral,Keyword,ValueName,Star))
+
+# At-root
+
+@mixin unify-parent($child) {
+  @at-root #{selector.unify(&, $child)} {
+    @content;
+  }
+}
+
+.wrapper .field {
+  @include unify-parent("input") {
+    /* ... */
+  }
+  @include unify-parent("select") {
+    /* ... */
+  }
+}
+
+==>
+
+StyleSheet(
+  MixinStatement(mixin,CallExpression(Callee,ArgList(SassVariableName)),Block(
+    RootStatement(Interpolation(InterpolationStart,
+      NamespacedValue(ValueName,CallExpression(Callee,ArgList(NestingSelector,SassVariableName))),
+    InterpolationEnd),Block(AtRule(AtKeyword))))),
+  RuleSet(DescendantSelector(ClassSelector(ClassName),ClassSelector(ClassName)),Block(
+    IncludeStatement(include,CallExpression(Callee,ArgList(StringLiteral)),Block(Comment)),
+    IncludeStatement(include,CallExpression(Callee,ArgList(StringLiteral)),Block(Comment)))))
+
+# Query At-root
+
+@media print {
+  .page {
+    width: 8in;
+
+    @at-root (without: media) {
+      color: #111;
+    }
+
+    @at-root (with: rule) {
+      font-size: 1.2em;
+    }
+  }
+}
+
+==>
+
+StyleSheet(MediaStatement(media,KeywordQuery,Block(
+  RuleSet(ClassSelector(ClassName),Block(
+    Declaration(PropertyName,NumberLiteral(Unit)),
+    RootStatement(Keyword,KeywordQuery,Block(Declaration(PropertyName,ColorLiteral))),
+    RootStatement(Keyword,KeywordQuery,Block(Declaration(PropertyName,NumberLiteral(Unit)))))))))
+
+# Control flow
+
+@function pow($base, $exponent) {
+  $result: 1;
+  @for $_ from 1 through $exponent {
+    $result: $result * $base;
+  }
+  @if $direction == up {
+    border-bottom-color: $color;
+  } @else if $direction == right {
+    border-left-color: $color;
+  } @else {
+    @error "Unknown direction #{$direction}.";
+  }
+  @while $one and $two < 55 {
+    $result: 0;
+  }
+  @return $result;
+}
+
+==>
+
+StyleSheet(MixinStatement(mixin,CallExpression(Callee,ArgList(SassVariableName,SassVariableName)),Block(
+  Declaration(SassVariableName,NumberLiteral),
+  ForStatement(ControlKeyword,SassVariableName,Keyword,NumberLiteral,Keyword,SassVariableName,Block(
+    Declaration(SassVariableName,BinaryExpression(SassVariableName,BinOp,SassVariableName)))),
+  IfStatement(ControlKeyword,BinaryExpression(SassVariableName,BinOp,ValueName),Block(
+    Declaration(PropertyName,SassVariableName)
+  ),ControlKeyword,Keyword,BinaryExpression(SassVariableName,BinOp,ValueName),Block(
+    Declaration(PropertyName,SassVariableName)
+  ),ControlKeyword,Block(
+    OutputStatement(ControlKeyword,StringLiteral))),
+  WhileStatement(ControlKeyword,
+    BinaryExpression(BinaryExpression(SassVariableName,LogicOp,SassVariableName),BinOp,NumberLiteral),
+    Block(Declaration(SassVariableName,NumberLiteral))),OutputStatement(ControlKeyword,SassVariableName))))
+
+# Indented {"dialect": "indented"}
+
+@mixin button-base()
+  @include typography(button)
+  @include ripple-surface
+  @include ripple-radius-bounded
+
+  display: inline-flex
+  position: relative
+  height: $button-height
+  border: none
+  vertical-align: middle
+
+  &:hover
+    cursor: pointer
+
+  &:disabled
+    color: $mdc-button-disabled-ink-color
+    cursor: default
+    pointer-events: none
+
+$i: 0
+
+==>
+
+StyleSheet(
+  MixinStatement(mixin,CallExpression(Callee,ArgList),Block(
+    IncludeStatement(include,CallExpression(Callee,ArgList(ValueName))),
+    IncludeStatement(include,ValueName),
+    IncludeStatement(include,ValueName),
+    Declaration(PropertyName,ValueName),
+    Declaration(PropertyName,ValueName),
+    Declaration(PropertyName,SassVariableName),
+    Declaration(PropertyName,ValueName),
+    Declaration(PropertyName,ValueName),
+    RuleSet(PseudoClassSelector(NestingSelector,PseudoClassName),Block(
+      Declaration(PropertyName,ValueName))),
+    RuleSet(PseudoClassSelector(NestingSelector,PseudoClassName),Block(
+      Declaration(PropertyName,SassVariableName),
+      Declaration(PropertyName,ValueName),
+      Declaration(PropertyName,ValueName))))),
+  Declaration(SassVariableName,NumberLiteral))
+
+# Comments in indented {"dialect": "indented"}
+
+// Nothing
+p
+  /* blah
+     and more comment
+  color: blue
+
+  // More comments
+  display: /* inline block */ none
+
+==>
+
+StyleSheet(
+  LineComment,
+  RuleSet(TagSelector(TagName),Block(
+    Comment,
+    Declaration(PropertyName,ValueName),
+    LineComment,
+    Declaration(PropertyName,Comment,ValueName))))
+
+# Indented mixin {"dialect": "indented"}
+
+=reset-list
+  margin: 0
+  padding: 0
+  list-style: none
+
+=horizontal-list
+  +reset-list
+
+  li
+    display: inline-block
+    margin:
+      left: -2px
+      right: 2em
+
+nav ul
+  +horizontal-list
+
+==>
+
+StyleSheet(
+  MixinStatement(IndentedMixin,ValueName,Block(
+    Declaration(PropertyName,NumberLiteral),
+    Declaration(PropertyName,NumberLiteral),
+    Declaration(PropertyName,ValueName))),
+  MixinStatement(IndentedMixin,ValueName,Block(
+    IncludeStatement(IndentedInclude,ValueName),
+    RuleSet(TagSelector(TagName),Block(
+      Declaration(PropertyName,ValueName),
+      Declaration(PropertyName,Block(
+        Declaration(PropertyName,NumberLiteral(Unit)),
+        Declaration(PropertyName,NumberLiteral(Unit)))))))),
+  RuleSet(DescendantSelector(TagSelector(TagName),TagSelector(TagName)),Block(
+    IncludeStatement(IndentedInclude,ValueName))))
+
+# Use
+
+@use 'foundation/code';
+@use "module" as m;
+@use "module" as *;
+@use 'library' with (
+  $black: #222,
+  $border-radius: 0.1rem
+);
+
+==>
+
+StyleSheet(
+  UseStatement(use,StringLiteral),
+  UseStatement(use,StringLiteral,Keyword,ValueName),
+  UseStatement(use,StringLiteral,Keyword,Star),
+  UseStatement(use,StringLiteral,Keyword,ArgList(
+    SassVariableName, ColorLiteral,
+    SassVariableName,NumberLiteral(Unit))))
+
+
+# Map declaration
+
+$units: (
+  "px": 1px,
+  "rem": 1rem,
+  "%": 1%,
+  "em": 1em,
+);
+
+==>
+
+StyleSheet(
+  Declaration(SassVariableName,":",Map("(",
+    StringLiteral,":",NumberLiteral(Unit),",",
+    StringLiteral,":",NumberLiteral(Unit),",",
+    StringLiteral,":",NumberLiteral(Unit),",",
+    StringLiteral,":",NumberLiteral(Unit),",",
+  ")")),
+";")
+
+# Map declaration on a single line
+
+$units: ("px": 1px, "rem": 1rem, "%": 1%, "em": 1em);
+
+==>
+
+StyleSheet(
+  Declaration(SassVariableName,":",Map("(",
+    StringLiteral,":",NumberLiteral(Unit),",",
+    StringLiteral,":",NumberLiteral(Unit),",",
+    StringLiteral,":",NumberLiteral(Unit),",",
+    StringLiteral,":",NumberLiteral(Unit),
+  ")")),
+";")
+
+# Map of maps
+
+$text-styles: (
+    "title": (
+        "small-screen": (
+            "font-size": $small-font-size,
+            "line-height": $small-line-height,
+            "font-weight": $small-font-weight,
+        ),
+        "large-screen": (
+            "font-size": $base-font-size,
+            "line-height": $base-line-height,
+            "font-weight": $base-font-weight,
+        )
+    )
+);
+
+==>
+
+StyleSheet(
+  Declaration(SassVariableName,":",Map("(",
+    StringLiteral,":",Map("(",
+      StringLiteral,":",Map("(",
+        StringLiteral,":",SassVariableName,",",
+        StringLiteral,":",SassVariableName,",",
+        StringLiteral,":",SassVariableName,",",
+      ")"),",",
+      StringLiteral,":",Map("(",
+        StringLiteral,":",SassVariableName,",",
+        StringLiteral,":",SassVariableName,",",
+        StringLiteral,":",SassVariableName,",",
+      ")"),
+    ")"),
+  ")")),
+";")

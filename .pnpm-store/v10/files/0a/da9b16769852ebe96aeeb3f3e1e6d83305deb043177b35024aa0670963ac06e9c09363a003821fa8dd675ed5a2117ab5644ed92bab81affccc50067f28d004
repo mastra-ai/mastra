@@ -1,0 +1,34 @@
+import type { LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { ToolChoice, ToolSet } from 'ai-v5';
+import type { StructuredOutputOptions } from '../../../agent/types.js';
+import type { ModelMethodType } from '../../../llm/model/model.loop.types.js';
+import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types.js';
+import type { LoopOptions } from '../../../loop/types.js';
+import type { OutputSchema } from '../../base/schema.js';
+import type { OnResult } from '../../types.js';
+type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
+    runId: string;
+    model: MastraLanguageModelV2;
+    providerOptions?: SharedV2ProviderOptions;
+    inputMessages: LanguageModelV2Prompt;
+    tools?: ToolSet;
+    toolChoice?: ToolChoice<ToolSet>;
+    options?: {
+        activeTools?: string[];
+        abortSignal?: AbortSignal;
+    };
+    includeRawChunks?: boolean;
+    modelSettings?: LoopOptions['modelSettings'];
+    onResult: OnResult;
+    structuredOutput?: StructuredOutputOptions<OUTPUT>;
+    /**
+    Additional HTTP headers to be sent with the request.
+    Only applicable for HTTP-based providers.
+    */
+    headers?: Record<string, string | undefined>;
+    shouldThrowError?: boolean;
+    methodType: ModelMethodType;
+};
+export declare function execute<OUTPUT extends OutputSchema = undefined>({ runId, model, providerOptions, inputMessages, tools, toolChoice, options, onResult, includeRawChunks, modelSettings, structuredOutput, headers, shouldThrowError, methodType, }: ExecutionProps<OUTPUT>): import("stream/web").ReadableStream<import("../..").ChunkType>;
+export {};
+//# sourceMappingURL=execute.d.ts.map

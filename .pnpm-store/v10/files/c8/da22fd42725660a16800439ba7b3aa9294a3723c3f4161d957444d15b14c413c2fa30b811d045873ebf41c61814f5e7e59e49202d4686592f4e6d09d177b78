@@ -1,0 +1,140 @@
+{
+  "name": "kysely",
+  "version": "0.28.8",
+  "description": "Type safe SQL query builder",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kysely-org/kysely.git"
+  },
+  "homepage": "https://kysely.dev",
+  "keywords": [
+    "query",
+    "builder",
+    "query builder",
+    "sql",
+    "typescript",
+    "postgres",
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "mssql",
+    "ms sql server",
+    "sql server",
+    "type-safe",
+    "type-safety",
+    "plugins"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "typesVersions": {
+    "<4.6": {
+      "*": [
+        "outdated-typescript.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist",
+    "helpers",
+    "outdated-typescript.d.ts"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/cjs/index.js"
+    },
+    "./helpers/postgres": {
+      "import": "./dist/esm/helpers/postgres.js",
+      "require": "./dist/cjs/helpers/postgres.js",
+      "default": "./dist/cjs/helpers/postgres.js"
+    },
+    "./helpers/mysql": {
+      "import": "./dist/esm/helpers/mysql.js",
+      "require": "./dist/cjs/helpers/mysql.js",
+      "default": "./dist/cjs/helpers/mysql.js"
+    },
+    "./helpers/mssql": {
+      "import": "./dist/esm/helpers/mssql.js",
+      "require": "./dist/cjs/helpers/mssql.js",
+      "default": "./dist/cjs/helpers/mssql.js"
+    },
+    "./helpers/sqlite": {
+      "import": "./dist/esm/helpers/sqlite.js",
+      "require": "./dist/cjs/helpers/sqlite.js",
+      "default": "./dist/cjs/helpers/sqlite.js"
+    }
+  },
+  "author": "Sami Koskimäki <sami@jakso.me>",
+  "license": "MIT",
+  "contributors": [
+    "Sami Koskimäki <sami@jakso.me>",
+    "Igal Klebanov <igalklebanov@gmail.com>"
+  ],
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@ark/attest": "^0.49.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/chai": "^5.0.1",
+    "@types/chai-as-promised": "^8.0.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^24.7.0",
+    "@types/pg": "^8.15.5",
+    "@types/pg-cursor": "^2.7.2",
+    "@types/semver": "^7.7.1",
+    "@types/sinon": "^17.0.4",
+    "better-sqlite3": "^12.4.1",
+    "chai": "^6.2.0",
+    "chai-as-promised": "^8.0.2",
+    "esbuild": "^0.25.10",
+    "lodash": "^4.17.21",
+    "mocha": "^11.7.4",
+    "mysql2": "^3.15.1",
+    "pathe": "^2.0.3",
+    "pg": "^8.15.6",
+    "pg-cursor": "^2.14.6",
+    "pkg-types": "^2.3.0",
+    "playwright": "^1.56.0",
+    "prettier": "^3.5.3",
+    "semver": "^7.7.3",
+    "sinon": "^21.0.0",
+    "std-env": "^3.9.0",
+    "tarn": "^3.0.2",
+    "tedious": "^19.0.0",
+    "tsd": "^0.33.0",
+    "typescript": "~5.9.3"
+  },
+  "scripts": {
+    "clean": "rm -rf dist & rm -rf test/node/dist & rm -rf test/browser/bundle.js & rm -rf helpers",
+    "bench:ts": "pnpm build && cd ./test/ts-benchmarks && node --experimental-strip-types ./index.ts",
+    "test": "pnpm build && pnpm test:node:build && pnpm test:node:run && pnpm test:typings && pnpm test:esmimports && pnpm test:exports",
+    "test:node:build": "tsc -p test/node",
+    "test:node": "pnpm build && pnpm test:node:build && pnpm test:node:run",
+    "test:node:run": "mocha --timeout 15000 test/node/dist/**/*.test.js",
+    "test:browser:build": "rm -rf test/browser/bundle.js && esbuild test/browser/main.ts --bundle --outfile=test/browser/bundle.js",
+    "test:browser": "pnpm build && pnpm test:browser:build && node test/browser/test.js",
+    "test:bun": "pnpm build && bun link && cd test/bun && bun install && bun run test",
+    "test:cloudflare-workers": "pnpm build && pnpm -r test --filter kysely-cloudflare-workers-test",
+    "test:deno": "deno run --allow-env --allow-read --allow-net --no-lock test/deno/local.test.ts && deno run --allow-env --allow-read --allow-net --no-lock test/deno/cdn.test.ts",
+    "test:typings": "tsd test/typings",
+    "test:esmimports": "node scripts/check-esm-imports.js",
+    "test:esbuild": "esbuild --bundle --platform=node --external:pg-native dist/esm/index.js --outfile=/dev/null",
+    "test:exports": "attw --pack . && node scripts/check-exports.js",
+    "test:jsdocs": "deno check --doc-only --no-lock --unstable-sloppy-imports --config=\"deno.check.json\" ./src",
+    "test:outdatedts": "pnpm build && cd test/outdated-ts && pnpm i && pnpm test",
+    "prettier": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
+    "build": "pnpm clean && (pnpm build:esm & pnpm build:cjs) && pnpm script:module-fixup && pnpm script:copy-interface-doc",
+    "build:esm": "tsc -p tsconfig.json && pnpm script:add-deno-type-references",
+    "build:cjs": "tsc -p tsconfig-cjs.json",
+    "script:module-fixup": "node scripts/module-fixup.js",
+    "script:copy-interface-doc": "node scripts/copy-interface-documentation.js",
+    "script:add-deno-type-references": "node scripts/add-deno-type-references.js",
+    "script:align-site-version": "node --experimental-strip-types scripts/align-site-version.mts",
+    "script:generate-site-examples": "node scripts/generate-site-examples.js",
+    "script:exclude-test-files-for-backwards-compat": "node --experimental-strip-types scripts/exclude-test-files-for-backwards-compat.mts",
+    "version": "pnpm script:align-site-version && git add ."
+  }
+}

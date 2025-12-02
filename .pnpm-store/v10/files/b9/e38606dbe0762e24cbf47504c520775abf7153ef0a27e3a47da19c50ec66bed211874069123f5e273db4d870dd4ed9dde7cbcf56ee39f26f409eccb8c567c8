@@ -1,0 +1,3 @@
+#pragma once
+#pragma message("This header will soon be removed. Use <gsl/narrow> instead of <gsl/gsl_narrow>")
+#include <gsl/narrow>

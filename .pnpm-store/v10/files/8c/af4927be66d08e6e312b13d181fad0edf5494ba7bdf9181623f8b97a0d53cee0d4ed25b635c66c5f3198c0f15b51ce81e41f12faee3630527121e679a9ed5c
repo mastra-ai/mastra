@@ -1,0 +1,71 @@
+{
+  "name": "@assistant-ui/react-markdown",
+  "version": "0.10.9",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./styles/dot.css": {
+      "default": "./styles/dot.css"
+    }
+  },
+  "source": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "styles",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@radix-ui/react-primitive": "^2.1.3",
+    "@radix-ui/react-use-callback-ref": "^1.1.1",
+    "@types/hast": "^3.0.4",
+    "classnames": "^2.5.1",
+    "react-markdown": "^10.1.0"
+  },
+  "peerDependencies": {
+    "@assistant-ui/react": "^0.10.42",
+    "@types/react": "*",
+    "react": "^18 || ^19 || ^19.0.0-rc"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.6",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "tsx": "^4.20.4",
+    "vitest": "^3.2.4",
+    "@assistant-ui/react": "0.10.42",
+    "@assistant-ui/x-buildutils": "0.0.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "homepage": "https://www.assistant-ui.com/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/assistant-ui/assistant-ui/tree/main/packages/react-markdown"
+  },
+  "bugs": {
+    "url": "https://github.com/assistant-ui/assistant-ui/issues"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.mts",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  }
+}

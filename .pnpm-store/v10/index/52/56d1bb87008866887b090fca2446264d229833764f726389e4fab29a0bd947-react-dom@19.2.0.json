@@ -1,0 +1,265 @@
+{
+  "name": "react-dom",
+  "version": "19.2.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662906683,
+      "integrity": "sha512-O4KI5drJltpEvYGw6x2WkFxLkK2RVPPSnQc8lokLdc0oH6A68Ld/Mx2+wjnTQTY7X5syi6/qDUuNCj6QDRUPgA==",
+      "mode": 420,
+      "size": 1088
+    },
+    "client.js": {
+      "checkedAt": 1764662906713,
+      "integrity": "sha512-d4wn5f1byiV7ZX9Gl6BQI1u63cTvttFQjnTTqYpDvFR8ExBswoBHSz/dZzzOWbRQqNCnC5oW0lEaF1eqOduA9g==",
+      "mode": 420,
+      "size": 1373
+    },
+    "client.react-server.js": {
+      "checkedAt": 1764662906714,
+      "integrity": "sha512-+hpMgbxj9ckf7EhQLfIAiPZi4//L/XxaJQP5ky+Jy3xqMMLYumDSddc58fH1E5B7xQP+9DIvv2GcmDBKfvISvw==",
+      "mode": 420,
+      "size": 101
+    },
+    "index.js": {
+      "checkedAt": 1764662906715,
+      "integrity": "sha512-e3jUjb8rboR7W6PaqSLbBEg6bRxQEu8qp79DJ0QdplzEnuXJnI2RQV8LFAvFV+GAeWIBJ5zniAVHGXA6l4Cfxg==",
+      "mode": 420,
+      "size": 1359
+    },
+    "profiling.js": {
+      "checkedAt": 1764662906717,
+      "integrity": "sha512-2408ezQSVntK4iIcFz8b1waRS4f/9jW564EDvhR8asXgyw8rUVS6Y3+FoFf8etDlceMZhKW/3fo0+MyuMKzbgQ==",
+      "mode": 420,
+      "size": 1378
+    },
+    "profiling.react-server.js": {
+      "checkedAt": 1764662906717,
+      "integrity": "sha512-A/xsanPqgIElklOeF/xFiRfWWKNEXNnM84kbeCNBAnNxeJIn8dAHab6D3LcvQ7kWiMJhUfBR5jAtQItxNzSO5Q==",
+      "mode": 420,
+      "size": 104
+    },
+    "cjs/react-dom-client.development.js": {
+      "checkedAt": 1764662906720,
+      "integrity": "sha512-Jl0D0Z4MHZt3QLTqVeu2Q5rl7uZR7Vb2Xf4gOCiWCJUnFmMRW23xnpUy12EWxRmgk3K5/sb1VBgnKIj4lIPTZw==",
+      "mode": 420,
+      "size": 1065698
+    },
+    "cjs/react-dom-client.production.js": {
+      "checkedAt": 1764662906723,
+      "integrity": "sha512-Bl/gTTn+S9Mevt7LfqjYvfZPHxC0gjaphNEDrqkzXpZeccsU5PiBj2cyiaKi4JnZpCzbew/4Wj6UytzpF9O8yw==",
+      "mode": 420,
+      "size": 536016
+    },
+    "cjs/react-dom-profiling.development.js": {
+      "checkedAt": 1764662906725,
+      "integrity": "sha512-6MYcwNkVRyN8MuI8H8L+2zrheTCMAaE394YVSCFClxJdfmZIydT7zlYZBvefYzIhNNjkTCVaXFdsdXWGYvBrEg==",
+      "mode": 420,
+      "size": 1082082
+    },
+    "cjs/react-dom-profiling.profiling.js": {
+      "checkedAt": 1764662906726,
+      "integrity": "sha512-tQjr4ILz3WiohKfbEgOo+VHIQKb4s0wv2fJhhtSlHxgULsMQ+vyjqgky+zkH9OvtOdjNq2LiOfm8Zn5XqhrRPg==",
+      "mode": 420,
+      "size": 607634
+    },
+    "cjs/react-dom-server-legacy.browser.development.js": {
+      "checkedAt": 1764662906727,
+      "integrity": "sha512-BFMuHtJ8VZDslMmaIqIo7FImDi+Uo03PIZJE/yMd1l637tjE3yoCflOOpdxJWM/FkW8C18HV82hP5YEi3XuRjA==",
+      "mode": 420,
+      "size": 395197
+    },
+    "cjs/react-dom-server-legacy.browser.production.js": {
+      "checkedAt": 1764662906728,
+      "integrity": "sha512-tZ01zFLxx1Vkfg9tHdkVqtxcTvewBneYpH23RQWMcjbnQ9w5kQZX43ydUF9ZXprkM1C6MXNn/kb3OrYNH8r7iw==",
+      "mode": 420,
+      "size": 237937
+    },
+    "cjs/react-dom-server-legacy.node.development.js": {
+      "checkedAt": 1764662906730,
+      "integrity": "sha512-S4GV9WINT7JB02lsHRE8s/myqZdLi55MBaZ/Gpc9kBarHojiNelUj7PWLuZLGNZw1Cq9aUrZQnyhN113FpJkkg==",
+      "mode": 420,
+      "size": 395194
+    },
+    "cjs/react-dom-server-legacy.node.production.js": {
+      "checkedAt": 1764662906733,
+      "integrity": "sha512-gTX8KBiEZdltRbr2KWWgDv6F2lT1cSc8Jn/aD+4yJNlFi2wYUvY6sZnZrkMKNJyEyrSouw47GgaKPibZTrFAiQ==",
+      "mode": 420,
+      "size": 242793
+    },
+    "cjs/react-dom-server.browser.development.js": {
+      "checkedAt": 1764662906734,
+      "integrity": "sha512-C3GS/JWdWRDVms4VxWMkT07UQBaENXXZY2+VhG5IGq322Wgd4kDD7P2gkH+QyEmcjrTEhfZS+TCXjHHeoajbHg==",
+      "mode": 420,
+      "size": 424658
+    },
+    "cjs/react-dom-server.browser.production.js": {
+      "checkedAt": 1764662906750,
+      "integrity": "sha512-2+fETw4VITM/k/T7QNcx4VRzW7SnSutd4Wmak1no20DQIFJQgnYV4ro3irITKSGoJKV0FYoQJCDWeADlcWx7Aw==",
+      "mode": 420,
+      "size": 268058
+    },
+    "cjs/react-dom-server.bun.development.js": {
+      "checkedAt": 1764662906754,
+      "integrity": "sha512-XQU88ANT8aJ4BJyIs6V0Z71MDU92DIrfz4o9IFT+qDVilH1vj5t/wqIRvQb9IP+cpYUPjHGgNsFFrYNzbyGefA==",
+      "mode": 420,
+      "size": 354659
+    },
+    "cjs/react-dom-server.bun.production.js": {
+      "checkedAt": 1764662906755,
+      "integrity": "sha512-630L06mMUMvANI6K9Cx4vE73ZhTRnYZQ+fA6o3hS6ZXJQ8Hm0MGJd0rUfWFHu1gKv0KM664NUvYaOb1sc3MCWg==",
+      "mode": 420,
+      "size": 245324
+    },
+    "cjs/react-dom-server.edge.development.js": {
+      "checkedAt": 1764662906757,
+      "integrity": "sha512-IfDJ99MqD1xMd4iEzE46v2E4s7T0p4km4Bt/kSr+SXeHn8KNjnFNe37fw9rWHjZeoxzkLYF9olBLkngfQiFmVg==",
+      "mode": 420,
+      "size": 425439
+    },
+    "cjs/react-dom-server.edge.production.js": {
+      "checkedAt": 1764662906757,
+      "integrity": "sha512-p3qFpnq0e9/XQlaosExKHoeD5SKFi/tLzzCxF66MIFipX13YOJbTnWr0Y+gJT8ZYCjICaRRxZxWbv/VYo/jyUw==",
+      "mode": 420,
+      "size": 273614
+    },
+    "cjs/react-dom-server.node.development.js": {
+      "checkedAt": 1764662906759,
+      "integrity": "sha512-vDWDxAYH9hkEydp6ApjSsDaoETjs+cFNE6uFYStsgKyzwb4FHueacDaQ0KIk6xWRm1WHnSokmbZXQDcgXIq+WQ==",
+      "mode": 420,
+      "size": 429423
+    },
+    "cjs/react-dom-server.node.production.js": {
+      "checkedAt": 1764662906760,
+      "integrity": "sha512-nS+JnIgyVzEoFbg3UI0v4jBrSWX5X5hBCmDerxdXPcDRxp9WnulvBUl438Y5vjpyTBm7WY+Wyjv2bycJOmfVHA==",
+      "mode": 420,
+      "size": 277046
+    },
+    "cjs/react-dom-test-utils.development.js": {
+      "checkedAt": 1764662906762,
+      "integrity": "sha512-WXOi4X8urnIYjwhn0/ettuwKqfPkRU/SKLAds31Ovg5w/cL3iy7GWQh8DdbUx1afVOJUwhU48fDqX1prORciCQ==",
+      "mode": 420,
+      "size": 793
+    },
+    "cjs/react-dom-test-utils.production.js": {
+      "checkedAt": 1764662906763,
+      "integrity": "sha512-jkoqaAph1QG0Rsi5v6QFKgNiVbYZAAHnJAMKrsaEng593GKYE7QdBtHNvNEnyJXhBy7MahqaZvPLT30h+DAZig==",
+      "mode": 420,
+      "size": 686
+    },
+    "cjs/react-dom.development.js": {
+      "checkedAt": 1764662906764,
+      "integrity": "sha512-yQWDtPOwvPd0M4DWdjZPP4JErVWQptYfw2g4YWcfHu9qUr5xYrU0aN7P1fWFG4Ezl5WwwubCVqs2vHcagkf7Og==",
+      "mode": 420,
+      "size": 17673
+    },
+    "cjs/react-dom.production.js": {
+      "checkedAt": 1764662906764,
+      "integrity": "sha512-64re4ZMmQcZwUXkizSiBmaRM4D3lCVQjG9l/6O8mBPIeWLgbyEYSwkgJijFUkg2zBLkOpMphfJdGX8VEzKB1Eg==",
+      "mode": 420,
+      "size": 6655
+    },
+    "cjs/react-dom.react-server.development.js": {
+      "checkedAt": 1764662906765,
+      "integrity": "sha512-0dyI8dL+TS7mv92Y2ppCHg3DJ4pMpixxgSFKup4rlwPdC1mL8Pui/34IEjHsYQ+TU7kEKiLmz947RjcsGo3uWA==",
+      "mode": 420,
+      "size": 14211
+    },
+    "react-dom.react-server.js": {
+      "checkedAt": 1764662906766,
+      "integrity": "sha512-C7fyMq7d9PGK7Wz9nqH1KYwZvDlq7X4gl/EVyavGSFLOa5b6+pXgbQ2vNBTCD3P6UwQ3LBDZExnsVPQGwqNSSw==",
+      "mode": 420,
+      "size": 220
+    },
+    "cjs/react-dom.react-server.production.js": {
+      "checkedAt": 1764662906767,
+      "integrity": "sha512-iSEKFY+qqq6BeIYgwBaTQ/s8gw+c7O09tvkGowIq7IKYn40PGp6TCNYgqrlWfv44AFc3ilaisEGU4ENecj0qfg==",
+      "mode": 420,
+      "size": 4878
+    },
+    "server.browser.js": {
+      "checkedAt": 1764662906768,
+      "integrity": "sha512-juFBGtyBLvgSgAQZg1dUuTmGzUD/VKHGBLtd24ow9kNx09AZe/+lrODyMb4Kxw8KpFAhnZ4RM9qoEBLw3bAEsw==",
+      "mode": 420,
+      "size": 563
+    },
+    "server.bun.js": {
+      "checkedAt": 1764662906771,
+      "integrity": "sha512-gSh0NTw6kRolzcBSALrJrc4dUmVgX7gi6p3JrJbwkTkhJqBcDf/dm43L9CBP7G77zQIskbh06JyWeMHJetJUlQ==",
+      "mode": 420,
+      "size": 559
+    },
+    "server.edge.js": {
+      "checkedAt": 1764662906772,
+      "integrity": "sha512-3QwxELdVE0ReGHp/YR4A1w+HEagjWy9LtQXLOAkNOEpQ7fmpL6r4vfrwZexMKS8skPzJ12ete1SKaBwIqAiSzA==",
+      "mode": 420,
+      "size": 561
+    },
+    "server.js": {
+      "checkedAt": 1764662906773,
+      "integrity": "sha512-NNf3twiSkfHY+M8TnFLtVmvhC0gdHHgCeZFa0l3KNrgqRkIHMOay4PBCaXvzFvp/bL6ZvXeVEC2xOHxvkraQLA==",
+      "mode": 420,
+      "size": 58
+    },
+    "server.node.js": {
+      "checkedAt": 1764662906774,
+      "integrity": "sha512-Z0Bj+H+TzRw5NnLMML8dQoBHolJsQI8FsDuae9JvKFmQZNgq8qI8VDNtdSl+GLbJXti6Zdq4e7ajmNjWFv66fQ==",
+      "mode": 420,
+      "size": 669
+    },
+    "server.react-server.js": {
+      "checkedAt": 1764662906775,
+      "integrity": "sha512-rJHcjXtGQYRdwHfu/cjcnls6ocKlnKPvw3J7j2f2BMOUX2+M0pJKfbIem6f8TUkyprV9C6z/SiXh8AyN9O1uVQ==",
+      "mode": 420,
+      "size": 101
+    },
+    "static.browser.js": {
+      "checkedAt": 1764662906776,
+      "integrity": "sha512-gqXh9aKU1EGsusvoirTUZWFOmweNPF/n2y+UfHWfpcbDdonxeRfX/TZX2wqHUddkR7OUdxqmA9ajaqaloKyLUw==",
+      "mode": 420,
+      "size": 319
+    },
+    "static.edge.js": {
+      "checkedAt": 1764662906777,
+      "integrity": "sha512-++pBPA+Ya+GLsHwF+bxdxjAHmEa5WpO82B4/J7N3wDK2rvDrUfyEhWG7HCJZuY2DrTxeG58L/hiwzhRUrkWHnw==",
+      "mode": 420,
+      "size": 313
+    },
+    "static.js": {
+      "checkedAt": 1764662906777,
+      "integrity": "sha512-U5vJjAcwaY8uskpQXgK3wsKcTM5D6Ubeko51llVh/Ouh+ojcN5HO28DpfZ4jCmQTG4J7jsWpKFYcobkwxk+hmg==",
+      "mode": 420,
+      "size": 58
+    },
+    "static.node.js": {
+      "checkedAt": 1764662906778,
+      "integrity": "sha512-Er0IN5LRf0K2MxkdBLBapoDjosGMQBRsmw23zl1ZiV31iC5t4Y4VPWTUuCkx9WleYKqr19r4Fp8HoQQsC/mcEw==",
+      "mode": 420,
+      "size": 445
+    },
+    "static.react-server.js": {
+      "checkedAt": 1764662906779,
+      "integrity": "sha512-Z37xQG/JE7zSzbGv2e1d9xtSwRGIOI9CUf0jWL2hHB6yMqprZjS7RZ+7MnQfsxcLuLC37XUFOSHYk+DD09uCpw==",
+      "mode": 420,
+      "size": 101
+    },
+    "test-utils.js": {
+      "checkedAt": 1764662906781,
+      "integrity": "sha512-1X3CWflwLtdNBKmO1S2v6WFQ/JLzH3oSV5atx5Z3GaS01o3UEL9JKImZ4ipBDgxWoIdKvCKWOnQpVjAiOpqedA==",
+      "mode": 420,
+      "size": 216
+    },
+    "package.json": {
+      "checkedAt": 1764662906783,
+      "integrity": "sha512-OnI4Rib72olwNNHTeqT7vQp6LvFBE2n+vbcnv7BWEIr07pnAmglYJjiYKxTYI0s7x7uBQbVImnSb4+0ccl175Q==",
+      "mode": 420,
+      "size": 3063
+    },
+    "README.md": {
+      "checkedAt": 1764662906783,
+      "integrity": "sha512-4NyDTEjV+QqzVjgksDnwGKxuGh2laPjXPJ8gBevQsDNewawDRsR3YVQTJqRPo0iU/GHRCi5FuHjZZ+bmbEYw+Q==",
+      "mode": 420,
+      "size": 1096
+    }
+  }
+}

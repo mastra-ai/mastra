@@ -1,0 +1,2193 @@
+'use strict';
+
+var base = require('@mastra/core/base');
+var error = require('@mastra/core/error');
+var logger = require('@mastra/core/logger');
+var zod = require('zod');
+var observability = require('@mastra/core/observability');
+var utils = require('@mastra/core/utils');
+var web = require('stream/web');
+
+// src/default.ts
+var SamplingStrategyType = /* @__PURE__ */ ((SamplingStrategyType2) => {
+  SamplingStrategyType2["ALWAYS"] = "always";
+  SamplingStrategyType2["NEVER"] = "never";
+  SamplingStrategyType2["RATIO"] = "ratio";
+  SamplingStrategyType2["CUSTOM"] = "custom";
+  return SamplingStrategyType2;
+})(SamplingStrategyType || {});
+var samplingStrategySchema = zod.z.discriminatedUnion("type", [
+  zod.z.object({
+    type: zod.z.literal("always" /* ALWAYS */)
+  }),
+  zod.z.object({
+    type: zod.z.literal("never" /* NEVER */)
+  }),
+  zod.z.object({
+    type: zod.z.literal("ratio" /* RATIO */),
+    probability: zod.z.number().min(0, "Probability must be between 0 and 1").max(1, "Probability must be between 0 and 1")
+  }),
+  zod.z.object({
+    type: zod.z.literal("custom" /* CUSTOM */),
+    sampler: zod.z.function().args(zod.z.any().optional()).returns(zod.z.boolean())
+  })
+]);
+var observabilityInstanceConfigSchema = zod.z.object({
+  name: zod.z.string().min(1, "Name is required"),
+  serviceName: zod.z.string().min(1, "Service name is required"),
+  sampling: samplingStrategySchema.optional(),
+  exporters: zod.z.array(zod.z.any()).optional(),
+  spanOutputProcessors: zod.z.array(zod.z.any()).optional(),
+  includeInternalSpans: zod.z.boolean().optional(),
+  requestContextKeys: zod.z.array(zod.z.string()).optional()
+});
+var observabilityConfigValueSchema = zod.z.object({
+  serviceName: zod.z.string().min(1, "Service name is required"),
+  sampling: samplingStrategySchema.optional(),
+  exporters: zod.z.array(zod.z.any()).optional(),
+  spanOutputProcessors: zod.z.array(zod.z.any()).optional(),
+  includeInternalSpans: zod.z.boolean().optional(),
+  requestContextKeys: zod.z.array(zod.z.string()).optional()
+});
+var observabilityRegistryConfigSchema = zod.z.object({
+  default: zod.z.object({
+    enabled: zod.z.boolean().optional()
+  }).optional().nullable(),
+  configs: zod.z.union([zod.z.record(zod.z.string(), zod.z.any()), zod.z.array(zod.z.any()), zod.z.null()]).optional(),
+  configSelector: zod.z.function().optional()
+}).passthrough().refine(
+  (data) => {
+    const isDefaultEnabled = data.default?.enabled === true;
+    const hasConfigs = data.configs && typeof data.configs === "object" && !Array.isArray(data.configs) ? Object.keys(data.configs).length > 0 : false;
+    return !(isDefaultEnabled && hasConfigs);
+  },
+  {
+    message: 'Cannot specify both "default" (when enabled) and "configs". Use either default observability or custom configs, but not both.'
+  }
+).refine(
+  (data) => {
+    const configCount = data.configs && typeof data.configs === "object" && !Array.isArray(data.configs) ? Object.keys(data.configs).length : 0;
+    if (configCount > 1 && !data.configSelector) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'A "configSelector" function is required when multiple configs are specified to determine which config to use.'
+  }
+);
+var BaseExporter = class {
+  /** Mastra logger instance */
+  logger;
+  /** Whether this exporter is disabled */
+  isDisabled = false;
+  /**
+   * Initialize the base exporter with logger
+   */
+  constructor(config = {}) {
+    const logLevel = this.resolveLogLevel(config.logLevel);
+    this.logger = config.logger ?? new logger.ConsoleLogger({ level: logLevel, name: this.constructor.name });
+  }
+  /**
+   * Set the logger for the exporter (called by Mastra/ObservabilityInstance during initialization)
+   */
+  __setLogger(logger) {
+    this.logger = logger;
+    this.logger.debug(`Logger updated for exporter [name=${this.name}]`);
+  }
+  /**
+   * Convert string log level to LogLevel enum
+   */
+  resolveLogLevel(logLevel) {
+    if (!logLevel) {
+      return logger.LogLevel.INFO;
+    }
+    if (typeof logLevel === "number") {
+      return logLevel;
+    }
+    const logLevelMap = {
+      debug: logger.LogLevel.DEBUG,
+      info: logger.LogLevel.INFO,
+      warn: logger.LogLevel.WARN,
+      error: logger.LogLevel.ERROR
+    };
+    return logLevelMap[logLevel] ?? logger.LogLevel.INFO;
+  }
+  /**
+   * Mark the exporter as disabled and log a message
+   *
+   * @param reason - Reason why the exporter is disabled
+   */
+  setDisabled(reason) {
+    this.isDisabled = true;
+    this.logger.warn(`${this.name} disabled: ${reason}`);
+  }
+  /**
+   * Export a tracing event
+   *
+   * This method checks if the exporter is disabled before calling _exportEvent.
+   * Subclasses should implement _exportEvent instead of overriding this method.
+   */
+  async exportTracingEvent(event) {
+    if (this.isDisabled) {
+      return;
+    }
+    await this._exportTracingEvent(event);
+  }
+  /**
+   * Shutdown the exporter and clean up resources
+   *
+   * Default implementation just logs. Override to add custom cleanup.
+   */
+  async shutdown() {
+    this.logger.info(`${this.name} shutdown complete`);
+  }
+};
+var CloudExporter = class extends BaseExporter {
+  name = "mastra-cloud-observability-exporter";
+  config;
+  buffer;
+  flushTimer = null;
+  constructor(config = {}) {
+    super(config);
+    const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+    if (!accessToken) {
+      this.setDisabled(
+        "MASTRA_CLOUD_ACCESS_TOKEN environment variable not set. \u{1F680} Sign up for Mastra Cloud at https://cloud.mastra.ai to see your traces online and obtain your access token."
+      );
+    }
+    const endpoint = config.endpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT ?? "https://api.mastra.ai/ai/spans/publish";
+    this.config = {
+      logger: this.logger,
+      logLevel: config.logLevel ?? logger.LogLevel.INFO,
+      maxBatchSize: config.maxBatchSize ?? 1e3,
+      maxBatchWaitMs: config.maxBatchWaitMs ?? 5e3,
+      maxRetries: config.maxRetries ?? 3,
+      accessToken: accessToken || "",
+      endpoint
+    };
+    this.buffer = {
+      spans: [],
+      totalSize: 0
+    };
+  }
+  async _exportTracingEvent(event) {
+    if (event.type !== observability.TracingEventType.SPAN_ENDED) {
+      return;
+    }
+    this.addToBuffer(event);
+    if (this.shouldFlush()) {
+      this.flush().catch((error) => {
+        this.logger.error("Batch flush failed", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    } else if (this.buffer.totalSize === 1) {
+      this.scheduleFlush();
+    }
+  }
+  addToBuffer(event) {
+    if (this.buffer.totalSize === 0) {
+      this.buffer.firstEventTime = /* @__PURE__ */ new Date();
+    }
+    const spanRecord = this.formatSpan(event.exportedSpan);
+    this.buffer.spans.push(spanRecord);
+    this.buffer.totalSize++;
+  }
+  formatSpan(span) {
+    const spanRecord = {
+      traceId: span.traceId,
+      spanId: span.id,
+      parentSpanId: span.parentSpanId ?? null,
+      name: span.name,
+      spanType: span.type,
+      attributes: span.attributes ?? null,
+      metadata: span.metadata ?? null,
+      startedAt: span.startTime,
+      endedAt: span.endTime ?? null,
+      input: span.input ?? null,
+      output: span.output ?? null,
+      error: span.errorInfo,
+      isEvent: span.isEvent,
+      createdAt: /* @__PURE__ */ new Date(),
+      updatedAt: null
+    };
+    return spanRecord;
+  }
+  shouldFlush() {
+    if (this.buffer.totalSize >= this.config.maxBatchSize) {
+      return true;
+    }
+    if (this.buffer.firstEventTime && this.buffer.totalSize > 0) {
+      const elapsed = Date.now() - this.buffer.firstEventTime.getTime();
+      if (elapsed >= this.config.maxBatchWaitMs) {
+        return true;
+      }
+    }
+    return false;
+  }
+  scheduleFlush() {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+    }
+    this.flushTimer = setTimeout(() => {
+      this.flush().catch((error$1) => {
+        const mastraError = new error.MastraError(
+          {
+            id: `CLOUD_EXPORTER_FAILED_TO_SCHEDULE_FLUSH`,
+            domain: error.ErrorDomain.MASTRA_OBSERVABILITY,
+            category: error.ErrorCategory.USER
+          },
+          error$1
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error("Scheduled flush failed", mastraError);
+      });
+    }, this.config.maxBatchWaitMs);
+  }
+  async flush() {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (this.buffer.totalSize === 0) {
+      return;
+    }
+    const startTime = Date.now();
+    const spansCopy = [...this.buffer.spans];
+    const flushReason = this.buffer.totalSize >= this.config.maxBatchSize ? "size" : "time";
+    this.resetBuffer();
+    try {
+      await this.batchUpload(spansCopy);
+      const elapsed = Date.now() - startTime;
+      this.logger.debug("Batch flushed successfully", {
+        batchSize: spansCopy.length,
+        flushReason,
+        durationMs: elapsed
+      });
+    } catch (error$1) {
+      const mastraError = new error.MastraError(
+        {
+          id: `CLOUD_EXPORTER_FAILED_TO_BATCH_UPLOAD`,
+          domain: error.ErrorDomain.MASTRA_OBSERVABILITY,
+          category: error.ErrorCategory.USER,
+          details: {
+            droppedBatchSize: spansCopy.length
+          }
+        },
+        error$1
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error("Batch upload failed after all retries, dropping batch", mastraError);
+    }
+  }
+  /**
+   * Uploads spans to cloud API using fetchWithRetry for all retry logic
+   */
+  async batchUpload(spans) {
+    const headers = {
+      Authorization: `Bearer ${this.config.accessToken}`,
+      "Content-Type": "application/json"
+    };
+    const options = {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ spans })
+    };
+    await utils.fetchWithRetry(this.config.endpoint, options, this.config.maxRetries);
+  }
+  resetBuffer() {
+    this.buffer.spans = [];
+    this.buffer.firstEventTime = void 0;
+    this.buffer.totalSize = 0;
+  }
+  async shutdown() {
+    if (this.isDisabled) {
+      return;
+    }
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (this.buffer.totalSize > 0) {
+      this.logger.info("Flushing remaining events on shutdown", {
+        remainingEvents: this.buffer.totalSize
+      });
+      try {
+        await this.flush();
+      } catch (error$1) {
+        const mastraError = new error.MastraError(
+          {
+            id: `CLOUD_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
+            domain: error.ErrorDomain.MASTRA_OBSERVABILITY,
+            category: error.ErrorCategory.USER,
+            details: {
+              remainingEvents: this.buffer.totalSize
+            }
+          },
+          error$1
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error("Failed to flush remaining events during shutdown", mastraError);
+      }
+    }
+    this.logger.info("CloudExporter shutdown complete");
+  }
+};
+var ConsoleExporter = class extends BaseExporter {
+  name = "tracing-console-exporter";
+  constructor(config = {}) {
+    super(config);
+  }
+  async _exportTracingEvent(event) {
+    const span = event.exportedSpan;
+    const formatAttributes = (attributes) => {
+      try {
+        return JSON.stringify(attributes, null, 2);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : "Unknown formatting error";
+        return `[Unable to serialize attributes: ${errMsg}]`;
+      }
+    };
+    const formatDuration = (startTime, endTime) => {
+      if (!endTime) return "N/A";
+      const duration = endTime.getTime() - startTime.getTime();
+      return `${duration}ms`;
+    };
+    switch (event.type) {
+      case observability.TracingEventType.SPAN_STARTED:
+        this.logger.info(`\u{1F680} SPAN_STARTED`);
+        this.logger.info(`   Type: ${span.type}`);
+        this.logger.info(`   Name: ${span.name}`);
+        this.logger.info(`   ID: ${span.id}`);
+        this.logger.info(`   Trace ID: ${span.traceId}`);
+        if (span.input !== void 0) {
+          this.logger.info(`   Input: ${formatAttributes(span.input)}`);
+        }
+        this.logger.info(`   Attributes: ${formatAttributes(span.attributes)}`);
+        this.logger.info("\u2500".repeat(80));
+        break;
+      case observability.TracingEventType.SPAN_ENDED:
+        const duration = formatDuration(span.startTime, span.endTime);
+        this.logger.info(`\u2705 SPAN_ENDED`);
+        this.logger.info(`   Type: ${span.type}`);
+        this.logger.info(`   Name: ${span.name}`);
+        this.logger.info(`   ID: ${span.id}`);
+        this.logger.info(`   Duration: ${duration}`);
+        this.logger.info(`   Trace ID: ${span.traceId}`);
+        if (span.input !== void 0) {
+          this.logger.info(`   Input: ${formatAttributes(span.input)}`);
+        }
+        if (span.output !== void 0) {
+          this.logger.info(`   Output: ${formatAttributes(span.output)}`);
+        }
+        if (span.errorInfo) {
+          this.logger.info(`   Error: ${formatAttributes(span.errorInfo)}`);
+        }
+        this.logger.info(`   Attributes: ${formatAttributes(span.attributes)}`);
+        this.logger.info("\u2500".repeat(80));
+        break;
+      case observability.TracingEventType.SPAN_UPDATED:
+        this.logger.info(`\u{1F4DD} SPAN_UPDATED`);
+        this.logger.info(`   Type: ${span.type}`);
+        this.logger.info(`   Name: ${span.name}`);
+        this.logger.info(`   ID: ${span.id}`);
+        this.logger.info(`   Trace ID: ${span.traceId}`);
+        if (span.input !== void 0) {
+          this.logger.info(`   Input: ${formatAttributes(span.input)}`);
+        }
+        if (span.output !== void 0) {
+          this.logger.info(`   Output: ${formatAttributes(span.output)}`);
+        }
+        if (span.errorInfo) {
+          this.logger.info(`   Error: ${formatAttributes(span.errorInfo)}`);
+        }
+        this.logger.info(`   Updated Attributes: ${formatAttributes(span.attributes)}`);
+        this.logger.info("\u2500".repeat(80));
+        break;
+      default:
+        this.logger.warn(`Tracing event type not implemented: ${event.type}`);
+    }
+  }
+  async shutdown() {
+    this.logger.info("ConsoleExporter shutdown");
+  }
+};
+function resolveTracingStorageStrategy(config, storage, logger) {
+  if (config.strategy && config.strategy !== "auto") {
+    const hints = storage.tracingStrategy;
+    if (hints.supported.includes(config.strategy)) {
+      return config.strategy;
+    }
+    logger.warn("User-specified tracing strategy not supported by storage adapter, falling back to auto-selection", {
+      userStrategy: config.strategy,
+      storageAdapter: storage.constructor.name,
+      supportedStrategies: hints.supported,
+      fallbackStrategy: hints.preferred
+    });
+  }
+  return storage.tracingStrategy.preferred;
+}
+var DefaultExporter = class extends BaseExporter {
+  name = "mastra-default-observability-exporter";
+  #storage;
+  #config;
+  #resolvedStrategy;
+  buffer;
+  #flushTimer = null;
+  // Track all spans that have been created, persists across flushes
+  allCreatedSpans = /* @__PURE__ */ new Set();
+  constructor(config = {}) {
+    super(config);
+    if (config === void 0) {
+      config = {};
+    }
+    this.#config = {
+      ...config,
+      maxBatchSize: config.maxBatchSize ?? 1e3,
+      maxBufferSize: config.maxBufferSize ?? 1e4,
+      maxBatchWaitMs: config.maxBatchWaitMs ?? 5e3,
+      maxRetries: config.maxRetries ?? 4,
+      retryDelayMs: config.retryDelayMs ?? 500,
+      strategy: config.strategy ?? "auto"
+    };
+    this.buffer = {
+      creates: [],
+      updates: [],
+      insertOnly: [],
+      seenSpans: /* @__PURE__ */ new Set(),
+      spanSequences: /* @__PURE__ */ new Map(),
+      completedSpans: /* @__PURE__ */ new Set(),
+      outOfOrderCount: 0,
+      totalSize: 0
+    };
+    this.#resolvedStrategy = "batch-with-updates";
+  }
+  #strategyInitialized = false;
+  /**
+   * Initialize the exporter (called after all dependencies are ready)
+   */
+  init(options) {
+    this.#storage = options.mastra?.getStorage();
+    if (!this.#storage) {
+      this.logger.warn("DefaultExporter disabled: Storage not available. Traces will not be persisted.");
+      return;
+    }
+    this.initializeStrategy(this.#storage);
+  }
+  /**
+   * Initialize the resolved strategy once storage is available
+   */
+  initializeStrategy(storage) {
+    if (this.#strategyInitialized) return;
+    this.#resolvedStrategy = resolveTracingStorageStrategy(this.#config, storage, this.logger);
+    this.#strategyInitialized = true;
+    this.logger.debug("tracing storage exporter initialized", {
+      strategy: this.#resolvedStrategy,
+      source: this.#config.strategy !== "auto" ? "user" : "auto",
+      storageAdapter: storage.constructor.name,
+      maxBatchSize: this.#config.maxBatchSize,
+      maxBatchWaitMs: this.#config.maxBatchWaitMs
+    });
+  }
+  /**
+   * Builds a unique span key for tracking
+   */
+  buildSpanKey(traceId, spanId) {
+    return `${traceId}:${spanId}`;
+  }
+  /**
+   * Gets the next sequence number for a span
+   */
+  getNextSequence(spanKey) {
+    const current = this.buffer.spanSequences.get(spanKey) || 0;
+    const next = current + 1;
+    this.buffer.spanSequences.set(spanKey, next);
+    return next;
+  }
+  /**
+   * Handles out-of-order span updates by logging and skipping
+   */
+  handleOutOfOrderUpdate(event) {
+    this.logger.warn("Out-of-order span update detected - skipping event", {
+      spanId: event.exportedSpan.id,
+      traceId: event.exportedSpan.traceId,
+      spanName: event.exportedSpan.name,
+      eventType: event.type
+    });
+  }
+  /**
+   * Adds an event to the appropriate buffer based on strategy
+   */
+  addToBuffer(event) {
+    const spanKey = this.buildSpanKey(event.exportedSpan.traceId, event.exportedSpan.id);
+    if (this.buffer.totalSize === 0) {
+      this.buffer.firstEventTime = /* @__PURE__ */ new Date();
+    }
+    switch (event.type) {
+      case observability.TracingEventType.SPAN_STARTED:
+        if (this.#resolvedStrategy === "batch-with-updates") {
+          const createRecord = this.buildCreateRecord(event.exportedSpan);
+          this.buffer.creates.push(createRecord);
+          this.buffer.seenSpans.add(spanKey);
+          this.allCreatedSpans.add(spanKey);
+        }
+        break;
+      case observability.TracingEventType.SPAN_UPDATED:
+        if (this.#resolvedStrategy === "batch-with-updates") {
+          if (this.allCreatedSpans.has(spanKey)) {
+            this.buffer.updates.push({
+              traceId: event.exportedSpan.traceId,
+              spanId: event.exportedSpan.id,
+              updates: this.buildUpdateRecord(event.exportedSpan),
+              sequenceNumber: this.getNextSequence(spanKey)
+            });
+          } else {
+            this.handleOutOfOrderUpdate(event);
+            this.buffer.outOfOrderCount++;
+          }
+        }
+        break;
+      case observability.TracingEventType.SPAN_ENDED:
+        if (this.#resolvedStrategy === "batch-with-updates") {
+          if (this.allCreatedSpans.has(spanKey)) {
+            this.buffer.updates.push({
+              traceId: event.exportedSpan.traceId,
+              spanId: event.exportedSpan.id,
+              updates: this.buildUpdateRecord(event.exportedSpan),
+              sequenceNumber: this.getNextSequence(spanKey)
+            });
+            this.buffer.completedSpans.add(spanKey);
+          } else if (event.exportedSpan.isEvent) {
+            const createRecord = this.buildCreateRecord(event.exportedSpan);
+            this.buffer.creates.push(createRecord);
+            this.buffer.seenSpans.add(spanKey);
+            this.allCreatedSpans.add(spanKey);
+            this.buffer.completedSpans.add(spanKey);
+          } else {
+            this.handleOutOfOrderUpdate(event);
+            this.buffer.outOfOrderCount++;
+          }
+        } else if (this.#resolvedStrategy === "insert-only") {
+          const createRecord = this.buildCreateRecord(event.exportedSpan);
+          this.buffer.insertOnly.push(createRecord);
+          this.buffer.completedSpans.add(spanKey);
+          this.allCreatedSpans.add(spanKey);
+        }
+        break;
+    }
+    this.buffer.totalSize = this.buffer.creates.length + this.buffer.updates.length + this.buffer.insertOnly.length;
+  }
+  /**
+   * Checks if buffer should be flushed based on size or time triggers
+   */
+  shouldFlush() {
+    if (this.buffer.totalSize >= this.#config.maxBufferSize) {
+      return true;
+    }
+    if (this.buffer.totalSize >= this.#config.maxBatchSize) {
+      return true;
+    }
+    if (this.buffer.firstEventTime && this.buffer.totalSize > 0) {
+      const elapsed = Date.now() - this.buffer.firstEventTime.getTime();
+      if (elapsed >= this.#config.maxBatchWaitMs) {
+        return true;
+      }
+    }
+    return false;
+  }
+  /**
+   * Resets the buffer after successful flush
+   */
+  resetBuffer(completedSpansToCleanup = /* @__PURE__ */ new Set()) {
+    this.buffer.creates = [];
+    this.buffer.updates = [];
+    this.buffer.insertOnly = [];
+    this.buffer.seenSpans.clear();
+    this.buffer.spanSequences.clear();
+    this.buffer.completedSpans.clear();
+    this.buffer.outOfOrderCount = 0;
+    this.buffer.firstEventTime = void 0;
+    this.buffer.totalSize = 0;
+    for (const spanKey of completedSpansToCleanup) {
+      this.allCreatedSpans.delete(spanKey);
+    }
+  }
+  /**
+   * Schedules a flush using setTimeout
+   */
+  scheduleFlush() {
+    if (this.#flushTimer) {
+      clearTimeout(this.#flushTimer);
+    }
+    this.#flushTimer = setTimeout(() => {
+      this.flush().catch((error) => {
+        this.logger.error("Scheduled flush failed", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    }, this.#config.maxBatchWaitMs);
+  }
+  /**
+   * Serializes span attributes to storage record format
+   * Handles all Span types and their specific attributes
+   */
+  serializeAttributes(span) {
+    if (!span.attributes) {
+      return null;
+    }
+    try {
+      return JSON.parse(
+        JSON.stringify(span.attributes, (_key, value) => {
+          if (value instanceof Date) {
+            return value.toISOString();
+          }
+          if (typeof value === "object" && value !== null) {
+            return value;
+          }
+          return value;
+        })
+      );
+    } catch (error) {
+      this.logger.warn("Failed to serialize span attributes, storing as null", {
+        spanId: span.id,
+        spanType: span.type,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return null;
+    }
+  }
+  buildCreateRecord(span) {
+    return {
+      traceId: span.traceId,
+      spanId: span.id,
+      parentSpanId: span.parentSpanId ?? null,
+      name: span.name,
+      scope: null,
+      spanType: span.type,
+      attributes: this.serializeAttributes(span),
+      metadata: span.metadata ?? null,
+      links: null,
+      startedAt: span.startTime,
+      endedAt: span.endTime ?? null,
+      input: span.input,
+      output: span.output,
+      error: span.errorInfo,
+      isEvent: span.isEvent
+    };
+  }
+  buildUpdateRecord(span) {
+    return {
+      name: span.name,
+      scope: null,
+      attributes: this.serializeAttributes(span),
+      metadata: span.metadata ?? null,
+      links: null,
+      endedAt: span.endTime ?? null,
+      input: span.input,
+      output: span.output,
+      error: span.errorInfo
+    };
+  }
+  /**
+   * Handles realtime strategy - processes each event immediately
+   */
+  async handleRealtimeEvent(event, storage) {
+    const span = event.exportedSpan;
+    const spanKey = this.buildSpanKey(span.traceId, span.id);
+    if (span.isEvent) {
+      if (event.type === observability.TracingEventType.SPAN_ENDED) {
+        await storage.createSpan(this.buildCreateRecord(event.exportedSpan));
+      } else {
+        this.logger.warn(`Tracing event type not implemented for event spans: ${event.type}`);
+      }
+    } else {
+      switch (event.type) {
+        case observability.TracingEventType.SPAN_STARTED:
+          await storage.createSpan(this.buildCreateRecord(event.exportedSpan));
+          this.allCreatedSpans.add(spanKey);
+          break;
+        case observability.TracingEventType.SPAN_UPDATED:
+          await storage.updateSpan({
+            traceId: span.traceId,
+            spanId: span.id,
+            updates: this.buildUpdateRecord(span)
+          });
+          break;
+        case observability.TracingEventType.SPAN_ENDED:
+          await storage.updateSpan({
+            traceId: span.traceId,
+            spanId: span.id,
+            updates: this.buildUpdateRecord(span)
+          });
+          this.allCreatedSpans.delete(spanKey);
+          break;
+        default:
+          this.logger.warn(`Tracing event type not implemented for span spans: ${event.type}`);
+      }
+    }
+  }
+  /**
+   * Handles batch-with-updates strategy - buffers events and processes in batches
+   */
+  handleBatchWithUpdatesEvent(event) {
+    this.addToBuffer(event);
+    if (this.shouldFlush()) {
+      this.flush().catch((error) => {
+        this.logger.error("Batch flush failed", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    } else if (this.buffer.totalSize === 1) {
+      this.scheduleFlush();
+    }
+  }
+  /**
+   * Handles insert-only strategy - only processes SPAN_ENDED events in batches
+   */
+  handleInsertOnlyEvent(event) {
+    if (event.type === observability.TracingEventType.SPAN_ENDED) {
+      this.addToBuffer(event);
+      if (this.shouldFlush()) {
+        this.flush().catch((error) => {
+          this.logger.error("Batch flush failed", {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      } else if (this.buffer.totalSize === 1) {
+        this.scheduleFlush();
+      }
+    }
+  }
+  /**
+   * Calculates retry delay using exponential backoff
+   */
+  calculateRetryDelay(attempt) {
+    return this.#config.retryDelayMs * Math.pow(2, attempt);
+  }
+  /**
+   * Flushes the current buffer to storage with retry logic
+   */
+  async flush() {
+    if (!this.#storage) {
+      this.logger.debug("Cannot flush traces. Mastra storage is not initialized");
+      return;
+    }
+    if (this.#flushTimer) {
+      clearTimeout(this.#flushTimer);
+      this.#flushTimer = null;
+    }
+    if (this.buffer.totalSize === 0) {
+      return;
+    }
+    const startTime = Date.now();
+    const flushReason = this.buffer.totalSize >= this.#config.maxBufferSize ? "overflow" : this.buffer.totalSize >= this.#config.maxBatchSize ? "size" : "time";
+    const bufferCopy = {
+      creates: [...this.buffer.creates],
+      updates: [...this.buffer.updates],
+      insertOnly: [...this.buffer.insertOnly],
+      seenSpans: new Set(this.buffer.seenSpans),
+      spanSequences: new Map(this.buffer.spanSequences),
+      completedSpans: new Set(this.buffer.completedSpans),
+      outOfOrderCount: this.buffer.outOfOrderCount,
+      firstEventTime: this.buffer.firstEventTime,
+      totalSize: this.buffer.totalSize
+    };
+    this.resetBuffer();
+    await this.flushWithRetries(this.#storage, bufferCopy, 0);
+    const elapsed = Date.now() - startTime;
+    this.logger.debug("Batch flushed", {
+      strategy: this.#resolvedStrategy,
+      batchSize: bufferCopy.totalSize,
+      flushReason,
+      durationMs: elapsed,
+      outOfOrderCount: bufferCopy.outOfOrderCount > 0 ? bufferCopy.outOfOrderCount : void 0
+    });
+  }
+  /**
+   * Attempts to flush with exponential backoff retry logic
+   */
+  async flushWithRetries(storage, buffer, attempt) {
+    try {
+      if (this.#resolvedStrategy === "batch-with-updates") {
+        if (buffer.creates.length > 0) {
+          await storage.batchCreateSpans({ records: buffer.creates });
+        }
+        if (buffer.updates.length > 0) {
+          const sortedUpdates = buffer.updates.sort((a, b) => {
+            const spanCompare = this.buildSpanKey(a.traceId, a.spanId).localeCompare(
+              this.buildSpanKey(b.traceId, b.spanId)
+            );
+            if (spanCompare !== 0) return spanCompare;
+            return a.sequenceNumber - b.sequenceNumber;
+          });
+          await storage.batchUpdateSpans({ records: sortedUpdates });
+        }
+      } else if (this.#resolvedStrategy === "insert-only") {
+        if (buffer.insertOnly.length > 0) {
+          await storage.batchCreateSpans({ records: buffer.insertOnly });
+        }
+      }
+      for (const spanKey of buffer.completedSpans) {
+        this.allCreatedSpans.delete(spanKey);
+      }
+    } catch (error) {
+      if (attempt < this.#config.maxRetries) {
+        const retryDelay = this.calculateRetryDelay(attempt);
+        this.logger.warn("Batch flush failed, retrying", {
+          attempt: attempt + 1,
+          maxRetries: this.#config.maxRetries,
+          nextRetryInMs: retryDelay,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        return this.flushWithRetries(storage, buffer, attempt + 1);
+      } else {
+        this.logger.error("Batch flush failed after all retries, dropping batch", {
+          finalAttempt: attempt + 1,
+          maxRetries: this.#config.maxRetries,
+          droppedBatchSize: buffer.totalSize,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        for (const spanKey of buffer.completedSpans) {
+          this.allCreatedSpans.delete(spanKey);
+        }
+      }
+    }
+  }
+  async _exportTracingEvent(event) {
+    if (!this.#storage) {
+      this.logger.debug("Cannot store traces. Mastra storage is not initialized");
+      return;
+    }
+    if (!this.#strategyInitialized) {
+      this.initializeStrategy(this.#storage);
+    }
+    switch (this.#resolvedStrategy) {
+      case "realtime":
+        await this.handleRealtimeEvent(event, this.#storage);
+        break;
+      case "batch-with-updates":
+        this.handleBatchWithUpdatesEvent(event);
+        break;
+      case "insert-only":
+        this.handleInsertOnlyEvent(event);
+        break;
+    }
+  }
+  async shutdown() {
+    if (this.#flushTimer) {
+      clearTimeout(this.#flushTimer);
+      this.#flushTimer = null;
+    }
+    if (this.buffer.totalSize > 0) {
+      this.logger.info("Flushing remaining events on shutdown", {
+        remainingEvents: this.buffer.totalSize
+      });
+      try {
+        await this.flush();
+      } catch (error) {
+        this.logger.error("Failed to flush remaining events during shutdown", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+    this.logger.info("DefaultExporter shutdown complete");
+  }
+};
+var ModelSpanTracker = class {
+  #modelSpan;
+  #currentStepSpan;
+  #currentChunkSpan;
+  #accumulator = {};
+  #stepIndex = 0;
+  #chunkSequence = 0;
+  constructor(modelSpan) {
+    this.#modelSpan = modelSpan;
+  }
+  /**
+   * Get the tracing context for creating child spans.
+   * Returns the current step span if active, otherwise the model span.
+   */
+  getTracingContext() {
+    return {
+      currentSpan: this.#currentStepSpan ?? this.#modelSpan
+    };
+  }
+  /**
+   * Report an error on the generation span
+   */
+  reportGenerationError(options) {
+    this.#modelSpan?.error(options);
+  }
+  /**
+   * End the generation span
+   */
+  endGeneration(options) {
+    this.#modelSpan?.end(options);
+  }
+  /**
+   * Update the generation span
+   */
+  updateGeneration(options) {
+    this.#modelSpan?.update(options);
+  }
+  /**
+   * Start a new Model execution step
+   */
+  #startStepSpan(payload) {
+    this.#currentStepSpan = this.#modelSpan?.createChildSpan({
+      name: `step: ${this.#stepIndex}`,
+      type: observability.SpanType.MODEL_STEP,
+      attributes: {
+        stepIndex: this.#stepIndex,
+        ...payload?.messageId ? { messageId: payload.messageId } : {},
+        ...payload?.warnings?.length ? { warnings: payload.warnings } : {}
+      },
+      input: payload?.request
+    });
+    this.#chunkSequence = 0;
+  }
+  /**
+   * End the current Model execution step with token usage, finish reason, output, and metadata
+   */
+  #endStepSpan(payload) {
+    if (!this.#currentStepSpan) return;
+    const output = payload.output;
+    const { usage, ...otherOutput } = output;
+    const stepResult = payload.stepResult;
+    const metadata = payload.metadata;
+    const cleanMetadata = metadata ? { ...metadata } : void 0;
+    if (cleanMetadata?.request) {
+      delete cleanMetadata.request;
+    }
+    this.#currentStepSpan.end({
+      output: otherOutput,
+      attributes: {
+        usage,
+        isContinued: stepResult.isContinued,
+        finishReason: stepResult.reason,
+        warnings: stepResult.warnings
+      },
+      metadata: {
+        ...cleanMetadata
+      }
+    });
+    this.#currentStepSpan = void 0;
+    this.#stepIndex++;
+  }
+  /**
+   * Create a new chunk span (for multi-part chunks like text-start/delta/end)
+   */
+  #startChunkSpan(chunkType, initialData) {
+    if (!this.#currentStepSpan) {
+      this.#startStepSpan();
+    }
+    this.#currentChunkSpan = this.#currentStepSpan?.createChildSpan({
+      name: `chunk: '${chunkType}'`,
+      type: observability.SpanType.MODEL_CHUNK,
+      attributes: {
+        chunkType,
+        sequenceNumber: this.#chunkSequence
+      }
+    });
+    this.#accumulator = initialData || {};
+  }
+  /**
+   * Append string content to a specific field in the accumulator
+   */
+  #appendToAccumulator(field, text) {
+    if (this.#accumulator[field] === void 0) {
+      this.#accumulator[field] = text;
+    } else {
+      this.#accumulator[field] += text;
+    }
+  }
+  /**
+   * End the current chunk span.
+   * Safe to call multiple times - will no-op if span already ended.
+   */
+  #endChunkSpan(output) {
+    if (!this.#currentChunkSpan) return;
+    this.#currentChunkSpan.end({
+      output: output !== void 0 ? output : this.#accumulator
+    });
+    this.#currentChunkSpan = void 0;
+    this.#accumulator = {};
+    this.#chunkSequence++;
+  }
+  /**
+   * Create an event span (for single chunks like tool-call)
+   */
+  #createEventSpan(chunkType, output) {
+    if (!this.#currentStepSpan) {
+      this.#startStepSpan();
+    }
+    const span = this.#currentStepSpan?.createEventSpan({
+      name: `chunk: '${chunkType}'`,
+      type: observability.SpanType.MODEL_CHUNK,
+      attributes: {
+        chunkType,
+        sequenceNumber: this.#chunkSequence
+      },
+      output
+    });
+    if (span) {
+      this.#chunkSequence++;
+    }
+  }
+  /**
+   * Check if there is currently an active chunk span
+   */
+  #hasActiveChunkSpan() {
+    return !!this.#currentChunkSpan;
+  }
+  /**
+   * Get the current accumulator value
+   */
+  #getAccumulator() {
+    return this.#accumulator;
+  }
+  /**
+   * Handle text chunk spans (text-start/delta/end)
+   */
+  #handleTextChunk(chunk) {
+    switch (chunk.type) {
+      case "text-start":
+        this.#startChunkSpan("text");
+        break;
+      case "text-delta":
+        this.#appendToAccumulator("text", chunk.payload.text);
+        break;
+      case "text-end": {
+        this.#endChunkSpan();
+        break;
+      }
+    }
+  }
+  /**
+   * Handle reasoning chunk spans (reasoning-start/delta/end)
+   */
+  #handleReasoningChunk(chunk) {
+    switch (chunk.type) {
+      case "reasoning-start":
+        this.#startChunkSpan("reasoning");
+        break;
+      case "reasoning-delta":
+        this.#appendToAccumulator("text", chunk.payload.text);
+        break;
+      case "reasoning-end": {
+        this.#endChunkSpan();
+        break;
+      }
+    }
+  }
+  /**
+   * Handle tool call chunk spans (tool-call-input-streaming-start/delta/end, tool-call)
+   */
+  #handleToolCallChunk(chunk) {
+    switch (chunk.type) {
+      case "tool-call-input-streaming-start":
+        this.#startChunkSpan("tool-call", {
+          toolName: chunk.payload.toolName,
+          toolCallId: chunk.payload.toolCallId
+        });
+        break;
+      case "tool-call-delta":
+        this.#appendToAccumulator("toolInput", chunk.payload.argsTextDelta);
+        break;
+      case "tool-call-input-streaming-end":
+      case "tool-call": {
+        const acc = this.#getAccumulator();
+        let toolInput;
+        try {
+          toolInput = acc.toolInput ? JSON.parse(acc.toolInput) : {};
+        } catch {
+          toolInput = acc.toolInput;
+        }
+        this.#endChunkSpan({
+          toolName: acc.toolName,
+          toolCallId: acc.toolCallId,
+          toolInput
+        });
+        break;
+      }
+    }
+  }
+  /**
+   * Handle object chunk spans (object, object-result)
+   */
+  #handleObjectChunk(chunk) {
+    switch (chunk.type) {
+      case "object":
+        if (!this.#hasActiveChunkSpan()) {
+          this.#startChunkSpan("object");
+        }
+        break;
+      case "object-result":
+        this.#endChunkSpan(chunk.object);
+        break;
+    }
+  }
+  /**
+   * Wraps a stream with model tracing transform to track MODEL_STEP and MODEL_CHUNK spans.
+   *
+   * This should be added to the stream pipeline to automatically
+   * create MODEL_STEP and MODEL_CHUNK spans for each semantic unit in the stream.
+   */
+  wrapStream(stream) {
+    return stream.pipeThrough(
+      new web.TransformStream({
+        transform: (chunk, controller) => {
+          controller.enqueue(chunk);
+          switch (chunk.type) {
+            case "text-start":
+            case "text-delta":
+            case "text-end":
+              this.#handleTextChunk(chunk);
+              break;
+            case "tool-call-input-streaming-start":
+            case "tool-call-delta":
+            case "tool-call-input-streaming-end":
+            case "tool-call":
+              this.#handleToolCallChunk(chunk);
+              break;
+            case "reasoning-start":
+            case "reasoning-delta":
+            case "reasoning-end":
+              this.#handleReasoningChunk(chunk);
+              break;
+            case "object":
+            case "object-result":
+              this.#handleObjectChunk(chunk);
+              break;
+            case "step-start":
+              this.#startStepSpan(chunk.payload);
+              break;
+            case "step-finish":
+              this.#endStepSpan(chunk.payload);
+              break;
+            case "raw":
+            // Skip raw chunks as they're redundant
+            case "start":
+            case "finish":
+              break;
+            // Default: auto-create event span for all other chunk types
+            default: {
+              let outputPayload = chunk.payload;
+              if (outputPayload && typeof outputPayload === "object" && "data" in outputPayload) {
+                const typedPayload = outputPayload;
+                outputPayload = { ...typedPayload };
+                if (typedPayload.data) {
+                  outputPayload.size = typeof typedPayload.data === "string" ? typedPayload.data.length : typedPayload.data instanceof Uint8Array ? typedPayload.data.length : void 0;
+                  delete outputPayload.data;
+                }
+              }
+              this.#createEventSpan(chunk.type, outputPayload);
+              break;
+            }
+          }
+        }
+      })
+    );
+  }
+};
+
+// src/spans/base.ts
+function isSpanInternal(spanType, flags) {
+  if (flags === void 0 || flags === observability.InternalSpans.NONE) {
+    return false;
+  }
+  switch (spanType) {
+    // Workflow-related spans
+    case observability.SpanType.WORKFLOW_RUN:
+    case observability.SpanType.WORKFLOW_STEP:
+    case observability.SpanType.WORKFLOW_CONDITIONAL:
+    case observability.SpanType.WORKFLOW_CONDITIONAL_EVAL:
+    case observability.SpanType.WORKFLOW_PARALLEL:
+    case observability.SpanType.WORKFLOW_LOOP:
+    case observability.SpanType.WORKFLOW_SLEEP:
+    case observability.SpanType.WORKFLOW_WAIT_EVENT:
+      return (flags & observability.InternalSpans.WORKFLOW) !== 0;
+    // Agent-related spans
+    case observability.SpanType.AGENT_RUN:
+      return (flags & observability.InternalSpans.AGENT) !== 0;
+    // Tool-related spans
+    case observability.SpanType.TOOL_CALL:
+    case observability.SpanType.MCP_TOOL_CALL:
+      return (flags & observability.InternalSpans.TOOL) !== 0;
+    // Model-related spans
+    case observability.SpanType.MODEL_GENERATION:
+    case observability.SpanType.MODEL_STEP:
+    case observability.SpanType.MODEL_CHUNK:
+      return (flags & observability.InternalSpans.MODEL) !== 0;
+    // Default: never internal
+    default:
+      return false;
+  }
+}
+var BaseSpan = class {
+  name;
+  type;
+  attributes;
+  parent;
+  startTime;
+  endTime;
+  isEvent;
+  isInternal;
+  observabilityInstance;
+  input;
+  output;
+  errorInfo;
+  metadata;
+  traceState;
+  /** Parent span ID (for root spans that are children of external spans) */
+  parentSpanId;
+  constructor(options, observabilityInstance) {
+    this.name = options.name;
+    this.type = options.type;
+    this.attributes = deepClean(options.attributes) || {};
+    this.metadata = deepClean(options.metadata);
+    this.parent = options.parent;
+    this.startTime = /* @__PURE__ */ new Date();
+    this.observabilityInstance = observabilityInstance;
+    this.isEvent = options.isEvent ?? false;
+    this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
+    this.traceState = options.traceState;
+    if (this.isEvent) {
+      this.output = deepClean(options.output);
+    } else {
+      this.input = deepClean(options.input);
+    }
+  }
+  createChildSpan(options) {
+    return this.observabilityInstance.startSpan({ ...options, parent: this, isEvent: false });
+  }
+  createEventSpan(options) {
+    return this.observabilityInstance.startSpan({ ...options, parent: this, isEvent: true });
+  }
+  /**
+   * Create a ModelSpanTracker for this span (only works if this is a MODEL_GENERATION span)
+   * Returns undefined for non-MODEL_GENERATION spans
+   */
+  createTracker() {
+    if (this.type !== observability.SpanType.MODEL_GENERATION) {
+      return void 0;
+    }
+    return new ModelSpanTracker(this);
+  }
+  /** Returns `TRUE` if the span is the root span of a trace */
+  get isRootSpan() {
+    return !this.parent;
+  }
+  /** Get the closest parent spanId that isn't an internal span */
+  getParentSpanId(includeInternalSpans) {
+    if (!this.parent) {
+      return this.parentSpanId;
+    }
+    if (includeInternalSpans) return this.parent.id;
+    if (this.parent.isInternal) return this.parent.getParentSpanId(includeInternalSpans);
+    return this.parent.id;
+  }
+  /** Find the closest parent span of a specific type by walking up the parent chain */
+  findParent(spanType) {
+    let current = this.parent;
+    while (current) {
+      if (current.type === spanType) {
+        return current;
+      }
+      current = current.parent;
+    }
+    return void 0;
+  }
+  /** Returns a lightweight span ready for export */
+  exportSpan(includeInternalSpans) {
+    return {
+      id: this.id,
+      traceId: this.traceId,
+      name: this.name,
+      type: this.type,
+      attributes: this.attributes,
+      metadata: this.metadata,
+      startTime: this.startTime,
+      endTime: this.endTime,
+      input: this.input,
+      output: this.output,
+      errorInfo: this.errorInfo,
+      isEvent: this.isEvent,
+      isRootSpan: this.isRootSpan,
+      parentSpanId: this.getParentSpanId(includeInternalSpans)
+    };
+  }
+  get externalTraceId() {
+    return this.isValid ? this.traceId : void 0;
+  }
+};
+var DEFAULT_KEYS_TO_STRIP = /* @__PURE__ */ new Set([
+  "logger",
+  "experimental_providerMetadata",
+  "providerMetadata",
+  "steps",
+  "tracingContext"
+]);
+function deepClean(value, options = {}, _seen = /* @__PURE__ */ new WeakSet(), _depth = 0) {
+  const { keysToStrip = DEFAULT_KEYS_TO_STRIP, maxDepth = 10 } = options;
+  if (_depth > maxDepth) {
+    return "[MaxDepth]";
+  }
+  if (value === null || typeof value !== "object") {
+    try {
+      JSON.stringify(value);
+      return value;
+    } catch (error) {
+      return `[${error instanceof Error ? error.message : String(error)}]`;
+    }
+  }
+  if (_seen.has(value)) {
+    return "[Circular]";
+  }
+  _seen.add(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClean(item, options, _seen, _depth + 1));
+  }
+  const cleaned = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (keysToStrip.has(key)) {
+      continue;
+    }
+    try {
+      cleaned[key] = deepClean(val, options, _seen, _depth + 1);
+    } catch (error) {
+      cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
+    }
+  }
+  return cleaned;
+}
+var DefaultSpan = class extends BaseSpan {
+  id;
+  traceId;
+  constructor(options, observabilityInstance) {
+    super(options, observabilityInstance);
+    this.id = generateSpanId();
+    if (options.parent) {
+      this.traceId = options.parent.traceId;
+    } else if (options.traceId) {
+      if (isValidTraceId(options.traceId)) {
+        this.traceId = options.traceId;
+      } else {
+        console.error(
+          `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`
+        );
+        this.traceId = generateTraceId();
+      }
+    } else {
+      this.traceId = generateTraceId();
+    }
+    if (!options.parent && options.parentSpanId) {
+      if (isValidSpanId(options.parentSpanId)) {
+        this.parentSpanId = options.parentSpanId;
+      } else {
+        console.error(
+          `[Mastra Tracing] Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}". Ignoring parent span ID.`
+        );
+      }
+    }
+  }
+  end(options) {
+    if (this.isEvent) {
+      return;
+    }
+    this.endTime = /* @__PURE__ */ new Date();
+    if (options?.output !== void 0) {
+      this.output = deepClean(options.output);
+    }
+    if (options?.attributes) {
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes) };
+    }
+    if (options?.metadata) {
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata) };
+    }
+  }
+  error(options) {
+    if (this.isEvent) {
+      return;
+    }
+    const { error: error$1, endSpan = true, attributes, metadata } = options;
+    this.errorInfo = error$1 instanceof error.MastraError ? {
+      id: error$1.id,
+      details: error$1.details,
+      category: error$1.category,
+      domain: error$1.domain,
+      message: error$1.message
+    } : {
+      message: error$1.message
+    };
+    if (attributes) {
+      this.attributes = { ...this.attributes, ...deepClean(attributes) };
+    }
+    if (metadata) {
+      this.metadata = { ...this.metadata, ...deepClean(metadata) };
+    }
+    if (endSpan) {
+      this.end();
+    } else {
+      this.update({});
+    }
+  }
+  update(options) {
+    if (this.isEvent) {
+      return;
+    }
+    if (options.input !== void 0) {
+      this.input = deepClean(options.input);
+    }
+    if (options.output !== void 0) {
+      this.output = deepClean(options.output);
+    }
+    if (options.attributes) {
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes) };
+    }
+    if (options.metadata) {
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata) };
+    }
+  }
+  get isValid() {
+    return true;
+  }
+  async export() {
+    return JSON.stringify({
+      spanId: this.id,
+      traceId: this.traceId,
+      startTime: this.startTime,
+      endTime: this.endTime,
+      attributes: this.attributes,
+      metadata: this.metadata
+    });
+  }
+};
+function generateSpanId() {
+  const bytes = new Uint8Array(8);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 8; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function generateTraceId() {
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function isValidTraceId(traceId) {
+  return /^[0-9a-f]{1,32}$/i.test(traceId);
+}
+function isValidSpanId(spanId) {
+  return /^[0-9a-f]{1,16}$/i.test(spanId);
+}
+
+// src/spans/no-op.ts
+var NoOpSpan = class extends BaseSpan {
+  id;
+  traceId;
+  constructor(options, observabilityInstance) {
+    super(options, observabilityInstance);
+    this.id = "no-op";
+    this.traceId = "no-op-trace";
+  }
+  end(_options) {
+  }
+  error(_options) {
+  }
+  update(_options) {
+  }
+  get isValid() {
+    return false;
+  }
+};
+
+// src/instances/base.ts
+var BaseObservabilityInstance = class extends base.MastraBase {
+  config;
+  constructor(config) {
+    super({ component: logger.RegisteredLogger.OBSERVABILITY, name: config.serviceName });
+    this.config = {
+      serviceName: config.serviceName,
+      name: config.name,
+      sampling: config.sampling ?? { type: "always" /* ALWAYS */ },
+      exporters: config.exporters ?? [],
+      spanOutputProcessors: config.spanOutputProcessors ?? [],
+      includeInternalSpans: config.includeInternalSpans ?? false,
+      requestContextKeys: config.requestContextKeys ?? []
+    };
+  }
+  /**
+   * Override setLogger to add Observability specific initialization log
+   * and propagate logger to exporters
+   */
+  __setLogger(logger) {
+    super.__setLogger(logger);
+    this.exporters.forEach((exporter) => {
+      if (typeof exporter.__setLogger === "function") {
+        exporter.__setLogger(logger);
+      }
+    });
+    this.logger.debug(
+      `[Observability] Initialized [service=${this.config.serviceName}] [instance=${this.config.name}] [sampling=${this.config.sampling.type}]`
+    );
+  }
+  // ============================================================================
+  // Protected getters for clean config access
+  // ============================================================================
+  get exporters() {
+    return this.config.exporters || [];
+  }
+  get spanOutputProcessors() {
+    return this.config.spanOutputProcessors || [];
+  }
+  // ============================================================================
+  // Public API - Single type-safe span creation method
+  // ============================================================================
+  /**
+   * Start a new span of a specific SpanType
+   */
+  startSpan(options) {
+    const { customSamplerOptions, requestContext, metadata, tracingOptions, ...rest } = options;
+    if (!this.shouldSample(customSamplerOptions)) {
+      return new NoOpSpan({ ...rest, metadata }, this);
+    }
+    let traceState;
+    if (options.parent) {
+      traceState = options.parent.traceState;
+    } else {
+      traceState = this.computeTraceState(tracingOptions);
+    }
+    const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, metadata, traceState);
+    const span = this.createSpan({
+      ...rest,
+      metadata: enrichedMetadata,
+      traceState
+    });
+    if (span.isEvent) {
+      this.emitSpanEnded(span);
+    } else {
+      this.wireSpanLifecycle(span);
+      this.emitSpanStarted(span);
+    }
+    return span;
+  }
+  // ============================================================================
+  // Configuration Management
+  // ============================================================================
+  /**
+   * Get current configuration
+   */
+  getConfig() {
+    return { ...this.config };
+  }
+  // ============================================================================
+  // Plugin Access
+  // ============================================================================
+  /**
+   * Get all exporters
+   */
+  getExporters() {
+    return [...this.exporters];
+  }
+  /**
+   * Get all span output processors
+   */
+  getSpanOutputProcessors() {
+    return [...this.spanOutputProcessors];
+  }
+  /**
+   * Get the logger instance (for exporters and other components)
+   */
+  getLogger() {
+    return this.logger;
+  }
+  // ============================================================================
+  // Span Lifecycle Management
+  // ============================================================================
+  /**
+   * Automatically wires up Observability lifecycle events for any span
+   * This ensures all spans emit events regardless of implementation
+   */
+  wireSpanLifecycle(span) {
+    if (!this.config.includeInternalSpans && span.isInternal) {
+      return;
+    }
+    const originalEnd = span.end.bind(span);
+    const originalUpdate = span.update.bind(span);
+    span.end = (options) => {
+      if (span.isEvent) {
+        this.logger.warn(`End event is not available on event spans`);
+        return;
+      }
+      originalEnd(options);
+      this.emitSpanEnded(span);
+    };
+    span.update = (options) => {
+      if (span.isEvent) {
+        this.logger.warn(`Update() is not available on event spans`);
+        return;
+      }
+      originalUpdate(options);
+      this.emitSpanUpdated(span);
+    };
+  }
+  // ============================================================================
+  // Utility Methods
+  // ============================================================================
+  /**
+   * Check if a trace should be sampled
+   */
+  shouldSample(options) {
+    const { sampling } = this.config;
+    switch (sampling.type) {
+      case "always" /* ALWAYS */:
+        return true;
+      case "never" /* NEVER */:
+        return false;
+      case "ratio" /* RATIO */:
+        if (sampling.probability === void 0 || sampling.probability < 0 || sampling.probability > 1) {
+          this.logger.warn(
+            `Invalid sampling probability: ${sampling.probability}. Expected value between 0 and 1. Defaulting to no sampling.`
+          );
+          return false;
+        }
+        return Math.random() < sampling.probability;
+      case "custom" /* CUSTOM */:
+        return sampling.sampler(options);
+      default:
+        throw new Error(`Sampling strategy type not implemented: ${sampling.type}`);
+    }
+  }
+  /**
+   * Compute TraceState for a new trace based on configured and per-request keys
+   */
+  computeTraceState(tracingOptions) {
+    const configuredKeys = this.config.requestContextKeys ?? [];
+    const additionalKeys = tracingOptions?.requestContextKeys ?? [];
+    const allKeys = [...configuredKeys, ...additionalKeys];
+    if (allKeys.length === 0) {
+      return void 0;
+    }
+    return {
+      requestContextKeys: allKeys
+    };
+  }
+  /**
+   * Extract metadata from RequestContext using TraceState
+   */
+  extractMetadataFromRequestContext(requestContext, explicitMetadata, traceState) {
+    if (!requestContext || !traceState || traceState.requestContextKeys.length === 0) {
+      return explicitMetadata;
+    }
+    const extracted = this.extractKeys(requestContext, traceState.requestContextKeys);
+    if (Object.keys(extracted).length === 0 && !explicitMetadata) {
+      return void 0;
+    }
+    return {
+      ...extracted,
+      ...explicitMetadata
+      // Explicit metadata always wins
+    };
+  }
+  /**
+   * Extract specific keys from RequestContext
+   */
+  extractKeys(requestContext, keys) {
+    const result = {};
+    for (const key of keys) {
+      const parts = key.split(".");
+      const rootKey = parts[0];
+      const value = requestContext.get(rootKey);
+      if (value !== void 0) {
+        if (parts.length > 1) {
+          const nestedPath = parts.slice(1).join(".");
+          const nestedValue = utils.getNestedValue(value, nestedPath);
+          if (nestedValue !== void 0) {
+            utils.setNestedValue(result, key, nestedValue);
+          }
+        } else {
+          utils.setNestedValue(result, key, value);
+        }
+      }
+    }
+    return result;
+  }
+  /**
+   * Process a span through all output processors
+   */
+  processSpan(span) {
+    for (const processor of this.spanOutputProcessors) {
+      if (!span) {
+        break;
+      }
+      try {
+        span = processor.process(span);
+      } catch (error) {
+        this.logger.error(`[Observability] Processor error [name=${processor.name}]`, error);
+      }
+    }
+    return span;
+  }
+  // ============================================================================
+  // Event-driven Export Methods
+  // ============================================================================
+  getSpanForExport(span) {
+    if (!span.isValid) return void 0;
+    if (span.isInternal && !this.config.includeInternalSpans) return void 0;
+    const processedSpan = this.processSpan(span);
+    return processedSpan?.exportSpan(this.config.includeInternalSpans);
+  }
+  /**
+   * Emit a span started event
+   */
+  emitSpanStarted(span) {
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
+      this.exportTracingEvent({ type: observability.TracingEventType.SPAN_STARTED, exportedSpan }).catch((error) => {
+        this.logger.error("[Observability] Failed to export span_started event", error);
+      });
+    }
+  }
+  /**
+   * Emit a span ended event (called automatically when spans end)
+   */
+  emitSpanEnded(span) {
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
+      this.exportTracingEvent({ type: observability.TracingEventType.SPAN_ENDED, exportedSpan }).catch((error) => {
+        this.logger.error("[Observability] Failed to export span_ended event", error);
+      });
+    }
+  }
+  /**
+   * Emit a span updated event
+   */
+  emitSpanUpdated(span) {
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
+      this.exportTracingEvent({ type: observability.TracingEventType.SPAN_UPDATED, exportedSpan }).catch((error) => {
+        this.logger.error("[Observability] Failed to export span_updated event", error);
+      });
+    }
+  }
+  /**
+   * Export tracing event through all exporters (realtime mode)
+   */
+  async exportTracingEvent(event) {
+    const exportPromises = this.exporters.map(async (exporter) => {
+      try {
+        if (exporter.exportTracingEvent) {
+          await exporter.exportTracingEvent(event);
+          this.logger.debug(`[Observability] Event exported [exporter=${exporter.name}] [type=${event.type}]`);
+        }
+      } catch (error) {
+        this.logger.error(`[Observability] Export error [exporter=${exporter.name}]`, error);
+      }
+    });
+    await Promise.allSettled(exportPromises);
+  }
+  // ============================================================================
+  // Lifecycle Management
+  // ============================================================================
+  /**
+   * Initialize Observability (called by Mastra during component registration)
+   */
+  init() {
+    this.logger.debug(`[Observability] Initialization started [name=${this.name}]`);
+    this.logger.info(`[Observability] Initialized successfully [name=${this.name}]`);
+  }
+  /**
+   * Shutdown Observability and clean up resources
+   */
+  async shutdown() {
+    this.logger.debug(`[Observability] Shutdown started [name=${this.name}]`);
+    const shutdownPromises = [
+      ...this.exporters.map((e) => e.shutdown()),
+      ...this.spanOutputProcessors.map((p) => p.shutdown())
+    ];
+    await Promise.allSettled(shutdownPromises);
+    this.logger.info(`[Observability] Shutdown completed [name=${this.name}]`);
+  }
+};
+
+// src/instances/default.ts
+var DefaultObservabilityInstance = class extends BaseObservabilityInstance {
+  constructor(config) {
+    super(config);
+  }
+  createSpan(options) {
+    return new DefaultSpan(options, this);
+  }
+};
+
+// src/registry.ts
+var ObservabilityRegistry = class {
+  #instances = /* @__PURE__ */ new Map();
+  #defaultInstance;
+  #configSelector;
+  /**
+   * Register a tracing instance
+   */
+  register(name, instance, isDefault = false) {
+    if (this.#instances.has(name)) {
+      throw new Error(`Tracing instance '${name}' already registered`);
+    }
+    this.#instances.set(name, instance);
+    if (isDefault || !this.#defaultInstance) {
+      this.#defaultInstance = instance;
+    }
+  }
+  /**
+   * Get a tracing instance by name
+   */
+  get(name) {
+    return this.#instances.get(name);
+  }
+  /**
+   * Get the default tracing instance
+   */
+  getDefault() {
+    return this.#defaultInstance;
+  }
+  /**
+   * Set the tracing selector function
+   */
+  setSelector(selector) {
+    this.#configSelector = selector;
+  }
+  /**
+   * Get the selected tracing instance based on context
+   */
+  getSelected(options) {
+    if (this.#configSelector) {
+      const selected = this.#configSelector(options, this.#instances);
+      if (selected && this.#instances.has(selected)) {
+        return this.#instances.get(selected);
+      }
+    }
+    return this.#defaultInstance;
+  }
+  /**
+   * Unregister a tracing instance
+   */
+  unregister(name) {
+    const instance = this.#instances.get(name);
+    const deleted = this.#instances.delete(name);
+    if (deleted && instance === this.#defaultInstance) {
+      const next = this.#instances.values().next();
+      this.#defaultInstance = next.done ? void 0 : next.value;
+    }
+    return deleted;
+  }
+  /**
+   * Shutdown all instances and clear the registry
+   */
+  async shutdown() {
+    const shutdownPromises = Array.from(this.#instances.values()).map((instance) => instance.shutdown());
+    await Promise.allSettled(shutdownPromises);
+    this.#instances.clear();
+    this.#instances.clear();
+    this.#defaultInstance = void 0;
+    this.#configSelector = void 0;
+  }
+  /**
+   * Clear all instances without shutdown
+   */
+  clear() {
+    this.#instances.clear();
+    this.#defaultInstance = void 0;
+    this.#configSelector = void 0;
+  }
+  /**
+   * list all registered instances
+   */
+  list() {
+    return new Map(this.#instances);
+  }
+};
+
+// src/span_processors/sensitive-data-filter.ts
+var SensitiveDataFilter = class {
+  name = "sensitive-data-filter";
+  sensitiveFields;
+  redactionToken;
+  redactionStyle;
+  constructor(options = {}) {
+    this.sensitiveFields = (options.sensitiveFields || [
+      "password",
+      "token",
+      "secret",
+      "key",
+      "apikey",
+      "auth",
+      "authorization",
+      "bearer",
+      "bearertoken",
+      "jwt",
+      "credential",
+      "clientsecret",
+      "privatekey",
+      "refresh",
+      "ssn"
+    ]).map((f) => this.normalizeKey(f));
+    this.redactionToken = options.redactionToken ?? "[REDACTED]";
+    this.redactionStyle = options.redactionStyle ?? "full";
+  }
+  /**
+   * Process a span by filtering sensitive data across its key fields.
+   * Fields processed: attributes, metadata, input, output, errorInfo.
+   *
+   * @param span - The input span to filter
+   * @returns A new span with sensitive values redacted
+   */
+  process(span) {
+    span.attributes = this.tryFilter(span.attributes);
+    span.metadata = this.tryFilter(span.metadata);
+    span.input = this.tryFilter(span.input);
+    span.output = this.tryFilter(span.output);
+    span.errorInfo = this.tryFilter(span.errorInfo);
+    return span;
+  }
+  /**
+   * Recursively filter objects/arrays for sensitive keys.
+   * Handles circular references by replacing with a marker.
+   */
+  deepFilter(obj, seen = /* @__PURE__ */ new WeakSet()) {
+    if (obj === null || typeof obj !== "object") {
+      return obj;
+    }
+    if (seen.has(obj)) {
+      return "[Circular Reference]";
+    }
+    seen.add(obj);
+    if (Array.isArray(obj)) {
+      return obj.map((item) => this.deepFilter(item, seen));
+    }
+    const filtered = {};
+    for (const key of Object.keys(obj)) {
+      const normKey = this.normalizeKey(key);
+      if (this.isSensitive(normKey)) {
+        if (obj[key] && typeof obj[key] === "object") {
+          filtered[key] = this.deepFilter(obj[key], seen);
+        } else {
+          filtered[key] = this.redactValue(obj[key]);
+        }
+      } else {
+        filtered[key] = this.deepFilter(obj[key], seen);
+      }
+    }
+    return filtered;
+  }
+  tryFilter(value) {
+    try {
+      return this.deepFilter(value);
+    } catch {
+      return { error: { processor: this.name } };
+    }
+  }
+  /**
+   * Normalize keys by lowercasing and stripping non-alphanumeric characters.
+   * Ensures consistent matching for variants like "api-key", "api_key", "Api Key".
+   */
+  normalizeKey(key) {
+    return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+  /**
+   * Check whether a normalized key exactly matches any sensitive field.
+   * Both key and sensitive fields are normalized by removing all non-alphanumeric
+   * characters and converting to lowercase before comparison.
+   *
+   * Examples:
+   * - "api_key", "api-key", "ApiKey" all normalize to "apikey" → MATCHES "apikey"
+   * - "promptTokens", "prompt_tokens" normalize to "prompttokens" → DOES NOT MATCH "token"
+   */
+  isSensitive(normalizedKey) {
+    return this.sensitiveFields.some((sensitiveField) => {
+      return normalizedKey === sensitiveField;
+    });
+  }
+  /**
+   * Redact a sensitive value.
+   * - Full style: replaces with a fixed token.
+   * - Partial style: shows 3 chars at start and end, hides the middle.
+   *
+   * Non-string values are converted to strings before partial redaction.
+   */
+  redactValue(value) {
+    if (this.redactionStyle === "full") {
+      return this.redactionToken;
+    }
+    const str = String(value);
+    const len = str.length;
+    if (len <= 6) {
+      return this.redactionToken;
+    }
+    return str.slice(0, 3) + "\u2026" + str.slice(len - 3);
+  }
+  async shutdown() {
+  }
+};
+
+// src/default.ts
+function isInstance(obj) {
+  return obj instanceof BaseObservabilityInstance;
+}
+var Observability = class extends base.MastraBase {
+  #registry = new ObservabilityRegistry();
+  constructor(config) {
+    super({
+      component: logger.RegisteredLogger.OBSERVABILITY,
+      name: "Observability"
+    });
+    if (config === void 0) {
+      config = {};
+    }
+    const validationResult = observabilityRegistryConfigSchema.safeParse(config);
+    if (!validationResult.success) {
+      const errorMessages = validationResult.error.errors.map((err) => `${err.path.join(".") || "config"}: ${err.message}`).join("; ");
+      throw new error.MastraError({
+        id: "OBSERVABILITY_INVALID_CONFIG",
+        text: `Invalid observability configuration: ${errorMessages}`,
+        domain: error.ErrorDomain.MASTRA_OBSERVABILITY,
+        category: error.ErrorCategory.USER,
+        details: {
+          validationErrors: errorMessages
+        }
+      });
+    }
+    if (config.configs) {
+      for (const [name, configValue] of Object.entries(config.configs)) {
+        if (!isInstance(configValue)) {
+          const configValidation = observabilityConfigValueSchema.safeParse(configValue);
+          if (!configValidation.success) {
+            const errorMessages = configValidation.error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join("; ");
+            throw new error.MastraError({
+              id: "OBSERVABILITY_INVALID_INSTANCE_CONFIG",
+              text: `Invalid configuration for observability instance '${name}': ${errorMessages}`,
+              domain: error.ErrorDomain.MASTRA_OBSERVABILITY,
+              category: error.ErrorCategory.USER,
+              details: {
+                instanceName: name,
+                validationErrors: errorMessages
+              }
+            });
+          }
+        }
+      }
+    }
+    if (config.default?.enabled) {
+      const defaultInstance = new DefaultObservabilityInstance({
+        serviceName: "mastra",
+        name: "default",
+        sampling: { type: "always" /* ALWAYS */ },
+        exporters: [new DefaultExporter(), new CloudExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()]
+      });
+      this.#registry.register("default", defaultInstance, true);
+    }
+    if (config.configs) {
+      const instances = Object.entries(config.configs);
+      instances.forEach(([name, tracingDef], index) => {
+        const instance = isInstance(tracingDef) ? tracingDef : new DefaultObservabilityInstance({ ...tracingDef, name });
+        const isDefault = !config.default?.enabled && index === 0;
+        this.#registry.register(name, instance, isDefault);
+      });
+    }
+    if (config.configSelector) {
+      this.#registry.setSelector(config.configSelector);
+    }
+  }
+  setMastraContext(options) {
+    const instances = this.listInstances();
+    const { mastra } = options;
+    instances.forEach((instance) => {
+      const config = instance.getConfig();
+      const exporters = instance.getExporters();
+      exporters.forEach((exporter) => {
+        if ("init" in exporter && typeof exporter.init === "function") {
+          try {
+            exporter.init({ mastra, config });
+          } catch (error) {
+            this.logger?.warn("Failed to initialize observability exporter", {
+              exporterName: exporter.name,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+      });
+    });
+  }
+  setLogger(options) {
+    super.__setLogger(options.logger);
+    this.listInstances().forEach((instance) => {
+      instance.__setLogger(options.logger);
+    });
+  }
+  getSelectedInstance(options) {
+    return this.#registry.getSelected(options);
+  }
+  /**
+   * Registry management methods
+   */
+  registerInstance(name, instance, isDefault = false) {
+    this.#registry.register(name, instance, isDefault);
+  }
+  getInstance(name) {
+    return this.#registry.get(name);
+  }
+  getDefaultInstance() {
+    return this.#registry.getDefault();
+  }
+  listInstances() {
+    return this.#registry.list();
+  }
+  unregisterInstance(name) {
+    return this.#registry.unregister(name);
+  }
+  hasInstance(name) {
+    return !!this.#registry.get(name);
+  }
+  setConfigSelector(selector) {
+    this.#registry.setSelector(selector);
+  }
+  clear() {
+    this.#registry.clear();
+  }
+  async shutdown() {
+    await this.#registry.shutdown();
+  }
+};
+
+exports.BaseExporter = BaseExporter;
+exports.BaseObservabilityInstance = BaseObservabilityInstance;
+exports.BaseSpan = BaseSpan;
+exports.CloudExporter = CloudExporter;
+exports.ConsoleExporter = ConsoleExporter;
+exports.DefaultExporter = DefaultExporter;
+exports.DefaultObservabilityInstance = DefaultObservabilityInstance;
+exports.DefaultSpan = DefaultSpan;
+exports.ModelSpanTracker = ModelSpanTracker;
+exports.NoOpSpan = NoOpSpan;
+exports.Observability = Observability;
+exports.SamplingStrategyType = SamplingStrategyType;
+exports.SensitiveDataFilter = SensitiveDataFilter;
+exports.deepClean = deepClean;
+exports.observabilityConfigValueSchema = observabilityConfigValueSchema;
+exports.observabilityInstanceConfigSchema = observabilityInstanceConfigSchema;
+exports.observabilityRegistryConfigSchema = observabilityRegistryConfigSchema;
+exports.samplingStrategySchema = samplingStrategySchema;
+//# sourceMappingURL=index.cjs.map
+//# sourceMappingURL=index.cjs.map

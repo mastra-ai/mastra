@@ -1,0 +1,61 @@
+{
+  "name": "@sindresorhus/is",
+  "version": "7.1.0",
+  "requiresBuild": false,
+  "files": {
+    "license": {
+      "checkedAt": 1764662924061,
+      "integrity": "sha512-0fM2/ycrxrltyaBKfQ748Ck23VlPUUBgNAR47ldf4B1V/HoXTfWBSk+vcshGKwEpmOynu4mOP5o+hyBfuRNa8g==",
+      "mode": 420,
+      "size": 1117
+    },
+    "distribution/index.js": {
+      "checkedAt": 1764662924061,
+      "integrity": "sha512-gQhbCVu4xwO2Oq2zKYILYXQ21IB4gEqZf6WppdAJnpu6hrrLnVz1ud9GO8q+ySfodZtZiSlnYZXjcf0VqfuAdg==",
+      "mode": 420,
+      "size": 43347
+    },
+    "distribution/types.js": {
+      "checkedAt": 1764662924062,
+      "integrity": "sha512-yjEgaDfGKoWtk3fD30EOrbDdDERWenlMSYnrLGRXFqzCazxdNdbPNFEmRAZFmPF2JmMB3wcVX6mIwa4EDRpShQ==",
+      "mode": 420,
+      "size": 128
+    },
+    "distribution/utilities.js": {
+      "checkedAt": 1764662924064,
+      "integrity": "sha512-a14pNcTDi8TNY6wStgjPTHIVm/EVdmvV7Tp5Dqq8Sn8sYiWHwOSRa5deAlc88eeyYihUwk4YcbGOTIhC6IcMOw==",
+      "mode": 420,
+      "size": 65
+    },
+    "package.json": {
+      "checkedAt": 1764662924066,
+      "integrity": "sha512-7AX9uu+Y9Jv6vmX8xuCIwP/IH2l/mKjbJUdI+AeEx1b18vlIgDUEfofO/PHz8RTmIFjboFrsaPlVZxrelIv6pA==",
+      "mode": 420,
+      "size": 1499
+    },
+    "readme.md": {
+      "checkedAt": 1764662924067,
+      "integrity": "sha512-LB4ZN5zXO4M/dPAEJ5a+jJ5Mq+UZnh1FHEi4iuqHucZIop7DzuySvxGLUy22sGbztwlYjUSZ0q6k4oBP4rU6bg==",
+      "mode": 420,
+      "size": 20137
+    },
+    "distribution/index.d.ts": {
+      "checkedAt": 1764662924069,
+      "integrity": "sha512-Ew8Z8hg9V3cPNTlGT5twms+4/JxBwe8KC3YKgZ/h7DA2YOtNDFRfWRQKRiD8a7jPoMVK5FVE92WI2Ht/6NCczQ==",
+      "mode": 420,
+      "size": 33156
+    },
+    "distribution/types.d.ts": {
+      "checkedAt": 1764662924071,
+      "integrity": "sha512-hW3uwjq2IvusylSSuDwqYh5Au+18H4ILymdtyMjceSigerTEmH4ooJwZTezaKgxEY8YFqftOGZz0WhKaIxJZnA==",
+      "mode": 420,
+      "size": 2061
+    },
+    "distribution/utilities.d.ts": {
+      "checkedAt": 1764662924072,
+      "integrity": "sha512-zTzTRVNq7uY0h116afejZneJxfa0lbXMZ2mJhhcRv1c2K+M4QG7tNnX1zYk1RH0yFu8tFv1VvcVKn1aPWJEfKw==",
+      "mode": 420,
+      "size": 98
+    }
+  }
+}

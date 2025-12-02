@@ -1,0 +1,166 @@
+# no interpolated text
+
+<?php
+echo "hi";
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  EchoStatement(echo,String))
+
+# interpolated text at beginning
+
+<div>
+<?php
+echo "hi";
+==>
+
+Template(
+  TextInterpolation(Text, PhpOpen),
+  EchoStatement(echo,String))
+
+# interpolated text at end
+
+<?php
+echo "hi";
+?>
+
+<div>
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  EchoStatement(echo,String),
+  TextInterpolation(PhpClose, Text))
+
+# interpolated text in middle
+
+<?php
+echo "hi";
+?>
+
+<div>
+
+<?php
+echo "bye";
+?>
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  EchoStatement(echo,String),
+  TextInterpolation(PhpClose, Text, PhpOpen),
+  EchoStatement(echo,String),
+  TextInterpolation(PhpClose))
+
+# short open tag: On
+
+<?
+echo "Used a short tag\n";
+?>
+Finished
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  EchoStatement(echo,String(EscapeSequence)),
+  TextInterpolation(PhpClose, Text))
+
+# short open tag: Off
+
+<div>one</div>
+
+<?php
+$a = 'This gets echoed twice';
+?>
+
+<?= $a ?>
+
+<div>two</div>
+
+<? $b=3; ?>
+
+<?php
+   echo "{$b}";
+?>
+
+<?= "{$b}" ?>
+
+==>
+
+Template(
+  TextInterpolation(Text,PhpOpen),
+  ExpressionStatement(AssignmentExpression(VariableName, AssignOp, String)),
+  TextInterpolation(PhpClose,Text,PhpOpen),
+  ExpressionStatement(VariableName),
+  TextInterpolation(PhpClose,Text,PhpOpen),
+  ExpressionStatement(AssignmentExpression(VariableName, AssignOp, Integer)),
+  TextInterpolation(PhpClose,Text,PhpOpen),
+  EchoStatement(echo,String(Interpolation(VariableName))),
+  TextInterpolation(PhpClose,Text,PhpOpen),
+  ExpressionStatement(String(Interpolation(VariableName))),
+  TextInterpolation(PhpClose))
+
+# Single line php comment
+
+<ul class="foo"><?php // this is a comment ?></ul>
+
+<?php
+// foo?
+// foo? bar?
+echo "hi";
+
+==>
+
+Template(
+  TextInterpolation(Text, PhpOpen),
+  LineComment,
+  TextInterpolation(PhpClose, Text, PhpOpen),
+  LineComment,
+  LineComment,
+  EchoStatement(echo,String))
+
+# Single line comment without any content
+
+<?php
+# Check if PHP xml isn't compiled
+#
+if ( ! function_exists('xml_parser_create') ) {
+  echo $test;
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  LineComment,
+  LineComment,
+  IfStatement(if,
+    ParenthesizedExpression(
+      UnaryExpression(LogicOp, CallExpression(Name,ArgList(String)))
+    ),
+    Block(EchoStatement(echo,VariableName))
+  )
+)
+
+# Closing tags before the first PHP tag
+
+a ?> b <?php c;
+
+==>
+
+Template(
+  TextInterpolation(Text, PhpOpen),
+  ExpressionStatement(Name))
+
+# Text ends in a less-than char
+
+foo<
+
+==>
+
+Template(Text)

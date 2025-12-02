@@ -1,0 +1,55 @@
+{
+  "name": "@jpwilliams/waitgroup",
+  "version": "2.1.1",
+  "description": "A tiny version of Golang's WaitGroup with typings, promises, and zero dependencies.",
+  "main": "lib/index.js",
+  "scripts": {
+    "clean": "rm -rf lib",
+    "test": "jest --coverage",
+    "test:watch": "jest --watchAll",
+    "build": "tsc",
+    "build:watch": "onchange 'src/**/*' -- npm run build"
+  },
+  "files": [
+    "lib"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jpwilliams/waitgroup.git"
+  },
+  "keywords": [
+    "waitgroup",
+    "wait",
+    "group",
+    "async",
+    "promises",
+    "golang",
+    "types",
+    "typings",
+    "typescript"
+  ],
+  "author": "Jack Williams <@jpwilliams>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jpwilliams/waitgroup/issues"
+  },
+  "homepage": "https://github.com/jpwilliams/waitgroup#readme",
+  "devDependencies": {
+    "@types/jest": "27.0.2",
+    "@types/node": "14.17.27",
+    "@typescript-eslint/eslint-plugin": "5.1.0",
+    "@typescript-eslint/parser": "5.1.0",
+    "eslint": "8.0.1",
+    "eslint-import-resolver-typescript": "2.5.0",
+    "eslint-plugin-import": "2.25.2",
+    "eslint-plugin-jest": "25.2.2",
+    "eslint-plugin-json": "3.1.0",
+    "eslint-plugin-node": "11.1.0",
+    "eslint-plugin-promise": "5.1.0",
+    "eslint-plugin-standard": "5.0.0",
+    "jest": "27.3.1",
+    "onchange": "7.1.0",
+    "ts-jest": "27.0.7",
+    "typescript": "4.4.4"
+  }
+}

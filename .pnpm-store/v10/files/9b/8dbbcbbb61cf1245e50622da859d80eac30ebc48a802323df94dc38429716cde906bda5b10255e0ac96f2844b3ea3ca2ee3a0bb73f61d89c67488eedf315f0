@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../src/cli/lib/deployApi/types.ts"],
+  "sourcesContent": ["import { z } from \"zod\";\n\nexport const reference = z.string();\nexport type Reference = z.infer<typeof reference>;\n\n// These validators parse the response from the backend so although\n// they roughly correspond with convex/auth.config.ts providers they\n// have been processed.\n\n// Passthrough so old CLIs can operate on new backend formats.\nconst Oidc = z\n  .object({\n    applicationID: z.string(),\n    domain: z.string(),\n  })\n  .passthrough();\nconst CustomJwt = z\n  .object({\n    type: z.literal(\"customJwt\"),\n    applicationID: z.string().nullable(),\n    issuer: z.string(),\n    jwks: z.string(),\n    algorithm: z.string(),\n  })\n  .passthrough();\n\nexport const authInfo = z.union([CustomJwt, Oidc]);\n\nexport type AuthInfo = z.infer<typeof authInfo>;\n\nexport const identifier = z.string();\nexport type Identifier = z.infer<typeof identifier>;\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,iBAAkB;AAEX,MAAM,YAAY,aAAE,OAAO;AAQlC,MAAM,OAAO,aACV,OAAO;AAAA,EACN,eAAe,aAAE,OAAO;AAAA,EACxB,QAAQ,aAAE,OAAO;AACnB,CAAC,EACA,YAAY;AACf,MAAM,YAAY,aACf,OAAO;AAAA,EACN,MAAM,aAAE,QAAQ,WAAW;AAAA,EAC3B,eAAe,aAAE,OAAO,EAAE,SAAS;AAAA,EACnC,QAAQ,aAAE,OAAO;AAAA,EACjB,MAAM,aAAE,OAAO;AAAA,EACf,WAAW,aAAE,OAAO;AACtB,CAAC,EACA,YAAY;AAER,MAAM,WAAW,aAAE,MAAM,CAAC,WAAW,IAAI,CAAC;AAI1C,MAAM,aAAa,aAAE,OAAO;",
+  "names": []
+}

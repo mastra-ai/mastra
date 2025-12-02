@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/server/impl/authentication_impl.ts"],
+  "sourcesContent": ["import { Auth } from \"../authentication.js\";\nimport { performAsyncSyscall } from \"./syscall.js\";\n\nexport function setupAuth(requestId: string): Auth {\n  return {\n    getUserIdentity: async () => {\n      return await performAsyncSyscall(\"1.0/getUserIdentity\", {\n        requestId,\n      });\n    },\n  };\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AACA,qBAAoC;AAE7B,SAAS,UAAU,WAAyB;AACjD,SAAO;AAAA,IACL,iBAAiB,YAAY;AAC3B,aAAO,UAAM,oCAAoB,uBAAuB;AAAA,QACtD;AAAA,MACF,CAAC;AAAA,IACH;AAAA,EACF;AACF;",
+  "names": []
+}

@@ -1,0 +1,113 @@
+import { MastraError } from '../chunk-JJ5O45LH.js';
+import { MastraBase } from '../chunk-S6URFGCZ.js';
+
+// src/server/auth.ts
+var MastraAuthProvider = class extends MastraBase {
+  protected;
+  public;
+  constructor(options) {
+    super({ component: "AUTH", name: options?.name });
+    if (options?.authorizeUser) {
+      this.authorizeUser = options.authorizeUser.bind(this);
+    }
+    this.protected = options?.protected;
+    this.public = options?.public;
+  }
+  registerOptions(opts) {
+    if (opts?.authorizeUser) {
+      this.authorizeUser = opts.authorizeUser.bind(this);
+    }
+    if (opts?.protected) {
+      this.protected = opts.protected;
+    }
+    if (opts?.public) {
+      this.public = opts.public;
+    }
+  }
+};
+
+// src/server/composite-auth.ts
+var CompositeAuth = class extends MastraAuthProvider {
+  providers;
+  constructor(providers) {
+    super();
+    this.providers = providers;
+  }
+  async authenticateToken(token, request) {
+    for (const provider of this.providers) {
+      try {
+        const user = await provider.authenticateToken(token, request);
+        if (user) {
+          return user;
+        }
+      } catch {
+      }
+    }
+    return null;
+  }
+  async authorizeUser(user, request) {
+    for (const provider of this.providers) {
+      const authorized = await provider.authorizeUser(user, request);
+      if (authorized) {
+        return true;
+      }
+    }
+    return false;
+  }
+};
+
+// src/server/index.ts
+function validateOptions(path, options) {
+  const opts = options;
+  if (opts.method === void 0) {
+    throw new MastraError({
+      id: "MASTRA_SERVER_API_INVALID_ROUTE_OPTIONS",
+      text: `Invalid options for route "${path}", missing "method" property`,
+      domain: "MASTRA_SERVER" /* MASTRA_SERVER */,
+      category: "USER" /* USER */
+    });
+  }
+  if (opts.handler === void 0 && opts.createHandler === void 0) {
+    throw new MastraError({
+      id: "MASTRA_SERVER_API_INVALID_ROUTE_OPTIONS",
+      text: `Invalid options for route "${path}", you must define a "handler" or "createHandler" property`,
+      domain: "MASTRA_SERVER" /* MASTRA_SERVER */,
+      category: "USER" /* USER */
+    });
+  }
+  if (opts.handler !== void 0 && opts.createHandler !== void 0) {
+    throw new MastraError({
+      id: "MASTRA_SERVER_API_INVALID_ROUTE_OPTIONS",
+      text: `Invalid options for route "${path}", you can only define one of the following properties: "handler" or "createHandler"`,
+      domain: "MASTRA_SERVER" /* MASTRA_SERVER */,
+      category: "USER" /* USER */
+    });
+  }
+}
+function registerApiRoute(path, options) {
+  if (path.startsWith("/api/")) {
+    throw new MastraError({
+      id: "MASTRA_SERVER_API_PATH_RESERVED",
+      text: `Path must not start with "/api", it's reserved for internal API routes`,
+      domain: "MASTRA_SERVER" /* MASTRA_SERVER */,
+      category: "USER" /* USER */
+    });
+  }
+  validateOptions(path, options);
+  return {
+    path,
+    method: options.method,
+    handler: options.handler,
+    createHandler: options.createHandler,
+    openapi: options.openapi,
+    middleware: options.middleware,
+    requiresAuth: options.requiresAuth
+  };
+}
+function defineAuth(config) {
+  return config;
+}
+
+export { CompositeAuth, MastraAuthProvider, defineAuth, registerApiRoute };
+//# sourceMappingURL=index.js.map
+//# sourceMappingURL=index.js.map

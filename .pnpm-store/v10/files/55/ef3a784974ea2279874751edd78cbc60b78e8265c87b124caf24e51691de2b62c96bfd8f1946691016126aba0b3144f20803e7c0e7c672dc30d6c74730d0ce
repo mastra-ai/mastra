@@ -1,0 +1,3 @@
+export { KV } from "./kv.js";
+export { NamespacesV4PagePaginationArray, Namespaces, type Namespace, type NamespaceDeleteResponse, type NamespaceBulkDeleteResponse, type NamespaceBulkGetResponse, type NamespaceBulkUpdateResponse, type NamespaceCreateParams, type NamespaceUpdateParams, type NamespaceListParams, type NamespaceDeleteParams, type NamespaceBulkDeleteParams, type NamespaceBulkGetParams, type NamespaceBulkUpdateParams, type NamespaceGetParams, } from "./namespaces/index.js";
+//# sourceMappingURL=index.d.ts.map

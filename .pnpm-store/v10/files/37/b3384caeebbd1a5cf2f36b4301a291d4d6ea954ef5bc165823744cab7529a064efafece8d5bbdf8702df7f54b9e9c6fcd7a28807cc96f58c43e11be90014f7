@@ -1,0 +1,41 @@
+import { z } from 'zod';
+import { ParsedSchema, FieldConfig, SchemaProvider, SchemaValidation } from '@autoform/core';
+
+type ZodObjectOrWrapped = z.ZodObject<any, any> | z.ZodEffects<z.ZodObject<any, any>>;
+
+declare function parseSchema(schema: ZodObjectOrWrapped): ParsedSchema;
+
+declare function getDefaultValueInZodStack(schema: z.ZodTypeAny): any;
+declare function getDefaultValues(schema: ZodObjectOrWrapped): Record<string, any>;
+
+declare function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig): string;
+
+declare function validateSchema(schema: ZodObjectOrWrapped, values: any): {
+    success: boolean;
+    data: any;
+    errors?: undefined;
+} | {
+    success: boolean;
+    errors: z.ZodIssue[];
+    data?: undefined;
+};
+
+declare const ZOD_FIELD_CONFIG_SYMBOL: unique symbol;
+type SuperRefineFunction = () => unknown;
+declare function fieldConfig<AdditionalRenderable = null, FieldTypes = string, FieldWrapper = any, CustomData = Record<string, any>>(config: FieldConfig<AdditionalRenderable, FieldTypes, FieldWrapper, CustomData>): SuperRefineFunction;
+declare function getFieldConfigInZodStack(schema: z.ZodTypeAny): FieldConfig | undefined;
+
+declare class ZodProvider<T extends ZodObjectOrWrapped> implements SchemaProvider<z.infer<T>> {
+    private schema;
+    /**
+     * Provider to use Zod schemas for AutoForm
+     *
+     * @param schema - Zod schema to use for validation
+     */
+    constructor(schema: T);
+    parseSchema(): ParsedSchema;
+    validateSchema(values: z.infer<T>): SchemaValidation;
+    getDefaultValues(): Record<string, any>;
+}
+
+export { type SuperRefineFunction, ZOD_FIELD_CONFIG_SYMBOL, type ZodObjectOrWrapped, ZodProvider, fieldConfig, getDefaultValueInZodStack, getDefaultValues, getFieldConfigInZodStack, inferFieldType, parseSchema, validateSchema };

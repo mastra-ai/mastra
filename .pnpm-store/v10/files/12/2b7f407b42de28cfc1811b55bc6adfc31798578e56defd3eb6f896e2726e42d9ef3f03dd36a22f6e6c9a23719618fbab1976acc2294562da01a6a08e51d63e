@@ -1,0 +1,67 @@
+# integral types
+
+class Beyonce {
+  int formation() {
+    int x;
+    byte x;
+    short x;
+    long x;
+    char x;
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        PrimitiveType,
+        Definition,
+        FormalParameters,
+        Block(
+          LocalVariableDeclaration(
+            PrimitiveType,
+              VariableDeclarator(Definition)),
+          LocalVariableDeclaration(
+            PrimitiveType,
+              VariableDeclarator(Definition)),
+          LocalVariableDeclaration(
+            PrimitiveType,
+              VariableDeclarator(Definition)),
+          LocalVariableDeclaration(
+            PrimitiveType,
+              VariableDeclarator(Definition)),
+          LocalVariableDeclaration(
+            PrimitiveType,
+              VariableDeclarator(Definition)))))))
+
+
+# floating point types
+
+class Beyonce {
+  int formation() {
+    float x;
+    double x;
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        PrimitiveType,
+        Definition,
+        FormalParameters,
+        Block(
+          LocalVariableDeclaration(
+            PrimitiveType,
+            VariableDeclarator(Definition)),
+          LocalVariableDeclaration(
+            PrimitiveType,
+            VariableDeclarator(Definition)))))))
+

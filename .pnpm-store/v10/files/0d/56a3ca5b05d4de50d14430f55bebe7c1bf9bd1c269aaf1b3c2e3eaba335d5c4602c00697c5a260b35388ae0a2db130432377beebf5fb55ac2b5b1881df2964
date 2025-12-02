@@ -1,0 +1,46 @@
+{
+  "name": "typescript-paths",
+  "version": "1.5.1",
+  "description": "Resolving tsconfig paths in runtime",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "node": "./lib/index.js"
+    },
+    "./register": {
+      "node": "./register.js"
+    },
+    "./esm": "./lib/esm/index.js",
+    "./esm/loader": "./lib/esm/loader.js"
+  },
+  "types": "./types/index.d.ts",
+  "main": "./lib/index.js",
+  "module": "./lib/index.mjs",
+  "author": "lightyen",
+  "repository": {
+    "url": "https://github.com/lightyen/typescript-paths"
+  },
+  "homepage": "https://github.com/lightyen/typescript-paths/blob/main/packages/typescript-paths#readme",
+  "keywords": [
+    "typescript",
+    "tsconfig",
+    "paths"
+  ],
+  "peerDependencies": {
+    "typescript": "^4.7.2 || ^5"
+  },
+  "files": [
+    "lib",
+    "types",
+    "register.js",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "types": "tsc --project tsconfig.json --declaration --emitDeclarationOnly --outDir types",
+    "compile": "rollup -c",
+    "format": "prettier --config ../../.prettierrc.yml --write **/{src,tests,types}/**/*",
+    "build": "npm run compile && npm run types && npm run format"
+  }
+}

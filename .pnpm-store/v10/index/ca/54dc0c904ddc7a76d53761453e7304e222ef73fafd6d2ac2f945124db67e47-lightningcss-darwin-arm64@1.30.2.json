@@ -1,0 +1,31 @@
+{
+  "name": "lightningcss-darwin-arm64",
+  "version": "1.30.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662904820,
+      "integrity": "sha512-/RQnDGWjLi6nPC/9SZotdtT9WsC3UcXe4N1rZO+ZdaplSU2YFwRg0rJaXcb6JfQ/uw5dxZ1S4juvInkrPBh2Eg==",
+      "mode": 420,
+      "size": 15648
+    },
+    "package.json": {
+      "checkedAt": 1764662904820,
+      "integrity": "sha512-XEtV+bsv3RDJe5Fl0Kuvixt1wvnjlgRQphUzbJl5n9jpIhMWaVOKFrB81rXvUYvTR4bqBAsqathny4tk57vLJQ==",
+      "mode": 420,
+      "size": 716
+    },
+    "README.md": {
+      "checkedAt": 1764662904821,
+      "integrity": "sha512-Kmj1ezcag2UWcRikA7Y/adhWNXZOzA83q8ITal/SegZX/wLCv9l/Zk+fdCM3UzevN1ngmpW0Ge4QVX9a9iLIgQ==",
+      "mode": 420,
+      "size": 119
+    },
+    "lightningcss.darwin-arm64.node": {
+      "checkedAt": 1764662904834,
+      "integrity": "sha512-j0HtQqRxpZp+4v/AVORgGExW+IKSxmdBs/kzs+taQ8a/U7hiG7JaN9xpFhcYwpm6527vlONrdweCTIAHcrvTrQ==",
+      "mode": 420,
+      "size": 8002256
+    }
+  }
+}

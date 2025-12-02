@@ -1,0 +1,13 @@
+import { z } from 'zod/v4';
+
+declare function validateSchema(schema: z.ZodObject, values: any): {
+    success: boolean;
+    data: any;
+    errors?: undefined;
+} | {
+    success: boolean;
+    errors: z.core.$ZodIssue[];
+    data?: undefined;
+};
+
+export { validateSchema };

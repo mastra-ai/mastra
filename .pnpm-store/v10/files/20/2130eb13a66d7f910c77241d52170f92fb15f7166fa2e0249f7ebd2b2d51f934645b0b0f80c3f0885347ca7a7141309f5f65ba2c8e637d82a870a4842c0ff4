@@ -1,0 +1,55 @@
+{
+  "name": "node-ical",
+  "version": "0.20.1",
+  "main": "node-ical.js",
+  "types": "node-ical.d.ts",
+  "description": "NodeJS class for parsing iCalendar/ICS files",
+  "keywords": [
+    "ical",
+    "ics",
+    "calendar",
+    "nodejs"
+  ],
+  "homepage": "https://github.com/jens-maus/node-ical",
+  "author": "Jens Maus <mail@jens-maus.de>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/jens-maus/node-ical.git"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "moment-timezone": "^0.5.45",
+    "rrule": "2.8.1",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "ansi-regex": ">=6.1.0",
+    "diff": ">=7.0.0",
+    "dot-prop": ">=9.0.0",
+    "eslint": "^7.11.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.30.0",
+    "pre-commit": "^1.2.2",
+    "set-value": ">=4.0.1",
+    "underscore": "1.13.7",
+    "vows": "^0.8.2",
+    "xml-js": "^1.6.11",
+    "braces": "^3.0.3",
+    "xo": "~0.39.1"
+  },
+  "xo": {
+    "space": 2
+  },
+  "pre-commit": [
+    "lintfix"
+  ],
+  "scripts": {
+    "test": "xo && vows test/test.js && vows test/test-async.js && printf \"\\n\"",
+    "lint": "xo",
+    "lintfix": "xo --fix",
+    "precommit": "npm run lint && npm run lintfix",
+    "build": "build/updatejson.sh"
+  },
+  "readmeFilename": "README.md"
+}

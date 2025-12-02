@@ -1,0 +1,37 @@
+{
+  "name": "changesets-changelog-github-local",
+  "version": "1.0.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662905115,
+      "integrity": "sha512-ch63k1TGyoVGQw93Bx16Y5BxrHDcVX1NGz5Z3REJd081TN/s8U7UIHtc5GL41ygX6Tjocz7Ct8On0PxCbldmlw==",
+      "mode": 420,
+      "size": 1064
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662905116,
+      "integrity": "sha512-ks12SJCZyR2JY+yqufE1TYte5vHTVfaRSICS5OaGcJuTUQ8hZ2MH4oViaVpqsS0V/ukminuihKgTBpd7UMWYeg==",
+      "mode": 420,
+      "size": 7479
+    },
+    "package.json": {
+      "checkedAt": 1764662905116,
+      "integrity": "sha512-LmkSquqtV8CL0hw3SvmY2br6U3RbYOhjwbWMUhsE/u7QeIrBV4a5PNagBPqUxVAxLdunik7bgfI+K4/ieP2i5g==",
+      "mode": 420,
+      "size": 1519
+    },
+    "README.md": {
+      "checkedAt": 1764662905117,
+      "integrity": "sha512-gX/G1RQUkk0ZSNpIV1FgmDb+y5cEXen9R7V9+dmhwPu3yasm9saAwcfqqNRqHoyT1FWcZAH4HStzrRIP+e0sNw==",
+      "mode": 420,
+      "size": 2541
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662905118,
+      "integrity": "sha512-9cjGzs8VmHg7DIjJVK+pZOYqc0ZXRhgYcWpzC1b7qYvkydqCV7J12vWD0LGwV9Ho/VviiTH+jcJPP3uCq7gaEw==",
+      "mode": 420,
+      "size": 191
+    }
+  }
+}

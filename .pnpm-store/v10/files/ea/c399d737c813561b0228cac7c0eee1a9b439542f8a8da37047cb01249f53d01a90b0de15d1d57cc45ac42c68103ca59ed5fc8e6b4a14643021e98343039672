@@ -1,0 +1,27 @@
+{
+    "name": "@types/duplexify",
+    "version": "3.6.4",
+    "description": "TypeScript definitions for duplexify",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/duplexify",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Sami Kukkonen",
+            "githubUsername": "strax",
+            "url": "https://github.com/strax"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/duplexify"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/node": "*"
+    },
+    "typesPublisherContentHash": "ab3724b4e50a4f2b7fcd3465c462ed5c86975737463f8769731da38bc29d2409",
+    "typeScriptVersion": "4.5"
+}

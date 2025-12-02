@@ -1,0 +1,184 @@
+"use client";
+
+// src/ui/assistant-action-bar.tsx
+import { forwardRef } from "react";
+import {
+  AudioLinesIcon,
+  CheckIcon,
+  CopyIcon,
+  RefreshCwIcon,
+  StopCircleIcon,
+  ThumbsDownIcon,
+  ThumbsUpIcon
+} from "lucide-react";
+import {
+  ActionBarPrimitive,
+  MessagePrimitive,
+  useThread
+} from "@assistant-ui/react";
+import { TooltipIconButton } from "./base/tooltip-icon-button.mjs";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import { useThreadConfig } from "./thread-config.mjs";
+import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+var useAllowCopy = (ensureCapability = false) => {
+  const { assistantMessage: { allowCopy = true } = {} } = useThreadConfig();
+  const copySupported = useThread((t) => t.capabilities.unstable_copy);
+  return allowCopy && (!ensureCapability || copySupported);
+};
+var useAllowSpeak = (ensureCapability = false) => {
+  const { assistantMessage: { allowSpeak = true } = {} } = useThreadConfig();
+  const speechSupported = useThread((t) => t.capabilities.speech);
+  return allowSpeak && (!ensureCapability || speechSupported);
+};
+var useAllowReload = (ensureCapability = false) => {
+  const { assistantMessage: { allowReload = true } = {} } = useThreadConfig();
+  const reloadSupported = useThread((t) => t.capabilities.reload);
+  return allowReload && (!ensureCapability || reloadSupported);
+};
+var useAllowFeedbackPositive = (ensureCapability = false) => {
+  const { assistantMessage: { allowFeedbackPositive = true } = {} } = useThreadConfig();
+  const feedbackSupported = useThread((t) => t.capabilities.feedback);
+  return allowFeedbackPositive && (!ensureCapability || feedbackSupported);
+};
+var useAllowFeedbackNegative = (ensureCapability = false) => {
+  const { assistantMessage: { allowFeedbackNegative = true } = {} } = useThreadConfig();
+  const feedbackSupported = useThread((t) => t.capabilities.feedback);
+  return allowFeedbackNegative && (!ensureCapability || feedbackSupported);
+};
+var AssistantActionBar = () => {
+  const allowCopy = useAllowCopy(true);
+  const allowReload = useAllowReload(true);
+  const allowSpeak = useAllowSpeak(true);
+  const allowFeedbackPositive = useAllowFeedbackPositive(true);
+  const allowFeedbackNegative = useAllowFeedbackNegative(true);
+  if (!allowCopy && !allowReload && !allowSpeak && !allowFeedbackPositive && !allowFeedbackNegative)
+    return null;
+  return /* @__PURE__ */ jsxs(
+    AssistantActionBarRoot,
+    {
+      hideWhenRunning: true,
+      autohide: "not-last",
+      autohideFloat: "single-branch",
+      children: [
+        allowSpeak && /* @__PURE__ */ jsx(AssistantActionBarSpeechControl, {}),
+        allowCopy && /* @__PURE__ */ jsx(AssistantActionBarCopy, {}),
+        allowReload && /* @__PURE__ */ jsx(AssistantActionBarReload, {}),
+        allowFeedbackPositive && /* @__PURE__ */ jsx(AssistantActionBarFeedbackPositive, {}),
+        allowFeedbackNegative && /* @__PURE__ */ jsx(AssistantActionBarFeedbackNegative, {})
+      ]
+    }
+  );
+};
+AssistantActionBar.displayName = "AssistantActionBar";
+var AssistantActionBarRoot = withDefaults(ActionBarPrimitive.Root, {
+  className: "aui-assistant-action-bar-root"
+});
+AssistantActionBarRoot.displayName = "AssistantActionBarRoot";
+var AssistantActionBarCopy = forwardRef(({ copiedDuration, ...props }, ref) => {
+  const {
+    strings: {
+      assistantMessage: { copy: { tooltip = "Copy" } = {} } = {}
+    } = {}
+  } = useThreadConfig();
+  return /* @__PURE__ */ jsx(ActionBarPrimitive.Copy, { copiedDuration, asChild: true, children: /* @__PURE__ */ jsx(TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsxs(Fragment, { children: [
+    /* @__PURE__ */ jsx(MessagePrimitive.If, { copied: true, children: /* @__PURE__ */ jsx(CheckIcon, {}) }),
+    /* @__PURE__ */ jsx(MessagePrimitive.If, { copied: false, children: /* @__PURE__ */ jsx(CopyIcon, {}) })
+  ] }) }) });
+});
+AssistantActionBarCopy.displayName = "AssistantActionBarCopy";
+var AssistantActionBarSpeechControl = () => {
+  return /* @__PURE__ */ jsxs(Fragment, { children: [
+    /* @__PURE__ */ jsx(MessagePrimitive.If, { speaking: false, children: /* @__PURE__ */ jsx(AssistantActionBarSpeak, {}) }),
+    /* @__PURE__ */ jsx(MessagePrimitive.If, { speaking: true, children: /* @__PURE__ */ jsx(AssistantActionBarStopSpeaking, {}) })
+  ] });
+};
+var AssistantActionBarSpeak = forwardRef((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: { speak: { tooltip = "Read aloud" } = {} } = {}
+    } = {}
+  } = useThreadConfig();
+  const allowSpeak = useAllowSpeak();
+  return /* @__PURE__ */ jsx(ActionBarPrimitive.Speak, { disabled: !allowSpeak, asChild: true, children: /* @__PURE__ */ jsx(TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(AudioLinesIcon, {}) }) });
+});
+AssistantActionBarSpeak.displayName = "AssistantActionBarSpeak";
+var AssistantActionBarStopSpeaking = forwardRef((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: {
+        speak: { stop: { tooltip: stopTooltip = "Stop" } = {} } = {}
+      } = {}
+    } = {}
+  } = useThreadConfig();
+  const allowSpeak = useAllowSpeak();
+  return /* @__PURE__ */ jsx(ActionBarPrimitive.StopSpeaking, { disabled: !allowSpeak, asChild: true, children: /* @__PURE__ */ jsx(TooltipIconButton, { tooltip: stopTooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(StopCircleIcon, {}) }) });
+});
+AssistantActionBarStopSpeaking.displayName = "AssistantActionBarStopSpeaking";
+var AssistantActionBarReload = forwardRef((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: { reload: { tooltip = "Refresh" } = {} } = {}
+    } = {}
+  } = useThreadConfig();
+  const allowReload = useAllowReload();
+  return /* @__PURE__ */ jsx(ActionBarPrimitive.Reload, { disabled: !allowReload, asChild: true, children: /* @__PURE__ */ jsx(TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(RefreshCwIcon, {}) }) });
+});
+AssistantActionBarReload.displayName = "AssistantActionBarReload";
+var AssistantActionBarFeedbackPositive = forwardRef((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: {
+        feedback: { positive: { tooltip = "Good response" } = {} } = {}
+      } = {}
+    } = {}
+  } = useThreadConfig();
+  const allowFeedbackPositive = useAllowFeedbackPositive();
+  return /* @__PURE__ */ jsx(
+    ActionBarPrimitive.FeedbackPositive,
+    {
+      disabled: !allowFeedbackPositive,
+      className: "aui-assistant-action-bar-feedback-positive",
+      asChild: true,
+      children: /* @__PURE__ */ jsx(TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(ThumbsUpIcon, {}) })
+    }
+  );
+});
+AssistantActionBarFeedbackPositive.displayName = "AssistantActionBarFeedbackPositive";
+var AssistantActionBarFeedbackNegative = forwardRef((props, ref) => {
+  const {
+    strings: {
+      assistantMessage: {
+        feedback: { negative: { tooltip = "Bad response" } = {} } = {}
+      } = {}
+    } = {}
+  } = useThreadConfig();
+  const allowFeedbackNegative = useAllowFeedbackNegative();
+  return /* @__PURE__ */ jsx(
+    ActionBarPrimitive.FeedbackNegative,
+    {
+      disabled: !allowFeedbackNegative,
+      className: "aui-assistant-action-bar-feedback-negative",
+      asChild: true,
+      children: /* @__PURE__ */ jsx(TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(ThumbsDownIcon, {}) })
+    }
+  );
+});
+AssistantActionBarFeedbackNegative.displayName = "AssistantActionBarFeedbackNegative";
+var exports = {
+  Root: AssistantActionBarRoot,
+  Reload: AssistantActionBarReload,
+  Copy: AssistantActionBarCopy,
+  Speak: AssistantActionBarSpeak,
+  StopSpeaking: AssistantActionBarStopSpeaking,
+  SpeechControl: AssistantActionBarSpeechControl,
+  FeedbackPositive: AssistantActionBarFeedbackPositive,
+  FeedbackNegative: AssistantActionBarFeedbackNegative
+};
+var assistant_action_bar_default = Object.assign(
+  AssistantActionBar,
+  exports
+);
+export {
+  assistant_action_bar_default as default
+};
+//# sourceMappingURL=assistant-action-bar.mjs.map

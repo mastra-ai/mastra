@@ -1,0 +1,54 @@
+import type { TransformStreamDefaultController } from 'stream/web';
+import type { StructuredOutputOptions } from '../../agent/types.js';
+import type { TracingContext } from '../../observability/index.js';
+import type { ChunkType, OutputSchema } from '../../stream/index.js';
+import type { Processor } from '../index.js';
+export type { StructuredOutputOptions } from '../../agent/types.js';
+export declare const STRUCTURED_OUTPUT_PROCESSOR_NAME = "structured-output";
+/**
+ * StructuredOutputProcessor transforms unstructured agent output into structured JSON
+ * using an internal structuring agent and provides real-time streaming support.
+ *
+ * Features:
+ * - Two-stage processing: unstructured → structured using internal agent
+ * - Real-time partial JSON parsing during streaming
+ * - Schema validation with Zod
+ * - Object chunks for partial updates
+ * - Configurable error handling strategies
+ * - Automatic instruction generation based on schema
+ */
+export declare class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor<'structured-output'> {
+    readonly id = "structured-output";
+    readonly name = "Structured Output";
+    schema: OUTPUT;
+    private structuringAgent;
+    private errorStrategy;
+    private fallbackValue?;
+    private isStructuringAgentStreamStarted;
+    private jsonPromptInjection?;
+    constructor(options: StructuredOutputOptions<OUTPUT>);
+    processOutputStream(args: {
+        part: ChunkType;
+        streamParts: ChunkType[];
+        state: {
+            controller: TransformStreamDefaultController<ChunkType<OUTPUT>>;
+        };
+        abort: (reason?: string) => never;
+        tracingContext?: TracingContext;
+    }): Promise<ChunkType | null | undefined>;
+    private processAndEmitStructuredOutput;
+    /**
+     * Build a structured markdown prompt from stream parts
+     * Collects chunks by type and formats them in a consistent structure
+     */
+    private buildStructuringPrompt;
+    /**
+     * Generate instructions for the structuring agent based on the schema
+     */
+    private generateInstructions;
+    /**
+     * Handle errors based on the configured strategy
+     */
+    private handleError;
+}
+//# sourceMappingURL=structured-output.d.ts.map

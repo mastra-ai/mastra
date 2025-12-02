@@ -1,0 +1,493 @@
+{
+  "name": "@opentelemetry/resource-detector-aws",
+  "version": "1.12.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662915150,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "build/esm/detectors/AwsBeanstalkDetector.js": {
+      "checkedAt": 1764662915150,
+      "integrity": "sha512-51tzL9jfMkloHueG7OFfYGK0f3ZuMq0XOvGrHx45ue9dBP29vZP5ixVoTiEWOLNUW7jBtKAuVuv1Xo2jWo+O+A==",
+      "mode": 420,
+      "size": 1579
+    },
+    "build/src/detectors/AwsBeanstalkDetector.js": {
+      "checkedAt": 1764662915151,
+      "integrity": "sha512-lruzmGMe9L1CP7kTijvJzElaee/GMON3B3y1PnG4ZDpUCXv3h3N3Sm/khV1zCjRSUdNFyi+ml+1hTeAXWmP53g==",
+      "mode": 420,
+      "size": 1621
+    },
+    "build/esm/detectors/AwsBeanstalkDetectorSync.js": {
+      "checkedAt": 1764662915152,
+      "integrity": "sha512-6z72mJ3S7Vn+3tgKvFiJN87VZGTY8xe3WTt6rxALKHv4Uaj3Bk9PD/rFfWluK551IHCzfzmUlcE6x9npEVZVpQ==",
+      "mode": 420,
+      "size": 7274
+    },
+    "build/src/detectors/AwsBeanstalkDetectorSync.js": {
+      "checkedAt": 1764662915152,
+      "integrity": "sha512-ycOVuSaGUWmSN0LZ/XtCkOO3HYFAnLTWSLShqXQEugNzCHMvz3vVqZ/E3WHaHTaBRcrrHQNkfU+FxvtygBbW2g==",
+      "mode": 420,
+      "size": 3910
+    },
+    "build/esm/detectors/AwsEc2Detector.js": {
+      "checkedAt": 1764662915153,
+      "integrity": "sha512-O/pqeBDOw3JIsKyePcnKYQBjFukDNR4RcxqRtgnyGddc3nr1csb4kwx3EeZ6qLd/MIGRzzWjlk71gaIHTZcfMQ==",
+      "mode": 420,
+      "size": 1247
+    },
+    "build/src/detectors/AwsEc2Detector.js": {
+      "checkedAt": 1764662915154,
+      "integrity": "sha512-VGdzAG8uW46wBKT81frWj/OJ/lfGUNC91AkTtEBzvdnIp+8twSrnAdPjYim6WIU9kqNbW7vS/fvw0onZ1khpIQ==",
+      "mode": 420,
+      "size": 1244
+    },
+    "build/esm/detectors/AwsEc2DetectorSync.js": {
+      "checkedAt": 1764662915155,
+      "integrity": "sha512-BtOzLXpDW85eQIgnBw12lBgMKVkplmDVRYSgLpziwY5M/rHDUG0q9GAVQ0wYEgZ8r6ExvfyPn50Yxnaxng5clQ==",
+      "mode": 420,
+      "size": 12291
+    },
+    "build/src/detectors/AwsEc2DetectorSync.js": {
+      "checkedAt": 1764662915156,
+      "integrity": "sha512-F4M0wtJUDAeM9dYlwbSKrQ/Vn6/RwqhCaoGmgWI5mZnPbcmnA5rgJNRWdoo3UCPA7cJMliK45uOuXS33JXEnDw==",
+      "mode": 420,
+      "size": 6264
+    },
+    "build/esm/detectors/AwsEcsDetector.js": {
+      "checkedAt": 1764662915157,
+      "integrity": "sha512-beZlATRAscwy4aFL4+W1KJ3EmxjF5iEnAjmYz0Y/Ngrt19iqNt5SPDf0y0KqrJKT9w4EIvw/wkOuMQEiP8A95Q==",
+      "mode": 420,
+      "size": 1268
+    },
+    "build/src/detectors/AwsEcsDetector.js": {
+      "checkedAt": 1764662915159,
+      "integrity": "sha512-k3elKq0XR/jIXdvbNLIHuY7LoXQP3q3zcwlMECEdomtpEDu555ZotAOpw01ybJnJGhWlxknykt0cW/b0AXtPag==",
+      "mode": 420,
+      "size": 1304
+    },
+    "build/esm/detectors/AwsEcsDetectorSync.js": {
+      "checkedAt": 1764662915162,
+      "integrity": "sha512-AokU1h4BlEdvNUFVNNO35mMzdXOwaXvIcLAHvnF092+2Ui4ZGbzUAg6aDdjej3M38V4N3jYlpRxFnEG/jxnKyQ==",
+      "mode": 420,
+      "size": 15399
+    },
+    "build/src/detectors/AwsEcsDetectorSync.js": {
+      "checkedAt": 1764662915163,
+      "integrity": "sha512-kKJx/+mWX1BtSaq5qwMSXjOIBLsJOpWGP+l6iECvu1bAMIJs28qEufY+9RxRs8IlhrahSDqfYhJWLRon33U1+Q==",
+      "mode": 420,
+      "size": 9261
+    },
+    "build/esm/detectors/AwsEksDetector.js": {
+      "checkedAt": 1764662915167,
+      "integrity": "sha512-sANeRtrbe/osR6x20hDrhq54TMKfooulf5veKzFttKUr4gNnUR5oQWL9dpteA016gC6RL35kkhPe3JlhJRD4AA==",
+      "mode": 420,
+      "size": 1847
+    },
+    "build/src/detectors/AwsEksDetector.js": {
+      "checkedAt": 1764662915168,
+      "integrity": "sha512-f64RwsDi5lgQ9jW46I24hVQKzlJ4BIhARPZ3yMQ0jYpQdSPWa6/0ynyB1dc9dWWtFnTuUXJ4dffeFYcbXeio6A==",
+      "mode": 420,
+      "size": 1909
+    },
+    "build/esm/detectors/AwsEksDetectorSync.js": {
+      "checkedAt": 1764662915170,
+      "integrity": "sha512-glEDmht/yod5CuCoUU1EYY6yNeTgo5MysGz34erR/819agL5IWG4ptMe99adiCEilMPbNBYrKAn0DzK11a5t6g==",
+      "mode": 420,
+      "size": 15934
+    },
+    "build/src/detectors/AwsEksDetectorSync.js": {
+      "checkedAt": 1764662915197,
+      "integrity": "sha512-NfIM65bgk+Q4CGL+zIUcPH2SA8/BPGei3p9pY6stu977oULkuuau6uCtfEq1TI4Mf9LZDPbgjwjMmlnQ/le7TA==",
+      "mode": 420,
+      "size": 8492
+    },
+    "build/esm/detectors/AwsLambdaDetector.js": {
+      "checkedAt": 1764662915199,
+      "integrity": "sha512-V3tzkltG3KG3xGhgJ3UO89XVCu5zCRicPzRZrfTkvX4AJTgeW5XCv1tWOdzmDDmVBlMysj1kElqbIhqskyvNQg==",
+      "mode": 420,
+      "size": 1307
+    },
+    "build/src/detectors/AwsLambdaDetector.js": {
+      "checkedAt": 1764662915199,
+      "integrity": "sha512-Ca1ZmFC8JHRZcq9Or0qsBrRTThZy6Z2UgtkJQ8m9G9yl7NBpgvkh867QN9veleoHtUq1EakfgEfJHR5Dq6dIKQ==",
+      "mode": 420,
+      "size": 1346
+    },
+    "build/esm/detectors/AwsLambdaDetectorSync.js": {
+      "checkedAt": 1764662915201,
+      "integrity": "sha512-NGSkmghd/xBCR7T4k6ZWW1I0N/RoZnjOu0j3xfAWM+vDg30nTrM8wuNPlkCj+disKcOP5hhWcXfH9R3IBVkTYQ==",
+      "mode": 420,
+      "size": 3115
+    },
+    "build/src/detectors/AwsLambdaDetectorSync.js": {
+      "checkedAt": 1764662915202,
+      "integrity": "sha512-kVb9M+s57ZRWkUAALK2miwQ7mWhyyDdo1rLLizKxVwyfj93oF6iJ3sSpyqzrM1M1LEwQIgWiJelHnZrar23iQA==",
+      "mode": 420,
+      "size": 3010
+    },
+    "build/esm/detectors/index.js": {
+      "checkedAt": 1764662915205,
+      "integrity": "sha512-2IwCFnFWS3HSTdJmiHhENUcJj0a/z6RwgRmZrEpeH62qODQco9M0A+HMUdNFfI3cI/0SpogndvQ+ggh8d9txGg==",
+      "mode": 420,
+      "size": 1390
+    },
+    "build/esm/index.js": {
+      "checkedAt": 1764662915207,
+      "integrity": "sha512-szKqLxjy2xZF0gV7d+Cv8t6HvBek/CGijMEGxjH0htIc6dB2rSGtqrRtanVW8BjOL9QLYiVQVbE/wJmsv02G6Q==",
+      "mode": 420,
+      "size": 668
+    },
+    "build/src/detectors/index.js": {
+      "checkedAt": 1764662915208,
+      "integrity": "sha512-mRR0PWsQbPEHQ1nHv3v8VjgIoFTqW8mM3TwF1s0A8m3xWvcpvtxnyb2thfhNsa0Ocvlvt8Ys+lb03np/eg2s7A==",
+      "mode": 420,
+      "size": 4470
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662915210,
+      "integrity": "sha512-4DG8/vRUbpfzzYmp3rWCuAvDr1LvErQCy83XG5++8Yoe3j6PukvbCLQGtoikoBaAbCkhIWcqszU3IdtfsUZ6Cw==",
+      "mode": 420,
+      "size": 1275
+    },
+    "build/esm/semconv.js": {
+      "checkedAt": 1764662915211,
+      "integrity": "sha512-m+Pe7e1goG+M/T0TklwI3JkdHjgcmwFV2qp+4W+hbHSDoUrH/0mnuCB/183ZN9AMihFv56f0OHCMPo1Gc62YRw==",
+      "mode": 420,
+      "size": 19272
+    },
+    "build/src/semconv.js": {
+      "checkedAt": 1764662915212,
+      "integrity": "sha512-ZMlKVWWG2LSoruuE+KkJg0ZSDSVpwpGSZiay4m/YSoKcgeugdfpfJSLt3GPHMg7zrhVE4zKAWiDzRswpKYXG2g==",
+      "mode": 420,
+      "size": 20388
+    },
+    "package.json": {
+      "checkedAt": 1764662915213,
+      "integrity": "sha512-Go1HZ50XBfMaLwDtocUmWvuIqwGL2Ew3QTrCrktcABkJFQwks+GdKutu0C4O5ID/h3jZGu5PSJRLX4r+Owzj/A==",
+      "mode": 420,
+      "size": 2088
+    },
+    "build/esm/detectors/AwsBeanstalkDetector.js.map": {
+      "checkedAt": 1764662915214,
+      "integrity": "sha512-5AFT+Z0OH00DxQdsV6nacOr/i3K6PDJzLZ7M36zWCw58aR64JRqldyalNxug5aBuYWIerm0dYfEYs4ocSW2kzg==",
+      "mode": 420,
+      "size": 2032
+    },
+    "build/src/detectors/AwsBeanstalkDetector.js.map": {
+      "checkedAt": 1764662915215,
+      "integrity": "sha512-qoSLneszlv9UzB82OfxbPFS8J76G9JoAxCBlerk2FFxt9n6+QhMXq/E8v9XexkKRaLLcW89S5ngH2u7lwFH4pA==",
+      "mode": 420,
+      "size": 1969
+    },
+    "build/esm/detectors/AwsBeanstalkDetectorSync.js.map": {
+      "checkedAt": 1764662915217,
+      "integrity": "sha512-rP871HbOecdfhqEsLhrRJadR1IUizJbV+r3Vw2+lKQnD8lynW0yGOTV9zXVJyrWN0MGcJDHi5GXptAVZZy01CA==",
+      "mode": 420,
+      "size": 5880
+    },
+    "build/src/detectors/AwsBeanstalkDetectorSync.js.map": {
+      "checkedAt": 1764662915218,
+      "integrity": "sha512-owR+9AbbekrXUi6aapMLrWOIfQf6iXX6BpmJGvuYff9Sli1IlV4RcVpkmfhaAVhkQs8xFyxEe9wF3wlDGhKeRw==",
+      "mode": 420,
+      "size": 5569
+    },
+    "build/esm/detectors/AwsEc2Detector.js.map": {
+      "checkedAt": 1764662915220,
+      "integrity": "sha512-fU10r3xTMt2ATaSCVkjOvzpxkkc/Jeh2h36kCjTkK8tqS+Yl2LKuux8RO2EjznVpyCpHaHwxp7E6LKwAQWbTyg==",
+      "mode": 420,
+      "size": 1725
+    },
+    "build/src/detectors/AwsEc2Detector.js.map": {
+      "checkedAt": 1764662915222,
+      "integrity": "sha512-7fLkBAtY5ronBktCJ4wH0dLbGc6ti00uadJTwnNURxJSX/kW6L4DQTZIGSVHYrj71jQ0/OuNDVMf7XVggpODUQ==",
+      "mode": 420,
+      "size": 1650
+    },
+    "build/esm/detectors/AwsEc2DetectorSync.js.map": {
+      "checkedAt": 1764662915224,
+      "integrity": "sha512-uCB+jFUhMWLmWBE1nRnFHx1ndk6i+0vKaU7QJ3dcZplYArTWza/qd3W1OhsVjiXPs3MUxewxUf6AsXiI8qS4XA==",
+      "mode": 420,
+      "size": 9840
+    },
+    "build/src/detectors/AwsEc2DetectorSync.js.map": {
+      "checkedAt": 1764662915225,
+      "integrity": "sha512-xbLKqcVDPJMFt8zUFJnu9otKvbsBYzMmslVsBaLbYH0HKo1Rn/5UoxuuRPo4BNGQmQGJd6pVPTiZrVB0VRBpSQ==",
+      "mode": 420,
+      "size": 9519
+    },
+    "build/esm/detectors/AwsEcsDetector.js.map": {
+      "checkedAt": 1764662915225,
+      "integrity": "sha512-MgKmZmb0dHSU2Xqo9EIl8HmdaNozBXWQG/C23ao8aYkiBmNCwXYeh5hW1qNo5U2oQl5pVcFftBQCbDurm5r68A==",
+      "mode": 420,
+      "size": 1641
+    },
+    "build/src/detectors/AwsEcsDetector.js.map": {
+      "checkedAt": 1764662915229,
+      "integrity": "sha512-lGjj0FzAdh3XuEvkHjHKksSsWZzSVWCSvEojNnYdAgrSYgDpQisPvURRWwm7rC8bGfTSq756KBJmPG1/H6Vbtw==",
+      "mode": 420,
+      "size": 1576
+    },
+    "build/esm/detectors/AwsEcsDetectorSync.js.map": {
+      "checkedAt": 1764662915245,
+      "integrity": "sha512-GbLEZp65ci0tJhX6x/47x+kS+n9t06WyOCBhljNfkEhCpNFtM5orAeqUGilPNyni+BLsYcNTHi4kCHc8ukCe5g==",
+      "mode": 420,
+      "size": 15609
+    },
+    "build/src/detectors/AwsEcsDetectorSync.js.map": {
+      "checkedAt": 1764662915249,
+      "integrity": "sha512-4SP8iSxfnZdM2vabkmUQckTaJawvLFJV6JDegNxAwMtDCbaDjitF2oOkem2JRLfrbeUEwTgwAsoTQLdVhAtJeA==",
+      "mode": 420,
+      "size": 15245
+    },
+    "build/esm/detectors/AwsEksDetector.js.map": {
+      "checkedAt": 1764662915250,
+      "integrity": "sha512-C0ROmmm/iy6tBCPfz6KVuuE4RGpHLn9xW+feKVWFR3tU5zFlfPHaMRfpnTRSXhXuXDrvlPLRa4d16wuQOQR4zA==",
+      "mode": 420,
+      "size": 2435
+    },
+    "build/src/detectors/AwsEksDetector.js.map": {
+      "checkedAt": 1764662915251,
+      "integrity": "sha512-aGApxN9A1bPtza0iftmqzIcdHimevAiZkufbA1Oj5xnZKX9YYX49ahummiUdCPWpTcz+N8ASPIhuUPmR8UKFqQ==",
+      "mode": 420,
+      "size": 2385
+    },
+    "build/esm/detectors/AwsEksDetectorSync.js.map": {
+      "checkedAt": 1764662915253,
+      "integrity": "sha512-5eGQxh0GtrpAfFXugXxv6+9gl0SCVldZmmm1jyrR5zQJtcuSXdC8c6QjrkoSccbRB5yE+UsCglqOGjIQY5k23w==",
+      "mode": 420,
+      "size": 13139
+    },
+    "build/src/detectors/AwsEksDetectorSync.js.map": {
+      "checkedAt": 1764662915255,
+      "integrity": "sha512-vPVpnBBA0jMRM3VVUP5q7LBKPjc8rTpNDwtTUTxVzSFbjRVD04yeu5x7lsGep5q8UC8f7fGSinc4K7QXFzh/uQ==",
+      "mode": 420,
+      "size": 12724
+    },
+    "build/esm/detectors/AwsLambdaDetector.js.map": {
+      "checkedAt": 1764662915258,
+      "integrity": "sha512-p9ehfpOaLibuSX5eyI9eZr7Cy6fwEFgGziABsuMD6ZlBaMkDBoSCo/Fdue9EaS6rtwrQHF3m3Ls21pYTwbGtWA==",
+      "mode": 420,
+      "size": 1757
+    },
+    "build/src/detectors/AwsLambdaDetector.js.map": {
+      "checkedAt": 1764662915259,
+      "integrity": "sha512-+r2U0Qf0vjwR9Jse0KtvH+Q1WDfyM5Fa10xMRvwILA/brrJbvYGzyUibnKBy4DIW+FkLI9mgtQIQAqc/Dan5wQ==",
+      "mode": 420,
+      "size": 1694
+    },
+    "build/esm/detectors/AwsLambdaDetectorSync.js.map": {
+      "checkedAt": 1764662915260,
+      "integrity": "sha512-Bii29t3vF/DHugAhCQiq50WviRYa11rQP+y6I7DQu+N2ukyYKZ97LmHWDOkx4mBeLFCnhFhZ5fJhwe/4aT+WIg==",
+      "mode": 420,
+      "size": 4450
+    },
+    "build/src/detectors/AwsLambdaDetectorSync.js.map": {
+      "checkedAt": 1764662915260,
+      "integrity": "sha512-gWNfJ2Xzvr61O2TGw+YXiNiYmIMMVq4CKRfbvFf3LK59kCeDRoI09WcXJsMd1wHDwdIQygls8B8ypWu8NLQROA==",
+      "mode": 420,
+      "size": 4281
+    },
+    "build/esm/detectors/index.js.map": {
+      "checkedAt": 1764662915261,
+      "integrity": "sha512-RVIbYLAP/l3xDD3wdowbj68S7XkJNvU0IyS0BLnxcV1r41am9hvFYYcKhOQC3pEy6Mu3kFayTCQIMVy74O/x2w==",
+      "mode": 420,
+      "size": 2112
+    },
+    "build/esm/index.js.map": {
+      "checkedAt": 1764662915262,
+      "integrity": "sha512-HAUnX4aY9XB1DDe16aJ1cTarwICxC0UxJCcoK/cccJpQLfEnxb2ExRkLcJN5Cf7VvwgaY9/HsbdHjCnPt9pMlA==",
+      "mode": 420,
+      "size": 826
+    },
+    "build/src/detectors/index.js.map": {
+      "checkedAt": 1764662915262,
+      "integrity": "sha512-cRZOVYGR8rPt6xdtNVwb9Bk9tJrlNy2XM3VDN1Db4fuZ3bsWEmBHB7zRTdgjXEj/SutK+EbpcUi/7NmsAB9wqg==",
+      "mode": 420,
+      "size": 2120
+    },
+    "build/src/index.js.map": {
+      "checkedAt": 1764662915263,
+      "integrity": "sha512-mxhoZIpCAvaeXgGmK7x4Bl4Q8xraevKKxnvOplEfYCg4ouItFIIY6p1CVSHhLGO5k/wxlCGJivCjYlhISn+tIQ==",
+      "mode": 420,
+      "size": 830
+    },
+    "build/esm/semconv.js.map": {
+      "checkedAt": 1764662915267,
+      "integrity": "sha512-/vrO5XhhIX2End0rBQ48JN0lMAFNLzTd4nG+idqtyTFtajDm5nHwlE+TmnwcSXZwz+CO8/jf20PHXXfDMq6fNw==",
+      "mode": 420,
+      "size": 22012
+    },
+    "build/src/semconv.js.map": {
+      "checkedAt": 1764662915267,
+      "integrity": "sha512-oC6d5H5C2tRUJeCA+tLwDk62kgZyJnOY1k1UVVrgNICwKzt3eVO0Ibll8d9ZPSqBGLcdEQmLGUYNz4wvCIMApg==",
+      "mode": 420,
+      "size": 21675
+    },
+    "README.md": {
+      "checkedAt": 1764662915268,
+      "integrity": "sha512-UWBi4Rj2Eyd9ORrGj1x/jbVi+R2GuGMhonccf+44k5ZMEzXB+tT7Cn1xxe5GFufmqpaNQ/Xpeoq812O3+Idyzg==",
+      "mode": 420,
+      "size": 9401
+    },
+    "build/esm/detectors/AwsBeanstalkDetector.d.ts": {
+      "checkedAt": 1764662915271,
+      "integrity": "sha512-S2PWgATS3whwrpj+akc4WEl+Lu+or8WuFPBTyPZ+2yFjCqn7wGH/LUutTY8xdMrhbvmkbk4rkACxu1yh2u/8Rg==",
+      "mode": 420,
+      "size": 812
+    },
+    "build/src/detectors/AwsBeanstalkDetector.d.ts": {
+      "checkedAt": 1764662915271,
+      "integrity": "sha512-S2PWgATS3whwrpj+akc4WEl+Lu+or8WuFPBTyPZ+2yFjCqn7wGH/LUutTY8xdMrhbvmkbk4rkACxu1yh2u/8Rg==",
+      "mode": 420,
+      "size": 812
+    },
+    "build/esm/detectors/AwsBeanstalkDetectorSync.d.ts": {
+      "checkedAt": 1764662915272,
+      "integrity": "sha512-1+qVLj2VpP9scu0pHtQozyegOSo5/tLSDLvnrk6RYVpiu/I+KdtHTkk/PqyXQ2tfs7aejIkLj60cXvKXb0bQjw==",
+      "mode": 420,
+      "size": 965
+    },
+    "build/src/detectors/AwsBeanstalkDetectorSync.d.ts": {
+      "checkedAt": 1764662915272,
+      "integrity": "sha512-1+qVLj2VpP9scu0pHtQozyegOSo5/tLSDLvnrk6RYVpiu/I+KdtHTkk/PqyXQ2tfs7aejIkLj60cXvKXb0bQjw==",
+      "mode": 420,
+      "size": 965
+    },
+    "build/esm/detectors/AwsEc2Detector.d.ts": {
+      "checkedAt": 1764662915273,
+      "integrity": "sha512-i65DpyULNjl3bh8solznVI+jzeqlm+zhZe2KFHV5/aaieeYYIc096e1kTSb24J+1AXey6naK4kZBAM0c7lN6Lg==",
+      "mode": 420,
+      "size": 552
+    },
+    "build/src/detectors/AwsEc2Detector.d.ts": {
+      "checkedAt": 1764662915273,
+      "integrity": "sha512-i65DpyULNjl3bh8solznVI+jzeqlm+zhZe2KFHV5/aaieeYYIc096e1kTSb24J+1AXey6naK4kZBAM0c7lN6Lg==",
+      "mode": 420,
+      "size": 552
+    },
+    "build/esm/detectors/AwsEc2DetectorSync.d.ts": {
+      "checkedAt": 1764662915274,
+      "integrity": "sha512-FSyKNflGO+/p4IWAkeYlL3QAT3mb5ICbtC0dsovcpjR4CUd6gwhkZIJCRTK+gSUJvT0S4kBCfHF4pUeapWrZzg==",
+      "mode": 420,
+      "size": 2068
+    },
+    "build/src/detectors/AwsEc2DetectorSync.d.ts": {
+      "checkedAt": 1764662915274,
+      "integrity": "sha512-FSyKNflGO+/p4IWAkeYlL3QAT3mb5ICbtC0dsovcpjR4CUd6gwhkZIJCRTK+gSUJvT0S4kBCfHF4pUeapWrZzg==",
+      "mode": 420,
+      "size": 2068
+    },
+    "build/esm/detectors/AwsEcsDetector.d.ts": {
+      "checkedAt": 1764662915275,
+      "integrity": "sha512-zP+cm7QhVp8n6Dd9HfQ1W0W4V40fNhGCzk6s8LZGp3rKwA88DU6Q454nIxD7YaHs7fHle15kKrmtrL/ZB58RHg==",
+      "mode": 420,
+      "size": 498
+    },
+    "build/src/detectors/AwsEcsDetector.d.ts": {
+      "checkedAt": 1764662915275,
+      "integrity": "sha512-zP+cm7QhVp8n6Dd9HfQ1W0W4V40fNhGCzk6s8LZGp3rKwA88DU6Q454nIxD7YaHs7fHle15kKrmtrL/ZB58RHg==",
+      "mode": 420,
+      "size": 498
+    },
+    "build/esm/detectors/AwsEcsDetectorSync.d.ts": {
+      "checkedAt": 1764662915275,
+      "integrity": "sha512-FAWdsjR6iSrI0btJzlKdmzQMN08gCzllX5s0RAUwmJSiwQj4ZK6pubBI1wMAvp3Wuz2FCiWKeIonFqKKW8X4GA==",
+      "mode": 420,
+      "size": 1165
+    },
+    "build/src/detectors/AwsEcsDetectorSync.d.ts": {
+      "checkedAt": 1764662915275,
+      "integrity": "sha512-FAWdsjR6iSrI0btJzlKdmzQMN08gCzllX5s0RAUwmJSiwQj4ZK6pubBI1wMAvp3Wuz2FCiWKeIonFqKKW8X4GA==",
+      "mode": 420,
+      "size": 1165
+    },
+    "build/esm/detectors/AwsEksDetector.d.ts": {
+      "checkedAt": 1764662915276,
+      "integrity": "sha512-Vc2NWjqUcBEB2pwRqaIJ3nKe0r5cf0ZW6h42l1WtcDsyp21Mtd0jlAw3e7vDmF3qIDOn0A9csPp9dMMrXrzvfA==",
+      "mode": 420,
+      "size": 1060
+    },
+    "build/src/detectors/AwsEksDetector.d.ts": {
+      "checkedAt": 1764662915276,
+      "integrity": "sha512-Vc2NWjqUcBEB2pwRqaIJ3nKe0r5cf0ZW6h42l1WtcDsyp21Mtd0jlAw3e7vDmF3qIDOn0A9csPp9dMMrXrzvfA==",
+      "mode": 420,
+      "size": 1060
+    },
+    "build/esm/detectors/AwsEksDetectorSync.d.ts": {
+      "checkedAt": 1764662915278,
+      "integrity": "sha512-af9Kk7KnMFGovJU4Bmbdh1wvIwnSPqKMH56OOirQTeNoxZE69lVSvbmhGvpIUsyRCUqHk2JPryGmDsVkKGN+Gw==",
+      "mode": 420,
+      "size": 3275
+    },
+    "build/src/detectors/AwsEksDetectorSync.d.ts": {
+      "checkedAt": 1764662915278,
+      "integrity": "sha512-af9Kk7KnMFGovJU4Bmbdh1wvIwnSPqKMH56OOirQTeNoxZE69lVSvbmhGvpIUsyRCUqHk2JPryGmDsVkKGN+Gw==",
+      "mode": 420,
+      "size": 3275
+    },
+    "build/esm/detectors/AwsLambdaDetector.d.ts": {
+      "checkedAt": 1764662915281,
+      "integrity": "sha512-rnlBwJWqPU3bwaBlmu6jCbc6nVMVcQNiUmi8KJOGza6B5HEB42VV+lhfEmis/WQSHmOWHKJb/9V3PppeWd8dbg==",
+      "mode": 420,
+      "size": 560
+    },
+    "build/src/detectors/AwsLambdaDetector.d.ts": {
+      "checkedAt": 1764662915281,
+      "integrity": "sha512-rnlBwJWqPU3bwaBlmu6jCbc6nVMVcQNiUmi8KJOGza6B5HEB42VV+lhfEmis/WQSHmOWHKJb/9V3PppeWd8dbg==",
+      "mode": 420,
+      "size": 560
+    },
+    "build/esm/detectors/AwsLambdaDetectorSync.d.ts": {
+      "checkedAt": 1764662915281,
+      "integrity": "sha512-wu05AUdOVNqCux1HH/Mb6ZJ0+UblHxipOwXdkn0RPQXDaZ6pgF4Vi1pJJctiTEaNcFYsNgTd6m7Z7TtqzLBaMw==",
+      "mode": 420,
+      "size": 558
+    },
+    "build/src/detectors/AwsLambdaDetectorSync.d.ts": {
+      "checkedAt": 1764662915281,
+      "integrity": "sha512-wu05AUdOVNqCux1HH/Mb6ZJ0+UblHxipOwXdkn0RPQXDaZ6pgF4Vi1pJJctiTEaNcFYsNgTd6m7Z7TtqzLBaMw==",
+      "mode": 420,
+      "size": 558
+    },
+    "build/esm/detectors/index.d.ts": {
+      "checkedAt": 1764662915297,
+      "integrity": "sha512-Iq/BVCr068bCoUpuiiVnR6XSvXGMEHMJwqbtbn9hmCENbItAUXKA2mPdMYeLSU0w9+2GL+dYmhEAmVft0/qOJw==",
+      "mode": 420,
+      "size": 786
+    },
+    "build/esm/index.d.ts": {
+      "checkedAt": 1764662915301,
+      "integrity": "sha512-1KnAGXE/Y/svj7qK4LFWHxupnQqdpOtPye/eXAMLexGrTn9yHgrJjoPdPtfgQ8EAN7HHKMWKei2sabEwSCSKNA==",
+      "mode": 420,
+      "size": 64
+    },
+    "build/src/detectors/index.d.ts": {
+      "checkedAt": 1764662915297,
+      "integrity": "sha512-Iq/BVCr068bCoUpuiiVnR6XSvXGMEHMJwqbtbn9hmCENbItAUXKA2mPdMYeLSU0w9+2GL+dYmhEAmVft0/qOJw==",
+      "mode": 420,
+      "size": 786
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662915301,
+      "integrity": "sha512-1KnAGXE/Y/svj7qK4LFWHxupnQqdpOtPye/eXAMLexGrTn9yHgrJjoPdPtfgQ8EAN7HHKMWKei2sabEwSCSKNA==",
+      "mode": 420,
+      "size": 64
+    },
+    "build/esm/semconv.d.ts": {
+      "checkedAt": 1764662915302,
+      "integrity": "sha512-ydiPCFe0Dh7dO7zLSZmisZ/hfDRDVPxa6CWUzrRqRG7rU1xL17HHbbUcZX6J+tgq3zAHQiAwL7bgldtoZhbgwg==",
+      "mode": 420,
+      "size": 18796
+    },
+    "build/src/semconv.d.ts": {
+      "checkedAt": 1764662915302,
+      "integrity": "sha512-ydiPCFe0Dh7dO7zLSZmisZ/hfDRDVPxa6CWUzrRqRG7rU1xL17HHbbUcZX6J+tgq3zAHQiAwL7bgldtoZhbgwg==",
+      "mode": 420,
+      "size": 18796
+    }
+  }
+}

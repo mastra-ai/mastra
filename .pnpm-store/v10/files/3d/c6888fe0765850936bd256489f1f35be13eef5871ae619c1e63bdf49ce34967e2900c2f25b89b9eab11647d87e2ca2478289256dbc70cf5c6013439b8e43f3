@@ -1,0 +1,45 @@
+{
+  "name": "obliterator",
+  "version": "1.6.1",
+  "description": "Higher order iterator library for JavaScript.",
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint *.js",
+    "prepublish": "npm run lint && npm test",
+    "test": "mocha test.js && npm run test:types",
+    "test:types": "tsc --lib es2015,dom --noEmit --noImplicitAny --noImplicitReturns ./test-types.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yomguithereal/obliterator.git"
+  },
+  "keywords": [
+    "iterator"
+  ],
+  "author": {
+    "name": "Guillaume Plique",
+    "url": "http://github.com/Yomguithereal"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yomguithereal/obliterator/issues"
+  },
+  "homepage": "https://github.com/yomguithereal/obliterator#readme",
+  "devDependencies": {
+    "@yomguithereal/eslint-config": "^4.0.0",
+    "eslint": "^6.8.0",
+    "mocha": "^7.0.0",
+    "typescript": "^3.7.5"
+  },
+  "eslintConfig": {
+    "extends": "@yomguithereal/eslint-config",
+    "globals": {
+      "ArrayBuffer": true,
+      "Map": true,
+      "Set": true,
+      "Symbol": true,
+      "Uint8Array": true,
+      "Uint32Array": true
+    }
+  }
+}

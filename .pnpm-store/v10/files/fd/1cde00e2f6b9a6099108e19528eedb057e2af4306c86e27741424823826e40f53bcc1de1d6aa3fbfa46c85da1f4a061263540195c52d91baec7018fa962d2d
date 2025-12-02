@@ -1,0 +1,93 @@
+{
+  "name": "@noble/hashes",
+  "version": "2.0.1",
+  "description": "Audited & minimal 0-dependency JS implementation of SHA, RIPEMD, BLAKE, HMAC, HKDF, PBKDF & Scrypt",
+  "files": [
+    "*.js",
+    "*.js.map",
+    "*.d.ts",
+    "*.d.ts.map",
+    "src"
+  ],
+  "devDependencies": {
+    "@paulmillr/jsbt": "0.4.4",
+    "@types/node": "24.2.1",
+    "fast-check": "4.2.0",
+    "prettier": "3.6.2",
+    "typescript": "5.9.2"
+  },
+  "scripts": {
+    "bench": "node test/benchmark/noble.ts",
+    "bench:compare": "MBENCH_DIMS='algorithm,buffer,library' node test/benchmark/hashes.ts",
+    "bench:compare-scrypt": "MBENCH_DIMS='iters,library' MBENCH_FILTER='async' node test/benchmark/scrypt.ts",
+    "bench:install": "cd test/benchmark; npm install",
+    "build": "tsc",
+    "build:release": "npx --no @paulmillr/jsbt esbuild test/build",
+    "build:clean": "rm *.{js,js.map,d.ts,d.ts.map} 2> /dev/null",
+    "format": "prettier --write 'src/**/*.{js,ts}' 'test/**/*.{js,ts}'",
+    "test": "node --experimental-strip-types --no-warnings test/index.ts",
+    "test:bun": "bun test/index.ts",
+    "test:deno": "deno --allow-env --allow-read test/index.ts",
+    "test:node20": "cd test; npx tsc; node compiled/test/index.js",
+    "test:dos": "node --experimental-strip-types test/slow-dos.test.ts",
+    "test:big": "node --experimental-strip-types test/slow-big.test.ts",
+    "test:acvp": "node --experimental-strip-types test/slow-acvp.test.ts",
+    "test:kdf": "node --experimental-strip-types test/slow-kdf.test.ts"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./_md.js": "./_md.js",
+    "./argon2.js": "./argon2.js",
+    "./blake1.js": "./blake1.js",
+    "./blake2.js": "./blake2.js",
+    "./blake3.js": "./blake3.js",
+    "./eskdf.js": "./eskdf.js",
+    "./hkdf.js": "./hkdf.js",
+    "./hmac.js": "./hmac.js",
+    "./legacy.js": "./legacy.js",
+    "./pbkdf2.js": "./pbkdf2.js",
+    "./scrypt.js": "./scrypt.js",
+    "./sha2.js": "./sha2.js",
+    "./sha3-addons.js": "./sha3-addons.js",
+    "./sha3.js": "./sha3.js",
+    "./webcrypto.js": "./webcrypto.js",
+    "./utils.js": "./utils.js"
+  },
+  "engines": {
+    "node": ">= 20.19.0"
+  },
+  "keywords": [
+    "sha1",
+    "sha2",
+    "sha3",
+    "blake",
+    "blake2",
+    "blake3",
+    "hmac",
+    "hkdf",
+    "pbkdf2",
+    "scrypt",
+    "sha256",
+    "sha512",
+    "keccak",
+    "ripemd160",
+    "kdf",
+    "hash",
+    "cryptography",
+    "security",
+    "noble"
+  ],
+  "homepage": "https://paulmillr.com/noble/",
+  "funding": "https://paulmillr.com/funding/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paulmillr/noble-hashes.git"
+  },
+  "type": "module",
+  "main": "index.js",
+  "module": "index.js",
+  "types": "index.d.ts",
+  "sideEffects": false,
+  "author": "Paul Miller (https://paulmillr.com)",
+  "license": "MIT"
+}

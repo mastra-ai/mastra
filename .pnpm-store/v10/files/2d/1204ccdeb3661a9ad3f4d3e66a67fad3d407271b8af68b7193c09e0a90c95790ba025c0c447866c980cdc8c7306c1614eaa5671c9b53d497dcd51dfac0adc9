@@ -1,0 +1,111 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/v4/schema-parser.ts
+var schema_parser_exports = {};
+__export(schema_parser_exports, {
+  parseSchema: () => parseSchema
+});
+module.exports = __toCommonJS(schema_parser_exports);
+var import_v44 = require("zod/v4");
+
+// src/v4/field-type-inference.ts
+var import_v4 = require("zod/v4");
+function inferFieldType(schema, fieldConfig) {
+  if (fieldConfig?.fieldType) {
+    return fieldConfig.fieldType;
+  }
+  if (schema instanceof import_v4.z.ZodObject) return "object";
+  if (schema instanceof import_v4.z.ZodString) return "string";
+  if (schema instanceof import_v4.z.ZodNumber) return "number";
+  if (schema instanceof import_v4.z.ZodBoolean) return "boolean";
+  if (schema instanceof import_v4.z.ZodDate) return "date";
+  if (schema instanceof import_v4.z.ZodEnum) return "select";
+  if (schema instanceof import_v4.z.ZodArray) return "array";
+  return "string";
+}
+
+// src/v4/default-values.ts
+var import_v42 = require("zod/v4");
+function getDefaultValueInZodStack(schema) {
+  if (schema instanceof import_v42.z.ZodDefault) {
+    return schema.def.defaultValue;
+  }
+  return void 0;
+}
+
+// src/v4/field-config.ts
+var import_v43 = require("zod/v4");
+var fieldConfigRegistry = import_v43.z.registry();
+function getFieldConfigInZodStack(schema) {
+  return fieldConfigRegistry.get(schema)?.fieldConfig;
+}
+
+// src/v4/schema-parser.ts
+function parseField(key, schema) {
+  const baseSchema = getBaseSchema(schema);
+  const fieldConfig = getFieldConfigInZodStack(schema);
+  const type = inferFieldType(baseSchema, fieldConfig);
+  const defaultValue = getDefaultValueInZodStack(schema);
+  const options = baseSchema.def.entries;
+  let optionValues = [];
+  if (options) {
+    if (!Array.isArray(options)) {
+      optionValues = Object.entries(options);
+    } else {
+      optionValues = options.map((value) => [value, value]);
+    }
+  }
+  let subSchema = [];
+  if (baseSchema instanceof import_v44.z.ZodObject) {
+    subSchema = Object.entries(baseSchema.shape).map(
+      ([key2, field]) => parseField(key2, field)
+    );
+  }
+  if (baseSchema instanceof import_v44.z.ZodArray) {
+    subSchema = [parseField("0", baseSchema.def.element)];
+  }
+  return {
+    key,
+    type,
+    required: !schema.safeParse(void 0).success,
+    default: defaultValue,
+    description: schema.description,
+    fieldConfig,
+    options: optionValues,
+    schema: subSchema
+  };
+}
+function parseSchema(schema) {
+  const shape = schema.shape;
+  const fields = Object.entries(shape).map(
+    ([key, field]) => parseField(key, field)
+  );
+  return { fields };
+}
+function getBaseSchema(schema) {
+  if ("innerType" in schema.def) {
+    return getBaseSchema(schema.def.innerType);
+  }
+  return schema;
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  parseSchema
+});

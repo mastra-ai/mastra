@@ -1,0 +1,388 @@
+# Declaration statements
+
+package main
+
+func main() {
+  var x = y
+  const x = 5
+}
+
+==>
+
+SourceFile(
+  PackageClause(package,DefName),
+  FunctionDecl(func,DefName,Parameters,Block(
+    VarDecl(var,VarSpec(DefName,VariableName)),
+    ConstDecl(const,ConstSpec(DefName,Number)))))
+
+# Expression statements
+
+func main() {
+  foo(5)
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  ExprStatement(CallExpr(VariableName,Arguments(Number))))))
+
+# Send statements
+
+func main() {
+  foo <- 5
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  SendStatement(VariableName,Number))))
+
+# Increment/Decrement statements
+
+func main() {
+  i++
+  j--
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  IncDecStatement(VariableName,IncDecOp),
+  IncDecStatement(VariableName,IncDecOp))))
+
+# Assignment statements
+
+func main() {
+  a = 1
+  b, c += 2, 3
+  d *= 3
+  e += 1
+  f /= 2
+  g <<= 1
+  h >>= 1
+  i %= 1
+  j &= 2
+  k &^= 3
+  l -= 1
+  m |= 2
+  n ^= 2
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  Assignment(VariableName,Number),
+  Assignment(VariableName,VariableName,UpdateOp,Number,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number),
+  Assignment(VariableName,UpdateOp,Number))))
+
+# Short var declarations
+
+func main() {
+  a, b := 1, 2
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  VarDecl(DefName,DefName,Number,Number))))
+
+# If statements
+
+func main() {
+  if a {
+    b()
+  }
+
+  if a := b(); c {
+    d()
+  }
+
+  if a {
+    b()
+  } else {
+    c()
+  }
+
+  if b {
+    c()
+  } else if d {
+    e()
+  } else {
+    f()
+  }
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  IfStatement(if,VariableName,Block(
+    ExprStatement(CallExpr(VariableName,Arguments)))),
+  IfStatement(if,VarDecl(DefName,CallExpr(VariableName,Arguments)),VariableName,Block(
+    ExprStatement(CallExpr(VariableName,Arguments)))),
+  IfStatement(if,VariableName,Block(
+    ExprStatement(CallExpr(VariableName,Arguments))
+  ),else,Block(
+    ExprStatement(CallExpr(VariableName,Arguments)))),
+  IfStatement(if,VariableName,Block(
+    ExprStatement(CallExpr(VariableName,Arguments))
+  ),else,IfStatement(if,VariableName,Block(
+    ExprStatement(CallExpr(VariableName,Arguments))
+  ),else,Block(
+    ExprStatement(CallExpr(VariableName,Arguments))))))))
+
+# For statements
+
+func main() {
+  for {
+    a()
+    goto loop
+  }
+
+  loop: for i := 0; i < 5; i++ {
+    a()
+    break loop
+  }
+
+loop2:
+  for ; i < 10; i++ {
+    a()
+    continue loop2
+  }
+
+  for ;; {
+    a()
+    continue
+  }
+
+  for x := range y {
+    a(x)
+    break
+  }
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  ForStatement(for,Block(ExprStatement(CallExpr(VariableName,Arguments)),GotoStatement(goto,LabelName))),
+  LabeledStatement(LabelName,ForStatement(for,ForClause(
+    VarDecl(DefName,Number),
+    BinaryExp(VariableName,CompareOp,Number),
+    IncDecStatement(VariableName,IncDecOp)
+  ),Block(ExprStatement(CallExpr(VariableName,Arguments)),GotoStatement(break,LabelName)))),
+  LabeledStatement(LabelName,ForStatement(for,ForClause(
+    BinaryExp(VariableName,CompareOp,Number),
+    IncDecStatement(VariableName,IncDecOp)
+  ),Block(ExprStatement(CallExpr(VariableName,Arguments)),GotoStatement(continue,LabelName)))),
+  ForStatement(for,ForClause,Block(ExprStatement(CallExpr(VariableName,Arguments)),GotoStatement(continue))),
+  ForStatement(for,RangeClause(DefName,range,VariableName),Block(
+    ExprStatement(CallExpr(VariableName,Arguments(VariableName))),GotoStatement(break))))))
+
+# Switch statements
+
+func main() {
+  switch e {
+    case 1, 2:
+      a()
+      fallthrough
+    case 3:
+      d()
+    default:
+      c()
+      break
+  }
+
+  switch {
+    case true:
+      return
+  }
+
+  switch f := y(); f {
+  }
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  SwitchStatement(switch,VariableName,SwitchBlock(
+    Case(case,Number,Number),
+    ExprStatement(CallExpr(VariableName,Arguments)),
+    FallthroughStatement(fallthrough),
+    Case(case,Number),
+    ExprStatement(CallExpr(VariableName,Arguments)),
+    Case(default),
+    ExprStatement(CallExpr(VariableName,Arguments)),
+    GotoStatement(break))),
+  SwitchStatement(switch,SwitchBlock(Case(case,Bool),ReturnStatement(return))),
+  SwitchStatement(switch,VarDecl(DefName,CallExpr(VariableName,Arguments)),VariableName,SwitchBlock))))
+
+# Type switch statements
+
+func main() {
+  switch e.(type) {
+    case []Person:
+      a()
+    case *Dog:
+      break
+  }
+  switch i := x.(type) {
+    case nil:
+    	printString("x is nil")
+    case int:
+    	printInt(i)
+    case float64:
+    	printFloat64(i)
+    case func(int) float64:
+    	printFunction(i)
+    case bool, string:
+    	printString("type is bool or string")
+    default:
+    	printString("don't know the type")
+  }
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  TypeSwitchStatement(switch,VariableName,type,SwitchBlock(
+    Case(case,SliceType(TypeName)),
+    ExprStatement(CallExpr(VariableName,Arguments)),
+    Case(case,PointerType(TypeName)),
+    GotoStatement(break))),
+  TypeSwitchStatement(switch,DefName,VariableName,type,SwitchBlock(
+    Case(case,TypeName),
+    ExprStatement(CallExpr(VariableName,Arguments(String))),
+    Case(case,TypeName),
+    ExprStatement(CallExpr(VariableName,Arguments(VariableName))),
+    Case(case,TypeName),
+    ExprStatement(CallExpr(VariableName,Arguments(VariableName))),
+    Case(case,FunctionType(func,Parameters(Parameter(TypeName)),TypeName)),
+    ExprStatement(CallExpr(VariableName,Arguments(VariableName))),
+    Case(case,TypeName,TypeName),
+    ExprStatement(CallExpr(VariableName,Arguments(String))),
+    Case(default),
+    ExprStatement(CallExpr(VariableName,Arguments(String))))))))
+
+# Select statements
+
+func main() {
+  select {
+    case x := <-c:
+      println(x)
+    case y <- c:
+      println(5)
+    case <-time.After(1):
+      println(6)
+    default:
+      return
+  }
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  SelectStatement(select,SelectBlock(
+    Case(case,ReceiveStatement(DefName,UnaryExp("<-",VariableName))),
+    ExprStatement(CallExpr(VariableName,Arguments(VariableName))),
+    Case(case,SendStatement(VariableName,"<-",VariableName)),
+    ExprStatement(CallExpr(VariableName,Arguments(Number))),
+    Case(case,ReceiveStatement(CallExpr(SelectorExpr(UnaryExp("<-",VariableName),FieldName),Arguments(Number)))),
+    ExprStatement(CallExpr(VariableName,Arguments(Number))),
+    Case(default),
+    ReturnStatement(return))))))
+
+# Go and defer statements
+
+func main() {
+  defer x.y()
+  go x.y()
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  DeferStatement(defer,CallExpr(SelectorExpr(VariableName,FieldName),Arguments)),
+  GoStatement(go,CallExpr(SelectorExpr(VariableName,FieldName),Arguments)))))
+
+# Nested statement blocks
+
+func main() {
+  {
+    println("hi")
+  }
+  {
+    println("bye")
+  }
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  Block(ExprStatement(CallExpr(VariableName,Arguments(String)))),
+  Block(ExprStatement(CallExpr(VariableName,Arguments(String)))))))
+
+# Labels at the ends of statement blocks
+
+func main() {
+  {
+  end_of_block:
+  }
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  Block(LabeledStatement(LabelName)))))
+
+# Empty statements
+
+func main() {
+	;
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block))
+
+# Nested control statements
+
+func main() {
+  for i, v := range vectors {
+    func() {
+      if v == v {
+        fmt.Println("something: %v", vectors[i])
+      }
+    }()
+  }
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  ForStatement(for,RangeClause(DefName,DefName,range,VariableName),Block(
+    ExprStatement(CallExpr(
+      FunctionLiteral(func,Parameters,Block(
+        IfStatement(if,BinaryExp(VariableName,CompareOp,VariableName),Block(
+          ExprStatement(CallExpr(SelectorExpr(VariableName,FieldName),Arguments(
+            String,IndexExpr(VariableName,VariableName)))))))),
+      Arguments)))))))
+
+# Top-level statements
+
+foo(5)
+x := T { a: b }
+
+==>
+
+SourceFile(
+  ExprStatement(CallExpr(VariableName,Arguments(Number))),
+  VarDecl(DefName,TypedLiteral(TypeName,LiteralValue(Element(Key(VariableName),VariableName)))))

@@ -1,0 +1,1 @@
+{"version":3,"file":"content.d.ts","sourceRoot":"","sources":["../../../../../src/stream/aisdk/v5/compat/content.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,0BAA0B,EAAE,MAAM,qBAAqB,CAAC;AACtE,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,OAAO,CAAC;AAqBzC,wBAAgB,oBAAoB,CAAC,OAAO,EAAE,WAAW,GAAG,GAAG,GAAG;IAChE,IAAI,EAAE,0BAA0B,CAAC;IACjC,SAAS,EAAE,MAAM,GAAG,SAAS,CAAC;CAC/B,CAsCA"}

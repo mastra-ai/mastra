@@ -1,0 +1,186 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const undici_1 = require("undici");
+const node_zlib_1 = require("node:zlib");
+const node_util_1 = require("node:util");
+const package_json_1 = require("../../package.json");
+const helpers_1 = require("../helpers");
+const gzipAsync = (0, node_util_1.promisify)(node_zlib_1.gzip);
+const gunzipAsync = (0, node_util_1.promisify)(node_zlib_1.gunzip);
+function convertHeadersType(headers) {
+    for (const key in headers) {
+        const v = headers[key];
+        if (v === undefined) {
+            delete headers[key];
+        }
+        else if (Array.isArray(v)) {
+            headers[key] = v[0];
+        }
+    }
+    return headers;
+}
+async function consumeResponseText(response) {
+    if (response.headers["content-encoding"] === "gzip") {
+        const body_buffer = await response.body.arrayBuffer();
+        const body_read_end = performance.now();
+        const gunzip_buffer = await gunzipAsync(body_buffer);
+        const body_text = gunzip_buffer.toString(); // is there a better way?
+        const decompress_end = performance.now();
+        return { body_text, body_read_end, decompress_end };
+    }
+    else {
+        const body_text = await response.body.text();
+        const body_read_end = performance.now();
+        return { body_text, body_read_end, decompress_end: body_read_end };
+    }
+}
+class NodeHTTPClient {
+    constructor(baseUrl, apiKey, connectTimeout, idleTimeout, warmConnections, compression) {
+        this.userAgent = `tpuf-typescript/${package_json_1.version}/node`;
+        this.baseUrl = baseUrl;
+        this.origin = new URL(baseUrl);
+        this.origin.pathname = "";
+        this.apiKey = apiKey;
+        this.compression = compression;
+        this.agent = new undici_1.Agent({
+            keepAliveTimeout: idleTimeout, // how long a socket can be idle for before it is closed
+            keepAliveMaxTimeout: 24 * 60 * 60 * 1000, // maximum configurable timeout with server hint
+            connect: {
+                timeout: connectTimeout,
+            },
+        });
+        for (let i = 0; i < warmConnections; i++) {
+            // send a small request to put some connections in the pool
+            void (0, undici_1.fetch)(this.baseUrl, {
+                method: "HEAD",
+                headers: { "User-Agent": this.userAgent },
+                dispatcher: this.agent,
+            });
+        }
+    }
+    async doRequest({ method, path, query, body, compress, retryable, }) {
+        const url = (0, helpers_1.buildUrl)(this.baseUrl, path, query);
+        const headers = {
+            Authorization: `Bearer ${this.apiKey}`,
+            "User-Agent": this.userAgent,
+        };
+        if (this.compression) {
+            headers["Accept-Encoding"] = "gzip";
+        }
+        if (body) {
+            headers["Content-Type"] = "application/json";
+        }
+        let requestCompressionDuration;
+        let requestBody = null;
+        if (body && compress && this.compression) {
+            headers["Content-Encoding"] = "gzip";
+            const beforeRequestCompression = performance.now();
+            requestBody = await gzipAsync(JSON.stringify(body));
+            requestCompressionDuration = performance.now() - beforeRequestCompression;
+        }
+        else if (body) {
+            requestBody = JSON.stringify(body);
+        }
+        const maxAttempts = retryable ? 3 : 1;
+        let response;
+        let error = null;
+        let request_start;
+        let response_start;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            error = null;
+            request_start = performance.now();
+            try {
+                response = await this.agent.request({
+                    origin: url.origin,
+                    path: url.pathname + url.search,
+                    method: method,
+                    headers,
+                    body: requestBody,
+                });
+            }
+            catch (e) {
+                if (e instanceof Error) {
+                    if (e.cause instanceof Error) {
+                        // wrap generic undici "fetch failed" error with the underlying cause
+                        error = new helpers_1.TurbopufferError(`fetch failed: ${e.cause.message}`, {
+                            cause: e,
+                        });
+                    }
+                    else {
+                        // wrap other errors directly
+                        error = new helpers_1.TurbopufferError(`fetch failed: ${e.message}`, {
+                            cause: e,
+                        });
+                    }
+                }
+                else {
+                    // not an Error? shouldn't happen but good to be thorough
+                    throw e;
+                }
+            }
+            response_start = performance.now();
+            if (!error && response.statusCode >= 400) {
+                let message = undefined;
+                const { body_text } = await consumeResponseText(response);
+                if (response.headers["content-type"] === "application/json") {
+                    try {
+                        const body = JSON.parse(body_text);
+                        if (body && body.status === "error") {
+                            message = body.error;
+                        }
+                        else {
+                            message = body_text;
+                        }
+                    }
+                    catch (_) {
+                        /* empty */
+                    }
+                }
+                else {
+                    message = body_text;
+                }
+                error = new helpers_1.TurbopufferError(message !== null && message !== void 0 ? message : `http error ${response.statusCode}`, {
+                    status: response.statusCode,
+                });
+            }
+            if (error &&
+                (0, helpers_1.statusCodeShouldRetry)(error.status) &&
+                attempt + 1 !== maxAttempts) {
+                await (0, helpers_1.delay)(150 * (attempt + 1)); // 150ms, 300ms, 450ms
+                continue;
+            }
+            break;
+        }
+        if (error) {
+            throw error;
+        }
+        if (method === "HEAD" || !response.body) {
+            return {
+                headers: convertHeadersType(response.headers),
+                request_timing: (0, helpers_1.make_request_timing)({ request_start, response_start }),
+            };
+        }
+        const { body_text, body_read_end, decompress_end } = await consumeResponseText(response);
+        const json = JSON.parse(body_text);
+        const deserialize_end = performance.now();
+        if (json.status && json.status === "error") {
+            throw new helpers_1.TurbopufferError(json.error || json, {
+                status: response.statusCode,
+            });
+        }
+        return {
+            body: json,
+            headers: convertHeadersType(response.headers),
+            request_timing: (0, helpers_1.make_request_timing)({
+                request_start,
+                response_start,
+                body_read_end,
+                decompress_end,
+                deserialize_end,
+                requestCompressionDuration,
+            }),
+        };
+    }
+}
+exports.default = NodeHTTPClient;
+//# sourceMappingURL=node.js.map

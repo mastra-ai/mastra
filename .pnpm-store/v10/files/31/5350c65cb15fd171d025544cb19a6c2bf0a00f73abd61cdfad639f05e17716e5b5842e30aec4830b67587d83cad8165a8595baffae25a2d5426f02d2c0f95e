@@ -1,0 +1,69 @@
+{
+  "name": "@uiw/react-codemirror",
+  "version": "4.25.2",
+  "description": "CodeMirror component for React.",
+  "homepage": "https://uiwjs.github.io/react-codemirror",
+  "funding": "https://jaywcjlove.github.io/#/sponsor",
+  "author": "kenny wong <wowohoo@qq.com>",
+  "license": "MIT",
+  "main": "./cjs/index.js",
+  "module": "./esm/index.js",
+  "exports": {
+    ".": {
+      "require": "./cjs/index.js",
+      "import": "./esm/index.js"
+    },
+    "./*": "./*"
+  },
+  "scripts": {
+    "bundle": "ncc build src/index.tsx --target web --filename codemirror && npm run bundle:min",
+    "bundle:watch": "ncc watch src/index.tsx --target web --filename codemirror",
+    "bundle:min": "ncc build src/index.tsx --target web --filename codemirror --minify",
+    "watch": "tsbb watch src/*.tsx --use-babel",
+    "build": "tsbb build src/*.tsx --use-babel && npm run setmodule",
+    "setmodule": "echo '{\"type\":\"module\"}' > esm/package.json && echo '{\"type\":\"commonjs\"}' > cjs/package.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uiwjs/react-codemirror.git"
+  },
+  "files": [
+    "dist",
+    "src",
+    "esm",
+    "cjs"
+  ],
+  "peerDependencies": {
+    "@babel/runtime": ">=7.11.0",
+    "@codemirror/state": ">=6.0.0",
+    "@codemirror/theme-one-dark": ">=6.0.0",
+    "@codemirror/view": ">=6.0.0",
+    "codemirror": ">=6.0.0",
+    "react": ">=17.0.0",
+    "react-dom": ">=17.0.0"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.18.6",
+    "@codemirror/commands": "^6.1.0",
+    "@codemirror/state": "^6.1.1",
+    "@codemirror/theme-one-dark": "^6.0.0",
+    "@uiw/codemirror-extensions-basic-setup": "4.25.2",
+    "codemirror": "^6.0.0"
+  },
+  "keywords": [
+    "react",
+    "codemirror",
+    "codemirror6",
+    "react-codemirror",
+    "editor",
+    "syntax",
+    "ide",
+    "code"
+  ],
+  "jest": {
+    "coverageReporters": [
+      "lcov",
+      "json-summary"
+    ]
+  }
+}

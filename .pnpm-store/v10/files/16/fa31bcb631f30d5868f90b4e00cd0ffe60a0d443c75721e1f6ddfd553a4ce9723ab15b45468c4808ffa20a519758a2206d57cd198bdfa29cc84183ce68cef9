@@ -1,0 +1,49 @@
+import {
+  parseSchema
+} from "./chunk-CN6KJ2YR.mjs";
+import {
+  getDefaultValues
+} from "./chunk-KZ2S76DS.mjs";
+
+// src/v4/provider.ts
+import { z } from "zod/v4";
+var ZodProvider = class {
+  /**
+   * Provider to use Zod schemas for AutoForm
+   *
+   * @param schema - Zod schema to use for validation
+   */
+  constructor(schema) {
+    this.schema = schema;
+    if (!schema) {
+      throw new Error("ZodProvider: schema is required");
+    }
+  }
+  parseSchema() {
+    return parseSchema(this.schema);
+  }
+  validateSchema(values) {
+    try {
+      const data = this.schema.parse(values);
+      return { success: true, data };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return {
+          success: false,
+          errors: error.issues.map((error2) => ({
+            path: error2.path,
+            message: error2.message
+          }))
+        };
+      }
+      throw error;
+    }
+  }
+  getDefaultValues() {
+    return getDefaultValues(this.schema);
+  }
+};
+
+export {
+  ZodProvider
+};

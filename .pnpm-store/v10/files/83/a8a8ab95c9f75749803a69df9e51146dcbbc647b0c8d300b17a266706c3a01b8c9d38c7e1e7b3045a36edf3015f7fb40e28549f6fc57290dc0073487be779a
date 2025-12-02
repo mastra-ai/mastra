@@ -1,0 +1,2 @@
+export { type BodySimulatesAConversationV1ConvaiAgentsAgentIdSimulateConversationPost } from "./BodySimulatesAConversationV1ConvaiAgentsAgentIdSimulateConversationPost";
+export { type BodySimulatesAConversationStreamV1ConvaiAgentsAgentIdSimulateConversationStreamPost } from "./BodySimulatesAConversationStreamV1ConvaiAgentsAgentIdSimulateConversationStreamPost";

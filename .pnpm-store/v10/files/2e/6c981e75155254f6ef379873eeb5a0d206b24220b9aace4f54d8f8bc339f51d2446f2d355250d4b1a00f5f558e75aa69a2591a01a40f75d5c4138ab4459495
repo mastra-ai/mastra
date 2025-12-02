@@ -1,0 +1,71 @@
+{
+  "name": "magicast",
+  "version": "0.5.1",
+  "description": "Modify a JS/TS file and write back magically just like JSON!",
+  "repository": "unjs/magicast",
+  "license": "MIT",
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./helpers": "./dist/helpers/index.js",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@babel/parser": "^7.28.5",
+    "@babel/types": "^7.28.5",
+    "source-map-js": "^1.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "@vitest/coverage-v8": "^4.0.4",
+    "@vitest/ui": "^4.0.4",
+    "ast-types": "^0.16.1",
+    "bumpp": "^10.3.1",
+    "eslint": "^9.38.0",
+    "eslint-config-unjs": "^0.5.0",
+    "giget": "^2.0.0",
+    "jiti": "^2.6.1",
+    "lint-staged": "^16.2.6",
+    "prettier": "^3.6.2",
+    "recast": "^0.23.11",
+    "simple-git-hooks": "^2.13.1",
+    "source-map": "npm:source-map-js@latest",
+    "taze": "^19.8.1",
+    "tsdown": "^0.15.11",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.4",
+    "magicast": "0.5.1"
+  },
+  "resolutions": {
+    "source-map": "npm:source-map-js@latest"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "lint-staged": {
+    "*.{ts,js,mjs,cjs}": [
+      "eslint --fix",
+      "prettier -w"
+    ]
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "vitest dev",
+    "dev:ui": "vitest dev --ui",
+    "lint": "eslint --cache . && prettier -c .",
+    "lint:fix": "eslint --cache . --fix && prettier -c . -w",
+    "typecheck": "tsc --noEmit",
+    "release": "pnpm run test run && bumpp",
+    "test": "vitest",
+    "test:build": "TEST_BUILD=true vitest",
+    "test:full": "pnpm run test --run && pnpm run build && pnpm run test:build --run"
+  }
+}

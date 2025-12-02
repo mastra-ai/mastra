@@ -1,0 +1,47 @@
+'use strict';
+
+var chunkE7K4FTLN_cjs = require('./chunk-E7K4FTLN.cjs');
+var zod = require('zod');
+
+var scoringExtractStepResultSchema = zod.z.record(zod.z.string(), zod.z.any()).optional();
+var scoringValueSchema = zod.z.number();
+var scoreResultSchema = zod.z.object({
+  result: zod.z.record(zod.z.string(), zod.z.any()).optional(),
+  score: scoringValueSchema,
+  prompt: zod.z.string().optional()
+});
+var saveScorePayloadSchema = zod.z.object({
+  runId: zod.z.string(),
+  scorerId: zod.z.string(),
+  entityId: zod.z.string(),
+  score: zod.z.number(),
+  input: zod.z.any().optional(),
+  output: zod.z.any(),
+  source: zod.z.enum(["LIVE", "TEST"]),
+  entityType: zod.z.enum(["AGENT", "WORKFLOW", ...Object.values(chunkE7K4FTLN_cjs.SpanType)]).optional(),
+  scorer: zod.z.record(zod.z.string(), zod.z.any()),
+  traceId: zod.z.string().optional(),
+  spanId: zod.z.string().optional(),
+  preprocessStepResult: zod.z.record(zod.z.string(), zod.z.any()).optional(),
+  extractStepResult: zod.z.record(zod.z.string(), zod.z.any()).optional(),
+  analyzeStepResult: zod.z.record(zod.z.string(), zod.z.any()).optional(),
+  reason: zod.z.string().optional(),
+  metadata: zod.z.record(zod.z.string(), zod.z.any()).optional(),
+  preprocessPrompt: zod.z.string().optional(),
+  extractPrompt: zod.z.string().optional(),
+  generateScorePrompt: zod.z.string().optional(),
+  generateReasonPrompt: zod.z.string().optional(),
+  analyzePrompt: zod.z.string().optional(),
+  additionalContext: zod.z.record(zod.z.string(), zod.z.any()).optional(),
+  requestContext: zod.z.record(zod.z.string(), zod.z.any()).optional(),
+  entity: zod.z.record(zod.z.string(), zod.z.any()).optional(),
+  resourceId: zod.z.string().optional(),
+  threadId: zod.z.string().optional()
+});
+
+exports.saveScorePayloadSchema = saveScorePayloadSchema;
+exports.scoreResultSchema = scoreResultSchema;
+exports.scoringExtractStepResultSchema = scoringExtractStepResultSchema;
+exports.scoringValueSchema = scoringValueSchema;
+//# sourceMappingURL=chunk-BMAFVZ2D.cjs.map
+//# sourceMappingURL=chunk-BMAFVZ2D.cjs.map

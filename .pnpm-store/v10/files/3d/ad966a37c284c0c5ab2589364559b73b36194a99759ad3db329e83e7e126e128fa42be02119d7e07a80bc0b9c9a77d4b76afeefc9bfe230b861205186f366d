@@ -1,0 +1,3 @@
+#pragma once
+#pragma message("This header will soon be removed. Use <gsl/byte> instead of <gsl/gsl_byte>")
+#include <gsl/byte>

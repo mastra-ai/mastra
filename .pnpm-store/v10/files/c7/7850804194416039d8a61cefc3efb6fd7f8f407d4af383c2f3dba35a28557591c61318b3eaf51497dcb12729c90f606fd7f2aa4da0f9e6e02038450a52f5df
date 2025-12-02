@@ -1,0 +1,9 @@
+The following libraries can be redistributed if you are using the Cognitive
+Services Speech SDK for JavaScript, subject to its license:
+
+microsoft.cognitiveservices.speech.sdk.bundle.js
+microsoft.cognitiveservices.speech.sdk.bundle-min.js
+microsoft-cognitiveservices-speech-sdk NPM library
+speech-processor.js
+
+Depending on your usage, you only need to redistribute a subset of the above.

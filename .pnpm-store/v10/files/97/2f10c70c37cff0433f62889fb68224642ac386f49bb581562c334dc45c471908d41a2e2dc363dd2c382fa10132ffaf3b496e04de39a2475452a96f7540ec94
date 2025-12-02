@@ -1,0 +1,1 @@
+{"version":3,"file":"READWRITE.js","sourceRoot":"","sources":["../../../lib/commands/READWRITE.ts"],"names":[],"mappings":";;AAGA,kBAAe;IACb,iBAAiB,EAAE,IAAI;IACvB,YAAY,EAAE,IAAI;IAClB;;;;;OAKG;IACH,YAAY,CAAC,MAAqB;QAChC,MAAM,CAAC,IAAI,CAAC,WAAW,CAAC,CAAC;IAC3B,CAAC;IACD,cAAc,EAAE,SAA+C;CACrC,CAAC"}

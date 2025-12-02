@@ -1,0 +1,1 @@
+{"version":3,"file":"TOGGLE.d.ts","sourceRoot":"","sources":["../../../lib/commands/TOGGLE.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,sCAAsC,CAAC;AACrE,OAAO,EAAE,aAAa,EAAE,UAAU,EAAE,WAAW,EAAE,SAAS,EAAY,MAAM,mCAAmC,CAAC;;;IAI9G;;;;;;;OAOG;gDACkB,aAAa,OAAO,aAAa,QAAQ,aAAa;mCAK7B,WAAW,GAAG,SAAS,GAAG,WAAW,WAAW,GAAG,SAAS,CAAC;;AAf7G,wBAgB6B"}

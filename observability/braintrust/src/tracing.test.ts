@@ -377,6 +377,99 @@ describe('BraintrustExporter', () => {
   });
 
   describe('LLM Generation Attributes', () => {
+    /**
+     * Issue #9822: Braintrust UI shows raw JSON for input/output columns
+     * instead of plain text messages.
+     *
+     * For MODEL_GENERATION spans with structured input (messages array) and
+     * structured output (text/content field), the exporter should extract
+     * plain text for better display in Braintrust UI.
+     */
+    it('should extract plain text from structured input/output for LLM spans (issue #9822)', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-span-plain-text',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'What is the weather today?' }] },
+        output: { text: 'I cannot check the current weather.' },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Verify that Braintrust receives plain text instead of raw JSON
+      // The input should be the messages array (formatted for Braintrust)
+      // The output should be the plain text response
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spanId: 'llm-span-plain-text',
+          // For input: extract messages array for Braintrust's native message display
+          input: [{ role: 'user', content: 'What is the weather today?' }],
+          // For output: extract the text content directly
+          output: 'I cannot check the current weather.',
+        }),
+      );
+    });
+
+    it('should extract plain text output from object with content field', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-span-content-field',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'Hello!' }] },
+        output: { content: 'Hi there!' },
+        attributes: {
+          model: 'gpt-4',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [{ role: 'user', content: 'Hello!' }],
+          output: 'Hi there!',
+        }),
+      );
+    });
+
+    it('should handle string input/output without transformation', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-span-string',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: 'What is 2+2?',
+        output: '4',
+        attributes: {
+          model: 'gpt-4',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: 'What is 2+2?',
+          output: '4',
+        }),
+      );
+    });
+
     it('should handle LLM generation with full attributes', async () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
@@ -384,7 +477,7 @@ describe('BraintrustExporter', () => {
         type: SpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'Hello' }] },
-        output: { content: 'Hi there!' },
+        output: { text: 'Hi there!' },
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -418,8 +511,10 @@ describe('BraintrustExporter', () => {
           spanId: llmSpan.traceId,
           rootSpanId: llmSpan.traceId,
         },
-        input: { messages: [{ role: 'user', content: 'Hello' }] },
-        output: { content: 'Hi there!' },
+        // Input: extract messages array for Braintrust
+        input: [{ role: 'user', content: 'Hello' }],
+        // Output: extract plain text
+        output: 'Hi there!',
         metrics: {
           prompt_tokens: 10,
           completion_tokens: 5,
@@ -531,15 +626,16 @@ describe('BraintrustExporter', () => {
         ...llmSpan.attributes,
         usage: { totalTokens: 150 },
       } as ModelGenerationAttributes;
-      llmSpan.output = { content: 'Updated response' };
+      llmSpan.output = { text: 'Updated response' };
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_UPDATED,
         exportedSpan: llmSpan,
       });
 
+      // Output should be extracted as plain text for LLM spans (issue #9822)
       expect(mockSpan.log).toHaveBeenCalledWith({
-        output: { content: 'Updated response' },
+        output: 'Updated response',
         metrics: { tokens: 150 },
         metadata: {
           spanType: 'model_generation',

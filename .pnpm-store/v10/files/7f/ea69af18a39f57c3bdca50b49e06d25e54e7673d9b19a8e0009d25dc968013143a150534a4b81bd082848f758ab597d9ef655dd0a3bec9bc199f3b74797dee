@@ -1,0 +1,97 @@
+{
+    "object": "list",
+    "data": [
+        {
+            "object": "organization",
+            "id": "org_01EHQMYV6MBK39QC5PZXHY59C3",
+            "name": "example.com",
+            "allow_profiles_outside_organization": false,
+            "domains": [
+                {
+                    "object": "organization_domain",
+                    "id": "org_domain_01EHQMYV71XT8H31WE5HF8YK4A",
+                    "domain": "example.com"
+                }
+            ]
+        },
+        {
+            "object": "organization",
+            "id": "org_01EHQMVDTC2GRAHFCCRNTSKH46",
+            "name": "example2.com",
+            "allow_profiles_outside_organization": false,
+            "domains": [
+                {
+                    "object": "organization_domain",
+                    "id": "org_domain_01EHQMVDTZVA27PK614ME4YK7V",
+                    "domain": "example2.com"
+                }
+            ]
+        },
+        {
+            "object": "organization",
+            "id": "org_01EGS4P7QR31EZ4YWD1Z1XA176",
+            "name": "foo-corp.com",
+            "allow_profiles_outside_organization": false,
+            "domains": [
+                {
+                    "object": "organization_domain",
+                    "id": "org_domain_01EGS4P7RNQPFQAQ7SKCC40KNE",
+                    "domain": "foo-corp.com"
+                }
+            ]
+        },
+        {
+            "object": "organization",
+            "id": "org_01EGPYFYM0Y66AHNYQG9Z63DTN",
+            "name": "example3.com",
+            "allow_profiles_outside_organization": false,
+            "domains": [
+                {
+                    "object": "organization_domain",
+                    "id": "org_domain_01EGPYFYMGTRR38Z109MCJ3HHA",
+                    "domain": "example3.com"
+                }
+            ]
+        },
+        {
+            "object": "organization",
+            "id": "org_01EGPJWMT2EQMK7FMPR3TBC861",
+            "name": "workos.com",
+            "allow_profiles_outside_organization": false,
+            "domains": [
+                {
+                    "object": "organization_domain",
+                    "id": "org_domain_01EGPJWMTHRB5FP6MKE14RZ9BQ",
+                    "domain": "workos.com"
+                }
+            ]
+        },
+        {
+            "object": "organization",
+            "id": "org_01EGPJ5YY5P897573GJFGGY7ZF",
+            "name": "example4.com",
+            "allow_profiles_outside_organization": false,
+            "domains": [
+                {
+                    "object": "organization_domain",
+                    "id": "org_domain_01EGPJ5YYE7V931BWYS1AJHHHC",
+                    "domain": "example4.com"
+                }
+            ]
+        },
+        {
+            "object": "organization",
+            "id": "org_01EGP9Z6RY2J6YE0ZV57CGEXV2",
+            "name": "example5.com",
+            "allow_profiles_outside_organization": false,
+            "domains": [
+                {
+                    "object": "organization_domain",
+                    "id": "org_domain_01EGP9Z6S6HVQ5CPD152GJBEA5",
+                    "domain": "example5.com"
+                }
+            ]
+        }
+    ],
+    "list_metadata": { "before": "before-id", "after": null }
+}

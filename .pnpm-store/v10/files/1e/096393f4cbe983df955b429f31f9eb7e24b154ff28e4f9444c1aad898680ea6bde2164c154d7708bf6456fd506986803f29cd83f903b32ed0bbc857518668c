@@ -1,0 +1,41 @@
+{
+  "name": "hono-mcp-server-sse-transport",
+  "version": "0.0.7",
+  "description": "Server-Sent Events transport for Hono and Model Context Protocol",
+  "type": "module",
+  "keywords": [
+    "modelcontextprotocol",
+    "mcp",
+    "hono"
+  ],
+  "author": "NikaBuligini",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NikaBuligini/hono-mcp-server-sse-transport.git"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "import": "./build/index.js",
+      "types": "./build/index.d.ts",
+      "default": "./build/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "*",
+    "hono": "*"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.4",
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "hono": "^4.7.10",
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "build": "tsc --listEmittedFiles",
+    "release": "changeset publish"
+  }
+}

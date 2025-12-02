@@ -1,0 +1,411 @@
+# Complex: Variable access
+
+<?php
+
+"{$test}";
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    String(Interpolation(VariableName))
+  )
+)
+
+# Complex: Disallow space between { and $
+
+<?php
+
+"{ $test}";
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    String(VariableName)
+  )
+)
+
+# Complex: PHP documentation tests
+
+<?php
+
+"This is {$great}";
+"This square is {$square->width}00 centimeters broad.";
+
+// Works, quoted keys only work using the curly brace syntax
+"This works: {$arr['key']}";
+"This works: {$arr[4][3]}";
+
+// Works. When using multi-dimensional arrays, always use braces around arrays
+// when inside of strings
+"This works: {$arr['foo'][3]}";
+
+"This works: " . $arr['foo'][3];
+
+"This works too: {$obj->values[3]->name}";
+
+"This is the value of the var named $name: {${$name}}";
+
+"This is the value of the var named by the return value of getName(): {${getName()}}";
+
+"This is the value of the var named by the return value of \$object->getName(): {${$object->getName()}}";
+
+// Won't work, outputs: This is the return value of getName(): {getName()}
+"This is the return value of getName(): {getName()}";
+
+"{$foo->$bar}\n";
+
+"{$foo->{$baz[1]}}\n";
+
+"I'd like an {${beers::softdrink}}\n";
+
+"I'd like an {${beers::$ale}}\n";
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    String(Interpolation(VariableName))
+  ),
+  ExpressionStatement(
+    String(Interpolation(MemberExpression(VariableName, Name)))
+  ),
+  LineComment,
+  ExpressionStatement(
+    String(Interpolation(SubscriptExpression(VariableName, String)))),
+  ExpressionStatement(
+    String(Interpolation(SubscriptExpression(SubscriptExpression(VariableName,Integer),Integer)))
+  ),
+  LineComment,
+  LineComment,
+  ExpressionStatement(
+    String(Interpolation(SubscriptExpression(SubscriptExpression(VariableName,String),Integer)))
+  ),
+  ExpressionStatement(
+    BinaryExpression(
+      String,
+      ConcatOp,
+      SubscriptExpression(SubscriptExpression(VariableName,String),Integer))
+  ),
+  ExpressionStatement(
+    String(
+      Interpolation(MemberExpression(
+        SubscriptExpression(
+          MemberExpression(
+            VariableName,
+            Name
+          ),
+          Integer
+        ),
+        Name
+      ))
+    )
+  ),
+  ExpressionStatement(
+    String(
+      VariableName,
+      Interpolation(DynamicVariable(VariableName))
+    )
+  ),
+  ExpressionStatement(
+    String(
+      Interpolation(DynamicVariable(CallExpression(Name,ArgList)))
+    )
+  ),
+  ExpressionStatement(
+    String(
+      EscapeSequence,
+      Interpolation(DynamicVariable(
+        CallExpression(MemberExpression(VariableName, Name), ArgList)
+      ))
+    )
+  ),
+  LineComment,
+  ExpressionStatement(String),
+  ExpressionStatement(
+    String(
+      Interpolation(MemberExpression(VariableName,VariableName)),
+      EscapeSequence
+    )
+  ),
+  ExpressionStatement(
+    String(
+      Interpolation(MemberExpression(
+        VariableName,
+        SubscriptExpression(
+          VariableName,
+          Integer
+        )
+      )),
+      EscapeSequence
+    )
+  ),
+  ExpressionStatement(
+    String(
+      Interpolation(DynamicVariable(
+        ScopedExpression(
+          Name,
+          ClassMemberName(Name)
+        )
+      )),
+      EscapeSequence
+    )
+  ),
+  ExpressionStatement(
+    String(
+      Interpolation(DynamicVariable(
+        ScopedExpression(
+          Name,
+          ClassMemberName(VariableName)
+        )
+      )),
+      EscapeSequence
+    )
+  )
+)
+
+# Simple: Variable access
+
+<?php
+
+"Hello $people, you're awesome!";
+"hello ${a} world";
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    String(VariableName)
+  ),
+  ExpressionStatement(
+    String(Interpolation(Name))
+  )
+)
+
+# Simple: Member and array access
+
+<?php
+
+"$people->john drank some $juices[0] juice.".PHP_EOL;
+"$people->john then said hello to $people?->jane.".PHP_EOL;
+"$people->john's wife greeted $people->robert.";
+"The character at index -2 is $string[-2].";
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    BinaryExpression(
+      String(
+        MemberExpression(VariableName,Name),
+        SubscriptExpression(VariableName,Integer),
+      ),
+      ConcatOp,
+      Name
+    )
+  ),
+  ExpressionStatement(
+    BinaryExpression(
+      String(
+        MemberExpression(VariableName,Name),
+        MemberExpression(VariableName,Name),
+      ),
+      ConcatOp,
+      Name
+    )
+  ),
+  ExpressionStatement(
+    String(
+      MemberExpression(VariableName,Name),
+      MemberExpression(VariableName,Name),
+    )
+  ),
+  ExpressionStatement(
+    String(
+      SubscriptExpression(VariableName,UnaryExpression(ArithOp,Integer)),
+    )
+  )
+)
+
+# Corner cases
+
+<?php
+
+"{";
+"{\$";
+"{ $";
+"/a";
+"#";
+"//";
+"/*";
+"/* text *#//";
+"/**/";
+"// # /**/";
+"\\";
+"\{";
+"";
+"\$notavar";
+"\\\\\$notavar";
+"\\\{$embedexp}";
+"#x$var";
+" # x $var#x";
+"sometext$var";
+"{$var::get()}";
+"Test $var->tester- Hello";
+" # x {$var->prop["key:"."key: {$var->func("arg")}"]}# x";
+"hello \0 world";
+"hello ${"a"."b"} world";
+"$$$$$$$$$$$$$a";
+"{$$$$$$$$b}";
+"\{$";
+"\u{$a}";
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String(EscapeSequence)
+  ),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String(EscapeSequence)
+  ),
+  ExpressionStatement(
+    String(EscapeSequence)
+  ),
+  ExpressionStatement(
+    String
+  ),
+  ExpressionStatement(
+    String(EscapeSequence)
+  ),
+  ExpressionStatement(
+    String(EscapeSequence,EscapeSequence,EscapeSequence)
+  ),
+  ExpressionStatement(
+    String(EscapeSequence,EscapeSequence,VariableName)
+  ),
+  ExpressionStatement(
+    String(VariableName)
+  ),
+  ExpressionStatement(
+    String(VariableName)
+  ),
+  ExpressionStatement(
+    String(VariableName)
+  ),
+  ExpressionStatement(
+    String(
+      Interpolation(CallExpression(ScopedExpression(VariableName,ClassMemberName(Name)), ArgList))
+    )
+  ),
+  ExpressionStatement(
+    String(MemberExpression(VariableName,Name))
+  ),
+  ExpressionStatement(
+    String(
+      Interpolation(SubscriptExpression(
+        MemberExpression(VariableName,Name),
+        BinaryExpression(
+          String,
+          ConcatOp,
+          String(Interpolation(CallExpression(MemberExpression(VariableName,Name),ArgList(String))))
+        )
+      ))
+    )
+  ),
+  ExpressionStatement(
+    String(EscapeSequence)
+  ),
+  ExpressionStatement(
+    String(Interpolation(BinaryExpression(String,ConcatOp,String)))
+  ),
+  ExpressionStatement(
+    String(VariableName)
+  ),
+  ExpressionStatement(
+    String(
+      Interpolation(DynamicVariable(
+        DynamicVariable(
+          DynamicVariable(
+            DynamicVariable(
+              DynamicVariable(
+                DynamicVariable(
+                  DynamicVariable(
+                    VariableName
+                  )
+                )
+              )
+            )
+          )
+        )
+      ))
+    )
+  ),
+  ExpressionStatement(
+    String(EscapeSequence)
+  ),
+  ExpressionStatement(
+    String(Interpolation(VariableName))
+  )
+)
+
+# Single quoted
+
+<?php
+
+'this is a simple string';
+'You can also have embedded newlines in
+strings this way as it is
+okay to do';
+'Arnold once said: "I\'ll be back"';
+'You deleted C:\\*.*?';
+'You deleted C:\*.*?';
+'This will not expand: \n a newline';
+'Variables do not $expand $either';
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(String),
+  ExpressionStatement(String),
+  ExpressionStatement(String),
+  ExpressionStatement(String),
+  ExpressionStatement(String),
+  ExpressionStatement(String),
+  ExpressionStatement(String)
+)

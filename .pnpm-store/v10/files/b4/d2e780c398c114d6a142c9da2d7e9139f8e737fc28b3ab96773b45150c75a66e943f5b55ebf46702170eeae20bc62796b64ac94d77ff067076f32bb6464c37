@@ -1,0 +1,273 @@
+'use strict';
+
+// src/observability/types/tracing.ts
+var SpanType = /* @__PURE__ */ ((SpanType2) => {
+  SpanType2["AGENT_RUN"] = "agent_run";
+  SpanType2["GENERIC"] = "generic";
+  SpanType2["MODEL_GENERATION"] = "model_generation";
+  SpanType2["MODEL_STEP"] = "model_step";
+  SpanType2["MODEL_CHUNK"] = "model_chunk";
+  SpanType2["MCP_TOOL_CALL"] = "mcp_tool_call";
+  SpanType2["PROCESSOR_RUN"] = "processor_run";
+  SpanType2["TOOL_CALL"] = "tool_call";
+  SpanType2["WORKFLOW_RUN"] = "workflow_run";
+  SpanType2["WORKFLOW_STEP"] = "workflow_step";
+  SpanType2["WORKFLOW_CONDITIONAL"] = "workflow_conditional";
+  SpanType2["WORKFLOW_CONDITIONAL_EVAL"] = "workflow_conditional_eval";
+  SpanType2["WORKFLOW_PARALLEL"] = "workflow_parallel";
+  SpanType2["WORKFLOW_LOOP"] = "workflow_loop";
+  SpanType2["WORKFLOW_SLEEP"] = "workflow_sleep";
+  SpanType2["WORKFLOW_WAIT_EVENT"] = "workflow_wait_event";
+  return SpanType2;
+})(SpanType || {});
+var InternalSpans = /* @__PURE__ */ ((InternalSpans2) => {
+  InternalSpans2[InternalSpans2["NONE"] = 0] = "NONE";
+  InternalSpans2[InternalSpans2["WORKFLOW"] = 1] = "WORKFLOW";
+  InternalSpans2[InternalSpans2["AGENT"] = 2] = "AGENT";
+  InternalSpans2[InternalSpans2["TOOL"] = 4] = "TOOL";
+  InternalSpans2[InternalSpans2["MODEL"] = 8] = "MODEL";
+  InternalSpans2[InternalSpans2["ALL"] = 15] = "ALL";
+  return InternalSpans2;
+})(InternalSpans || {});
+var SamplingStrategyType = /* @__PURE__ */ ((SamplingStrategyType2) => {
+  SamplingStrategyType2["ALWAYS"] = "always";
+  SamplingStrategyType2["NEVER"] = "never";
+  SamplingStrategyType2["RATIO"] = "ratio";
+  SamplingStrategyType2["CUSTOM"] = "custom";
+  return SamplingStrategyType2;
+})(SamplingStrategyType || {});
+var TracingEventType = /* @__PURE__ */ ((TracingEventType2) => {
+  TracingEventType2["SPAN_STARTED"] = "span_started";
+  TracingEventType2["SPAN_UPDATED"] = "span_updated";
+  TracingEventType2["SPAN_ENDED"] = "span_ended";
+  return TracingEventType2;
+})(TracingEventType || {});
+
+// src/observability/no-op.ts
+var NoOpObservability = class {
+  setMastraContext(_options) {
+    return;
+  }
+  setLogger(_options) {
+    return;
+  }
+  getSelectedInstance(_options) {
+    return;
+  }
+  registerInstance(_name, _instance, _isDefault = false) {
+    return;
+  }
+  getInstance(_name) {
+    return;
+  }
+  getDefaultInstance() {
+    return;
+  }
+  listInstances() {
+    return /* @__PURE__ */ new Map();
+  }
+  unregisterInstance(_name) {
+    return false;
+  }
+  hasInstance(_name) {
+    return false;
+  }
+  setConfigSelector(_selector) {
+    return;
+  }
+  clear() {
+    return;
+  }
+  async shutdown() {
+    return;
+  }
+};
+
+// src/observability/utils.ts
+function getOrCreateSpan(options) {
+  const { type, attributes, tracingContext, requestContext, tracingOptions, ...rest } = options;
+  const metadata = {
+    ...rest.metadata ?? {},
+    ...tracingOptions?.metadata ?? {}
+  };
+  if (tracingContext?.currentSpan) {
+    return tracingContext.currentSpan.createChildSpan({
+      type,
+      attributes,
+      ...rest,
+      metadata
+    });
+  }
+  const instance = options.mastra?.observability?.getSelectedInstance({ requestContext });
+  return instance?.startSpan({
+    type,
+    attributes,
+    ...rest,
+    metadata,
+    requestContext,
+    tracingOptions,
+    traceId: tracingOptions?.traceId,
+    parentSpanId: tracingOptions?.parentSpanId,
+    customSamplerOptions: {
+      requestContext,
+      metadata
+    }
+  });
+}
+
+// src/observability/context.ts
+var AGENT_GETTERS = ["getAgent", "getAgentById"];
+var AGENT_METHODS_TO_WRAP = ["generate", "stream", "generateLegacy", "streamLegacy"];
+var WORKFLOW_GETTERS = ["getWorkflow", "getWorkflowById"];
+var WORKFLOW_METHODS_TO_WRAP = ["execute", "createRun", "createRun"];
+function isNoOpSpan(span) {
+  return span.constructor.name === "NoOpSpan" || span.__isNoOp === true;
+}
+function isMastra(mastra) {
+  const hasAgentGetters = AGENT_GETTERS.every((method) => typeof mastra?.[method] === "function");
+  const hasWorkflowGetters = WORKFLOW_GETTERS.every((method) => typeof mastra?.[method] === "function");
+  return hasAgentGetters && hasWorkflowGetters;
+}
+function wrapMastra(mastra, tracingContext) {
+  if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
+    return mastra;
+  }
+  if (!isMastra(mastra)) {
+    return mastra;
+  }
+  try {
+    return new Proxy(mastra, {
+      get(target, prop) {
+        try {
+          if (AGENT_GETTERS.includes(prop)) {
+            return (...args) => {
+              const agent = target[prop](...args);
+              return wrapAgent(agent, tracingContext);
+            };
+          }
+          if (WORKFLOW_GETTERS.includes(prop)) {
+            return (...args) => {
+              const workflow = target[prop](...args);
+              return wrapWorkflow(workflow, tracingContext);
+            };
+          }
+          const value = target[prop];
+          return typeof value === "function" ? value.bind(target) : value;
+        } catch (error) {
+          console.warn("Tracing: Failed to wrap method, falling back to original", error);
+          const value = target[prop];
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+      }
+    });
+  } catch (error) {
+    console.warn("Tracing: Failed to create proxy, using original Mastra instance", error);
+    return mastra;
+  }
+}
+function wrapAgent(agent, tracingContext) {
+  if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
+    return agent;
+  }
+  try {
+    return new Proxy(agent, {
+      get(target, prop) {
+        try {
+          if (AGENT_METHODS_TO_WRAP.includes(prop)) {
+            return (input, options = {}) => {
+              return target[prop](input, {
+                ...options,
+                tracingContext
+              });
+            };
+          }
+          const value = target[prop];
+          return typeof value === "function" ? value.bind(target) : value;
+        } catch (error) {
+          console.warn("Tracing: Failed to wrap agent method, falling back to original", error);
+          const value = target[prop];
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+      }
+    });
+  } catch (error) {
+    console.warn("Tracing: Failed to create agent proxy, using original instance", error);
+    return agent;
+  }
+}
+function wrapWorkflow(workflow, tracingContext) {
+  if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
+    return workflow;
+  }
+  try {
+    return new Proxy(workflow, {
+      get(target, prop) {
+        try {
+          if (WORKFLOW_METHODS_TO_WRAP.includes(prop)) {
+            if (prop === "createRun" || prop === "createRun") {
+              return async (options = {}) => {
+                const run = await target[prop](options);
+                return run ? wrapRun(run, tracingContext) : run;
+              };
+            }
+            return (input, options = {}) => {
+              return target[prop](input, {
+                ...options,
+                tracingContext
+              });
+            };
+          }
+          const value = target[prop];
+          return typeof value === "function" ? value.bind(target) : value;
+        } catch (error) {
+          console.warn("Tracing: Failed to wrap workflow method, falling back to original", error);
+          const value = target[prop];
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+      }
+    });
+  } catch (error) {
+    console.warn("Tracing: Failed to create workflow proxy, using original instance", error);
+    return workflow;
+  }
+}
+function wrapRun(run, tracingContext) {
+  if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
+    return run;
+  }
+  try {
+    return new Proxy(run, {
+      get(target, prop) {
+        try {
+          if (prop === "start") {
+            return (startOptions = {}) => {
+              return target.start({
+                ...startOptions,
+                tracingContext: startOptions.tracingContext ?? tracingContext
+              });
+            };
+          }
+          const value = target[prop];
+          return typeof value === "function" ? value.bind(target) : value;
+        } catch (error) {
+          console.warn("Tracing: Failed to wrap run method, falling back to original", error);
+          const value = target[prop];
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+      }
+    });
+  } catch (error) {
+    console.warn("Tracing: Failed to create run proxy, using original instance", error);
+    return run;
+  }
+}
+
+exports.InternalSpans = InternalSpans;
+exports.NoOpObservability = NoOpObservability;
+exports.SamplingStrategyType = SamplingStrategyType;
+exports.SpanType = SpanType;
+exports.TracingEventType = TracingEventType;
+exports.getOrCreateSpan = getOrCreateSpan;
+exports.wrapMastra = wrapMastra;
+//# sourceMappingURL=chunk-E7K4FTLN.cjs.map
+//# sourceMappingURL=chunk-E7K4FTLN.cjs.map

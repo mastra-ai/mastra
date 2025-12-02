@@ -1,0 +1,2 @@
+import { AuthenticateUserWithOrganizationSelectionCredentials, AuthenticateWithOrganizationSelectionOptions, SerializedAuthenticateWithOrganizationSelectionOptions } from '../interfaces/authenticate-with-organization-selection.interface';
+export declare const serializeAuthenticateWithOrganizationSelectionOptions: (options: AuthenticateWithOrganizationSelectionOptions & AuthenticateUserWithOrganizationSelectionCredentials) => SerializedAuthenticateWithOrganizationSelectionOptions;

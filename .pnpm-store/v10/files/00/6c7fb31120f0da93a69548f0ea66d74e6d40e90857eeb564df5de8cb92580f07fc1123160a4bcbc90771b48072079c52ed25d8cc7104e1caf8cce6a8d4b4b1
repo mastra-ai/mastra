@@ -1,0 +1,21 @@
+module.exports = {
+	ar: require("./ar").stopwords,
+	cs: require("./cs").stopwords,
+	da: require("./da").stopwords,
+	de: require("./de").stopwords,
+	en: require("./en").stopwords,
+	es: require("./es").stopwords,
+	fa: require("./fa").stopwords,
+	fr: require("./fr").stopwords,
+	gl: require("./gl").stopwords,
+	it: require("./it").stopwords,
+	ko: require("./ko").stopwords,
+	nl: require("./nl").stopwords,
+	pl: require("./pl").stopwords,
+	pt: require("./pt").stopwords,
+	ro: require("./ro").stopwords,
+	ru: require("./ru").stopwords,
+	sv: require("./sv").stopwords,
+	tr: require("./tr").stopwords,
+	vi: require("./vi").stopwords
+};

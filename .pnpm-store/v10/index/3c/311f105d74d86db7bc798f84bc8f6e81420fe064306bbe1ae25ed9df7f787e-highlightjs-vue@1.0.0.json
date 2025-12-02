@@ -1,0 +1,43 @@
+{
+  "name": "highlightjs-vue",
+  "version": "1.0.0",
+  "requiresBuild": false,
+  "files": {
+    "dist/highlightjs-vue.cjs.js": {
+      "checkedAt": 1764662919643,
+      "integrity": "sha512-JZeWv/f5Yjb456DUzXXaJYgybCVr1gDkgBY7bzRZ8aGeUD4PdjjHPr0TDOaqeFe76PEEH7l420tL106pKltsvw==",
+      "mode": 438,
+      "size": 1597
+    },
+    "dist/highlightjs-vue.esm.js": {
+      "checkedAt": 1764662919644,
+      "integrity": "sha512-F+m/CWo0s2sP35E3tcgLNjV4kj4zlTjBqgsAqvbFH5C8oRdnNkbRGF+MPG1HwM6KrfjKjrMgWv5qolQfN8UbAQ==",
+      "mode": 438,
+      "size": 1572
+    },
+    "dist/highlightjs-vue.umd.js": {
+      "checkedAt": 1764662919645,
+      "integrity": "sha512-f3s93COtk5v9hEWBK3LgkGyye2Bwo9V8lbtBy23K50cgmqzVIQomakg1KMedM4b8rF7LYi5mWHA3qJmM54qXow==",
+      "mode": 438,
+      "size": 1823
+    },
+    "dist/highlightjs-vue.umd.min.js": {
+      "checkedAt": 1764662919646,
+      "integrity": "sha512-WPiba1Yrees1zy1ugXGm+QFpG1WrH/SDQ+nW8wsr2sA3dXtsqNk48YsUanFV7pVO3ACHwZgfzxVJiKKBENPjNA==",
+      "mode": 438,
+      "size": 900
+    },
+    "package.json": {
+      "checkedAt": 1764662919647,
+      "integrity": "sha512-5FYo0B+TV+VQPbGO370tL6mntudX8+J8N1ljaQRoeM6+F9zZ8WlhSeEFLcoUsv1MDodOtCcJfA4T2NDd4hXvwA==",
+      "mode": 438,
+      "size": 1119
+    },
+    "README.md": {
+      "checkedAt": 1764662919648,
+      "integrity": "sha512-KftO9ea08I8SDu69RJN5K4Su51SXjn5LBD9yBIpoHPIO5iCgLXAkLaVcrCIxgJxndULFh1/FR7BIN2zPjFakwA==",
+      "mode": 438,
+      "size": 1072
+    }
+  }
+}

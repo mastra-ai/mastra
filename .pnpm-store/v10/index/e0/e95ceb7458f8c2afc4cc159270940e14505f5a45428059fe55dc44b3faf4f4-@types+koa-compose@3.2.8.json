@@ -1,0 +1,31 @@
+{
+  "name": "@types/koa-compose",
+  "version": "3.2.8",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662907856,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662907857,
+      "integrity": "sha512-QKXpgncasFojc1Ny+2l3MQU4nMdIrOeWHeHY8oRS4XOp2sag9Cu40Gr+ZLBJXauq/9/34byQtzMP8pqDha9S9Q==",
+      "mode": 420,
+      "size": 3155
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662907859,
+      "integrity": "sha512-c4XqkaWsWrDEdEmg7A78gWmYzFIq9SGF+qlgICrZEwQ+FBDNpR7ax2QaoIvNjtIPuMivw4m7KHiYoKhKsBx+Hg==",
+      "mode": 420,
+      "size": 2464
+    },
+    "package.json": {
+      "checkedAt": 1764662907862,
+      "integrity": "sha512-AfjKt4b+vHG3ln4ytadPM3uDY03dNZ9dPC7A0PkkL+nmIAUOWeI/9zjSqbJprW+PTSNlG0Nie35D91QhzaIKPw==",
+      "mode": 420,
+      "size": 974
+    }
+  }
+}

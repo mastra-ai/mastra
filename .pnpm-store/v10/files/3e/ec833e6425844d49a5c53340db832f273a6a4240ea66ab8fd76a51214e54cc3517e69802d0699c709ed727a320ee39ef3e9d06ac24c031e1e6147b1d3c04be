@@ -1,0 +1,105 @@
+{
+  "name": "eventsource-parser",
+  "version": "1.1.2",
+  "description": "Streaming, source-agnostic EventSource/Server-Sent Events parser",
+  "keywords": [
+    "sse",
+    "eventsource",
+    "server-sent-events"
+  ],
+  "homepage": "https://github.com/rexxars/eventsource-parser#readme",
+  "bugs": {
+    "url": "https://github.com/rexxars/eventsource-parser/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/rexxars/eventsource-parser.git"
+  },
+  "license": "MIT",
+  "author": "Espen Hovlandsdal <espen@hovlandsdal.com>",
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    },
+    "./stream": {
+      "types": "./dist/stream.d.ts",
+      "source": "./src/stream.ts",
+      "import": "./dist/stream.js",
+      "require": "./dist/stream.cjs",
+      "default": "./dist/stream.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "source": "./src/index.ts",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "typesVersions": {
+    "*": {
+      "stream": [
+        "./dist/stream.d.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "prebuild": "npm run clean",
+    "build": "pkg-utils build && pkg-utils --strict",
+    "clean": "rimraf dist coverage",
+    "lint": "eslint . && tsc --noEmit",
+    "prepublishOnly": "npm run build",
+    "test": "vitest --reporter=verbose",
+    "posttest": "npm run lint"
+  },
+  "prettier": {
+    "bracketSpacing": false,
+    "printWidth": 100,
+    "semi": false,
+    "singleQuote": true
+  },
+  "eslintConfig": {
+    "parserOptions": {
+      "ecmaFeatures": {
+        "modules": true
+      },
+      "ecmaVersion": 9,
+      "sourceType": "module"
+    },
+    "extends": [
+      "sanity",
+      "sanity/typescript",
+      "prettier"
+    ],
+    "ignorePatterns": [
+      "lib/**/"
+    ]
+  },
+  "devDependencies": {
+    "@sanity/pkg-utils": "^2.4.9",
+    "@sanity/semantic-release-preset": "^4.0.2",
+    "@types/node": "^14.18.0",
+    "@typescript-eslint/eslint-plugin": "^6.7.2",
+    "@typescript-eslint/parser": "^6.7.2",
+    "eslint": "^8.49.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-config-sanity": "^6.0.0",
+    "prettier": "^3.0.3",
+    "rimraf": "^5.0.1",
+    "rollup-plugin-visualizer": "^5.9.2",
+    "semantic-release": "^21.0.0",
+    "typescript": "^5.2.2",
+    "vitest": "^0.34.4"
+  },
+  "engines": {
+    "node": ">=14.18"
+  }
+}

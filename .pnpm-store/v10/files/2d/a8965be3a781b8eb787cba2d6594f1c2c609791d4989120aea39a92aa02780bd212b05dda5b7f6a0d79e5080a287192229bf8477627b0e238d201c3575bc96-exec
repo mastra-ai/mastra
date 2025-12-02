@@ -1,0 +1,45 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_strip:
+	dh_strip -pcouchbase-cxx-client-tools -pcouchbase-cxx-client --dbg-package=couchbase-cxx-client-dbg
+	dh_strip --remaining-packages
+
+override_dh_auto_configure:
+	echo "usr/include/couchbase" \
+		> debian/couchbase-cxx-client-dev.install
+	echo "usr/include/tao" \
+		>> debian/couchbase-cxx-client-dev.install
+	echo "usr/lib/$(DEB_HOST_MULTIARCH)/libcouchbase_cxx_client.so" \
+		>> debian/couchbase-cxx-client-dev.install
+	echo "usr/lib/$(DEB_HOST_MULTIARCH)/libcouchbase_cxx_client_static.a" \
+		>> debian/couchbase-cxx-client-dev.install
+	echo "usr/lib/$(DEB_HOST_MULTIARCH)/cmake" \
+		>> debian/couchbase-cxx-client-dev.install
+	echo "usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig" \
+		>> debian/couchbase-cxx-client-dev.install
+	echo "usr/bin/*" \
+		> debian/couchbase-cxx-client-tools.install
+	echo "usr/lib/$(DEB_HOST_MULTIARCH)/libcouchbase_cxx_client.so.*" \
+		> debian/couchbase-cxx-client.install
+	echo "usr/share/doc/tao/json/LICENSE" \
+		>> debian/couchbase-cxx-client.install
+	echo "usr/share/doc/tao/pegtl/LICENSE" \
+		>> debian/couchbase-cxx-client.install
+	echo "usr/share/doc/couchbase_cxx_client/LICENSE.txt" \
+		>> debian/couchbase-cxx-client.install
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DBUILD_SHARED_LIBS=OFF \
+		-DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
+		-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
+
+override_dh_auto_build:
+	dh_auto_build

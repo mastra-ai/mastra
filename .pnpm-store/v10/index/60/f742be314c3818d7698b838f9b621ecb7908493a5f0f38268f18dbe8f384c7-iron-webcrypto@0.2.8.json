@@ -1,0 +1,43 @@
+{
+  "name": "iron-webcrypto",
+  "version": "0.2.8",
+  "requiresBuild": false,
+  "files": {
+    "dist/index.js": {
+      "checkedAt": 1764662907853,
+      "integrity": "sha512-HID/VQZCytqydEPY5gqKcIGXpkVc+o5J6ZglM4QXUOwK+vi4GjXulQNy/RYDO4nqBY/nybqOSHRPqljG2hlcEA==",
+      "mode": 420,
+      "size": 4761
+    },
+    "package.json": {
+      "checkedAt": 1764662907856,
+      "integrity": "sha512-Zn3MpQmLHfVx6Mdtw3Y6b5pDPCIXNhpzvZatttfTtjVA6atw31lo76eD/6m8eDZZhhWKSflpK6zUhV8IwJPdHQ==",
+      "mode": 420,
+      "size": 2437
+    },
+    "LICENSE.md": {
+      "checkedAt": 1764662907863,
+      "integrity": "sha512-JWjXwprQb8X0nmSmZ1FuVg8iryaKkoX45Taax7Z5KwmBVanpHcllGJpShqXP8BKSMkI6NZdMcL5F17mL1bgFpQ==",
+      "mode": 420,
+      "size": 1071
+    },
+    "README.md": {
+      "checkedAt": 1764662907864,
+      "integrity": "sha512-ti5Abs2MVGURxg/0lw3+Rrv+OXeoTC8wcaeNbhAmzMQNX/xIEOWIDB2pIMR2WWaHnXrAFm5YolqrISZVADZyoA==",
+      "mode": 420,
+      "size": 1872
+    },
+    "dist/index.mjs": {
+      "checkedAt": 1764662907867,
+      "integrity": "sha512-1MF/Sf6tGEIqJRu3v/+4Mu403yrHzA3wBOOmgtUqtRxY/a8LP7YbsxvYjJV9/+yt7mOvfN9Y7jK98mLQZdMEBQ==",
+      "mode": 420,
+      "size": 4487
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662907869,
+      "integrity": "sha512-6ACCLvlaE5W9QvGcS6iSDpMkLx7wRMokIvnqkXwrIbNCeHw3K0g863Z0Eil5An30t0ZrnCasVnyLMK77HfBJkw==",
+      "mode": 420,
+      "size": 6597
+    }
+  }
+}

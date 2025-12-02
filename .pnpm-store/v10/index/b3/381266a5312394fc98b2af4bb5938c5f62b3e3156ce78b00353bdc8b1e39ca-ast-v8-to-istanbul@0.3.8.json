@@ -1,0 +1,31 @@
+{
+  "name": "ast-v8-to-istanbul",
+  "version": "0.3.8",
+  "requiresBuild": false,
+  "files": {
+    "dist/index.js": {
+      "checkedAt": 1764662928720,
+      "integrity": "sha512-0IS4t5N1X6Wbv/0E24OXmF9dntqJds76ZGf57pNSVC2fJnQ91+wOjlIjTXpyr2YD9FjGNBu3Bdg5CjahFViKkA==",
+      "mode": 420,
+      "size": 22921
+    },
+    "package.json": {
+      "checkedAt": 1764662928721,
+      "integrity": "sha512-GmFb2v9XHzLBEqsvZmEzZz0FZhPO+4ftTbh4u2MjlDgodmSeK+iekCAwItZusdDdYUudnQTWfV4yhhBJNHJyoA==",
+      "mode": 420,
+      "size": 2651
+    },
+    "README.md": {
+      "checkedAt": 1764662928723,
+      "integrity": "sha512-X8+N4Zspsb3psxXo86xgkp2rijMU5O2gCGvqPW82IQgwPPK5KjYK8OpVMH5WCbJD8whz0igMd7jZ5+zRYsRo5w==",
+      "mode": 420,
+      "size": 8092
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662928724,
+      "integrity": "sha512-VNgylFilxnkyeMhBO3FFCZQxfjBCYDCGLo0fPRGMFji3XPIRV8VTlGVKRAtJGNkI8E3xiFlwYPk7h2GP2zeuMg==",
+      "mode": 420,
+      "size": 1691
+    }
+  }
+}

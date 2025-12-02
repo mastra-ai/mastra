@@ -1,0 +1,177 @@
+types:
+  SpeechToTextConvertRequestTimestampsGranularity:
+    enum:
+      - none
+      - word
+      - character
+    docs: >-
+      The granularity of the timestamps in the transcription. 'word' provides
+      word-level timestamps and 'character' provides character-level timestamps
+      per word.
+    default: word
+    inline: true
+    source:
+      openapi: openapi.json
+  SpeechToTextConvertRequestFileFormat:
+    enum:
+      - pcm_s16le_16
+      - other
+    docs: >-
+      The format of input audio. Options are 'pcm_s16le_16' or 'other' For
+      `pcm_s16le_16`, the input audio must be 16-bit PCM at a 16kHz sample rate,
+      single channel (mono), and little-endian byte order. Latency will be lower
+      than with passing an encoded waveform.
+    default: other
+    inline: true
+    source:
+      openapi: openapi.json
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    convert:
+      path: /v1/speech-to-text
+      method: POST
+      auth: false
+      docs: Transcribe an audio or video file.
+      source:
+        openapi: openapi.json
+      display-name: Create transcript
+      request:
+        name: Body_Speech_to_Text_v1_speech_to_text_post
+        query-parameters:
+          enable_logging:
+            type: optional<boolean>
+            default: true
+            docs: >-
+              When enable_logging is set to false zero retention mode will be
+              used for the request. This will mean history features are
+              unavailable for this request, including request stitching. Zero
+              retention mode may only be used by enterprise customers.
+        body:
+          properties:
+            model_id:
+              type: string
+              docs: >-
+                The ID of the model to use for transcription, currently only
+                'scribe_v1' and 'scribe_v1_experimental' are available.
+            file:
+              type: optional<file>
+              docs: >-
+                The file to transcribe. All major audio and video formats are
+                supported. Exactly one of the file or cloud_storage_url
+                parameters must be provided. The file size must be less than
+                1GB.
+            language_code:
+              type: optional<string>
+              docs: >-
+                An ISO-639-1 or ISO-639-3 language_code corresponding to the
+                language of the audio file. Can sometimes improve transcription
+                performance if known beforehand. Defaults to null, in this case
+                the language is predicted automatically.
+            tag_audio_events:
+              type: optional<boolean>
+              docs: >-
+                Whether to tag audio events like (laughter), (footsteps), etc.
+                in the transcription.
+              default: true
+            num_speakers:
+              type: optional<integer>
+              docs: >-
+                The maximum amount of speakers talking in the uploaded file. Can
+                help with predicting who speaks when. The maximum amount of
+                speakers that can be predicted is 32. Defaults to null, in this
+                case the amount of speakers is set to the maximum value the
+                model supports.
+              validation:
+                min: 1
+                max: 32
+            timestamps_granularity:
+              type: optional<SpeechToTextConvertRequestTimestampsGranularity>
+              docs: >-
+                The granularity of the timestamps in the transcription. 'word'
+                provides word-level timestamps and 'character' provides
+                character-level timestamps per word.
+              default: word
+            diarize:
+              type: optional<boolean>
+              docs: >-
+                Whether to annotate which speaker is currently talking in the
+                uploaded file.
+              default: false
+            additional_formats:
+              type: optional<root.AdditionalFormats>
+              docs: A list of additional formats to export the transcript to.
+            file_format:
+              type: optional<SpeechToTextConvertRequestFileFormat>
+              docs: >-
+                The format of input audio. Options are 'pcm_s16le_16' or 'other'
+                For `pcm_s16le_16`, the input audio must be 16-bit PCM at a
+                16kHz sample rate, single channel (mono), and little-endian byte
+                order. Latency will be lower than with passing an encoded
+                waveform.
+              default: other
+            cloud_storage_url:
+              type: optional<string>
+              docs: >-
+                The valid AWS S3, Cloudflare R2 or Google Cloud Storage URL of
+                the file to transcribe. Exactly one of the file or
+                cloud_storage_url parameters must be provided. The file must be
+                a valid publicly accessible cloud storage URL. The file size
+                must be less than 2GB. URL can be pre-signed.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.SpeechToTextChunkResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            model_id: model_id
+          response:
+            body:
+              language_code: en
+              language_probability: 0.98
+              text: Hello world!
+              words:
+                - text: Hello
+                  start: 0
+                  end: 0.5
+                  type: word
+                  speaker_id: speaker_1
+                  logprob: 1.1
+                  characters:
+                    - text: text
+                      start: 0
+                      end: 0.1
+                - text: ' '
+                  start: 0.5
+                  end: 0.5
+                  type: spacing
+                  speaker_id: speaker_1
+                  logprob: 1.1
+                  characters:
+                    - text: text
+                      start: 0
+                      end: 0.1
+                - text: world!
+                  start: 0.5
+                  end: 1.2
+                  type: word
+                  speaker_id: speaker_1
+                  logprob: 1.1
+                  characters:
+                    - text: text
+                      start: 0
+                      end: 0.1
+              additional_formats:
+                - requested_format: requested_format
+                  file_extension: file_extension
+                  content_type: content_type
+                  is_base64_encoded: true
+                  content: content
+  source:
+    openapi: openapi.json

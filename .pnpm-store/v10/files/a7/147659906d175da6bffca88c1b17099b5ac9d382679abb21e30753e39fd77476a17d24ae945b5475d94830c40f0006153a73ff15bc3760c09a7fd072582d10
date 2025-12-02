@@ -1,0 +1,40 @@
+From 6bdc93aac66f2282823dceee802b60e2447c4ba9 Mon Sep 17 00:00:00 2001
+From: Sergey Avseyev <sergey.avseyev@gmail.com>
+Date: Fri, 20 Oct 2023 20:48:33 -0700
+Subject: [PATCH] fix build for mingw-w64-ucrt-x86_64-toolchain
+
+---
+ src/crypto/CMakeLists.txt        | 4 ++++
+ src/crypto/curve25519/internal.h | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/crypto/CMakeLists.txt b/src/crypto/CMakeLists.txt
+index 68fb65b30..f53a9eee9 100644
+--- a/src/crypto/CMakeLists.txt
++++ b/src/crypto/CMakeLists.txt
+@@ -335,6 +335,10 @@ if(WIN32)
+   target_link_libraries(crypto ws2_32)
+ endif()
+
++if(MINGW)
++  target_link_libraries(crypto --static-libgcc --static-libstdc++)
++endif()
++
+ if(NOT ANDROID)
+   find_package(Threads REQUIRED)
+   target_link_libraries(crypto Threads::Threads)
+diff --git a/src/crypto/curve25519/internal.h b/src/crypto/curve25519/internal.h
+index 0cd1a12aa..ab33badc0 100644
+--- a/src/crypto/curve25519/internal.h
++++ b/src/crypto/curve25519/internal.h
+@@ -32,7 +32,7 @@ void x25519_NEON(uint8_t out[32], const uint8_t scalar[32],
+ #endif
+
+ #if !defined(OPENSSL_NO_ASM) && !defined(OPENSSL_SMALL) && \
+-    defined(__GNUC__) && defined(__x86_64__)
++    defined(__GNUC__) && defined(__x86_64__) && !defined(__MINGW32__)
+ #define BORINGSSL_FE25519_ADX
+
+ // fiat_curve25519_adx_mul is defined in
+--
+2.42.0.windows.2

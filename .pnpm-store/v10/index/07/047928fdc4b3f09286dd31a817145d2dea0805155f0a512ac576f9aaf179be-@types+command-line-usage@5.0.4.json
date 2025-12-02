@@ -1,0 +1,31 @@
+{
+  "name": "@types/command-line-usage",
+  "version": "5.0.4",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662925143,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662925145,
+      "integrity": "sha512-ssK85IyFAoaYu/vwSCdSzKyv/b2LcQmkR2nREhfCQaJV5z6UiXcAuDR4RgFXiLfHiInoRqyUKXXTJiYMbVk6Dg==",
+      "mode": 420,
+      "size": 558
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662925146,
+      "integrity": "sha512-CyvDpmj2wbdGZHqxzpw4Vz99jqXUVHBpr6UBxXlbZ0S123chsAfiaeGGItrZxY5oaVaGCigFFLwSiQCfGTzDmw==",
+      "mode": 420,
+      "size": 4227
+    },
+    "package.json": {
+      "checkedAt": 1764662925148,
+      "integrity": "sha512-wJOf0hVJfKWqAVr3d9EFLNXjuimNubxMQCbUZxV0k0ynMk+bhTGoQQj9D8htPaeN9iQmJpW60ceErc5VZ92MyA==",
+      "mode": 420,
+      "size": 972
+    }
+  }
+}

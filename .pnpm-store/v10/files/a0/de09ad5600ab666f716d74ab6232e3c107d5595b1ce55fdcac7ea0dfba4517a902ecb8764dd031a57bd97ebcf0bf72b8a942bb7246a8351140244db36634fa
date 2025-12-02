@@ -1,0 +1,86 @@
+{
+  "name": "better-call",
+  "version": "1.1.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Bekacru/better-call"
+  },
+  "copyright": "Copyright (C) 2025 Bereket Engida",
+  "license": "MIT",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.16.4",
+    "@biomejs/biome": "^1.8.3",
+    "@types/body-parser": "^1.19.6",
+    "@types/bun": "latest",
+    "@types/express": "^5.0.3",
+    "@types/set-cookie-parser": "^2.4.10",
+    "@types/supertest": "^6.0.3",
+    "arktype": "^2.0.0",
+    "body-parser": "^2.2.0",
+    "bumpp": "^9.4.1",
+    "express": "^5.1.0",
+    "supertest": "^7.1.4",
+    "tsdown": "^0.15.7",
+    "type-fest": "^4.23.0",
+    "typescript": "^5.6.0-beta",
+    "valibot": "1.0.0-beta.15",
+    "vitest": "^3.1.1",
+    "zod": "^4.0.1"
+  },
+  "dependencies": {
+    "@better-auth/utils": "^0.3.0",
+    "@better-fetch/fetch": "^1.1.4",
+    "rou3": "^0.5.1",
+    "set-cookie-parser": "^2.7.1"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./client": {
+      "import": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.js"
+      },
+      "require": {
+        "types": "./dist/client.d.cts",
+        "default": "./dist/client.cjs"
+      }
+    },
+    "./node": {
+      "import": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.js"
+      },
+      "require": {
+        "types": "./dist/node.d.cts",
+        "default": "./dist/node.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "test": "vitest",
+    "lint": "biome format",
+    "lint:fix": "biome format --fix",
+    "format": "biome format --write",
+    "typecheck": "tsc --noEmit",
+    "bump": "bumpp",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "serve": "bun --hot example/hello.ts"
+  }
+}

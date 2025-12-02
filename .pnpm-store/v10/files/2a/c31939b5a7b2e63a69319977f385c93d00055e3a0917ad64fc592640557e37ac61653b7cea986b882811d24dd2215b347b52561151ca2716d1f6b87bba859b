@@ -1,0 +1,90 @@
+function convertToOpenAPISchema(jsonSchema, context) {
+  const _jsonSchema = JSON.parse(JSON.stringify(jsonSchema));
+  if ("nullable" in _jsonSchema && _jsonSchema.nullable === true) {
+    if (_jsonSchema.type) {
+      if (Array.isArray(_jsonSchema.type)) {
+        if (!_jsonSchema.type.includes("null")) {
+          _jsonSchema.type.push("null");
+        }
+      } else {
+        _jsonSchema.type = [_jsonSchema.type, "null"];
+      }
+    } else {
+      _jsonSchema.type = ["null"];
+    }
+    delete _jsonSchema.nullable;
+  }
+  if (_jsonSchema.$schema) {
+    delete _jsonSchema.$schema;
+  }
+  const nestedSchemaKeys = [
+    "properties",
+    "additionalProperties",
+    "items",
+    "additionalItems",
+    "allOf",
+    "anyOf",
+    "oneOf",
+    "not",
+    "if",
+    "then",
+    "else",
+    "definitions",
+    "$defs",
+    "patternProperties",
+    "propertyNames",
+    "contains"
+    // "unevaluatedProperties",
+    // "unevaluatedItems",
+  ];
+  nestedSchemaKeys.forEach((key) => {
+    if (_jsonSchema[key] && (typeof _jsonSchema[key] === "object" || Array.isArray(_jsonSchema[key]))) {
+      if (key === "properties" || key === "definitions" || key === "$defs" || key === "patternProperties") {
+        for (const subKey in _jsonSchema[key]) {
+          _jsonSchema[key][subKey] = convertToOpenAPISchema(
+            _jsonSchema[key][subKey],
+            context
+          );
+        }
+      } else if (key === "allOf" || key === "anyOf" || key === "oneOf") {
+        _jsonSchema[key] = _jsonSchema[key].map(
+          (item) => convertToOpenAPISchema(item, context)
+        );
+      } else if (key === "items") {
+        if (Array.isArray(_jsonSchema[key])) {
+          _jsonSchema[key] = _jsonSchema[key].map(
+            (item) => convertToOpenAPISchema(item, context)
+          );
+        } else {
+          _jsonSchema[key] = convertToOpenAPISchema(_jsonSchema[key], context);
+        }
+      } else {
+        _jsonSchema[key] = convertToOpenAPISchema(_jsonSchema[key], context);
+      }
+    }
+  });
+  if (_jsonSchema.ref || _jsonSchema.$id) {
+    const { ref, $id, ...component } = _jsonSchema;
+    const id = ref || $id;
+    context.components.schemas = {
+      ...context.components.schemas,
+      [id]: component
+    };
+    return {
+      $ref: `#/components/schemas/${id}`
+    };
+  } else if (_jsonSchema.$ref) {
+    const { $ref, $defs } = _jsonSchema;
+    const EFFECT_DEFS_PREFIX = "#/$defs/";
+    context.components.schemas = {
+      ...context.components.schemas,
+      ...$defs
+    };
+    return {
+      $ref: `#/components/schemas/${$ref.slice(EFFECT_DEFS_PREFIX.length)}`
+    };
+  }
+  return _jsonSchema;
+}
+
+export { convertToOpenAPISchema };

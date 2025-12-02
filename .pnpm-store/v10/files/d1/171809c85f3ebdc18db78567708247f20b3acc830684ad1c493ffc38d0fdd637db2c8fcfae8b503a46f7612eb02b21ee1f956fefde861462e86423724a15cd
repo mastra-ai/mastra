@@ -1,0 +1,34 @@
+import type { Agent } from '../agent/index.js';
+import type { IMastraLogger } from '../logger/index.js';
+import type { Mastra } from '../mastra/index.js';
+import type { MastraMemory } from '../memory/index.js';
+import type { MastraStorage } from '../storage/index.js';
+import type { MastraTTS } from '../tts/index.js';
+import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat.js';
+import type { MastraVector } from '../vector/index.js';
+export type MastraPrimitives = {
+    logger?: IMastraLogger;
+    storage?: MastraStorage;
+    agents?: Record<string, Agent>;
+    tts?: Record<string, MastraTTS>;
+    vectors?: Record<string, MastraVector>;
+    memory?: MastraMemory;
+};
+export type MastraUnion = {
+    [K in keyof Mastra]: Mastra[K];
+} & MastraPrimitives;
+export interface IExecutionContext<TSchemaIn extends ZodLikeSchema | undefined = undefined> {
+    context: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : {};
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    memory?: MastraMemory;
+}
+export interface IAction<TId extends string, TSchemaIn extends ZodLikeSchema | undefined, TSchemaOut extends ZodLikeSchema | undefined, TContext extends IExecutionContext<TSchemaIn>, TOptions extends unknown = unknown> {
+    id: TId;
+    description?: string;
+    inputSchema?: TSchemaIn;
+    outputSchema?: TSchemaOut;
+    execute?: (context: TContext, options?: TOptions) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
+}
+//# sourceMappingURL=index.d.ts.map

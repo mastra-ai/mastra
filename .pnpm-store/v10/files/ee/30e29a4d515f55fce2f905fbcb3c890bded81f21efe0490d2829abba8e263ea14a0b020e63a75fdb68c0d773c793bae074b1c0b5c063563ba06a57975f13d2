@@ -1,0 +1,65 @@
+{
+  "name": "@uiw/codemirror-extensions-basic-setup",
+  "version": "4.25.2",
+  "description": "Basic configuration for the CodeMirror6 code editor.",
+  "homepage": "https://uiwjs.github.io/react-codemirror/#/extensions/basic-setup",
+  "funding": "https://jaywcjlove.github.io/#/sponsor",
+  "author": "kenny wong <wowohoo@qq.com>",
+  "license": "MIT",
+  "type": "module",
+  "main": "./cjs/index.js",
+  "module": "./esm/index.js",
+  "exports": {
+    ".": {
+      "require": "./cjs/index.js",
+      "import": "./esm/index.js"
+    },
+    "./*": "./*"
+  },
+  "scripts": {
+    "watch": "tsbb watch src/*.ts --use-babel",
+    "build": "tsbb build src/*.ts --use-babel && npm run setmodule",
+    "setmodule": "echo '{\"type\":\"module\"}' > esm/package.json && echo '{\"type\":\"commonjs\"}' > cjs/package.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uiwjs/react-codemirror.git"
+  },
+  "files": [
+    "src",
+    "esm",
+    "cjs"
+  ],
+  "peerDependencies": {
+    "@codemirror/autocomplete": ">=6.0.0",
+    "@codemirror/commands": ">=6.0.0",
+    "@codemirror/language": ">=6.0.0",
+    "@codemirror/lint": ">=6.0.0",
+    "@codemirror/search": ">=6.0.0",
+    "@codemirror/state": ">=6.0.0",
+    "@codemirror/view": ">=6.0.0"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.0.0",
+    "@codemirror/commands": "^6.0.0",
+    "@codemirror/language": "^6.0.0",
+    "@codemirror/lint": "^6.0.0",
+    "@codemirror/search": "^6.0.0",
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0"
+  },
+  "keywords": [
+    "codemirror",
+    "codemirror6",
+    "basic-setup",
+    "extensions",
+    "ide",
+    "code"
+  ],
+  "jest": {
+    "coverageReporters": [
+      "lcov",
+      "json-summary"
+    ]
+  }
+}

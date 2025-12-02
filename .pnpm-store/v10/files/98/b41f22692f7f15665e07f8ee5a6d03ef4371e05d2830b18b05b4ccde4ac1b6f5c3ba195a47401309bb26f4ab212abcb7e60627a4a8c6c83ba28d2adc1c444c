@@ -1,0 +1,73 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    delete:
+      path: /v1/voices/{voice_id}/samples/{sample_id}
+      method: DELETE
+      auth: false
+      docs: Removes a sample by its ID.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. You can use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+        sample_id:
+          type: string
+          docs: >-
+            ID of the sample to be used. You can use the [Get
+            voices](/docs/api-reference/voices/get) endpoint list all the
+            available samples for a voice.
+      display-name: Delete voice sample
+      response:
+        docs: Successful Response
+        type: root.DeleteSampleResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+            sample_id: VW7YKqPnjY4h39yTbx2L
+          response:
+            body:
+              status: ok
+    get_audio:
+      path: /v1/voices/{voice_id}/samples/{sample_id}/audio
+      method: GET
+      auth: false
+      docs: Returns the audio corresponding to a sample attached to a voice.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. You can use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+        sample_id:
+          type: string
+          docs: >-
+            ID of the sample to be used. You can use the [Get
+            voices](/docs/api-reference/voices/get) endpoint list all the
+            available samples for a voice.
+      display-name: Get audio from sample
+      response:
+        docs: Successful Response
+        type: file
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+  source:
+    openapi: openapi.json
+  display-name: Samples
+docs: >-
+  Access to your samples. A sample is any audio file you attached to a voice. A
+  voice can have one or more samples.

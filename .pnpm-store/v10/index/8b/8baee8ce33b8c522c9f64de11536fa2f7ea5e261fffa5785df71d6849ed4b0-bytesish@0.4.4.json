@@ -1,0 +1,55 @@
+{
+  "name": "bytesish",
+  "version": "0.4.4",
+  "requiresBuild": false,
+  "files": {
+    "test/basics.spec.js": {
+      "checkedAt": 1764662928072,
+      "integrity": "sha512-Re78TR9sN+C45MaL1lOTzhIvW3YGby3Va3K/RSVvV6eXVxpl0lQu/qbh6qnsixeLHIKP8KuB7B+4LfXO+4DlYA==",
+      "mode": 420,
+      "size": 2832
+    },
+    "browser.js": {
+      "checkedAt": 1764662928073,
+      "integrity": "sha512-qYHS7RLra5FDOv89Lyp6XltUNaIoHPxExzERD8+gs65YobujTHqF3w374jO2vqnarejq48WAL9mZeA2Z/lJ3tQ==",
+      "mode": 420,
+      "size": 1724
+    },
+    "core.js": {
+      "checkedAt": 1764662928073,
+      "integrity": "sha512-v55McdQ79zMpwf6Uc14UPTP0QdwGpMXnuVkwVi3IkOyFZqb+OY9dMOdwEfC3CJFGMlOz2W2eLKUqTiC3lO25hA==",
+      "mode": 420,
+      "size": 2454
+    },
+    "node.js": {
+      "checkedAt": 1764662928076,
+      "integrity": "sha512-nIsk+YX/c9M8pDH7F03OCmhJEswTVZRyXEOfD8XMTfHNtLIZkff0q8DVo4blLFggfDM4cMCygS65dK+IcPJbvg==",
+      "mode": 420,
+      "size": 904
+    },
+    "package.json": {
+      "checkedAt": 1764662928077,
+      "integrity": "sha512-WXeJ3nq9g39yDCwmywQAunBy1gPLMpli2K8IsVr676hnPv0wjmSeBIxd++FBvLPLnRbIxAhSRlLJPhndaZP85w==",
+      "mode": 420,
+      "size": 710
+    },
+    "README.md": {
+      "checkedAt": 1764662928080,
+      "integrity": "sha512-Oktws/wDgShhZwUvuX9YQsurx9VDtgqKGMVs7o1uHjS3Fn1ngYX5+v05OScHs7VCAPuCXA3E3q2uV/EX/Qi4tw==",
+      "mode": 420,
+      "size": 3930
+    },
+    "junit-report-browser.xml": {
+      "checkedAt": 1764662928081,
+      "integrity": "sha512-6zb9WWOeMpiEX6e2GlJyZFqbWeoIrp55kZIoyvyTeI3MgQTDKV+q8skj/t/X6LJJJFcEvI3DSFRuoklDKDrm/A==",
+      "mode": 420,
+      "size": 1154
+    },
+    ".github/workflows/mikeals-workflow.yml": {
+      "checkedAt": 1764662928082,
+      "integrity": "sha512-WxqOf1gYxS0tQhjvatPJRUakALNORM1aKLrZcLoQ79xMwHOFEnUYi1xW+EJvaJeVHxH29PdTgf3qDkc6qALgsQ==",
+      "mode": 420,
+      "size": 1532
+    }
+  }
+}

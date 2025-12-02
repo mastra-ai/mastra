@@ -1,0 +1,10 @@
+[
+  "../../protos/google/firestore/admin/v1/backup.proto",
+  "../../protos/google/firestore/admin/v1/database.proto",
+  "../../protos/google/firestore/admin/v1/field.proto",
+  "../../protos/google/firestore/admin/v1/firestore_admin.proto",
+  "../../protos/google/firestore/admin/v1/index.proto",
+  "../../protos/google/firestore/admin/v1/location.proto",
+  "../../protos/google/firestore/admin/v1/operation.proto",
+  "../../protos/google/firestore/admin/v1/schedule.proto"
+]

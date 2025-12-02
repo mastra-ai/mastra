@@ -1,0 +1,106 @@
+/**
+ * BaseObservability - Abstract base class for Observability implementations
+ */
+import { MastraBase } from '@mastra/core/base';
+import type { RequestContext } from '@mastra/core/di';
+import type { IMastraLogger } from '@mastra/core/logger';
+import type { Span, SpanType, ObservabilityExporter, SpanOutputProcessor, TracingEvent, AnySpan, StartSpanOptions, CreateSpanOptions, ObservabilityInstance, CustomSamplerOptions, AnyExportedSpan, TraceState, TracingOptions } from '@mastra/core/observability';
+import type { ObservabilityInstanceConfig } from '../config.js';
+/**
+ * Abstract base class for all Observability implementations in Mastra.
+ */
+export declare abstract class BaseObservabilityInstance extends MastraBase implements ObservabilityInstance {
+    protected config: Required<ObservabilityInstanceConfig>;
+    constructor(config: ObservabilityInstanceConfig);
+    /**
+     * Override setLogger to add Observability specific initialization log
+     * and propagate logger to exporters
+     */
+    __setLogger(logger: IMastraLogger): void;
+    protected get exporters(): ObservabilityExporter[];
+    protected get spanOutputProcessors(): SpanOutputProcessor[];
+    /**
+     * Start a new span of a specific SpanType
+     */
+    startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType>;
+    /**
+     * Create a new span (called after sampling)
+     *
+     * Implementations should:
+     * 1. Create a plain span with the provided attributes
+     * 2. Return the span - base class handles all tracing lifecycle automatically
+     *
+     * The base class will automatically:
+     * - Set trace relationships
+     * - Wire span lifecycle callbacks
+     * - Emit span_started event
+     */
+    protected abstract createSpan<TType extends SpanType>(options: CreateSpanOptions<TType>): Span<TType>;
+    /**
+     * Get current configuration
+     */
+    getConfig(): Readonly<Required<ObservabilityInstanceConfig>>;
+    /**
+     * Get all exporters
+     */
+    getExporters(): readonly ObservabilityExporter[];
+    /**
+     * Get all span output processors
+     */
+    getSpanOutputProcessors(): readonly SpanOutputProcessor[];
+    /**
+     * Get the logger instance (for exporters and other components)
+     */
+    getLogger(): IMastraLogger;
+    /**
+     * Automatically wires up Observability lifecycle events for any span
+     * This ensures all spans emit events regardless of implementation
+     */
+    private wireSpanLifecycle;
+    /**
+     * Check if a trace should be sampled
+     */
+    protected shouldSample(options?: CustomSamplerOptions): boolean;
+    /**
+     * Compute TraceState for a new trace based on configured and per-request keys
+     */
+    protected computeTraceState(tracingOptions?: TracingOptions): TraceState | undefined;
+    /**
+     * Extract metadata from RequestContext using TraceState
+     */
+    protected extractMetadataFromRequestContext(requestContext: RequestContext | undefined, explicitMetadata: Record<string, any> | undefined, traceState: TraceState | undefined): Record<string, any> | undefined;
+    /**
+     * Extract specific keys from RequestContext
+     */
+    protected extractKeys(requestContext: RequestContext, keys: string[]): Record<string, any>;
+    /**
+     * Process a span through all output processors
+     */
+    private processSpan;
+    getSpanForExport(span: AnySpan): AnyExportedSpan | undefined;
+    /**
+     * Emit a span started event
+     */
+    protected emitSpanStarted(span: AnySpan): void;
+    /**
+     * Emit a span ended event (called automatically when spans end)
+     */
+    protected emitSpanEnded(span: AnySpan): void;
+    /**
+     * Emit a span updated event
+     */
+    protected emitSpanUpdated(span: AnySpan): void;
+    /**
+     * Export tracing event through all exporters (realtime mode)
+     */
+    protected exportTracingEvent(event: TracingEvent): Promise<void>;
+    /**
+     * Initialize Observability (called by Mastra during component registration)
+     */
+    init(): void;
+    /**
+     * Shutdown Observability and clean up resources
+     */
+    shutdown(): Promise<void>;
+}
+//# sourceMappingURL=base.d.ts.map

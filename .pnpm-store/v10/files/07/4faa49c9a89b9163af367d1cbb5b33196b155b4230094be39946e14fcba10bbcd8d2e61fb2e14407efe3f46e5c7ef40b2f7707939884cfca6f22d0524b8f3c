@@ -1,0 +1,1 @@
+{"version":3,"file":"GetProjectBalancesResponse.d.ts","sourceRoot":"","sources":["../../../../src/lib/types/GetProjectBalancesResponse.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,0BAA0B;IACzC,QAAQ,EAAE,yBAAyB,EAAE,CAAC;CACvC;AAED,MAAM,WAAW,yBAAyB;IACxC,UAAU,EAAE,MAAM,CAAC;IACnB,MAAM,EAAE,MAAM,CAAC;IACf,KAAK,EAAE,MAAM,CAAC;IACd,QAAQ,EAAE,MAAM,CAAC;CAClB"}

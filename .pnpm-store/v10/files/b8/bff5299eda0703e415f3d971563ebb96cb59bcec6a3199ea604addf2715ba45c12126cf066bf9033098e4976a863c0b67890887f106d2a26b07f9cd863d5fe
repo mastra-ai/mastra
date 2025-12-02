@@ -1,0 +1,90 @@
+import { createTool } from '../chunk-XIDKHXNR.js';
+import { z } from 'zod';
+
+// src/integration/integration.ts
+var Integration = class {
+  name = "Integration";
+  workflows;
+  constructor() {
+    this.workflows = {};
+  }
+  /**
+   * Workflows
+   */
+  registerWorkflow(name, fn) {
+    if (this.workflows[name]) {
+      throw new Error(`Sync function "${name}" already registered`);
+    }
+    this.workflows[name] = fn;
+  }
+  listWorkflows({ serialized }) {
+    if (serialized) {
+      return Object.entries(this.workflows).reduce((acc, [k, v]) => {
+        return {
+          ...acc,
+          [k]: {
+            name: v.name
+          }
+        };
+      }, {});
+    }
+    return this.workflows;
+  }
+  /**
+   * TOOLS
+   */
+  listStaticTools(_params) {
+    throw new Error("Method not implemented.");
+  }
+  async listTools(_params) {
+    throw new Error("Method not implemented.");
+  }
+  async getApiClient() {
+    throw new Error("Method not implemented");
+  }
+};
+var OpenAPIToolset = class {
+  authType = "API_KEY";
+  constructor() {
+  }
+  get toolSchemas() {
+    return {};
+  }
+  get toolDocumentations() {
+    return {};
+  }
+  get baseClient() {
+    return {};
+  }
+  async getApiClient() {
+    throw new Error("API not implemented");
+  }
+  _generateIntegrationTools() {
+    const { client: _client, ...clientMethods } = this.baseClient;
+    const schemas = this.toolSchemas;
+    const documentations = this.toolDocumentations;
+    const tools = Object.keys(clientMethods).reduce((acc, key) => {
+      const comment = documentations[key]?.comment;
+      const fallbackComment = `Execute ${key}`;
+      const tool = createTool({
+        id: key,
+        inputSchema: schemas[key] || z.object({}),
+        description: comment || fallbackComment,
+        // documentation: doc || fallbackComment,
+        execute: async (input) => {
+          const client = await this.getApiClient();
+          const value = client[key];
+          return value({
+            ...input
+          });
+        }
+      });
+      return { ...acc, [key]: tool };
+    }, {});
+    return tools;
+  }
+};
+
+export { Integration, OpenAPIToolset };
+//# sourceMappingURL=index.js.map
+//# sourceMappingURL=index.js.map

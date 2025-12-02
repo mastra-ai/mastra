@@ -1,0 +1,748 @@
+@precedence {
+  cast
+  update @left
+  unaryPlus @left
+  negate @left
+  instanceof
+  times @left
+  plus @left
+  shift @left
+  compare @left
+  bitAnd @left
+  bitOr @left
+  bitXor @left
+  and @left
+  or @left
+  ternary @right
+  valuePair
+  assign @right
+  array @right
+  new @right
+  else @right
+  scope @left
+  typeArgs
+}
+
+@top Program {
+  statement*
+}
+
+@top ClassContent {
+  classBodyDeclaration*
+}
+
+literal {
+  IntegerLiteral |
+  FloatingPointLiteral |
+  @specialize[@name=BooleanLiteral]<identifier, "true" | "false"> |
+  CharacterLiteral |
+  StringLiteral |
+  TextBlock |
+  kw<"null">
+}
+
+@skip {} {
+  TextBlock { textBlockStart textBlockContent* textBlockEnd }
+}
+
+expression[@isGroup=Expression] {
+  AssignmentExpression |
+  BinaryExpression |
+  InstanceofExpression |
+  LambdaExpression |
+  TernaryExpression |
+  UpdateExpression |
+  baseExpression |
+  UnaryExpression |
+  CastExpression
+}
+
+CastExpression {
+  "(" type ("&" type)* ")" !cast expression
+}
+
+AssignmentExpression {
+  (Identifier | FieldAccess | ArrayAccess)
+  !assign (AssignOp | "=") expression
+}
+
+BinaryExpression {
+  expression !compare (op<Compare, "==" | ">=" | "<=" | "!="> | CompareOp { "<" | ">" }) expression |
+  expression !and op<Logic, "&&"> expression |
+  expression !or op<Logic, "||"> expression |
+  expression !bitAnd BitOp { "&" } expression |
+  expression !bitOr op<Bit, "|"> expression |
+  expression !bitXor op<Bit, "^"> expression |
+  expression !plus op<Arith, "+" | "-"> expression |
+  expression !times times expression |
+  expression !shift (op<Arith, "%"> | op<Bit, "<<" | ">>" ">"?>) expression
+}
+
+InstanceofExpression {
+  expression !instanceof kw<"instanceof"> type
+}
+
+LambdaExpression {
+  (Definition | FormalParameters | InferredParameters) "->" (expression | Block)
+}
+
+InferredParameters {
+  "(" commaSep1<Definition ~identifier> ")"
+}
+
+TernaryExpression {
+  expression !ternary op<Logic, "?"> expression ":" expression
+}
+
+UnaryExpression {
+  op<Arith, "+" | "-"> !unaryPlus expression |
+  (op<Logic, "!"> | op<Bit, "~">) !negate expression
+}
+
+UpdateExpression {
+  expression !update op<Update, "--" | "++"> |
+  op<Update, "--" | "++"> !update expression
+}
+
+baseExpression {
+  literal |
+  ClassLiteral |
+  kw<"this"> |
+  Identifier ~identifier |
+  ParenthesizedExpression |
+  ObjectCreationExpression |
+  FieldAccess |
+  ArrayAccess |
+  MethodInvocation |
+  MethodReference |
+  ArrayCreationExpression
+}
+
+ArrayCreationExpression {
+  kw<"new"> simpleType
+  Dimension { annotation* !array "[" expression? "]" }+
+  ArrayInitializer?
+}
+
+ParenthesizedExpression {
+  "(" expression ")"
+}
+
+ClassLiteral {
+  unannotatedType "." kw<"class">
+}
+
+ObjectCreationExpression {
+  unqualifiedObjectCreationExpression |
+  baseExpression "." unqualifiedObjectCreationExpression
+}
+
+unqualifiedObjectCreationExpression {
+  kw<"new"> TypeArguments? simpleType !new ArgumentList ClassBody?
+}
+
+FieldAccess {
+  (baseExpression | kw<"super">) ("." kw<"super">)? "." (Identifier | kw<"this">)
+}
+
+ArrayAccess {
+  baseExpression "[" expression "]"
+}
+
+MethodName { Identifier }
+
+MethodInvocation {
+  (MethodName |
+   (baseExpression | kw<"super">) "." (kw<"super"> ".")? TypeArguments? MethodName)
+  ArgumentList
+}
+
+ArgumentList {
+  "(" commaSep<expression> ")"
+}
+
+MethodReference {
+  (type | baseExpression | kw<"super">) "::" TypeArguments? (kw<"new"> | Identifier)
+}
+
+TypeArguments {
+  "<" commaSep<type | Wildcard> ">"
+}
+
+Wildcard {
+  annotation* "?" wildcardBounds?
+}
+
+wildcardBounds {
+  kw<"extends"> type |
+  kw<"super"> type
+}
+
+Dimension {
+  annotation* !array "[" "]"
+}
+
+statement[@isGroup=Statement] {
+  declaration |
+  ExpressionStatement |
+  LabeledStatement |
+  IfStatement |
+  WhileStatement |
+  ForStatement |
+  EnhancedForStatement |
+  Block |
+  ";" |
+  AssertStatement |
+  SwitchStatement |
+  DoStatement |
+  BreakStatement |
+  ContinueStatement |
+  ReturnStatement |
+  SynchronizedStatement |
+  LocalVariableDeclaration |
+  ThrowStatement |
+  TryStatement |
+  TryWithResourcesStatement
+}
+
+Block {
+  "{" statement* "}"
+}
+
+ExpressionStatement {
+  expression ";"
+}
+
+LabeledStatement {
+  Label ":" statement
+}
+
+Label { identifier | capitalIdentifier }
+
+AssertStatement {
+  kw<"assert"> expression ";" |
+  kw<"assert"> expression ":" expression ";"
+}
+
+SwitchStatement {
+  kw<"switch"> ParenthesizedExpression SwitchBlock
+}
+
+SwitchBlock {
+  "{" (SwitchLabel | statement)* "}"
+}
+
+SwitchLabel {
+  kw<"case"> expression ":" |
+  kw<"default"> ":"
+}
+
+DoStatement {
+  kw<"do"> statement kw<"while"> ParenthesizedExpression ";"
+}
+
+BreakStatement {
+  kw<"break"> Label? ";"
+}
+
+ContinueStatement {
+  kw<"continue"> Label? ";"
+}
+
+ReturnStatement {
+  kw<"return"> expression? ";"
+}
+
+SynchronizedStatement {
+  kw<"synchronized"> ParenthesizedExpression Block
+}
+
+ThrowStatement {
+  kw<"throw"> expression ";"
+}
+
+TryStatement {
+  kw<"try"> Block CatchClause* FinallyClause?
+}
+
+CatchClause {
+  !else kw<"catch"> CatchFormalParameter Block
+}
+
+CatchFormalParameter {
+  "(" Modifiers? CatchType variableDeclaratorId ")"
+}
+
+CatchType {
+  unannotatedType ("|" unannotatedType)*
+}
+
+FinallyClause {
+  kw<"finally"> Block
+}
+
+TryWithResourcesStatement {
+  kw<"try"> ResourceSpecification Block CatchClause* FinallyClause?
+}
+
+ResourceSpecification {
+  "(" Resource (";" Resource)* ";"? ")"
+}
+
+Resource {
+  Modifiers? unannotatedType variableDeclaratorId "=" expression |
+  Identifier |
+  FieldAccess
+}
+
+IfStatement {
+  kw<"if"> ParenthesizedExpression statement (!else kw<"else"> statement)?
+}
+
+WhileStatement {
+  kw<"while"> ParenthesizedExpression statement
+}
+
+ForStatement {
+  kw<"for">
+  ForSpec {
+    "(" (LocalVariableDeclaration | commaSep<expression> ";") expression? ";" commaSep<expression> ")"
+  }
+  statement
+}
+
+EnhancedForStatement {
+  kw<"for">
+  ForSpec {
+    "(" Modifiers? unannotatedType variableDeclaratorId ":" expression ")"
+  }
+  statement
+}
+
+annotation {
+  MarkerAnnotation |
+  Annotation
+}
+
+MarkerAnnotation {
+  "@" name
+}
+
+Annotation {
+  "@" name AnnotationArgumentList
+}
+
+AnnotationArgumentList {
+  "(" (elementValue | commaSep<ElementValuePair>) ")"
+}
+
+ElementValuePair {
+  Identifier !valuePair "=" elementValue
+}
+
+elementValue {
+  (expression |
+   ElementValueArrayInitializer |
+   annotation) !valuePair
+}
+
+ElementValueArrayInitializer {
+  "{" commaSepTrailing<elementValue> "}"
+}
+
+declaration {
+  ModuleDeclaration |
+  PackageDeclaration |
+  ImportDeclaration |
+  ClassDeclaration |
+  InterfaceDeclaration |
+  AnnotationTypeDeclaration |
+  EnumDeclaration
+}
+
+ModuleDeclaration {
+  annotation* ckw<"open">? ckw<"module"> name ModuleBody
+}
+
+ModuleBody {
+  "{" ModuleDirective* "}"
+}
+
+ModuleDirective {
+  (kw<"requires"> requiresModifier* name |
+   kw<"exports"> name kw<"to">? commaSep<name> |
+   kw<"opens"> name kw<"to">? commaSep<name> |
+   kw<"uses"> name | kw<"provides"> name kw<"with"> commaSep1<name>)
+  ";"
+}
+
+requiresModifier {
+  kw<"transitive"> |
+  kw<"static">
+}
+
+PackageDeclaration {
+  annotation* kw<"package"> name ";"
+}
+
+ImportDeclaration {
+  kw<"import"> kw<"static">? name ("." Asterisk)? ";"
+}
+
+EnumDeclaration {
+  Modifiers? kw<"enum"> Definition SuperInterfaces? EnumBody
+}
+
+EnumBody {
+  "{" commaSepTrailing<EnumConstant> EnumBodyDeclarations? "}"
+}
+
+EnumBodyDeclarations {
+  ";" classBodyDeclaration*
+}
+
+EnumConstant {
+  Modifiers? Definition ArgumentList? ClassBody?
+}
+
+ClassDeclaration {
+  Modifiers? kw<"class"> Definition TypeParameters? Superclass? SuperInterfaces? ClassBody
+}
+
+Modifiers {
+  annotation+ (modifier annotation*)* ~annotations |
+  (modifier annotation*)+ ~annotations
+}
+
+modifier {
+  kw<"public"> | kw<"protected"> | kw<"private"> | kw<"abstract"> | kw<"static"> | kw<"final"> | kw<"strictfp"> |
+  kw<"default"> kw<"synchronized"> | kw<"native"> | kw<"transient"> | kw<"volatile">
+}
+
+TypeParameters {
+  "<" commaSep1<TypeParameter> ">"
+}
+
+TypeParameter {
+  annotation* Definition TypeBound?
+}
+
+TypeBound {
+  kw<"extends"> type ("&" type)*
+}
+
+Superclass {
+  kw<"extends"> type
+}
+
+SuperInterfaces {
+  kw<"implements"> InterfaceTypeList
+}
+
+InterfaceTypeList {
+  commaSep1<type>
+}
+
+ClassBody {
+  "{" classBodyDeclaration* "}"
+}
+
+classBodyDeclaration {
+  FieldDeclaration |
+  MethodDeclaration |
+  ClassDeclaration |
+  InterfaceDeclaration |
+  AnnotationTypeDeclaration |
+  EnumDeclaration |
+  Block |
+  StaticInitializer |
+  ConstructorDeclaration |
+  ";"
+}
+
+StaticInitializer {
+  kw<"static"> Block
+}
+
+ConstructorDeclaration {
+  Modifiers? constructorDeclarator Throws? ConstructorBody
+}
+
+constructorDeclarator {
+  TypeParameters? Definition FormalParameters
+}
+
+ConstructorBody {
+  "{" ExplicitConstructorInvocation? statement* "}"
+}
+
+ExplicitConstructorInvocation {
+  (TypeArguments? (kw<"this"> | kw<"super">) | (baseExpression) "." TypeArguments? kw<"super">) ArgumentList ";"
+}
+
+name {
+  Identifier |
+  ScopedIdentifier
+}
+
+ScopedIdentifier {
+  name "." Identifier
+}
+
+FieldDeclaration {
+  Modifiers? unannotatedType commaSep1<VariableDeclarator> ";"
+}
+
+AnnotationTypeDeclaration {
+  Modifiers? "@interface" Identifier AnnotationTypeBody
+}
+
+AnnotationTypeBody {
+  "{" (
+    AnnotationTypeElementDeclaration |
+    ConstantDeclaration |
+    ClassDeclaration |
+    InterfaceDeclaration |
+    AnnotationTypeDeclaration
+  )* "}"
+}
+
+AnnotationTypeElementDeclaration {
+  Modifiers? unannotatedType Identifier "(" ")" Dimension* defaultValue? ";"
+}
+
+defaultValue {
+  kw<"default"> elementValue
+}
+
+InterfaceDeclaration {
+  Modifiers? kw<"interface"> Definition TypeParameters? ExtendsInterfaces? InterfaceBody
+}
+
+ExtendsInterfaces {
+  kw<"extends"> InterfaceTypeList
+}
+
+InterfaceBody {
+  "{" (
+    ConstantDeclaration |
+    EnumDeclaration |
+    MethodDeclaration |
+    ClassDeclaration |
+    InterfaceDeclaration |
+    AnnotationTypeDeclaration |
+    ";"
+  )* "}"
+}
+
+ConstantDeclaration {
+  Modifiers? unannotatedType commaSep1<VariableDeclarator> ";"
+}
+
+VariableDeclarator {
+  variableDeclaratorId ("=" variableInitializer)?
+}
+
+variableDeclaratorId {
+  Definition Dimension*
+}
+
+variableInitializer {
+  expression |
+  ArrayInitializer
+}
+
+ArrayInitializer {
+  "{" commaSepTrailing<variableInitializer> "}"
+}
+
+type[@isGroup=Type] {
+  unannotatedType |
+  AnnotatedType { annotation+ unannotatedType }
+}
+
+unannotatedType {
+  ~annotations simpleType |
+  ArrayType
+}
+
+simpleType {
+  kw<"void"> |
+  @specialize[@name=PrimitiveType]<identifier, "byte" | "short" | "int" | "long" | "char" | "float" | "double" | "boolean"> |
+  TypeName |
+  ScopedTypeName |
+  GenericType
+}
+
+TypeName {
+  ~annotations (
+    capitalIdentifier ~identifier |
+    [@dynamicPrecedence=-1] { identifier ~identifier }
+  )
+}
+
+Identifier {
+  identifier ~identifier |
+  [@dynamicPrecedence=-1] { capitalIdentifier ~identifier }
+}
+
+Definition {
+  identifier ~identifier |
+  capitalIdentifier ~identifier
+}
+
+ScopedTypeName {
+  (TypeName | ScopedTypeName | GenericType) !scope "." annotation* TypeName
+}
+
+GenericType[@dynamicPrecedence=1] {
+  (TypeName | ScopedTypeName) !typeArgs TypeArguments
+}
+
+ArrayType {
+  unannotatedType !array Dimension+
+}
+
+methodHeader {
+  (TypeParameters annotation*)? unannotatedType methodDeclarator Throws?
+}
+
+methodDeclarator {
+  Definition FormalParameters Dimension*
+}
+
+FormalParameters {
+  "(" ReceiverParameter? commaSep<FormalParameter | SpreadParameter> ")"
+}
+
+FormalParameter {
+  Modifiers? unannotatedType variableDeclaratorId
+}
+
+ReceiverParameter {
+  annotation* unannotatedType (Identifier ".")? kw<"this">
+}
+
+SpreadParameter {
+  Modifiers? unannotatedType "..." VariableDeclarator
+}
+
+Throws {
+  kw<"throws"> commaSep1<type>
+}
+
+LocalVariableDeclaration {
+  Modifiers? (ckw<"var"> | unannotatedType) commaSep1<VariableDeclarator> ";"
+}
+
+MethodDeclaration {
+  Modifiers? methodHeader (Block | ";")
+}
+
+kw<term> { @specialize[@name={term}]<identifier, term> }
+
+ckw<term> { @extend[@name={term}]<identifier, term> }
+
+commaSep<expr> { (expr ("," expr)*)? }
+
+commaSep1<expr> { expr ("," expr)* }
+
+commaSepTrailing<expr> { (expr ("," expr?)*)? }
+
+@skip { LineComment | BlockComment | whitespace }
+
+@tokens {
+  whitespace {
+    @whitespace+
+  }
+
+  digits {
+    $[0-9]+ ("_"+ $[0-9]+)*
+  }
+
+  hexDigits {
+    $[A-Fa-f0-9]+ ("_" $[A-Fa-f0-9]+)*
+  }
+
+  IntegerLiteral {
+    (digits |
+     ("0x" | "0X") hexDigits |
+     ("0o" | "0O") $[0-7]+ ("_" $[0-7]+)* |
+     ("0b" | "0B") $[01]+ ("_" $[01]+)*)
+    ("l" | "L")?
+  }
+
+  exponent {
+    $[eE] ("-" | "+")? digits
+  }
+
+  hexExponent {
+    $[pP] ("-" | "+")? digits
+  }
+
+  floatSuffix {
+    $[fFdD]
+  }
+
+  FloatingPointLiteral {
+    digits ("." digits? exponent? floatSuffix? | exponent floatSuffix? | floatSuffix) |
+    "." digits exponent? floatSuffix? |
+    ("0x" | "0X") (hexDigits ("." hexDigits?)? | "." hexDigits) hexExponent floatSuffix?
+  }
+
+  @precedence { FloatingPointLiteral, IntegerLiteral }
+
+  CharacterLiteral[isolate] {
+    "'" (![\\'\n] | "\\" ("'" | "\\" | ![\n\\']+)) "'"
+  }
+  StringLiteral[isolate] {
+    "\"" (![\\"\n] | "\\" (![\n] | "\n"))* "\""
+  }
+  textBlockStart {
+    '"""' $[ \t]* "\n"
+  }
+  @precedence { textBlockStart, StringLiteral }
+  textBlockContent { "\n" | !["\n] textBlockContent? | '"' textBlockQuote }
+  textBlockQuote { !["\n] textBlockContent | "\n" | '"' textBlockQuote2 }
+  textBlockQuote2 { !["\n] textBlockContent | "\n" }
+  textBlockEnd { '"""' }
+
+  Asterisk { "*" }
+
+  identifierChar { @asciiLetter | @digit | $[$_\u{a1}-\u{10ffff}] }
+
+  identifier { $[a-z_$\u{a1}-\u{10ffff}] identifierChar* }
+
+  @precedence { whitespace, identifier }
+
+  capitalIdentifier { $[A-Z] identifierChar* }
+
+  AssignOp {
+    ("+" | "-" | "*" | "/" | "&" | "|" | "^" | "%" | "<<" | ">>" ">"?) "="
+  }
+
+  op[@name={name} "Op"]<name, body> { body }
+
+  times[@name=ArithOp] { "*" | "/" }
+
+  LineComment[isolate] {
+    "//" ![\n]*
+  }
+
+  BlockComment[isolate] { "/*" blockCommentRest }
+
+  blockCommentRest { ![*] blockCommentRest | "*" blockCommentAfterStar }
+
+  blockCommentAfterStar { "/" | "*" blockCommentAfterStar | ![/*] blockCommentRest }
+
+  @precedence { LineComment, times }
+  @precedence { BlockComment, times }
+
+  "="[@name=AssignOp]
+
+  "{" "}" "(" ")" "[" "]" "." "," ";" ":"
+}
+
+@external propSource javaHighlighting from "./highlight"
+
+@detectDelim

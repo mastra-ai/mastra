@@ -1,0 +1,35 @@
+import type { Context, Handler, MiddlewareHandler } from 'hono';
+import type { DescribeRouteOptions } from 'hono-openapi';
+import type { Mastra } from '../mastra/index.js';
+import type { ApiRoute, MastraAuthConfig, Methods } from './types.js';
+export type { MastraAuthConfig, ContextWithMastra, ApiRoute } from './types.js';
+export { MastraAuthProvider } from './auth.js';
+export type { MastraAuthProviderOptions } from './auth.js';
+export { CompositeAuth } from './composite-auth.js';
+type ParamsFromPath<P extends string> = {
+    [K in P extends `${string}:${infer Param}/${string}` | `${string}:${infer Param}` ? Param : never]: string;
+};
+type RegisterApiRoutePathError = `Param 'path' must not start with '/api', it is reserved for internal API routes.`;
+type ValidatePath<P extends string, T> = P extends `/api/${string}` ? RegisterApiRoutePathError : T;
+type RegisterApiRouteOptions<P extends string> = {
+    method: Methods;
+    openapi?: DescribeRouteOptions;
+    handler?: Handler<{
+        Variables: {
+            mastra: Mastra;
+        };
+    }, P, ParamsFromPath<P>>;
+    createHandler?: (c: Context) => Promise<Handler<{
+        Variables: {
+            mastra: Mastra;
+        };
+    }, P, ParamsFromPath<P>>>;
+    middleware?: MiddlewareHandler | MiddlewareHandler[];
+    /**
+     * When false, skips Mastra auth for this route (defaults to true)
+     */
+    requiresAuth?: boolean;
+};
+export declare function registerApiRoute<P extends string>(path: P, options: ValidatePath<P, RegisterApiRouteOptions<P>>): ValidatePath<P, ApiRoute>;
+export declare function defineAuth<TUser>(config: MastraAuthConfig<TUser>): MastraAuthConfig<TUser>;
+//# sourceMappingURL=index.d.ts.map

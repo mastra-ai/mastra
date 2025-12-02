@@ -1,0 +1,31 @@
+{
+  "name": "jwa",
+  "version": "1.4.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662907022,
+      "integrity": "sha512-xpBUsJ9xgvPzlwMTEHoJg/gd0N4rfujm0CDIe6wFGoSD92S0hGJQRFR6VUP+XL+yh2v1fPHUD/9nqA2MLHMTtw==",
+      "mode": 420,
+      "size": 1068
+    },
+    "index.js": {
+      "checkedAt": 1764662907022,
+      "integrity": "sha512-8fJH85Ut5LM9XasAyEIrntX+sHwyM+TUSObdwMEQnhQuPwtmJehKyYXIpvPLwOum55WIcGt1G5jAzcOWFdfreQ==",
+      "mode": 420,
+      "size": 6801
+    },
+    "package.json": {
+      "checkedAt": 1764662907023,
+      "integrity": "sha512-nUCx7YI7Sd0bSi1NZi4UDCdR6ZoigHciLThQu5iI1yZ6YzCGp5s3Y6h/5a5pP3KG9axDQ8TGouI3KW8mnrRxVA==",
+      "mode": 420,
+      "size": 749
+    },
+    "README.md": {
+      "checkedAt": 1764662907024,
+      "integrity": "sha512-tk2dQnWrD8S8jeCmzLMYWotYNEgKdFCAyEAOD661XnPvT/6vk6Coph4YrHtoYP/Z0CXwJLaMH97t913sSAzIjw==",
+      "mode": 420,
+      "size": 5371
+    }
+  }
+}

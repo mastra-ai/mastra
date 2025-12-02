@@ -1,0 +1,57 @@
+"use client";
+
+// src/ui/edit-composer.tsx
+import { forwardRef } from "react";
+import { Button } from "./base/button.mjs";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import { useThreadConfig } from "./thread-config.mjs";
+import { ComposerPrimitive } from "@assistant-ui/react";
+import { jsx, jsxs } from "react/jsx-runtime";
+var EditComposer = () => {
+  return /* @__PURE__ */ jsxs(EditComposerRoot, { children: [
+    /* @__PURE__ */ jsx(EditComposerInput, {}),
+    /* @__PURE__ */ jsxs(EditComposerFooter, { children: [
+      /* @__PURE__ */ jsx(EditComposerCancel, {}),
+      /* @__PURE__ */ jsx(EditComposerSend, {})
+    ] })
+  ] });
+};
+EditComposer.displayName = "EditComposer";
+var EditComposerRoot = withDefaults(ComposerPrimitive.Root, {
+  className: "aui-edit-composer-root"
+});
+EditComposerRoot.displayName = "EditComposerRoot";
+var EditComposerInput = withDefaults(ComposerPrimitive.Input, {
+  className: "aui-edit-composer-input"
+});
+EditComposerInput.displayName = "EditComposerInput";
+var EditComposerFooter = withDefaults("div", {
+  className: "aui-edit-composer-footer"
+});
+EditComposerFooter.displayName = "EditComposerFooter";
+var EditComposerCancel = forwardRef((props, ref) => {
+  const {
+    strings: { editComposer: { cancel: { label = "Cancel" } = {} } = {} } = {}
+  } = useThreadConfig();
+  return /* @__PURE__ */ jsx(ComposerPrimitive.Cancel, { asChild: true, children: /* @__PURE__ */ jsx(Button, { variant: "ghost", ...props, ref, children: props.children ?? label }) });
+});
+EditComposerCancel.displayName = "EditComposerCancel";
+var EditComposerSend = forwardRef((props, ref) => {
+  const {
+    strings: { editComposer: { send: { label = "Send" } = {} } = {} } = {}
+  } = useThreadConfig();
+  return /* @__PURE__ */ jsx(ComposerPrimitive.Send, { asChild: true, children: /* @__PURE__ */ jsx(Button, { ...props, ref, children: props.children ?? label }) });
+});
+EditComposerSend.displayName = "EditComposerSend";
+var exports = {
+  Root: EditComposerRoot,
+  Input: EditComposerInput,
+  Footer: EditComposerFooter,
+  Cancel: EditComposerCancel,
+  Send: EditComposerSend
+};
+var edit_composer_default = Object.assign(EditComposer, exports);
+export {
+  edit_composer_default as default
+};
+//# sourceMappingURL=edit-composer.mjs.map

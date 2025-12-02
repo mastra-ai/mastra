@@ -1,0 +1,3 @@
+export { CatchAlls, type CatchAllAction, type CatchAllMatcher, type CatchAllUpdateResponse, type CatchAllGetResponse, type CatchAllUpdateParams, type CatchAllGetParams, } from "./catch-alls.js";
+export { EmailRoutingRulesV4PagePaginationArray, Rules, type Action, type EmailRoutingRule, type Matcher, type RuleCreateParams, type RuleUpdateParams, type RuleListParams, type RuleDeleteParams, type RuleGetParams, } from "./rules.js";
+//# sourceMappingURL=index.d.ts.map

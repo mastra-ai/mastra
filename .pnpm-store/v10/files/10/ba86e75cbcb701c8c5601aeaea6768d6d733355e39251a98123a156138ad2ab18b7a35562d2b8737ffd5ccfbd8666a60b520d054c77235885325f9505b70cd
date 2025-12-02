@@ -1,0 +1,150 @@
+channel:
+  path: /v1/text-to-speech/{voice_id}/stream-input
+  url: WSS
+  auth: false
+  docs: >
+    The Text-to-Speech WebSockets API is designed to generate audio from partial
+    text input
+
+    while ensuring consistency throughout the generated audio. Although highly
+    flexible,
+
+    the WebSockets API isn't a one-size-fits-all solution. It's well-suited for
+    scenarios where:
+      * The input text is being streamed or generated in chunks.
+      * Word-to-audio alignment information is required.
+
+    However, it may not be the best choice when:
+      * The entire input text is available upfront. Given that the generations are partial,
+        some buffering is involved, which could potentially result in slightly higher latency compared
+        to a standard HTTP request.
+      * You want to quickly experiment or prototype. Working with WebSockets can be harder and more
+        complex than using a standard HTTP API, which might slow down rapid development and testing.
+  path-parameters:
+    voice_id:
+      type: string
+      docs: The unique identifier for the voice to use in the TTS process.
+  messages:
+    publish:
+      origin: client
+      body:
+        type: sendMessage
+        docs: Send messages to the WebSocket
+    subscribe:
+      origin: server
+      body:
+        type: receiveMessage
+        docs: Receive messages from the WebSocket
+  examples:
+    - messages:
+        - type: publish
+          body:
+            text: ' '
+            voice_settings:
+              stability: 0.5
+              similarity_boost: 0.8
+              speed: 1
+        - type: publish
+          body:
+            text: Hello World
+            try_trigger_generation: true
+        - type: publish
+          body:
+            text: ''
+        - type: subscribe
+          body:
+            audio: Y3VyaW91cyBtaW5kcyB0aGluayBhbGlrZSA6KQ==
+            normalizedAlignment:
+              charStartTimesMs:
+                - 0
+                - 3
+                - 7
+                - 9
+                - 11
+                - 12
+                - 13
+                - 15
+                - 17
+                - 19
+                - 21
+              charsDurationsMs:
+                - 3
+                - 4
+                - 2
+                - 2
+                - 1
+                - 1
+                - 2
+                - 2
+                - 2
+                - 2
+                - 3
+              chars:
+                - H
+                - e
+                - l
+                - l
+                - o
+                - ' '
+                - w
+                - o
+                - r
+                - l
+                - d
+            alignment:
+              charStartTimesMs:
+                - 0
+                - 3
+                - 7
+                - 9
+                - 11
+                - 12
+                - 13
+                - 15
+                - 17
+                - 19
+                - 21
+              charsDurationsMs:
+                - 3
+                - 4
+                - 2
+                - 2
+                - 1
+                - 1
+                - 2
+                - 2
+                - 2
+                - 2
+                - 3
+              chars:
+                - H
+                - e
+                - l
+                - l
+                - o
+                - ' '
+                - w
+                - o
+                - r
+                - l
+                - d
+imports:
+  root: __package__.yml
+types:
+  sendMessage:
+    discriminated: false
+    docs: Send messages to the WebSocket
+    union:
+      - root.InitializeConnection
+      - root.SendText
+      - root.CloseConnection
+    source:
+      openapi: asyncapi.yml
+  receiveMessage:
+    discriminated: false
+    docs: Receive messages from the WebSocket
+    union:
+      - root.AudioOutput
+      - root.FinalOutput
+    source:
+      openapi: asyncapi.yml

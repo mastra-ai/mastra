@@ -1,0 +1,35 @@
+{
+	"$id": "/inference/schemas/image-classification/input.json",
+	"$schema": "http://json-schema.org/draft-06/schema#",
+	"description": "Inputs for Image Classification inference",
+	"title": "ImageClassificationInput",
+	"type": "object",
+	"properties": {
+		"inputs": {
+			"type": "string",
+			"description": "The input image data as a base64-encoded string. If no `parameters` are provided, you can also provide the image data as a raw bytes payload."
+		},
+		"parameters": {
+			"description": "Additional inference parameters",
+			"$ref": "#/$defs/ImageClassificationParameters"
+		}
+	},
+	"$defs": {
+		"ImageClassificationParameters": {
+			"title": "ImageClassificationParameters",
+			"description": "Additional inference parameters for Image Classification",
+			"type": "object",
+			"properties": {
+				"function_to_apply": {
+					"title": "ImageClassificationOutputTransform",
+					"$ref": "/inference/schemas/common-definitions.json#/definitions/ClassificationOutputTransform"
+				},
+				"top_k": {
+					"type": "integer",
+					"description": "When specified, limits the output to the top K most probable classes."
+				}
+			}
+		}
+	},
+	"required": ["inputs"]
+}

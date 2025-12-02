@@ -1,0 +1,40 @@
+{
+	"$id": "/inference/schemas/sentence-similarity/input.json",
+	"$schema": "http://json-schema.org/draft-06/schema#",
+	"description": "Inputs for Sentence similarity inference",
+	"title": "SentenceSimilarityInput",
+	"type": "object",
+	"properties": {
+		"inputs": {
+			"title": "SentenceSimilarityInputData",
+			"type": "object",
+			"properties": {
+				"sourceSentence": {
+					"description": "The string that you wish to compare the other strings with. This can be a phrase, sentence, or longer passage, depending on the model being used.",
+					"type": "string"
+				},
+				"sentences": {
+					"type": "array",
+					"description": "A list of strings which will be compared against the source_sentence.",
+					"items": {
+						"type": "string"
+					}
+				}
+			},
+			"required": ["sourceSentence", "sentences"]
+		},
+		"parameters": {
+			"description": "Additional inference parameters",
+			"$ref": "#/$defs/SentenceSimilarityParameters"
+		}
+	},
+	"$defs": {
+		"SentenceSimilarityParameters": {
+			"title": "SentenceSimilarityParameters",
+			"description": "Additional inference parameters for Sentence Similarity",
+			"type": "object",
+			"properties": {}
+		}
+	},
+	"required": ["inputs"]
+}

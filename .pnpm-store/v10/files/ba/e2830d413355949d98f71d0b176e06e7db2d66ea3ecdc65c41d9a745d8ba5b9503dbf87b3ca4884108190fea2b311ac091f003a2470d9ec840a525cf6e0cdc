@@ -1,0 +1,11 @@
+import type { Attachment } from '@ai-sdk/ui-utils-v5';
+import type { FilePart, ImagePart, TextPart } from '../../../ai-sdk.types.d.ts';
+type ContentPart = TextPart | ImagePart | FilePart;
+/**
+ * Converts a list of attachments to a list of content parts
+ * for consumption by `ai/core` functions.
+ * Currently only supports images and text attachments.
+ */
+export declare function attachmentsToParts(attachments: Attachment[]): ContentPart[];
+export {};
+//# sourceMappingURL=attachments-to-parts.d.ts.map

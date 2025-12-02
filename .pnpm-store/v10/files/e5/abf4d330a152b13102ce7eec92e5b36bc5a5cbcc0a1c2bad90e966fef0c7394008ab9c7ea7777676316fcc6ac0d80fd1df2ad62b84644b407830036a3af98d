@@ -1,0 +1,104 @@
+/**
+ * OpenTelemetry input messages schema
+ * As of 10/14/2025, this schema is still in draft status.
+ * https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-input-messages.json
+ */
+
+/**
+ * Role of the entity that created the message.
+ */
+export type Role = Role1 | string;
+export type Role1 = "system" | "user" | "assistant" | "tool";
+/**
+ * The type of the content captured in this part.
+ */
+export type Type = "text";
+/**
+ * Text content sent to or received from the model.
+ */
+export type Content = string;
+/**
+ * The type of the content captured in this part.
+ */
+export type Type1 = "tool_call";
+/**
+ * Unique identifier for the tool call.
+ */
+export type Id = string | null;
+/**
+ * Name of the tool.
+ */
+export type Name = string;
+/**
+ * The type of the content captured in this part.
+ */
+export type Type2 = "tool_call_response";
+/**
+ * Unique tool call identifier.
+ */
+export type Id1 = string | null;
+/**
+ * The type of the content captured in this part.
+ */
+export type Type3 = string;
+/**
+ * List of message parts that make up the message content.
+ */
+export type Parts = (TextPart | ToolCallRequestPart | ToolCallResponsePart)[];
+/**
+ * Represents the list of input messages sent to the model.
+ */
+export type InputMessages = ChatMessage[];
+
+export interface ChatMessage {
+  role: Role;
+  parts: Parts;
+  [k: string]: unknown;
+}
+/**
+ * Represents text content sent to or received from the model.
+ */
+export interface TextPart {
+  type: Type;
+  content: Content;
+  [k: string]: unknown;
+}
+/**
+ * Represents a tool call requested by the model.
+ */
+export interface ToolCallRequestPart {
+  type: Type1;
+  id?: Id;
+  name: Name;
+  arguments?: Arguments;
+  [k: string]: unknown;
+}
+/**
+ * Arguments for the tool call.
+ */
+export interface Arguments {
+  [k: string]: unknown;
+}
+/**
+ * Represents a tool call result sent to the model or a built-in tool call outcome and details.
+ */
+export interface ToolCallResponsePart {
+  type: Type2;
+  id?: Id1;
+  response: Response;
+  [k: string]: unknown;
+}
+/**
+ * Tool call response.
+ */
+export interface Response {
+  [k: string]: unknown;
+}
+/**
+ * Represents an arbitrary message part with any type and properties.
+ * This allows for extensibility with custom message part types.
+ */
+export interface GenericPart {
+  type: Type3;
+  [k: string]: unknown;
+}

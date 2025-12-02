@@ -1,0 +1,150 @@
+# Call expressions
+
+func main() {
+  a(b, c...)
+
+  a(
+    b,
+    c,
+  )
+
+  a(
+    b,
+    c...,
+  )
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  ExprStatement(CallExpr(VariableName,Arguments(VariableName,VariableName,"..."))),
+  ExprStatement(CallExpr(VariableName,Arguments(VariableName,VariableName))),
+  ExprStatement(CallExpr(VariableName,Arguments(VariableName,VariableName,"..."))))))
+
+# Nested call expressions
+
+a(b(c(d)))
+
+==>
+
+SourceFile(ExprStatement(CallExpr(VariableName,Arguments(
+  CallExpr(VariableName,Arguments(CallExpr(VariableName,Arguments(VariableName))))))))
+
+# Generic call expressions
+
+a[b](c)
+a[b, c](d)
+a[b[c], d](e[f])
+
+==>
+
+SourceFile(
+  ExprStatement(CallExpr(ParameterizedExpr(VariableName,TypeArgs(TypeName)),Arguments(VariableName))),
+  ExprStatement(CallExpr(ParameterizedExpr(VariableName,TypeArgs(TypeName,TypeName)),Arguments(VariableName))),
+  ExprStatement(CallExpr(
+    ParameterizedExpr(VariableName,TypeArgs(ParameterizedType(TypeName,TypeArgs(TypeName)),TypeName)),
+    Arguments(IndexExpr(VariableName,VariableName)))))
+
+# Calls to 'make' and 'new'
+
+make(chan<- int)
+
+// `new` and `make` can also be used as variable names
+make(chan<- int, (new - old), make.stuff)
+
+make(chan<- int, 5, 10)
+new(map[string]string)
+
+==>
+
+SourceFile(
+  ExprStatement(CallExpr(make,Arguments(ChannelType(chan,"<-",TypeName)))),
+  LineComment,
+  ExprStatement(CallExpr(make,Arguments(
+    ChannelType(chan,"<-",TypeName),
+    ParenthesizedExpr(BinaryExp(VariableName,ArithOp,VariableName)),
+    SelectorExpr(VariableName,FieldName)))),
+  ExprStatement(CallExpr(make,Arguments(ChannelType(chan,"<-",TypeName),Number,Number))),
+  ExprStatement(CallExpr(new,Arguments(MapType(map,TypeName,TypeName)))))
+
+# Selector expressions
+
+a.b.c()
+
+==>
+
+SourceFile(ExprStatement(CallExpr(SelectorExpr(SelectorExpr(VariableName,FieldName),FieldName),Arguments)))
+
+# Indexing expressions
+
+_ = a[1]
+_ = b[:]
+_ = c[1:]
+_ = d[1:2]
+_ = e[:2:3]
+_ = f[1:2:3]
+
+==>
+
+SourceFile(
+  Assignment(VariableName,IndexExpr(VariableName,Number)),
+  Assignment(VariableName,SliceExpr(VariableName)),
+  Assignment(VariableName,SliceExpr(VariableName,Number)),
+  Assignment(VariableName,SliceExpr(VariableName,Number,Number)),
+  Assignment(VariableName,SliceExpr(VariableName,Number,Number)),
+  Assignment(VariableName,SliceExpr(VariableName,Number,Number,Number)))
+
+# Type assertion expressions
+
+_ = a.(p.Person)
+
+==>
+
+SourceFile(
+  Assignment(VariableName,TypeAssertion(VariableName,QualifiedType(VariableName,TypeName))))
+
+# Type conversion expressions
+
+_ = []a.b(c.d)
+_ = ([]a.b)(c.d)
+_ = <-chan int(c) // conversion to channel type
+<-(chan int(c)) // receive statement
+// These type conversions cannot be distinguished from call expressions
+T(x)
+(*Point)(p)
+e.f(g)
+(e.f)(g)
+
+==>
+
+SourceFile(
+  Assignment(VariableName,Conversion(
+    SliceType(QualifiedType(VariableName,TypeName)),
+    SelectorExpr(VariableName,FieldName))),
+  Assignment(VariableName,Conversion(
+    ParenthesizedType(SliceType(QualifiedType(VariableName,TypeName))),
+    SelectorExpr(VariableName,FieldName))),
+  Assignment(VariableName,Conversion(
+    ChannelType("<-",chan,TypeName),
+    VariableName)),LineComment,
+  ExprStatement(UnaryExp("<-",ParenthesizedExpr(Conversion(
+    ChannelType(chan,TypeName),
+    VariableName)))),LineComment,
+  LineComment,
+  ExprStatement(CallExpr(VariableName,Arguments(VariableName))),
+  ExprStatement(CallExpr(ParenthesizedExpr(UnaryExp(DerefOp,VariableName)),Arguments(VariableName))),
+  ExprStatement(CallExpr(SelectorExpr(VariableName,FieldName),Arguments(VariableName))),
+  ExprStatement(CallExpr(ParenthesizedExpr(SelectorExpr(VariableName,FieldName)),Arguments(VariableName))))
+
+# Unary expressions
+
+func main() {
+  _ = !<-a
+  _ = *foo()
+}
+
+==>
+
+SourceFile(FunctionDecl(func,DefName,Parameters,Block(
+  Assignment(VariableName,UnaryExp(LogicOp,UnaryExp("<-",VariableName))),
+  Assignment(VariableName,CallExpr(UnaryExp(DerefOp,VariableName),Arguments)))))

@@ -1,0 +1,51 @@
+{
+	"name": "path-type",
+	"version": "6.0.0",
+	"description": "Check if a path is a file, directory, or symlink",
+	"license": "MIT",
+	"repository": "sindresorhus/path-type",
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		"types": "./index.d.ts",
+		"default": "./index.js"
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"test": "xo && nyc ava && tsd"
+	},
+	"files": [
+		"index.js",
+		"index.d.ts"
+	],
+	"keywords": [
+		"path",
+		"fs",
+		"type",
+		"is",
+		"check",
+		"directory",
+		"file",
+		"filepath",
+		"symlink",
+		"symbolic",
+		"link",
+		"stat",
+		"stats",
+		"filesystem"
+	],
+	"devDependencies": {
+		"ava": "^6.1.3",
+		"nyc": "^17.0.0",
+		"tsd": "^0.31.1",
+		"xo": "^0.59.2"
+	}
+}

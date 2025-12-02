@@ -1,0 +1,43 @@
+{
+  "name": "@img/sharp-libvips-darwin-arm64",
+  "version": "1.0.4",
+  "requiresBuild": false,
+  "files": {
+    "lib/libvips-cpp.42.dylib": {
+      "checkedAt": 1764662924260,
+      "integrity": "sha512-EJLRgXJoEz4JqZ3ZiDjxMPgPNqI3p+6odUEuUWpyMU0ahZ0jxdtCdMs32UPLJeW3xyZlpwy+cu+5Ie56vGPPsw==",
+      "mode": 420,
+      "size": 15578152
+    },
+    "lib/glib-2.0/include/glibconfig.h": {
+      "checkedAt": 1764662924261,
+      "integrity": "sha512-D04/TQ4aB9MGCKRfJ5mZ/AyF8zAJRRFgVfuukSv2SuXhiyWQr/83pZw7VPmyEE/i3klwRK6yN8UsWLKs+9nQEg==",
+      "mode": 420,
+      "size": 6044
+    },
+    "lib/index.js": {
+      "checkedAt": 1764662924262,
+      "integrity": "sha512-gnbnufU5zVY34J5YOScRxwTRqq1P4UNNokFG3F+VnCKGywbjVxdKLY3oFhVw2R6vMReWFJ5F+iUis8CbSY34mw==",
+      "mode": 420,
+      "size": 28
+    },
+    "package.json": {
+      "checkedAt": 1764662924263,
+      "integrity": "sha512-z7TF8/GS1qqx7j0iBnTa5lZBP+9kG1O+QVOHMQos87qsKZuQ1k5Xox+QBUFd8MQmjM5sMrO2JtPk0NTRM7XDSw==",
+      "mode": 420,
+      "size": 826
+    },
+    "versions.json": {
+      "checkedAt": 1764662924263,
+      "integrity": "sha512-a7FNBj/grW4kGbB/iFLcopjbbCU7cByJlVBrFv+Ua6bOfRNs53RLktVEFpSI7Do+0RDSNHwMguJBP37CIrOK8A==",
+      "mode": 420,
+      "size": 590
+    },
+    "README.md": {
+      "checkedAt": 1764662924264,
+      "integrity": "sha512-gSWmijhP9fEj1bOsJmK5LcD8bxBYue0cNw0kpaKVMJ1hd4iOasZBbSgpVdXzu0+aYocjbMR1fHLXQo3jcpFmaA==",
+      "mode": 420,
+      "size": 4333
+    }
+  }
+}

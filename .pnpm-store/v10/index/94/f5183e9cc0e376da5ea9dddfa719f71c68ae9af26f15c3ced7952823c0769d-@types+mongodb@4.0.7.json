@@ -1,0 +1,25 @@
+{
+  "name": "@types/mongodb",
+  "version": "4.0.7",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662925784,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 511,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662925785,
+      "integrity": "sha512-h/53vARQ5+SqfFJbEC10QaQUN6HUE+eHZuor61ggC77V1G9M7PshqdDKiM93Kyg4bFQDXXUv0Q+ZLdanLC13mQ==",
+      "mode": 511,
+      "size": 188
+    },
+    "package.json": {
+      "checkedAt": 1764662925785,
+      "integrity": "sha512-eDC07w9hgpgHheTQvXy3dHAEHcxlHStO4NbC75aHxMH0QNs18RYgZmWm9DkCKO0pUwAbDyY3VDl7JaxjsRpdGQ==",
+      "mode": 511,
+      "size": 314
+    }
+  }
+}

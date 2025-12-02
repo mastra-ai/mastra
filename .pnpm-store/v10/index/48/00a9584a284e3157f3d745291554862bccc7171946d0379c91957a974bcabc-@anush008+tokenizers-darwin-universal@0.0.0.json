@@ -1,0 +1,25 @@
+{
+  "name": "@anush008/tokenizers-darwin-universal",
+  "version": "0.0.0",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662918912,
+      "integrity": "sha512-4lVCeh+iEGDbPD8hRvtI1sjnYq+jDLBXTtMtADHAzbuUNwEY6CbCHpjWNByhYG/ERG1jGUeGyP1q2ue1VVXI+A==",
+      "mode": 420,
+      "size": 388
+    },
+    "README.md": {
+      "checkedAt": 1764662918913,
+      "integrity": "sha512-Rf7l5af4Rr09L8Eg226YIt6Nb5bxCfzN/NeTf8wbsN8PCXtip364dWPKDAiHgwlExGkTtaQDOuyd6e7SZxZayQ==",
+      "mode": 420,
+      "size": 116
+    },
+    "tokenizers.darwin-universal.node": {
+      "checkedAt": 1764662919005,
+      "integrity": "sha512-0u3L4w5VMsi5Qn8dJyRCpoAON9WPtDMX55MZbTiw4C8kfJ73cJGyWYwUaH4LTuTebraAdkEdQeB9a+LlYlabAg==",
+      "mode": 420,
+      "size": 8292976
+    }
+  }
+}

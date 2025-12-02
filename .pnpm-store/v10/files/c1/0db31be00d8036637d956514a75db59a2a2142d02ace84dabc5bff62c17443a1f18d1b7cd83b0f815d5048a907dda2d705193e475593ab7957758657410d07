@@ -1,0 +1,145 @@
+import z from 'zod';
+import type { AgentExecutionOptions } from '../../agent/index.js';
+import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types.js';
+import { Agent } from '../../agent/index.js';
+import type { MessageListInput } from '../../agent/message-list/index.js';
+import type { TracingContext } from '../../observability/index.js';
+import type { RequestContext } from '../../request-context/index.js';
+import type { OutputSchema } from '../../stream/index.js';
+import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream.js';
+export declare function getLastMessage(messages: MessageListInput): string;
+export declare function prepareMemoryStep({ threadId, resourceId, messages, routingAgent, requestContext, generateId, tracingContext, memoryConfig, }: {
+    threadId: string;
+    resourceId: string;
+    messages: MessageListInput;
+    routingAgent: Agent;
+    requestContext: RequestContext;
+    generateId: () => string;
+    tracingContext?: TracingContext;
+    memoryConfig?: any;
+}): Promise<{
+    thread: import("../../memory").StorageThreadType | undefined;
+}>;
+export declare function createNetworkLoop({ networkName, requestContext, runId, agent, generateId, routingAgentOptions, }: {
+    networkName: string;
+    requestContext: RequestContext;
+    runId: string;
+    agent: Agent;
+    routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
+    generateId: () => string;
+}): Promise<{
+    networkWorkflow: import("../../workflows").Workflow<import("../../workflows").DefaultEngineType, import("../../workflows").Step<string, any, any, any, any, any, import("../../workflows").DefaultEngineType>[], "Agent-Network-Outer-Workflow", z.ZodObject<any, z.UnknownKeysParam, z.ZodTypeAny, {
+        [x: string]: any;
+    }, {
+        [x: string]: any;
+    }>, z.ZodObject<{
+        task: z.ZodString;
+        primitiveId: z.ZodString;
+        primitiveType: z.ZodEnum<["agent", "workflow", "none", "tool"]>;
+        result: z.ZodOptional<z.ZodString>;
+        iteration: z.ZodNumber;
+        threadId: z.ZodOptional<z.ZodString>;
+        threadResourceId: z.ZodOptional<z.ZodString>;
+        isOneOff: z.ZodBoolean;
+        verboseIntrospection: z.ZodBoolean;
+    }, "strip", z.ZodTypeAny, {
+        iteration: number;
+        task: string;
+        primitiveId: string;
+        primitiveType: "none" | "tool" | "agent" | "workflow";
+        isOneOff: boolean;
+        verboseIntrospection: boolean;
+        result?: string | undefined;
+        threadId?: string | undefined;
+        threadResourceId?: string | undefined;
+    }, {
+        iteration: number;
+        task: string;
+        primitiveId: string;
+        primitiveType: "none" | "tool" | "agent" | "workflow";
+        isOneOff: boolean;
+        verboseIntrospection: boolean;
+        result?: string | undefined;
+        threadId?: string | undefined;
+        threadResourceId?: string | undefined;
+    }>, z.ZodObject<{
+        task: z.ZodString;
+        primitiveId: z.ZodString;
+        primitiveType: z.ZodEnum<["agent", "workflow", "none", "tool"]>;
+        prompt: z.ZodString;
+        result: z.ZodString;
+        isComplete: z.ZodOptional<z.ZodBoolean>;
+        completionReason: z.ZodOptional<z.ZodString>;
+        iteration: z.ZodNumber;
+        threadId: z.ZodOptional<z.ZodString>;
+        threadResourceId: z.ZodOptional<z.ZodString>;
+        isOneOff: z.ZodBoolean;
+    }, "strip", z.ZodTypeAny, {
+        result: string;
+        prompt: string;
+        iteration: number;
+        task: string;
+        primitiveId: string;
+        primitiveType: "none" | "tool" | "agent" | "workflow";
+        isOneOff: boolean;
+        threadId?: string | undefined;
+        threadResourceId?: string | undefined;
+        isComplete?: boolean | undefined;
+        completionReason?: string | undefined;
+    }, {
+        result: string;
+        prompt: string;
+        iteration: number;
+        task: string;
+        primitiveId: string;
+        primitiveType: "none" | "tool" | "agent" | "workflow";
+        isOneOff: boolean;
+        threadId?: string | undefined;
+        threadResourceId?: string | undefined;
+        isComplete?: boolean | undefined;
+        completionReason?: string | undefined;
+    }>, z.ZodObject<{
+        task: z.ZodString;
+        primitiveId: z.ZodString;
+        primitiveType: z.ZodEnum<["agent", "workflow", "none", "tool"]>;
+        result: z.ZodOptional<z.ZodString>;
+        iteration: z.ZodNumber;
+        threadId: z.ZodOptional<z.ZodString>;
+        threadResourceId: z.ZodOptional<z.ZodString>;
+        isOneOff: z.ZodBoolean;
+        verboseIntrospection: z.ZodBoolean;
+    }, "strip", z.ZodTypeAny, {
+        iteration: number;
+        task: string;
+        primitiveId: string;
+        primitiveType: "none" | "tool" | "agent" | "workflow";
+        isOneOff: boolean;
+        verboseIntrospection: boolean;
+        result?: string | undefined;
+        threadId?: string | undefined;
+        threadResourceId?: string | undefined;
+    }, {
+        iteration: number;
+        task: string;
+        primitiveId: string;
+        primitiveType: "none" | "tool" | "agent" | "workflow";
+        isOneOff: boolean;
+        verboseIntrospection: boolean;
+        result?: string | undefined;
+        threadId?: string | undefined;
+        threadResourceId?: string | undefined;
+    }>>;
+}>;
+export declare function networkLoop<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined>({ networkName, requestContext, runId, routingAgent, routingAgentOptions, generateId, maxIterations, threadId, resourceId, messages, }: {
+    networkName: string;
+    requestContext: RequestContext;
+    runId: string;
+    routingAgent: Agent;
+    routingAgentOptions?: AgentExecutionOptions<OUTPUT, FORMAT>;
+    generateId: () => string;
+    maxIterations: number;
+    threadId?: string;
+    resourceId?: string;
+    messages: MessageListInput;
+}): Promise<MastraAgentNetworkStream>;
+//# sourceMappingURL=index.d.ts.map

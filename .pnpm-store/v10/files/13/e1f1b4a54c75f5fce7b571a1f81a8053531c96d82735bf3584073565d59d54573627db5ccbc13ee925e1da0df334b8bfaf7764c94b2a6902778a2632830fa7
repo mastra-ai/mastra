@@ -1,0 +1,63 @@
+{
+  "name": "@rollup/plugin-alias",
+  "version": "6.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Define and resolve aliases for bundle dependencies",
+  "license": "MIT",
+  "repository": {
+    "url": "rollup/plugins",
+    "directory": "packages/alias"
+  },
+  "author": "Johannes Stein",
+  "homepage": "https://github.com/rollup/plugins/tree/master/packages/alias#readme",
+  "bugs": "https://github.com/rollup/plugins/issues",
+  "type": "module",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "import": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "rollup",
+    "plugin",
+    "resolve",
+    "alias"
+  ],
+  "peerDependencies": {
+    "rollup": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "rollup": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "del-cli": "^5.0.0",
+    "rollup": "^4.0.0",
+    "typescript": "catalog:"
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "ci:coverage": "nyc pnpm test && nyc report --reporter=text-lcov > coverage.lcov",
+    "ci:lint": "pnpm build && pnpm lint",
+    "ci:lint:commits": "commitlint --from=${CIRCLE_BRANCH} --to=${CIRCLE_SHA1}",
+    "ci:test": "pnpm test -- --reporter=verbose",
+    "prebuild": "del-cli dist",
+    "prerelease": "pnpm build",
+    "pretest": "pnpm build",
+    "release": "pnpm --workspace-root package:release $(pwd)",
+    "test": "vitest --config ../../.config/vitest.config.mts run"
+  }
+}

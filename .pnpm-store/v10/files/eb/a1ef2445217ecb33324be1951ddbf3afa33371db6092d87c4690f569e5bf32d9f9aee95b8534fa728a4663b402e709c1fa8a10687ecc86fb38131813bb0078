@@ -1,0 +1,33 @@
+{
+  "name": "imvectordb",
+  "version": "0.0.6",
+  "description": "A super simple in-memory VectorDB",
+  "author": "Jin Kim <golbin@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/golbin/imvectordb",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
+  "include": [
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "mocha -r ts-node/esm  --extension ts 'test/**/*.spec.ts'"
+  },
+  "dependencies": {
+    "openai": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.5",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.4.1",
+    "chai": "^4.3.7",
+    "mocha": "^10.2.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
+  }
+}

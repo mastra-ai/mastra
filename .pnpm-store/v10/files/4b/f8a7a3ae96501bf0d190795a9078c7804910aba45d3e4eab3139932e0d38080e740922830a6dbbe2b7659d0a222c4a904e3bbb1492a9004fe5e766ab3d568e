@@ -1,0 +1,17 @@
+import { Nfsv4Attr } from './constants';
+export declare const PER_SERVER_ATTRS: Set<Nfsv4Attr>;
+export declare const PER_FS_ATTRS: Set<Nfsv4Attr>;
+export declare const HOMOGENEOUS_ATTRS: Set<Nfsv4Attr>;
+export declare const GET_ONLY_ATTRS: Set<Nfsv4Attr>;
+export declare const SET_ONLY_ATTRS: Set<Nfsv4Attr>;
+export declare const REQUIRED_ATTRS: Set<Nfsv4Attr>;
+export declare const RECOMMENDED_ATTRS: Set<Nfsv4Attr>;
+export declare const STAT_ATTRS: Set<Nfsv4Attr>;
+export declare const FS_ATTRS: Set<Nfsv4Attr>;
+export declare const parseBitmask: (mask: number[]) => Set<number>;
+export declare const overlaps: <T>(a: Set<T>, b: Set<T>) => boolean;
+export declare const containsSetOnlyAttr: (requestedAttrs: Set<number>) => boolean;
+export declare const requiresLstat: (requestedAttrs: Set<number>) => boolean;
+export declare const requiresFsStats: (requestedAttrs: Set<number>) => boolean;
+export declare const setBit: (mask: number[], attrNum: Nfsv4Attr) => void;
+export declare const attrNumsToBitmap: (attrNums: Nfsv4Attr[]) => number[];

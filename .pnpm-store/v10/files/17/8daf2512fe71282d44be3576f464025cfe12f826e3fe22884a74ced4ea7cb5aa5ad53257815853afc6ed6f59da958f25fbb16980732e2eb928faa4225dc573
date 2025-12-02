@@ -1,0 +1,36 @@
+{
+  "name": "@libsql/darwin-arm64",
+  "description": "Prebuilt binary package for `libsql` on `darwin-arm64`.",
+  "version": "0.5.22",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "index.node",
+  "files": [
+    "index.node"
+  ],
+  "neon": {
+    "type": "binary",
+    "rust": "aarch64-apple-darwin",
+    "node": "darwin-arm64",
+    "platform": "darwin",
+    "arch": "arm64",
+    "abi": null
+  },
+  "author": "Pekka Enberg <penberg@iki.fi>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tursodatabase/libsql-js.git"
+  },
+  "keywords": [
+    "libsql"
+  ],
+  "bugs": {
+    "url": "https://github.com/tursodatabase/libsql-js/issues"
+  },
+  "homepage": "https://github.com/tursodatabase/libsql-js",
+  "license": "MIT"
+}

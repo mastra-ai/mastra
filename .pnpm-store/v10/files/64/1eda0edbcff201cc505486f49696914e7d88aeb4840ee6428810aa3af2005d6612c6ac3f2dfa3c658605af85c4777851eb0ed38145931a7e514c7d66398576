@@ -1,0 +1,33 @@
+{
+    "object": "list",
+    "data": [
+        {
+            "object": "feature_flag",
+            "id": "flag_01EHQMYV6MBK39QC5PZXHY59C5",
+            "name": "Advanced Dashboard",
+            "slug": "advanced-dashboard",
+            "description": "Enable advanced dashboard features",
+            "created_at": "2024-01-01T00:00:00.000Z",
+            "updated_at": "2024-01-01T00:00:00.000Z"
+        },
+        {
+            "object": "feature_flag",
+            "id": "flag_01EHQMYV6MBK39QC5PZXHY59C6",
+            "name": "Beta Features",
+            "slug": "beta-features",
+            "description": null,
+            "created_at": "2024-01-01T00:00:00.000Z",
+            "updated_at": "2024-01-01T00:00:00.000Z"
+        },
+        {
+            "object": "feature_flag",
+            "id": "flag_01EHQMYV6MBK39QC5PZXHY59C7",
+            "name": "Premium Support",
+            "slug": "premium-support",
+            "description": "Access to premium support features",
+            "created_at": "2024-01-01T00:00:00.000Z",
+            "updated_at": "2024-01-01T00:00:00.000Z"
+        }
+    ],
+    "list_metadata": {}
+}

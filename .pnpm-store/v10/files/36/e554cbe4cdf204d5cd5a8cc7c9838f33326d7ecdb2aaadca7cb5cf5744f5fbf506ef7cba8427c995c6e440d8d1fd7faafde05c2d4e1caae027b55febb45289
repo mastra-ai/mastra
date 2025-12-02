@@ -1,0 +1,62 @@
+{
+  "name": "@huggingface/hub",
+  "packageManager": "pnpm@8.10.5",
+  "version": "0.15.2",
+  "description": "Utilities to interact with the Hugging Face hub",
+  "repository": "https://github.com/huggingface/huggingface.js.git",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "browser": {
+    "./src/utils/sha256-node.ts": false,
+    "./src/utils/FileBlob.ts": false,
+    "./dist/index.js": "./dist/browser/index.js",
+    "./dist/index.mjs": "./dist/browser/index.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "source": "index.ts",
+  "files": [
+    "src",
+    "dist",
+    "index.ts",
+    "tsconfig.json"
+  ],
+  "keywords": [
+    "huggingface",
+    "hub",
+    "api",
+    "client",
+    "hugging",
+    "face"
+  ],
+  "author": "Hugging Face",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.28"
+  },
+  "dependencies": {
+    "@huggingface/tasks": "^0.12.1"
+  },
+  "scripts": {
+    "lint": "eslint --quiet --fix --ext .cjs,.ts .",
+    "lint:check": "eslint --ext .cjs,.ts .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build": "tsup && tsc --emitDeclarationOnly --declaration",
+    "test": "vitest run",
+    "test:browser": "vitest run --browser.name=chrome --browser.headless --config vitest-browser.config.mts",
+    "check": "tsc"
+  }
+}

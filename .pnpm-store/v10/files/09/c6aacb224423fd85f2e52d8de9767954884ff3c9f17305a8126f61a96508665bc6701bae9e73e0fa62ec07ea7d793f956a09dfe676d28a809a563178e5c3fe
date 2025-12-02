@@ -1,0 +1,154 @@
+import type { MastraDBMessage } from '../../agent/message-list/index.js';
+import type { MastraModelConfig } from '../../llm/model/shared.types.js';
+import type { TracingContext } from '../../observability/index.js';
+import type { Processor } from '../index.js';
+/**
+ * Language detection result for a single text
+ */
+export interface LanguageDetection {
+    language: string;
+    confidence: number;
+    iso_code: string;
+}
+/**
+ * Translation result
+ */
+export interface TranslationResult {
+    original_text: string;
+    original_language: string;
+    translated_text: string;
+    target_language: string;
+    confidence: number;
+}
+/**
+ * Language detection and translation result (simplified for minimal tokens)
+ */
+export interface LanguageDetectionResult {
+    iso_code: string | null;
+    confidence: number | null;
+    translated_text?: string | null;
+}
+/**
+ * Configuration options for LanguageDetector
+ */
+export interface LanguageDetectorOptions {
+    /** Model configuration for the detection/translation agent */
+    model: MastraModelConfig;
+    /**
+     * Target language(s) for the project.
+     * If content is detected in a different language, it may be translated.
+     * Can be language name ('English') or ISO code ('en')
+     */
+    targetLanguages: string[];
+    /**
+     * Confidence threshold for language detection (0-1, default: 0.7)
+     * Only process when detection confidence exceeds this threshold
+     */
+    threshold?: number;
+    /**
+     * Strategy when non-target language is detected:
+     * - 'detect': Only detect language, don't translate (default)
+     * - 'translate': Automatically translate to target language
+     * - 'block': Reject content not in target language
+     * - 'warn': Log warning but allow content through
+     */
+    strategy?: 'detect' | 'translate' | 'block' | 'warn';
+    /**
+     * Whether to preserve original content in message metadata (default: true)
+     * Useful for audit trails and debugging
+     */
+    preserveOriginal?: boolean;
+    /**
+     * Custom detection instructions for the agent
+     * If not provided, uses default instructions
+     */
+    instructions?: string;
+    /**
+     * Minimum text length to perform detection (default: 10)
+     * Short text is often unreliable for language detection
+     */
+    minTextLength?: number;
+    /**
+     * Whether to include detailed detection info in logs (default: false)
+     */
+    includeDetectionDetails?: boolean;
+    /**
+     * Translation quality preference:
+     * - 'speed': Prioritize fast translation
+     * - 'quality': Prioritize translation accuracy (default)
+     * - 'balanced': Balance between speed and quality
+     */
+    translationQuality?: 'speed' | 'quality' | 'balanced';
+}
+/**
+ * LanguageDetector identifies the language of input text and optionally
+ * translates it to a target language for consistent processing.
+ *
+ * Supports 100+ languages via internal agent-based detection and translation,
+ * making it ideal for multilingual AI applications and global deployment.
+ */
+export declare class LanguageDetector implements Processor<'language-detector'> {
+    readonly id = "language-detector";
+    readonly name = "Language Detector";
+    private detectionAgent;
+    private targetLanguages;
+    private threshold;
+    private strategy;
+    private preserveOriginal;
+    private minTextLength;
+    private includeDetectionDetails;
+    private translationQuality;
+    private static readonly DEFAULT_TARGET_LANGUAGES;
+    private static readonly LANGUAGE_MAP;
+    constructor(options: LanguageDetectorOptions);
+    processInput(args: {
+        messages: MastraDBMessage[];
+        abort: (reason?: string) => never;
+        tracingContext?: TracingContext;
+    }): Promise<MastraDBMessage[]>;
+    /**
+     * Detect language using the internal agent
+     */
+    private detectLanguage;
+    /**
+     * Determine if language detection indicates non-target language
+     */
+    private isNonTargetLanguage;
+    /**
+     * Get detected language name from ISO code
+     */
+    private getLanguageName;
+    /**
+     * Handle detected language based on strategy
+     */
+    private handleDetectedLanguage;
+    /**
+     * Create a translated message with original preserved in metadata
+     */
+    private createTranslatedMessage;
+    /**
+     * Add language detection metadata to message
+     */
+    private addLanguageMetadata;
+    /**
+     * Check if detected language is a target language
+     */
+    private isTargetLanguage;
+    /**
+     * Extract text content from message for analysis
+     */
+    private extractTextContent;
+    /**
+     * Get language code from language name or vice versa
+     */
+    private getLanguageCode;
+    /**
+     * Create default detection and translation instructions
+     */
+    private createDefaultInstructions;
+    /**
+     * Create detection prompt for the agent
+     */
+    private createDetectionPrompt;
+}
+//# sourceMappingURL=language-detector.d.ts.map

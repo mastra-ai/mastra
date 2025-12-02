@@ -1,0 +1,1 @@
+{"version":3,"file":"ALIASDEL.js","sourceRoot":"","sources":["../../../lib/commands/ALIASDEL.ts"],"names":[],"mappings":";;AAGA,kBAAe;IACb,iBAAiB,EAAE,IAAI;IACvB,YAAY,EAAE,IAAI;IAClB;;;;OAIG;IACH,YAAY,CAAC,MAAqB,EAAE,KAAoB;QACtD,MAAM,CAAC,IAAI,CAAC,aAAa,EAAE,KAAK,CAAC,CAAC;IACpC,CAAC;IACD,cAAc,EAAE,SAAqD;CAC3C,CAAC"}

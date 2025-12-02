@@ -1,0 +1,31 @@
+{
+  "name": "@vitest/pretty-format",
+  "version": "4.0.8",
+  "requiresBuild": false,
+  "files": {
+    "dist/index.js": {
+      "checkedAt": 1764662923515,
+      "integrity": "sha512-SFJtXW9MMriAl97PHZwxFhkt6dwLFh0v8IYPMZh9IaVA+MKbeHg1VTHF6Jnu0HG6OxkA5MleaUynnGlO2U1u/Q==",
+      "mode": 420,
+      "size": 39685
+    },
+    "package.json": {
+      "checkedAt": 1764662923516,
+      "integrity": "sha512-abQU3/MxukF92rrBsPZALAzxRCOBCob0Aoq5eHBBmnpMrMMUIKMD2K4SmBdBEk2b5mDUa3BKl6ynFZan45AXNA==",
+      "mode": 420,
+      "size": 1076
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662923517,
+      "integrity": "sha512-n0aUW0vyZr7t39Ngu5Mo7TnJWl9WEXRq1lF6QNVjCmmrrkh6u8+okgp93XAwLQ0N5p0QR/xCtLOY8rwstfvg1w==",
+      "mode": 420,
+      "size": 3211
+    },
+    "LICENSE": {
+      "checkedAt": 1764662923518,
+      "integrity": "sha512-AxPiQHDnFTOwiy0HEsivy5bYN2wjcRKtw2lWjpeXevVq5EsAeGD6UzkfgwyM9B8ElYup7flAhvpi12SE1jQcGA==",
+      "mode": 420,
+      "size": 1102
+    }
+  }
+}

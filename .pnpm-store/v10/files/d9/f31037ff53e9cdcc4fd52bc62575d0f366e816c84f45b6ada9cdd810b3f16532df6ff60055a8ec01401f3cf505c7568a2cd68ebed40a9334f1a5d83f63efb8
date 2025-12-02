@@ -1,0 +1,1 @@
+{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../../src/runtimes/remote-thread-list/index.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,0BAA0B,IAAI,mCAAmC,EAAE,MAAM,8BAA8B,CAAC;AACjH,YAAY,EAAE,uBAAuB,IAAI,gCAAgC,EAAE,MAAM,SAAS,CAAC;AAE3F,OAAO,EAAE,yBAAyB,IAAI,kCAAkC,EAAE,MAAM,qBAAqB,CAAC;AACtG,OAAO,EAAE,yBAAyB,IAAI,kCAAkC,EAAE,MAAM,iBAAiB,CAAC"}

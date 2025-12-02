@@ -1,0 +1,85 @@
+type Renderable<AdditionalRenderable = null> = string | number | boolean | null | undefined | AdditionalRenderable;
+interface FieldConfig<AdditionalRenderable = null, FieldTypes = string, FieldWrapper = any, CustomData = Record<string, any>> {
+    description?: Renderable<AdditionalRenderable>;
+    inputProps?: Record<string, any>;
+    label?: Renderable<AdditionalRenderable>;
+    fieldType?: FieldTypes;
+    order?: number;
+    fieldWrapper?: FieldWrapper;
+    customData?: CustomData;
+}
+interface ParsedField<AdditionalRenderable = null, FieldTypes = string> {
+    key: string;
+    type: string;
+    required: boolean;
+    default?: any;
+    description?: Renderable;
+    fieldConfig?: FieldConfig<AdditionalRenderable, FieldTypes>;
+    options?: [string, string][];
+    schema?: ParsedField<AdditionalRenderable, FieldTypes>[];
+}
+interface ParsedSchema<AdditionalRenderable = null, FieldTypes = string> {
+    fields: ParsedField<AdditionalRenderable, FieldTypes>[];
+}
+type SuccessfulSchemaValidation = {
+    success: true;
+    data: any;
+};
+type SchemaValidationError = {
+    path: (string | number)[];
+    message: string;
+};
+type ErrorSchemaValidation = {
+    success: false;
+    errors: SchemaValidationError[];
+};
+type SchemaValidation = SuccessfulSchemaValidation | ErrorSchemaValidation;
+
+/**
+ * Get the best label to use for a field.
+ * This will use user-provided labels, descriptions from the schema, or the field key.
+ *
+ * @param field Parsed field
+ * @returns Label for the field
+ */
+declare function getLabel(field: ParsedField): string | number | true;
+
+/**
+ * Schema provider interface
+ *
+ * Schema providers are responsible for converting schemas from different libraries into
+ * a format that AutoForm can use.
+ * They also handle validating the form value and returning error messages in a consistent format.
+ */
+interface SchemaProvider<T = any> {
+    /**
+     * Parse the schema into a format that AutoForm can use.
+     */
+    parseSchema(): ParsedSchema;
+    /**
+     * Validate the form values against the schema.
+     * This returns either the transformed result (e.g. with date coersion) or an array of errors.
+     *
+     * @param values - Form values to validate
+     */
+    validateSchema(_values: T): SchemaValidation;
+    /**
+     * Get the default values for the fields.
+     * This is used to populate the form with initial values.
+     *
+     * @returns Default values for the form
+     */
+    getDefaultValues(): Record<string, any>;
+}
+
+declare function parseSchema(schemaProvider: SchemaProvider): ParsedSchema;
+declare function validateSchema(schemaProvider: SchemaProvider, values: any): SchemaValidation;
+declare function getDefaultValues(schemaProvider: SchemaProvider): Record<string, any>;
+declare function removeEmptyValues<T extends Record<string, any>>(values: T): Partial<T>;
+/**
+ * Sort the fields by order.
+ * If no order is set, the field will be sorted based on the order in the schema.
+ */
+declare function sortFieldsByOrder(fields: ParsedField[] | undefined): ParsedField[];
+
+export { type ErrorSchemaValidation, type FieldConfig, type ParsedField, type ParsedSchema, type Renderable, type SchemaProvider, type SchemaValidation, type SchemaValidationError, type SuccessfulSchemaValidation, getDefaultValues, getLabel, parseSchema, removeEmptyValues, sortFieldsByOrder, validateSchema };

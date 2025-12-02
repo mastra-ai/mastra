@@ -1,0 +1,958 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.firestore.admin.v1;
+
+import "google/api/annotations.proto";
+import "google/api/client.proto";
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/firestore/admin/v1/backup.proto";
+import "google/firestore/admin/v1/database.proto";
+import "google/firestore/admin/v1/field.proto";
+import "google/firestore/admin/v1/index.proto";
+import "google/firestore/admin/v1/operation.proto";
+import "google/firestore/admin/v1/schedule.proto";
+import "google/longrunning/operations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Google.Cloud.Firestore.Admin.V1";
+option go_package = "cloud.google.com/go/firestore/apiv1/admin/adminpb;adminpb";
+option java_multiple_files = true;
+option java_outer_classname = "FirestoreAdminProto";
+option java_package = "com.google.firestore.admin.v1";
+option objc_class_prefix = "GCFS";
+option php_namespace = "Google\\Cloud\\Firestore\\Admin\\V1";
+option ruby_package = "Google::Cloud::Firestore::Admin::V1";
+option (google.api.resource_definition) = {
+  type: "firestore.googleapis.com/Location"
+  pattern: "projects/{project}/locations/{location}"
+};
+option (google.api.resource_definition) = {
+  type: "firestore.googleapis.com/CollectionGroup"
+  pattern: "projects/{project}/databases/{database}/collectionGroups/{collection}"
+};
+
+// The Cloud Firestore Admin API.
+//
+// This API provides several administrative services for Cloud Firestore.
+//
+// Project, Database, Namespace, Collection, Collection Group, and Document are
+// used as defined in the Google Cloud Firestore API.
+//
+// Operation: An Operation represents work being performed in the background.
+//
+// The index service manages Cloud Firestore indexes.
+//
+// Index creation is performed asynchronously.
+// An Operation resource is created for each such asynchronous operation.
+// The state of the operation (including any errors encountered)
+// may be queried via the Operation resource.
+//
+// The Operations collection provides a record of actions performed for the
+// specified Project (including any Operations in progress). Operations are not
+// created directly but through calls on other collections or resources.
+//
+// An Operation that is done may be deleted so that it is no longer listed as
+// part of the Operation collection. Operations are garbage collected after
+// 30 days. By default, ListOperations will only return in progress and failed
+// operations. To list completed operation, issue a ListOperations request with
+// the filter `done: true`.
+//
+// Operations are created by service `FirestoreAdmin`, but are accessed via
+// service `google.longrunning.Operations`.
+service FirestoreAdmin {
+  option (google.api.default_host) = "firestore.googleapis.com";
+  option (google.api.oauth_scopes) =
+      "https://www.googleapis.com/auth/cloud-platform,"
+      "https://www.googleapis.com/auth/datastore";
+
+  // Creates a composite index. This returns a
+  // [google.longrunning.Operation][google.longrunning.Operation] which may be
+  // used to track the status of the creation. The metadata for the operation
+  // will be the type
+  // [IndexOperationMetadata][google.firestore.admin.v1.IndexOperationMetadata].
+  rpc CreateIndex(CreateIndexRequest) returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/{parent=projects/*/databases/*/collectionGroups/*}/indexes"
+      body: "index"
+    };
+    option (google.api.method_signature) = "parent,index";
+    option (google.longrunning.operation_info) = {
+      response_type: "Index"
+      metadata_type: "IndexOperationMetadata"
+    };
+  }
+
+  // Lists composite indexes.
+  rpc ListIndexes(ListIndexesRequest) returns (ListIndexesResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=projects/*/databases/*/collectionGroups/*}/indexes"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Gets a composite index.
+  rpc GetIndex(GetIndexRequest) returns (Index) {
+    option (google.api.http) = {
+      get: "/v1/{name=projects/*/databases/*/collectionGroups/*/indexes/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Deletes a composite index.
+  rpc DeleteIndex(DeleteIndexRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=projects/*/databases/*/collectionGroups/*/indexes/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Gets the metadata and configuration for a Field.
+  rpc GetField(GetFieldRequest) returns (Field) {
+    option (google.api.http) = {
+      get: "/v1/{name=projects/*/databases/*/collectionGroups/*/fields/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Updates a field configuration. Currently, field updates apply only to
+  // single field index configuration. However, calls to
+  // [FirestoreAdmin.UpdateField][google.firestore.admin.v1.FirestoreAdmin.UpdateField]
+  // should provide a field mask to avoid changing any configuration that the
+  // caller isn't aware of. The field mask should be specified as: `{ paths:
+  // "index_config" }`.
+  //
+  // This call returns a
+  // [google.longrunning.Operation][google.longrunning.Operation] which may be
+  // used to track the status of the field update. The metadata for the
+  // operation will be the type
+  // [FieldOperationMetadata][google.firestore.admin.v1.FieldOperationMetadata].
+  //
+  // To configure the default field settings for the database, use
+  // the special `Field` with resource name:
+  // `projects/{project_id}/databases/{database_id}/collectionGroups/__default__/fields/*`.
+  rpc UpdateField(UpdateFieldRequest) returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      patch: "/v1/{field.name=projects/*/databases/*/collectionGroups/*/fields/*}"
+      body: "field"
+    };
+    option (google.api.method_signature) = "field";
+    option (google.longrunning.operation_info) = {
+      response_type: "Field"
+      metadata_type: "FieldOperationMetadata"
+    };
+  }
+
+  // Lists the field configuration and metadata for this database.
+  //
+  // Currently,
+  // [FirestoreAdmin.ListFields][google.firestore.admin.v1.FirestoreAdmin.ListFields]
+  // only supports listing fields that have been explicitly overridden. To issue
+  // this query, call
+  // [FirestoreAdmin.ListFields][google.firestore.admin.v1.FirestoreAdmin.ListFields]
+  // with the filter set to `indexConfig.usesAncestorConfig:false` or
+  // `ttlConfig:*`.
+  rpc ListFields(ListFieldsRequest) returns (ListFieldsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=projects/*/databases/*/collectionGroups/*}/fields"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Exports a copy of all or a subset of documents from Google Cloud Firestore
+  // to another storage system, such as Google Cloud Storage. Recent updates to
+  // documents may not be reflected in the export. The export occurs in the
+  // background and its progress can be monitored and managed via the
+  // Operation resource that is created. The output of an export may only be
+  // used once the associated operation is done. If an export operation is
+  // cancelled before completion it may leave partial data behind in Google
+  // Cloud Storage.
+  //
+  // For more details on export behavior and output format, refer to:
+  // https://cloud.google.com/firestore/docs/manage-data/export-import
+  rpc ExportDocuments(ExportDocumentsRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/{name=projects/*/databases/*}:exportDocuments"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "ExportDocumentsResponse"
+      metadata_type: "ExportDocumentsMetadata"
+    };
+  }
+
+  // Imports documents into Google Cloud Firestore. Existing documents with the
+  // same name are overwritten. The import occurs in the background and its
+  // progress can be monitored and managed via the Operation resource that is
+  // created. If an ImportDocuments operation is cancelled, it is possible
+  // that a subset of the data has already been imported to Cloud Firestore.
+  rpc ImportDocuments(ImportDocumentsRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/{name=projects/*/databases/*}:importDocuments"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "google.protobuf.Empty"
+      metadata_type: "ImportDocumentsMetadata"
+    };
+  }
+
+  // Bulk deletes a subset of documents from Google Cloud Firestore.
+  // Documents created or updated after the underlying system starts to process
+  // the request will not be deleted. The bulk delete occurs in the background
+  // and its progress can be monitored and managed via the Operation resource
+  // that is created.
+  //
+  // For more details on bulk delete behavior, refer to:
+  // https://cloud.google.com/firestore/docs/manage-data/bulk-delete
+  rpc BulkDeleteDocuments(BulkDeleteDocumentsRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/{name=projects/*/databases/*}:bulkDeleteDocuments"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "BulkDeleteDocumentsResponse"
+      metadata_type: "BulkDeleteDocumentsMetadata"
+    };
+  }
+
+  // Create a database.
+  rpc CreateDatabase(CreateDatabaseRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/{parent=projects/*}/databases"
+      body: "database"
+    };
+    option (google.api.method_signature) = "parent,database,database_id";
+    option (google.longrunning.operation_info) = {
+      response_type: "Database"
+      metadata_type: "CreateDatabaseMetadata"
+    };
+  }
+
+  // Gets information about a database.
+  rpc GetDatabase(GetDatabaseRequest) returns (Database) {
+    option (google.api.http) = {
+      get: "/v1/{name=projects/*/databases/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // List all the databases in the project.
+  rpc ListDatabases(ListDatabasesRequest) returns (ListDatabasesResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=projects/*}/databases"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Updates a database.
+  rpc UpdateDatabase(UpdateDatabaseRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      patch: "/v1/{database.name=projects/*/databases/*}"
+      body: "database"
+    };
+    option (google.api.method_signature) = "database,update_mask";
+    option (google.longrunning.operation_info) = {
+      response_type: "Database"
+      metadata_type: "UpdateDatabaseMetadata"
+    };
+  }
+
+  // Deletes a database.
+  rpc DeleteDatabase(DeleteDatabaseRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      delete: "/v1/{name=projects/*/databases/*}"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "Database"
+      metadata_type: "DeleteDatabaseMetadata"
+    };
+  }
+
+  // Gets information about a backup.
+  rpc GetBackup(GetBackupRequest) returns (Backup) {
+    option (google.api.http) = {
+      get: "/v1/{name=projects/*/locations/*/backups/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Lists all the backups.
+  rpc ListBackups(ListBackupsRequest) returns (ListBackupsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=projects/*/locations/*}/backups"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Deletes a backup.
+  rpc DeleteBackup(DeleteBackupRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=projects/*/locations/*/backups/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Creates a new database by restoring from an existing backup.
+  //
+  // The new database must be in the same cloud region or multi-region location
+  // as the existing backup. This behaves similar to
+  // [FirestoreAdmin.CreateDatabase][google.firestore.admin.v1.FirestoreAdmin.CreateDatabase]
+  // except instead of creating a new empty database, a new database is created
+  // with the database type, index configuration, and documents from an existing
+  // backup.
+  //
+  // The [long-running operation][google.longrunning.Operation] can be used to
+  // track the progress of the restore, with the Operation's
+  // [metadata][google.longrunning.Operation.metadata] field type being the
+  // [RestoreDatabaseMetadata][google.firestore.admin.v1.RestoreDatabaseMetadata].
+  // The [response][google.longrunning.Operation.response] type is the
+  // [Database][google.firestore.admin.v1.Database] if the restore was
+  // successful. The new database is not readable or writeable until the LRO has
+  // completed.
+  rpc RestoreDatabase(RestoreDatabaseRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/{parent=projects/*}/databases:restore"
+      body: "*"
+    };
+    option (google.longrunning.operation_info) = {
+      response_type: "Database"
+      metadata_type: "RestoreDatabaseMetadata"
+    };
+  }
+
+  // Creates a backup schedule on a database.
+  // At most two backup schedules can be configured on a database, one daily
+  // backup schedule and one weekly backup schedule.
+  rpc CreateBackupSchedule(CreateBackupScheduleRequest)
+      returns (BackupSchedule) {
+    option (google.api.http) = {
+      post: "/v1/{parent=projects/*/databases/*}/backupSchedules"
+      body: "backup_schedule"
+    };
+    option (google.api.method_signature) = "parent,backup_schedule";
+  }
+
+  // Gets information about a backup schedule.
+  rpc GetBackupSchedule(GetBackupScheduleRequest) returns (BackupSchedule) {
+    option (google.api.http) = {
+      get: "/v1/{name=projects/*/databases/*/backupSchedules/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // List backup schedules.
+  rpc ListBackupSchedules(ListBackupSchedulesRequest)
+      returns (ListBackupSchedulesResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=projects/*/databases/*}/backupSchedules"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Updates a backup schedule.
+  rpc UpdateBackupSchedule(UpdateBackupScheduleRequest)
+      returns (BackupSchedule) {
+    option (google.api.http) = {
+      patch: "/v1/{backup_schedule.name=projects/*/databases/*/backupSchedules/*}"
+      body: "backup_schedule"
+    };
+    option (google.api.method_signature) = "backup_schedule,update_mask";
+  }
+
+  // Deletes a backup schedule.
+  rpc DeleteBackupSchedule(DeleteBackupScheduleRequest)
+      returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=projects/*/databases/*/backupSchedules/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+}
+
+// A request to list the Firestore Databases in all locations for a project.
+message ListDatabasesRequest {
+  // Required. A parent name of the form
+  // `projects/{project_id}`
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "firestore.googleapis.com/Database"
+    }
+  ];
+
+  // If true, also returns deleted resources.
+  bool show_deleted = 4;
+}
+
+// The request for
+// [FirestoreAdmin.CreateDatabase][google.firestore.admin.v1.FirestoreAdmin.CreateDatabase].
+message CreateDatabaseRequest {
+  // Required. A parent name of the form
+  // `projects/{project_id}`
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "firestore.googleapis.com/Database"
+    }
+  ];
+
+  // Required. The Database to create.
+  Database database = 2 [(google.api.field_behavior) = REQUIRED];
+
+  // Required. The ID to use for the database, which will become the final
+  // component of the database's resource name.
+  //
+  // This value should be 4-63 characters. Valid characters are /[a-z][0-9]-/
+  // with first character a letter and the last a letter or a number. Must not
+  // be UUID-like /[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/.
+  //
+  // "(default)" database ID is also valid.
+  string database_id = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Metadata related to the create database operation.
+message CreateDatabaseMetadata {}
+
+// The list of databases for a project.
+message ListDatabasesResponse {
+  // The databases in the project.
+  repeated Database databases = 1;
+
+  // In the event that data about individual databases cannot be listed they
+  // will be recorded here.
+  //
+  // An example entry might be: projects/some_project/locations/some_location
+  // This can happen if the Cloud Region that the Database resides in is
+  // currently unavailable.  In this case we can't fetch all the details about
+  // the database. You may be able to get a more detailed error message
+  // (or possibly fetch the resource) by sending a 'Get' request for the
+  // resource or a 'List' request for the specific location.
+  repeated string unreachable = 3;
+}
+
+// The request for
+// [FirestoreAdmin.GetDatabase][google.firestore.admin.v1.FirestoreAdmin.GetDatabase].
+message GetDatabaseRequest {
+  // Required. A name of the form
+  // `projects/{project_id}/databases/{database_id}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Database"
+    }
+  ];
+}
+
+// The request for
+// [FirestoreAdmin.UpdateDatabase][google.firestore.admin.v1.FirestoreAdmin.UpdateDatabase].
+message UpdateDatabaseRequest {
+  // Required. The database to update.
+  Database database = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// Metadata related to the update database operation.
+message UpdateDatabaseMetadata {}
+
+// The request for
+// [FirestoreAdmin.DeleteDatabase][google.firestore.admin.v1.FirestoreAdmin.DeleteDatabase].
+message DeleteDatabaseRequest {
+  // Required. A name of the form
+  // `projects/{project_id}/databases/{database_id}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Database"
+    }
+  ];
+
+  // The current etag of the Database.
+  // If an etag is provided and does not match the current etag of the database,
+  // deletion will be blocked and a FAILED_PRECONDITION error will be returned.
+  string etag = 3;
+}
+
+// Metadata related to the delete database operation.
+message DeleteDatabaseMetadata {}
+
+// The request for
+// [FirestoreAdmin.CreateBackupSchedule][google.firestore.admin.v1.FirestoreAdmin.CreateBackupSchedule].
+message CreateBackupScheduleRequest {
+  // Required. The parent database.
+  //
+  //  Format `projects/{project}/databases/{database}`
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Database"
+    }
+  ];
+
+  // Required. The backup schedule to create.
+  BackupSchedule backup_schedule = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// The request for
+// [FirestoreAdmin.GetBackupSchedule][google.firestore.admin.v1.FirestoreAdmin.GetBackupSchedule].
+message GetBackupScheduleRequest {
+  // Required. The name of the backup schedule.
+  //
+  // Format
+  // `projects/{project}/databases/{database}/backupSchedules/{backup_schedule}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/BackupSchedule"
+    }
+  ];
+}
+
+// The request for
+// [FirestoreAdmin.UpdateBackupSchedule][google.firestore.admin.v1.FirestoreAdmin.UpdateBackupSchedule].
+message UpdateBackupScheduleRequest {
+  // Required. The backup schedule to update.
+  BackupSchedule backup_schedule = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// The request for
+// [FirestoreAdmin.ListBackupSchedules][google.firestore.admin.v1.FirestoreAdmin.ListBackupSchedules].
+message ListBackupSchedulesRequest {
+  // Required. The parent database.
+  //
+  // Format is `projects/{project}/databases/{database}`.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Database"
+    }
+  ];
+}
+
+// The response for
+// [FirestoreAdmin.ListBackupSchedules][google.firestore.admin.v1.FirestoreAdmin.ListBackupSchedules].
+message ListBackupSchedulesResponse {
+  // List of all backup schedules.
+  repeated BackupSchedule backup_schedules = 1;
+}
+
+// The request for [FirestoreAdmin.DeleteBackupSchedules][].
+message DeleteBackupScheduleRequest {
+  // Required. The name of the backup schedule.
+  //
+  // Format
+  // `projects/{project}/databases/{database}/backupSchedules/{backup_schedule}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/BackupSchedule"
+    }
+  ];
+}
+
+// The request for
+// [FirestoreAdmin.CreateIndex][google.firestore.admin.v1.FirestoreAdmin.CreateIndex].
+message CreateIndexRequest {
+  // Required. A parent name of the form
+  // `projects/{project_id}/databases/{database_id}/collectionGroups/{collection_id}`
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/CollectionGroup"
+    }
+  ];
+
+  // Required. The composite index to create.
+  Index index = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// The request for
+// [FirestoreAdmin.ListIndexes][google.firestore.admin.v1.FirestoreAdmin.ListIndexes].
+message ListIndexesRequest {
+  // Required. A parent name of the form
+  // `projects/{project_id}/databases/{database_id}/collectionGroups/{collection_id}`
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/CollectionGroup"
+    }
+  ];
+
+  // The filter to apply to list results.
+  string filter = 2;
+
+  // The number of results to return.
+  int32 page_size = 3;
+
+  // A page token, returned from a previous call to
+  // [FirestoreAdmin.ListIndexes][google.firestore.admin.v1.FirestoreAdmin.ListIndexes],
+  // that may be used to get the next page of results.
+  string page_token = 4;
+}
+
+// The response for
+// [FirestoreAdmin.ListIndexes][google.firestore.admin.v1.FirestoreAdmin.ListIndexes].
+message ListIndexesResponse {
+  // The requested indexes.
+  repeated Index indexes = 1;
+
+  // A page token that may be used to request another page of results. If blank,
+  // this is the last page.
+  string next_page_token = 2;
+}
+
+// The request for
+// [FirestoreAdmin.GetIndex][google.firestore.admin.v1.FirestoreAdmin.GetIndex].
+message GetIndexRequest {
+  // Required. A name of the form
+  // `projects/{project_id}/databases/{database_id}/collectionGroups/{collection_id}/indexes/{index_id}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "firestore.googleapis.com/Index" }
+  ];
+}
+
+// The request for
+// [FirestoreAdmin.DeleteIndex][google.firestore.admin.v1.FirestoreAdmin.DeleteIndex].
+message DeleteIndexRequest {
+  // Required. A name of the form
+  // `projects/{project_id}/databases/{database_id}/collectionGroups/{collection_id}/indexes/{index_id}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "firestore.googleapis.com/Index" }
+  ];
+}
+
+// The request for
+// [FirestoreAdmin.UpdateField][google.firestore.admin.v1.FirestoreAdmin.UpdateField].
+message UpdateFieldRequest {
+  // Required. The field to be updated.
+  Field field = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // A mask, relative to the field. If specified, only configuration specified
+  // by this field_mask will be updated in the field.
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// The request for
+// [FirestoreAdmin.GetField][google.firestore.admin.v1.FirestoreAdmin.GetField].
+message GetFieldRequest {
+  // Required. A name of the form
+  // `projects/{project_id}/databases/{database_id}/collectionGroups/{collection_id}/fields/{field_id}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "firestore.googleapis.com/Field" }
+  ];
+}
+
+// The request for
+// [FirestoreAdmin.ListFields][google.firestore.admin.v1.FirestoreAdmin.ListFields].
+message ListFieldsRequest {
+  // Required. A parent name of the form
+  // `projects/{project_id}/databases/{database_id}/collectionGroups/{collection_id}`
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/CollectionGroup"
+    }
+  ];
+
+  // The filter to apply to list results. Currently,
+  // [FirestoreAdmin.ListFields][google.firestore.admin.v1.FirestoreAdmin.ListFields]
+  // only supports listing fields that have been explicitly overridden. To issue
+  // this query, call
+  // [FirestoreAdmin.ListFields][google.firestore.admin.v1.FirestoreAdmin.ListFields]
+  // with a filter that includes `indexConfig.usesAncestorConfig:false` or
+  // `ttlConfig:*`.
+  string filter = 2;
+
+  // The number of results to return.
+  int32 page_size = 3;
+
+  // A page token, returned from a previous call to
+  // [FirestoreAdmin.ListFields][google.firestore.admin.v1.FirestoreAdmin.ListFields],
+  // that may be used to get the next page of results.
+  string page_token = 4;
+}
+
+// The response for
+// [FirestoreAdmin.ListFields][google.firestore.admin.v1.FirestoreAdmin.ListFields].
+message ListFieldsResponse {
+  // The requested fields.
+  repeated Field fields = 1;
+
+  // A page token that may be used to request another page of results. If blank,
+  // this is the last page.
+  string next_page_token = 2;
+}
+
+// The request for
+// [FirestoreAdmin.ExportDocuments][google.firestore.admin.v1.FirestoreAdmin.ExportDocuments].
+message ExportDocumentsRequest {
+  // Required. Database to export. Should be of the form:
+  // `projects/{project_id}/databases/{database_id}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Database"
+    }
+  ];
+
+  // Which collection IDs to export. Unspecified means all collections. Each
+  // collection ID in this list must be unique.
+  repeated string collection_ids = 2;
+
+  // The output URI. Currently only supports Google Cloud Storage URIs of the
+  // form: `gs://BUCKET_NAME[/NAMESPACE_PATH]`, where `BUCKET_NAME` is the name
+  // of the Google Cloud Storage bucket and `NAMESPACE_PATH` is an optional
+  // Google Cloud Storage namespace path. When
+  // choosing a name, be sure to consider Google Cloud Storage naming
+  // guidelines: https://cloud.google.com/storage/docs/naming.
+  // If the URI is a bucket (without a namespace path), a prefix will be
+  // generated based on the start time.
+  string output_uri_prefix = 3;
+
+  // An empty list represents all namespaces. This is the preferred
+  // usage for databases that don't use namespaces.
+  //
+  // An empty string element represents the default namespace. This should be
+  // used if the database has data in non-default namespaces, but doesn't want
+  // to include them. Each namespace in this list must be unique.
+  repeated string namespace_ids = 4;
+
+  // The timestamp that corresponds to the version of the database to be
+  // exported. The timestamp must be in the past, rounded to the minute and not
+  // older than
+  // [earliestVersionTime][google.firestore.admin.v1.Database.earliest_version_time].
+  // If specified, then the exported documents will represent a consistent view
+  // of the database at the provided time. Otherwise, there are no guarantees
+  // about the consistency of the exported documents.
+  google.protobuf.Timestamp snapshot_time = 5;
+}
+
+// The request for
+// [FirestoreAdmin.ImportDocuments][google.firestore.admin.v1.FirestoreAdmin.ImportDocuments].
+message ImportDocumentsRequest {
+  // Required. Database to import into. Should be of the form:
+  // `projects/{project_id}/databases/{database_id}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Database"
+    }
+  ];
+
+  // Which collection IDs to import. Unspecified means all collections included
+  // in the import. Each collection ID in this list must be unique.
+  repeated string collection_ids = 2;
+
+  // Location of the exported files.
+  // This must match the output_uri_prefix of an ExportDocumentsResponse from
+  // an export that has completed successfully.
+  // See:
+  // [google.firestore.admin.v1.ExportDocumentsResponse.output_uri_prefix][google.firestore.admin.v1.ExportDocumentsResponse.output_uri_prefix].
+  string input_uri_prefix = 3;
+
+  // An empty list represents all namespaces. This is the preferred
+  // usage for databases that don't use namespaces.
+  //
+  // An empty string element represents the default namespace. This should be
+  // used if the database has data in non-default namespaces, but doesn't want
+  // to include them. Each namespace in this list must be unique.
+  repeated string namespace_ids = 4;
+}
+
+// The request for
+// [FirestoreAdmin.BulkDeleteDocuments][google.firestore.admin.v1.FirestoreAdmin.BulkDeleteDocuments].
+//
+// When both collection_ids and namespace_ids are set, only documents satisfying
+// both conditions will be deleted.
+//
+// Requests with namespace_ids and collection_ids both empty will be rejected.
+// Please use
+// [FirestoreAdmin.DeleteDatabase][google.firestore.admin.v1.FirestoreAdmin.DeleteDatabase]
+// instead.
+message BulkDeleteDocumentsRequest {
+  // Required. Database to operate. Should be of the form:
+  // `projects/{project_id}/databases/{database_id}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Database"
+    }
+  ];
+
+  // Optional. IDs of the collection groups to delete. Unspecified means all
+  // collection groups.
+  //
+  // Each collection group in this list must be unique.
+  repeated string collection_ids = 2 [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. Namespaces to delete.
+  //
+  // An empty list means all namespaces. This is the recommended
+  // usage for databases that don't use namespaces.
+  //
+  // An empty string element represents the default namespace. This should be
+  // used if the database has data in non-default namespaces, but doesn't want
+  // to delete from them.
+  //
+  // Each namespace in this list must be unique.
+  repeated string namespace_ids = 3 [(google.api.field_behavior) = OPTIONAL];
+}
+
+// The response for
+// [FirestoreAdmin.BulkDeleteDocuments][google.firestore.admin.v1.FirestoreAdmin.BulkDeleteDocuments].
+message BulkDeleteDocumentsResponse {}
+
+// The request for
+// [FirestoreAdmin.GetBackup][google.firestore.admin.v1.FirestoreAdmin.GetBackup].
+message GetBackupRequest {
+  // Required. Name of the backup to fetch.
+  //
+  // Format is `projects/{project}/locations/{location}/backups/{backup}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Backup"
+    }
+  ];
+}
+
+// The request for
+// [FirestoreAdmin.ListBackups][google.firestore.admin.v1.FirestoreAdmin.ListBackups].
+message ListBackupsRequest {
+  // Required. The location to list backups from.
+  //
+  // Format is `projects/{project}/locations/{location}`.
+  // Use `{location} = '-'` to list backups from all locations for the given
+  // project. This allows listing backups from a single location or from all
+  // locations.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Location"
+    }
+  ];
+
+  // An expression that filters the list of returned backups.
+  //
+  // A filter expression consists of a field name, a comparison operator, and a
+  // value for filtering.
+  // The value must be a string, a number, or a boolean. The comparison operator
+  // must be one of: `<`, `>`, `<=`, `>=`, `!=`, `=`, or `:`.
+  // Colon `:` is the contains operator. Filter rules are not case sensitive.
+  //
+  // The following fields in the [Backup][google.firestore.admin.v1.Backup] are
+  // eligible for filtering:
+  //
+  //   * `database_uid` (supports `=` only)
+  string filter = 2;
+}
+
+// The response for
+// [FirestoreAdmin.ListBackups][google.firestore.admin.v1.FirestoreAdmin.ListBackups].
+message ListBackupsResponse {
+  // List of all backups for the project.
+  repeated Backup backups = 1;
+
+  // List of locations that existing backups were not able to be fetched from.
+  //
+  // Instead of failing the entire requests when a single location is
+  // unreachable, this response returns a partial result set and list of
+  // locations unable to be reached here. The request can be retried against a
+  // single location to get a concrete error.
+  repeated string unreachable = 3;
+}
+
+// The request for
+// [FirestoreAdmin.DeleteBackup][google.firestore.admin.v1.FirestoreAdmin.DeleteBackup].
+message DeleteBackupRequest {
+  // Required. Name of the backup to delete.
+  //
+  // format is `projects/{project}/locations/{location}/backups/{backup}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Backup"
+    }
+  ];
+}
+
+// The request message for
+// [FirestoreAdmin.RestoreDatabase][google.firestore.admin.v1.FirestoreAdmin.RestoreDatabase].
+message RestoreDatabaseRequest {
+  // Required. The project to restore the database in. Format is
+  // `projects/{project_id}`.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "firestore.googleapis.com/Database"
+    }
+  ];
+
+  // Required. The ID to use for the database, which will become the final
+  // component of the database's resource name. This database ID must not be
+  // associated with an existing database.
+  //
+  // This value should be 4-63 characters. Valid characters are /[a-z][0-9]-/
+  // with first character a letter and the last a letter or a number. Must not
+  // be UUID-like /[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/.
+  //
+  // "(default)" database ID is also valid.
+  string database_id = 2 [(google.api.field_behavior) = REQUIRED];
+
+  // Required. Backup to restore from. Must be from the same project as the
+  // parent.
+  //
+  // The restored database will be created in the same location as the source
+  // backup.
+  //
+  // Format is: `projects/{project_id}/locations/{location}/backups/{backup}`
+  string backup = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "firestore.googleapis.com/Backup"
+    }
+  ];
+
+  // Optional. Encryption configuration for the restored database.
+  //
+  // If this field is not specified, the restored database will use
+  // the same encryption configuration as the backup, namely
+  // [use_source_encryption][google.firestore.admin.v1.Database.EncryptionConfig.use_source_encryption].
+  Database.EncryptionConfig encryption_config = 9
+      [(google.api.field_behavior) = OPTIONAL];
+}

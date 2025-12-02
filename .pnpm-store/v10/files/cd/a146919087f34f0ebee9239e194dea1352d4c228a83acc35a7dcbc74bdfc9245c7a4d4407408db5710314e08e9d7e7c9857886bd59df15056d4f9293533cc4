@@ -1,0 +1,702 @@
+# Concept definition
+
+template <class T, class U>
+concept Derived = std::is_base_of<U, T>::value;
+
+==>
+
+Program(TemplateDeclaration(
+  template,
+  TemplateParameterList(TypeParameterDeclaration(class,TypeIdentifier),TypeParameterDeclaration(class,TypeIdentifier)),
+  ConceptDefinition(concept,Identifier,ScopedIdentifier(
+    TemplateType(
+      ScopedTypeIdentifier(NamespaceIdentifier,TypeIdentifier),
+      TemplateArgumentList(TypeDescriptor(TypeIdentifier),TypeDescriptor(TypeIdentifier))),
+    Identifier))))
+
+# Concept definition with requires expression
+
+template<typename T>
+concept Hashable = requires(T a) {
+    { std::hash<T>{}(a) } -> std::convertible_to<std::size_t>;
+};
+
+==>
+
+Program(TemplateDeclaration(
+  template,TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+  ConceptDefinition(concept,Identifier,
+    RequiresExpression(requires,ParameterList(ParameterDeclaration(TypeIdentifier,Identifier)),RequirementList(
+      CompoundRequirement(
+        CallExpression(CompoundLiteralExpression(TemplateType(ScopedTypeIdentifier(NamespaceIdentifier,TypeIdentifier),
+          TemplateArgumentList(TypeDescriptor(TypeIdentifier))),InitializerList),ArgumentList(Identifier)),
+        ReturnTypeRequirement(TemplateFunction(ScopedIdentifier(NamespaceIdentifier,Identifier),
+          TemplateArgumentList(TypeDescriptor(ScopedTypeIdentifier(NamespaceIdentifier,TypeIdentifier)))))))))))
+
+# Requires clauses and expressions
+
+template<typename T>
+void f(T&&) requires Eq<T>; // can appear as the last element of a function declarator
+
+template<typename T> requires Addable<T> // or right after a template parameter list
+T add(T a, T b) { return a + b; }
+
+template<typename T>
+concept Addable = requires (T x) { x + x; }; // requires-expression
+
+template<typename T>
+    requires requires (T x) { x + x; } // ad-hoc constraint, note keyword used twice
+T add(T a, T b) { return a + b; }
+
+template<typename T>
+    requires (!std::is_same_v<T, bool>) // parenthesized expressions are allowed
+void f(T);
+
+template<typename T> requires Addable<T> && Subtractable<T> // conjunctions
+T f(T);
+
+template<typename T> requires Addable<T> || Subtractable<T> // disjunctions
+T f(T);
+
+template<typename T> requires false || true // boolean literals
+T f(T);
+
+template<typename... T> requires (... && Addable<T>) // fold expressions
+T f(T);
+
+==>
+
+Program(
+  TemplateDeclaration(template,TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+    Declaration(PrimitiveType,FunctionDeclarator(Identifier,
+      ParameterList(ParameterDeclaration(TypeIdentifier,AbstractReferenceDeclarator)),
+      RequiresClause(requires,TemplateType(TypeIdentifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))))))),
+  LineComment,
+  TemplateDeclaration(
+    template,
+    TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+    RequiresClause(requires,TemplateType(TypeIdentifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier)))),
+    LineComment,
+    FunctionDefinition(TypeIdentifier,FunctionDeclarator(Identifier,ParameterList(
+      ParameterDeclaration(TypeIdentifier,Identifier),
+      ParameterDeclaration(TypeIdentifier,Identifier))),
+      CompoundStatement(ReturnStatement(return,BinaryExpression(Identifier,ArithOp,Identifier))))),
+  TemplateDeclaration(template,
+    TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+    ConceptDefinition(concept,Identifier,
+      RequiresExpression(requires,ParameterList(ParameterDeclaration(TypeIdentifier,Identifier)),
+      RequirementList(SimpleRequirement(BinaryExpression(Identifier,ArithOp,Identifier)))))),
+  LineComment,
+  TemplateDeclaration(template,
+    TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+    RequiresClause(requires,RequiresExpression(requires,
+      ParameterList(ParameterDeclaration(TypeIdentifier,Identifier)),
+      RequirementList(SimpleRequirement(BinaryExpression(Identifier,ArithOp,Identifier))))),
+    LineComment,
+    FunctionDefinition(TypeIdentifier,FunctionDeclarator(Identifier,ParameterList(
+      ParameterDeclaration(TypeIdentifier,Identifier),
+      ParameterDeclaration(TypeIdentifier,Identifier))),
+      CompoundStatement(ReturnStatement(return,BinaryExpression(Identifier,ArithOp,Identifier))))),
+  TemplateDeclaration(template,
+    TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+    RequiresClause(requires,ParenthesizedExpression(UnaryExpression(LogicOp,TemplateFunction(
+      ScopedIdentifier(NamespaceIdentifier,Identifier),
+      TemplateArgumentList(TypeDescriptor(TypeIdentifier),TypeDescriptor(PrimitiveType)))))),
+    LineComment,
+    Declaration(PrimitiveType,FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(TypeIdentifier))))),
+  TemplateDeclaration(template,
+    TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+    RequiresClause(requires,ConstraintConjuction(
+      TemplateType(TypeIdentifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+      LogicOp,
+      TemplateType(TypeIdentifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))))),
+    LineComment,
+    Declaration(TypeIdentifier,FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(TypeIdentifier))))),
+  TemplateDeclaration(template,
+    TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+    RequiresClause(requires,ConstraintDisjunction(
+      TemplateType(TypeIdentifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+      LogicOp,
+      TemplateType(TypeIdentifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))))),
+    LineComment,
+    Declaration(TypeIdentifier,FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(TypeIdentifier))))),
+  TemplateDeclaration(template,
+    TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+    RequiresClause(requires,ConstraintDisjunction(False,LogicOp,True)),
+    LineComment,
+    Declaration(TypeIdentifier,FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(TypeIdentifier))))),
+  TemplateDeclaration(template,
+    TemplateParameterList(VariadicTypeParameterDeclaration(typename,TypeIdentifier)),
+    RequiresClause(requires,ParenthesizedExpression(BinaryExpression(
+      ParamPack,
+      LogicOp,
+      TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier)))))),
+    LineComment,
+    Declaration(TypeIdentifier,FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(TypeIdentifier))))))
+
+# Compound requirements
+
+template<typename T> concept C2 =
+requires(T x) {
+    {*x} -> std::convertible_to<typename T::inner>; // the expression *x must be valid
+                                                    // AND the type T::inner must be valid
+                                                    // AND the result of *x must be convertible to T::inner
+    {x + 1} -> std::same_as<int>; // the expression x + 1 must be valid 
+                               // AND std::same_as<decltype((x + 1)), int> must be satisfied
+                               // i.e., (x + 1) must be a prvalue of type int
+    {x * 1} -> std::convertible_to<T>; // the expression x * 1 must be valid
+                                       // AND its result must be convertible to T
+};
+
+==>
+
+Program(
+  TemplateDeclaration(template,
+    TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+    ConceptDefinition(concept,Identifier,RequiresExpression(
+      requires,
+      ParameterList(ParameterDeclaration(TypeIdentifier,Identifier)),
+      RequirementList(CompoundRequirement(
+        PointerExpression(Identifier),
+        ReturnTypeRequirement(TemplateFunction(
+          ScopedIdentifier(NamespaceIdentifier,Identifier),
+          TemplateArgumentList(
+            TypeDescriptor(DependentType(typename,ScopedTypeIdentifier(NamespaceIdentifier,TypeIdentifier))))))),
+      LineComment,
+      LineComment,
+      LineComment,
+      CompoundRequirement(
+        BinaryExpression(Identifier,ArithOp,Number),
+        ReturnTypeRequirement(TemplateFunction(ScopedIdentifier(NamespaceIdentifier,Identifier),
+          TemplateArgumentList(TypeDescriptor(PrimitiveType))))),
+      LineComment,
+      LineComment,
+      LineComment,
+      CompoundRequirement(
+        BinaryExpression(Identifier,ArithOp,Number),
+        ReturnTypeRequirement(TemplateFunction(ScopedIdentifier(NamespaceIdentifier,Identifier),
+          TemplateArgumentList(TypeDescriptor(TypeIdentifier))))),
+      LineComment,
+      LineComment)))))
+
+# Nested requirements
+
+template <class T>
+concept Semiregular = DefaultConstructible<T> &&
+    CopyConstructible<T> && Destructible<T> && CopyAssignable<T> &&
+requires(T a, size_t n) {  
+    requires Same<T*, decltype(&a)>;  // nested: 
+    { a.~T() } noexcept;  // compound:  is a valid expression that doesn't throw
+    requires Same<T*, decltype(new T)>; // nested: 
+    requires Same<T*, decltype(new T[n])>; // nested
+    { delete new T };  // compound
+    { delete new T[n] }; // compound
+};
+
+==>
+
+Program(TemplateDeclaration(template,
+  TemplateParameterList(TypeParameterDeclaration(class,TypeIdentifier)),
+  ConceptDefinition(concept,Identifier,BinaryExpression(
+    BinaryExpression(
+      BinaryExpression(
+        BinaryExpression(
+          TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+          LogicOp,
+          TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier)))),
+        LogicOp,
+        TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier)))),
+      LogicOp,
+      TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier)))),
+    LogicOp,
+    RequiresExpression(requires,
+      ParameterList(ParameterDeclaration(TypeIdentifier,Identifier),ParameterDeclaration(PrimitiveType,Identifier)),
+      RequirementList(
+        RequiresClause(requires,TemplateType(TypeIdentifier,TemplateArgumentList(
+          TypeDescriptor(TypeIdentifier,AbstractPointerDeclarator),
+          TypeDescriptor(Decltype(decltype,PointerExpression(Identifier)))))),
+        LineComment,
+        CompoundRequirement(CallExpression(FieldExpression(Identifier,DestructorName),ArgumentList),noexcept),
+        LineComment,
+        RequiresClause(requires,TemplateType(TypeIdentifier,TemplateArgumentList(
+          TypeDescriptor(TypeIdentifier,AbstractPointerDeclarator),
+          TypeDescriptor(Decltype(decltype,NewExpression(new,TypeIdentifier)))))),
+        LineComment,
+        RequiresClause(requires,TemplateType(TypeIdentifier,TemplateArgumentList(
+          TypeDescriptor(TypeIdentifier,AbstractPointerDeclarator),
+          TypeDescriptor(Decltype(decltype,NewExpression(new,TypeIdentifier,NewDeclarator(Identifier))))))),
+        LineComment,
+        CompoundRequirement(DeleteExpression(delete,NewExpression(new,TypeIdentifier))),
+        LineComment,
+        CompoundRequirement(DeleteExpression(delete,NewExpression(new,TypeIdentifier,NewDeclarator(Identifier)))),
+        LineComment))))))
+
+# Constraints
+
+template <EqualityComparable T>
+void f(const T&); // constrained function template declaration
+
+void f(const EqualityComparable auto&); // constrained function template declaration
+
+Sortable auto foo = f();
+Sortable<T> auto bar = g();
+NS::Concept<T> auto baz = h();
+
+Sortable decltype(auto) foo = i();
+
+==>
+
+Program(
+  TemplateDeclaration(template,
+    TemplateParameterList(ParameterDeclaration(TypeIdentifier,Identifier)),
+    Declaration(PrimitiveType,FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(
+      const,TypeIdentifier,AbstractReferenceDeclarator))))),
+  LineComment,
+  Declaration(PrimitiveType,FunctionDeclarator(Identifier,ParameterList(
+    ParameterDeclaration(const,PlaceholderTypeSpecifier(TypeIdentifier,auto),AbstractReferenceDeclarator)))),
+  LineComment,
+  Declaration(
+    PlaceholderTypeSpecifier(TypeIdentifier,auto),InitDeclarator(Identifier,CallExpression(Identifier,ArgumentList))),
+  Declaration(
+    PlaceholderTypeSpecifier(TemplateType(TypeIdentifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))),auto),
+    InitDeclarator(Identifier,CallExpression(Identifier,ArgumentList))),
+  Declaration(
+    PlaceholderTypeSpecifier(TemplateType(ScopedTypeIdentifier(NamespaceIdentifier,TypeIdentifier),TemplateArgumentList(TypeDescriptor(TypeIdentifier))),auto),
+    InitDeclarator(Identifier,CallExpression(Identifier,ArgumentList))),
+  Declaration(
+    PlaceholderTypeSpecifier(TypeIdentifier,Decltype(decltype,auto)),
+    InitDeclarator(Identifier,CallExpression(Identifier,ArgumentList))))
+
+# Namespace definitions
+
+namespace std {
+
+int x;
+
+}  // namespace std
+
+namespace A::B { }
+namespace A::B::inline C::D { }
+
+==>
+
+Program(
+  NamespaceDefinition(namespace,Identifier,CompoundStatement(Declaration(PrimitiveType,Identifier))),
+  LineComment,
+  NamespaceDefinition(namespace,Identifier,Identifier,CompoundStatement),
+  NamespaceDefinition(namespace,Identifier,Identifier,inline,Identifier,Identifier,CompoundStatement))
+
+# Namespace alias definitions
+
+namespace A = B;
+namespace C = ::D;
+namespace fs = std::filesystem;
+namespace bfs = ::boost::filesystem;
+namespace literals = std::chono::literals;
+
+==>
+
+Program(
+  NamespaceDefinition(namespace,Identifier,Identifier),
+  NamespaceDefinition(namespace,Identifier,ScopedIdentifier(Identifier)),
+  NamespaceDefinition(namespace,Identifier,ScopedIdentifier(NamespaceIdentifier,Identifier)),
+  NamespaceDefinition(namespace,Identifier,ScopedIdentifier(ScopedNamespaceIdentifier(NamespaceIdentifier),Identifier)),
+  NamespaceDefinition(namespace,Identifier,ScopedIdentifier(
+    ScopedNamespaceIdentifier(NamespaceIdentifier,NamespaceIdentifier),Identifier)))
+
+# Reference declarations
+
+int main() {
+  T &x = y<T &>();
+}
+
+==>
+
+Program(FunctionDefinition(PrimitiveType,FunctionDeclarator(Identifier,ParameterList),CompoundStatement(
+  Declaration(TypeIdentifier,InitDeclarator(ReferenceDeclarator(Identifier),CallExpression(
+    TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier,AbstractReferenceDeclarator))),
+    ArgumentList))))))
+
+# R-value reference declarations
+
+int main(T &&);
+
+int main(T &&t) {
+  const U &&u = v;
+}
+
+==>
+
+Program(
+  Declaration(PrimitiveType,
+    FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(TypeIdentifier,AbstractReferenceDeclarator)))),
+  FunctionDefinition(PrimitiveType,
+    FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(TypeIdentifier,ReferenceDeclarator(Identifier)))),
+    CompoundStatement(Declaration(const,TypeIdentifier,InitDeclarator(ReferenceDeclarator(Identifier),Identifier)))))
+
+# Function-try-block definitions
+
+void foo() try {} catch(...) {}
+
+==>
+
+Program(FunctionDefinition(PrimitiveType,FunctionDeclarator(Identifier,ParameterList),TryStatement(
+  try,CompoundStatement,CatchClause(catch,ParameterList,CompoundStatement))))
+
+# Inline try method definitions
+
+struct S {
+  int getF2() const try { throw 1; } catch (...) { return f; }
+};
+
+==>
+
+Program(StructSpecifier(struct,TypeIdentifier,FieldDeclarationList(
+  FunctionDefinition(PrimitiveType,
+    FunctionDeclarator(FieldIdentifier,ParameterList,const),
+    TryStatement(try,
+      CompoundStatement(ThrowStatement(throw,Number)),
+      CatchClause(catch,ParameterList,CompoundStatement(ReturnStatement(return,Identifier))))))))
+
+# Classes with inheritance
+
+class F : [[deprecated]] public G {};
+class H : public virtual I {};
+class J : virtual protected I {};
+
+==>
+
+Program(
+  ClassSpecifier(class,TypeIdentifier,BaseClassClause(Attribute(AttributeName(Identifier)),Access,TypeIdentifier),
+    FieldDeclarationList),
+  ClassSpecifier(class,TypeIdentifier,BaseClassClause(Access,virtual,TypeIdentifier),FieldDeclarationList),
+  ClassSpecifier(class,TypeIdentifier,BaseClassClause(virtual,Access,TypeIdentifier),FieldDeclarationList))
+
+# Attributes on declarations
+
+[[aaa]]
+int f() { }
+
+class [[gnu::visibility("default")]] A {};
+struct [[gnu::visibility("default")]] A {};
+union [[gnu::visibility("default")]] A {};
+
+class [[gnu::visibility("default")]] [[deprecated]] A {};
+class A final : [[deprecated]] public B {};
+
+==>
+
+Program(
+  FunctionDefinition(Attribute(AttributeName(Identifier)),PrimitiveType,
+    FunctionDeclarator(Identifier,ParameterList),CompoundStatement),
+  ClassSpecifier(class,Attribute(AttributeName(Identifier,Identifier),AttributeArgs(String)),TypeIdentifier,
+    FieldDeclarationList),
+  StructSpecifier(struct,Attribute(AttributeName(Identifier,Identifier),AttributeArgs(String)),TypeIdentifier,
+    FieldDeclarationList),
+  UnionSpecifier(union,Attribute(AttributeName(Identifier,Identifier),AttributeArgs(String)),TypeIdentifier,
+    FieldDeclarationList),
+  ClassSpecifier(class,
+    Attribute(AttributeName(Identifier,Identifier),AttributeArgs(String)),
+    Attribute(AttributeName(Identifier)),
+    TypeIdentifier,FieldDeclarationList),
+  ClassSpecifier(class,TypeIdentifier,VirtualSpecifier,
+    BaseClassClause(Attribute(AttributeName(Identifier)),Access,TypeIdentifier),
+    FieldDeclarationList))
+
+# Constinit/consteval declarations
+
+consteval int answer();
+constinit int life = answer();
+
+==>
+
+Program(
+  Declaration(consteval,PrimitiveType,FunctionDeclarator(Identifier,ParameterList)),
+  Declaration(constinit,PrimitiveType,InitDeclarator(Identifier,CallExpression(Identifier,ArgumentList))))
+
+# Ref-qualifiers
+
+class C
+{
+  void f() &;
+  void f() && noexcept;
+  void f() & {}
+  void f() & noexcept {}
+};
+
+void C::f() &;
+void C::f() & noexcept;
+void C::f() && {}
+void C::f() & noexcept {}
+
+==>
+
+Program(
+  ClassSpecifier(class,TypeIdentifier,FieldDeclarationList(
+    FieldDeclaration(PrimitiveType,FunctionDeclarator(FieldIdentifier,ParameterList)),
+    FieldDeclaration(PrimitiveType,FunctionDeclarator(FieldIdentifier,ParameterList,Noexcept(noexcept))),
+    FunctionDefinition(PrimitiveType,FunctionDeclarator(FieldIdentifier,ParameterList),CompoundStatement),
+    FunctionDefinition(PrimitiveType,FunctionDeclarator(FieldIdentifier,ParameterList,Noexcept(noexcept)),
+      CompoundStatement))),
+  Declaration(PrimitiveType,FunctionDeclarator(ScopedIdentifier(NamespaceIdentifier,Identifier),ParameterList)),
+  Declaration(PrimitiveType,
+    FunctionDeclarator(ScopedIdentifier(NamespaceIdentifier,Identifier),ParameterList,Noexcept(noexcept))),
+  FunctionDefinition(PrimitiveType,
+    FunctionDeclarator(ScopedIdentifier(NamespaceIdentifier,Identifier),ParameterList),CompoundStatement),
+  FunctionDefinition(PrimitiveType,
+    FunctionDeclarator(ScopedIdentifier(NamespaceIdentifier,Identifier),ParameterList,Noexcept(noexcept)),CompoundStatement))
+
+# Default comparison declarations
+
+struct A {
+  auto operator<=>(A const &) = default;
+};
+
+==>
+
+Program(StructSpecifier(struct,TypeIdentifier,FieldDeclarationList(
+  FunctionDefinition(auto,FunctionDeclarator(
+    OperatorName(operator,CompareOp),
+    ParameterList(ParameterDeclaration(TypeIdentifier,const,AbstractReferenceDeclarator))),
+    DefaultMethodClause(default)))))
+
+# Parameter pack expansions
+
+container<A,B,C...> t1;
+container<C...,A,B> t2;
+
+typedef Tuple<Pair<Args1, Args2>...> type;
+
+f(&args...); // expands to f(&E1, &E2, &E3)
+f(n, ++args...); // expands to f(n, ++E1, ++E2, ++E3);
+f(++args..., n); // expands to f(++E1, ++E2, ++E3, n);
+f(const_cast<const Args*>(&args)...); // f(const_cast<const E1*>(&X1), const_cast<const E2*>(&X2), const_cast<const E3*>(&X3))
+f(h(args...) + args...); // expands to f(h(E1,E2,E3) + E1, h(E1,E2,E3) + E2, h(E1,E2,E3) + E3)
+
+const int size = sizeof...(args) + 2;
+int res[size] = {1,args...,2};
+int dummy[sizeof...(Ts)] = { (std::cout << args, 0)... };
+
+auto lm = [&, args...] { return g(args...); };
+
+class X : public Mixins... {
+public:
+    X(const Mixins&... mixins) : Mixins(mixins)... { }
+};
+
+template <typename... Args>
+void wrap(Args&&... args) {
+    f(forward<Args>(args)...);
+}
+
+void f(T...) {}
+
+==>
+
+Program(
+  Declaration(TemplateType(TypeIdentifier,TemplateArgumentList(
+    TypeDescriptor(TypeIdentifier),
+    TypeDescriptor(TypeIdentifier),
+    ParameterPackExpansion(TypeDescriptor(TypeIdentifier))
+  )),Identifier),
+  Declaration(TemplateType(TypeIdentifier,TemplateArgumentList(
+    ParameterPackExpansion(TypeDescriptor(TypeIdentifier)),
+    TypeDescriptor(TypeIdentifier),
+    TypeDescriptor(TypeIdentifier)
+  )),Identifier),
+  TypeDefinition(typedef,TemplateType(TypeIdentifier,TemplateArgumentList(
+    ParameterPackExpansion(TypeDescriptor(TemplateType(TypeIdentifier,TemplateArgumentList(
+      TypeDescriptor(TypeIdentifier),TypeDescriptor(TypeIdentifier))))))),TypeIdentifier),
+  ExpressionStatement(CallExpression(Identifier,ArgumentList(ParameterPackExpansion(PointerExpression(Identifier))))),
+  LineComment,
+  ExpressionStatement(CallExpression(Identifier,ArgumentList(
+    Identifier,
+    ParameterPackExpansion(UpdateExpression(UpdateOp,Identifier))))),
+  LineComment,
+  ExpressionStatement(CallExpression(Identifier,ArgumentList(
+    ParameterPackExpansion(UpdateExpression(UpdateOp,Identifier)),Identifier))),
+  LineComment,
+  ExpressionStatement(CallExpression(Identifier,ArgumentList(
+    ParameterPackExpansion(CallExpression(TemplateFunction(Identifier,TemplateArgumentList(
+      TypeDescriptor(const,TypeIdentifier,AbstractPointerDeclarator)
+    )),ArgumentList(PointerExpression(Identifier))))))),
+  LineComment,
+  ExpressionStatement(CallExpression(Identifier,ArgumentList(ParameterPackExpansion(BinaryExpression(
+    CallExpression(Identifier,ArgumentList(ParameterPackExpansion(Identifier))),
+    ArithOp,
+    Identifier))))),
+  LineComment,
+  Declaration(const,PrimitiveType,InitDeclarator(Identifier,BinaryExpression(
+    SizeofExpression(sizeof,Identifier),
+    ArithOp,
+    Number))),
+  Declaration(PrimitiveType,
+    InitDeclarator(ArrayDeclarator(Identifier,Identifier),InitializerList(Number,ParameterPackExpansion(Identifier),Number))),
+  Declaration(PrimitiveType,InitDeclarator(
+    ArrayDeclarator(Identifier,SizeofExpression(sizeof,Identifier)),
+    InitializerList(ParameterPackExpansion(ParenthesizedExpression(CommaExpression(
+      BinaryExpression(ScopedIdentifier(NamespaceIdentifier,Identifier),BitOp,Identifier),
+      Number)))))),
+  Declaration(auto,InitDeclarator(Identifier,LambdaExpression(
+    LambdaCaptureSpecifier(ParameterPackExpansion(Identifier)),
+    CompoundStatement(ReturnStatement(return,CallExpression(Identifier,ArgumentList(ParameterPackExpansion(Identifier)))))))),
+  ClassSpecifier(class,TypeIdentifier,BaseClassClause(Access,TypeIdentifier),FieldDeclarationList(
+    AccessSpecifier(Access),
+    FunctionDefinition(FunctionDeclarator(Identifier,ParameterList(
+      VariadicParameterDeclaration(const,TypeIdentifier,ReferenceDeclarator(VariadicDeclarator(Identifier))))
+    ),FieldInitializerList(FieldInitializer(FieldIdentifier,ArgumentList(Identifier))),CompoundStatement))),
+  TemplateDeclaration(template,
+    TemplateParameterList(VariadicTypeParameterDeclaration(typename,TypeIdentifier)),
+    FunctionDefinition(PrimitiveType,FunctionDeclarator(Identifier,ParameterList(
+      VariadicParameterDeclaration(TypeIdentifier,ReferenceDeclarator(VariadicDeclarator(Identifier)))
+    )),CompoundStatement(
+      ExpressionStatement(CallExpression(Identifier,ArgumentList(
+        ParameterPackExpansion(CallExpression(TemplateFunction(Identifier,TemplateArgumentList(
+          TypeDescriptor(TypeIdentifier)
+        )),ArgumentList(Identifier))))))))),
+  FunctionDefinition(PrimitiveType,
+    FunctionDeclarator(Identifier,ParameterList(VariadicParameterDeclaration(TypeIdentifier,VariadicDeclarator))),
+    CompoundStatement))
+
+# User-defined literals
+
+1.2_km;
+"foo" "bar"_baz;
+
+==>
+
+Program(
+  ExpressionStatement(UserDefinedLiteral(Number,Identifier)),
+  ExpressionStatement(UserDefinedLiteral(ConcatenatedString(String,String),Identifier)))
+
+# Coroutines
+
+co_await fn() || co_await var;
+co_return 1;
+co_return;
+co_yield 1;
+
+==>
+
+Program(
+  ExpressionStatement(BinaryExpression(
+    CoAwaitExpression(co_await,CallExpression(Identifier,ArgumentList)),
+    LogicOp,
+    CoAwaitExpression(co_await,Identifier))),
+  CoReturnStatement(co_return,Number),
+  CoReturnStatement(co_return),
+  CoYieldStatement(co_yield,Number))
+
+# Fold Expressions
+
+bool t  = (... + IndexOf<T>);
+bool t2 = (IndexOf<T> + ...);
+bool t3 = (1 + ... + IndexOf<T>);
+bool t3 = (IndexOf<T> + ... + 1);
+
+==>
+
+Program(
+  Declaration(PrimitiveType,InitDeclarator(Identifier,ParenthesizedExpression(BinaryExpression(
+    ParamPack,
+    ArithOp,
+    TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))))))),
+  Declaration(PrimitiveType,InitDeclarator(Identifier,ParenthesizedExpression(BinaryExpression(
+    TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+    ArithOp,
+    ParamPack)))),
+  Declaration(PrimitiveType,InitDeclarator(Identifier,ParenthesizedExpression(BinaryExpression(
+    BinaryExpression(Number,ArithOp,ParamPack),
+    ArithOp,
+    TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))))))),
+  Declaration(PrimitiveType,InitDeclarator(Identifier,ParenthesizedExpression(BinaryExpression(
+    BinaryExpression(TemplateFunction(Identifier,TemplateArgumentList(TypeDescriptor(TypeIdentifier))),ArithOp,ParamPack),
+    ArithOp,
+    Number)))))
+
+# Range-based for loops
+
+T main() {
+  for (auto n = v.size(); auto i : v) {
+    cout << --n + i << ' ';
+  }
+
+  for (using elem_t = T::value_type; elem_t i : v) {
+    cout << --n + i << ' ';
+  }
+}
+
+==>
+
+Program(FunctionDefinition(TypeIdentifier,FunctionDeclarator(Identifier,ParameterList),CompoundStatement(
+  ForRangeLoop(for,
+    Declaration(auto,InitDeclarator(Identifier,CallExpression(FieldExpression(Identifier,FieldIdentifier),ArgumentList))),
+    auto,Identifier,Identifier,
+    CompoundStatement(
+      ExpressionStatement(BinaryExpression(
+        BinaryExpression(Identifier,BitOp,BinaryExpression(UpdateExpression(UpdateOp,Identifier),ArithOp,Identifier)),
+        BitOp,
+        CharLiteral)))),
+  ForRangeLoop(for,
+    AliasDeclaration(using,TypeIdentifier,TypeDescriptor(ScopedTypeIdentifier(NamespaceIdentifier,TypeIdentifier))),
+    TypeIdentifier,Identifier,Identifier,
+    CompoundStatement(
+      ExpressionStatement(BinaryExpression(
+        BinaryExpression(Identifier,BitOp,BinaryExpression(UpdateExpression(UpdateOp,Identifier),ArithOp,Identifier)),
+        BitOp,
+        CharLiteral)))))))
+
+# Attributes
+
+void f() {
+  [[a]] switch (b) {
+   [[c]] case 1: {}
+  }
+  [[a]] while (true) {}
+  [[a]] if (true) {}
+  [[a]] for (auto x : y) {}
+  [[a]] for (;;) {}
+  [[a]] return;
+  [[a]] a;
+  [[a]];
+  [[a]] label: {}
+  [[a]] goto label;
+}
+
+==>
+
+Program(FunctionDefinition(PrimitiveType,FunctionDeclarator(Identifier,ParameterList),CompoundStatement(
+  AttributeStatement(
+    Attribute(AttributeName(Identifier)),
+    SwitchStatement(switch,ConditionClause(Identifier),CompoundStatement(
+      AttributeStatement(Attribute(AttributeName(Identifier)),CaseStatement(case,Number,CompoundStatement))))),
+  AttributeStatement(Attribute(AttributeName(Identifier)),WhileStatement(while,ConditionClause(True),CompoundStatement)),
+  AttributeStatement(Attribute(AttributeName(Identifier)),IfStatement(if,ConditionClause(True),CompoundStatement)),
+  AttributeStatement(Attribute(AttributeName(Identifier)),ForRangeLoop(for,auto,Identifier,Identifier,CompoundStatement)),
+  AttributeStatement(Attribute(AttributeName(Identifier)),ForStatement(for,CompoundStatement)),
+  AttributeStatement(Attribute(AttributeName(Identifier)),ReturnStatement(return)),
+  AttributeStatement(Attribute(AttributeName(Identifier)),ExpressionStatement(Identifier)),
+  AttributeStatement(Attribute(AttributeName(Identifier)),ExpressionStatement),
+  AttributeStatement(Attribute(AttributeName(Identifier)),LabeledStatement(StatementIdentifier,CompoundStatement)),
+  AttributeStatement(Attribute(AttributeName(Identifier)),GotoStatement(goto,StatementIdentifier)))))
+
+# Modules
+
+export module helloworld;
+module a.b;
+module : private;
+import a:C;
+import <iostream>;
+export void hello() {}
+export import :B;
+
+==>
+
+Program(
+  ExportDeclaration(export,ModuleDeclaration(module,ModuleName(Identifier))),
+  ModuleDeclaration(module,ModuleName(Identifier,Identifier)),
+  ModuleDeclaration(module,Access),
+  ImportDeclaration(import,ModuleName(Identifier,PartitionName)),
+  ImportDeclaration(import,HeaderName),
+  ExportDeclaration(export,FunctionDefinition(PrimitiveType,FunctionDeclarator(Identifier,ParameterList),CompoundStatement)),
+  ExportDeclaration(export,ImportDeclaration(import,ModuleName(PartitionName))))

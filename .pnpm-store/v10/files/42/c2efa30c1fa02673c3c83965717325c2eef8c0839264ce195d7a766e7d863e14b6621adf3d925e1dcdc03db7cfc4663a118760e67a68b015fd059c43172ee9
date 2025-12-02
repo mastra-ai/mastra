@@ -1,0 +1,156 @@
+/**
+ * Official TypeScript SDK for turbopuffer.com's API
+ * Something missing or should be improved? Email morgan@turbopuffer.com.
+ *
+ * Based off the initial work of https://github.com/holocron-hq! Thank you ❤️
+ */
+import type { Consistency, DistanceMetric, Encryption, Filters, HintCacheWarmResponse, HTTPClient, Id, NamespaceMetadata, NamespacesListResult, QueryMetrics, QueryResults, RankBy, RecallMeasurement, Schema, Vector } from "./types";
+export declare class Turbopuffer {
+    http: HTTPClient;
+    constructor({ apiKey, baseUrl, connectTimeout, connectionIdleTimeout, warmConnections, compression, }: {
+        /** The API key to authenticate with. */
+        apiKey: string;
+        /** The base URL. Default is https://api.turbopuffer.com. */
+        baseUrl?: string;
+        /** The timeout to establish a connection, in ms. Default is 10_000. Only applicable in Node and Deno.*/
+        connectTimeout?: number;
+        /** The socket idle timeout, in ms. Default is 60_000. Only applicable in Node and Deno.*/
+        connectionIdleTimeout?: number;
+        /** The number of connections to open initially when creating a new client. Default is 0. */
+        warmConnections?: number;
+        /** Whether to compress requests and accept compressed responses. Default is true. */
+        compression?: boolean;
+    });
+    /**
+     * List all your namespaces.
+     * See: https://turbopuffer.com/docs/reference/namespaces
+     */
+    namespaces({ cursor, prefix, page_size, }?: {
+        cursor?: string;
+        prefix?: string;
+        page_size?: number;
+    }): Promise<NamespacesListResult>;
+    /**
+     * Creates a namespace object to operate on. Operations
+     * should be called on the Namespace object itself.
+     */
+    namespace(id: string): Namespace;
+}
+export declare class Namespace {
+    private client;
+    id: string;
+    constructor(client: Turbopuffer, id: string);
+    /**
+     * Creates or updates vectors.
+     * See: https://turbopuffer.com/docs/reference/upsert
+     *
+     * Note: Will automatically batch according to the client's configured batch size.
+     */
+    upsert({ vectors, distance_metric, schema, encryption, batchSize, }: {
+        vectors: Vector[];
+        distance_metric: DistanceMetric;
+        schema?: Schema;
+        /** Only available as part of our enterprise offerings. */
+        encryption?: Encryption;
+        batchSize?: number;
+    }): Promise<void>;
+    /**
+     * Deletes vectors (by IDs).
+     */
+    delete({ ids }: {
+        ids: Id[];
+    }): Promise<void>;
+    /**
+     * Deletes vectors (by filter).
+     */
+    deleteByFilter({ filters }: {
+        filters: Filters;
+    }): Promise<number>;
+    /**
+     * Queries vectors.
+     * See: https://turbopuffer.com/docs/reference/query
+     */
+    query({ ...params }: {
+        vector?: number[];
+        distance_metric?: DistanceMetric;
+        top_k?: number;
+        include_vectors?: boolean;
+        include_attributes?: boolean | string[];
+        filters?: Filters;
+        rank_by?: RankBy;
+        consistency?: Consistency;
+    }): Promise<QueryResults>;
+    /**
+     * Queries vectors and returns performance metrics along with the results.
+     * See: https://turbopuffer.com/docs/reference/query
+     */
+    queryWithMetrics({ ...params }: {
+        vector?: number[];
+        distance_metric?: DistanceMetric;
+        top_k?: number;
+        include_vectors?: boolean;
+        include_attributes?: boolean | string[];
+        filters?: Filters;
+        rank_by?: RankBy;
+        consistency?: Consistency;
+    }): Promise<{
+        results: QueryResults;
+        metrics: QueryMetrics;
+    }>;
+    /**
+     * Warm the cache.
+     */
+    hintCacheWarm(): Promise<HintCacheWarmResponse>;
+    /**
+     * Export all vectors at full precision.
+     * See: https://turbopuffer.com/docs/reference/list
+     */
+    export(params?: {
+        cursor?: string;
+    }): Promise<{
+        vectors: Vector[];
+        next_cursor?: string;
+    }>;
+    /**
+     * Fetches the approximate number of vectors in a namespace.
+     */
+    approxNumVectors(): Promise<number>;
+    metadata(): Promise<NamespaceMetadata>;
+    /**
+     * Checks if a namespace exists.
+     */
+    exists(): Promise<boolean>;
+    /**
+     * Delete a namespace fully (all data).
+     * See: https://turbopuffer.com/docs/reference/delete-namespace
+     */
+    deleteAll(): Promise<void>;
+    /**
+     * Evaluates the recall performance of ANN queries in a namespace.
+     * See: https://turbopuffer.com/docs/reference/recall
+     */
+    recall({ num, top_k, filters, queries, }: {
+        num?: number;
+        top_k?: number;
+        filters?: Filters;
+        queries?: number[][];
+    }): Promise<RecallMeasurement>;
+    /**
+     * Returns the current schema for the namespace.
+     * See: https://turbopuffer.com/docs/schema
+     */
+    schema(): Promise<Schema>;
+    /**
+     * Updates the schema for a namespace.
+     * Returns the final schema after updates are done.
+     * See https://turbopuffer.com/docs/schema for specifics on allowed updates.
+     */
+    updateSchema(updatedSchema: Schema): Promise<Schema>;
+    /**
+     * Copies all documents from another namespace to this namespace.
+     * See: https://turbopuffer.com/docs/upsert#parameters `copy_from_namespace`
+     * for specifics on how this works.
+     */
+    copyFromNamespace(sourceNamespace: string): Promise<void>;
+}
+//# sourceMappingURL=turbopuffer.d.ts.map

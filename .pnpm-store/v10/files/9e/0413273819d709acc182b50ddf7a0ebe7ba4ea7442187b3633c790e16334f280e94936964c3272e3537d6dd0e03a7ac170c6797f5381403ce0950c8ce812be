@@ -1,0 +1,35 @@
+{
+	"$id": "/inference/schemas/text-classification/input.json",
+	"$schema": "http://json-schema.org/draft-06/schema#",
+	"description": "Inputs for Text Classification inference",
+	"title": "TextClassificationInput",
+	"type": "object",
+	"properties": {
+		"inputs": {
+			"description": "The text to classify",
+			"type": "string"
+		},
+		"parameters": {
+			"description": "Additional inference parameters",
+			"$ref": "#/$defs/TextClassificationParameters"
+		}
+	},
+	"$defs": {
+		"TextClassificationParameters": {
+			"title": "TextClassificationParameters",
+			"description": "Additional inference parameters for Text Classification",
+			"type": "object",
+			"properties": {
+				"function_to_apply": {
+					"title": "TextClassificationOutputTransform",
+					"$ref": "/inference/schemas/common-definitions.json#/definitions/ClassificationOutputTransform"
+				},
+				"top_k": {
+					"type": "integer",
+					"description": "When specified, limits the output to the top K most probable classes."
+				}
+			}
+		}
+	},
+	"required": ["inputs"]
+}

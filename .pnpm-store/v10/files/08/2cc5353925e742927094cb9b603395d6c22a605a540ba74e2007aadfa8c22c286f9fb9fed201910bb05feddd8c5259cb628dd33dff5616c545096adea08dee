@@ -1,0 +1,1451 @@
+'use strict';
+
+var middlewareHostHeader = require('@aws-sdk/middleware-host-header');
+var middlewareLogger = require('@aws-sdk/middleware-logger');
+var middlewareRecursionDetection = require('@aws-sdk/middleware-recursion-detection');
+var middlewareUserAgent = require('@aws-sdk/middleware-user-agent');
+var configResolver = require('@smithy/config-resolver');
+var core = require('@smithy/core');
+var middlewareContentLength = require('@smithy/middleware-content-length');
+var middlewareEndpoint = require('@smithy/middleware-endpoint');
+var middlewareRetry = require('@smithy/middleware-retry');
+var smithyClient = require('@smithy/smithy-client');
+var httpAuthSchemeProvider = require('./auth/httpAuthSchemeProvider');
+var runtimeConfig = require('./runtimeConfig');
+var regionConfigResolver = require('@aws-sdk/region-config-resolver');
+var protocolHttp = require('@smithy/protocol-http');
+var middlewareSerde = require('@smithy/middleware-serde');
+var core$1 = require('@aws-sdk/core');
+
+const resolveClientEndpointParameters = (options) => {
+    return Object.assign(options, {
+        useFipsEndpoint: options.useFipsEndpoint ?? false,
+        defaultSigningName: "s3vectors",
+    });
+};
+const commonParams = {
+    UseFIPS: { type: "builtInParams", name: "useFipsEndpoint" },
+    Endpoint: { type: "builtInParams", name: "endpoint" },
+    Region: { type: "builtInParams", name: "region" },
+};
+
+const getHttpAuthExtensionConfiguration = (runtimeConfig) => {
+    const _httpAuthSchemes = runtimeConfig.httpAuthSchemes;
+    let _httpAuthSchemeProvider = runtimeConfig.httpAuthSchemeProvider;
+    let _credentials = runtimeConfig.credentials;
+    return {
+        setHttpAuthScheme(httpAuthScheme) {
+            const index = _httpAuthSchemes.findIndex((scheme) => scheme.schemeId === httpAuthScheme.schemeId);
+            if (index === -1) {
+                _httpAuthSchemes.push(httpAuthScheme);
+            }
+            else {
+                _httpAuthSchemes.splice(index, 1, httpAuthScheme);
+            }
+        },
+        httpAuthSchemes() {
+            return _httpAuthSchemes;
+        },
+        setHttpAuthSchemeProvider(httpAuthSchemeProvider) {
+            _httpAuthSchemeProvider = httpAuthSchemeProvider;
+        },
+        httpAuthSchemeProvider() {
+            return _httpAuthSchemeProvider;
+        },
+        setCredentials(credentials) {
+            _credentials = credentials;
+        },
+        credentials() {
+            return _credentials;
+        },
+    };
+};
+const resolveHttpAuthRuntimeConfig = (config) => {
+    return {
+        httpAuthSchemes: config.httpAuthSchemes(),
+        httpAuthSchemeProvider: config.httpAuthSchemeProvider(),
+        credentials: config.credentials(),
+    };
+};
+
+const resolveRuntimeExtensions = (runtimeConfig, extensions) => {
+    const extensionConfiguration = Object.assign(regionConfigResolver.getAwsRegionExtensionConfiguration(runtimeConfig), smithyClient.getDefaultExtensionConfiguration(runtimeConfig), protocolHttp.getHttpHandlerExtensionConfiguration(runtimeConfig), getHttpAuthExtensionConfiguration(runtimeConfig));
+    extensions.forEach((extension) => extension.configure(extensionConfiguration));
+    return Object.assign(runtimeConfig, regionConfigResolver.resolveAwsRegionExtensionConfiguration(extensionConfiguration), smithyClient.resolveDefaultRuntimeConfig(extensionConfiguration), protocolHttp.resolveHttpHandlerRuntimeConfig(extensionConfiguration), resolveHttpAuthRuntimeConfig(extensionConfiguration));
+};
+
+class S3VectorsClient extends smithyClient.Client {
+    config;
+    constructor(...[configuration]) {
+        const _config_0 = runtimeConfig.getRuntimeConfig(configuration || {});
+        super(_config_0);
+        this.initConfig = _config_0;
+        const _config_1 = resolveClientEndpointParameters(_config_0);
+        const _config_2 = middlewareUserAgent.resolveUserAgentConfig(_config_1);
+        const _config_3 = middlewareRetry.resolveRetryConfig(_config_2);
+        const _config_4 = configResolver.resolveRegionConfig(_config_3);
+        const _config_5 = middlewareHostHeader.resolveHostHeaderConfig(_config_4);
+        const _config_6 = middlewareEndpoint.resolveEndpointConfig(_config_5);
+        const _config_7 = httpAuthSchemeProvider.resolveHttpAuthSchemeConfig(_config_6);
+        const _config_8 = resolveRuntimeExtensions(_config_7, configuration?.extensions || []);
+        this.config = _config_8;
+        this.middlewareStack.use(middlewareUserAgent.getUserAgentPlugin(this.config));
+        this.middlewareStack.use(middlewareRetry.getRetryPlugin(this.config));
+        this.middlewareStack.use(middlewareContentLength.getContentLengthPlugin(this.config));
+        this.middlewareStack.use(middlewareHostHeader.getHostHeaderPlugin(this.config));
+        this.middlewareStack.use(middlewareLogger.getLoggerPlugin(this.config));
+        this.middlewareStack.use(middlewareRecursionDetection.getRecursionDetectionPlugin(this.config));
+        this.middlewareStack.use(core.getHttpAuthSchemeEndpointRuleSetPlugin(this.config, {
+            httpAuthSchemeParametersProvider: httpAuthSchemeProvider.defaultS3VectorsHttpAuthSchemeParametersProvider,
+            identityProviderConfigProvider: async (config) => new core.DefaultIdentityProviderConfig({
+                "aws.auth#sigv4": config.credentials,
+            }),
+        }));
+        this.middlewareStack.use(core.getHttpSigningPlugin(this.config));
+    }
+    destroy() {
+        super.destroy();
+    }
+}
+
+class S3VectorsServiceException extends smithyClient.ServiceException {
+    constructor(options) {
+        super(options);
+        Object.setPrototypeOf(this, S3VectorsServiceException.prototype);
+    }
+}
+
+class AccessDeniedException extends S3VectorsServiceException {
+    name = "AccessDeniedException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "AccessDeniedException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, AccessDeniedException.prototype);
+    }
+}
+class ConflictException extends S3VectorsServiceException {
+    name = "ConflictException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "ConflictException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, ConflictException.prototype);
+    }
+}
+const DataType = {
+    FLOAT32: "float32",
+};
+const DistanceMetric = {
+    COSINE: "cosine",
+    EUCLIDEAN: "euclidean",
+};
+class InternalServerException extends S3VectorsServiceException {
+    name = "InternalServerException";
+    $fault = "server";
+    $retryable = {};
+    constructor(opts) {
+        super({
+            name: "InternalServerException",
+            $fault: "server",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, InternalServerException.prototype);
+    }
+}
+class NotFoundException extends S3VectorsServiceException {
+    name = "NotFoundException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "NotFoundException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, NotFoundException.prototype);
+    }
+}
+class ServiceQuotaExceededException extends S3VectorsServiceException {
+    name = "ServiceQuotaExceededException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "ServiceQuotaExceededException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, ServiceQuotaExceededException.prototype);
+    }
+}
+class ServiceUnavailableException extends S3VectorsServiceException {
+    name = "ServiceUnavailableException";
+    $fault = "server";
+    $retryable = {};
+    constructor(opts) {
+        super({
+            name: "ServiceUnavailableException",
+            $fault: "server",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, ServiceUnavailableException.prototype);
+    }
+}
+class TooManyRequestsException extends S3VectorsServiceException {
+    name = "TooManyRequestsException";
+    $fault = "client";
+    $retryable = {
+        throttling: true,
+    };
+    constructor(opts) {
+        super({
+            name: "TooManyRequestsException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, TooManyRequestsException.prototype);
+    }
+}
+class ValidationException extends S3VectorsServiceException {
+    name = "ValidationException";
+    $fault = "client";
+    fieldList;
+    constructor(opts) {
+        super({
+            name: "ValidationException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, ValidationException.prototype);
+        this.fieldList = opts.fieldList;
+    }
+}
+const SseType = {
+    AES256: "AES256",
+    AWS_KMS: "aws:kms",
+};
+class KmsDisabledException extends S3VectorsServiceException {
+    name = "KmsDisabledException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "KmsDisabledException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, KmsDisabledException.prototype);
+    }
+}
+class KmsInvalidKeyUsageException extends S3VectorsServiceException {
+    name = "KmsInvalidKeyUsageException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "KmsInvalidKeyUsageException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, KmsInvalidKeyUsageException.prototype);
+    }
+}
+class KmsInvalidStateException extends S3VectorsServiceException {
+    name = "KmsInvalidStateException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "KmsInvalidStateException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, KmsInvalidStateException.prototype);
+    }
+}
+class KmsNotFoundException extends S3VectorsServiceException {
+    name = "KmsNotFoundException";
+    $fault = "client";
+    constructor(opts) {
+        super({
+            name: "KmsNotFoundException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, KmsNotFoundException.prototype);
+    }
+}
+exports.VectorData = void 0;
+(function (VectorData) {
+    VectorData.visit = (value, visitor) => {
+        if (value.float32 !== undefined)
+            return visitor.float32(value.float32);
+        return visitor._(value.$unknown[0], value.$unknown[1]);
+    };
+})(exports.VectorData || (exports.VectorData = {}));
+
+const se_CreateIndexCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/CreateIndex");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        dataType: [],
+        dimension: [],
+        distanceMetric: [],
+        indexName: [],
+        metadataConfiguration: (_) => smithyClient._json(_),
+        vectorBucketArn: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_CreateVectorBucketCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/CreateVectorBucket");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        encryptionConfiguration: (_) => smithyClient._json(_),
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_DeleteIndexCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/DeleteIndex");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        indexArn: [],
+        indexName: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_DeleteVectorBucketCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/DeleteVectorBucket");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        vectorBucketArn: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_DeleteVectorBucketPolicyCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/DeleteVectorBucketPolicy");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        vectorBucketArn: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_DeleteVectorsCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/DeleteVectors");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        indexArn: [],
+        indexName: [],
+        keys: (_) => smithyClient._json(_),
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_GetIndexCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/GetIndex");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        indexArn: [],
+        indexName: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_GetVectorBucketCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/GetVectorBucket");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        vectorBucketArn: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_GetVectorBucketPolicyCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/GetVectorBucketPolicy");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        vectorBucketArn: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_GetVectorsCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/GetVectors");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        indexArn: [],
+        indexName: [],
+        keys: (_) => smithyClient._json(_),
+        returnData: [],
+        returnMetadata: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_ListIndexesCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/ListIndexes");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        maxResults: [],
+        nextToken: [],
+        prefix: [],
+        vectorBucketArn: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_ListVectorBucketsCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/ListVectorBuckets");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        maxResults: [],
+        nextToken: [],
+        prefix: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_ListVectorsCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/ListVectors");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        indexArn: [],
+        indexName: [],
+        maxResults: [],
+        nextToken: [],
+        returnData: [],
+        returnMetadata: [],
+        segmentCount: [],
+        segmentIndex: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_PutVectorBucketPolicyCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/PutVectorBucketPolicy");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        policy: [],
+        vectorBucketArn: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_PutVectorsCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/PutVectors");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        indexArn: [],
+        indexName: [],
+        vectorBucketName: [],
+        vectors: (_) => se_PutVectorsInputList(_),
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const se_QueryVectorsCommand = async (input, context) => {
+    const b = core.requestBuilder(input, context);
+    const headers = {
+        "content-type": "application/json",
+    };
+    b.bp("/QueryVectors");
+    let body;
+    body = JSON.stringify(smithyClient.take(input, {
+        filter: (_) => se_Document(_),
+        indexArn: [],
+        indexName: [],
+        queryVector: (_) => se_VectorData(_),
+        returnDistance: [],
+        returnMetadata: [],
+        topK: [],
+        vectorBucketName: [],
+    }));
+    b.m("POST").h(headers).b(body);
+    return b.build();
+};
+const de_CreateIndexCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    await smithyClient.collectBody(output.body, context);
+    return contents;
+};
+const de_CreateVectorBucketCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    await smithyClient.collectBody(output.body, context);
+    return contents;
+};
+const de_DeleteIndexCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    await smithyClient.collectBody(output.body, context);
+    return contents;
+};
+const de_DeleteVectorBucketCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    await smithyClient.collectBody(output.body, context);
+    return contents;
+};
+const de_DeleteVectorBucketPolicyCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    await smithyClient.collectBody(output.body, context);
+    return contents;
+};
+const de_DeleteVectorsCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    await smithyClient.collectBody(output.body, context);
+    return contents;
+};
+const de_GetIndexCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    const data = smithyClient.expectNonNull(smithyClient.expectObject(await core$1.parseJsonBody(output.body, context)), "body");
+    const doc = smithyClient.take(data, {
+        index: (_) => de_Index(_),
+    });
+    Object.assign(contents, doc);
+    return contents;
+};
+const de_GetVectorBucketCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    const data = smithyClient.expectNonNull(smithyClient.expectObject(await core$1.parseJsonBody(output.body, context)), "body");
+    const doc = smithyClient.take(data, {
+        vectorBucket: (_) => de_VectorBucket(_),
+    });
+    Object.assign(contents, doc);
+    return contents;
+};
+const de_GetVectorBucketPolicyCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    const data = smithyClient.expectNonNull(smithyClient.expectObject(await core$1.parseJsonBody(output.body, context)), "body");
+    const doc = smithyClient.take(data, {
+        policy: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    return contents;
+};
+const de_GetVectorsCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    const data = smithyClient.expectNonNull(smithyClient.expectObject(await core$1.parseJsonBody(output.body, context)), "body");
+    const doc = smithyClient.take(data, {
+        vectors: (_) => de_GetVectorsOutputList(_),
+    });
+    Object.assign(contents, doc);
+    return contents;
+};
+const de_ListIndexesCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    const data = smithyClient.expectNonNull(smithyClient.expectObject(await core$1.parseJsonBody(output.body, context)), "body");
+    const doc = smithyClient.take(data, {
+        indexes: (_) => de_ListIndexesOutputList(_),
+        nextToken: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    return contents;
+};
+const de_ListVectorBucketsCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    const data = smithyClient.expectNonNull(smithyClient.expectObject(await core$1.parseJsonBody(output.body, context)), "body");
+    const doc = smithyClient.take(data, {
+        nextToken: smithyClient.expectString,
+        vectorBuckets: (_) => de_ListVectorBucketsOutputList(_),
+    });
+    Object.assign(contents, doc);
+    return contents;
+};
+const de_ListVectorsCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    const data = smithyClient.expectNonNull(smithyClient.expectObject(await core$1.parseJsonBody(output.body, context)), "body");
+    const doc = smithyClient.take(data, {
+        nextToken: smithyClient.expectString,
+        vectors: (_) => de_ListVectorsOutputList(_),
+    });
+    Object.assign(contents, doc);
+    return contents;
+};
+const de_PutVectorBucketPolicyCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    await smithyClient.collectBody(output.body, context);
+    return contents;
+};
+const de_PutVectorsCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    await smithyClient.collectBody(output.body, context);
+    return contents;
+};
+const de_QueryVectorsCommand = async (output, context) => {
+    if (output.statusCode !== 200 && output.statusCode >= 300) {
+        return de_CommandError(output, context);
+    }
+    const contents = smithyClient.map({
+        $metadata: deserializeMetadata(output),
+    });
+    const data = smithyClient.expectNonNull(smithyClient.expectObject(await core$1.parseJsonBody(output.body, context)), "body");
+    const doc = smithyClient.take(data, {
+        vectors: (_) => de_QueryVectorsOutputList(_),
+    });
+    Object.assign(contents, doc);
+    return contents;
+};
+const de_CommandError = async (output, context) => {
+    const parsedOutput = {
+        ...output,
+        body: await core$1.parseJsonErrorBody(output.body, context),
+    };
+    const errorCode = core$1.loadRestJsonErrorCode(output, parsedOutput.body);
+    switch (errorCode) {
+        case "AccessDeniedException":
+        case "com.amazonaws.s3vectors#AccessDeniedException":
+            throw await de_AccessDeniedExceptionRes(parsedOutput);
+        case "ConflictException":
+        case "com.amazonaws.s3vectors#ConflictException":
+            throw await de_ConflictExceptionRes(parsedOutput);
+        case "InternalServerException":
+        case "com.amazonaws.s3vectors#InternalServerException":
+            throw await de_InternalServerExceptionRes(parsedOutput);
+        case "NotFoundException":
+        case "com.amazonaws.s3vectors#NotFoundException":
+            throw await de_NotFoundExceptionRes(parsedOutput);
+        case "ServiceQuotaExceededException":
+        case "com.amazonaws.s3vectors#ServiceQuotaExceededException":
+            throw await de_ServiceQuotaExceededExceptionRes(parsedOutput);
+        case "ServiceUnavailableException":
+        case "com.amazonaws.s3vectors#ServiceUnavailableException":
+            throw await de_ServiceUnavailableExceptionRes(parsedOutput);
+        case "TooManyRequestsException":
+        case "com.amazonaws.s3vectors#TooManyRequestsException":
+            throw await de_TooManyRequestsExceptionRes(parsedOutput);
+        case "ValidationException":
+        case "com.amazonaws.s3vectors#ValidationException":
+            throw await de_ValidationExceptionRes(parsedOutput);
+        case "KmsDisabledException":
+        case "com.amazonaws.s3vectors#KmsDisabledException":
+            throw await de_KmsDisabledExceptionRes(parsedOutput);
+        case "KmsInvalidKeyUsageException":
+        case "com.amazonaws.s3vectors#KmsInvalidKeyUsageException":
+            throw await de_KmsInvalidKeyUsageExceptionRes(parsedOutput);
+        case "KmsInvalidStateException":
+        case "com.amazonaws.s3vectors#KmsInvalidStateException":
+            throw await de_KmsInvalidStateExceptionRes(parsedOutput);
+        case "KmsNotFoundException":
+        case "com.amazonaws.s3vectors#KmsNotFoundException":
+            throw await de_KmsNotFoundExceptionRes(parsedOutput);
+        default:
+            const parsedBody = parsedOutput.body;
+            return throwDefaultError({
+                output,
+                parsedBody,
+                errorCode,
+            });
+    }
+};
+const throwDefaultError = smithyClient.withBaseException(S3VectorsServiceException);
+const de_AccessDeniedExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new AccessDeniedException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_ConflictExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new ConflictException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_InternalServerExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new InternalServerException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_KmsDisabledExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new KmsDisabledException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_KmsInvalidKeyUsageExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new KmsInvalidKeyUsageException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_KmsInvalidStateExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new KmsInvalidStateException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_KmsNotFoundExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new KmsNotFoundException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_NotFoundExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new NotFoundException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_ServiceQuotaExceededExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new ServiceQuotaExceededException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_ServiceUnavailableExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new ServiceUnavailableException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_TooManyRequestsExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new TooManyRequestsException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const de_ValidationExceptionRes = async (parsedOutput, context) => {
+    const contents = smithyClient.map({});
+    const data = parsedOutput.body;
+    const doc = smithyClient.take(data, {
+        fieldList: smithyClient._json,
+        message: smithyClient.expectString,
+    });
+    Object.assign(contents, doc);
+    const exception = new ValidationException({
+        $metadata: deserializeMetadata(parsedOutput),
+        ...contents,
+    });
+    return smithyClient.decorateServiceException(exception, parsedOutput.body);
+};
+const se_Float32VectorData = (input, context) => {
+    return input
+        .filter((e) => e != null)
+        .map((entry) => {
+        return smithyClient.serializeFloat(entry);
+    });
+};
+const se_PutInputVector = (input, context) => {
+    return smithyClient.take(input, {
+        data: (_) => se_VectorData(_),
+        key: [],
+        metadata: (_) => se_VectorMetadata(_),
+    });
+};
+const se_PutVectorsInputList = (input, context) => {
+    return input
+        .filter((e) => e != null)
+        .map((entry) => {
+        return se_PutInputVector(entry);
+    });
+};
+const se_VectorData = (input, context) => {
+    return exports.VectorData.visit(input, {
+        float32: (value) => ({ float32: se_Float32VectorData(value) }),
+        _: (name, value) => ({ [name]: value }),
+    });
+};
+const se_VectorMetadata = (input, context) => {
+    return input;
+};
+const se_Document = (input, context) => {
+    return input;
+};
+const de_Float32VectorData = (output, context) => {
+    const retVal = (output || [])
+        .filter((e) => e != null)
+        .map((entry) => {
+        return smithyClient.limitedParseFloat32(entry);
+    });
+    return retVal;
+};
+const de_GetOutputVector = (output, context) => {
+    return smithyClient.take(output, {
+        data: (_) => de_VectorData(core$1.awsExpectUnion(_)),
+        key: smithyClient.expectString,
+        metadata: (_) => de_VectorMetadata(_),
+    });
+};
+const de_GetVectorsOutputList = (output, context) => {
+    const retVal = (output || [])
+        .filter((e) => e != null)
+        .map((entry) => {
+        return de_GetOutputVector(entry);
+    });
+    return retVal;
+};
+const de_Index = (output, context) => {
+    return smithyClient.take(output, {
+        creationTime: (_) => smithyClient.expectNonNull(smithyClient.parseEpochTimestamp(smithyClient.expectNumber(_))),
+        dataType: smithyClient.expectString,
+        dimension: smithyClient.expectInt32,
+        distanceMetric: smithyClient.expectString,
+        indexArn: smithyClient.expectString,
+        indexName: smithyClient.expectString,
+        metadataConfiguration: smithyClient._json,
+        vectorBucketName: smithyClient.expectString,
+    });
+};
+const de_IndexSummary = (output, context) => {
+    return smithyClient.take(output, {
+        creationTime: (_) => smithyClient.expectNonNull(smithyClient.parseEpochTimestamp(smithyClient.expectNumber(_))),
+        indexArn: smithyClient.expectString,
+        indexName: smithyClient.expectString,
+        vectorBucketName: smithyClient.expectString,
+    });
+};
+const de_ListIndexesOutputList = (output, context) => {
+    const retVal = (output || [])
+        .filter((e) => e != null)
+        .map((entry) => {
+        return de_IndexSummary(entry);
+    });
+    return retVal;
+};
+const de_ListOutputVector = (output, context) => {
+    return smithyClient.take(output, {
+        data: (_) => de_VectorData(core$1.awsExpectUnion(_)),
+        key: smithyClient.expectString,
+        metadata: (_) => de_VectorMetadata(_),
+    });
+};
+const de_ListVectorBucketsOutputList = (output, context) => {
+    const retVal = (output || [])
+        .filter((e) => e != null)
+        .map((entry) => {
+        return de_VectorBucketSummary(entry);
+    });
+    return retVal;
+};
+const de_ListVectorsOutputList = (output, context) => {
+    const retVal = (output || [])
+        .filter((e) => e != null)
+        .map((entry) => {
+        return de_ListOutputVector(entry);
+    });
+    return retVal;
+};
+const de_QueryOutputVector = (output, context) => {
+    return smithyClient.take(output, {
+        data: (_) => de_VectorData(core$1.awsExpectUnion(_)),
+        distance: smithyClient.limitedParseFloat32,
+        key: smithyClient.expectString,
+        metadata: (_) => de_VectorMetadata(_),
+    });
+};
+const de_QueryVectorsOutputList = (output, context) => {
+    const retVal = (output || [])
+        .filter((e) => e != null)
+        .map((entry) => {
+        return de_QueryOutputVector(entry);
+    });
+    return retVal;
+};
+const de_VectorBucket = (output, context) => {
+    return smithyClient.take(output, {
+        creationTime: (_) => smithyClient.expectNonNull(smithyClient.parseEpochTimestamp(smithyClient.expectNumber(_))),
+        encryptionConfiguration: smithyClient._json,
+        vectorBucketArn: smithyClient.expectString,
+        vectorBucketName: smithyClient.expectString,
+    });
+};
+const de_VectorBucketSummary = (output, context) => {
+    return smithyClient.take(output, {
+        creationTime: (_) => smithyClient.expectNonNull(smithyClient.parseEpochTimestamp(smithyClient.expectNumber(_))),
+        vectorBucketArn: smithyClient.expectString,
+        vectorBucketName: smithyClient.expectString,
+    });
+};
+const de_VectorData = (output, context) => {
+    if (output.float32 != null) {
+        return {
+            float32: de_Float32VectorData(output.float32),
+        };
+    }
+    return { $unknown: Object.entries(output)[0] };
+};
+const de_VectorMetadata = (output, context) => {
+    return output;
+};
+const deserializeMetadata = (output) => ({
+    httpStatusCode: output.statusCode,
+    requestId: output.headers["x-amzn-requestid"] ?? output.headers["x-amzn-request-id"] ?? output.headers["x-amz-request-id"],
+    extendedRequestId: output.headers["x-amz-id-2"],
+    cfId: output.headers["x-amz-cf-id"],
+});
+
+class CreateIndexCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "CreateIndex", {})
+    .n("S3VectorsClient", "CreateIndexCommand")
+    .f(void 0, void 0)
+    .ser(se_CreateIndexCommand)
+    .de(de_CreateIndexCommand)
+    .build() {
+}
+
+class CreateVectorBucketCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "CreateVectorBucket", {})
+    .n("S3VectorsClient", "CreateVectorBucketCommand")
+    .f(void 0, void 0)
+    .ser(se_CreateVectorBucketCommand)
+    .de(de_CreateVectorBucketCommand)
+    .build() {
+}
+
+class DeleteIndexCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "DeleteIndex", {})
+    .n("S3VectorsClient", "DeleteIndexCommand")
+    .f(void 0, void 0)
+    .ser(se_DeleteIndexCommand)
+    .de(de_DeleteIndexCommand)
+    .build() {
+}
+
+class DeleteVectorBucketCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "DeleteVectorBucket", {})
+    .n("S3VectorsClient", "DeleteVectorBucketCommand")
+    .f(void 0, void 0)
+    .ser(se_DeleteVectorBucketCommand)
+    .de(de_DeleteVectorBucketCommand)
+    .build() {
+}
+
+class DeleteVectorBucketPolicyCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "DeleteVectorBucketPolicy", {})
+    .n("S3VectorsClient", "DeleteVectorBucketPolicyCommand")
+    .f(void 0, void 0)
+    .ser(se_DeleteVectorBucketPolicyCommand)
+    .de(de_DeleteVectorBucketPolicyCommand)
+    .build() {
+}
+
+class DeleteVectorsCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "DeleteVectors", {})
+    .n("S3VectorsClient", "DeleteVectorsCommand")
+    .f(void 0, void 0)
+    .ser(se_DeleteVectorsCommand)
+    .de(de_DeleteVectorsCommand)
+    .build() {
+}
+
+class GetIndexCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "GetIndex", {})
+    .n("S3VectorsClient", "GetIndexCommand")
+    .f(void 0, void 0)
+    .ser(se_GetIndexCommand)
+    .de(de_GetIndexCommand)
+    .build() {
+}
+
+class GetVectorBucketCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "GetVectorBucket", {})
+    .n("S3VectorsClient", "GetVectorBucketCommand")
+    .f(void 0, void 0)
+    .ser(se_GetVectorBucketCommand)
+    .de(de_GetVectorBucketCommand)
+    .build() {
+}
+
+class GetVectorBucketPolicyCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "GetVectorBucketPolicy", {})
+    .n("S3VectorsClient", "GetVectorBucketPolicyCommand")
+    .f(void 0, void 0)
+    .ser(se_GetVectorBucketPolicyCommand)
+    .de(de_GetVectorBucketPolicyCommand)
+    .build() {
+}
+
+class GetVectorsCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "GetVectors", {})
+    .n("S3VectorsClient", "GetVectorsCommand")
+    .f(void 0, void 0)
+    .ser(se_GetVectorsCommand)
+    .de(de_GetVectorsCommand)
+    .build() {
+}
+
+class ListIndexesCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "ListIndexes", {})
+    .n("S3VectorsClient", "ListIndexesCommand")
+    .f(void 0, void 0)
+    .ser(se_ListIndexesCommand)
+    .de(de_ListIndexesCommand)
+    .build() {
+}
+
+class ListVectorBucketsCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "ListVectorBuckets", {})
+    .n("S3VectorsClient", "ListVectorBucketsCommand")
+    .f(void 0, void 0)
+    .ser(se_ListVectorBucketsCommand)
+    .de(de_ListVectorBucketsCommand)
+    .build() {
+}
+
+class ListVectorsCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "ListVectors", {})
+    .n("S3VectorsClient", "ListVectorsCommand")
+    .f(void 0, void 0)
+    .ser(se_ListVectorsCommand)
+    .de(de_ListVectorsCommand)
+    .build() {
+}
+
+class PutVectorBucketPolicyCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "PutVectorBucketPolicy", {})
+    .n("S3VectorsClient", "PutVectorBucketPolicyCommand")
+    .f(void 0, void 0)
+    .ser(se_PutVectorBucketPolicyCommand)
+    .de(de_PutVectorBucketPolicyCommand)
+    .build() {
+}
+
+class PutVectorsCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "PutVectors", {})
+    .n("S3VectorsClient", "PutVectorsCommand")
+    .f(void 0, void 0)
+    .ser(se_PutVectorsCommand)
+    .de(de_PutVectorsCommand)
+    .build() {
+}
+
+class QueryVectorsCommand extends smithyClient.Command
+    .classBuilder()
+    .ep(commonParams)
+    .m(function (Command, cs, config, o) {
+    return [
+        middlewareSerde.getSerdePlugin(config, this.serialize, this.deserialize),
+        middlewareEndpoint.getEndpointPlugin(config, Command.getEndpointParameterInstructions()),
+    ];
+})
+    .s("S3Vectors", "QueryVectors", {})
+    .n("S3VectorsClient", "QueryVectorsCommand")
+    .f(void 0, void 0)
+    .ser(se_QueryVectorsCommand)
+    .de(de_QueryVectorsCommand)
+    .build() {
+}
+
+const commands = {
+    CreateIndexCommand,
+    CreateVectorBucketCommand,
+    DeleteIndexCommand,
+    DeleteVectorBucketCommand,
+    DeleteVectorBucketPolicyCommand,
+    DeleteVectorsCommand,
+    GetIndexCommand,
+    GetVectorBucketCommand,
+    GetVectorBucketPolicyCommand,
+    GetVectorsCommand,
+    ListIndexesCommand,
+    ListVectorBucketsCommand,
+    ListVectorsCommand,
+    PutVectorBucketPolicyCommand,
+    PutVectorsCommand,
+    QueryVectorsCommand,
+};
+class S3Vectors extends S3VectorsClient {
+}
+smithyClient.createAggregatedClient(commands, S3Vectors);
+
+const paginateListIndexes = core.createPaginator(S3VectorsClient, ListIndexesCommand, "nextToken", "nextToken", "maxResults");
+
+const paginateListVectorBuckets = core.createPaginator(S3VectorsClient, ListVectorBucketsCommand, "nextToken", "nextToken", "maxResults");
+
+const paginateListVectors = core.createPaginator(S3VectorsClient, ListVectorsCommand, "nextToken", "nextToken", "maxResults");
+
+Object.defineProperty(exports, "$Command", {
+    enumerable: true,
+    get: function () { return smithyClient.Command; }
+});
+Object.defineProperty(exports, "__Client", {
+    enumerable: true,
+    get: function () { return smithyClient.Client; }
+});
+exports.AccessDeniedException = AccessDeniedException;
+exports.ConflictException = ConflictException;
+exports.CreateIndexCommand = CreateIndexCommand;
+exports.CreateVectorBucketCommand = CreateVectorBucketCommand;
+exports.DataType = DataType;
+exports.DeleteIndexCommand = DeleteIndexCommand;
+exports.DeleteVectorBucketCommand = DeleteVectorBucketCommand;
+exports.DeleteVectorBucketPolicyCommand = DeleteVectorBucketPolicyCommand;
+exports.DeleteVectorsCommand = DeleteVectorsCommand;
+exports.DistanceMetric = DistanceMetric;
+exports.GetIndexCommand = GetIndexCommand;
+exports.GetVectorBucketCommand = GetVectorBucketCommand;
+exports.GetVectorBucketPolicyCommand = GetVectorBucketPolicyCommand;
+exports.GetVectorsCommand = GetVectorsCommand;
+exports.InternalServerException = InternalServerException;
+exports.KmsDisabledException = KmsDisabledException;
+exports.KmsInvalidKeyUsageException = KmsInvalidKeyUsageException;
+exports.KmsInvalidStateException = KmsInvalidStateException;
+exports.KmsNotFoundException = KmsNotFoundException;
+exports.ListIndexesCommand = ListIndexesCommand;
+exports.ListVectorBucketsCommand = ListVectorBucketsCommand;
+exports.ListVectorsCommand = ListVectorsCommand;
+exports.NotFoundException = NotFoundException;
+exports.PutVectorBucketPolicyCommand = PutVectorBucketPolicyCommand;
+exports.PutVectorsCommand = PutVectorsCommand;
+exports.QueryVectorsCommand = QueryVectorsCommand;
+exports.S3Vectors = S3Vectors;
+exports.S3VectorsClient = S3VectorsClient;
+exports.S3VectorsServiceException = S3VectorsServiceException;
+exports.ServiceQuotaExceededException = ServiceQuotaExceededException;
+exports.ServiceUnavailableException = ServiceUnavailableException;
+exports.SseType = SseType;
+exports.TooManyRequestsException = TooManyRequestsException;
+exports.ValidationException = ValidationException;
+exports.paginateListIndexes = paginateListIndexes;
+exports.paginateListVectorBuckets = paginateListVectorBuckets;
+exports.paginateListVectors = paginateListVectors;

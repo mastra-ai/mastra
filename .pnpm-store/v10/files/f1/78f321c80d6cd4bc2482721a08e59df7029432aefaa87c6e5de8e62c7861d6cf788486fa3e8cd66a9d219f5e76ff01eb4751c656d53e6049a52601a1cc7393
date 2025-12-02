@@ -1,0 +1,92 @@
+{
+    "name": "tailwind-merge",
+    "version": "3.3.1",
+    "description": "Merge Tailwind CSS classes without style conflicts",
+    "keywords": [
+        "tailwindcss",
+        "tailwind",
+        "css",
+        "classes",
+        "className",
+        "classList",
+        "merge",
+        "conflict",
+        "override"
+    ],
+    "homepage": "https://github.com/dcastil/tailwind-merge",
+    "bugs": {
+        "url": "https://github.com/dcastil/tailwind-merge/issues"
+    },
+    "funding": {
+        "type": "github",
+        "url": "https://github.com/sponsors/dcastil"
+    },
+    "license": "MIT",
+    "author": "Dany Castillo",
+    "files": [
+        "dist",
+        "src"
+    ],
+    "source": "src/index.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/types.d.ts",
+            "require": "./dist/bundle-cjs.js",
+            "import": "./dist/bundle-mjs.mjs",
+            "default": "./dist/bundle-mjs.mjs"
+        },
+        "./es5": {
+            "types": "./dist/types.d.ts",
+            "require": "./dist/es5/bundle-cjs.js",
+            "import": "./dist/es5/bundle-mjs.mjs",
+            "default": "./dist/es5/bundle-mjs.mjs"
+        }
+    },
+    "main": "./dist/bundle-cjs.js",
+    "types": "./dist/types.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/dcastil/tailwind-merge.git"
+    },
+    "sideEffects": false,
+    "scripts": {
+        "build": "rollup --config scripts/rollup.config.mjs",
+        "bench": "vitest bench --config scripts/vitest.config.mts",
+        "test": "vitest --config scripts/vitest.config.mts --coverage",
+        "test:watch": "vitest --config scripts/vitest.config.mts",
+        "test:exports": "node scripts/test-built-package-exports.cjs && node scripts/test-built-package-exports.mjs",
+        "lint": "eslint --max-warnings 0 '**'",
+        "preversion": "if [ -n \"$DANYS_MACHINE\" ]; then git checkout main && git pull; fi",
+        "version": "zx scripts/update-readme.mjs",
+        "postversion": "if [ -n \"$DANYS_MACHINE\" ]; then git push --follow-tags && open https://github.com/dcastil/tailwind-merge/releases; fi"
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "@babel/core": "^7.27.4",
+        "@babel/preset-env": "^7.27.2",
+        "@codspeed/vitest-plugin": "^4.0.1",
+        "@rollup/plugin-babel": "^6.0.4",
+        "@rollup/plugin-node-resolve": "^16.0.1",
+        "@rollup/plugin-typescript": "^12.1.2",
+        "@vitest/coverage-v8": "^3.1.4",
+        "@vitest/eslint-plugin": "^1.2.1",
+        "babel-plugin-annotate-pure-calls": "^0.5.0",
+        "babel-plugin-polyfill-regenerator": "^0.6.4",
+        "eslint": "^9.28.0",
+        "eslint-plugin-import": "^2.31.0",
+        "globby": "^11.1.0",
+        "prettier": "^3.5.3",
+        "rollup": "^4.41.1",
+        "rollup-plugin-delete": "^3.0.1",
+        "rollup-plugin-dts": "^6.2.1",
+        "tslib": "^2.8.1",
+        "typescript": "^5.8.3",
+        "typescript-eslint": "^8.33.0",
+        "vitest": "^3.1.4",
+        "zx": "^8.5.4"
+    },
+    "publishConfig": {
+        "provenance": true
+    },
+    "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+}

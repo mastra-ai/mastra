@@ -1,0 +1,24 @@
+import { type FC } from "react";
+import { TooltipIconButton } from "./base/tooltip-icon-button";
+declare const AssistantActionBar: FC;
+declare const exports: {
+    Root: import("react").ForwardRefExoticComponent<Partial<Omit<Omit<import("react").ClassAttributes<HTMLDivElement> & import("react").HTMLAttributes<HTMLDivElement> & {
+        asChild?: boolean;
+    }, "ref"> & {
+        hideWhenRunning?: boolean | undefined;
+        autohide?: "always" | "not-last" | "never" | undefined;
+        autohideFloat?: "always" | "single-branch" | "never" | undefined;
+    } & import("react").RefAttributes<HTMLDivElement>, "ref">> & import("react").RefAttributes<HTMLDivElement>>;
+    Reload: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+    Copy: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & {
+        copiedDuration?: number | undefined;
+    } & import("react").RefAttributes<HTMLButtonElement>>;
+    Speak: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+    StopSpeaking: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+    SpeechControl: FC;
+    FeedbackPositive: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+    FeedbackNegative: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+};
+declare const _default: typeof AssistantActionBar & typeof exports;
+export default _default;
+//# sourceMappingURL=assistant-action-bar.d.ts.map

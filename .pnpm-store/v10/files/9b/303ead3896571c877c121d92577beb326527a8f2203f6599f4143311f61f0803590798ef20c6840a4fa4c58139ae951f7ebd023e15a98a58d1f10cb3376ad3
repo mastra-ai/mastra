@@ -1,0 +1,22 @@
+// This is a dummy program that just needs to compile and link to tell us if
+// the C++17 std::filesystem API is available. Use CMake's configure_file
+// command to replace the FILESYSTEM_HEADER and FILESYSTEM_NAMESPACE tokens
+// for each combination of headers and namespaces which we want to pass to the
+// CMake try_compile command.
+
+#include <@FILESYSTEM_HEADER@>
+
+// clang-format off
+int main()
+{
+#if defined( __cpp_exceptions )
+   try {
+      throw @FILESYSTEM_NAMESPACE@::filesystem_error( "instantiate one to make sure it links", std::make_error_code( std::errc::function_not_supported ) );
+   }
+   catch( const @FILESYSTEM_NAMESPACE@::filesystem_error& error ) {
+      return -1;
+   }
+#endif
+
+   return !@FILESYSTEM_NAMESPACE@::temp_directory_path().is_absolute();
+}

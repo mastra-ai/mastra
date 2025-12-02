@@ -1,0 +1,51 @@
+{
+    "author": "Michael De Lorenzo <michael@delorenzodesign.com> (http://mikedelorenzo.com)",
+    "name": "keyword-extractor",
+    "description": "Module for creating a keyword array from a string and excluding stop words.",
+    "types": "types/index.d.ts",
+    "keywords": [
+        "text",
+        "keyword",
+        "search",
+        "extract"
+    ],
+    "version": "0.0.28",
+    "licenses": [
+        {
+            "type": "MIT",
+            "url": "https://github.com/michaeldelorenzo/keyword-extractor/raw/master/LICENSE"
+        }
+    ],
+    "contributors": [
+        "Marcos Sanz <marcossanzlatorre@gmail.com> (http://www.mistersanz.com)",
+        "d-oliveros (https://github.com/d-oliveros)",
+        "Abhijeet Sutar <ajduke@about.me> (https://github.com/ajduke)",
+        "janvde (https://github.com/janvde)",
+        "Alex Gustafsson (https://github.com/AlexGustafsson)",
+        "CircleHD Devs (https://github.com/circlehddev)",
+	"Oliver Tacke (https://github.com/otacke)"
+    ],
+    "homepage": "https://github.com/michaeldelorenzo/keyword-extractor",
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/michaeldelorenzo/keyword-extractor.git"
+    },
+    "bugs": {
+        "url": "https://github.com/michaeldelorenzo/keyword-extractor/issues"
+    },
+    "main": "./index",
+    "scripts": {
+        "start": "browserify index.js --o bundle.js",
+        "test": "mocha -r esm"
+    },
+    "devDependencies": {
+        "browserify": "^17.0.0",
+        "esm": "^3.2.25",
+        "mocha": "^10.2.0",
+        "should": "^13.2.3"
+    },
+    "dependencies": {},
+    "engines": {
+        "node": ">= 0.10.0"
+    }
+}

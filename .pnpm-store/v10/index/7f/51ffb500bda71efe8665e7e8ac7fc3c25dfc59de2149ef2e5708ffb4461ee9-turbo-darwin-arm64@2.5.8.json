@@ -1,0 +1,31 @@
+{
+  "name": "turbo-darwin-arm64",
+  "version": "2.5.8",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662905708,
+      "integrity": "sha512-b+6xg8upbbVjNDwep+HkMhMPrmISEG0mtW/ftCwbkTX++jaGzZQPvpBVhxVsQTpaPrvQuhKY/SpzO98mJW3sqw==",
+      "mode": 420,
+      "size": 1055
+    },
+    "README.md": {
+      "checkedAt": 1764662905709,
+      "integrity": "sha512-vzymE31PIySqOHs2pnKgO00uMiTo3OfNgtK9mKTlP94aCWtz/LSxVlKDAlYiPMVUA/xsESiiUxqGuDxpeuNlpQ==",
+      "mode": 420,
+      "size": 139
+    },
+    "package.json": {
+      "checkedAt": 1764662905712,
+      "integrity": "sha512-UOFulco4RsFQAWrR8IbpwpF/ou9Uh9bcLh8CkOvpMRo8usBJmsqJoEHqBg/Qf/vKPNDxGvahW6MtMtcmR5ggmQ==",
+      "mode": 420,
+      "size": 389
+    },
+    "bin/turbo": {
+      "checkedAt": 1764662905774,
+      "integrity": "sha512-DmkEt747Z+Bp1KXvpJlTMJM6tAMKfqAw6eZj6pKmrsy3FUxfL8ntEkT9f+ZgygP9KeZxlKNBUQt+LlI4rU6iLQ==",
+      "mode": 493,
+      "size": 28089536
+    }
+  }
+}

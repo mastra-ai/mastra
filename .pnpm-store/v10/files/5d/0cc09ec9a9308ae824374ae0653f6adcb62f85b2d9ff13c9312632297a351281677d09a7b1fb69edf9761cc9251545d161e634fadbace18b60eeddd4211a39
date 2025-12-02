@@ -1,0 +1,22 @@
+import type { CoreMessage } from '../../../../ai-sdk.types.d.ts';
+import type { ModelMessage } from 'ai-v5';
+type GeminiCompatibleMessage = ModelMessage | CoreMessage;
+/**
+ * Ensures message array is compatible with Gemini API requirements.
+ *
+ * Gemini requires that the first non-system message must be from the user role.
+ * This fixes "single turn requests" errors where messages start with assistant
+ * or contain only system messages.
+ *
+ * This function modifies the messages array by inserting a placeholder user
+ * message when needed to satisfy this requirement.
+ *
+ * @param messages - Array of model messages to validate and fix
+ * @returns Modified messages array that satisfies Gemini requirements
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/7287 - Tool call ordering
+ * @see https://github.com/mastra-ai/mastra/issues/8053 - Single turn validation
+ */
+export declare function ensureGeminiCompatibleMessages<T extends GeminiCompatibleMessage>(messages: T[]): T[];
+export {};
+//# sourceMappingURL=gemini-compatibility.d.ts.map

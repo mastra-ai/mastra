@@ -1,0 +1,31 @@
+{
+  "name": "@types/pumpify",
+  "version": "1.4.4",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662928431,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662928433,
+      "integrity": "sha512-GX9ZCVQitqcQBlXXygIZRr6rEEEt42oXV90khJ7ABXoBTIEF0bcnMMJodfN8E6QQSW8hhDK90KixZzq6b4HpEw==",
+      "mode": 420,
+      "size": 1518
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662928433,
+      "integrity": "sha512-ml5e0Z0cikPmUoUOZUB5wqsBijOKFE2SDPafYiuqyNEpoMEgNCU+yz9s4ifR4efmnRFtndeQDs6J9s0K6AQwcQ==",
+      "mode": 420,
+      "size": 760
+    },
+    "package.json": {
+      "checkedAt": 1764662928434,
+      "integrity": "sha512-PpHMiQZPcnO9us6UG4DF2y2iD0Hy/HqnEmQf7rjHFPqaM3Xfn5uTZauLG6DQNC9Lmb22Rl1MYlC+y+ZgY7ARew==",
+      "mode": 420,
+      "size": 1012
+    }
+  }
+}

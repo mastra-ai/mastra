@@ -1,0 +1,10 @@
+{
+    "object": "password_reset",
+    "id": "password_reset_01H5JQDV7R7ATEYZDEG0W5PRYS",
+    "user_id": "user_01H5JQDV7R7ATEYZDEG0W5PRYS",
+    "email": "dane@workos.com",
+    "password_reset_token": "Z1uX3RbwcIl5fIGJJJCXXisdI",
+    "password_reset_url": "https://your-app.com/reset-password?token=Z1uX3RbwcIl5fIGJJJCXXisdI",
+    "expires_at": "2023-07-18T02:07:19.911Z",
+    "created_at": "2023-07-18T02:07:19.911Z"
+}

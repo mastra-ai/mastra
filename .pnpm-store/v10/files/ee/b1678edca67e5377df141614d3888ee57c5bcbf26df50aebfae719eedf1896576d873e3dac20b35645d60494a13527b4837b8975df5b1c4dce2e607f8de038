@@ -1,0 +1,12 @@
+'use strict';
+
+var chunkY63IFHEZ_cjs = require('../chunk-Y63IFHEZ.cjs');
+
+
+
+Object.defineProperty(exports, "MastraBundler", {
+  enumerable: true,
+  get: function () { return chunkY63IFHEZ_cjs.MastraBundler; }
+});
+//# sourceMappingURL=index.cjs.map
+//# sourceMappingURL=index.cjs.map

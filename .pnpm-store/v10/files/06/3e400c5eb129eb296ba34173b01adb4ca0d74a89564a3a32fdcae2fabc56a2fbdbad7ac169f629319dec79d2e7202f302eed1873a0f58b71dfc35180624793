@@ -1,0 +1,1 @@
+{"version":3,"file":"COMMAND_COUNT.js","sourceRoot":"","sources":["../../../lib/commands/COMMAND_COUNT.ts"],"names":[],"mappings":";;AAGA,kBAAe;IACb,iBAAiB,EAAE,IAAI;IACvB,YAAY,EAAE,IAAI;IAClB;;;OAGG;IACH,YAAY,CAAC,MAAqB;QAChC,MAAM,CAAC,IAAI,CAAC,SAAS,EAAE,OAAO,CAAC,CAAC;IAClC,CAAC;IACD,cAAc,EAAE,SAAyC;CAC/B,CAAC"}

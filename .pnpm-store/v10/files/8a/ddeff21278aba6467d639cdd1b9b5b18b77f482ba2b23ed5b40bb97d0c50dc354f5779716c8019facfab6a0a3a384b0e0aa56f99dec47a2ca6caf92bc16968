@@ -1,0 +1,38 @@
+{
+  "name": "extendable-error",
+  "version": "0.1.7",
+  "description": "A simple extendable error class that extends Error.",
+  "main": "bld/index.js",
+  "typings": "bld/index.d.ts",
+  "scripts": {
+    "tsc": "tsc",
+    "tslint": "tslint",
+    "mocha": "mocha",
+    "lint": "tslint src/**/*.ts -c tslint.json",
+    "build": "npm run lint && rimraf bld && tsc",
+    "pretest": "npm run build",
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vilic/extendable-error.git"
+  },
+  "keywords": [],
+  "author": "vilicvane",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/vilic/extendable-error/issues"
+  },
+  "homepage": "https://github.com/vilic/extendable-error#readme",
+  "devDependencies": {
+    "@types/chai": "^3.4.35",
+    "@types/mocha": "^2.2.40",
+    "@types/node": "^7.0.8",
+    "chai": "^3.5.0",
+    "mocha": "^3.2.0",
+    "rimraf": "^2.6.1",
+    "tslint": "^4.5.1",
+    "typescript": "^2.2.1",
+    "vts": "^0.1.0"
+  }
+}

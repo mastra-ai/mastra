@@ -1,0 +1,34 @@
+{
+  "name": "@wong2/mcp-cli",
+  "version": "1.13.0",
+  "description": "A CLI inspector for the Model Context Protocol",
+  "bin": {
+    "mcp-cli": "src/cli.js"
+  },
+  "type": "module",
+  "homepage": "https://github.com/wong2/mcp-cli",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "MCP"
+  ],
+  "author": "wong2",
+  "dependencies": {
+    "@json-schema-tools/traverse": "^1.10.4",
+    "@modelcontextprotocol/sdk": "^1.15.1",
+    "conf": "^13.1.0",
+    "eventsource": "^3.0.6",
+    "express": "^5.1.0",
+    "get-port": "^7.1.0",
+    "lodash-es": "^4.17.21",
+    "meow": "^13.2.0",
+    "open": "^10.1.2",
+    "prompts": "^2.4.2",
+    "uri-template": "^2.0.0",
+    "yocto-spinner": "^0.2.2",
+    "yoctocolors": "^2.1.1"
+  },
+  "scripts": {}
+}

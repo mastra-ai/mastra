@@ -1,0 +1,196 @@
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// ../../node_modules/.pnpm/tailwindcss@3.4.17/node_modules/tailwindcss/lib/util/createPlugin.js
+var require_createPlugin = __commonJS({
+  "../../node_modules/.pnpm/tailwindcss@3.4.17/node_modules/tailwindcss/lib/util/createPlugin.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", {
+      value: true
+    });
+    Object.defineProperty(exports, "default", {
+      enumerable: true,
+      get: function() {
+        return _default;
+      }
+    });
+    function createPlugin(plugin2, config) {
+      return {
+        handler: plugin2,
+        config
+      };
+    }
+    createPlugin.withOptions = function(pluginFunction, configFunction = () => ({})) {
+      const optionsFunction = function(options) {
+        return {
+          __options: options,
+          handler: pluginFunction(options),
+          config: configFunction(options)
+        };
+      };
+      optionsFunction.__isOptionsFunction = true;
+      optionsFunction.__pluginFunction = pluginFunction;
+      optionsFunction.__configFunction = configFunction;
+      return optionsFunction;
+    };
+    var _default = createPlugin;
+  }
+});
+
+// ../../node_modules/.pnpm/tailwindcss@3.4.17/node_modules/tailwindcss/lib/public/create-plugin.js
+var require_create_plugin = __commonJS({
+  "../../node_modules/.pnpm/tailwindcss@3.4.17/node_modules/tailwindcss/lib/public/create-plugin.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", {
+      value: true
+    });
+    Object.defineProperty(exports, "default", {
+      enumerable: true,
+      get: function() {
+        return _default;
+      }
+    });
+    var _createPlugin = /* @__PURE__ */ _interop_require_default(require_createPlugin());
+    function _interop_require_default(obj) {
+      return obj && obj.__esModule ? obj : {
+        default: obj
+      };
+    }
+    var _default = _createPlugin.default;
+  }
+});
+
+// ../../node_modules/.pnpm/tailwindcss@3.4.17/node_modules/tailwindcss/plugin.js
+var require_plugin = __commonJS({
+  "../../node_modules/.pnpm/tailwindcss@3.4.17/node_modules/tailwindcss/plugin.js"(exports, module) {
+    "use strict";
+    var createPlugin = require_create_plugin();
+    module.exports = (createPlugin.__esModule ? createPlugin : { default: createPlugin }).default;
+  }
+});
+
+// src/tailwindcss/index.ts
+var import_plugin = __toESM(require_plugin());
+import baseComponentsCSS from "../../dist/styles/tailwindcss/base-components.css.json" with { type: "json" };
+import threadCSS from "../../dist/styles/tailwindcss/thread.css.json" with { type: "json" };
+import modalCSS from "../../dist/styles/tailwindcss/modal.css.json" with { type: "json" };
+import defaultThemeCSS from "../../dist/styles/themes/default.css.json" with { type: "json" };
+import shadcnExtrasCSS from "../../dist/styles/themes/shadcn-extras.css.json" with { type: "json" };
+import markdownCSS from "../../dist/styles/tailwindcss/markdown.css.json" with { type: "json" };
+var auiPlugin = import_plugin.default.withOptions(
+  ({
+    components = ["assistant-modal", "thread", "markdown"],
+    shadcn = false
+  } = {}) => ({ addComponents }) => {
+    const assistantModal = components.includes("assistant-modal");
+    const thread = assistantModal || components.includes("thread");
+    const markdown = components.includes("markdown");
+    const base = thread || components.includes("base");
+    const defaultTheme = components.includes("default-theme");
+    if (defaultTheme && shadcn)
+      throw new Error("default-theme cannot be used with shadcn");
+    if (defaultTheme || base && !shadcn) {
+      addComponents(defaultThemeCSS);
+    }
+    if (!defaultTheme && base && shadcn) {
+      addComponents(shadcnExtrasCSS);
+    }
+    if (base) {
+      addComponents(baseComponentsCSS);
+    }
+    if (thread) {
+      addComponents(threadCSS);
+    }
+    if (assistantModal) {
+      addComponents(modalCSS);
+    }
+    if (markdown) {
+      addComponents(markdownCSS);
+    }
+  },
+  ({
+    // components = ["assistant-modal", "thread"],
+    colors = {},
+    shadcn = false
+  } = {}) => {
+    const prefix = !shadcn ? "--aui-" : "--";
+    return {
+      safelist: [{ pattern: /^aui-/ }],
+      // ...(components.length > 0
+      //   ? { safelist: [{ pattern: /^aui-/ }] }
+      //   : undefined),
+      theme: {
+        extend: {
+          maxWidth: {
+            "aui-thread": "var(--aui-thread-max-width)"
+          },
+          colors: {
+            aui: {
+              border: colors.border ?? `hsl(var(${prefix}border))`,
+              input: colors.input ?? `hsl(var(${prefix}input))`,
+              ring: colors.ring ?? `hsl(var(${prefix}ring))`,
+              background: colors.background ?? `hsl(var(${prefix}background))`,
+              foreground: colors.foreground ?? `hsl(var(${prefix}foreground))`,
+              primary: {
+                DEFAULT: colors.primary?.DEFAULT ?? `hsl(var(${prefix}primary))`,
+                foreground: colors.primary?.foreground ?? `hsl(var(${prefix}primary-foreground))`
+              },
+              secondary: {
+                DEFAULT: colors.secondary?.DEFAULT ?? `hsl(var(${prefix}secondary))`,
+                foreground: colors.secondary?.foreground ?? `hsl(var(${prefix}secondary-foreground))`
+              },
+              destructive: {
+                DEFAULT: colors.destructive?.DEFAULT ?? `hsl(var(${prefix}destructive))`,
+                foreground: `hsl(var(${prefix}destructive-foreground))`
+              },
+              muted: {
+                DEFAULT: `hsl(var(${prefix}muted))`,
+                foreground: colors.muted?.foreground ?? `hsl(var(${prefix}muted-foreground))`
+              },
+              accent: {
+                DEFAULT: colors.accent?.DEFAULT ?? `hsl(var(${prefix}accent))`,
+                foreground: colors.accent?.foreground ?? `hsl(var(${prefix}accent-foreground))`
+              },
+              popover: {
+                DEFAULT: colors.popover?.DEFAULT ?? `hsl(var(${prefix}popover))`,
+                foreground: colors.popover?.foreground ?? `hsl(var(${prefix}popover-foreground))`
+              },
+              card: {
+                DEFAULT: colors.card?.DEFAULT ?? `hsl(var(${prefix}card))`,
+                foreground: colors.card?.foreground ?? `hsl(var(${prefix}card-foreground))`
+              }
+            }
+          }
+        }
+      }
+    };
+  }
+);
+var tailwindcss_default = auiPlugin;
+export {
+  tailwindcss_default as default
+};
+//# sourceMappingURL=index.mjs.map

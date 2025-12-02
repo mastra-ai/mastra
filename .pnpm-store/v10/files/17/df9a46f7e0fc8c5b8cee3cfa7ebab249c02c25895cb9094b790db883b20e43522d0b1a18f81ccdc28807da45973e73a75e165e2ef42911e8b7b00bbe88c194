@@ -1,0 +1,67 @@
+{
+  "name": "use-latest",
+  "version": "1.3.0",
+  "description": "A React helper hook for storing latest value in ref object (updated in useEffect's callback).",
+  "main": "dist/use-latest.cjs.js",
+  "module": "dist/use-latest.esm.js",
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/use-latest.cjs.mjs",
+        "default": "./dist/use-latest.cjs.js"
+      },
+      "module": "./dist/use-latest.esm.js",
+      "import": "./dist/use-latest.cjs.mjs",
+      "default": "./dist/use-latest.cjs.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "test": "echo \"Warning: no test specified\"",
+    "build": "preconstruct build",
+    "prepare": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Andarist/use-latest.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Andarist/use-latest/issues"
+  },
+  "homepage": "https://github.com/Andarist/use-latest#readme",
+  "dependencies": {
+    "use-isomorphic-layout-effect": "^1.1.1"
+  },
+  "peerDependencies": {
+    "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@babel/core": "^7.17.9",
+    "@babel/preset-env": "^7.16.11",
+    "@babel/preset-typescript": "^7.16.7",
+    "@preconstruct/cli": "^2.8.10",
+    "@types/react": "^18.0.6",
+    "husky": "^4.2.5",
+    "lint-staged": "^10.2.11",
+    "prettier": "^2.6.2",
+    "react": "^18.0.0",
+    "typescript": "^4.6.3"
+  },
+  "preconstruct": {
+    "exports": {
+      "importConditionDefaultExport": "default"
+    },
+    "___experimentalFlags_WILL_CHANGE_IN_PATCH": {
+      "importsConditions": true
+    }
+  }
+}

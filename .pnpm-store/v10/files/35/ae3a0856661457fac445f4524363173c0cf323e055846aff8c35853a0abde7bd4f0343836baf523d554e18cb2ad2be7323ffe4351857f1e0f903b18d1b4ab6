@@ -1,0 +1,1024 @@
+# Dynamic variable names
+
+<?php
+$$k = $v;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(AssignmentExpression(
+    DynamicVariable(VariableName),
+    AssignOp,
+    VariableName)))
+
+# Exponentiation
+
+<?php
+$foo = 2 ** 2;
+$a = 3;
+echo $a ** -$a;
+$a ** $c += $b;
+$a ** $c = $b;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    AssignmentExpression(
+      VariableName,
+      AssignOp,
+      BinaryExpression(Integer, ArithOp, Integer)
+    )
+  ),
+  ExpressionStatement(
+    AssignmentExpression(
+      VariableName,
+      AssignOp,
+      Integer)),
+  EchoStatement(echo,
+    BinaryExpression(VariableName, ArithOp, UnaryExpression(ArithOp, VariableName))
+  ),
+  ExpressionStatement(
+    BinaryExpression(
+      VariableName,
+      ArithOp,
+      UpdateExpression(
+        VariableName,
+        UpdateOp,
+        VariableName
+      )
+    )
+  ),
+  ExpressionStatement(
+    BinaryExpression(
+      VariableName,
+      ArithOp,
+      AssignmentExpression(
+        VariableName,
+        AssignOp,
+        VariableName
+      )
+    )
+  )
+)
+
+# Reserved Identifiers as Names
+
+<?php
+$foo = new self();
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(AssignmentExpression(
+    VariableName,
+    AssignOp,
+    NewExpression(new, Name, ArgList))))
+
+# Unary op with assignment expressions
+
+<?php
+
+if (!$foo = $bar) {
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  IfStatement(if,
+    ParenthesizedExpression(UnaryExpression(LogicOp,
+      AssignmentExpression(
+        VariableName,
+        AssignOp,
+        VariableName))),
+    Block))
+
+# Capitalized logical operators
+
+<?php
+a() OR b() XOR C();
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    BinaryExpression(
+      CallExpression(Name, ArgList),
+      LogicOp,
+      BinaryExpression(
+        CallExpression(Name, ArgList),
+        LogicOp,
+        CallExpression(Name, ArgList)))))
+
+# Reserved words as function calls
+
+<?php
+$foo = new static($this->current());
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(AssignmentExpression(
+    VariableName,
+    AssignOp,
+    NewExpression(new, Name, ArgList(
+        CallExpression(MemberExpression(VariableName, Name), ArgList))))))
+
+# Scoped self call expressions
+
+<?php
+
+m::self();
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    CallExpression(ScopedExpression(Name, ClassMemberName(Name)), ArgList)))
+
+# Symmetric array destructuring
+
+<?php
+$data = [
+    [1, 'Tom'],
+    [2, 'Fred'],
+];
+
+// list() style
+list($id1, $name1) = $data[0];
+
+// Support trailing commma
+list($id1, $name1,) = $data[0];
+
+// Support skipping arguments
+list(, $name1) = $data[0];
+
+// [] style
+[$id1, $name1] = $data[0];
+
+// Support trailing commma
+[$id1, $name1,] = $data[0];
+
+// Support skipping arguments
+[, $name1] = $data[0];
+
+[$error, $canonicalized] = Json::canonicalize($actual);
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    AssignmentExpression(
+      VariableName,
+      AssignOp,
+      ArrayExpression(
+        ArrayExpression(Integer, String),
+        ArrayExpression(Integer, String)
+      )
+    )
+  ),
+  LineComment,
+  ExpressionStatement(
+    AssignmentExpression(
+      ListExpression(list, ValueList(VariableName,VariableName)),
+      AssignOp,
+      SubscriptExpression(
+        VariableName,
+        Integer
+      )
+    )
+  ),
+  LineComment,
+  ExpressionStatement(
+    AssignmentExpression(
+      ListExpression(list,ValueList(VariableName,VariableName)),
+      AssignOp,
+      SubscriptExpression(
+        VariableName,
+        Integer
+      )
+    )
+  ),
+  LineComment,
+  ExpressionStatement(
+    AssignmentExpression(
+      ListExpression(list,ValueList(VariableName)),
+      AssignOp,
+      SubscriptExpression(
+        VariableName,
+        Integer
+      )
+    )
+  ),
+  LineComment,
+  ExpressionStatement(
+    AssignmentExpression(
+      ArrayExpression(VariableName,VariableName),
+      AssignOp,
+      SubscriptExpression(
+        VariableName,
+        Integer
+      )
+    )
+  ),
+  LineComment,
+  ExpressionStatement(
+    AssignmentExpression(
+      ArrayExpression(
+        VariableName,
+        VariableName
+      ),
+      AssignOp,
+      SubscriptExpression(
+        VariableName,
+        Integer
+      )
+    )
+  ),
+  LineComment,
+  ExpressionStatement(
+    AssignmentExpression(
+      ArrayExpression(VariableName),
+      AssignOp,
+      SubscriptExpression(
+        VariableName,
+        Integer
+      )
+    )
+  ),
+  ExpressionStatement(
+    AssignmentExpression(
+      ArrayExpression(
+        VariableName,
+        VariableName
+      ),
+      AssignOp,
+      CallExpression(
+        ScopedExpression(Name, ClassMemberName(Name)),
+        ArgList(VariableName)
+      )
+    )
+  )
+)
+
+# Precedence of assignment, `or`, `xor`, and `and`
+
+<?php
+$x = true and false;
+$x = true or false;
+$x = true xor false;
+$x = true and true or true xor true and true;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    BinaryExpression(
+      AssignmentExpression(
+        VariableName,
+        AssignOp,
+        Boolean),
+      LogicOp,
+      Boolean)),
+  ExpressionStatement(
+    BinaryExpression(
+      AssignmentExpression(
+        VariableName,
+        AssignOp,
+        Boolean),
+      LogicOp,
+      Boolean)),
+  ExpressionStatement(
+    BinaryExpression(
+      AssignmentExpression(
+        VariableName,
+        AssignOp,
+        Boolean),
+      LogicOp,
+      Boolean)),
+  ExpressionStatement(
+    BinaryExpression(
+      BinaryExpression(
+        AssignmentExpression(
+          VariableName,
+          AssignOp,
+          Boolean),
+        LogicOp,
+        Boolean),
+      LogicOp,
+      BinaryExpression(
+        Boolean,
+        LogicOp,
+        BinaryExpression(
+          Boolean,
+          LogicOp,
+          Boolean)))))
+
+# Associativity of conditional
+
+<?php
+true ? false : true ? "a" : "b";
+?>
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    ConditionalExpression(
+      ConditionalExpression(Boolean, LogicOp, Boolean, Boolean),
+      LogicOp,
+      String,
+      String)),
+  TextInterpolation(PhpClose))
+
+# Associativity of null-coalescence
+
+<?php
+NULL ?? NULL ?? 1;
+?>
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    BinaryExpression(
+      null,
+      LogicOp,
+      BinaryExpression(
+        null,
+        LogicOp,
+        Integer))),
+  TextInterpolation(PhpClose))
+
+# Associativity of negation
+
+<?php
+-1 * -1;
+!$i instanceof object;
+?>
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    BinaryExpression(
+      UnaryExpression(ArithOp, Integer),
+      ArithOp,
+      UnaryExpression(ArithOp, Integer))),
+  ExpressionStatement(
+    UnaryExpression(LogicOp,
+      BinaryExpression(VariableName, LogicOp, Name))),
+  TextInterpolation(PhpClose))
+
+# Augmented assignment
+
+<?php
+$i .= $j = "a";
+$i += $j += 3;
+$i .= "a" . "b";
+"a" . $i .= "b";
+?>
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    UpdateExpression(
+      VariableName,
+      UpdateOp,
+      AssignmentExpression(
+        VariableName,
+        AssignOp,
+        String))),
+  ExpressionStatement(
+    UpdateExpression(
+      VariableName,
+      UpdateOp,
+      UpdateExpression(
+        VariableName,
+        UpdateOp,
+        Integer))),
+  ExpressionStatement(
+    UpdateExpression(
+      VariableName,
+      UpdateOp,
+      BinaryExpression(String, ConcatOp, String))),
+  ExpressionStatement(
+    BinaryExpression(
+      String,
+      ConcatOp,
+      UpdateExpression(
+        VariableName,
+        UpdateOp,
+        String))),
+  TextInterpolation(PhpClose))
+
+# Nested assignemnts
+
+<?php
+$c = $d[0] = $d[2] = $i;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    AssignmentExpression(
+      VariableName,
+      AssignOp,
+      AssignmentExpression(
+        SubscriptExpression(VariableName, Integer),
+        AssignOp,
+        AssignmentExpression(
+          SubscriptExpression(VariableName, Integer),
+          AssignOp,
+          VariableName)))))
+
+# All binary op precedence levels
+
+<?php
+1 or 2 xor 3 and $i .= 4 ?? 5 || 6 && 7 | 8 ^ 9 & 10 == 11 > 12 << 13 + 14 * (int) 15 instanceof foo;
+(int) 1 instanceof foo / 3 - 4 >> 5 <= 6 <=> 7 & 8 ^ 9 | 10 && 11 || 12 ?? $i += 13 and 14 xor 15 or 16;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    BinaryExpression(
+      Integer,
+      LogicOp,
+      BinaryExpression(
+        Integer,
+        LogicOp,
+        BinaryExpression(
+          Integer,
+          LogicOp,
+          UpdateExpression(
+            VariableName,
+            UpdateOp,
+            BinaryExpression(
+              Integer,
+              LogicOp,
+              BinaryExpression(
+                Integer,
+                LogicOp,
+                BinaryExpression(
+                  Integer,
+                  LogicOp,
+                  BinaryExpression(
+                    Integer,
+                    BitOp,
+                    BinaryExpression(
+                      Integer,
+                      BitOp,
+                      BinaryExpression(
+                        Integer,
+                        BitOp,
+                        BinaryExpression(
+                          Integer,
+                          CompareOp,
+                          BinaryExpression(
+                            Integer,
+                            CompareOp,
+                            BinaryExpression(
+                              Integer,
+                              BitOp,
+                              BinaryExpression(
+                                Integer,
+                                ArithOp,
+                                BinaryExpression(
+                                  Integer,
+                                  ArithOp,
+                                  BinaryExpression(
+                                    CastExpression(
+                                      NamedType(Name),
+                                      Integer),
+                                    LogicOp,
+                                    Name))))))))))))))))),
+  ExpressionStatement(
+    BinaryExpression(
+      BinaryExpression(
+        BinaryExpression(
+          BinaryExpression(
+            BinaryExpression(
+              BinaryExpression(
+                BinaryExpression(
+                  BinaryExpression(
+                    BinaryExpression(
+                      BinaryExpression(
+                        BinaryExpression(
+                          BinaryExpression(
+                            BinaryExpression(
+                              BinaryExpression(
+                                BinaryExpression(
+                                  CastExpression(
+                                    NamedType(Name),
+                                    Integer),
+                                    LogicOp,
+                                    Name),
+                                ArithOp,
+                                Integer),
+                              ArithOp,
+                              Integer),
+                            BitOp,
+                            Integer),
+                          CompareOp,
+                          Integer),
+                        CompareOp,
+                        Integer),
+                      BitOp,
+                      Integer),
+                    BitOp,
+                    Integer),
+                  BitOp,
+                  Integer),
+                LogicOp,
+                Integer),
+              LogicOp,
+              Integer),
+            LogicOp,
+            UpdateExpression(
+              VariableName,
+              UpdateOp,
+              Integer)),
+          LogicOp,
+          Integer),
+        LogicOp,
+        Integer),
+      LogicOp,
+      Integer)))
+
+# Concatenation precedence
+
+<?php
+
+"3" . "5" + 7;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    BinaryExpression(
+      String,
+      ConcatOp,
+      BinaryExpression(
+        String,
+        ArithOp,
+        Integer
+      )
+    )
+  )
+)
+
+# Arrays
+
+<?php
+print_r([1, 2, 3]);
+print_r(["foo" => "orange", "bar" => "apple", "baz" => "lemon"]);
+$a = [...$values];
+?>
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(CallExpression(
+    Name,
+    ArgList(ArrayExpression(Integer, Integer, Integer)))),
+  ExpressionStatement(
+    CallExpression(
+      Name,
+      ArgList(
+        ArrayExpression(Pair(String, String),
+                        Pair(String, String),
+                        Pair(String, String))))),
+  ExpressionStatement(
+    AssignmentExpression(
+      VariableName,
+      AssignOp,
+      ArrayExpression(VariadicUnpacking(VariableName))
+    )
+  ),
+  TextInterpolation(PhpClose))
+
+# Anonymous functions
+
+<?php
+header_register_callback(
+  function() { echo "sent";}
+);
+
+ob_start(function($buffer) use (&$storage) { $storage .= $buffer; }, 20);
+ob_start(function($buffer) use (&$storage,) { $storage .= $buffer; }, 20);
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    CallExpression(
+      Name,
+      ArgList(
+        FunctionExpression(function,
+          ParamList,
+          Block(EchoStatement(echo, String)))))),
+  ExpressionStatement(
+    CallExpression(
+      Name,
+      ArgList(
+        FunctionExpression(function,
+          ParamList(Parameter(VariableName)),
+          use, UseList(VariableName),
+          Block(ExpressionStatement(UpdateExpression(
+            VariableName,
+            UpdateOp,
+            VariableName)))),
+        Integer))),
+  ExpressionStatement(
+    CallExpression(
+      Name,
+      ArgList(
+        FunctionExpression(function,
+          ParamList(Parameter(VariableName)),
+          use, UseList(VariableName),
+          Block(ExpressionStatement(UpdateExpression(
+            VariableName,
+            UpdateOp,
+            VariableName)))),
+        Integer))))
+
+# Throw expressions
+
+<?php
+throw new Exception(__METHOD__);
+
+$value = !empty($array)
+    ? reset($array)
+    : throw new InvalidArgumentException();
+
+$condition && throw new Exception();
+$condition || throw new Exception();
+$condition and throw new Exception();
+$condition or throw new Exception();
+
+throw $this->createNotFoundException();
+throw static::createNotFoundException();
+throw $userIsAuthorized ? new ForbiddenException() : new UnauthorizedException();
+throw $maybeNullException ?? new Exception();
+throw $exception = new Exception();
+throw $condition1 && $condition2 ? new Exception1() : new Exception2();
+throw $exception ??= new Exception();
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    ThrowExpression(throw,
+      NewExpression(new, Name, ArgList(Name)
+      )
+    )
+  ),
+  ExpressionStatement(
+    AssignmentExpression(
+      VariableName,
+      AssignOp,
+      ConditionalExpression(
+        UnaryExpression(LogicOp,
+          CallExpression(Name, ArgList(VariableName))),
+        LogicOp,
+        CallExpression(Name, ArgList(VariableName)),
+        ThrowExpression(throw,
+          NewExpression(new, Name, ArgList))
+      )
+    )
+  ),
+  ExpressionStatement(
+    BinaryExpression(
+      VariableName,
+      LogicOp,
+      ThrowExpression(throw,
+        NewExpression(new, Name, ArgList)
+      )
+    )
+  ),
+  ExpressionStatement(
+    BinaryExpression(
+      VariableName,
+      LogicOp,
+      ThrowExpression(throw,
+        NewExpression(new, Name, ArgList)
+      )
+    )
+  ),
+  ExpressionStatement(
+    BinaryExpression(
+      VariableName,
+      LogicOp,
+      ThrowExpression(throw,
+        NewExpression(new, Name, ArgList)
+      )
+    )
+  ),
+  ExpressionStatement(
+    BinaryExpression(
+      VariableName,
+      LogicOp,
+      ThrowExpression(throw,
+        NewExpression(new, Name, ArgList)
+      )
+    )
+  ),
+  ExpressionStatement(
+    ThrowExpression(throw,
+      CallExpression(MemberExpression(VariableName, Name), ArgList)
+    )
+  ),
+  ExpressionStatement(
+    ThrowExpression(throw,
+      CallExpression(
+        ScopedExpression(Name, ClassMemberName(Name)),
+        ArgList
+      )
+    )
+  ),
+  ExpressionStatement(
+    ThrowExpression(throw,
+      ConditionalExpression(
+        VariableName,
+        LogicOp,
+        NewExpression(new, Name, ArgList),
+        NewExpression(new, Name, ArgList)
+      )
+    )
+  ),
+  ExpressionStatement(
+    ThrowExpression(throw,
+      BinaryExpression(
+        VariableName,
+        LogicOp,
+        NewExpression(new, Name, ArgList)
+      )
+    )
+  ),
+  ExpressionStatement(
+    ThrowExpression(throw,
+      AssignmentExpression(
+        VariableName,
+        AssignOp,
+        NewExpression(new, Name, ArgList)
+      )
+    )
+  ),
+  ExpressionStatement(
+    ThrowExpression(throw,
+      ConditionalExpression(
+        BinaryExpression(
+          VariableName,
+          LogicOp,
+          VariableName
+        ),
+        LogicOp,
+        NewExpression(new, Name, ArgList),
+        NewExpression(new, Name, ArgList)
+      )
+    )
+  ),
+  ExpressionStatement(
+    ThrowExpression(throw,
+      UpdateExpression(
+        VariableName,
+        UpdateOp,
+        NewExpression(new, Name, ArgList)
+      )
+    )
+  )
+)
+
+# Nullsafe operator
+
+<?php
+
+$a?->b;
+$a?->b($c);
+new $a?->b;
+$country = $session?->user?->getAddress()?->country;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    MemberExpression(
+      VariableName,
+      Name
+    )
+  ),
+  ExpressionStatement(
+    CallExpression(
+      MemberExpression(VariableName, Name),
+      ArgList(VariableName)
+    )
+  ),
+  ExpressionStatement(
+    NewExpression(new, MemberExpression(VariableName, Name))
+  ),
+  ExpressionStatement(
+    AssignmentExpression(
+      VariableName,
+      AssignOp,
+      MemberExpression(
+        CallExpression(
+          MemberExpression(MemberExpression(VariableName, Name), Name),
+          ArgList
+        ),
+        Name
+      )
+    )
+  )
+)
+
+# Match expressions
+
+<?php
+
+$statement = match ($a) {
+    Lexer::T_SELECT, $c => $b,
+    Lexer::T_UPDATE => updateStatement(),
+    Lexer::T_DELETE => $this->DeleteStatement(),
+    default => $this->syntaxError('SELECT, UPDATE or DELETE'),
+};
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    AssignmentExpression(
+      VariableName,
+      AssignOp,
+      MatchExpression(match,
+        ParenthesizedExpression(VariableName),
+        MatchBlock(
+          MatchArm(
+            ScopedExpression(Name, ClassMemberName(Name)), VariableName
+            VariableName
+          ),
+          MatchArm(
+            ScopedExpression(Name, ClassMemberName(Name)),
+            CallExpression(Name, ArgList)
+          ),
+          MatchArm(
+            ScopedExpression(Name, ClassMemberName(Name))
+            CallExpression(MemberExpression(VariableName, Name), ArgList)
+          ),
+          MatchArm(
+            default,
+            CallExpression(MemberExpression(VariableName, Name), ArgList(String))
+          )
+        )
+      )
+    )
+  )
+)
+
+# Arrow functions
+
+<?php
+
+fn(bool $a) => $a;
+fn($x = 42) => $x;
+static fn(&$x) => $x;
+fn&($x) => $x;
+fn($x, ...$rest) => $rest;
+fn(): int => $x;
+
+$fn1 = fn($x) => $x + $y;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    ArrowFunction(fn,
+      ParamList(
+        Parameter(
+          NamedType(Name),
+          VariableName
+        )
+      ),
+      VariableName
+    )
+  ),
+  ExpressionStatement(
+    ArrowFunction(fn,
+      ParamList(
+        Parameter(
+          VariableName,
+          AssignOp,
+          Integer)
+        ),
+        VariableName
+    )
+  ),
+  ExpressionStatement(
+    ArrowFunction(static, fn,
+      ParamList(Parameter(VariableName)),
+      VariableName
+    )
+  ),
+  ExpressionStatement(
+    ArrowFunction(fn,
+      ParamList(Parameter(VariableName)),
+      VariableName
+    )
+  ),
+  ExpressionStatement(
+    ArrowFunction(fn,
+      ParamList(
+        Parameter(VariableName),
+        VariadicParameter(VariableName)),
+        VariableName)),
+  ExpressionStatement(
+    ArrowFunction(fn,
+      ParamList,
+      NamedType(Name),
+      VariableName
+    )
+  ),
+  ExpressionStatement(
+    AssignmentExpression(
+      VariableName,
+      AssignOp,
+      ArrowFunction(fn,
+        ParamList(
+          Parameter(VariableName)
+        ),
+        BinaryExpression(VariableName, ArithOp, VariableName)
+      )
+    )
+  )
+)
+
+# Functions with named arguments
+
+<?php
+
+array_fill(start_index: 0, num: 100, value: $val);
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    CallExpression(
+      Name,
+      ArgList(
+        NamedArgument(Name, Integer),
+        NamedArgument(Name, Integer),
+        NamedArgument(Name, VariableName)
+      )
+    )
+  )
+)
+
+# Precedence between concatenation and shift
+
+<?php
+$a . $c << $b ;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    BinaryExpression(
+      VariableName,
+      ConcatOp,
+      BinaryExpression(VariableName, BitOp, VariableName))))
+
+# Dynamic Class Constant
+
+<?php
+echo Foo::{$name};
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  EchoStatement(echo,ScopedExpression(Name,ClassMemberName(DynamicMemberName(VariableName)))))

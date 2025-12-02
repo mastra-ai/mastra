@@ -1,0 +1,139 @@
+import type { MastraDBMessage } from '../../agent/message-list/index.js';
+import type { MastraModelConfig } from '../../llm/model/shared.types.js';
+import type { TracingContext } from '../../observability/index.js';
+import type { ChunkType } from '../../stream/index.js';
+import type { Processor } from '../index.js';
+/**
+ * Individual moderation category score
+ */
+export interface ModerationCategoryScore {
+    category: string;
+    score: number;
+}
+export type ModerationCategoryScores = ModerationCategoryScore[];
+/**
+ * Result structure for moderation
+ */
+export interface ModerationResult {
+    category_scores: ModerationCategoryScores | null;
+    reason: string | null;
+}
+/**
+ * Configuration options for ModerationInputProcessor
+ */
+export interface ModerationOptions {
+    /**
+     * Model configuration for the moderation agent
+     * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
+     */
+    model: MastraModelConfig;
+    /**
+     * Categories to check for moderation.
+     * If not specified, uses default OpenAI categories.
+     */
+    categories?: string[];
+    /**
+     * Confidence threshold for flagging (0-1, default: 0.5)
+     * Content is flagged if any category score exceeds this threshold
+     */
+    threshold?: number;
+    /**
+     * Strategy when content is flagged:
+     * - 'block': Reject the entire input with an error (default)
+     * - 'warn': Log warning but allow content through
+     * - 'filter': Remove flagged messages but continue with remaining
+     */
+    strategy?: 'block' | 'warn' | 'filter';
+    /**
+     * Custom moderation instructions for the agent
+     * If not provided, uses default instructions based on categories
+     */
+    instructions?: string;
+    /**
+     * Whether to include confidence scores in logs (default: false)
+     * Useful for tuning thresholds and debugging
+     */
+    includeScores?: boolean;
+    /**
+     * Number of previous chunks to include for context when moderating stream chunks.
+     * If set to 1, includes the previous part. If set to 2, includes the two previous chunks, etc.
+     * Default: 0 (no context window)
+     */
+    chunkWindow?: number;
+    /**
+     * Structured output options used for the moderation agent
+     */
+    structuredOutputOptions?: {
+        /**
+         * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+         */
+        jsonPromptInjection?: boolean;
+    };
+}
+/**
+ * ModerationInputProcessor uses an internal Mastra agent to evaluate content
+ * against configurable moderation categories for content safety.
+ *
+ * Provides flexible moderation with custom categories, thresholds, and strategies
+ * while maintaining compatibility with OpenAI's moderation API structure.
+ */
+export declare class ModerationProcessor implements Processor<'moderation'> {
+    readonly id = "moderation";
+    readonly name = "Moderation";
+    private moderationAgent;
+    private categories;
+    private threshold;
+    private strategy;
+    private includeScores;
+    private chunkWindow;
+    private structuredOutputOptions?;
+    private static readonly DEFAULT_CATEGORIES;
+    constructor(options: ModerationOptions);
+    processInput(args: {
+        messages: MastraDBMessage[];
+        abort: (reason?: string) => never;
+        tracingContext?: TracingContext;
+    }): Promise<MastraDBMessage[]>;
+    processOutputResult(args: {
+        messages: MastraDBMessage[];
+        abort: (reason?: string) => never;
+        tracingContext?: TracingContext;
+    }): Promise<MastraDBMessage[]>;
+    processOutputStream(args: {
+        part: ChunkType;
+        streamParts: ChunkType[];
+        state: Record<string, any>;
+        abort: (reason?: string) => never;
+        tracingContext?: TracingContext;
+    }): Promise<ChunkType | null | undefined>;
+    /**
+     * Moderate content using the internal agent
+     */
+    private moderateContent;
+    /**
+     * Determine if content is flagged based on category scores above threshold
+     */
+    private isModerationFlagged;
+    /**
+     * Handle flagged content based on strategy
+     */
+    private handleFlaggedContent;
+    /**
+     * Extract text content from message for moderation
+     */
+    private extractTextContent;
+    /**
+     * Create default moderation instructions
+     */
+    private createDefaultInstructions;
+    /**
+     * Create moderation prompt for the agent
+     */
+    private createModerationPrompt;
+    /**
+     * Build context string from chunks based on chunkWindow
+     * streamParts includes the current part
+     */
+    private buildContextFromChunks;
+}
+//# sourceMappingURL=moderation.d.ts.map

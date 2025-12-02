@@ -1,0 +1,37 @@
+{
+  "name": "@lezer/yaml",
+  "version": "1.0.3",
+  "description": "Lezer-based YAML grammar",
+  "main": "dist/index.cjs",
+  "type": "module",
+  "exports": {
+    "import": "./dist/index.js",
+    "require": "./dist/index.cjs"
+  },
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "author": "Marijn Haverbeke <marijnh@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@lezer/generator": "^1.0.0",
+    "mocha": "^9.0.1",
+    "rollup": "^2.52.2",
+    "@rollup/plugin-node-resolve": "^9.0.0"
+  },
+  "dependencies": {
+    "@lezer/highlight": "^1.0.0",
+    "@lezer/lr": "^1.4.0",
+    "@lezer/common": "^1.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lezer-parser/yaml.git"
+  },
+  "scripts": {
+    "build": "lezer-generator src/yaml.grammar -o src/parser && rollup -c",
+    "build-debug": "lezer-generator src/yaml.grammar --names -o src/parser && rollup -c",
+    "prepare": "npm run build",
+    "test": "mocha test/test-yaml.js",
+    "check": "npm run build-debug && npm run test"
+  }
+}

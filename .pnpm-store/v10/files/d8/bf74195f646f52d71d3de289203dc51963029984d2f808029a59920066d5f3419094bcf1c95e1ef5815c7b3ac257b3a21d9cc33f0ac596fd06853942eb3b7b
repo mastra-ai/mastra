@@ -1,0 +1,1 @@
+{"version":3,"file":"XGROUP_CREATECONSUMER.d.ts","sourceRoot":"","sources":["../../../lib/commands/XGROUP_CREATECONSUMER.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,aAAa,EAAW,WAAW,EAAE,MAAM,eAAe,CAAC;AAEpE;;GAEG;;;IAGD;;;;;;;;;OASG;gDAEO,aAAa,OAChB,aAAa,SACX,aAAa,YACV,aAAa;mCAMqB,WAAW;;AAtB3D,wBAuB6B"}

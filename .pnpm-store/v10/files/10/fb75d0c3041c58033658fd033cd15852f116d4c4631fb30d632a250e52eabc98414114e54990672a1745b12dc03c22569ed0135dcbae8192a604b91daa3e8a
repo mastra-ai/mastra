@@ -1,0 +1,10 @@
+[
+  "../../protos/google/firestore/v1/aggregation_result.proto",
+  "../../protos/google/firestore/v1/bloom_filter.proto",
+  "../../protos/google/firestore/v1/common.proto",
+  "../../protos/google/firestore/v1/document.proto",
+  "../../protos/google/firestore/v1/firestore.proto",
+  "../../protos/google/firestore/v1/query.proto",
+  "../../protos/google/firestore/v1/query_profile.proto",
+  "../../protos/google/firestore/v1/write.proto"
+]

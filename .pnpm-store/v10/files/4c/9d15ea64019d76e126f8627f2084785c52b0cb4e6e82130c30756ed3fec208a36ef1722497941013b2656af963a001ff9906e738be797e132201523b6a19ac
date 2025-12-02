@@ -1,0 +1,89 @@
+{
+  "name": "@ast-grep/napi",
+  "version": "0.36.3",
+  "description": "Search and Rewrite code at large scale using precise AST pattern",
+  "homepage": "https://ast-grep.github.io",
+  "main": "index.js",
+  "repository": "https://github.com/ast-grep/ast-grep",
+  "license": "MIT",
+  "keywords": [
+    "ast",
+    "pattern",
+    "codemod",
+    "search",
+    "rewrite"
+  ],
+  "files": [
+    "index.d.ts",
+    "index.js",
+    "types/*.ts",
+    "lang/*.ts"
+  ],
+  "napi": {
+    "name": "ast-grep-napi",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "i686-pc-windows-msvc",
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+        "x64-unknown-linux-musl"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">= 10"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --no-const-enum --dts ignore.d.ts --platform --release",
+    "build:debug": "napi build --no-const-enum --dts ignore.d.ts --platform",
+    "prepublishOnly": "napi prepublish -t npm --skip-gh-release",
+    "pretest": "ts-node scripts/generateTypes.ts --test-only",
+    "test": "tsc --noEmit && ava",
+    "version": "napi version",
+    "lint": "biome lint --fix && biome format --write",
+    "typegen": "ts-node scripts/generateTypes.ts"
+  },
+  "devDependencies": {
+    "@ast-grep/napi": "0.36.2",
+    "@biomejs/biome": "1.9.4",
+    "@napi-rs/cli": "2.18.4",
+    "@types/node": "^22.10.2",
+    "ava": "6.2.0",
+    "chalk": "5.4.1",
+    "smol-toml": "^1.3.1",
+    "ts-node": "10.9.2",
+    "typescript": "5.8.3"
+  },
+  "ava": {
+    "require": [
+      "ts-node/register"
+    ],
+    "extensions": [
+      "ts"
+    ],
+    "timeout": "2m",
+    "workerThreads": false,
+    "environmentVariables": {
+      "TS_NODE_PROJECT": "./tsconfig.json"
+    }
+  },
+  "optionalDependencies": {
+    "@ast-grep/napi-win32-x64-msvc": "0.36.3",
+    "@ast-grep/napi-darwin-x64": "0.36.3",
+    "@ast-grep/napi-linux-x64-gnu": "0.36.3",
+    "@ast-grep/napi-win32-ia32-msvc": "0.36.3",
+    "@ast-grep/napi-darwin-arm64": "0.36.3",
+    "@ast-grep/napi-win32-arm64-msvc": "0.36.3",
+    "@ast-grep/napi-linux-arm64-gnu": "0.36.3",
+    "@ast-grep/napi-linux-arm64-musl": "0.36.3",
+    "@ast-grep/napi-linux-x64-musl": "0.36.3"
+  }
+}

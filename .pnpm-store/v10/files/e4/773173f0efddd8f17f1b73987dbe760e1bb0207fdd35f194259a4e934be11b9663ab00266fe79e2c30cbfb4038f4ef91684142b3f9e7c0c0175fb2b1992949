@@ -1,0 +1,577 @@
+# local variable
+
+class A {
+  public int b() {
+    int c = 5;
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        Modifiers(public),
+        PrimitiveType,
+        Definition,
+        FormalParameters,
+        Block(
+          LocalVariableDeclaration(
+            PrimitiveType,
+            VariableDeclarator(
+              Definition,
+              AssignOp,
+              IntegerLiteral)))))))
+
+
+# local array variable
+
+String[] nodeNames = internalCluster().getNodeNames();
+Integer[][] inputArrays = new Integer[0x100][];
+
+==>
+
+Program(
+  LocalVariableDeclaration(
+    ArrayType(
+      TypeName,
+      Dimension),
+    VariableDeclarator(
+      Definition,
+      AssignOp,
+      MethodInvocation(
+        MethodInvocation(
+          MethodName(Identifier),
+          ArgumentList),
+        MethodName(Identifier),
+        ArgumentList))),
+  LocalVariableDeclaration(
+    ArrayType(
+      TypeName,
+      Dimension, Dimension),
+    VariableDeclarator(
+      Definition,
+      AssignOp,
+      ArrayCreationExpression(new,
+        TypeName,
+        Dimension(IntegerLiteral),
+        Dimension))))
+
+
+# module
+
+module com.foo { }
+open module com.foo { }
+
+==>
+
+Program(
+  ModuleDeclaration(module,
+    ScopedIdentifier(
+      Identifier,
+      Identifier),
+    ModuleBody),
+  ModuleDeclaration(open, module,
+    ScopedIdentifier(
+      Identifier,
+      Identifier),
+    ModuleBody))
+
+
+# module with normal annotation
+
+@RequestForEnhancement(
+    id       = 2868724,
+    synopsis = "Provide time-travel functionality",
+    engineer = "Mr. Peabody",
+    date     = "4/1/2004"
+)
+module com.foo { }
+
+==>
+
+Program(
+  ModuleDeclaration(
+    Annotation(
+      Identifier,
+      AnnotationArgumentList(
+        ElementValuePair(Identifier, AssignOp, IntegerLiteral),
+        ElementValuePair(Identifier, AssignOp, StringLiteral),
+        ElementValuePair(Identifier, AssignOp, StringLiteral),
+        ElementValuePair(Identifier, AssignOp, StringLiteral))),
+    module,
+    ScopedIdentifier(Identifier, Identifier),
+    ModuleBody))
+
+
+# module with marker annotation
+
+@Preliminary module com.foo { }
+@Preliminary open module com.foo { }
+
+==>
+
+Program(
+  ModuleDeclaration(
+    MarkerAnnotation(Identifier),
+    module,
+    ScopedIdentifier(Identifier, Identifier),
+    ModuleBody),
+  ModuleDeclaration(
+    MarkerAnnotation(Identifier),
+    open, module,
+    ScopedIdentifier(Identifier, Identifier),
+    ModuleBody))
+
+
+# module with single element annotation
+
+@Copyright("a")
+module com.foo {}
+
+==>
+
+Program(
+  ModuleDeclaration(
+    Annotation(
+      Identifier,
+      AnnotationArgumentList(StringLiteral)),
+    module,
+    ScopedIdentifier(
+      Identifier,
+      Identifier),
+    ModuleBody))
+
+
+# package_declaration
+
+package myVector;
+
+==>
+
+Program(PackageDeclaration(package,Identifier))
+
+# module directive
+
+module com.example.foo {
+    requires com.example.foo.http;
+}
+
+==>
+
+Program(
+  ModuleDeclaration(module,
+    ScopedIdentifier(
+      ScopedIdentifier(
+        Identifier,
+        Identifier),
+      Identifier),
+    ModuleBody(
+      ModuleDirective(requires,
+        ScopedIdentifier(
+          ScopedIdentifier(
+            ScopedIdentifier(
+              Identifier,
+              Identifier),
+            Identifier),
+          Identifier)))))
+
+
+# module directive with requires, exports, opens, uses and provides
+
+module com.example.foo {
+    requires com.example.http;
+    requires java.logging;
+
+    requires transitive com.example.network;
+
+    exports com.example.bar;
+    exports com.example.internal to com.example.probe;
+
+    opens com.example.quux;
+    opens com.example.internal to com.example.network, com.example.probe;
+
+    uses com.example.Intf;
+    provides com.example.Intf with com.example.Impl;
+}
+
+==>
+
+Program(
+  ModuleDeclaration(module,
+    ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier),
+    ModuleBody(
+      ModuleDirective(requires,
+        ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier)),
+      ModuleDirective(requires,
+        ScopedIdentifier(Identifier, Identifier)),
+      ModuleDirective(requires, transitive,
+        ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier)),
+      ModuleDirective(exports,
+        ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier)),
+      ModuleDirective(exports,
+        ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier),
+        to, ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier)),
+      ModuleDirective(opens,
+        ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier)),
+      ModuleDirective(opens,
+        ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier),
+        to, ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier),
+        ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier)),
+      ModuleDirective(uses,
+        ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier)),
+      ModuleDirective(provides,
+        ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier),
+        with, ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier)))))
+
+
+# single type import declaration
+
+import java.util.Vector;
+
+==>
+
+Program(ImportDeclaration(import,
+  ScopedIdentifier(ScopedIdentifier(Identifier, Identifier), Identifier)))
+
+
+# type_import_on_declaraction
+
+import java.util.*;
+
+==>
+
+Program(ImportDeclaration(import,
+  ScopedIdentifier(Identifier, Identifier), Asterisk))
+
+
+# single static import declaration
+
+import static java.util.Vector;
+
+==>
+
+Program(ImportDeclaration(import, static,
+  ScopedIdentifier(
+    ScopedIdentifier(Identifier, Identifier),
+    Identifier)))
+
+
+# static import on demand declaration
+
+import static java.util.*;
+
+==>
+
+Program(ImportDeclaration(import, static,
+  ScopedIdentifier(Identifier, Identifier),
+  Asterisk))
+
+
+# class declaration
+
+class Point {
+}
+
+==>
+
+Program(
+  ClassDeclaration(class, Definition, ClassBody))
+
+
+# class declaration involving public, private, abstract and superclass
+
+public class Point {
+}
+
+private class Point {
+}
+
+abstract class ColoredPoint extends Point {
+}
+
+==>
+
+Program(
+  ClassDeclaration(Modifiers(public), class, Definition, ClassBody),
+  ClassDeclaration(Modifiers(private), class, Definition, ClassBody),
+  ClassDeclaration(Modifiers(abstract), class, Definition, Superclass(extends, TypeName), ClassBody))
+
+
+# class declaration with implements
+
+public class Dog implements ISpeak {
+}
+
+==>
+
+Program(
+  ClassDeclaration(
+     Modifiers(public), class, Definition,
+     SuperInterfaces(implements,InterfaceTypeList(TypeName)), ClassBody))
+
+
+# class declaration with body
+
+class Point {
+  int x;
+
+  void bar() {
+    x = 2;
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      FieldDeclaration(
+        PrimitiveType,
+        VariableDeclarator(Definition)),
+      MethodDeclaration(
+        void,
+        Definition,
+        FormalParameters,
+        Block(
+          ExpressionStatement(
+            AssignmentExpression(Identifier, AssignOp, IntegerLiteral)))))))
+
+
+# interface declaration
+
+interface Top {
+}
+
+==>
+
+Program(
+  InterfaceDeclaration(
+    interface,
+    Definition,
+    InterfaceBody))
+
+
+# interface declaration with extends
+
+interface Left extends Top {
+}
+
+interface Bottom extends Left, Right {}
+
+==>
+
+Program(
+  InterfaceDeclaration(
+    interface,
+    Definition,
+    ExtendsInterfaces(extends,InterfaceTypeList(TypeName)),
+    InterfaceBody),
+  InterfaceDeclaration(
+    interface,
+    Definition,
+    ExtendsInterfaces(extends,InterfaceTypeList(TypeName, TypeName)), InterfaceBody))
+
+
+# interface with annotation type declaration
+
+@interface SelfRef {}
+
+==>
+
+Program(
+  AnnotationTypeDeclaration(Identifier, AnnotationTypeBody))
+
+
+# method declaration
+
+class Beyonce {
+  void calculateAnswer(double wingSpan, int numberOfEngines,
+                       double length, double grossTons) {
+      //do the calculation here
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        void,
+        Definition,
+        FormalParameters(
+          FormalParameter(PrimitiveType, Definition),
+          FormalParameter(PrimitiveType, Definition),
+          FormalParameter(PrimitiveType, Definition),
+          FormalParameter(PrimitiveType, Definition)),
+        Block(LineComment)))))
+
+
+# constructor declaration
+
+class Point {
+  int x, y;
+  Point(int x, int y) {
+    this.x = x;
+    this.y = y;
+  }
+
+  Point() {
+    this(0, 0);
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      FieldDeclaration(
+        PrimitiveType,
+        VariableDeclarator(Definition),
+        VariableDeclarator(Definition)),
+      ConstructorDeclaration(
+        Definition,
+        FormalParameters(
+          FormalParameter(
+            PrimitiveType,
+            Definition),
+          FormalParameter(
+            PrimitiveType,
+            Definition)),
+        ConstructorBody(
+          ExpressionStatement(AssignmentExpression(
+            FieldAccess(
+              this,
+              Identifier),
+            AssignOp,
+            Identifier)),
+          ExpressionStatement(AssignmentExpression(
+            FieldAccess(
+              this,
+              Identifier),
+            AssignOp,
+            Identifier)))),
+      ConstructorDeclaration(
+        Definition,
+        FormalParameters,
+        ConstructorBody(
+          ExplicitConstructorInvocation(
+            this,
+            ArgumentList(
+              IntegerLiteral,
+              IntegerLiteral)))))))
+
+
+# throws
+
+class Beyonce {
+  BufferedReader newReader() throws FileNotFoundException {
+    new BufferedReader(new InputStreamReader(new FileInputStream(file), charset));
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+      ClassBody(
+        MethodDeclaration(
+          TypeName,
+          Definition,
+          FormalParameters,
+          Throws(throws,TypeName),
+          Block(
+            ExpressionStatement(
+              ObjectCreationExpression(new,
+                TypeName,
+                ArgumentList(
+                  ObjectCreationExpression(new,
+                    TypeName,
+                    ArgumentList(
+                      ObjectCreationExpression(new,
+                        TypeName,
+                        ArgumentList(Identifier)),
+                      Identifier))))))))))
+
+
+# object instantiation
+
+class Point {
+  public double Foo() {
+    new BufferedWriter();
+    Foo.new BufferedWriter();
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        Modifiers(public),
+        PrimitiveType,
+        Definition,
+        FormalParameters,
+        Block(
+          ExpressionStatement(
+            ObjectCreationExpression(new,
+              TypeName,
+              ArgumentList)),
+          ExpressionStatement(
+            ObjectCreationExpression(
+              Identifier, new,
+              TypeName,
+              ArgumentList)))))))
+
+
+# variable declaration
+
+class JayZ {
+  public void Beyonce() {
+    int blue_ivy_carter;
+  };
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        Modifiers(public),
+        void,
+        Definition,
+        FormalParameters,
+        Block(
+          LocalVariableDeclaration(
+            PrimitiveType,
+            VariableDeclarator(Definition)))))))
+
+
+# enum declaration
+
+enum HandSign {
+   SCISSOR, PAPER, STONE
+}
+
+==>
+
+Program(
+  EnumDeclaration(enum,
+    Definition,
+    EnumBody(
+      EnumConstant(Definition),
+      EnumConstant(Definition),
+      EnumConstant(Definition))))
+

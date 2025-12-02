@@ -1,0 +1,4 @@
+import { DefaultCustomAttributes, DirectoryUser, DirectoryUserResponse, DirectoryUserWithGroups, DirectoryUserWithGroupsResponse } from '../interfaces';
+export declare const deserializeDirectoryUser: <TCustomAttributes extends object = DefaultCustomAttributes>(directoryUser: DirectoryUserResponse<TCustomAttributes, any> | DirectoryUserWithGroupsResponse<TCustomAttributes>) => DirectoryUser<TCustomAttributes, any>;
+export declare const deserializeDirectoryUserWithGroups: <TCustomAttributes extends object = DefaultCustomAttributes>(directoryUserWithGroups: DirectoryUserWithGroupsResponse<TCustomAttributes>) => DirectoryUserWithGroups<TCustomAttributes>;
+export declare const deserializeUpdatedEventDirectoryUser: (directoryUser: DirectoryUserResponse & Record<'previous_attributes', any>) => DirectoryUser & Record<'previousAttributes', any>;

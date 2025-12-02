@@ -1,0 +1,1 @@
+{"version":3,"file":"UnderlyingReadable.d.ts","sourceRoot":"","sources":["../../../../src/core/utils/stream/UnderlyingReadable.ts"],"names":[],"mappings":"AAAA,MAAM,MAAM,kBAAkB,CAAC,WAAW,IAAI;IAC5C,KAAK,CAAC,EAAE,CAAC,UAAU,EAAE,WAAW,KAAK,IAAI,CAAC;IAC1C,IAAI,CAAC,EAAE,CAAC,UAAU,EAAE,WAAW,KAAK,IAAI,GAAG,WAAW,CAAC,IAAI,CAAC,CAAC;IAC7D,MAAM,CAAC,EAAE,8BAA8B,CAAC;CACzC,CAAC"}

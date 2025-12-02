@@ -1,0 +1,49 @@
+{
+  "name": "is-subdir",
+  "version": "1.2.0",
+  "description": "Return whether a directory is a subdirectory of another directory",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "test": "node test",
+    "md": "mos"
+  },
+  "engines": {
+    "node": ">=4"
+  },
+  "repository": "https://github.com/zkochan/packages/tree/master/is-subdir",
+  "keywords": [
+    "subdirectory",
+    "subfolder",
+    "subpath",
+    "directory",
+    "folder",
+    "path"
+  ],
+  "author": {
+    "name": "Zoltan Kochan",
+    "url": "https://www.kochan.io"
+  },
+  "mos": {
+    "plugins": [
+      "readme"
+    ],
+    "installation": {
+      "useShortAlias": true
+    }
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/zkochan/packages/tree/master/is-subdir#readme",
+  "devDependencies": {
+    "is-windows": "1.0.2",
+    "mos": "2.0.0-alpha.3",
+    "mos-plugin-readme": "^1.0.4",
+    "tape": "^5.0.1"
+  },
+  "dependencies": {
+    "better-path-resolve": "1.0.0"
+  }
+}

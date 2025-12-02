@@ -1,0 +1,1 @@
+{"version":3,"file":"CLIENT_ID.js","sourceRoot":"","sources":["../../../lib/commands/CLIENT_ID.ts"],"names":[],"mappings":";;AAGA,kBAAe;IACb,iBAAiB,EAAE,IAAI;IACvB,YAAY,EAAE,IAAI;IAClB;;;OAGG;IACH,YAAY,CAAC,MAAqB;QAChC,MAAM,CAAC,IAAI,CAAC,QAAQ,EAAE,IAAI,CAAC,CAAC;IAC9B,CAAC;IACD,cAAc,EAAE,SAAyC;CAC/B,CAAC"}

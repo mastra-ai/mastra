@@ -1,0 +1,36 @@
+{
+  "name": "redis",
+  "description": "A modern, high performance Redis client",
+  "version": "5.8.3",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
+  "scripts": {
+    "release": "release-it"
+  },
+  "dependencies": {
+    "@redis/bloom": "5.8.3",
+    "@redis/client": "5.8.3",
+    "@redis/json": "5.8.3",
+    "@redis/search": "5.8.3",
+    "@redis/time-series": "5.8.3"
+  },
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/redis/node-redis.git"
+  },
+  "bugs": {
+    "url": "https://github.com/redis/node-redis/issues"
+  },
+  "homepage": "https://github.com/redis/node-redis",
+  "keywords": [
+    "redis"
+  ]
+}

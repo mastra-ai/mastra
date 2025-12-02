@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/server/functionName.ts"],
+  "sourcesContent": ["/**\n * A symbol for accessing the name of a {@link FunctionReference} at runtime.\n */\nexport const functionName = Symbol.for(\"functionName\");\n"],
+  "mappings": ";AAGO,aAAM,eAAe,OAAO,IAAI,cAAc;",
+  "names": []
+}

@@ -1,0 +1,141 @@
+"use client";
+
+// src/ui/composer.tsx
+import { forwardRef } from "react";
+import { PaperclipIcon, SendHorizontalIcon } from "lucide-react";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import { useThreadConfig } from "./thread-config.mjs";
+import { TooltipIconButton } from "./base/tooltip-icon-button.mjs";
+import { CircleStopIcon } from "./base/CircleStopIcon.mjs";
+import {
+  ComposerPrimitive,
+  ThreadPrimitive,
+  useThread
+} from "@assistant-ui/react";
+import Attachment from "./attachment-ui.mjs";
+import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+var useAllowAttachments = (ensureCapability = false) => {
+  const { composer: { allowAttachments = true } = {} } = useThreadConfig();
+  const attachmentsSupported = useThread((t) => t.capabilities.attachments);
+  return allowAttachments && (!ensureCapability || attachmentsSupported);
+};
+var Composer = () => {
+  const allowAttachments = useAllowAttachments(true);
+  return /* @__PURE__ */ jsxs(ComposerRoot, { children: [
+    allowAttachments && /* @__PURE__ */ jsx(ComposerAttachments, {}),
+    allowAttachments && /* @__PURE__ */ jsx(ComposerAddAttachment, {}),
+    /* @__PURE__ */ jsx(ComposerInput, { autoFocus: true }),
+    /* @__PURE__ */ jsx(ComposerAction, {})
+  ] });
+};
+Composer.displayName = "Composer";
+var ComposerRoot = withDefaults(ComposerPrimitive.Root, {
+  className: "aui-composer-root"
+});
+ComposerRoot.displayName = "ComposerRoot";
+var ComposerInputStyled = withDefaults(ComposerPrimitive.Input, {
+  rows: 1,
+  autoFocus: true,
+  className: "aui-composer-input"
+});
+var ComposerInput = forwardRef(
+  (props, ref) => {
+    const {
+      strings: {
+        composer: { input: { placeholder = "Write a message..." } = {} } = {}
+      } = {}
+    } = useThreadConfig();
+    return /* @__PURE__ */ jsx(ComposerInputStyled, { placeholder, ...props, ref });
+  }
+);
+ComposerInput.displayName = "ComposerInput";
+var ComposerAttachmentsContainer = withDefaults("div", {
+  className: "aui-composer-attachments"
+});
+var ComposerAttachments = ({ components }) => {
+  return /* @__PURE__ */ jsx(ComposerAttachmentsContainer, { children: /* @__PURE__ */ jsx(
+    ComposerPrimitive.Attachments,
+    {
+      components: {
+        ...components,
+        Attachment: components?.Attachment ?? Attachment
+      }
+    }
+  ) });
+};
+var ComposerAttachButton = withDefaults(TooltipIconButton, {
+  variant: "default",
+  className: "aui-composer-attach"
+});
+var ComposerAddAttachment = forwardRef((props, ref) => {
+  const {
+    strings: {
+      composer: { addAttachment: { tooltip = "Attach file" } = {} } = {}
+    } = {}
+  } = useThreadConfig();
+  const allowAttachments = useAllowAttachments();
+  return /* @__PURE__ */ jsx(ComposerPrimitive.AddAttachment, { disabled: !allowAttachments, asChild: true, children: /* @__PURE__ */ jsx(
+    ComposerAttachButton,
+    {
+      tooltip,
+      variant: "ghost",
+      ...props,
+      ref,
+      children: props.children ?? /* @__PURE__ */ jsx(PaperclipIcon, {})
+    }
+  ) });
+});
+ComposerAddAttachment.displayName = "ComposerAddAttachment";
+var useAllowCancel = () => {
+  const cancelSupported = useThread((t) => t.capabilities.cancel);
+  return cancelSupported;
+};
+var ComposerAction = () => {
+  const allowCancel = useAllowCancel();
+  if (!allowCancel) return /* @__PURE__ */ jsx(ComposerSend, {});
+  return /* @__PURE__ */ jsxs(Fragment, { children: [
+    /* @__PURE__ */ jsx(ThreadPrimitive.If, { running: false, children: /* @__PURE__ */ jsx(ComposerSend, {}) }),
+    /* @__PURE__ */ jsx(ThreadPrimitive.If, { running: true, children: /* @__PURE__ */ jsx(ComposerCancel, {}) })
+  ] });
+};
+ComposerAction.displayName = "ComposerAction";
+var ComposerSendButton = withDefaults(TooltipIconButton, {
+  variant: "default",
+  className: "aui-composer-send"
+});
+var ComposerSend = forwardRef(
+  (props, ref) => {
+    const {
+      strings: { composer: { send: { tooltip = "Send" } = {} } = {} } = {}
+    } = useThreadConfig();
+    return /* @__PURE__ */ jsx(ComposerPrimitive.Send, { asChild: true, children: /* @__PURE__ */ jsx(ComposerSendButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(SendHorizontalIcon, {}) }) });
+  }
+);
+ComposerSend.displayName = "ComposerSend";
+var ComposerCancelButton = withDefaults(TooltipIconButton, {
+  variant: "default",
+  className: "aui-composer-cancel"
+});
+var ComposerCancel = forwardRef(
+  (props, ref) => {
+    const {
+      strings: { composer: { cancel: { tooltip = "Cancel" } = {} } = {} } = {}
+    } = useThreadConfig();
+    return /* @__PURE__ */ jsx(ComposerPrimitive.Cancel, { asChild: true, children: /* @__PURE__ */ jsx(ComposerCancelButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(CircleStopIcon, {}) }) });
+  }
+);
+ComposerCancel.displayName = "ComposerCancel";
+var exports = {
+  Root: ComposerRoot,
+  Input: ComposerInput,
+  Action: ComposerAction,
+  Send: ComposerSend,
+  Cancel: ComposerCancel,
+  AddAttachment: ComposerAddAttachment,
+  Attachments: ComposerAttachments
+};
+var composer_default = Object.assign(Composer, exports);
+export {
+  composer_default as default
+};
+//# sourceMappingURL=composer.mjs.map

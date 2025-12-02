@@ -1,0 +1,3 @@
+const MotionGlobalConfig = {};
+
+export { MotionGlobalConfig };

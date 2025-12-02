@@ -1,0 +1,40 @@
+{
+  "name": "highlightjs-vue",
+  "version": "1.0.0",
+  "description": "Highlight Single-File Components of Vue.js Framework",
+  "main": "dist/highlightjs-vue.cjs.js",
+  "module": "dist/highlightjs-vue.esm.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run clean && rollup --config",
+    "clean": "rimraf dist package-lock.json",
+    "test": "./node_modules/.bin/mocha --reporter spec"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/highlightjs/highlightjs-vue.git"
+  },
+  "keywords": [
+    "highlight",
+    "hljs",
+    "vue.js",
+    "vue"
+  ],
+  "author": "Sara Lissette <lissette.ibnz@gmail.com> (https://github.com/LissetteIbnz)",
+  "license": "CC0-1.0",
+  "bugs": {
+    "url": "https://github.com/highlightjs/highlightjs-vue/issues"
+  },
+  "homepage": "https://github.com/highlightjs/highlightjs-vue#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "highlight.js": "^9.15.10",
+    "mocha": "^6.2.0",
+    "rimraf": "^3.0.0",
+    "rollup": "^1.27.1",
+    "rollup-plugin-terser": "^5.1.2",
+    "should": "^13.2.3"
+  }
+}

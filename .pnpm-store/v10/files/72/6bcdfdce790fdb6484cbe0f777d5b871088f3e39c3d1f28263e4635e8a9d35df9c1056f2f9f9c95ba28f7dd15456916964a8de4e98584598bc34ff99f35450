@@ -1,0 +1,535 @@
+# Interface declarations
+
+<?php
+
+interface ThrowableInterface {
+	public function getMessage();
+}
+
+class Exception_foo implements ThrowableInterface {
+	public $foo = "foo";
+
+	public function getMessage() {
+		return $this->foo;
+	}
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  InterfaceDeclaration(interface,
+    Name,
+    DeclarationList(
+      MethodDeclaration(
+        Visibility,
+        function,
+        Name,
+        ParamList))),
+  ClassDeclaration(
+    class,
+    Name,
+    ClassInterfaceClause(implements, Name),
+    DeclarationList(
+      PropertyDeclaration(
+        Visibility,
+        VariableDeclarator(VariableName, AssignOp, String)),
+      MethodDeclaration(
+        Visibility,
+        function,
+        Name,
+        ParamList,
+        Block(
+          ReturnStatement(return,MemberExpression(
+            VariableName,
+            Name)))))))
+
+# Use declarations
+
+<?php
+
+trait AbstractTrait
+{
+    use LoggerAwareTrait;
+    use LoggerAwareTrait, OtherTrait {}
+    use LoggerAwareTrait, OtherTrait;
+}
+
+class AbstractCache
+{
+    use AbstractTrait {
+        deleteItems as private;
+        AbstractTrait::deleteItem as delete;
+        AbstractTrait::hasItem as has;
+    }
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  TraitDeclaration(trait,
+    Name,
+    DeclarationList(
+      UseDeclaration(use,Name),
+      UseDeclaration(use,Name, Name, UseList),
+      UseDeclaration(use,Name, Name))),
+  ClassDeclaration(
+    class,
+    Name,
+    DeclarationList(
+      UseDeclaration(use,
+        Name,
+        UseList(
+          UseAsClause(Name, as, Visibility),
+          UseAsClause(ScopedExpression(Name, ClassMemberName(Name)), as, Name),
+          UseAsClause(ScopedExpression(Name, ClassMemberName(Name)), as, Name))))))
+
+# Use Groups
+
+<?php
+use a as b;
+use some\namespace\{ClassA, ClassB, ClassC as C};
+use function some\namespace\{fn_a, fn_b, fn_c};
+use const some\namespace\{ConstA, ConstB, ConstC};
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  NamespaceUseDeclaration(use,Name,as,Name),
+  NamespaceUseDeclaration(use,NamespaceName,NamespaceName,UseGroup(UseClause(Name),UseClause(Name),UseClause(Name,as,Name))),
+  NamespaceUseDeclaration(use,function,NamespaceName,NamespaceName,UseGroup(UseClause(Name),UseClause(Name),UseClause(Name))),
+  NamespaceUseDeclaration(use,const,NamespaceName,NamespaceName,UseGroup(UseClause(Name),UseClause(Name),UseClause(Name))))
+
+# Namespace names in namespaces
+
+<?php
+
+namespace Be \ ta {
+    class A {}
+    class B {}
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  NamespaceDefinition(namespace,
+    QualifiedName(NamespaceName, Name),
+    Block(
+      ClassDeclaration(class,
+        Name,
+        DeclarationList),
+      ClassDeclaration(class,
+        Name,
+        DeclarationList))))
+
+# Class declarations
+
+<?php
+class foo {
+  function __construct($name) {
+    $GLOBALS['List']= &$this;
+    $this->Name = $name;
+    $GLOBALS['List']->echoName();
+  }
+
+  function echoName() {
+    $GLOBALS['names'][]=$this->Name;
+  }
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ClassDeclaration(class,
+    Name,
+    DeclarationList(
+      MethodDeclaration(function,
+        Name,
+        ParamList(
+          Parameter(
+            VariableName)),
+        Block(
+          ExpressionStatement(AssignmentExpression(
+            SubscriptExpression(VariableName, String),
+            AssignOp,
+            VariableName)),
+          ExpressionStatement(AssignmentExpression(
+            MemberExpression(
+              VariableName,
+              Name),
+            AssignOp,
+            VariableName)),
+          ExpressionStatement(CallExpression(
+            MemberExpression(SubscriptExpression(VariableName, String), Name),
+            ArgList)))),
+      MethodDeclaration(function,
+        Name,
+        ParamList,
+        Block(
+          ExpressionStatement(AssignmentExpression(
+            SubscriptExpression(SubscriptExpression(VariableName, String)),
+            AssignOp,
+            MemberExpression(VariableName,Name))))))))
+
+# Class declarations with base classes
+
+<?php
+class A extends B {
+
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ClassDeclaration(class,
+    Name,
+    BaseClause(extends, Name),
+    DeclarationList))
+
+# Function parameters
+
+<?php
+function test(int $a, string ...$b)
+{
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  FunctionDefinition(function,
+    Name,
+    ParamList(
+      Parameter(
+        NamedType(Name),
+        VariableName),
+      VariadicParameter(
+        NamedType(Name),
+        VariableName)),
+    Block))
+
+# Functions with default parameters
+
+<?php
+function a($arg = self::bar) {
+  echo $arg;
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  FunctionDefinition(function,
+    Name,
+    ParamList(
+      Parameter(
+        VariableName,
+        AssignOp,
+        ScopedExpression(Name, ClassMemberName(Name)))),
+    Block(EchoStatement(echo,VariableName))))
+
+# Static variables in functions
+
+<?php
+function blah()
+{
+  static $hey=0, $yo=0;
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  FunctionDefinition(function,
+    Name,
+    ParamList,
+    Block(
+      FunctionStaticDeclaration(static,
+        VariableDeclarator(VariableName, AssignOp, Integer),
+        VariableDeclarator(VariableName, AssignOp, Integer)))))
+
+# Defining Constants
+
+<?php
+
+define("CONSTANT", "Hello world.");
+const CONSTANT = 'Hello World';
+const ANOTHER_CONST = CONSTANT.'; Goodbye World';
+const ANIMALS = array('dog', 'cat', 'bird');
+define('ANIMALS', array(
+    'dog',
+    'cat',
+    'bird'
+));
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(
+    CallExpression(
+      Name,
+      ArgList(String,String)
+    )
+  ),
+  ConstDeclaration(const,
+    VariableDeclarator(
+      Name,
+      AssignOp,
+      String
+    )
+  ),
+  ConstDeclaration(const,
+    VariableDeclarator(
+      Name,
+      AssignOp,
+      BinaryExpression(
+        Name,
+        ConcatOp,
+        String
+      )
+    )
+  ),
+  ConstDeclaration(const,
+    VariableDeclarator(
+      Name,
+      AssignOp,
+      ArrayExpression(array, ValueList(String,String,String))
+    )
+  ),
+  ExpressionStatement(
+    CallExpression(
+      Name,
+      ArgList(
+        String,
+        ArrayExpression(array, ValueList(String,String,String))
+      )
+    )
+  )
+)
+
+# Attributes
+
+<?php
+
+#[Test]
+function a(#[Test] $a) {
+  $c;
+}
+
+class PostsController
+{
+  #[Test]
+  const CONSTANT = 'constant value';
+
+  #[Test]
+  private string $a = '';
+
+  #[Route("/api/posts/{id}", ["GET"])]
+  public function get(#[Test] $id) { /* ... */ }
+}
+
+#[MyAttribute]
+#[\MyExample\MyAttribute]
+#[MyAttribute(1234)]
+#[MyAttribute(MyAttribute::VALUE)]
+#[MyAttribute(array("key" => "value"))]
+#[MyAttribute(100 + 200)]
+class Thing
+{
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+
+  FunctionDefinition(
+    Attributes(Attribute(Name)),
+    function,
+    Name,
+    ParamList(
+      Parameter(
+        Attributes(Attribute(Name)),
+        VariableName
+      )
+    ),
+    Block(ExpressionStatement(VariableName))
+  ),
+
+  ClassDeclaration(class,
+    Name,
+    DeclarationList(
+      ConstDeclaration(
+        Attributes(Attribute(Name)),
+        const,
+        VariableDeclarator(Name, AssignOp, String)
+      ),
+
+      PropertyDeclaration(
+        Attributes(Attribute(Name)),
+        Visibility,
+        NamedType(Name),
+        VariableDeclarator(VariableName, AssignOp, String)
+      ),
+      MethodDeclaration(
+        Attributes(
+          Attribute(
+            Name,
+            ArgList(
+              String,
+              ArrayExpression(String)
+            )
+          )
+        ),
+        Visibility,
+        function,
+        Name,
+        ParamList(
+          Parameter(
+            Attributes(Attribute(Name)),
+            VariableName
+          )
+        ),
+        Block(BlockComment)
+      )
+    )
+  ),
+  ClassDeclaration(
+    Attributes(Attribute(Name)),
+    Attributes(Attribute(QualifiedName(NamespaceName,Name))),
+    Attributes(Attribute(Name,ArgList(Integer))),
+    Attributes(Attribute(Name,ArgList(ScopedExpression(Name,ClassMemberName(Name))))),
+    Attributes(Attribute(Name,ArgList(ArrayExpression(array, ValueList(Pair(String, String)))))),
+    Attributes(Attribute(Name,ArgList(BinaryExpression(Integer, ArithOp, Integer)))),
+    class,
+    Name,
+    DeclarationList
+  )
+)
+
+# Enums
+
+<?php
+
+enum A {}
+enum B implements Bar, Baz {
+}
+enum C: int implements Bar {}
+
+enum Suit: string
+{
+  case Hearts = 'H';
+  case Diamonds;
+  case Clubs = 'C';
+  case Spades = 'S';
+
+  // Fulfills the interface contract.
+  public function color(): string {
+    return match($this) {
+      Suit::Hearts, Suit::Diamonds => 'Red',
+      Suit::Clubs, Suit::Spades => 'Black',
+    };
+  }
+
+  public const X = self::Clubs;
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  EnumDeclaration(enum,
+    Name,
+    EnumBody
+  ),
+  EnumDeclaration(enum,
+    Name,
+    ClassInterfaceClause(implements, Name, Name),
+    EnumBody
+  ),
+  EnumDeclaration(enum,
+    Name,
+    NamedType(Name),
+    ClassInterfaceClause(implements, Name),
+    EnumBody
+  ),
+  EnumDeclaration(enum,
+    Name,
+    NamedType(Name),
+    EnumBody(
+      EnumCase(case, Name, AssignOp, String),
+      EnumCase(case, Name),
+      EnumCase(case, Name, AssignOp, String),
+      EnumCase(case, Name, AssignOp, String),
+      
+      LineComment,
+      
+      MethodDeclaration(
+        Visibility,
+        function,
+        Name,
+        ParamList,
+        NamedType(Name),
+        Block(
+          ReturnStatement(return,
+            MatchExpression(match,
+              ParenthesizedExpression(
+                VariableName
+              ),
+              MatchBlock(
+                MatchArm(
+                  ScopedExpression(Name, ClassMemberName(Name)),
+                  ScopedExpression(Name, ClassMemberName(Name)),
+                  String
+                ),
+                MatchArm(
+                  ScopedExpression(Name, ClassMemberName(Name)),
+                  ScopedExpression(Name, ClassMemberName(Name)),
+                  String
+                )
+              )
+            )
+          )
+        )
+      ),
+
+      ConstDeclaration(Visibility,const,VariableDeclarator(Name,AssignOp,ScopedExpression(Name,ClassMemberName(Name))))
+    )
+  )
+)
+
+# Property Hooks
+
+<?php
+
+class Example
+{
+    private bool $modified = false;
+
+    public string $foo = 'default value' {
+        get => $this->foo . ($this->modified ? ' (modified)' : '');
+
+        set(string $value) {
+            $this->foo = strtolower($value);
+            $this->modified = true;
+        }
+    }
+}
+
+==>
+
+Template(TextInterpolation(PhpOpen),ClassDeclaration(
+  class,Name,DeclarationList(
+    PropertyDeclaration(Visibility,NamedType(Name),VariableDeclarator(VariableName,AssignOp,Boolean)),
+    PropertyDeclaration(Visibility,NamedType(Name),VariableDeclarator(VariableName,AssignOp,String),PropertyHooks(
+      PropertyHook(Name,BinaryExpression(MemberExpression(VariableName,Name),ConcatOp,ParenthesizedExpression(
+        ConditionalExpression(MemberExpression(VariableName,Name),LogicOp,String,String)))),
+      PropertyHook(Name,ParamList(Parameter(NamedType(Name),VariableName)),Block(
+        ExpressionStatement(AssignmentExpression(MemberExpression(VariableName,Name),AssignOp,CallExpression(Name,ArgList(                       VariableName)))),
+        ExpressionStatement(AssignmentExpression(MemberExpression(VariableName,Name),AssignOp,Boolean)))))))))

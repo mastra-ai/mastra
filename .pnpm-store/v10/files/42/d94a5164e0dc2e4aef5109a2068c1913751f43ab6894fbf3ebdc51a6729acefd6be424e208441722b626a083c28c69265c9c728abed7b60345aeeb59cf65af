@@ -1,0 +1,4 @@
+import type { UIMessage as UIMessageV4 } from '../../../../ai-sdk.types.d.ts';
+import type { AIV5Type } from '../../types.js';
+export declare function hasAIV5UIMessageCharacteristics(msg: AIV5Type.UIMessage | UIMessageV4): msg is AIV5Type.UIMessage;
+//# sourceMappingURL=ui-message.d.ts.map

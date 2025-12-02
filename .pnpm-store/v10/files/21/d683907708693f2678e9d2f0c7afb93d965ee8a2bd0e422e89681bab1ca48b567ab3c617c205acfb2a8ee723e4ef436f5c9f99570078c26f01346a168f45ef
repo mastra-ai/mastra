@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/workers/analytics-engine/analytics-engine.worker.ts"],
+  "mappings": ";AAGA,IAAM,8BAAN,MAAoE;AAAA,EACnE,YAAoB,KAAU;AAAV;AAAA,EAAW;AAAA,EAC/B,eAAe,QAAyC;AAAA,EAExD;AACD;AAEe,SAAR,gCAAkB,KAAU;AAClC,SAAO,IAAI,4BAA4B,GAAG;AAC3C;",
+  "names": []
+}

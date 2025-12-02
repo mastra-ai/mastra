@@ -1,0 +1,25 @@
+{
+    "name": "@types/command-line-args",
+    "version": "5.2.3",
+    "description": "TypeScript definitions for command-line-args",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/command-line-args",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Lloyd Brookes",
+            "githubUsername": "75lb",
+            "url": "https://github.com/75lb"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/command-line-args"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "825ac3babf498cc47e8323961ce0e89a35cde1d1ca119a97c5521a80e3eb53c2",
+    "typeScriptVersion": "4.5"
+}

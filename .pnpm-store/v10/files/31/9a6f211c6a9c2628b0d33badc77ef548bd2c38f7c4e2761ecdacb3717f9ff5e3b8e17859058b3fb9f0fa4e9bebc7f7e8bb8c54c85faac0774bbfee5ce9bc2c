@@ -1,0 +1,89 @@
+import type { TracingEvent, InitExporterOptions, TracingStorageStrategy } from '@mastra/core/observability';
+import type { BaseExporterConfig } from './base.js';
+import { BaseExporter } from './base.js';
+interface DefaultExporterConfig extends BaseExporterConfig {
+    maxBatchSize?: number;
+    maxBufferSize?: number;
+    maxBatchWaitMs?: number;
+    maxRetries?: number;
+    retryDelayMs?: number;
+    strategy?: TracingStorageStrategy | 'auto';
+}
+export declare class DefaultExporter extends BaseExporter {
+    #private;
+    name: string;
+    private buffer;
+    private allCreatedSpans;
+    constructor(config?: DefaultExporterConfig);
+    /**
+     * Initialize the exporter (called after all dependencies are ready)
+     */
+    init(options: InitExporterOptions): void;
+    /**
+     * Initialize the resolved strategy once storage is available
+     */
+    private initializeStrategy;
+    /**
+     * Builds a unique span key for tracking
+     */
+    private buildSpanKey;
+    /**
+     * Gets the next sequence number for a span
+     */
+    private getNextSequence;
+    /**
+     * Handles out-of-order span updates by logging and skipping
+     */
+    private handleOutOfOrderUpdate;
+    /**
+     * Adds an event to the appropriate buffer based on strategy
+     */
+    private addToBuffer;
+    /**
+     * Checks if buffer should be flushed based on size or time triggers
+     */
+    private shouldFlush;
+    /**
+     * Resets the buffer after successful flush
+     */
+    private resetBuffer;
+    /**
+     * Schedules a flush using setTimeout
+     */
+    private scheduleFlush;
+    /**
+     * Serializes span attributes to storage record format
+     * Handles all Span types and their specific attributes
+     */
+    private serializeAttributes;
+    private buildCreateRecord;
+    private buildUpdateRecord;
+    /**
+     * Handles realtime strategy - processes each event immediately
+     */
+    private handleRealtimeEvent;
+    /**
+     * Handles batch-with-updates strategy - buffers events and processes in batches
+     */
+    private handleBatchWithUpdatesEvent;
+    /**
+     * Handles insert-only strategy - only processes SPAN_ENDED events in batches
+     */
+    private handleInsertOnlyEvent;
+    /**
+     * Calculates retry delay using exponential backoff
+     */
+    private calculateRetryDelay;
+    /**
+     * Flushes the current buffer to storage with retry logic
+     */
+    private flush;
+    /**
+     * Attempts to flush with exponential backoff retry logic
+     */
+    private flushWithRetries;
+    _exportTracingEvent(event: TracingEvent): Promise<void>;
+    shutdown(): Promise<void>;
+}
+export {};
+//# sourceMappingURL=default.d.ts.map

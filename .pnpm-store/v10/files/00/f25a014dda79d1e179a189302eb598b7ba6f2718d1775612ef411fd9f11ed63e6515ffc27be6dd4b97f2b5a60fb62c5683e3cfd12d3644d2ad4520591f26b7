@@ -1,0 +1,24 @@
+// src/v4/default-values.ts
+import { z } from "zod/v4";
+function getDefaultValueInZodStack(schema) {
+  if (schema instanceof z.ZodDefault) {
+    return schema.def.defaultValue;
+  }
+  return void 0;
+}
+function getDefaultValues(schema) {
+  const shape = schema.shape;
+  const defaultValues = {};
+  for (const [key, field] of Object.entries(shape)) {
+    const defaultValue = getDefaultValueInZodStack(field);
+    if (defaultValue !== void 0) {
+      defaultValues[key] = defaultValue;
+    }
+  }
+  return defaultValues;
+}
+
+export {
+  getDefaultValueInZodStack,
+  getDefaultValues
+};

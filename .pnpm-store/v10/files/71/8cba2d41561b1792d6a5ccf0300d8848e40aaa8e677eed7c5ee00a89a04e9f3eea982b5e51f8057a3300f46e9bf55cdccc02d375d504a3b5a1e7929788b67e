@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/browser/sync/session.ts"],
+  "sourcesContent": ["export function newSessionId() {\n  return uuidv4();\n}\n\n// From https://stackoverflow.com/a/2117523\nfunction uuidv4() {\n  return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g, (c) => {\n    const r = (Math.random() * 16) | 0,\n      v = c === \"x\" ? r : (r & 0x3) | 0x8;\n    return v.toString(16);\n  });\n}\n"],
+  "mappings": ";AAAO,gBAAS,eAAe;AAC7B,SAAO,OAAO;AAChB;AAGA,SAAS,SAAS;AAChB,SAAO,uCAAuC,QAAQ,SAAS,CAAC,MAAM;AACpE,UAAM,IAAK,KAAK,OAAO,IAAI,KAAM,GAC/B,IAAI,MAAM,MAAM,IAAK,IAAI,IAAO;AAClC,WAAO,EAAE,SAAS,EAAE;AAAA,EACtB,CAAC;AACH;",
+  "names": []
+}

@@ -1,0 +1,91 @@
+{
+  "name": "@assistant-ui/react-ui",
+  "description": "Pre-styled React components for @assistant-ui/react",
+  "version": "0.1.8",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./tailwindcss": {
+      "types": "./dist/tailwindcss/index.d.ts",
+      "import": "./dist/tailwindcss/index.mjs",
+      "require": "./dist/tailwindcss/index.js"
+    },
+    "./styles/*": {
+      "default": "./dist/styles/*"
+    }
+  },
+  "source": "./src/index.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "tailwindcss",
+    "src",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@radix-ui/react-avatar": "^1.1.3",
+    "@radix-ui/react-dialog": "^1.1.6",
+    "@radix-ui/react-primitive": "^2.0.2",
+    "@radix-ui/react-tooltip": "^1.1.8",
+    "class-variance-authority": "^0.7.1",
+    "classnames": "^2.5.1",
+    "lucide-react": "^0.475.0",
+    "zustand": "^5.0.3"
+  },
+  "peerDependencies": {
+    "@assistant-ui/react": "*",
+    "@assistant-ui/react-markdown": "*",
+    "@types/react": "*",
+    "@types/react-dom": "*",
+    "react": "^18 || ^19 || ^19.0.0-rc",
+    "react-dom": "^18 || ^19 || ^19.0.0-rc"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
+    "@types/react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9",
+    "eslint-config-next": "15.1.6",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.19.2",
+    "@assistant-ui/react": "^0.8.0",
+    "@assistant-ui/react-markdown": "^0.8.0",
+    "@assistant-ui/tailwindcss-transformer": "0.1.0",
+    "@assistant-ui/tsbuildutils": "^0.0.1",
+    "@assistant-ui/tsconfig": "0.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "homepage": "https://www.assistant-ui.com/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/assistant-ui/assistant-ui/tree/main/packages/react-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/assistant-ui/assistant-ui/issues"
+  },
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.mts"
+  }
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../../src/resources/api-gateway/discovery/index.ts"],"names":[],"mappings":"AAEA,OAAO,EACL,wCAAwC,EACxC,SAAS,EACT,KAAK,kBAAkB,EACvB,KAAK,oBAAoB,EACzB,KAAK,kBAAkB,GACxB,MAAM,aAAa,CAAC;AACrB,OAAO,EACL,UAAU,EACV,KAAK,yBAAyB,EAC9B,KAAK,qBAAqB,EAC1B,KAAK,mBAAmB,EACxB,KAAK,uBAAuB,EAC5B,KAAK,mBAAmB,GACzB,MAAM,cAAc,CAAC"}

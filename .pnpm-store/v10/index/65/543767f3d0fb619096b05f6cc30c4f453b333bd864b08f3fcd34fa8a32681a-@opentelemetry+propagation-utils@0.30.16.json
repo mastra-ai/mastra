@@ -1,0 +1,115 @@
+{
+  "name": "@opentelemetry/propagation-utils",
+  "version": "0.30.16",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662914469,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "build/esm/index.js": {
+      "checkedAt": 1764662914469,
+      "integrity": "sha512-b/2GoBOe5VLh+X99I6jND0SUWbn0GpmoUeXEp59UgaVu+dZLakC84k41f2UEqtiiQNnhj45O93Nt6oDeGf5Qyw==",
+      "mode": 420,
+      "size": 708
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662914470,
+      "integrity": "sha512-YOwyGb8ldqahopc4w3OH7c+Khz0wwELruVw2uqXh2Qqg8y41X+r7doFWc7ezvYuOc/zHUXF/ZqmNArUdXMgUCg==",
+      "mode": 420,
+      "size": 946
+    },
+    "build/esm/pubsub-propagation.js": {
+      "checkedAt": 1764662914470,
+      "integrity": "sha512-hV/55kvAU2iq0S4tZ6uezpTQSjk5AesZkkbTkIqE9pd64ZGsIBuKgmdvRpojHM+Kt/o/Sp9C9H3kU3E5ShhB8w==",
+      "mode": 420,
+      "size": 7191
+    },
+    "build/src/pubsub-propagation.js": {
+      "checkedAt": 1764662914471,
+      "integrity": "sha512-pUazrwtNI+PPK6Pg+P7ljIPHggzHvchGaP/KMerbQoIP3gX0vwF+1uDTP01KwfHmR/K+mw8XOc7HX/WsDxBb6Q==",
+      "mode": 420,
+      "size": 6141
+    },
+    "build/test/pubsub-propagation.test.js": {
+      "checkedAt": 1764662914471,
+      "integrity": "sha512-FzmAhBaWTC71lPXewZTv8eBO35kWYvV9Qb2PAR1nY9t4j48IVP38p8BbxFw5Pbw8hR4veK7MvNTbn09tHyytpg==",
+      "mode": 420,
+      "size": 4746
+    },
+    "package.json": {
+      "checkedAt": 1764662914472,
+      "integrity": "sha512-nQbLxYqktQSoFUXKlhk3Qig49Mp8l2DOmIwTgguRxdqosD++ZAJmF0mQ3vYFiwfiPBf2mUXR1shhg150a7ytSQ==",
+      "mode": 420,
+      "size": 1705
+    },
+    "build/esm/index.js.map": {
+      "checkedAt": 1764662914473,
+      "integrity": "sha512-p8qzPiPPtZW8wLrWtXAl8g0l0qQE3J9EgU3GD4qizQdDg9E2f/IItiag9B9ZKsjPeTnPXiir0ifFHmnnSMCYSQ==",
+      "mode": 420,
+      "size": 898
+    },
+    "build/src/index.js.map": {
+      "checkedAt": 1764662914476,
+      "integrity": "sha512-/8rJW3pXXW5Kx+530PWkr6ufN/OF9mbKmO5T9QTN35beKT0i0c8+wTB+rrKVX4SimluY6S5Bq3F9TR/GhdaaVw==",
+      "mode": 420,
+      "size": 882
+    },
+    "build/esm/pubsub-propagation.js.map": {
+      "checkedAt": 1764662914476,
+      "integrity": "sha512-pdKpQdJRkAijFjRaPDVM5LiMGd8SWfJesr/VwoqLtpASeBqPX7ntX/q2uv2vK8Qspnnb+pQOPMC9bmOygnw2vA==",
+      "mode": 420,
+      "size": 11467
+    },
+    "build/src/pubsub-propagation.js.map": {
+      "checkedAt": 1764662914478,
+      "integrity": "sha512-aqTLuCMlRkpl9rc3Nlq0F5ybhH19g547TyiwuBeNAWekcAxgvGejJ7za0v1ZJH1WWXtBAUKVIk7sJIf5geDOzw==",
+      "mode": 420,
+      "size": 11271
+    },
+    "build/test/pubsub-propagation.test.js.map": {
+      "checkedAt": 1764662914478,
+      "integrity": "sha512-ta4BNFz4pIcwi6BzWCGvEHv5DeGwOd07J+CRk0CkIRFrpXZZw+EUeXsj9qzMM4iGg0VO++b5HTb8DFMCDFxa6A==",
+      "mode": 420,
+      "size": 7173
+    },
+    "README.md": {
+      "checkedAt": 1764662914479,
+      "integrity": "sha512-FNQyKYLdimsoMd5FaBPWqNrL/ojcYjpAJnCVScHzLEmIBc61yfX0w81TRUeLVrhbky2Ns/RHwXuVlCnuzT5q5w==",
+      "mode": 420,
+      "size": 1837
+    },
+    "build/esm/index.d.ts": {
+      "checkedAt": 1764662914499,
+      "integrity": "sha512-ztgYsBAcPWWxZKtdwvxCc/gIQ68IeMP05PubBc4ZBBdFkkrWCeON8UJNJgQe4tNFmrXuylXkJfJugvwPXIEI7Q==",
+      "mode": 420,
+      "size": 104
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662914499,
+      "integrity": "sha512-ztgYsBAcPWWxZKtdwvxCc/gIQ68IeMP05PubBc4ZBBdFkkrWCeON8UJNJgQe4tNFmrXuylXkJfJugvwPXIEI7Q==",
+      "mode": 420,
+      "size": 104
+    },
+    "build/esm/pubsub-propagation.d.ts": {
+      "checkedAt": 1764662914500,
+      "integrity": "sha512-hKHlVDjDUk7SDm/CgqHqW4+MxtaK4Y7G0zT3manLP5/xpJqd+lCoslXAc1kNQSkLXdyPs3glILVH+/9bwDq9jg==",
+      "mode": 420,
+      "size": 812
+    },
+    "build/src/pubsub-propagation.d.ts": {
+      "checkedAt": 1764662914500,
+      "integrity": "sha512-hKHlVDjDUk7SDm/CgqHqW4+MxtaK4Y7G0zT3manLP5/xpJqd+lCoslXAc1kNQSkLXdyPs3glILVH+/9bwDq9jg==",
+      "mode": 420,
+      "size": 812
+    },
+    "build/test/pubsub-propagation.test.d.ts": {
+      "checkedAt": 1764662914501,
+      "integrity": "sha512-pWdU3YlU6wogBgwLq/E9gCLCPlR5fLeeW3BJ2tKurRYs0CoqmTOq1TQw0JmO/oGoc0Bv8wgzIWgqMjxPyFl7eg==",
+      "mode": 420,
+      "size": 64
+    }
+  }
+}

@@ -1,0 +1,3 @@
+{
+  "extends": "tsex/tsconfig.json"
+}

@@ -1,0 +1,1047 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get_all:
+      path: /v1/voices
+      method: GET
+      auth: false
+      docs: Returns a list of all available voices for a user.
+      source:
+        openapi: openapi.json
+      display-name: List voices
+      request:
+        name: VoicesGetAllRequest
+        query-parameters:
+          show_legacy:
+            type: optional<boolean>
+            docs: >-
+              If set to true, legacy premade voices will be included in
+              responses from /v1/voices
+      response:
+        docs: Successful Response
+        type: root.GetVoicesResponse
+        status-code: 200
+      availability: deprecated
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              voices:
+                - voice_id: 21m00Tcm4TlvDq8ikWAM
+                  name: Rachel
+                  samples:
+                    - sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                      file_name: sample.mp3
+                      mime_type: audio/mpeg
+                      size_bytes: 1000000
+                      hash: '1234567890'
+                  category: professional
+                  fine_tuning:
+                    is_allowed_to_fine_tune: true
+                    state:
+                      eleven_multilingual_v2: fine_tuned
+                    verification_failures:
+                      - verification_failures
+                    verification_attempts_count: 2
+                    manual_verification_requested: false
+                  labels:
+                    accent: American
+                    age: middle-aged
+                    description: expressive
+                    gender: female
+                    use_case: social media
+                  description: A warm, expressive voice with a touch of humor.
+                  preview_url: >-
+                    https://storage.googleapis.com/eleven-public-prod/premade/voices/9BWtsMINqrJLrRacOk9x/405766b8-1f4e-4d3c-aba1-6f25333823ec.mp3
+                  available_for_tiers:
+                    - creator
+                    - enterprise
+                  settings:
+                    stability: 1
+                    similarity_boost: 1
+                    style: 0
+                    use_speaker_boost: true
+                    speed: 1
+                  sharing:
+                    status: enabled
+                    history_item_sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                    date_unix: 1714204800
+                    whitelisted_emails:
+                      - example@example.com
+                    public_owner_id: DCwhRBWXzGAHq8TQ4Fs18
+                    original_voice_id: DCwhRBWXzGAHq8TQ4Fs18
+                    financial_rewards_enabled: true
+                    free_users_allowed: true
+                    live_moderation_enabled: true
+                    rate: 0.05
+                    notice_period: 30
+                    disable_at_unix: 1714204800
+                    voice_mixing_allowed: false
+                    featured: true
+                    category: professional
+                    reader_app_enabled: true
+                    liked_by_count: 100
+                    cloned_by_count: 50
+                    name: Rachel
+                    description: A female voice with a soft and friendly tone.
+                    labels:
+                      accent: American
+                      gender: female
+                    review_status: allowed
+                    enabled_in_library: true
+                    moderation_check:
+                      date_checked_unix: 1714204800
+                      name_value: Rachel
+                      name_check: true
+                      description_value: A female voice with a soft and friendly tone.
+                      description_check: true
+                      sample_ids:
+                        - sample1
+                        - sample2
+                      sample_checks:
+                        - 0.95
+                        - 0.98
+                      captcha_ids:
+                        - captcha1
+                        - captcha2
+                      captcha_checks:
+                        - 0.95
+                        - 0.98
+                    reader_restricted_on:
+                      - resource_type: read
+                        resource_id: FCwhRBWXzGAHq8TQ4Fs18
+                  high_quality_base_model_ids:
+                    - eleven_v2_flash
+                    - eleven_flash_v2
+                    - eleven_turbo_v2_5
+                    - eleven_multilingual_v2
+                    - eleven_v2_5_flash
+                    - eleven_flash_v2_5
+                    - eleven_turbo_v2
+                  verified_languages:
+                    - language: en
+                      model_id: eleven_turbo_v2_5
+                      accent: American
+                  safety_control: NONE
+                  voice_verification:
+                    requires_verification: false
+                    is_verified: true
+                    verification_failures:
+                      - verification_failures
+                    verification_attempts_count: 0
+                    language: en
+                    verification_attempts:
+                      - text: Hello, how are you?
+                        date_unix: 1714204800
+                        accepted: true
+                        similarity: 0.95
+                        levenshtein_distance: 2
+                        recording:
+                          recording_id: CwhRBWXzGAHq8TQ4Fs17
+                          mime_type: audio/mpeg
+                          size_bytes: 1000000
+                          upload_date_unix: 1714204800
+                          transcription: Hello, how are you?
+                  permission_on_resource: permission_on_resource
+                  is_owner: false
+                  is_legacy: false
+                  is_mixed: false
+                  created_at_unix: 1
+    search:
+      path: /v2/voices
+      method: GET
+      auth: false
+      docs: >-
+        Gets a list of all available voices for a user with search, filtering
+        and pagination.
+      source:
+        openapi: openapi.json
+      display-name: List voices
+      request:
+        name: VoicesSearchRequest
+        query-parameters:
+          next_page_token:
+            type: optional<string>
+            docs: >-
+              The next page token to use for pagination. Returned from the
+              previous request.
+          page_size:
+            type: optional<integer>
+            default: 10
+            docs: >-
+              How many voices to return at maximum. Can not exceed 100, defaults
+              to 10. Page 0 may include more voices due to default voices being
+              included.
+          search:
+            type: optional<string>
+            docs: >-
+              Search term to filter voices by. Searches in name, description,
+              labels, category.
+          sort:
+            type: optional<string>
+            docs: >-
+              Which field to sort by, one of 'created_at_unix' or 'name'.
+              'created_at_unix' may not be available for older voices.
+          sort_direction:
+            type: optional<string>
+            docs: Which direction to sort the voices in. 'asc' or 'desc'.
+          voice_type:
+            type: optional<string>
+            docs: >-
+              Type of the voice to filter by. One of 'personal', 'community',
+              'default', 'workspace', 'non-default'. 'non-default' is equal to
+              'personal' plus 'community'.
+          category:
+            type: optional<string>
+            docs: >-
+              Category of the voice to filter by. One of 'premade', 'cloned',
+              'generated', 'professional'
+          fine_tuning_state:
+            type: optional<string>
+            docs: >-
+              State of the voice's fine tuning to filter by. Applicable only to
+              professional voices clones. One of 'draft', 'not_verified',
+              'not_started', 'queued', 'fine_tuning', 'fine_tuned', 'failed',
+              'delayed'
+          collection_id:
+            type: optional<string>
+            docs: Collection ID to filter voices by.
+          include_total_count:
+            type: optional<boolean>
+            default: true
+            docs: >-
+              Whether to include the total count of voices found in the
+              response. Incurs a performance cost.
+      response:
+        docs: Successful Response
+        type: root.GetVoicesV2Response
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - query-parameters:
+            include_total_count: true
+          response:
+            body:
+              voices:
+                - voice_id: 21m00Tcm4TlvDq8ikWAM
+                  name: Rachel
+                  samples:
+                    - sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                      file_name: sample.mp3
+                      mime_type: audio/mpeg
+                      size_bytes: 1000000
+                      hash: '1234567890'
+                  category: professional
+                  fine_tuning:
+                    is_allowed_to_fine_tune: true
+                    state:
+                      eleven_multilingual_v2: fine_tuned
+                    verification_failures:
+                      - verification_failures
+                    verification_attempts_count: 2
+                    manual_verification_requested: false
+                  labels:
+                    accent: American
+                    age: middle-aged
+                    description: expressive
+                    gender: female
+                    use_case: social media
+                  description: A warm, expressive voice with a touch of humor.
+                  preview_url: >-
+                    https://storage.googleapis.com/eleven-public-prod/premade/voices/9BWtsMINqrJLrRacOk9x/405766b8-1f4e-4d3c-aba1-6f25333823ec.mp3
+                  available_for_tiers:
+                    - creator
+                    - enterprise
+                  settings:
+                    stability: 1
+                    similarity_boost: 1
+                    style: 0
+                    use_speaker_boost: true
+                    speed: 1
+                  sharing:
+                    status: enabled
+                    history_item_sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                    date_unix: 1714204800
+                    whitelisted_emails:
+                      - example@example.com
+                    public_owner_id: DCwhRBWXzGAHq8TQ4Fs18
+                    original_voice_id: DCwhRBWXzGAHq8TQ4Fs18
+                    financial_rewards_enabled: true
+                    free_users_allowed: true
+                    live_moderation_enabled: true
+                    rate: 0.05
+                    notice_period: 30
+                    disable_at_unix: 1714204800
+                    voice_mixing_allowed: false
+                    featured: true
+                    category: professional
+                    reader_app_enabled: true
+                    liked_by_count: 100
+                    cloned_by_count: 50
+                    name: Rachel
+                    description: A female voice with a soft and friendly tone.
+                    labels:
+                      accent: American
+                      gender: female
+                    review_status: allowed
+                    enabled_in_library: true
+                    moderation_check:
+                      date_checked_unix: 1714204800
+                      name_value: Rachel
+                      name_check: true
+                      description_value: A female voice with a soft and friendly tone.
+                      description_check: true
+                      sample_ids:
+                        - sample1
+                        - sample2
+                      sample_checks:
+                        - 0.95
+                        - 0.98
+                      captcha_ids:
+                        - captcha1
+                        - captcha2
+                      captcha_checks:
+                        - 0.95
+                        - 0.98
+                    reader_restricted_on:
+                      - resource_type: read
+                        resource_id: FCwhRBWXzGAHq8TQ4Fs18
+                  high_quality_base_model_ids:
+                    - eleven_v2_flash
+                    - eleven_flash_v2
+                    - eleven_turbo_v2_5
+                    - eleven_multilingual_v2
+                    - eleven_v2_5_flash
+                    - eleven_flash_v2_5
+                    - eleven_turbo_v2
+                  verified_languages:
+                    - language: en
+                      model_id: eleven_turbo_v2_5
+                      accent: American
+                  safety_control: NONE
+                  voice_verification:
+                    requires_verification: false
+                    is_verified: true
+                    verification_failures:
+                      - verification_failures
+                    verification_attempts_count: 0
+                    language: en
+                    verification_attempts:
+                      - text: Hello, how are you?
+                        date_unix: 1714204800
+                        accepted: true
+                        similarity: 0.95
+                        levenshtein_distance: 2
+                        recording:
+                          recording_id: CwhRBWXzGAHq8TQ4Fs17
+                          mime_type: audio/mpeg
+                          size_bytes: 1000000
+                          upload_date_unix: 1714204800
+                          transcription: Hello, how are you?
+                  permission_on_resource: permission_on_resource
+                  is_owner: false
+                  is_legacy: false
+                  is_mixed: false
+                  created_at_unix: 1
+              has_more: true
+              total_count: 1
+              next_page_token: next_page_token
+    get_default_settings:
+      path: /v1/voices/settings/default
+      method: GET
+      auth: false
+      docs: >-
+        Gets the default settings for voices. "similarity_boost" corresponds
+        to"Clarity + Similarity Enhancement" in the web app and "stability"
+        corresponds to "Stability" slider in the web app.
+      source:
+        openapi: openapi.json
+      display-name: Get default voice settings
+      response:
+        docs: Successful Response
+        type: root.VoiceSettings
+        status-code: 200
+      examples:
+        - response:
+            body:
+              stability: 1
+              similarity_boost: 1
+              style: 0
+              use_speaker_boost: true
+              speed: 1
+    get_settings:
+      path: /v1/voices/{voice_id}/settings
+      method: GET
+      auth: false
+      docs: >-
+        Returns the settings for a specific voice. "similarity_boost"
+        corresponds to"Clarity + Similarity Enhancement" in the web app and
+        "stability" corresponds to "Stability" slider in the web app.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+      display-name: Get voice settings
+      response:
+        docs: Successful Response
+        type: root.VoiceSettings
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              stability: 1
+              similarity_boost: 1
+              style: 0
+              use_speaker_boost: true
+              speed: 1
+    get:
+      path: /v1/voices/{voice_id}
+      method: GET
+      auth: false
+      docs: Returns metadata about a specific voice.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. You can use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+      display-name: Get voice
+      request:
+        name: VoicesGetRequest
+        query-parameters:
+          with_settings:
+            type: optional<boolean>
+            default: true
+            docs: >-
+              This parameter is now deprecated. It is ignored and will be
+              removed in a future version.
+            availability: deprecated
+      response:
+        docs: Successful Response
+        type: root.Voice
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              voice_id: 21m00Tcm4TlvDq8ikWAM
+              name: Rachel
+              samples:
+                - sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                  file_name: sample.mp3
+                  mime_type: audio/mpeg
+                  size_bytes: 1000000
+                  hash: '1234567890'
+                  duration_secs: 1.1
+                  remove_background_noise: true
+                  has_isolated_audio: true
+                  has_isolated_audio_preview: true
+                  speaker_separation:
+                    voice_id: DCwhRBWXzGAHq8TQ4Fs18
+                    sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                    status: not_started
+                  trim_start: 1
+                  trim_end: 1
+              category: professional
+              fine_tuning:
+                is_allowed_to_fine_tune: true
+                state:
+                  eleven_multilingual_v2: fine_tuned
+                verification_failures:
+                  - verification_failures
+                verification_attempts_count: 2
+                manual_verification_requested: false
+                language: language
+                progress:
+                  key: 1.1
+                message:
+                  key: value
+                dataset_duration_seconds: 1.1
+                verification_attempts:
+                  - text: Hello, how are you?
+                    date_unix: 1714204800
+                    accepted: true
+                    similarity: 0.95
+                    levenshtein_distance: 2
+                    recording:
+                      recording_id: CwhRBWXzGAHq8TQ4Fs17
+                      mime_type: audio/mpeg
+                      size_bytes: 1000000
+                      upload_date_unix: 1714204800
+                      transcription: Hello, how are you?
+                slice_ids:
+                  - slice_ids
+                manual_verification:
+                  extra_text: Please verify the voice is that of a female.
+                  request_time_unix: 1714204800
+                  files:
+                    - file_id: CwhRBWXzGAHq8TQ4Fs18
+                      file_name: file.mp3
+                      mime_type: audio/mpeg
+                      size_bytes: 1000000
+                      upload_date_unix: 1714204800
+                max_verification_attempts: 1
+                next_max_verification_attempts_reset_unix_ms: 1
+                finetuning_state:
+                  key: value
+              labels:
+                accent: American
+                age: middle-aged
+                description: expressive
+                gender: female
+                use_case: social media
+              description: A warm, expressive voice with a touch of humor.
+              preview_url: >-
+                https://storage.googleapis.com/eleven-public-prod/premade/voices/9BWtsMINqrJLrRacOk9x/405766b8-1f4e-4d3c-aba1-6f25333823ec.mp3
+              available_for_tiers:
+                - creator
+                - enterprise
+              settings:
+                stability: 1
+                similarity_boost: 1
+                style: 0
+                use_speaker_boost: true
+                speed: 1
+              sharing:
+                status: enabled
+                history_item_sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                date_unix: 1714204800
+                whitelisted_emails:
+                  - example@example.com
+                public_owner_id: DCwhRBWXzGAHq8TQ4Fs18
+                original_voice_id: DCwhRBWXzGAHq8TQ4Fs18
+                financial_rewards_enabled: true
+                free_users_allowed: true
+                live_moderation_enabled: true
+                rate: 0.05
+                notice_period: 30
+                disable_at_unix: 1714204800
+                voice_mixing_allowed: false
+                featured: true
+                category: professional
+                reader_app_enabled: true
+                image_url: image_url
+                ban_reason: ban_reason
+                liked_by_count: 100
+                cloned_by_count: 50
+                name: Rachel
+                description: A female voice with a soft and friendly tone.
+                labels:
+                  accent: American
+                  gender: female
+                review_status: allowed
+                review_message: review_message
+                enabled_in_library: true
+                instagram_username: instagram_username
+                twitter_username: twitter_username
+                youtube_username: youtube_username
+                tiktok_username: tiktok_username
+                moderation_check:
+                  date_checked_unix: 1714204800
+                  name_value: Rachel
+                  name_check: true
+                  description_value: A female voice with a soft and friendly tone.
+                  description_check: true
+                  sample_ids:
+                    - sample1
+                    - sample2
+                  sample_checks:
+                    - 0.95
+                    - 0.98
+                  captcha_ids:
+                    - captcha1
+                    - captcha2
+                  captcha_checks:
+                    - 0.95
+                    - 0.98
+                reader_restricted_on:
+                  - resource_type: read
+                    resource_id: FCwhRBWXzGAHq8TQ4Fs18
+              high_quality_base_model_ids:
+                - eleven_v2_flash
+                - eleven_flash_v2
+                - eleven_turbo_v2_5
+                - eleven_multilingual_v2
+                - eleven_v2_5_flash
+                - eleven_flash_v2_5
+                - eleven_turbo_v2
+              verified_languages:
+                - language: en
+                  model_id: eleven_turbo_v2_5
+                  accent: American
+                  locale: locale
+                  preview_url: preview_url
+              safety_control: NONE
+              voice_verification:
+                requires_verification: false
+                is_verified: true
+                verification_failures:
+                  - verification_failures
+                verification_attempts_count: 0
+                language: en
+                verification_attempts:
+                  - text: Hello, how are you?
+                    date_unix: 1714204800
+                    accepted: true
+                    similarity: 0.95
+                    levenshtein_distance: 2
+                    recording:
+                      recording_id: CwhRBWXzGAHq8TQ4Fs17
+                      mime_type: audio/mpeg
+                      size_bytes: 1000000
+                      upload_date_unix: 1714204800
+                      transcription: Hello, how are you?
+              permission_on_resource: permission_on_resource
+              is_owner: false
+              is_legacy: false
+              is_mixed: false
+              created_at_unix: 1
+    delete:
+      path: /v1/voices/{voice_id}
+      method: DELETE
+      auth: false
+      docs: Deletes a voice by its ID.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. You can use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+      display-name: Delete voice
+      response:
+        docs: Successful Response
+        type: root.DeleteVoiceResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              status: ok
+    edit_settings:
+      path: /v1/voices/{voice_id}/settings/edit
+      method: POST
+      auth: false
+      docs: >-
+        Edit your settings for a specific voice. "similarity_boost" corresponds
+        to "Clarity + Similarity Enhancement" in the web app and "stability"
+        corresponds to "Stability" slider in the web app.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. You can use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+      display-name: Edit voice settings
+      request:
+        body:
+          type: root.VoiceSettings
+          docs: The settings for a specific voice.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.EditVoiceSettingsResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            stability: 1
+            similarity_boost: 1
+            style: 0
+            use_speaker_boost: true
+            speed: 1
+          response:
+            body:
+              status: ok
+    add:
+      path: /v1/voices/add
+      method: POST
+      auth: false
+      docs: Create a voice clone and add it to your Voices
+      source:
+        openapi: openapi.json
+      display-name: Create voice clone
+      request:
+        name: Body_Add_voice_v1_voices_add_post
+        body:
+          properties:
+            name:
+              type: string
+              docs: >-
+                The name that identifies this voice. This will be displayed in
+                the dropdown of the website.
+            files:
+              type: list<file>
+              docs: >-
+                A list of file paths to audio recordings intended for voice
+                cloning.
+            remove_background_noise:
+              type: optional<boolean>
+              docs: >-
+                If set will remove background noise for voice samples using our
+                audio isolation model. If the samples do not include background
+                noise, it can make the quality worse.
+              default: false
+            description:
+              type: optional<string>
+              docs: A description of the voice.
+            labels:
+              type: optional<string>
+              docs: Serialized labels dictionary for the voice.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.AddVoiceIvcResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            name: name
+          response:
+            body:
+              voice_id: c38kUX8pkfYO2kHyqfFy
+              requires_verification: false
+    edit:
+      path: /v1/voices/{voice_id}/edit
+      method: POST
+      auth: false
+      docs: Edit a voice created by you.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. You can use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+      display-name: Edit voice
+      request:
+        name: Body_Edit_voice_v1_voices__voice_id__edit_post
+        body:
+          properties:
+            name:
+              type: string
+              docs: >-
+                The name that identifies this voice. This will be displayed in
+                the dropdown of the website.
+            files:
+              type: optional<list<file>>
+              docs: Audio files to add to the voice
+            remove_background_noise:
+              type: optional<boolean>
+              docs: >-
+                If set will remove background noise for voice samples using our
+                audio isolation model. If the samples do not include background
+                noise, it can make the quality worse.
+              default: false
+            description:
+              type: optional<string>
+              docs: A description of the voice.
+            labels:
+              type: optional<string>
+              docs: Serialized labels dictionary for the voice.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.EditVoiceResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            name: name
+          response:
+            body:
+              status: ok
+    add_sharing_voice:
+      path: /v1/voices/add/{public_user_id}/{voice_id}
+      method: POST
+      auth: false
+      docs: Add a shared voice to your collection of Voices
+      source:
+        openapi: openapi.json
+      path-parameters:
+        public_user_id:
+          type: string
+          docs: Public user ID used to publicly identify ElevenLabs users.
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. You can use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+      display-name: Add shared voice
+      request:
+        name: BodyAddSharedVoiceV1VoicesAddPublicUserIdVoiceIdPost
+        body:
+          properties:
+            new_name:
+              type: string
+              docs: >-
+                The name that identifies this voice. This will be displayed in
+                the dropdown of the website.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddVoiceResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            public_user_id: 63e06b7e7cafdc46be4d2e0b3f045940231ae058d508589653d74d1265a574ca
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            new_name: John Smith
+          response:
+            body:
+              voice_id: b38kUX8pkfYO2kHyqfFy
+    get_shared:
+      path: /v1/shared-voices
+      method: GET
+      auth: false
+      docs: Retrieves a list of shared voices.
+      source:
+        openapi: openapi.json
+      display-name: Get shared voices
+      request:
+        name: VoicesGetSharedRequest
+        query-parameters:
+          page_size:
+            type: optional<integer>
+            default: 30
+            docs: >-
+              How many shared voices to return at maximum. Can not exceed 100,
+              defaults to 30.
+          category:
+            type: optional<VoicesGetSharedRequestCategory>
+            docs: Voice category used for filtering
+          gender:
+            type: optional<string>
+            docs: Gender used for filtering
+          age:
+            type: optional<string>
+            docs: Age used for filtering
+          accent:
+            type: optional<string>
+            docs: Accent used for filtering
+          language:
+            type: optional<string>
+            docs: Language used for filtering
+          locale:
+            type: optional<string>
+            docs: Locale used for filtering
+          search:
+            type: optional<string>
+            docs: Search term used for filtering
+          use_cases:
+            type: optional<string>
+            allow-multiple: true
+            docs: Use-case used for filtering
+          descriptives:
+            type: optional<string>
+            allow-multiple: true
+            docs: Search term used for filtering
+          featured:
+            type: optional<boolean>
+            default: false
+            docs: Filter featured voices
+          min_notice_period_days:
+            type: optional<integer>
+            docs: >-
+              Filter voices with a minimum notice period of the given number of
+              days.
+          include_custom_rates:
+            type: optional<boolean>
+            docs: Include/exclude voices with custom rates
+          reader_app_enabled:
+            type: optional<boolean>
+            default: false
+            docs: Filter voices that are enabled for the reader app
+          owner_id:
+            type: optional<string>
+            docs: Filter voices by public owner ID
+          sort:
+            type: optional<string>
+            docs: Sort criteria
+          page:
+            type: optional<integer>
+            default: 0
+      response:
+        docs: Successful Response
+        type: root.GetLibraryVoicesResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - query-parameters:
+            featured: true
+            reader_app_enabled: true
+          response:
+            body:
+              voices:
+                - public_owner_id: >-
+                    63e84100a6bf7874ba37a1bab9a31828a379ec94b891b401653b655c5110880f
+                  voice_id: sB1b5zUrxQVAFl2PhZFp
+                  date_unix: 1714423232
+                  name: Alita
+                  accent: american
+                  gender: Female
+                  age: young
+                  descriptive: calm
+                  use_case: characters_animation
+                  category: professional
+                  language: en
+                  locale: locale
+                  description: >-
+                    Perfectly calm, neutral and strong voice. Great for a young
+                    female protagonist.
+                  preview_url: >-
+                    https://storage.googleapis.com/eleven-public-prod/wqkMCd9huxXHX1dy5mLJn4QEQHj1/voices/sB1b5zUrxQVAFl2PhZFp/55e71aac-5cb7-4b3d-8241-429388160509.mp3
+                  usage_character_count_1y: 12852
+                  usage_character_count_7d: 12852
+                  play_api_usage_character_count_1y: 12852
+                  cloned_by_count: 11
+                  rate: 1
+                  free_users_allowed: true
+                  live_moderation_enabled: false
+                  featured: false
+                  verified_languages:
+                    - language: en
+                      model_id: eleven_turbo_v2_5
+                      accent: American
+                  notice_period: 1
+                  instagram_username: instagram_username
+                  twitter_username: twitter_username
+                  youtube_username: youtube_username
+                  tiktok_username: tiktok_username
+                  image_url: image_url
+                  is_added_by_user: true
+              has_more: false
+              last_sort_id: last_sort_id
+    get_similar_library_voices:
+      path: /v1/similar-voices
+      method: POST
+      auth: false
+      docs: >-
+        Returns a list of shared voices similar to the provided audio sample. If
+        neither similarity_threshold nor top_k is provided, we will apply
+        default values.
+      source:
+        openapi: openapi.json
+      display-name: List similar voices
+      request:
+        name: Body_Get_similar_library_voices_v1_similar_voices_post
+        body:
+          properties:
+            audio_file: optional<file>
+            similarity_threshold:
+              type: optional<double>
+              docs: >-
+                Threshold for voice similarity between provided sample and
+                library voices. Values range from 0 to 2. The smaller the value
+                the more similar voices will be returned.
+            top_k:
+              type: optional<integer>
+              docs: >-
+                Number of most similar voices to return. If similarity_threshold
+                is provided, less than this number of voices may be returned.
+                Values range from 1 to 100.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.GetLibraryVoicesResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request: {}
+          response:
+            body:
+              voices:
+                - public_owner_id: >-
+                    63e84100a6bf7874ba37a1bab9a31828a379ec94b891b401653b655c5110880f
+                  voice_id: sB1b5zUrxQVAFl2PhZFp
+                  date_unix: 1714423232
+                  name: Alita
+                  accent: american
+                  gender: Female
+                  age: young
+                  descriptive: calm
+                  use_case: characters_animation
+                  category: professional
+                  language: en
+                  locale: locale
+                  description: >-
+                    Perfectly calm, neutral and strong voice. Great for a young
+                    female protagonist.
+                  preview_url: >-
+                    https://storage.googleapis.com/eleven-public-prod/wqkMCd9huxXHX1dy5mLJn4QEQHj1/voices/sB1b5zUrxQVAFl2PhZFp/55e71aac-5cb7-4b3d-8241-429388160509.mp3
+                  usage_character_count_1y: 12852
+                  usage_character_count_7d: 12852
+                  play_api_usage_character_count_1y: 12852
+                  cloned_by_count: 11
+                  rate: 1
+                  free_users_allowed: true
+                  live_moderation_enabled: false
+                  featured: false
+                  verified_languages:
+                    - language: en
+                      model_id: eleven_turbo_v2_5
+                      accent: American
+                  notice_period: 1
+                  instagram_username: instagram_username
+                  twitter_username: twitter_username
+                  youtube_username: youtube_username
+                  tiktok_username: tiktok_username
+                  image_url: image_url
+                  is_added_by_user: true
+              has_more: false
+              last_sort_id: last_sort_id
+  source:
+    openapi: openapi.json
+  display-name: Voices
+docs: Access to voices created either by you or us.
+types:
+  VoicesGetSharedRequestCategory:
+    enum:
+      - professional
+      - famous
+      - high_quality
+    docs: Voice category used for filtering
+    source:
+      openapi: openapi.json

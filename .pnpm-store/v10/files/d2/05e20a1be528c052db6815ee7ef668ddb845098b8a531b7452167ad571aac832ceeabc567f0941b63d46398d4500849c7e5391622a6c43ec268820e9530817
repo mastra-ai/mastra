@@ -1,0 +1,1 @@
+{"version":3,"file":"functionSpec.d.ts","sourceRoot":"","sources":["../../../../src/cli/lib/functionSpec.ts"],"names":[],"mappings":"AAGA,OAAO,EAAE,OAAO,EAAE,MAAM,0BAA0B,CAAC;AAEnD,wBAAsB,yBAAyB,CAC7C,GAAG,EAAE,OAAO,EACZ,OAAO,EAAE;IACP,aAAa,EAAE,MAAM,CAAC;IACtB,QAAQ,EAAE,MAAM,CAAC;IACjB,IAAI,EAAE,OAAO,CAAC;CACf,iBA0BF"}

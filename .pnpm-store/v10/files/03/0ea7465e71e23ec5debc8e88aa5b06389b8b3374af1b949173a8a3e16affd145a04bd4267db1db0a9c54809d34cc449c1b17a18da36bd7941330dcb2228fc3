@@ -1,0 +1,173 @@
+import type { ReadableStream } from 'stream/web';
+import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import type { MessageList } from '../../../agent/message-list/index.js';
+import type { StructuredOutputOptions } from '../../../agent/types.js';
+import type { TracingContext } from '../../../observability/index.js';
+import type { MastraModelOutput } from '../../base/output.js';
+import type { InferSchemaOutput, OutputSchema } from '../../base/schema.js';
+import type { ConsumeStreamOptions } from './compat/index.js';
+import type { OutputChunkType } from './transform.js';
+type AISDKV5OutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
+    toolCallStreaming?: boolean;
+    includeRawChunks?: boolean;
+    structuredOutput?: StructuredOutputOptions<OUTPUT>;
+    tracingContext?: TracingContext;
+};
+export type AIV5FullStreamPart<OUTPUT extends OutputSchema = undefined> = OUTPUT extends undefined ? TextStreamPart<ToolSet> : TextStreamPart<ToolSet> | {
+    type: 'object';
+    object: InferSchemaOutput<OUTPUT>;
+};
+export type AIV5FullStreamType<OUTPUT extends OutputSchema = undefined> = ReadableStream<AIV5FullStreamPart<OUTPUT>>;
+export declare class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
+    #private;
+    /**
+     * Trace ID used on the execution (if the execution was traced).
+     */
+    traceId?: string;
+    constructor({ modelOutput, options, messageList, }: {
+        modelOutput: MastraModelOutput<OUTPUT>;
+        options: AISDKV5OutputStreamOptions<OUTPUT>;
+        messageList: MessageList;
+    });
+    toTextStreamResponse(init?: ResponseInit): Response;
+    toUIMessageStreamResponse<UI_MESSAGE extends UIMessage>({ generateMessageId, originalMessages, sendFinish, sendReasoning, sendSources, onError, sendStart, messageMetadata, onFinish, ...init }?: UIMessageStreamOptions<UI_MESSAGE> & ResponseInit): Response;
+    toUIMessageStream<UI_MESSAGE extends UIMessage>({ generateMessageId, originalMessages, sendFinish, sendReasoning, sendSources, onError, sendStart, messageMetadata, onFinish, }?: UIMessageStreamOptions<UI_MESSAGE>): globalThis.ReadableStream<import("ai-v5").InferUIMessageChunk<UI_MESSAGE>>;
+    consumeStream(options?: ConsumeStreamOptions): Promise<void>;
+    get sources(): Promise<OutputChunkType<undefined>[]>;
+    get files(): Promise<(import("ai-v5").Experimental_GeneratedImage | undefined)[]>;
+    get text(): Promise<string>;
+    /**
+     * Stream of valid JSON chunks. The final JSON result is validated against the output schema when the stream ends.
+     */
+    get objectStream(): ReadableStream<import("../..").PartialSchemaOutput<OUTPUT>>;
+    get toolCalls(): Promise<OutputChunkType<undefined>[]>;
+    get toolResults(): Promise<OutputChunkType<undefined>[]>;
+    get reasoningText(): Promise<string | undefined>;
+    get reasoning(): Promise<{
+        providerMetadata: import("@ai-sdk/provider-v5").SharedV2ProviderMetadata | undefined;
+        text: string;
+        type: "reasoning";
+    }[]>;
+    get warnings(): Promise<import("@ai-sdk/provider-v5").LanguageModelV2CallWarning[]>;
+    get usage(): Promise<import("../../types").LanguageModelUsage>;
+    get finishReason(): Promise<string | undefined>;
+    get providerMetadata(): Promise<import("@ai-sdk/provider-v5").SharedV2ProviderMetadata | undefined>;
+    get request(): Promise<{
+        body?: unknown;
+    }>;
+    get totalUsage(): Promise<import("../../types").LanguageModelUsage>;
+    get response(): Promise<{
+        [key: string]: unknown;
+        headers?: Record<string, string>;
+        messages?: import("ai-v5").StepResult<ToolSet>["response"]["messages"];
+        uiMessages?: UIMessage<OUTPUT extends OutputSchema ? {
+            structuredOutput?: InferSchemaOutput<OUTPUT> | undefined;
+        } & Record<string, unknown> : unknown, import("ai-v5").UIDataTypes, import("ai-v5").UITools>[] | undefined;
+        id?: string;
+        timestamp?: Date;
+        modelId?: string;
+    }>;
+    get steps(): Promise<import("../../types").LLMStepResult[]>;
+    get content(): ({
+        type: "text";
+        text: string;
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    } | import("ai-v5").ReasoningOutput | ({
+        type: "source";
+    } & import("@ai-sdk/provider-v5").LanguageModelV2Source) | {
+        type: "file";
+        file: import("ai-v5").Experimental_GeneratedImage;
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    } | ({
+        type: "tool-call";
+    } & (import("ai-v5").TypedToolCall<any> & {
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    })) | ({
+        type: "tool-result";
+    } & (import("ai-v5").TypedToolResult<any> & {
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    })) | ({
+        type: "tool-error";
+    } & (import("ai-v5").TypedToolError<any> & {
+        providerMetadata?: import("ai-v5").ProviderMetadata;
+    })))[];
+    /**
+     * Stream of only text content, compatible with streaming text responses.
+     */
+    get textStream(): ReadableStream<string>;
+    /**
+     * Stream of individual array elements when output schema is an array type.
+     */
+    get elementStream(): ReadableStream<InferSchemaOutput<OUTPUT> extends (infer T)[] ? T : never>;
+    /**
+     * Stream of all chunks in AI SDK v5 format.
+     */
+    get fullStream(): AIV5FullStreamType<OUTPUT>;
+    getFullOutput(): Promise<{
+        object?: NonNullable<Awaited<InferSchemaOutput<OUTPUT>>> | undefined;
+        text: string;
+        usage: import("../../types").LanguageModelUsage;
+        steps: import("../../types").LLMStepResult[];
+        finishReason: string | undefined;
+        warnings: import("@ai-sdk/provider-v5").LanguageModelV2CallWarning[];
+        providerMetadata: import("@ai-sdk/provider-v5").SharedV2ProviderMetadata | undefined;
+        request: {
+            body?: unknown;
+        };
+        reasoning: {
+            providerMetadata: import("@ai-sdk/provider-v5").SharedV2ProviderMetadata | undefined;
+            text: string;
+            type: "reasoning";
+        }[];
+        reasoningText: string | undefined;
+        toolCalls: OutputChunkType<undefined>[];
+        toolResults: OutputChunkType<undefined>[];
+        sources: OutputChunkType<undefined>[];
+        files: (import("ai-v5").Experimental_GeneratedImage | undefined)[];
+        response: {
+            [key: string]: unknown;
+            headers?: Record<string, string>;
+            messages?: import("ai-v5").StepResult<ToolSet>["response"]["messages"];
+            uiMessages?: UIMessage<OUTPUT extends OutputSchema ? {
+                structuredOutput?: InferSchemaOutput<OUTPUT> | undefined;
+            } & Record<string, unknown> : unknown, import("ai-v5").UIDataTypes, import("ai-v5").UITools>[] | undefined;
+            id?: string;
+            timestamp?: Date;
+            modelId?: string;
+        };
+        content: ({
+            type: "text";
+            text: string;
+            providerMetadata?: import("ai-v5").ProviderMetadata;
+        } | import("ai-v5").ReasoningOutput | ({
+            type: "source";
+        } & import("@ai-sdk/provider-v5").LanguageModelV2Source) | {
+            type: "file";
+            file: import("ai-v5").Experimental_GeneratedImage;
+            providerMetadata?: import("ai-v5").ProviderMetadata;
+        } | ({
+            type: "tool-call";
+        } & (import("ai-v5").TypedToolCall<any> & {
+            providerMetadata?: import("ai-v5").ProviderMetadata;
+        })) | ({
+            type: "tool-result";
+        } & (import("ai-v5").TypedToolResult<any> & {
+            providerMetadata?: import("ai-v5").ProviderMetadata;
+        })) | ({
+            type: "tool-error";
+        } & (import("ai-v5").TypedToolError<any> & {
+            providerMetadata?: import("ai-v5").ProviderMetadata;
+        })))[];
+        totalUsage: import("../../types").LanguageModelUsage;
+        error: Error | undefined;
+        tripwire: boolean;
+        tripwireReason: string;
+        traceId: string | undefined;
+    }>;
+    get tripwire(): boolean;
+    get tripwireReason(): string;
+    get error(): Error | undefined;
+    get object(): Promise<InferSchemaOutput<OUTPUT>>;
+}
+export {};
+//# sourceMappingURL=output.d.ts.map

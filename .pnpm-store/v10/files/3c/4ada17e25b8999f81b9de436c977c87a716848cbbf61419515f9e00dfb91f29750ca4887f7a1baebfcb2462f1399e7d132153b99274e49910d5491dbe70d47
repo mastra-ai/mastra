@@ -1,0 +1,376 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.cloud.speech.v1p1beta1;
+
+import "google/api/annotations.proto";
+import "google/api/client.proto";
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/cloud/speech/v1p1beta1/resource.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+
+option cc_enable_arenas = true;
+option go_package = "cloud.google.com/go/speech/apiv1p1beta1/speechpb;speechpb";
+option java_multiple_files = true;
+option java_outer_classname = "SpeechAdaptationProto";
+option java_package = "com.google.cloud.speech.v1p1beta1";
+option objc_class_prefix = "GCS";
+
+// Service that implements Google Cloud Speech Adaptation API.
+service Adaptation {
+  option (google.api.default_host) = "speech.googleapis.com";
+  option (google.api.oauth_scopes) =
+      "https://www.googleapis.com/auth/cloud-platform";
+
+  // Create a set of phrase hints. Each item in the set can be a single word or
+  // a multi-word phrase. The items in the PhraseSet are favored by the
+  // recognition model when you send a call that includes the PhraseSet.
+  rpc CreatePhraseSet(CreatePhraseSetRequest) returns (PhraseSet) {
+    option (google.api.http) = {
+      post: "/v1p1beta1/{parent=projects/*/locations/*}/phraseSets"
+      body: "*"
+    };
+    option (google.api.method_signature) = "parent,phrase_set,phrase_set_id";
+  }
+
+  // Get a phrase set.
+  rpc GetPhraseSet(GetPhraseSetRequest) returns (PhraseSet) {
+    option (google.api.http) = {
+      get: "/v1p1beta1/{name=projects/*/locations/*/phraseSets/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // List phrase sets.
+  rpc ListPhraseSet(ListPhraseSetRequest) returns (ListPhraseSetResponse) {
+    option (google.api.http) = {
+      get: "/v1p1beta1/{parent=projects/*/locations/*}/phraseSets"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Update a phrase set.
+  rpc UpdatePhraseSet(UpdatePhraseSetRequest) returns (PhraseSet) {
+    option (google.api.http) = {
+      patch: "/v1p1beta1/{phrase_set.name=projects/*/locations/*/phraseSets/*}"
+      body: "phrase_set"
+    };
+    option (google.api.method_signature) = "phrase_set,update_mask";
+  }
+
+  // Delete a phrase set.
+  rpc DeletePhraseSet(DeletePhraseSetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1p1beta1/{name=projects/*/locations/*/phraseSets/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Create a custom class.
+  rpc CreateCustomClass(CreateCustomClassRequest) returns (CustomClass) {
+    option (google.api.http) = {
+      post: "/v1p1beta1/{parent=projects/*/locations/*}/customClasses"
+      body: "*"
+    };
+    option (google.api.method_signature) =
+        "parent,custom_class,custom_class_id";
+  }
+
+  // Get a custom class.
+  rpc GetCustomClass(GetCustomClassRequest) returns (CustomClass) {
+    option (google.api.http) = {
+      get: "/v1p1beta1/{name=projects/*/locations/*/customClasses/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // List custom classes.
+  rpc ListCustomClasses(ListCustomClassesRequest)
+      returns (ListCustomClassesResponse) {
+    option (google.api.http) = {
+      get: "/v1p1beta1/{parent=projects/*/locations/*}/customClasses"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Update a custom class.
+  rpc UpdateCustomClass(UpdateCustomClassRequest) returns (CustomClass) {
+    option (google.api.http) = {
+      patch: "/v1p1beta1/{custom_class.name=projects/*/locations/*/customClasses/*}"
+      body: "custom_class"
+    };
+    option (google.api.method_signature) = "custom_class,update_mask";
+  }
+
+  // Delete a custom class.
+  rpc DeleteCustomClass(DeleteCustomClassRequest)
+      returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1p1beta1/{name=projects/*/locations/*/customClasses/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+}
+
+// Message sent by the client for the `CreatePhraseSet` method.
+message CreatePhraseSetRequest {
+  // Required. The parent resource where this phrase set will be created.
+  // Format:
+  //
+  // `projects/{project}/locations/{location}`
+  //
+  // Speech-to-Text supports three locations: `global`, `us` (US North America),
+  // and `eu` (Europe). If you are calling the `speech.googleapis.com`
+  // endpoint, use the `global` location. To specify a region, use a
+  // [regional endpoint](https://cloud.google.com/speech-to-text/docs/endpoints)
+  // with matching `us` or `eu` location value.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "speech.googleapis.com/PhraseSet"
+    }
+  ];
+
+  // Required. The ID to use for the phrase set, which will become the final
+  // component of the phrase set's resource name.
+  //
+  // This value should restrict to letters, numbers, and hyphens, with the first
+  // character a letter, the last a letter or a number, and be 4-63 characters.
+  string phrase_set_id = 2 [(google.api.field_behavior) = REQUIRED];
+
+  // Required. The phrase set to create.
+  PhraseSet phrase_set = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Message sent by the client for the `UpdatePhraseSet` method.
+message UpdatePhraseSetRequest {
+  // Required. The phrase set to update.
+  //
+  // The phrase set's `name` field is used to identify the set to be
+  // updated. Format:
+  //
+  // `projects/{project}/locations/{location}/phraseSets/{phrase_set}`
+  //
+  // Speech-to-Text supports three locations: `global`, `us` (US North America),
+  // and `eu` (Europe). If you are calling the `speech.googleapis.com`
+  // endpoint, use the `global` location. To specify a region, use a
+  // [regional endpoint](https://cloud.google.com/speech-to-text/docs/endpoints)
+  // with matching `us` or `eu` location value.
+  PhraseSet phrase_set = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// Message sent by the client for the `GetPhraseSet` method.
+message GetPhraseSetRequest {
+  // Required. The name of the phrase set to retrieve. Format:
+  //
+  // `projects/{project}/locations/{location}/phraseSets/{phrase_set}`
+  //
+  // Speech-to-Text supports three locations: `global`, `us` (US North America),
+  // and `eu` (Europe). If you are calling the `speech.googleapis.com`
+  // endpoint, use the `global` location. To specify a region, use a
+  // [regional endpoint](https://cloud.google.com/speech-to-text/docs/endpoints)
+  // with matching `us` or `eu` location value.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/PhraseSet"
+    }
+  ];
+}
+
+// Message sent by the client for the `ListPhraseSet` method.
+message ListPhraseSetRequest {
+  // Required. The parent, which owns this collection of phrase set. Format:
+  //
+  // `projects/{project}/locations/{location}`
+  //
+  // Speech-to-Text supports three locations: `global`, `us` (US North America),
+  // and `eu` (Europe). If you are calling the `speech.googleapis.com`
+  // endpoint, use the `global` location. To specify a region, use a
+  // [regional endpoint](https://cloud.google.com/speech-to-text/docs/endpoints)
+  // with matching `us` or `eu` location value.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "speech.googleapis.com/PhraseSet"
+    }
+  ];
+
+  // The maximum number of phrase sets to return. The service may return
+  // fewer than this value. If unspecified, at most 50 phrase sets will be
+  // returned. The maximum value is 1000; values above 1000 will be coerced to
+  // 1000.
+  int32 page_size = 2;
+
+  // A page token, received from a previous `ListPhraseSet` call.
+  // Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to `ListPhraseSet` must
+  // match the call that provided the page token.
+  string page_token = 3;
+}
+
+// Message returned to the client by the `ListPhraseSet` method.
+message ListPhraseSetResponse {
+  // The phrase set.
+  repeated PhraseSet phrase_sets = 1;
+
+  // A token, which can be sent as `page_token` to retrieve the next page.
+  // If this field is omitted, there are no subsequent pages.
+  string next_page_token = 2;
+}
+
+// Message sent by the client for the `DeletePhraseSet` method.
+message DeletePhraseSetRequest {
+  // Required. The name of the phrase set to delete. Format:
+  //
+  // `projects/{project}/locations/{location}/phraseSets/{phrase_set}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/PhraseSet"
+    }
+  ];
+}
+
+// Message sent by the client for the `CreateCustomClass` method.
+message CreateCustomClassRequest {
+  // Required. The parent resource where this custom class will be created.
+  // Format:
+  //
+  // `projects/{project}/locations/{location}/customClasses`
+  //
+  // Speech-to-Text supports three locations: `global`, `us` (US North America),
+  // and `eu` (Europe). If you are calling the `speech.googleapis.com`
+  // endpoint, use the `global` location. To specify a region, use a
+  // [regional endpoint](https://cloud.google.com/speech-to-text/docs/endpoints)
+  // with matching `us` or `eu` location value.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "speech.googleapis.com/CustomClass"
+    }
+  ];
+
+  // Required. The ID to use for the custom class, which will become the final
+  // component of the custom class' resource name.
+  //
+  // This value should restrict to letters, numbers, and hyphens, with the first
+  // character a letter, the last a letter or a number, and be 4-63 characters.
+  string custom_class_id = 2 [(google.api.field_behavior) = REQUIRED];
+
+  // Required. The custom class to create.
+  CustomClass custom_class = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Message sent by the client for the `UpdateCustomClass` method.
+message UpdateCustomClassRequest {
+  // Required. The custom class to update.
+  //
+  // The custom class's `name` field is used to identify the custom class to be
+  // updated. Format:
+  //
+  // `projects/{project}/locations/{location}/customClasses/{custom_class}`
+  //
+  // Speech-to-Text supports three locations: `global`, `us` (US North America),
+  // and `eu` (Europe). If you are calling the `speech.googleapis.com`
+  // endpoint, use the `global` location. To specify a region, use a
+  // [regional endpoint](https://cloud.google.com/speech-to-text/docs/endpoints)
+  // with matching `us` or `eu` location value.
+  CustomClass custom_class = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// Message sent by the client for the `GetCustomClass` method.
+message GetCustomClassRequest {
+  // Required. The name of the custom class to retrieve. Format:
+  //
+  // `projects/{project}/locations/{location}/customClasses/{custom_class}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/CustomClass"
+    }
+  ];
+}
+
+// Message sent by the client for the `ListCustomClasses` method.
+message ListCustomClassesRequest {
+  // Required. The parent, which owns this collection of custom classes. Format:
+  //
+  // `projects/{project}/locations/{location}/customClasses`
+  //
+  // Speech-to-Text supports three locations: `global`, `us` (US North America),
+  // and `eu` (Europe). If you are calling the `speech.googleapis.com`
+  // endpoint, use the `global` location. To specify a region, use a
+  // [regional endpoint](https://cloud.google.com/speech-to-text/docs/endpoints)
+  // with matching `us` or `eu` location value.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "speech.googleapis.com/CustomClass"
+    }
+  ];
+
+  // The maximum number of custom classes to return. The service may return
+  // fewer than this value. If unspecified, at most 50 custom classes will be
+  // returned. The maximum value is 1000; values above 1000 will be coerced to
+  // 1000.
+  int32 page_size = 2;
+
+  // A page token, received from a previous `ListCustomClass` call.
+  // Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to `ListCustomClass` must
+  // match the call that provided the page token.
+  string page_token = 3;
+}
+
+// Message returned to the client by the `ListCustomClasses` method.
+message ListCustomClassesResponse {
+  // The custom classes.
+  repeated CustomClass custom_classes = 1;
+
+  // A token, which can be sent as `page_token` to retrieve the next page.
+  // If this field is omitted, there are no subsequent pages.
+  string next_page_token = 2;
+}
+
+// Message sent by the client for the `DeleteCustomClass` method.
+message DeleteCustomClassRequest {
+  // Required. The name of the custom class to delete. Format:
+  //
+  // `projects/{project}/locations/{location}/customClasses/{custom_class}`
+  //
+  // Speech-to-Text supports three locations: `global`, `us` (US North America),
+  // and `eu` (Europe). If you are calling the `speech.googleapis.com`
+  // endpoint, use the `global` location. To specify a region, use a
+  // [regional endpoint](https://cloud.google.com/speech-to-text/docs/endpoints)
+  // with matching `us` or `eu` location value.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/CustomClass"
+    }
+  ];
+}

@@ -1,0 +1,36 @@
+import { Writer } from './Writer';
+import type { IReader, IReaderResettable } from './types';
+import { Reader } from './Reader';
+export declare class StreamingReader implements IReader, IReaderResettable {
+    protected readonly writer: Writer;
+    protected dx: number;
+    constructor(allocSize?: number);
+    size(): number;
+    protected assertSize(size: number): void;
+    push(uint8: Uint8Array): void;
+    consume(): void;
+    get uint8(): Uint8Array;
+    get view(): DataView;
+    get x(): number;
+    set x(x: number);
+    peek(): number;
+    peak(): number;
+    skip(length: number): void;
+    buf(size?: number): Uint8Array;
+    subarray(start?: number, end?: number): Uint8Array;
+    slice(start?: number, end?: number): Reader;
+    cut(size?: number): Reader;
+    u8(): number;
+    i8(): number;
+    u16(): number;
+    i16(): number;
+    u32(): number;
+    i32(): number;
+    u64(): bigint;
+    i64(): bigint;
+    f32(): number;
+    f64(): number;
+    utf8(size: number): string;
+    ascii(length: number): string;
+    reset(uint8: Uint8Array): void;
+}

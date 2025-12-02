@@ -1,0 +1,503 @@
+import { sValidator } from '@hono/standard-validator';
+import { loadVendor as loadVendor$1, toJsonSchema } from '@standard-community/standard-json';
+import { loadVendor as loadVendor$2, toOpenAPISchema } from '@standard-community/standard-openapi';
+
+const uniqueSymbol = Symbol("openapi");
+const ALLOWED_METHODS = [
+  "GET",
+  "PUT",
+  "POST",
+  "DELETE",
+  "OPTIONS",
+  "HEAD",
+  "PATCH",
+  "TRACE"
+];
+const toOpenAPIPath = (path) => path.split("/").map((x) => {
+  let tmp = x;
+  if (tmp.startsWith(":")) {
+    const match = tmp.match(/^:([^{?]+)(?:{(.+)})?(\?)?$/);
+    if (match) {
+      const paramName = match[1];
+      tmp = `{${paramName}}`;
+    } else {
+      tmp = tmp.slice(1, tmp.length);
+      if (tmp.endsWith("?")) tmp = tmp.slice(0, -1);
+      tmp = `{${tmp}}`;
+    }
+  }
+  return tmp;
+}).join("/");
+const capitalize = (word) => word.charAt(0).toUpperCase() + word.slice(1);
+const generateOperationId = (route) => {
+  let operationId = route.method.toLowerCase();
+  if (route.path === "/") return `${operationId}Index`;
+  for (const segment of route.path.split("/")) {
+    if (segment.charCodeAt(0) === 123) {
+      operationId += `By${capitalize(segment.slice(1, -1))}`;
+    } else {
+      operationId += capitalize(segment);
+    }
+  }
+  return operationId;
+};
+const paramKey = (param) => "$ref" in param ? param.$ref : `${param.in} ${param.name}`;
+function mergeParameters(...params) {
+  const merged = params.flatMap((x) => x ?? []).reduce((acc, param) => {
+    acc.set(paramKey(param), param);
+    return acc;
+  }, /* @__PURE__ */ new Map());
+  return Array.from(merged.values());
+}
+const specsByPathContext = /* @__PURE__ */ new Map();
+function getPathContext(path) {
+  const context = [];
+  for (const [key, data] of specsByPathContext) {
+    if (data && path.match(key)) {
+      context.push(data);
+    }
+  }
+  return context;
+}
+function clearSpecsContext() {
+  specsByPathContext.clear();
+}
+function mergeSpecs(route, ...specs) {
+  return specs.reduce(
+    (prev, spec) => {
+      if (!spec || !prev) return prev;
+      for (const [key, value] of Object.entries(spec)) {
+        if (value == null) continue;
+        if (key in prev && (typeof value === "object" || typeof value === "function" && key === "operationId")) {
+          if (Array.isArray(value)) {
+            const values = [...prev[key] ?? [], ...value];
+            if (key === "tags") {
+              prev[key] = Array.from(new Set(values));
+            } else if (key === "parameters") {
+              prev[key] = mergeParameters(values);
+            } else {
+              prev[key] = values;
+            }
+          } else if (typeof value === "function") {
+            prev[key] = value(route);
+          } else {
+            if (key === "parameters") {
+              prev[key] = mergeParameters(prev[key], value);
+            } else {
+              prev[key] = {
+                ...prev[key],
+                ...value
+              };
+            }
+          }
+        } else {
+          prev[key] = value;
+        }
+      }
+      return prev;
+    },
+    {
+      operationId: generateOperationId(route)
+    }
+  );
+}
+function registerSchemaPath({
+  route,
+  specs,
+  paths
+}) {
+  const path = toOpenAPIPath(route.path);
+  const method = route.method.toLowerCase();
+  if (method === "all") {
+    if (!specs) return;
+    if (specsByPathContext.has(path)) {
+      const prev = specsByPathContext.get(path) ?? {};
+      specsByPathContext.set(path, mergeSpecs(route, prev, specs));
+    } else {
+      specsByPathContext.set(path, specs);
+    }
+  } else {
+    const pathContext = getPathContext(path);
+    if (!(path in paths)) {
+      paths[path] = {};
+    }
+    if (paths[path]) {
+      paths[path][method] = mergeSpecs(
+        route,
+        ...pathContext,
+        paths[path]?.[method],
+        specs
+      );
+    }
+  }
+}
+function removeExcludedPaths(paths, ctx) {
+  const { exclude, excludeStaticFile } = ctx.options;
+  const newPaths = {};
+  const _exclude = Array.isArray(exclude) ? exclude : [exclude];
+  for (const [key, value] of Object.entries(paths)) {
+    if (value == null) continue;
+    const isExplicitlyExcluded = _exclude.some((x) => {
+      if (typeof x === "string") return key === x;
+      return x.test(key);
+    });
+    if (isExplicitlyExcluded) continue;
+    const isWildcardWithoutParameters = key.includes("*") && !key.includes("{");
+    if (isWildcardWithoutParameters) continue;
+    if (excludeStaticFile) {
+      const hasPathParameters = key.includes("{");
+      const lastSegment = key.split("/").pop() || "";
+      const looksLikeStaticFile = lastSegment.includes(".");
+      const shouldExcludeAsStaticFile = !hasPathParameters && looksLikeStaticFile;
+      if (shouldExcludeAsStaticFile) continue;
+    }
+    for (const method of Object.keys(value)) {
+      const schema = value[method];
+      if (schema == null) continue;
+      if (key.includes("{")) {
+        if (!schema.parameters) schema.parameters = [];
+        const pathParameters = key.split("/").filter(
+          (x) => x.startsWith("{") && !schema.parameters.find(
+            (params) => params.in === "path" && params.name === x.slice(1, x.length - 1)
+          )
+        );
+        for (const param of pathParameters) {
+          const paramName = param.slice(1, param.length - 1);
+          const index = schema.parameters.findIndex(
+            (x) => {
+              if ("$ref" in x) {
+                const pos = x.$ref.split("/").pop();
+                if (pos) {
+                  const param2 = ctx.components.parameters?.[pos];
+                  if (param2 && !("$ref" in param2)) {
+                    return param2.in === "path" && param2.name === paramName;
+                  }
+                }
+                return false;
+              }
+              return x.in === "path" && x.name === paramName;
+            }
+          );
+          if (index === -1) {
+            schema.parameters.push({
+              schema: { type: "string" },
+              in: "path",
+              name: paramName,
+              required: true
+            });
+          }
+        }
+      }
+      if (!schema.responses) {
+        schema.responses = {
+          200: {}
+        };
+      }
+    }
+    newPaths[key] = value;
+  }
+  return newPaths;
+}
+
+const DEFAULT_OPTIONS = {
+  documentation: {},
+  excludeStaticFile: true,
+  exclude: [],
+  excludeMethods: ["OPTIONS"],
+  excludeTags: []
+};
+function openAPIRouteHandler(hono, options) {
+  let specs;
+  return async (c) => {
+    if (specs) return c.json(specs);
+    specs = await generateSpecs(hono, options, c);
+    return c.json(specs);
+  };
+}
+async function generateSpecs(hono, options = DEFAULT_OPTIONS, c) {
+  const ctx = {
+    components: {},
+    // @ts-expect-error
+    options: {
+      ...DEFAULT_OPTIONS,
+      ...options
+    }
+  };
+  const _documentation = ctx.options.documentation ?? {};
+  clearSpecsContext();
+  const paths = await generatePaths(hono, ctx);
+  for (const path in paths) {
+    for (const method in paths[path]) {
+      const isHidden = getHiddenValue({
+        valueOrFunc: paths[path][method]?.hide,
+        method,
+        path,
+        c
+      });
+      if (isHidden) {
+        paths[path][method] = void 0;
+      }
+    }
+  }
+  const components = mergeComponentsObjects(
+    _documentation.components,
+    ctx.components
+  );
+  return {
+    openapi: "3.1.0",
+    ..._documentation,
+    tags: _documentation.tags?.filter(
+      (tag) => !ctx.options.excludeTags?.includes(tag?.name)
+    ),
+    info: {
+      title: "Hono Documentation",
+      description: "Development documentation",
+      version: "0.0.0",
+      ..._documentation.info
+    },
+    paths: {
+      ...removeExcludedPaths(paths, ctx),
+      ..._documentation.paths
+    },
+    components
+  };
+}
+async function generatePaths(hono, ctx) {
+  const paths = {};
+  for (const route of hono.routes) {
+    const middlewareHandler = route.handler[uniqueSymbol];
+    if (!middlewareHandler) {
+      if (ctx.options.includeEmptyPaths) {
+        registerSchemaPath({
+          route,
+          paths
+        });
+      }
+      continue;
+    }
+    const routeMethod = route.method;
+    if (routeMethod !== "ALL") {
+      if (ctx.options.excludeMethods?.includes(routeMethod)) {
+        continue;
+      }
+      if (!ALLOWED_METHODS.includes(routeMethod)) {
+        continue;
+      }
+    }
+    const defaultOptionsForThisMethod = ctx.options.defaultOptions?.[routeMethod];
+    const { schema: routeSpecs, components = {} } = await getSpec(
+      middlewareHandler,
+      defaultOptionsForThisMethod
+    );
+    ctx.components = mergeComponentsObjects(ctx.components, components);
+    registerSchemaPath({
+      route,
+      specs: routeSpecs,
+      paths
+    });
+  }
+  return paths;
+}
+function getHiddenValue(options) {
+  const { valueOrFunc, c, method, path } = options;
+  if (valueOrFunc != null) {
+    if (typeof valueOrFunc === "boolean") {
+      return valueOrFunc;
+    }
+    if (typeof valueOrFunc === "function") {
+      return valueOrFunc({ c, method, path });
+    }
+  }
+  return false;
+}
+async function getSpec(middlewareHandler, defaultOptions) {
+  if ("spec" in middlewareHandler) {
+    let components = {};
+    const tmp = {
+      ...defaultOptions,
+      ...middlewareHandler.spec,
+      responses: {
+        ...defaultOptions?.responses,
+        ...middlewareHandler.spec.responses
+      }
+    };
+    if (tmp.responses) {
+      for (const key of Object.keys(tmp.responses)) {
+        const response = tmp.responses[key];
+        if (!response || !("content" in response)) continue;
+        for (const contentKey of Object.keys(response.content ?? {})) {
+          const raw = response.content?.[contentKey];
+          if (!raw) continue;
+          if (raw.schema && "toOpenAPISchema" in raw.schema) {
+            const result2 = await raw.schema.toOpenAPISchema();
+            raw.schema = result2.schema;
+            if (result2.components) {
+              components = mergeComponentsObjects(
+                components,
+                result2.components
+              );
+            }
+          }
+        }
+      }
+    }
+    return { schema: tmp, components };
+  }
+  const result = await middlewareHandler.toOpenAPISchema();
+  const docs = defaultOptions ?? {};
+  if (middlewareHandler.target === "form" || middlewareHandler.target === "json") {
+    const media = middlewareHandler.options?.media ?? middlewareHandler.target === "json" ? "application/json" : "multipart/form-data";
+    if (!docs.requestBody || !("content" in docs.requestBody) || !docs.requestBody.content) {
+      docs.requestBody = {
+        content: {
+          [media]: {
+            schema: result.schema
+          }
+        }
+      };
+    } else {
+      docs.requestBody.content[media] = {
+        schema: result.schema
+      };
+    }
+  } else {
+    let parameters = [];
+    if ("$ref" in result.schema) {
+      const ref = result.schema.$ref;
+      const pos = ref.split("/").pop();
+      if (pos && result.components?.schemas?.[pos]) {
+        const schema = result.components.schemas[pos];
+        const newParameters = generateParameters(
+          middlewareHandler.target,
+          schema
+        )[0];
+        if (!result.components.parameters) {
+          result.components.parameters = {};
+        }
+        result.components.parameters[pos] = newParameters;
+        delete result.components.schemas[pos];
+        parameters.push({
+          $ref: `#/components/parameters/${pos}`
+        });
+      }
+    } else {
+      parameters = generateParameters(middlewareHandler.target, result.schema);
+    }
+    docs.parameters = parameters;
+  }
+  return { schema: docs, components: result.components };
+}
+function generateParameters(target, schema) {
+  const parameters = [];
+  for (const [key, value] of Object.entries(schema.properties ?? {})) {
+    const def = {
+      in: target === "param" ? "path" : target,
+      name: key,
+      // @ts-expect-error
+      schema: value
+    };
+    const isRequired = schema.required?.includes(key);
+    if (isRequired) {
+      def.required = true;
+    }
+    if (def.schema && "description" in def.schema && def.schema.description) {
+      def.description = def.schema.description;
+      def.schema.description = void 0;
+    }
+    parameters.push(def);
+  }
+  return parameters;
+}
+function mergeComponentsObjects(...components) {
+  return components.reduce(
+    (prev, component, index) => {
+      if (component == null || index === 0) return prev;
+      if (prev.schemas && Object.keys(prev.schemas).length > 0 || component.schemas && Object.keys(component.schemas).length > 0) {
+        prev.schemas = {
+          ...prev.schemas,
+          ...component.schemas
+        };
+      }
+      if (prev.parameters && Object.keys(prev.parameters).length > 0 || component.parameters && Object.keys(component.parameters).length > 0) {
+        prev.parameters = {
+          ...prev.parameters,
+          ...component.parameters
+        };
+      }
+      return prev;
+    },
+    components[0] ?? {}
+  );
+}
+
+function loadVendor(vendor, fn) {
+  if (fn.toJSONSchema) {
+    loadVendor$1(vendor, fn.toJSONSchema);
+  }
+  if (fn.toOpenAPISchema) {
+    loadVendor$2(vendor, fn.toOpenAPISchema);
+  }
+}
+function resolver(schema, userDefinedOptions) {
+  return {
+    vendor: schema["~standard"].vendor,
+    validate: schema["~standard"].validate,
+    toJSONSchema: (customOptions) => toJsonSchema(schema, { ...userDefinedOptions, ...customOptions }),
+    toOpenAPISchema: (customOptions) => toOpenAPISchema(schema, { ...userDefinedOptions, ...customOptions })
+  };
+}
+function validator(target, schema, hook, options) {
+  const middleware = sValidator(target, schema, hook);
+  return Object.assign(middleware, {
+    [uniqueSymbol]: {
+      target,
+      ...resolver(schema, options),
+      options
+    }
+  });
+}
+function describeRoute(spec) {
+  const middleware = async (_c, next) => {
+    await next();
+  };
+  return Object.assign(middleware, {
+    [uniqueSymbol]: {
+      spec
+    }
+  });
+}
+function describeResponse(handler, responses, options) {
+  const _responses = Object.entries(responses).reduce(
+    (acc, [statusCode, response]) => {
+      if (response.content) {
+        const content = Object.entries(response.content).reduce(
+          (contentAcc, [mediaType, media]) => {
+            if (media.vSchema) {
+              const { vSchema, ...rest } = media;
+              contentAcc[mediaType] = {
+                ...rest,
+                schema: resolver(vSchema, options)
+              };
+            } else {
+              contentAcc[mediaType] = media;
+            }
+            return contentAcc;
+          },
+          {}
+        );
+        acc[statusCode] = { ...response, content };
+      } else {
+        acc[statusCode] = response;
+      }
+      return acc;
+    },
+    {}
+  );
+  return Object.assign(handler, {
+    [uniqueSymbol]: {
+      spec: { responses: _responses }
+    }
+  });
+}
+
+export { ALLOWED_METHODS, clearSpecsContext, describeResponse, describeRoute, generateSpecs, loadVendor, openAPIRouteHandler, registerSchemaPath, removeExcludedPaths, resolver, uniqueSymbol, validator };

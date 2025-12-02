@@ -1,0 +1,67 @@
+{
+  "name": "openai-realtime-api",
+  "version": "1.0.8",
+  "requiresBuild": false,
+  "files": {
+    "license": {
+      "checkedAt": 1764662928548,
+      "integrity": "sha512-Nc4e5tSqat9M0v2tktC1d49HXHGAqkFcNju403Bj0eyau/A/zs8ITxahrB3nB568mp9x3mYQRhDBY+PK8NjPOw==",
+      "mode": 420,
+      "size": 1071
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662928549,
+      "integrity": "sha512-NRXZUifIfpmEtu4Zv/eqZs4TlqNri0bx3qsVDzvO9qnISk+k+NWFyDI6lErKwU7a6zHLoGJc6wt6UtOqwPIiWw==",
+      "mode": 420,
+      "size": 32066
+    },
+    "dist/node/index.js": {
+      "checkedAt": 1764662928552,
+      "integrity": "sha512-CK4vwrs4FDq30vHHEFEKtsvPxn+X4UiMdlKk4Cqj8F8bCn1HaBOkrzmFVypreKeVioJNBCQDHBQF2NbfaGXNHg==",
+      "mode": 420,
+      "size": 3596
+    },
+    "package.json": {
+      "checkedAt": 1764662928556,
+      "integrity": "sha512-c7L/1rSx1D6MTOQbllIy+A4pDp1t41lce2MA2KozVy+4/ccY3aR9+oIpOf03zABb9iACjn0xQjpyqq3IrFYg3g==",
+      "mode": 420,
+      "size": 1472
+    },
+    "dist/index.js.map": {
+      "checkedAt": 1764662928557,
+      "integrity": "sha512-pmbO0oYr85+aayeJaEnK0mGKrBHd9IEIMfATUpRM1NPeim/Bpd8BlJTfZPLvW+so2mnFWHWpFmKKuHJarpk19w==",
+      "mode": 420,
+      "size": 62565
+    },
+    "dist/node/index.js.map": {
+      "checkedAt": 1764662928557,
+      "integrity": "sha512-WpQlEfhYkk/5SkrcpRzv/BOMOT6mfgWfhXQEGjznjuw7mde21mUfXHesJKZ9yttnw6RtAm6h+ybZ2hHJAZY9qg==",
+      "mode": 420,
+      "size": 10834
+    },
+    "readme.md": {
+      "checkedAt": 1764662928559,
+      "integrity": "sha512-ISxkFsxgGGQU5BUvLC1Q829AgCrq9g2pIapM0UsoBLntI+sTVwAKfDxphftxSqPcsrTPP3zcuVYUBWn3rs3+gA==",
+      "mode": 420,
+      "size": 8441
+    },
+    "dist/client-mSdYPPkK.d.ts": {
+      "checkedAt": 1764662928562,
+      "integrity": "sha512-Qd9QI7YFaFXbOMRpP/mjnMPkcUehLjFysj/ti+3247h2i0XQJjkuwu4NurWHLS1+DRyjAS97isEJRog4+xxh/Q==",
+      "mode": 420,
+      "size": 42331
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662928563,
+      "integrity": "sha512-RQ/I8N+n97HpaR5VSrGdmi/3dbEPHJ33OY0Qpo+QKMRX4ECqgoThRBJJUlCp70qIyyuPxeF4F00jbEqss/xNKg==",
+      "mode": 420,
+      "size": 1855
+    },
+    "dist/node/index.d.ts": {
+      "checkedAt": 1764662928565,
+      "integrity": "sha512-gNCQW0mgZANKbgaXI6ieIvOD/ekiNMUFduqcueeZBs0HiNbrpBLS94gs2o8NNyYy/Qc+BYkCsTJOiHT3gSkHiQ==",
+      "mode": 420,
+      "size": 1199
+    }
+  }
+}

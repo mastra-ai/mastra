@@ -1,0 +1,61 @@
+{
+  "name": "@typescript-eslint/project-service",
+  "version": "8.46.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662909841,
+      "integrity": "sha512-OhByWNBANxCayp40F13QEvy2OtSHh1ynSgwmP3RYUgJ/UkCE5eaJV7pD6XiwflNLYFR8Nf+ZcKm4y4ngL1wbTQ==",
+      "mode": 420,
+      "size": 1097
+    },
+    "dist/createProjectService.js": {
+      "checkedAt": 1764662909857,
+      "integrity": "sha512-Hhg0iS4Xp6nN5Cgqa7esHogyFuiM+a5v02GxC+xM17wwk5YDJ7i+0B/7vKiEP/G09ChNPj+ht+ADFyjQIpw3cg==",
+      "mode": 420,
+      "size": 6096
+    },
+    "dist/getParsedConfigFileFromTSServer.js": {
+      "checkedAt": 1764662909862,
+      "integrity": "sha512-G0FBlyPNSaywHbeV1HJX4t3nFEiJymlld5U1GW0Rp9RZdvZ0hKQcxdXipK2r33nWxkKaG+pSnF4KS4KpYXPFKA==",
+      "mode": 420,
+      "size": 649
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662909863,
+      "integrity": "sha512-QKLLfHzLmyltc8cEP+rjJjAZzLzjINpg1sBkLu5/yDxHvj/KMo5/l5gIDqRUHJZ/Rw5ucJ8mpv4nmneKuxSfJg==",
+      "mode": 420,
+      "size": 815
+    },
+    "package.json": {
+      "checkedAt": 1764662909865,
+      "integrity": "sha512-fbJ0LNLY+vtf3gOM2TKXuW0AfH8ZrJVmF7Tc8S+TOzMT/XruNIJtc4OI31VapUn/CjPS5Uv2C4ipOQYkVZCQQQ==",
+      "mode": 420,
+      "size": 1858
+    },
+    "README.md": {
+      "checkedAt": 1764662909869,
+      "integrity": "sha512-BO6dGei+HueuMgYTytbhtCUNNcI0/lBtn1BzSxeNQzgTJVLc4gQa81tALxhKfIJB7bUvK8KOdpKUKKojVnTnFw==",
+      "mode": 420,
+      "size": 764
+    },
+    "dist/createProjectService.d.ts": {
+      "checkedAt": 1764662909871,
+      "integrity": "sha512-gndhffyiwr2YsJ/HdJkatNhhwvJBcG6a5IyWK6cZs20Qd/D+EhUxyHLHM8HdfHicv3s2L7v1NBVQkwkphWtdUw==",
+      "mode": 420,
+      "size": 2109
+    },
+    "dist/getParsedConfigFileFromTSServer.d.ts": {
+      "checkedAt": 1764662909889,
+      "integrity": "sha512-4lHVfdHCSlh3DbCm4aBH1j5HtdGsjVH/BnX/OhkakNjfI9NoYFN36DjrQ6jOqBA7rPFFqye5y3CUmet83MtWyw==",
+      "mode": 420,
+      "size": 246
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662909890,
+      "integrity": "sha512-TOS2aLkdsGrnTzAfmD76D9f1lTPKNjoDjfIGx5StpJB6Gm9rOWJgkkSgarT7ehtpTGZcnhpTsZBKIKfwp5q6pw==",
+      "mode": 420,
+      "size": 40
+    }
+  }
+}

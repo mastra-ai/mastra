@@ -1,0 +1,43 @@
+{
+  "name": "minipass",
+  "version": "5.0.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662911551,
+      "integrity": "sha512-yrAKeOY97Hb6Ek/EnRwoli1nT6GN2l/fKBkHi9ky8b8MyavXQbePYoabSAlHMJn4W6imIryW9O6SzxG1ZDRllw==",
+      "mode": 420,
+      "size": 787
+    },
+    "index.js": {
+      "checkedAt": 1764662911556,
+      "integrity": "sha512-hOQBjTng6ZJTteMSoCazHzEUbhhWX9xEDKrfvRuZrMHqxFP9PpUfq414naIaK2jTFZ6XdqmibYg/lT9IWMp1Og==",
+      "mode": 420,
+      "size": 18551
+    },
+    "package.json": {
+      "checkedAt": 1764662911556,
+      "integrity": "sha512-6vQBWqLlpwXoXt83YcCyPa+CMtcc4wxQiDKrDvRaCyEbLe70aK5PqqUuxwGjb0haPlDQNTczRSZ7kEH1haGyQg==",
+      "mode": 420,
+      "size": 1745
+    },
+    "README.md": {
+      "checkedAt": 1764662911557,
+      "integrity": "sha512-uf/BGFvQuvDl/p+6F/4ZJgIlHgq/GE+W/xmQje04ELCVQK2Km2Fz3ghaTajfH9sxA0OCTVG9sOVbsNhQ2ykUKA==",
+      "mode": 420,
+      "size": 25550
+    },
+    "index.mjs": {
+      "checkedAt": 1764662911559,
+      "integrity": "sha512-nkUZusvv9Ts54OEA0o6TNiTOXRhHpFbDiLZrdPJO0o/8ovpAJqkCtCDFmOB7iYEUbAJqO7UDIlPuH9vSo/r0/A==",
+      "mode": 420,
+      "size": 18516
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662911560,
+      "integrity": "sha512-kj4A2J5/sPI+D6W3VPl9I3bj4wlfHYIFlBlucbuNyHTe3Zo9A9x0RlreeMd7bZuvtBBy8tqeM9YDp6GYhemKvQ==",
+      "mode": 420,
+      "size": 4326
+    }
+  }
+}

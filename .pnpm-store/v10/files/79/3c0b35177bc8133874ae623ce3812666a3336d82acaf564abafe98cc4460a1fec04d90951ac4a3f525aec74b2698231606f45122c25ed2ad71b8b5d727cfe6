@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/use-is-hydrated.tsx"],
+  "sourcesContent": ["import { useSyncExternalStore } from 'use-sync-external-store/shim';\n\n/**\n * Determines whether or not the component tree has been hydrated.\n */\nexport function useIsHydrated() {\n  return useSyncExternalStore(\n    subscribe,\n    () => true,\n    () => false\n  );\n}\n\nfunction subscribe() {\n  return () => {};\n}\n"],
+  "mappings": ";AAAA,SAAS,4BAA4B;AAK9B,SAAS,gBAAgB;AAC9B,SAAO;AAAA,IACL;AAAA,IACA,MAAM;AAAA,IACN,MAAM;AAAA,EACR;AACF;AAEA,SAAS,YAAY;AACnB,SAAO,MAAM;AAAA,EAAC;AAChB;",
+  "names": []
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"event-coercer.d.ts","sourceRoot":"","sources":["../../../src/error-tracking/coercers/event-coercer.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,eAAe,EAAE,oBAAoB,EAAE,aAAa,EAAE,MAAM,UAAU,CAAA;AAG/E,qBAAa,YAAa,YAAW,oBAAoB,CAAC,KAAK,CAAC;IAC9D,KAAK,CAAC,GAAG,EAAE,OAAO,GAAG,GAAG,IAAI,KAAK;IAIjC,MAAM,CAAC,GAAG,EAAE,KAAK,EAAE,GAAG,EAAE,eAAe,GAAG,aAAa;CASxD"}

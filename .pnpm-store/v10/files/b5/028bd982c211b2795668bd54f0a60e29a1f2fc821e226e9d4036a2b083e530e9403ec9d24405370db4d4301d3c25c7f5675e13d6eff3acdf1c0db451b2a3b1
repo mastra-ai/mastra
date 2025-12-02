@@ -1,0 +1,64 @@
+"use client";
+
+// src/ui/thread-list-item.tsx
+import { forwardRef } from "react";
+import { ArchiveIcon } from "lucide-react";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import { TooltipIconButton } from "./base/tooltip-icon-button.mjs";
+import { ThreadListItemPrimitive } from "@assistant-ui/react";
+import { useThreadConfig } from "./thread-config.mjs";
+import classNames from "classnames";
+import { jsx, jsxs } from "react/jsx-runtime";
+var ThreadListItem = () => {
+  return /* @__PURE__ */ jsxs(ThreadListItemRoot, { children: [
+    /* @__PURE__ */ jsx(ThreadListItemTrigger, { children: /* @__PURE__ */ jsx(ThreadListItemTitle, {}) }),
+    /* @__PURE__ */ jsx(ThreadListItemArchive, {})
+  ] });
+};
+var ThreadListItemRoot = withDefaults(ThreadListItemPrimitive.Root, {
+  className: "aui-thread-list-item"
+});
+ThreadListItemRoot.displayName = "ThreadListItemRoot";
+var ThreadListItemTrigger = withDefaults(ThreadListItemPrimitive.Trigger, {
+  className: "aui-thread-list-item-trigger"
+});
+var ThreadListItemTitle = forwardRef(({ className, ...props }, ref) => {
+  const config = useThreadConfig();
+  const fallback = config.strings?.threadList?.item?.title?.fallback ?? "New Chat";
+  return /* @__PURE__ */ jsx(
+    "p",
+    {
+      ref,
+      className: classNames("aui-thread-list-item-title", className),
+      ...props,
+      children: /* @__PURE__ */ jsx(ThreadListItemPrimitive.Title, { fallback })
+    }
+  );
+});
+ThreadListItemTitle.displayName = "ThreadListItemTitle";
+var ThreadListItemArchive = forwardRef(({ className, ...props }, ref) => {
+  const config = useThreadConfig();
+  const tooltip = config.strings?.threadList?.item?.archive?.tooltip ?? "Archive thread";
+  return /* @__PURE__ */ jsx(ThreadListItemPrimitive.Archive, { asChild: true, children: /* @__PURE__ */ jsx(
+    TooltipIconButton,
+    {
+      ref,
+      className: classNames("aui-thread-list-item-archive", className),
+      variant: "ghost",
+      tooltip,
+      ...props,
+      children: /* @__PURE__ */ jsx(ArchiveIcon, {})
+    }
+  ) });
+});
+ThreadListItemArchive.displayName = "ThreadListItemArchive";
+var exports = {
+  Root: ThreadListItemRoot,
+  Title: ThreadListItemTitle,
+  Archive: ThreadListItemArchive
+};
+var thread_list_item_default = Object.assign(ThreadListItem, exports);
+export {
+  thread_list_item_default as default
+};
+//# sourceMappingURL=thread-list-item.mjs.map

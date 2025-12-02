@@ -1,0 +1,23 @@
+{
+  "name": "pct-encode",
+  "version": "1.0.3",
+  "description": "Percent-encode characters in strings matching a regular expression",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grncdr/pct-encode"
+  },
+  "keywords": [
+    "uri",
+    "url",
+    "pct",
+    "encode"
+  ],
+  "license": "BSD-2-Clause",
+  "devDependencies": {
+    "tape": "~2.0.0"
+  }
+}

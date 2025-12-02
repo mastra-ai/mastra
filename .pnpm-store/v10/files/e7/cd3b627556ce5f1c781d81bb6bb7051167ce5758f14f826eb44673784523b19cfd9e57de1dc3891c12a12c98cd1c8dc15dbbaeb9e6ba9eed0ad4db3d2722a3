@@ -1,0 +1,33 @@
+{
+  "author": "Stephen Sugden <me@stephensugden.com> (http://stephensugden.com)",
+  "name": "uri-template",
+  "description": "Parse and expand URI templates as defined by http://tools.ietf.org/html/rfc6570",
+  "version": "2.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/grncdr/uri-template.git"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "prepare": "make clean all",
+    "test": "make test"
+  },
+  "dependencies": {
+    "pct-encode": "~1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.0",
+    "peggy": "^1.2.0",
+    "prettier": "^2.4.1",
+    "typescript": "^4.4.4"
+  },
+  "files": [
+    "dist",
+    "lib",
+    "AUTHORS",
+    "LICENSE",
+    "README.md"
+  ],
+  "license": "MIT"
+}

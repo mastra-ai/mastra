@@ -1,0 +1,148 @@
+# Macro invocation - no arguments
+
+a!();
+b![];
+c!{}
+d::e!();
+f::g::h!{}
+
+==>
+
+SourceFile(
+  MacroInvocation(Identifier, ParenthesizedTokens),
+  MacroInvocation(Identifier, BracketedTokens),
+  MacroInvocation(Identifier, BracedTokens),
+  MacroInvocation(ScopedIdentifier(ScopeIdentifier, Identifier), ParenthesizedTokens),
+  MacroInvocation(ScopedIdentifier(ScopeIdentifier, ScopeIdentifier, Identifier), BracedTokens))
+
+
+# Macro invocation - arbitrary tokens
+
+a!(* a *);
+a!(& a &);
+a!(- a -);
+a!(b + c + +);
+a!('a'..='z');
+a!('\u{0}'..='\u{2}');
+a!('lifetime);
+
+==>
+
+SourceFile(
+  MacroInvocation(
+    Identifier,
+    ParenthesizedTokens(ArithOp, Identifier, ArithOp)),
+  MacroInvocation(
+    Identifier,
+    ParenthesizedTokens(BitOp, Identifier, BitOp)),
+  MacroInvocation(
+    Identifier,
+    ParenthesizedTokens(ArithOp, Identifier, ArithOp)),
+  MacroInvocation(
+    Identifier,
+    ParenthesizedTokens(Identifier, ArithOp, Identifier, ArithOp, ArithOp)),
+  MacroInvocation(
+    Identifier,
+    ParenthesizedTokens(Char, Char)),
+  MacroInvocation(
+    Identifier,
+    ParenthesizedTokens(Char, Char)),
+  MacroInvocation(
+    Identifier,
+    ParenthesizedTokens(Lifetime)))
+
+
+# Macro definition
+
+macro_rules! say_hello {
+    () => (
+        println!("Hello!");
+    )
+}
+
+macro_rules! four {
+    () => {1 + 3};
+}
+
+macro_rules! foo {
+    (x => $e:expr) => (println!("mode X: {}", $e));
+    (y => $e:expr) => (println!("mode Y: {}", $e))
+}
+
+macro_rules! o_O {
+    (
+      $($x:expr; [ $( $y:expr ),* ]);*
+    ) => {
+      $($($x + $e),*),*
+    }
+}
+
+macro_rules! zero_or_one {
+    ($($e:expr),?) => {
+        $($e),?
+    };
+}
+
+==>
+
+SourceFile(
+  MacroDefinition(macro_rules,
+    Identifier,
+    MacroRule(
+      ParenthesizedTokens,
+      ParenthesizedTokens(
+        Identifier,
+        ParenthesizedTokens(String)))),
+  MacroDefinition(macro_rules,
+    Identifier,
+    MacroRule(
+      ParenthesizedTokens,
+      BracedTokens(Integer, ArithOp, Integer))),
+  MacroDefinition(macro_rules,
+    Identifier,
+    MacroRule(
+      ParenthesizedTokens(
+        Identifier,
+        TokenBinding(
+          Metavariable,
+          Identifier)),
+      ParenthesizedTokens(
+        Identifier,
+        ParenthesizedTokens(
+          String,
+          Metavariable))),
+    MacroRule(
+      ParenthesizedTokens(
+        Identifier,
+        TokenBinding(
+          Metavariable,
+          Identifier)),
+      ParenthesizedTokens(
+        Identifier,
+        ParenthesizedTokens(
+          String,
+          Metavariable)))),
+  MacroDefinition(macro_rules,
+    Identifier,
+    MacroRule(
+      ParenthesizedTokens(
+        TokenRepetition(
+          TokenBinding(
+            Metavariable,
+            Identifier),
+          BracketedTokens(
+            TokenRepetition(
+              TokenBinding(
+                Metavariable,
+                Identifier))))),
+      BracedTokens(
+        TokenRepetition(
+          TokenRepetition(Metavariable, ArithOp, Metavariable))))),
+  MacroDefinition(macro_rules,
+    Identifier,
+    MacroRule(
+      ParenthesizedTokens(
+        TokenRepetition(
+          TokenBinding(Metavariable, Identifier))),
+      BracedTokens(
+        TokenRepetition(Metavariable)))))

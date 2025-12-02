@@ -1,0 +1,31 @@
+{
+  "name": "@types/bunyan",
+  "version": "1.8.11",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662914559,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662914559,
+      "integrity": "sha512-vH98arSYKvoO1scnOxYSTa+4L1YNd+ZPGQO23V75arQrlGSoiJusuiKv8PsZhqYPdy0BU5Fxan9Jme7c10QxtA==",
+      "mode": 420,
+      "size": 515
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662914563,
+      "integrity": "sha512-FJoEDF7HsPoYAp+wO8zHyCo9xKMdoFhirHvfJmQtPxGfEKC65+7tpC7KXA77NxZ2xLdEdUTCFMXkjDc2fHyV+w==",
+      "mode": 420,
+      "size": 8405
+    },
+    "package.json": {
+      "checkedAt": 1764662914565,
+      "integrity": "sha512-MSeEuRWPk0BhqjdPWbhJ0p2Y1Eb93SQLOqO15skiFutjIK7vEpXb2wRlR+iAKNkv0Q6eevNgBFKwqG6rgXOnDw==",
+      "mode": 420,
+      "size": 818
+    }
+  }
+}

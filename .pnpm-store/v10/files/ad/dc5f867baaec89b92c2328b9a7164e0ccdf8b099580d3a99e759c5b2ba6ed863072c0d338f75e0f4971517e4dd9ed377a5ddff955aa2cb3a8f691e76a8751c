@@ -1,0 +1,114 @@
+{
+  "name": "use-debounce",
+  "version": "10.0.6",
+  "description": "Debounce hook for react",
+  "source": "src/index.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.module.js",
+  "esmodule": "dist/index.mjs",
+  "umd:main": "dist/index.umd.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "module": "./dist/index.module.js",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "jest": "jest",
+    "size": "npm run build-only && size-limit",
+    "test": "jest && eslint \"src/**.ts\"",
+    "build-only": "rm -rf ./dist/*; microbundle build --entry src/index.ts --name use-debounce --tsconfig tsconfig.json",
+    "build": "npm run test && npm run build-only && size-limit",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">= 16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/xnimorz/use-debounce.git"
+  },
+  "keywords": [
+    "debounce",
+    "react-hook",
+    "react"
+  ],
+  "author": "Nik (nik@xnim.me)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/xnimorz/use-debounce/issues"
+  },
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "react": "*"
+  },
+  "homepage": "https://github.com/xnimorz/use-debounce#readme",
+  "devDependencies": {
+    "@size-limit/preset-small-lib": "^11.2.0",
+    "@testing-library/jest-dom": "^6.1.4",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.5.1",
+    "@types/jest": "^29.5.7",
+    "@types/node": "^20.8.9",
+    "@types/react": "^18.2.33",
+    "@types/react-dom": "^18.2.14",
+    "@typescript-eslint/eslint-plugin": "^6.9.1",
+    "@typescript-eslint/parser": "^6.9.1",
+    "eslint": "^8.52.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-prettier": "^5.0.1",
+    "eslint-plugin-promise": "^6.1.1",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-standard": "^4.1.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "microbundle": "^0.15.1",
+    "prettier": "^3.0.3",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "size-limit": "^10.0.1",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.2.2"
+  },
+  "resolutions": {
+    "kind-of": "6.0.3"
+  },
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "1.2 KB"
+    },
+    {
+      "path": "dist/index.module.js",
+      "limit": "1.2 KB"
+    },
+    {
+      "path": "dist/index.umd.js",
+      "limit": "1.2 KB"
+    },
+    {
+      "path": "dist/index.js",
+      "import": "{ useDebounce }",
+      "limit": "1.2 KB"
+    },
+    {
+      "path": "dist/index.js",
+      "import": "{ useDebouncedCallback }",
+      "limit": "1.2 KB"
+    },
+    {
+      "path": "dist/index.js",
+      "import": "{ useThrottledCallback }",
+      "limit": "1.2 KB"
+    }
+  ]
+}

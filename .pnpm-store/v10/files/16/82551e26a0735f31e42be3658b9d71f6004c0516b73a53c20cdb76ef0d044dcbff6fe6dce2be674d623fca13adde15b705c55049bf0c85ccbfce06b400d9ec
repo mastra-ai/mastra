@@ -1,0 +1,123 @@
+:root {
+  --error-bg: #ff000632;
+  --pre-selection-bg: var(--slate-a5);
+  --line-numbers-fg: var(--slate-a11);
+}
+html.dark {
+  --error-bg: #ff173f2d;
+  --pre-selection-bg: var(--slate-a5);
+  --line-numbers-fg: var(--slate-a11);
+}
+
+.line-highlight {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--error-bg);
+  height: 24px;
+  pointer-events: none;
+}
+
+[class*='shj-lang-'] {
+  white-space: pre;
+  border-top: 1px solid var(--border);
+  background: var(--pre-bg-color);
+  color: var(--pre-fg-color);
+  line-height: 24px;
+  box-sizing: border-box;
+  max-width: min(100%, 100vw);
+  display: block;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  position: relative;
+  padding: calc(2vw + 4px) calc(2vw + 6px) calc(2vw + 4px) calc(2vw + 6px);
+}
+[class*='shj-lang-'] * {
+  -webkit-font-smoothing: initial;
+  -moz-osx-font-smoothing: initial;
+}
+
+.shj-inline {
+  margin: 0;
+  padding: 2px 5px;
+  display: inline-block;
+  border-radius: 5px;
+}
+[class*='shj-lang-']::selection,
+[class*='shj-lang-'] ::selection {
+  background: var(--pre-selection-bg);
+}
+[class*='shj-lang-'] > div {
+  display: flex;
+  overflow: auto;
+}
+[class*='shj-lang-'] > div :last-child {
+  flex: 1;
+  outline: none;
+}
+.shj-numbers {
+  padding-left: 5px;
+  counter-reset: line;
+}
+.shj-numbers div {
+  padding-right: 5px;
+}
+.shj-numbers div:before {
+  color: var(--line-numbers-fg);
+  display: block;
+  content: counter(line);
+  opacity: 0.5;
+  text-align: right;
+  margin-right: 5px;
+  counter-increment: line;
+}
+.shj-syn-cmnt {
+  font-style: italic;
+}
+.shj-syn-err,
+.shj-syn-kwd {
+  color: var(--dt-symbol-fg-color);
+}
+.shj-syn-num {
+  color: var(--dt-number-fg-color);
+}
+.shj-syn-class {
+  color: var(--class-label-fg-color);
+}
+
+.shj-numbers,
+.shj-syn-cmnt {
+  color: var(--dt-undefined-fg-color);
+}
+.shj-syn-insert,
+.shj-syn-str {
+  color: var(--dt-string-fg-color);
+}
+.shj-syn-bool {
+  color: var(--dt-boolean-fg-color);
+}
+.shj-syn-type,
+.shj-syn-oper {
+  color: var(--braces-fg-color);
+}
+.shj-syn-section,
+.shj-syn-func {
+  color: var(--pre-fg-color);
+}
+.shj-syn-deleted,
+.shj-syn-var {
+  color: var(--brackets-fg-color);
+}
+.shj-oneline {
+  padding: 12px 10px;
+}
+.shj-multiline.shj-mode-header {
+  padding: 20px;
+}
+
+@media (min-width: 768px) {
+  [class*='shj-lang-'] {
+    border-top: none;
+    padding: 10px 12px 12px 12px;
+  }
+}

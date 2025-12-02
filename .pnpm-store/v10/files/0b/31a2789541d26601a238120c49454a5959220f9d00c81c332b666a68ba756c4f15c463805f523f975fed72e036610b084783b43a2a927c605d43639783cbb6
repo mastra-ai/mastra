@@ -1,0 +1,497 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    searchUserGroups:
+      path: /v1/workspace/groups/search
+      method: GET
+      auth: false
+      docs: >-
+        Searches for user groups in the workspace. Multiple or no groups may be
+        returned.
+      source:
+        openapi: openapi.json
+      display-name: Search user group
+      request:
+        name: SearchUserGroupsV1WorkspaceGroupsSearchGetRequest
+        query-parameters:
+          name:
+            type: string
+            docs: Name of the target group.
+      response:
+        docs: Successful Response
+        type: list<root.WorkspaceGroupByNameResponseModel>
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - query-parameters:
+            name: name
+          headers: {}
+          response:
+            body:
+              - name: My Workspace Group
+                id: '1234567890'
+                members_emails:
+                  - john.doe@example.com
+                  - jane.smith@example.com
+    deleteMemberFromUserGroup:
+      path: /v1/workspace/groups/{group_id}/members/remove
+      method: POST
+      auth: false
+      docs: >-
+        Removes a member from the specified group. This endpoint may only be
+        called by workspace administrators.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        group_id:
+          type: string
+          docs: The ID of the target group.
+      display-name: Remove member from user group
+      request:
+        name: BodyDeleteMemberFromUserGroupV1WorkspaceGroupsGroupIdMembersRemovePost
+        body:
+          properties:
+            email:
+              type: string
+              docs: The email of the target workspace member.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.DeleteWorkspaceGroupMemberResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            group_id: group_id
+          headers: {}
+          request:
+            email: email
+          response:
+            body:
+              status: ok
+    addMemberToUserGroup:
+      path: /v1/workspace/groups/{group_id}/members
+      method: POST
+      auth: false
+      docs: >-
+        Adds a member of your workspace to the specified group. This endpoint
+        may only be called by workspace administrators.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        group_id:
+          type: string
+          docs: The ID of the target group.
+      display-name: Add member to user group
+      request:
+        name: AddMemberToGroupRequest
+        body:
+          properties:
+            email:
+              type: string
+              docs: The email of the target workspace member.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddWorkspaceGroupMemberResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            group_id: group_id
+          headers: {}
+          request:
+            email: email
+          response:
+            body:
+              status: ok
+    inviteUser:
+      path: /v1/workspace/invites/add
+      method: POST
+      auth: false
+      docs: >-
+        Sends an email invitation to join your workspace to the provided email.
+        If the user doesn't have an account they will be prompted to create one.
+        If the user accepts this invite they will be added as a user to your
+        workspace and your subscription using one of your seats. This endpoint
+        may only be called by workspace administrators. If the user is already
+        in the workspace a 400 error will be returned.
+      source:
+        openapi: openapi.json
+      display-name: Invite user
+      request:
+        name: InviteUserRequest
+        body:
+          properties:
+            email:
+              type: string
+              docs: The email of the customer
+            group_ids:
+              type: optional<list<string>>
+              docs: The group ids of the user
+            workspace_permission:
+              type: >-
+                optional<BodyInviteUserV1WorkspaceInvitesAddPostWorkspacePermission>
+              docs: The workspace permission of the user
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddWorkspaceInviteResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            email: john.doe@testmail.com
+          response:
+            body:
+              status: ok
+    inviteMultipleUsers:
+      path: /v1/workspace/invites/add-bulk
+      method: POST
+      auth: false
+      docs: >-
+        Sends email invitations to join your workspace to the provided emails.
+        Requires all email addresses to be part of a verified domain. If the
+        users don't have an account they will be prompted to create one. If the
+        users accept these invites they will be added as users to your workspace
+        and your subscription using one of your seats. This endpoint may only be
+        called by workspace administrators.
+      source:
+        openapi: openapi.json
+      display-name: Invite Multiple Users
+      request:
+        name: BodyInviteMultipleUsersV1WorkspaceInvitesAddBulkPost
+        body:
+          properties:
+            emails:
+              docs: The email of the customer
+              type: list<string>
+            group_ids:
+              type: optional<list<string>>
+              docs: The group ids of the user
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddWorkspaceInviteResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            emails:
+              - emails
+          response:
+            body:
+              status: ok
+    deleteExistingInvitation:
+      path: /v1/workspace/invites
+      method: DELETE
+      auth: false
+      docs: >-
+        Invalidates an existing email invitation. The invitation will still show
+        up in the inbox it has been delivered to, but activating it to join the
+        workspace won't work. This endpoint may only be called by workspace
+        administrators.
+      source:
+        openapi: openapi.json
+      display-name: Delete invite
+      request:
+        name: BodyDeleteExistingInvitationV1WorkspaceInvitesDelete
+        body:
+          properties:
+            email:
+              type: string
+              docs: The email of the customer
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.DeleteWorkspaceInviteResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            email: john.doe@testmail.com
+          response:
+            body:
+              status: ok
+    updateMember:
+      path: /v1/workspace/members
+      method: POST
+      auth: false
+      docs: >-
+        Updates attributes of a workspace member. Apart from the email
+        identifier, all parameters will remain unchanged unless specified. This
+        endpoint may only be called by workspace administrators.
+      source:
+        openapi: openapi.json
+      display-name: Update member
+      request:
+        name: UpdateMemberRequest
+        body:
+          properties:
+            email:
+              type: string
+              docs: Email of the target user.
+            is_locked:
+              type: optional<boolean>
+              docs: Whether to lock or unlock the user account.
+            workspace_role:
+              type: optional<BodyUpdateMemberV1WorkspaceMembersPostWorkspaceRole>
+              docs: Role dictating permissions in the workspace.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.UpdateWorkspaceMemberResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            email: email
+          response:
+            body:
+              status: ok
+    deleteMember:
+      path: /v1/workspace/members
+      method: DELETE
+      auth: false
+      docs: >-
+        Deletes a workspace member. This endpoint may only be called by
+        workspace administrators.
+      source:
+        openapi: openapi.json
+      display-name: Delete Member
+      request:
+        name: BodyDeleteMemberV1WorkspaceMembersDelete
+        body:
+          properties:
+            email:
+              type: string
+              docs: Email of the target user.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.DeleteWorkspaceMemberResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            email: email
+          response:
+            body:
+              status: ok
+    getResource:
+      path: /v1/workspace/resources/{resource_id}
+      method: GET
+      auth: false
+      docs: Gets the metadata of a resource by ID.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        resource_id:
+          type: string
+          docs: The ID of the target resource.
+      display-name: Get Resource
+      request:
+        name: GetResourceV1WorkspaceResourcesResourceIdGetRequest
+        query-parameters:
+          resource_type:
+            type: root.WorkspaceResourceType
+            docs: Resource type of the target resource.
+      response:
+        docs: Successful Response
+        type: root.ResourceMetadataResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            resource_id: resource_id
+          query-parameters:
+            resource_type: voice
+          response:
+            body:
+              resource_id: 4ZUqyldxf71HqUbcP2Lc
+              resource_type: voice
+              creator_user_id: 5zavrE1kZXv2lFw9BKgEkf0B5Wqo
+              role_to_group_ids:
+                admin:
+                  - 5zavrE1kZXv2lFw9BKgEkf0B5Wqo
+                editor:
+                  - 8ruQDGM2R4w1mFbHI5aROCUjIpJZ
+                viewer:
+                  - role_to_group_ids
+              share_options:
+                - name: user@example.com
+                  id: i2YYI6huwBmcgYydAXARmQJc3pmX
+                  type: user
+                - name: mygroup
+                  id: x1AfvYKAmiqxCnbvZeNXHqqthJaC
+                  type: group
+    shareWorkspaceResource:
+      path: /v1/workspace/resources/{resource_id}/share
+      method: POST
+      auth: false
+      docs: >-
+        Grants a role on a workspace resource to a user or a group. It overrides
+        any existing role this user/service account/group/workspace api key has
+        on the resource. To target a user or service account, pass only the user
+        email. The user must be in your workspace. To target a group, pass only
+        the group id. To target a workspace api key, pass the api key id. The
+        resource will be shared with the service account associated with the api
+        key. You must have admin access to the resource to share it.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        resource_id:
+          type: string
+          docs: The ID of the target resource.
+      display-name: Share Workspace Resource
+      request:
+        name: BodyShareWorkspaceResourceV1WorkspaceResourcesResourceIdSharePost
+        body:
+          properties:
+            role:
+              type: >-
+                BodyShareWorkspaceResourceV1WorkspaceResourcesResourceIdSharePostRole
+              docs: Role to update the target principal with.
+            resource_type:
+              type: root.WorkspaceResourceType
+              docs: Resource type of the target resource.
+            user_email:
+              type: optional<string>
+              docs: The email of the user or service account.
+            group_id:
+              type: optional<string>
+              docs: >-
+                The ID of the target group. To target the permissions principals
+                have by default on this resource, use the value 'default'.
+            workspace_api_key_id:
+              type: optional<string>
+              docs: >-
+                The ID of the target workspace API key. This isn't the same as
+                the key itself that would you pass in the header for
+                authentication. Workspace admins can find this in the workspace
+                settings UI.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: unknown
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            resource_id: resource_id
+          request:
+            role: admin
+            resource_type: voice
+          response:
+            body:
+              key: value
+    unshareWorkspaceResource:
+      path: /v1/workspace/resources/{resource_id}/unshare
+      method: POST
+      auth: false
+      docs: >-
+        Removes any existing role on a workspace resource from a user, service
+        account, group or workspace api key. To target a user or service
+        account, pass only the user email. The user must be in your workspace.
+        To target a group, pass only the group id. To target a workspace api
+        key, pass the api key id. The resource will be unshared from the service
+        account associated with the api key. You must have admin access to the
+        resource to unshare it. You cannot remove permissions from the user who
+        created the resource.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        resource_id:
+          type: string
+          docs: The ID of the target resource.
+      display-name: Unshare Workspace Resource
+      request:
+        name: BodyUnshareWorkspaceResourceV1WorkspaceResourcesResourceIdUnsharePost
+        body:
+          properties:
+            resource_type:
+              type: root.WorkspaceResourceType
+              docs: Resource type of the target resource.
+            user_email:
+              type: optional<string>
+              docs: The email of the user or service account.
+            group_id:
+              type: optional<string>
+              docs: >-
+                The ID of the target group. To target the permissions principals
+                have by default on this resource, use the value 'default'.
+            workspace_api_key_id:
+              type: optional<string>
+              docs: >-
+                The ID of the target workspace API key. This isn't the same as
+                the key itself that would you pass in the header for
+                authentication. Workspace admins can find this in the workspace
+                settings UI.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: unknown
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            resource_id: resource_id
+          request:
+            resource_type: voice
+          response:
+            body:
+              key: value
+  source:
+    openapi: openapi.json
+types:
+  BodyInviteUserV1WorkspaceInvitesAddPostWorkspacePermission:
+    enum:
+      - external
+      - admin
+      - workspace_admin
+      - workspace_member
+      - support_l1
+      - support_l2
+      - moderator
+      - sales
+      - voice_mixer
+      - voice_admin
+      - convai_admin
+      - enterprise_viewer
+      - quality_check_admin
+      - workspace_migration_admin
+      - human_reviewer
+      - productions_admin
+    inline: true
+    source:
+      openapi: openapi.json
+  BodyUpdateMemberV1WorkspaceMembersPostWorkspaceRole:
+    enum:
+      - workspace_admin
+      - workspace_member
+    inline: true
+    source:
+      openapi: openapi.json
+  BodyShareWorkspaceResourceV1WorkspaceResourcesResourceIdSharePostRole:
+    enum:
+      - admin
+      - editor
+      - viewer
+    docs: Role to update the target principal with.
+    inline: true
+    source:
+      openapi: openapi.json

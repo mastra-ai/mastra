@@ -1,0 +1,1 @@
+{"version":3,"file":"identity-provider.d.ts","sourceRoot":"","sources":["../../../lib/authx/identity-provider.ts"],"names":[],"mappings":"AAAA;;GAEG;AAEH;;;;;;;;GAQG;AACH,MAAM,MAAM,aAAa,CAAC,CAAC,IAAI;IAAE,KAAK,EAAE,CAAC,CAAC;IAAC,KAAK,EAAE,MAAM,CAAA;CAAE,CAAC;AAE3D,MAAM,WAAW,gBAAgB,CAAC,CAAC;IACjC;;;OAGG;IACH,YAAY,IAAI,OAAO,CAAC,aAAa,CAAC,CAAC,CAAC,CAAC,CAAC;CAC3C"}

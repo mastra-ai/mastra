@@ -1,0 +1,57 @@
+{
+  "name": "@turbopuffer/turbopuffer",
+  "version": "0.6.17",
+  "description": "Official Typescript API client library for turbopuffer.com",
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "prepublishOnly": "npm run build",
+    "postinstall:workspaces": "npm run build",
+    "test:node": "jest --config jest_node.config.js",
+    "test:browser": "jest --config jest_jsdom.config.js",
+    "test": "npm run test:node && npm run test:browser",
+    "format": "prettier --check . --ignore-path ./.gitignore",
+    "format:fix": "prettier --check . --ignore-path ./.gitignore --write",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "homepage": "https://turbopuffer.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/turbopuffer/turbopuffer-typescript.git"
+  },
+  "browser": {
+    "./dist/httpClient/node.js": false
+  },
+  "author": "Morgan Gallant <morgan@turbopuffer.com>",
+  "license": "MIT",
+  "keywords": [
+    "turbopuffer",
+    "embeddings",
+    "vector database",
+    "semantic search"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/pako": "^2.0.3",
+    "@typescript-eslint/eslint-plugin": "^7.0.2",
+    "@typescript-eslint/parser": "^7.0.2",
+    "eslint": "^8.57.0",
+    "eslint-plugin-import": "^2.29.1",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "prettier": "^3.3.3",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.4.3"
+  },
+  "dependencies": {
+    "pako": "^2.1.0",
+    "undici": "^6.19.8"
+  }
+}

@@ -1,0 +1,24 @@
+name: api
+error-discrimination:
+  strategy: status-code
+display-name: ElevenLabs API Documentation
+environments:
+  Production:
+    urls:
+      Base: https://api.elevenlabs.io/
+      WSS: wss://api.elevenlabs.io
+  Production US:
+    urls:
+      Base: https://api.us.elevenlabs.io/
+      WSS: wss://api.elevenlabs.io
+  Production EU:
+    urls:
+      Base: https://api.eu.residency.elevenlabs.io
+      WSS: wss://api.elevenlabs.io
+default-environment: Production
+default-url: Base
+headers:
+  xi-api-key:
+    name: api-key
+    env: ELEVENLABS_API_KEY
+    type: optional<string>

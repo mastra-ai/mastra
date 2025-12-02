@@ -1,0 +1,4 @@
+import { FC } from "react";
+import { CodeHeaderProps } from "@assistant-ui/react-markdown";
+export declare const CodeHeader: FC<CodeHeaderProps>;
+//# sourceMappingURL=code-header.d.ts.map

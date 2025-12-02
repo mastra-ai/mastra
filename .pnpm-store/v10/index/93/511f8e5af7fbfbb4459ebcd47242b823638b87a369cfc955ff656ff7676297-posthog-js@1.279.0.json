@@ -1,0 +1,2923 @@
+{
+  "name": "posthog-js",
+  "version": "1.279.0",
+  "requiresBuild": false,
+  "files": {
+    "lib/src/extensions/surveys/action-matcher.js": {
+      "checkedAt": 1764662919329,
+      "integrity": "sha512-DH9sbStZhfPy8QwNKyw6bpNa82VtFopHYehd3nuqs++rdWoX9rCaLy+pnVD44frklb8CqJMrznXhab8fyF/f7g==",
+      "mode": 420,
+      "size": 10176
+    },
+    "dist/all-external-dependencies.js": {
+      "checkedAt": 1764662919330,
+      "integrity": "sha512-KC7nspMH9gYdP/IzXayIZkFo/yzLIrDBYRrlJeiDOScgnaIoESvhjbtMjyGzL8W55dxIU2qIVUjc8BTNxu9/Nw==",
+      "mode": 420,
+      "size": 223022
+    },
+    "lib/src/entrypoints/all-external-dependencies.js": {
+      "checkedAt": 1764662919337,
+      "integrity": "sha512-ygBwL5+/SfZuhTh+reBcvbIqO0PP2839zXZl/MhB3zWDFSyBzu7FA/UjmbVkjwQkEpxvmskTGryWQuW5VilB0w==",
+      "mode": 420,
+      "size": 304
+    },
+    "dist/array.full.es5.js": {
+      "checkedAt": 1764662919340,
+      "integrity": "sha512-tB39NSd0kOTnFxgdSmz+a/nvncu4u4dBjGRN1npSM2ZL645Yh6GzAH1Xw2LrOm2UuS1wsqJQ1qeo7BCb7eU59w==",
+      "mode": 420,
+      "size": 290474
+    },
+    "lib/src/entrypoints/array.full.es5.js": {
+      "checkedAt": 1764662919341,
+      "integrity": "sha512-kd8kDJBSxnDcO2hBW/vjirjLoBY01tBgj4MWi45vYdrE1HoxJ0odFiZIGZTg6/CEGkdrCNakOo7LSUj3duBgdw==",
+      "mode": 420,
+      "size": 599
+    },
+    "dist/array.full.js": {
+      "checkedAt": 1764662919342,
+      "integrity": "sha512-VPN3gJAEprptJaNBHi+yRGBSXnZMuD4fnCB0WM+O12lCigm39WOSNhVQWLaC9zSnFe8kCkNcn0r0UQ0PCDmHwg==",
+      "mode": 420,
+      "size": 358115
+    },
+    "lib/src/entrypoints/array.full.js": {
+      "checkedAt": 1764662919343,
+      "integrity": "sha512-eq4FAKeUjHy/LAKHgredp7coDjSjM2n81Mluj7bIxjL5x2fc5ADObIM5oTXUyMOxQ5n7/FjUkCVJzeMSRa1fzw==",
+      "mode": 420,
+      "size": 253
+    },
+    "dist/array.full.no-external.js": {
+      "checkedAt": 1764662919344,
+      "integrity": "sha512-ah2xvoDDk1SvcpaQ6FuqU4Jr2Jbrt7538MqafwXkiczWpIrVye1I+Nj4xxddqS0LzvR/ur8XErPAjj7ZurRF4w==",
+      "mode": 420,
+      "size": 371806
+    },
+    "lib/src/entrypoints/array.full.no-external.js": {
+      "checkedAt": 1764662919348,
+      "integrity": "sha512-RewMYBxyQkMgn0FHhePI9WRMUj0xLkKM0z2yFcERJ+mhxU9uG6tSOyyNdYCiDPl3sjFBhc6TWkFG5eSLMPyaTw==",
+      "mode": 420,
+      "size": 277
+    },
+    "dist/array.js": {
+      "checkedAt": 1764662919351,
+      "integrity": "sha512-dUNpkmdk3/6u7TQgDZn3ygxlKsfVhN5mXMb93M19Kfi1U8uRfetzUF6c6/LDDCCFidoFu9VCplvKs041Tnh6Jw==",
+      "mode": 420,
+      "size": 157344
+    },
+    "lib/src/entrypoints/array.js": {
+      "checkedAt": 1764662919354,
+      "integrity": "sha512-s99KmUUT4q33OBO1GKb8gdoPXI2Xq+A6FKaFNm+lGHlFu7Om+UF6rzyMn3hlnuOtqhE188cekNBHBhFe6elfbQ==",
+      "mode": 420,
+      "size": 180
+    },
+    "dist/array.no-external.js": {
+      "checkedAt": 1764662919356,
+      "integrity": "sha512-EhT5Llrocaywb0K6C0qh1x+qUGq6oj+uUzfNtQ6czA8dxQvl4v//RA1zT2RIbpJk2jx32RJqq7f6g4uxoqMyQw==",
+      "mode": 420,
+      "size": 169118
+    },
+    "lib/src/entrypoints/array.no-external.js": {
+      "checkedAt": 1764662919359,
+      "integrity": "sha512-lMkS17zrWlyq4hBM2FGca1O0cZ1fp+xljxITL4D+oFkyMVi9uSAkqHSSmPtBSPvvM6YQcgld/taVLbMHNSe3zQ==",
+      "mode": 420,
+      "size": 212
+    },
+    "lib/src/autocapture-utils.js": {
+      "checkedAt": 1764662919359,
+      "integrity": "sha512-iGR/6Q4L6rLBuVIv6RZi8elVT/H/49+wJ21wJJAX8sQZIZV3KsAzXugBc1VyMym3peHzA6jE3tSjU0VDakvnWw==",
+      "mode": 420,
+      "size": 25146
+    },
+    "lib/src/autocapture.js": {
+      "checkedAt": 1764662919360,
+      "integrity": "sha512-TAYrCckv13TpzDPKo7t8lHwQhN28kspR2yyuZt3qfpz1Tcjwy8XFGx2RWK0SnFI+UZLNEoAQfA+zZ8nSDO73jQ==",
+      "mode": 420,
+      "size": 17195
+    },
+    "lib/src/customizations/before-send.js": {
+      "checkedAt": 1764662919361,
+      "integrity": "sha512-7ZJ3ntn191mGfeWhV0/4kcldoEka//hCP19te/zo5beZrbDTXsSbco8zQlNY6lxSLUlM7Ud5tZDXiFuO+vHLzg==",
+      "mode": 420,
+      "size": 4257
+    },
+    "lib/src/utils/blocked-uas.js": {
+      "checkedAt": 1764662919363,
+      "integrity": "sha512-naJEHSGLkYkbozcEsLR4zpvr5x0tMPcNBH35rcber2OtdWevZKwPV8dPE8tHe4nUPfscBxYmad4ylZChRV6ksw==",
+      "mode": 420,
+      "size": 4564
+    },
+    "lib/src/config.js": {
+      "checkedAt": 1764662919367,
+      "integrity": "sha512-+pN0r+x3S0Du89zltNKqyi3QmK2dYtuKcX+HQuNAf3QTEy9TTD2P171MRYCi0O6jefnE2ZjP4WT1Laljbwf3SQ==",
+      "mode": 420,
+      "size": 523
+    },
+    "lib/src/extensions/replay/external/config.js": {
+      "checkedAt": 1764662919368,
+      "integrity": "sha512-U9I4qolc+1e9b2iIqOPaqzfwqDWMSMqUGnxQEdeJg0RJFhtnSGUeN7MQ0MS3rw85TUqFKuLojBLIQKrgEI/yvQ==",
+      "mode": 420,
+      "size": 10555
+    },
+    "lib/src/consent.js": {
+      "checkedAt": 1764662919368,
+      "integrity": "sha512-cg6SYTVcLvqa46abc9HC230YylpRSDrvn9/liPFmnxDPY1Xa3K/Qr/Lq/DrC6wFre7q+MJWHsHORKuvV3jJ/lg==",
+      "mode": 420,
+      "size": 5910
+    },
+    "lib/src/constants.js": {
+      "checkedAt": 1764662919369,
+      "integrity": "sha512-c215irjyaYVxT02CnRVSROtzFGF+Gsd1ZJ18U0OQu7OCzGPlNPjCIMJxo0Qst4AU3DP7sT6CcOHgoYdmD+EtDQ==",
+      "mode": 420,
+      "size": 6881
+    },
+    "dist/crisp-chat-integration.js": {
+      "checkedAt": 1764662919369,
+      "integrity": "sha512-J8GQ4/TOfXSbmxjVn8g7SWjHuj6NAFEqbPo9+/DKf/wJAut30FDZnM0oQxvRSo9jym74FEuQ831g6bu8gbXHTA==",
+      "mode": 420,
+      "size": 1966
+    },
+    "lib/src/entrypoints/crisp-chat-integration.js": {
+      "checkedAt": 1764662919371,
+      "integrity": "sha512-k77KTMxO15ycU0yCQPlwvmsPOTdIKaDk2hfdA/13p05wtq7UhWoEojJA2JFjJp4q9FsxUFjUMOpYhhgc4lUELQ==",
+      "mode": 420,
+      "size": 2264
+    },
+    "dist/customizations.full.js": {
+      "checkedAt": 1764662919372,
+      "integrity": "sha512-A3K5GDjiVqI/YVJsCnwYBSQdZTsOtBmVcIGab+7jODipqYXOkEI2Zu46T3mILsYXt7TFNRKDIcuw6vK75mFufw==",
+      "mode": 420,
+      "size": 19132
+    },
+    "lib/src/entrypoints/customizations.full.js": {
+      "checkedAt": 1764662919372,
+      "integrity": "sha512-xqc4NrY94WQfE2/wmQJ+Ts+eX52p4kLMKrni6DWA0haGEids5YJU3hZYocYTtIBYzwmrIeXrC/A3dUKNGPJaoA==",
+      "mode": 420,
+      "size": 1905
+    },
+    "dist/dead-clicks-autocapture.js": {
+      "checkedAt": 1764662919382,
+      "integrity": "sha512-FmPmQfgBqUXWZtwsdARtDHTLl2ppKG/OL0KIZX5t41chcUWeIqYNzBx16ucdl2lqKxE8lS/EfTMBTvgIQbTUwQ==",
+      "mode": 420,
+      "size": 12574
+    },
+    "lib/src/entrypoints/dead-clicks-autocapture.js": {
+      "checkedAt": 1764662919384,
+      "integrity": "sha512-fSEo1z7mrJ+/XaNGj6zPwXYz3hq/a1bOU8leaz7G0RDlmxUFd1tlY3P42uIz9JfP/GgCjSy63HRpUBjEFprrLQ==",
+      "mode": 420,
+      "size": 13916
+    },
+    "lib/src/extensions/dead-clicks-autocapture.js": {
+      "checkedAt": 1764662919384,
+      "integrity": "sha512-kk4/BugpyYxOb/Qat8C20mTCq7U+h4dxMTifrdrHTXmDS7MXfwlsDR8IpzjqD1oN/NXql00CmVYfOl49zuhrvQ==",
+      "mode": 420,
+      "size": 4231
+    },
+    "lib/src/extensions/replay/external/denylist.js": {
+      "checkedAt": 1764662919385,
+      "integrity": "sha512-1UC+tNTuO2ljPbC5jKE1jyPJaAKXwolmTEeYM7uPiLmbrSXqCW9wOYwlV6Idb0rqXJPLbTujyOHjY8a+sIzGFw==",
+      "mode": 420,
+      "size": 1837
+    },
+    "lib/src/utils/element-utils.js": {
+      "checkedAt": 1764662919385,
+      "integrity": "sha512-+pE1w33tU1UwEhm3mUxQlgU0BNeAFiKI21I4Ia+ByYeqrkv9gjVfJu+R6nk6CqsUdyhIWJv914dBpkB0DiSMLw==",
+      "mode": 420,
+      "size": 2217
+    },
+    "lib/src/utils/encode-utils.js": {
+      "checkedAt": 1764662919386,
+      "integrity": "sha512-WsJzFWdgCk6d7B5vDj+ZDxQghJwBTG2ADOkNQhu7Z5a8gbMBxGg64MOEvBIhf/QW5+p37qeehYS1I3L/zXRi+w==",
+      "mode": 420,
+      "size": 2261
+    },
+    "lib/src/utils/event-utils.js": {
+      "checkedAt": 1764662919387,
+      "integrity": "sha512-tzv1pWyxRQuo0AvnKxDC1uLruI1te3FiNfofaRLoa+4OxTZ8H/IYJn11+SvtC98rsmZlrLpkLT46M4/WRKRg4g==",
+      "mode": 420,
+      "size": 12213
+    },
+    "dist/exception-autocapture.js": {
+      "checkedAt": 1764662919388,
+      "integrity": "sha512-2R+IvI8b/p2yHjQy1GmOYX4ppUp6qmRKgUZ4Md8PQnoseUNqg2TwkrSsfLbKvA3Cz+it7rwxfthwheKWcdTTmQ==",
+      "mode": 420,
+      "size": 11550
+    },
+    "lib/src/entrypoints/exception-autocapture.js": {
+      "checkedAt": 1764662919388,
+      "integrity": "sha512-51Sooq0SgMKABpPIhVmKvFbseVV2DlUApaELGHRcf/5xNZYjtvmdo6pLalzxPRc4V78OVK1HdiybCUQthh5Z+w==",
+      "mode": 420,
+      "size": 5192
+    },
+    "lib/src/extensions/external-integration.js": {
+      "checkedAt": 1764662919389,
+      "integrity": "sha512-/kTpYcXs9ADb2nnMAYHxQHhz3El70RmfnGYl4vhXrlY2ds0e5Jhgxth7jGXDe6QRCethKY6rlftWn2PRJYB0fQ==",
+      "mode": 420,
+      "size": 4062
+    },
+    "dist/external-scripts-loader.js": {
+      "checkedAt": 1764662919389,
+      "integrity": "sha512-tAURtjDl9MFQnlzZM+KjCr3ZLHszX+K9msRG4bRKc3t4q4jDma2V/Nz1MZrXjP0aP+j69JRC91PpPV6ZjvFOjA==",
+      "mode": 420,
+      "size": 2809
+    },
+    "lib/src/entrypoints/external-scripts-loader.js": {
+      "checkedAt": 1764662919390,
+      "integrity": "sha512-9eF9Fnre7yGuOXATnS0OoAXmGmB1jjB4FgxZ7nSzoJYv7EFTpJdwU1KXUiCjpugUdngzCdY10Hm9q1kXC44nhg==",
+      "mode": 420,
+      "size": 5267
+    },
+    "lib/src/utils/globals.js": {
+      "checkedAt": 1764662919390,
+      "integrity": "sha512-y6nbxMsGovgXkEJD1ZH28V9D/Eaf4AaUsxRyApC6tkDr/Nn9IYloehCcnV7e0XRqCziPjQiBPLMVFzuGi7ygHg==",
+      "mode": 420,
+      "size": 2080
+    },
+    "lib/src/heatmaps.js": {
+      "checkedAt": 1764662919391,
+      "integrity": "sha512-scD+0yW3up+RByJ5Fui48cPvyk/LCeJMwaOiabudrSNG/vhyBhhFSWv+/GBGeWG/Qi/yLtGw+YUzTyNkcI1Xhg==",
+      "mode": 420,
+      "size": 9148
+    },
+    "lib/src/extensions/history-autocapture.js": {
+      "checkedAt": 1764662919391,
+      "integrity": "sha512-c1T5AZaH9tRhctE42KLnH85u5sP+Gr886lK0enMIckyTgfkKe3iLJmvf/TTe1A5qcJrRcJLl+i7IJNCvJb6nRw==",
+      "mode": 420,
+      "size": 4674
+    },
+    "lib/src/customizations/index.js": {
+      "checkedAt": 1764662919392,
+      "integrity": "sha512-pBDsVNql93X3Tuwm2S+ivsavyPfjDf7DDwNKuRF1NtKMQi/x6YEij8SsY1FVngcDKo396YwGChkbfM5IIJa6dw==",
+      "mode": 420,
+      "size": 1766
+    },
+    "lib/src/extensions/exception-autocapture/index.js": {
+      "checkedAt": 1764662919393,
+      "integrity": "sha512-HjsoiC3MC6K+znqbCK4th43giQWsQs5useVYP7QT7q00qvWV+9Pg1PSWsV5Yiz3dUFgTArmbrU1q79PGaTAQMg==",
+      "mode": 420,
+      "size": 7225
+    },
+    "lib/src/extensions/web-vitals/index.js": {
+      "checkedAt": 1764662919393,
+      "integrity": "sha512-E8libRWYtSLi7O45k2uG8QNGv2yWZ2kE817eIxLBjPZCmSl1YHJH0/fpOMByDYz5cBYiK9x6SwruR9Q6CizA7w==",
+      "mode": 420,
+      "size": 12482
+    },
+    "lib/src/utils/index.js": {
+      "checkedAt": 1764662919394,
+      "integrity": "sha512-UsDMVhhKnzfEMg8N+gOR+r8yWPqNJcpn8Zet4kjDle0tSGRwAOle0eTUDKT592iM/8O2toHh04nyfo/2nQdB+A==",
+      "mode": 420,
+      "size": 11008
+    },
+    "react/dist/esm/index.js": {
+      "checkedAt": 1764662919394,
+      "integrity": "sha512-GKYRe7XjK8xsR7bcIZbHRkGw8Bh1Yu6iwrk0s478Mxfm0pITwETROKuRDlbdPCkON9P1JADBcUsdZ940BspJMA==",
+      "mode": 420,
+      "size": 15117
+    },
+    "react/dist/umd/index.js": {
+      "checkedAt": 1764662919395,
+      "integrity": "sha512-3WgaIJidtVgNwFeXXVwEkB34wKjQYBMJYeZe9vS8AenLw9EMEU35khf0nk8mqZ0u8PXEmU6RHljizzu+0g7FBw==",
+      "mode": 420,
+      "size": 17804
+    },
+    "dist/intercom-integration.js": {
+      "checkedAt": 1764662919395,
+      "integrity": "sha512-OjkPrL/OYd+LiWxTp2OUMBQe183DPe/Lq29uyh54OmoWjN3rU5lHffe5nD3YGKmh5PUEs6ZFy0DsIzmOyCQE+Q==",
+      "mode": 420,
+      "size": 2018
+    },
+    "lib/src/entrypoints/intercom-integration.js": {
+      "checkedAt": 1764662919396,
+      "integrity": "sha512-EsLlxtMigeR1tmVz36ESFJuTTs31qKRT5IDdAyjgA92x7rLxB/J+LNUl42gUVw2vl5NKLs1nVA1RUHeq/qrdwQ==",
+      "mode": 420,
+      "size": 2227
+    },
+    "lib/src/extensions/replay/external/lazy-loaded-session-recorder.js": {
+      "checkedAt": 1764662919396,
+      "integrity": "sha512-EQj746wQcsMLTp7DxyVCkDLqtvncjvFWgg7qrJlRHq93ljikYkuZ2b4Dmbrgn1W5w14MSgREW0L0AoSyYQ7zMg==",
+      "mode": 420,
+      "size": 62402
+    },
+    "dist/lazy-recorder.js": {
+      "checkedAt": 1764662919398,
+      "integrity": "sha512-/FswnaHVr2swJ9mFOkrxd0Sp6z7ciP9VTvh/DB7HmCCHk65SMPQcGUmhX3zgQyFYWGbPyK24p3IaD2S59vW7hg==",
+      "mode": 420,
+      "size": 147045
+    },
+    "lib/src/entrypoints/lazy-recorder.js": {
+      "checkedAt": 1764662919398,
+      "integrity": "sha512-Gz0LQ540s9gPsQFxrMFDjr6zVL1p7TqsTMQI3pPK+ZWptNPJNHFDqgV+GNc9aGLKFOWSGWof3UGymRKs0xKJ5Q==",
+      "mode": 420,
+      "size": 1567
+    },
+    "lib/src/utils/logger.js": {
+      "checkedAt": 1764662919399,
+      "integrity": "sha512-Uvmy5ClLLFn/okGsnmxoJg/UsAtg06AP3hhZGoDgsVFWQZYU0sL8TKh5IQ2BKtZi6CYuVxJMqDWNtKi5AgolZA==",
+      "mode": 420,
+      "size": 3768
+    },
+    "lib/src/entrypoints/main.cjs.js": {
+      "checkedAt": 1764662919399,
+      "integrity": "sha512-VO4EbaGUafXSakxS0UmG2GIN9G4xZkaNKBAFWWZ9yY9LGO5k9kd5gNCk/QHkavyKYq9E86Y8negXIalysvBtuw==",
+      "mode": 420,
+      "size": 1286
+    },
+    "dist/main.js": {
+      "checkedAt": 1764662919400,
+      "integrity": "sha512-eD2tw9KEx3ODYPew7AH5Mw23S+OYeW24kgvBIe8s33z5siER2DDRsWMvOiHVCGWgK9eVWZ6gQFaRVbyw1ulxZw==",
+      "mode": 420,
+      "size": 158444
+    },
+    "lib/src/entrypoints/module.es.js": {
+      "checkedAt": 1764662919401,
+      "integrity": "sha512-usmh2OjWG9KPDJ4CradVsdiKA4Nt513ney3Jn8uglOwBU9lYIX2oaMJ3d1uXlMWolcICRcUEC9lDqRXULPleSA==",
+      "mode": 420,
+      "size": 1164
+    },
+    "lib/src/entrypoints/module.full.es.js": {
+      "checkedAt": 1764662919402,
+      "integrity": "sha512-quqWwn0Gy7VaiqD7+EPBpjg+S8QN7ICJOVXftzeahfI8lHhJ42CibEtio52FfZEkjIUYqacdyOK9KArqGBfsDQ==",
+      "mode": 420,
+      "size": 1123
+    },
+    "dist/module.full.js": {
+      "checkedAt": 1764662919402,
+      "integrity": "sha512-3aE/+0kUE42x5lZGs6n7t/Dm8cwmin5HN3V69xkVdg6cQDp1YXyH09+tG3auRLYetSeBOlIGATpbZu/3M7U3Hw==",
+      "mode": 420,
+      "size": 358358
+    },
+    "lib/src/entrypoints/module.full.no-external.es.js": {
+      "checkedAt": 1764662919403,
+      "integrity": "sha512-nz+cRUyf0PGWh0IZ6EFLCTUfPsiccKaOVrFUxdofXz8aAsnPCRaycq49aCesBAHprxACLVYgQnjxgg5K0qnO2w==",
+      "mode": 420,
+      "size": 1183
+    },
+    "dist/module.full.no-external.js": {
+      "checkedAt": 1764662919404,
+      "integrity": "sha512-ApmI5LEQnkFS7FYQMD+NCYl8nukpXY/9AhKgb8TSsvWL2aGPVmLFi6cndenWSxlNJ+4KWsCLuo16a1syYJapUw==",
+      "mode": 420,
+      "size": 372049
+    },
+    "dist/module.js": {
+      "checkedAt": 1764662919405,
+      "integrity": "sha512-PlT5Vrdjp4In5YpehUt1gEi/Z4zjJ9J/6FousQFpHBspMD+KZ1BU5F4t/X4NRj2zLBWYTCf03VwbRm6GtaRvdA==",
+      "mode": 420,
+      "size": 158308
+    },
+    "lib/src/entrypoints/module.no-external.es.js": {
+      "checkedAt": 1764662919406,
+      "integrity": "sha512-6UlOzTNpUnyP+jMNv9M2lGQ9BCrp+6FcGTcNfzBF1r+RYkGABGkpP3gRgL/qZvEvqs5jgkzv4cZmDrENRnCpMQ==",
+      "mode": 420,
+      "size": 1261
+    },
+    "dist/module.no-external.js": {
+      "checkedAt": 1764662919407,
+      "integrity": "sha512-tXS3DDCWMDga0zOfHtfpHZZNNq7WecPZ8qbZAt+vwuvxxT1hF0YuA0Jz3M7GvPMKAXZEwP667DH+dZiUpRCE+Q==",
+      "mode": 420,
+      "size": 170082
+    },
+    "lib/src/extensions/replay/external/mutation-throttler.js": {
+      "checkedAt": 1764662919407,
+      "integrity": "sha512-WHMfWtiIHSkN+KyHgZJnk1LaS6RfP499vKoNdt5MC2Vu4iN3o0fqosVYvwbj+SADJXRmnBQiU2PmMuqW0A3uUQ==",
+      "mode": 420,
+      "size": 4985
+    },
+    "lib/src/extensions/replay/external/network-plugin.js": {
+      "checkedAt": 1764662919408,
+      "integrity": "sha512-A++NWtsEErY/2Xsm0QcdlIKRnetfqlJlW4xwE7x6EapyKqw3CFW4MdFgVTH7LcQJD4/4y8VkIE9E3rN8nZmKFg==",
+      "mode": 420,
+      "size": 29780
+    },
+    "lib/src/page-view.js": {
+      "checkedAt": 1764662919408,
+      "integrity": "sha512-DkBN4SqvBzLeOgpgVLMfCpwCKcsAAQ0k7hLIUq5sT5z5f5DWe2LfJ1qEPARgjT65BK403XHRNFZMoZDxtHyzMA==",
+      "mode": 420,
+      "size": 5702
+    },
+    "lib/src/extensions/replay/rrweb-plugins/patch.js": {
+      "checkedAt": 1764662919409,
+      "integrity": "sha512-6dCLaq2HQD7Chtx2ht0ziBobgEieKYGUYT0NOUGfNv+lNDoteZz5esuvCVsz5q4Qqd0WXTponvc01vTzUlyqrg==",
+      "mode": 420,
+      "size": 1700
+    },
+    "lib/src/posthog-core.js": {
+      "checkedAt": 1764662919411,
+      "integrity": "sha512-mnwzOsAQq0jb+fPKi4fw3uZYjzQ8hY9xqxDy0Fyb3feTDkizplckO58NlxydYyWBzR6CHLtzxGeKwwiUurBNbQ==",
+      "mode": 420,
+      "size": 131997
+    },
+    "lib/src/posthog-exceptions.js": {
+      "checkedAt": 1764662919412,
+      "integrity": "sha512-AiUezITbl7POxJwc9Woqmq3dPtmgZ5Mr9CmtNyQqQIEJUDrMQ346F3+ER4wL1FtzRGSAS+MPtOL0HE1iwIrGhA==",
+      "mode": 420,
+      "size": 6098
+    },
+    "lib/src/posthog-featureflags.js": {
+      "checkedAt": 1764662919421,
+      "integrity": "sha512-bRVMue/TpBLza6JwUha3x+KbKpBX8RX1IzG37iRw9Rr1BhdNSkwPHHtnZT90dQ3zvR/yF4AyxKieDjtYQLbBoQ==",
+      "mode": 420,
+      "size": 44985
+    },
+    "lib/src/posthog-persistence.js": {
+      "checkedAt": 1764662919422,
+      "integrity": "sha512-de3k60QGILLqbTkpw4UD0wmeWzVQ0gphVGQbgJWe0hVofcLuEzYtLSiLGKWlBhmYTbhoPRLW9ZvvCOeGNUUnFg==",
+      "mode": 420,
+      "size": 12963
+    },
+    "dist/posthog-recorder.js": {
+      "checkedAt": 1764662919423,
+      "integrity": "sha512-fN4mQ1UBqzG7FKep6/OSHtnbylQDCqWhDiBOk4uj+iF9+td+lkZNuqPBeAoSJhmqVEHp1nfuHiLnD9LDv337Mw==",
+      "mode": 420,
+      "size": 241757
+    },
+    "lib/src/entrypoints/posthog-recorder.js": {
+      "checkedAt": 1764662919425,
+      "integrity": "sha512-pPqXkzqZzGzO/f3IZPpCeTMBzYE+jykQcryw2Bnj31BG6u6mcURlB7stjZ9nRJIRoE/D92+DwOMauNUKkAE7RA==",
+      "mode": 420,
+      "size": 1763
+    },
+    "lib/src/posthog-surveys-types.js": {
+      "checkedAt": 1764662919427,
+      "integrity": "sha512-WRFp9+B1jfLPq+0ExdPQ1SN2whzSHk8WTeI1E/x5KQxIEQwM6nZfawFe71uCnOX1tsNJEbjtLqPXSRp4aeXiUA==",
+      "mode": 420,
+      "size": 4013
+    },
+    "lib/src/posthog-surveys.js": {
+      "checkedAt": 1764662919429,
+      "integrity": "sha512-G45uewqEi43ZnW1iG72Uc56I3EDEXbVfHefVyjK7ffrIldSlmGxI8VqlYphg+3ct7dqgCMI9JiPlLCInjdrTIw==",
+      "mode": 420,
+      "size": 18796
+    },
+    "lib/src/customizations/posthogReduxLogger.js": {
+      "checkedAt": 1764662919431,
+      "integrity": "sha512-2JOLi5jsY2lb5tWTaLEoTxwl8ds+oOFyBMeT7PKsN/OXtXu4pnomkw6Imh2tXK5mnzp4Y+SMN8tAPQHJH7MupQ==",
+      "mode": 420,
+      "size": 12352
+    },
+    "lib/src/utils/property-utils.js": {
+      "checkedAt": 1764662919432,
+      "integrity": "sha512-0tbGddwubMMB7RE16blR4WVqAcIUcZxWNoIuaWFVYJtF/0r7Qxx1URVQlG2iTpsEcceOo+Dlz2sBtPcoNLoXDg==",
+      "mode": 420,
+      "size": 1774
+    },
+    "lib/src/utils/prototype-utils.js": {
+      "checkedAt": 1764662919434,
+      "integrity": "sha512-GYlAlKtKAB59A8sIn2sr3qhaTX/j5UVCfVk3mtYhYJ3GzKVZQIcRCZ0ZrnpLMQu9DGbDTgMaj6vD/TSD4uCLWA==",
+      "mode": 420,
+      "size": 2378
+    },
+    "lib/src/extensions/rageclick.js": {
+      "checkedAt": 1764662919435,
+      "integrity": "sha512-At6mgDmmibaF5apTEHsrcobfm+OpmQAgy3NUmI960jwDxBnFTsqS6Xu9V+AFPNQ4+JlOK4/4UqtfjKJQWElwKg==",
+      "mode": 420,
+      "size": 1213
+    },
+    "lib/src/rate-limiter.js": {
+      "checkedAt": 1764662919435,
+      "integrity": "sha512-J+QdkavElua6P1EX8GOrOHdi5cvKP1poDC62IPeSUSPZuk+Yg5ibOaX82cBjhdGCbJWKabzofgUmG5CjwpWNIQ==",
+      "mode": 420,
+      "size": 4037
+    },
+    "dist/recorder-v2.js": {
+      "checkedAt": 1764662919437,
+      "integrity": "sha512-UKzDlt+yM1tAkpDCkQaJ2B9pgfM6KTiwP2mSkNsCz6pmy6zniiL6ZiBwggaTJsOT+8+Bd3o6+GyN7xZdW8M4GQ==",
+      "mode": 420,
+      "size": 113086
+    },
+    "lib/src/entrypoints/recorder-v2.js": {
+      "checkedAt": 1764662919437,
+      "integrity": "sha512-dsTGLibmBDX7m9sPXjuLiQ+nrzYOFgAoCv3BgQcuDfLvxdlIZGIbj0g8+pEHkxo8exkgqoLJ37jNb2f9HVqT4A==",
+      "mode": 420,
+      "size": 891
+    },
+    "dist/recorder.js": {
+      "checkedAt": 1764662919438,
+      "integrity": "sha512-bAz/BbCEl3ELQ5kqpGEgpWtRpOFG+45cPXiAY484XQxTLHhnKANryQQ0zAXnsc9JvWu4dyfeAztSH10t9lrqlA==",
+      "mode": 420,
+      "size": 113083
+    },
+    "lib/src/entrypoints/recorder.js": {
+      "checkedAt": 1764662919439,
+      "integrity": "sha512-oy6rBgvyNlb+zBN4XeRI5H5UiFuAdCAO5VsfH3CQwbKkOCFX3Cb7iVxPi6A9lGgzv55fHNluiQ43HIOlwShxug==",
+      "mode": 420,
+      "size": 1448
+    },
+    "lib/src/utils/regex-utils.js": {
+      "checkedAt": 1764662919440,
+      "integrity": "sha512-zVQO2PU8VGzwM69HgIj4ai33ggCHQqy9ljtnhdWdnxJLBc/rfnKAvAD/LSNzkTBC3NqTSEIwcnPE9KLrkodMrw==",
+      "mode": 420,
+      "size": 624
+    },
+    "lib/src/remote-config.js": {
+      "checkedAt": 1764662919441,
+      "integrity": "sha512-YMkRARuShcGjylor9ljz8KbYljrHicSIz6yuPeDbvoFxu6HbvBCHuYOh5VCakqGRJpL8h8kVCgQwRAlhIZWj1g==",
+      "mode": 420,
+      "size": 4535
+    },
+    "lib/src/request-queue.js": {
+      "checkedAt": 1764662919441,
+      "integrity": "sha512-KjvsSm+bQAlxlUUEHRrYF6ElSmZ0ovgMpLBCQ+HaEedgJlaMom8r+neRqyIRWXhYqCmPgTtmUPpeRd1MFVgJZw==",
+      "mode": 420,
+      "size": 5135
+    },
+    "lib/src/utils/request-router.js": {
+      "checkedAt": 1764662919442,
+      "integrity": "sha512-JAftInRNypXWSGZ29B1wSQOU33+STXrWzuMW8Kr6p3AcDiPXA1V6ady+63Ym4HEJeap52/1QV6TQFCLuT+y1tg==",
+      "mode": 420,
+      "size": 3772
+    },
+    "lib/src/utils/request-utils.js": {
+      "checkedAt": 1764662919443,
+      "integrity": "sha512-M0KAgzyhVdT0DJ22i1vpyWTBZ9wvRm9qDvkeiWK8eRYVbl2/h4aqZTC/0PK2zY9z7haH+/in6Evg/g1eHE+KUA==",
+      "mode": 420,
+      "size": 4538
+    },
+    "lib/src/request.js": {
+      "checkedAt": 1764662919443,
+      "integrity": "sha512-5VN8UP1ELZaHgxWITg+vW5XqPckPza5khYoBkxXDx7eC+0/bOWpTjGt1TAr8waG8xUe3pF2IVhlaicdDREPUBA==",
+      "mode": 420,
+      "size": 11162
+    },
+    "lib/src/retry-queue.js": {
+      "checkedAt": 1764662919444,
+      "integrity": "sha512-fMS+0LZirRRSIEwO5pfR+l5cGG17Kf248JwB40tSolbMgOrCN9fcFB5d0iBtaZznUFYH1swRcpEprK/21c6Z8Q==",
+      "mode": 420,
+      "size": 8057
+    },
+    "lib/src/extensions/replay/types/rrweb-types.js": {
+      "checkedAt": 1764662919444,
+      "integrity": "sha512-XE8VGjXlPA/0jZ5k83Kp5kynjY3CD6SHUJxL7fiTgEECkhBIEZ5SpnBLHAzpzxp11XlIJoCz+g6BAQhcWosqlQ==",
+      "mode": 420,
+      "size": 5080
+    },
+    "lib/src/extensions/replay/types/rrweb.js": {
+      "checkedAt": 1764662919445,
+      "integrity": "sha512-rn13G5LKGDNG+RyKul8anhwUQCTd5qynmQAPRclr8xbUlEGuPVQazYxFRqdI+9+WO4kGNYhsB8NLWt7sBhvhkA==",
+      "mode": 420,
+      "size": 594
+    },
+    "lib/src/extensions/sampling.js": {
+      "checkedAt": 1764662919446,
+      "integrity": "sha512-ft1Xvzhk48XZXUuBnYxi1mLbnClZeOLStKjaIQDR1u8YFtdXmPZuuM/l0Roy57geQi8X/bx44ntEzWkqansQhQ==",
+      "mode": 420,
+      "size": 2034
+    },
+    "lib/src/scroll-manager.js": {
+      "checkedAt": 1764662919446,
+      "integrity": "sha512-J9dhwlfMaC3An8WzIJp7F5162rIZyaQD1QzD2Oco32Mac3YBUArn4BN6qzjmK2NEOSys4mjOEobzhGozOjJZFw==",
+      "mode": 420,
+      "size": 5449
+    },
+    "lib/src/extensions/segment-integration.js": {
+      "checkedAt": 1764662919447,
+      "integrity": "sha512-z12wZyucqO8/HMcLFQyjc1PQK8srFWo2GDJetSpcaF1yUAp2lgSyTZxv/98SadzQWetCjOPyTjX3pvvR9eINSg==",
+      "mode": 420,
+      "size": 3437
+    },
+    "lib/src/extensions/sentry-integration.js": {
+      "checkedAt": 1764662919447,
+      "integrity": "sha512-wiquU8pOGPHsXoAhaaHiM+f1L9LngXfEaxlXa1CCPFgpKB1Hvg9mUmMBbDRI+/mHZ3/XGgbO5tGwvBNHKVEGHQ==",
+      "mode": 420,
+      "size": 5606
+    },
+    "lib/src/session-props.js": {
+      "checkedAt": 1764662919449,
+      "integrity": "sha512-HBr+UznkwVyLqaVsBZTMx0bzHBeFn51h6MZythS4BiQrzlWYDkuIyDrKSMr+YElRlEfpbtpCPNMPr4k6Ts1EqQ==",
+      "mode": 420,
+      "size": 3694
+    },
+    "lib/src/extensions/replay/session-recording.js": {
+      "checkedAt": 1764662919449,
+      "integrity": "sha512-ErtasM9x4u9cQMV8j1UklIQ77fD4JSH0tdnfmz8uoQvD0edpv87kiLt0PjQG7ZyGxit/Drs1eB7l/85CfoksqQ==",
+      "mode": 420,
+      "size": 16060
+    },
+    "lib/src/sessionid.js": {
+      "checkedAt": 1764662919450,
+      "integrity": "sha512-FwOeUPhvy/Wp2xPyHWXg++6q8Zss1ORy4vzPMI1PBNJU0QVRUK/4jFkLrsLt1Y3iyHmqfDyEeeTmMN1ZHF6VIg==",
+      "mode": 420,
+      "size": 16018
+    },
+    "lib/src/extensions/replay/external/sessionrecording-utils.js": {
+      "checkedAt": 1764662919450,
+      "integrity": "sha512-LWsfvDGemm1jZYsFBzVDwwLz2Kj/Y7C8ZGAgP4hZWP48QAZQYTG+yFE41DijB/LaURB9muFY5s8H5L5b0pYHCA==",
+      "mode": 420,
+      "size": 7690
+    },
+    "lib/src/customizations/setAllPersonProfilePropertiesAsPersonPropertiesForFlags.js": {
+      "checkedAt": 1764662919451,
+      "integrity": "sha512-7t0mHg6vZSY/9TtUx6aTvg2s13ZhH96PdqH59sAV655Gn6AygYiqe4diRI3qMTnE3bkLFs3dbJyqZm8RvY9wlQ==",
+      "mode": 420,
+      "size": 1300
+    },
+    "lib/src/utils/simple-event-emitter.js": {
+      "checkedAt": 1764662919451,
+      "integrity": "sha512-MglK/mzdzkwNyv18zbN+EaRVE95vWbH3W+0Uhw8ymbD8x365JkpO2rEmDAoNSfTqk0fzPTnjGmIW1R6vyIfCVA==",
+      "mode": 420,
+      "size": 2242
+    },
+    "lib/src/site-apps.js": {
+      "checkedAt": 1764662919452,
+      "integrity": "sha512-1lzCvcobV4swI4gomGJVRteohapmq9d3XLh76fquUxnIjyKg67xRs7TaIqQSMR7Ys6V5fNRXQdM8/NZKNBYwkg==",
+      "mode": 420,
+      "size": 13222
+    },
+    "lib/src/storage.js": {
+      "checkedAt": 1764662919453,
+      "integrity": "sha512-Qv8RasIgljFMsTJ1Vm2rhjI/vJAlT4y0u3c5zhQAoKNuZmRZBk6WZQTvOH0z7+/zePSwf4yi4aVd5LwGHD2N4A==",
+      "mode": 420,
+      "size": 13889
+    },
+    "lib/src/extensions/utils/stylesheet-loader.js": {
+      "checkedAt": 1764662919454,
+      "integrity": "sha512-TJBiy28TX18SVwg4XMfFp4ejy5NLq8U9daUJMvd5lC8IHpGteiLOHmy+RYLKQE3VHw7BlUR9O2FqEhDiohN5EQ==",
+      "mode": 420,
+      "size": 999
+    },
+    "lib/src/utils/survey-event-receiver.js": {
+      "checkedAt": 1764662919454,
+      "integrity": "sha512-46TbUHXp4XlqRwa1+U0KjPXYbtYAEJ3g92zKyO6wQe/brC0E7JRG8yU+VmsDXIrgm4A9qx5BNp5EE5Yvi2WRUw==",
+      "mode": 420,
+      "size": 11858
+    },
+    "lib/src/utils/survey-utils.js": {
+      "checkedAt": 1764662919456,
+      "integrity": "sha512-9T2Ugbs1Edy4IIIswUGEiQX/bNdgQhKlyGKgbX6Ob23ONJ9J7LwbjhpZAidLASNErgygl5RSmQh4h7shJKLZQw==",
+      "mode": 420,
+      "size": 3168
+    },
+    "lib/src/entrypoints/surveys-preview.es.js": {
+      "checkedAt": 1764662919456,
+      "integrity": "sha512-xM3wM9uLaROwK1iHE1Xe18lsWlVS/x5wHe7Pa7MYmhVgPEooJCnXNWB8YtGBg0JAR5Qj7PfGyc1oJg6EWryKyg==",
+      "mode": 420,
+      "size": 703
+    },
+    "dist/surveys-preview.js": {
+      "checkedAt": 1764662919466,
+      "integrity": "sha512-pnMHF5yVgv4o2xHLAsKY7mMsbDUxOGr4juIruYn0/p7vz1UULXbivPSs3J6mAF8lvnuT0s0ujOe7A9wgfxOahw==",
+      "mode": 420,
+      "size": 71165
+    },
+    "dist/surveys.js": {
+      "checkedAt": 1764662919467,
+      "integrity": "sha512-qee6BoWN7APpo8UOwqQAeUojY8xPxqLcG7eUBQh2Pw1RMBxaserO1MVW/nGtoAuIs+bZKE0hcb4b0m713xp4mw==",
+      "mode": 420,
+      "size": 79951
+    },
+    "lib/src/entrypoints/surveys.js": {
+      "checkedAt": 1764662919469,
+      "integrity": "sha512-5x29w81ZyEVWEsXSW0e2GU7ZSyIJ9Yub1rcZRHcnlt1WhHQpp4ulLpR3mRU2Q9c851KNVwKHBzVxXyp0xMB6/A==",
+      "mode": 420,
+      "size": 667
+    },
+    "lib/src/extensions/toolbar.js": {
+      "checkedAt": 1764662919470,
+      "integrity": "sha512-MYCbwVaOb/Uzt6XfV0GIzbWwrQ/RCQWeUOaoUBzUExdpBp2rtJSCoScgvdcGMie4o52rHFu/oY5McYiQxtEu7g==",
+      "mode": 420,
+      "size": 9913
+    },
+    "dist/tracing-headers.js": {
+      "checkedAt": 1764662919470,
+      "integrity": "sha512-par1agpp6FBDjwbehCrkuvieP43993klwA12k1OLl6UnJe2xdyMQyzN6t4u5xs+ZMRtF/F5AU99fr7G3SLJJsg==",
+      "mode": 420,
+      "size": 1842
+    },
+    "lib/src/entrypoints/tracing-headers.js": {
+      "checkedAt": 1764662919471,
+      "integrity": "sha512-I0ymbT9FAa9QGm+f+XJBtW5BU+pbtkU7Urq48vB7RxLt7l4zjNvpIGS3YTA/UytBZCQMy5/ZSsBCtOCRJhDVMQ==",
+      "mode": 420,
+      "size": 6355
+    },
+    "lib/src/extensions/tracing-headers.js": {
+      "checkedAt": 1764662919471,
+      "integrity": "sha512-nWsgzV1R0/D63CXfFsQFJU/Hn8C8AOvToKiOZYk4TcPsCwB7MBzRyq1Ok92zBgakGmtOkTwx/yz1ZdRszVoRlA==",
+      "mode": 420,
+      "size": 2780
+    },
+    "lib/src/extensions/replay/external/triggerMatching.js": {
+      "checkedAt": 1764662919472,
+      "integrity": "sha512-I0Cp+Qq8ia1k+M/C+xLxVsGCpcGNYPatawsel6jMnCAOsQkfAfX1jQ0EqFIxlhd+2eplQB+ypKvpHOeMdO0ZXQ==",
+      "mode": 420,
+      "size": 16638
+    },
+    "lib/src/utils/type-utils.js": {
+      "checkedAt": 1764662919472,
+      "integrity": "sha512-nFy7kPQmK5GZc/wZt94tKOae0Jo9DaVzFgXRBq9ChFRb6HT7iQaGhxH8Xs1huvHOJMVroRN0n3M4miAwK6mzvw==",
+      "mode": 420,
+      "size": 627
+    },
+    "lib/src/types.js": {
+      "checkedAt": 1764662919473,
+      "integrity": "sha512-qx0vPr/lOviX7bjXtDOO22GIosE8FN2F1NdZJW7zfvJOKqR+3a05pXNOoJLtVnfSqWnBS8oMydfeelGpzr6mEw==",
+      "mode": 420,
+      "size": 745
+    },
+    "lib/src/utils/user-agent-utils.js": {
+      "checkedAt": 1764662919473,
+      "integrity": "sha512-1BspdmzShZHk+jZjhbcxVEXPYYeyjzdOIJb2N6XcMzGxNEjyGPavOWm3wStqmyC/3qldvJ5xTePgU5vpIkZTBg==",
+      "mode": 420,
+      "size": 14680
+    },
+    "lib/src/uuidv7.js": {
+      "checkedAt": 1764662919474,
+      "integrity": "sha512-kEdBdbKtu5B3Z5vyU3o3uZVVUmr3TBeQ4t3c+A9hlZz5k6FTXATg2vxYivik8HbpuMGkl72PMAZFwCNEkbOSlw==",
+      "mode": 420,
+      "size": 9593
+    },
+    "lib/src/web-experiments-types.js": {
+      "checkedAt": 1764662919474,
+      "integrity": "sha512-nWcPnQDWnng3xdgcxSD67w/Ey5n66H31LDO1NJDiwvSOeLE0vnt6oNX/fS1N/UpOtpmzT9tZ0BwKLsZYBUGL8g==",
+      "mode": 420,
+      "size": 126
+    },
+    "lib/src/web-experiments.js": {
+      "checkedAt": 1764662919475,
+      "integrity": "sha512-yapQuPIEN3HfQxEKP5J2G7Ej+eKtIaKaOUTS7u0DYJEJ73vLjOLhYO6qDNpDNm0C3sHjRhqLj8YnyzBN2a33pw==",
+      "mode": 420,
+      "size": 13031
+    },
+    "dist/web-vitals.js": {
+      "checkedAt": 1764662919476,
+      "integrity": "sha512-mXDH7gvzrQFL5On7ddsZLEkT0Rg136+jPvZVEtmlxPFCMcvc2AIcznGRE16LYcp/P+UIWTyMnbqG+x1h8Lv8LQ==",
+      "mode": 420,
+      "size": 10437
+    },
+    "lib/src/entrypoints/web-vitals.js": {
+      "checkedAt": 1764662919476,
+      "integrity": "sha512-6UXb+BBIFUIRgfTymdSPpBxZD0sUAodMnHHjivQ5My+hDBnwKtlylZXJzljx4sbi+GXRXLVKZss4qGCQmspl5w==",
+      "mode": 420,
+      "size": 1044
+    },
+    "lib/package.json": {
+      "checkedAt": 1764662919476,
+      "integrity": "sha512-XQVwdGL/gi426upRPt44J5bYWLnlEcsrC0ze7CJUhBRtZhs+epUz189pfcmSWop3atxM0WUzn8tgMkaQJuaI4g==",
+      "mode": 420,
+      "size": 5991
+    },
+    "package.json": {
+      "checkedAt": 1764662919477,
+      "integrity": "sha512-JObaInv2P7ZJPhX98QnY5zfFlgBS/RS6AavvTLKcEbzqjzLxWDWnhokdtN0ChWsTixHM8HFunfbI29Fm8+Mxhw==",
+      "mode": 420,
+      "size": 5325
+    },
+    "react/package.json": {
+      "checkedAt": 1764662919477,
+      "integrity": "sha512-K69uXBYiqNJDBfJgInz5cH1THH5xHW9lwmIHYI7ihzI3irHMHqxcq2TdTud/JKmQKZv3aTHGh8LHMvMbjaQy0w==",
+      "mode": 420,
+      "size": 489
+    },
+    "lib/src/extensions/surveys/components/BottomSection.jsx": {
+      "checkedAt": 1764662919478,
+      "integrity": "sha512-Se7e5TQ+b0++Sfnyn65zUHcOw4/sPs1Bb4l8IL7CunMMgp+I0Jfq80z3z/8Nb9uLwTKjWsOSSZWHsw9XwI7G+A==",
+      "mode": 420,
+      "size": 1462
+    },
+    "lib/src/extensions/surveys/components/ConfirmationMessage.jsx": {
+      "checkedAt": 1764662919478,
+      "integrity": "sha512-O0OuRR/8/5T5fXah4SLNuF3YDYJCXIvHrb6G+8lzW7rfaPb8pLiCXa+EJ3QTiSkXeHCBm8CT9K+dsCBA/h8WUw==",
+      "mode": 420,
+      "size": 2271
+    },
+    "lib/src/extensions/surveys/icons.jsx": {
+      "checkedAt": 1764662919479,
+      "integrity": "sha512-ecegYpFGZT1qkiCaRo3OqYHug+Ahcfj/m/A+SijwZhLNulB5uZYv1nS2gg7KjcYNKyDthir4IOkHBe4tPtpNZg==",
+      "mode": 420,
+      "size": 12927
+    },
+    "lib/src/extensions/surveys/components/PostHogLogo.jsx": {
+      "checkedAt": 1764662919479,
+      "integrity": "sha512-ufdp0h1kT152JSIPDLfWGqKUT+tqCvSqeHHpCb565mC32McngWpHlESvpOrYktvQaYsB8kUvKwGkPjuXhyZ1Sg==",
+      "mode": 420,
+      "size": 387
+    },
+    "lib/src/extensions/surveys/components/QuestionHeader.jsx": {
+      "checkedAt": 1764662919479,
+      "integrity": "sha512-VELU4GbrfetigJTpqlVRaVC18EkWjxq+D1uY4Bb7LKrEli3FZQpwvwAkRJCnPnCamtvbWuj/ztgYs6nrol7mow==",
+      "mode": 420,
+      "size": 1574
+    },
+    "lib/src/extensions/surveys/components/QuestionTypes.jsx": {
+      "checkedAt": 1764662919480,
+      "integrity": "sha512-Jbm2bj2xJJV/ucnrHmHWf8T2QzRKBmtT6tgzERJA53GgjbqVHUwVnIKVwzsO9v4ja7IIFRNUUi9xtGbW5KTTQw==",
+      "mode": 420,
+      "size": 18286
+    },
+    "lib/src/extensions/surveys/surveys-extension-utils.jsx": {
+      "checkedAt": 1764662919480,
+      "integrity": "sha512-BPWx19BVmAA0JT8RsxpctqHX6tzvU23wfp1Nxn3TvQ4m/uDJ33nnzZ/YfB2BuCeE8vfCFpzngVMQtzg1QadBLQ==",
+      "mode": 420,
+      "size": 29005
+    },
+    "lib/src/extensions/surveys.jsx": {
+      "checkedAt": 1764662919481,
+      "integrity": "sha512-muSvZiuVTV28o1MlkMWLJJABIQkKBOoo/51KacurFqfQcK/XGP/M6e84ygOLnpkw6AEd6JfH7sp37r6g53/xTQ==",
+      "mode": 420,
+      "size": 55610
+    },
+    "lib/src/extensions/surveys/action-matcher.js.map": {
+      "checkedAt": 1764662919481,
+      "integrity": "sha512-ft+efcGyCNr8kKhEGmSwolcXjkLzJ1O/FmiQBz3HaQWg7/5dQSetO3jtult/GX69erDsnwLhSFoVqO/4drRx2A==",
+      "mode": 420,
+      "size": 14541
+    },
+    "dist/all-external-dependencies.js.map": {
+      "checkedAt": 1764662919482,
+      "integrity": "sha512-kGdErLOigqZgFfgpgRIeL8IvAhzCaTyAxRAAzgK2RjEKYcfrvXj03MELmprztHcMz6/LZYQCMvcDVkyhQCrGow==",
+      "mode": 420,
+      "size": 831525
+    },
+    "lib/src/entrypoints/all-external-dependencies.js.map": {
+      "checkedAt": 1764662919483,
+      "integrity": "sha512-WYPsuPW4hqEpCB2391B14fal0Y4vfFx445LsySlxL+CqO+NX4FpUI3+TzRYDiaLQ+EMgdZysA4TOg1Yz0e3exQ==",
+      "mode": 420,
+      "size": 422
+    },
+    "dist/array.full.es5.js.map": {
+      "checkedAt": 1764662919485,
+      "integrity": "sha512-rnHfVxYDxs8ULMo+XFRZFnR3cTS911998zq3G/2IJ86HRoCi4HhyuT1z3SVzDBKSwZpv0QiMVfK6NM9+yDfSWw==",
+      "mode": 420,
+      "size": 1255082
+    },
+    "lib/src/entrypoints/array.full.es5.js.map": {
+      "checkedAt": 1764662919485,
+      "integrity": "sha512-vA0CwF+JEqTPZytctgT8gym27VYyle/kzaz6oPgHY/h5EWt2BXUuSJtGc01El402IRMP77Y/AJrYRM85+EB0Pg==",
+      "mode": 420,
+      "size": 784
+    },
+    "dist/array.full.js.map": {
+      "checkedAt": 1764662919487,
+      "integrity": "sha512-kxqJkcijQfBamDHOUfiHmPR/eDzh9asosg4mUIHtJkN//mTuY/quF1VyVFfTnpb6Mfl+cQHUKLRgYDOFXzAEsg==",
+      "mode": 420,
+      "size": 1575228
+    },
+    "lib/src/entrypoints/array.full.js.map": {
+      "checkedAt": 1764662919488,
+      "integrity": "sha512-rmCTrw263sZuz2f2Sn1Q+kNW5Z+vZO/tIulYoY1BsKH64xHcQFvJY7hZCPUFOgWTgBRlMaKKamZBa80MbmGHog==",
+      "mode": 420,
+      "size": 326
+    },
+    "dist/array.full.no-external.js.map": {
+      "checkedAt": 1764662919531,
+      "integrity": "sha512-osn5Reydd2mLiJ7CknZbGfYsKHlX1PKSt2+ZukCegTrIVkixmZvk61EmqphYBKKQ9HPh8pT7Z105HWKTZMnuZA==",
+      "mode": 420,
+      "size": 1568732
+    },
+    "lib/src/entrypoints/array.full.no-external.js.map": {
+      "checkedAt": 1764662919532,
+      "integrity": "sha512-dwIE35Dk7E5l6YIH5+88ZXNEVECfKjYcW0yw4GEKgM7BZlZO4VHplO4dmdE0fou64bHwk1H6s5R6DMgo1kJRGA==",
+      "mode": 420,
+      "size": 362
+    },
+    "dist/array.js.map": {
+      "checkedAt": 1764662919538,
+      "integrity": "sha512-MYP9kldmWjp2T4t3sMMDfk4CzjFZGVLK99Nfyqk82LzrUhrdVoLRovOPXZcxCeDx2V/fLN26yHXRqeiOSh8NXw==",
+      "mode": 420,
+      "size": 927017
+    },
+    "lib/src/entrypoints/array.js.map": {
+      "checkedAt": 1764662919541,
+      "integrity": "sha512-aO9nw3T3wF4Nd8wAbR18gbjLB1nXNOfvJ5xCmfFThiXly1P/tikXmOLYi1ZcHNZ8nnR2qqdXWYi6lDkETXlJKQ==",
+      "mode": 420,
+      "size": 234
+    },
+    "dist/array.no-external.js.map": {
+      "checkedAt": 1764662919545,
+      "integrity": "sha512-4U0c1Kqrd9Jvj4YGk8Sx40JJ43pVAy4LqIJos3uKFyVpJSm5lB2I7Q3O1+1ABvCyM27HEw68Yzgx2DSFsK+Ipw==",
+      "mode": 420,
+      "size": 919984
+    },
+    "lib/src/entrypoints/array.no-external.js.map": {
+      "checkedAt": 1764662919548,
+      "integrity": "sha512-dYImxvIiVx1lYYvQoqPufmFeAcPGcsRyHgcKIiJE7eMppjglcFdRJU8mV4uuc8WTnzLKW02QEXrC3zNtVQxkCg==",
+      "mode": 420,
+      "size": 283
+    },
+    "lib/src/autocapture-utils.js.map": {
+      "checkedAt": 1764662919548,
+      "integrity": "sha512-a+2HxavFGEk+/Kbn313xMldVodZ3349jeUZvM0pRgUB6SB9QG2fCjPol+RL3SHSSQ6YLwJ9/BUPT72pkOL/Lxg==",
+      "mode": 420,
+      "size": 36054
+    },
+    "lib/src/autocapture.js.map": {
+      "checkedAt": 1764662919549,
+      "integrity": "sha512-MsARWISDHOOGJhnCFEIsBltdFahh1s59SQKuBj0ZESQaqB9XrvShsk6iNagulcGHGf12SMbdCU0/D0I22O1sHA==",
+      "mode": 420,
+      "size": 27516
+    },
+    "lib/src/customizations/before-send.js.map": {
+      "checkedAt": 1764662919549,
+      "integrity": "sha512-96hbpN4T9lKkYXtFzrcHqY3J1xiJitJ4JInqWHCSs8rKWGZk4CgDF+bNrlXQX3noeiNbxWj4HyZExzcTU1uM1Q==",
+      "mode": 420,
+      "size": 5952
+    },
+    "lib/src/utils/blocked-uas.js.map": {
+      "checkedAt": 1764662919551,
+      "integrity": "sha512-HOo6+CJpy8PXO0JgFnFN2YPCgqwxzmJu7Ug2EwzeclHogiIv3iRRE1RbsoCNZeja4UALTQm5NNJScp3iO5M2Qw==",
+      "mode": 420,
+      "size": 7399
+    },
+    "lib/src/extensions/surveys/components/BottomSection.jsx.map": {
+      "checkedAt": 1764662919552,
+      "integrity": "sha512-zO8+FCv2txhg4sQ6P6rP8Z6+tcFKjJtCoiBfh4scqaBGukEIWvhIsF2UsgrhwZtbZDivYu9HL93YvKFPLr4izQ==",
+      "mode": 420,
+      "size": 2599
+    },
+    "lib/src/config.js.map": {
+      "checkedAt": 1764662919552,
+      "integrity": "sha512-YzUtRmTslUjxjo1zguaVJjFS1yONh9d/3tCAxx9F3dgje7rs81PpA0APsxscdr/xDRh51Esf+mu4fcQ6wtZh6g==",
+      "mode": 420,
+      "size": 522
+    },
+    "lib/src/extensions/replay/external/config.js.map": {
+      "checkedAt": 1764662919555,
+      "integrity": "sha512-ay5wtf0dfHAU/O32JnQDt8G5hPPdaWBcX+Xae8UBZHFgQe/kB6O7ozKFJObXZuIrsvDdqGPFPa6NE05epqPKNQ==",
+      "mode": 420,
+      "size": 15797
+    },
+    "lib/src/extensions/surveys/components/ConfirmationMessage.jsx.map": {
+      "checkedAt": 1764662919556,
+      "integrity": "sha512-rRROQXfVyFx87XbN22sn8ZZGSz5oKg6u0A20AxHpewO+mZNk2Km1mJOB+wnq2APl8h2/FOktkOcgOxkMxAZ7Hg==",
+      "mode": 420,
+      "size": 4068
+    },
+    "lib/src/consent.js.map": {
+      "checkedAt": 1764662919556,
+      "integrity": "sha512-lIHpYyD0vc+axCxoMGF14Ygy5vl6oPYFS2XKUYpJZzwj3WxNINHxcGeLugGbOGuj43xtngzvRsfJf977UFuN0Q==",
+      "mode": 420,
+      "size": 7882
+    },
+    "lib/src/constants.js.map": {
+      "checkedAt": 1764662919557,
+      "integrity": "sha512-skoi6Vefbgf9iilXAkH4ByPG9jAyxic+VoqrU2c/6pWZY7mj+V/7IvJwYiwGWbLriiEirEHH6+BnifM/vwUksg==",
+      "mode": 420,
+      "size": 7353
+    },
+    "dist/crisp-chat-integration.js.map": {
+      "checkedAt": 1764662919558,
+      "integrity": "sha512-9sv2LKazMqiXyPQ9uRJ1hm1xSp0CKHLqxY6/TxUVj1lqWDP8jPxRX7rqi9agoRa7gqjdeskSWduOPHMbu9vwNw==",
+      "mode": 420,
+      "size": 19535
+    },
+    "lib/src/entrypoints/crisp-chat-integration.js.map": {
+      "checkedAt": 1764662919558,
+      "integrity": "sha512-HWrJQAEVaYSl6No2csz8OhaQV8B6jKUjfi/vMnuWaeDocZYuGneD6tHcMqvLL2vG+gaMh9T9M2AQ5PeRxSABWA==",
+      "mode": 420,
+      "size": 3637
+    },
+    "dist/customizations.full.js.map": {
+      "checkedAt": 1764662919559,
+      "integrity": "sha512-EJP1CBltwtnc4iLfMW04IyZr1CMCQupntTJH8+XBgScAfnsHgvVJWbsBxzrpJvVJCo2/HTWDKqSFy9LBjCpdNw==",
+      "mode": 420,
+      "size": 133394
+    },
+    "lib/src/entrypoints/customizations.full.js.map": {
+      "checkedAt": 1764662919560,
+      "integrity": "sha512-hBgMFrHgABQZ8/nuCk6abek07qF//na8CaYaxaEwBpliATPagbyDURAi43iqsW7N0+rJuOAg9IH1G93MdmY/bg==",
+      "mode": 420,
+      "size": 721
+    },
+    "dist/dead-clicks-autocapture.js.map": {
+      "checkedAt": 1764662919561,
+      "integrity": "sha512-neXzYjozSZ7GHX+FnEXRsbBTQ27PnwOg5ZeKVta8jRDAyejV2gE/S4XGs3mYGdkSVNZKW0adtZ25Ak3ltLoWrA==",
+      "mode": 420,
+      "size": 108427
+    },
+    "lib/src/entrypoints/dead-clicks-autocapture.js.map": {
+      "checkedAt": 1764662919561,
+      "integrity": "sha512-TsbRGtKUpP8FQNPK/Qg7jCtKRwjStB4eA7WHrnR7zXhMgWWLglqBC7JKqP5yR40pTC9lEk+jD1+nv/zW3GHdRA==",
+      "mode": 420,
+      "size": 19911
+    },
+    "lib/src/extensions/dead-clicks-autocapture.js.map": {
+      "checkedAt": 1764662919562,
+      "integrity": "sha512-91qPkmJ8vq2/tW/COP+eSEvjnJuwHdFq3Cb9YIfTA/dn5DCzz4cHIt4aL/AYtvKw9pT0xvisDXWZEJVzBbMiBQ==",
+      "mode": 420,
+      "size": 6095
+    },
+    "lib/src/extensions/replay/external/denylist.js.map": {
+      "checkedAt": 1764662919562,
+      "integrity": "sha512-0vtwNIbNochqopWCTm1JQQ1CCIRrHSpOHzoi5w45+M2jxi4zMpUSApO2ELkscoGzwXSgCJ5adS9623Rtz9ObeQ==",
+      "mode": 420,
+      "size": 2045
+    },
+    "lib/src/utils/element-utils.js.map": {
+      "checkedAt": 1764662919563,
+      "integrity": "sha512-qeocSDzBK9WMjFqt7Oms1haBZ3LJqYYSxbJl6oAmsjyEbJWtC/d+23q5kqI4YhzF35grYNAt7y7pm6lW8ggrug==",
+      "mode": 420,
+      "size": 3189
+    },
+    "lib/src/utils/encode-utils.js.map": {
+      "checkedAt": 1764662919564,
+      "integrity": "sha512-upXCfLy3+tZhuv3BznfGb8i1Z6+fsyDo65CwepsFhwybK/u/oPOfjz1+BbfqIVNRi4Rh/NLFXl20Q+QJOdafVg==",
+      "mode": 420,
+      "size": 5374
+    },
+    "lib/src/utils/event-utils.js.map": {
+      "checkedAt": 1764662919565,
+      "integrity": "sha512-zp0CcKGIpnefGTzpb1w8abuuSOiyPS+pepSj+wJ/LAxX0XepBT0nNbsZF/6UTN6+b1GqvuPeCkCL/QZFc+WRNQ==",
+      "mode": 420,
+      "size": 18478
+    },
+    "dist/exception-autocapture.js.map": {
+      "checkedAt": 1764662919565,
+      "integrity": "sha512-vgxmcpJgIPpBwKv6MTFJu5wSoPkTpqdTXZJkgExeB9lN31jFYFdofB0gPxV24fui8F0rFvqb8vwruBVBuRrsyg==",
+      "mode": 420,
+      "size": 72238
+    },
+    "lib/src/entrypoints/exception-autocapture.js.map": {
+      "checkedAt": 1764662919566,
+      "integrity": "sha512-rrYSGfetjhpxL/jbbXz0ll6VnA6mze3cN8jEyH9TLwqP1vKXQ7pHF+lU3Ns5awssqvxqz9XYwqY7iK0yZRY31Q==",
+      "mode": 420,
+      "size": 6548
+    },
+    "lib/src/extensions/external-integration.js.map": {
+      "checkedAt": 1764662919566,
+      "integrity": "sha512-nUDeDSBunEhUnLk2LC1uFzQkkXfjbTyhHJCchat/FS6MIgOilnMZIfqD9wFfD+zJc2EYWE5dyVWnrjShLyPglg==",
+      "mode": 420,
+      "size": 3392
+    },
+    "dist/external-scripts-loader.js.map": {
+      "checkedAt": 1764662919567,
+      "integrity": "sha512-WwUZ+NOy46EsN49KPtDKJ1qdkiPOGZn+VPIrcoPHU2VFytbdCFSCrzohxEKpLCYyytB6RdSSQpgig8nIG5O5WA==",
+      "mode": 420,
+      "size": 23688
+    },
+    "lib/src/entrypoints/external-scripts-loader.js.map": {
+      "checkedAt": 1764662919567,
+      "integrity": "sha512-hm16R9RTCR0F4qFLEQsISWL4yhB35R77eYWuJe7kIR3aKAEaGpn3EEaL1/vI6Xf16EtihA74coTGM/rQgSfNlg==",
+      "mode": 420,
+      "size": 8477
+    },
+    "lib/src/utils/globals.js.map": {
+      "checkedAt": 1764662919568,
+      "integrity": "sha512-zXtGTUMHvZvf/Bs5yATj72bja8UzfG8iilvhM2arnmWQNZjV5f8FXiM8kXS60eUeAkVtZfK7cgBUdv10JriWrg==",
+      "mode": 420,
+      "size": 10267
+    },
+    "lib/src/heatmaps.js.map": {
+      "checkedAt": 1764662919570,
+      "integrity": "sha512-T58YpsUGnRf1SYrmdSBAIvosI+wqlq9Ul1Y+urFJlSzyEBNBlFG8bK4LLw5HREt/b9NErllzYDIF+3qpENcm5Q==",
+      "mode": 420,
+      "size": 14433
+    },
+    "lib/src/extensions/history-autocapture.js.map": {
+      "checkedAt": 1764662919570,
+      "integrity": "sha512-BoP57QOnuHlt7pVb6NorE03bFwMv+GSLPo65HHq20OBP/XhE0ovqtA2oZetiRwFIn6SUXD+ynzjuhpyhM3MUHw==",
+      "mode": 420,
+      "size": 6884
+    },
+    "lib/src/extensions/surveys/icons.jsx.map": {
+      "checkedAt": 1764662919571,
+      "integrity": "sha512-BX0WoEpHCzn+PCqcOr6o3XZAbMrfX5fNwYO855rd5uq7ka8++MG+LSDD6iNmNLkj5x+5v616bv0bY2NnUYOiuA==",
+      "mode": 420,
+      "size": 16630
+    },
+    "lib/src/customizations/index.js.map": {
+      "checkedAt": 1764662919586,
+      "integrity": "sha512-kRf/rIUbHqjyf7MBG+otc+DTvzOlYH9E4aVN9VwtEjrI97dhx/1f4czbaYjb0x7GT8pC/KbKd+xDaMrqcxs6Cg==",
+      "mode": 420,
+      "size": 564
+    },
+    "lib/src/extensions/exception-autocapture/index.js.map": {
+      "checkedAt": 1764662919587,
+      "integrity": "sha512-QbjZ0tVihz/dntoF70eatxWqo3jjuGWnRpzPP0phnZoQRE8FDEAzhgGKVQhqCZNxr2wxi5TJ375p1eFE9rSG5Q==",
+      "mode": 420,
+      "size": 10254
+    },
+    "lib/src/extensions/web-vitals/index.js.map": {
+      "checkedAt": 1764662919587,
+      "integrity": "sha512-B3/dxfuhrck3fC1NKlL852Qt/9w9QgnlPi327ekOc2qPSDgp3GPvyIfsTpW93K8TkC2CqzF1JcGIBCW+Tx9usw==",
+      "mode": 420,
+      "size": 18646
+    },
+    "lib/src/utils/index.js.map": {
+      "checkedAt": 1764662919588,
+      "integrity": "sha512-GM0TMr9qBmhstTeVkNdM46pZm5DugG7djUd5BB3ycMVbSIOXieI+BtncGb93KASJD2JdUGBwaoH/6jBwgzaSCQ==",
+      "mode": 420,
+      "size": 16962
+    },
+    "react/dist/esm/index.js.map": {
+      "checkedAt": 1764662919588,
+      "integrity": "sha512-gMw507pdZxggB/OjneMD/YtXe20NRe+QWh6oO4VKl0QQK6BC3WbqQMnbWng5+nDsJfbuMIcfgbJM0UnWQTNR7A==",
+      "mode": 420,
+      "size": 35058
+    },
+    "react/dist/umd/index.js.map": {
+      "checkedAt": 1764662919589,
+      "integrity": "sha512-+jlzIIe3f6oaLJJUlWwUcZpFypouZOdSVpFbTlzv/BGuDDlQQ0E7MRVV06VSeXMZv/X0vLJ6wId61bwOTtRwVw==",
+      "mode": 420,
+      "size": 35273
+    },
+    "dist/intercom-integration.js.map": {
+      "checkedAt": 1764662919589,
+      "integrity": "sha512-VUpTHVfHNQPcnrp0QVoOq7902PFCZDGplk/dLOGXAaq3zYP1BcsiswDAJ2RGYm0560PnRhmhvB1UPbTEUekkRA==",
+      "mode": 420,
+      "size": 19517
+    },
+    "lib/src/entrypoints/intercom-integration.js.map": {
+      "checkedAt": 1764662919590,
+      "integrity": "sha512-7pn11p07XrQfMRNK9TZUFVJaNrKXieRo0yGKblBpwwLAm8E9kNIvXKLuyfKjFzO8Tkle02gaKaozrb+qseFQOw==",
+      "mode": 420,
+      "size": 3587
+    },
+    "lib/src/extensions/replay/external/lazy-loaded-session-recorder.js.map": {
+      "checkedAt": 1764662919591,
+      "integrity": "sha512-o8T6KFufdX3V/qw79HOh8wa6QIKrUR4FuxJYWUbbyg2bYJ6L9bWsBldU5z35KTVbvR7jiZmVChiLB0Fai8849w==",
+      "mode": 420,
+      "size": 89263
+    },
+    "dist/lazy-recorder.js.map": {
+      "checkedAt": 1764662919593,
+      "integrity": "sha512-H6105EhggvKZx/adRgNwJM5O1jrPlYJlliTo11CemgP40xqT0BY/JzuJYWpcRD+l8KNXNOVxBmJ1dtRiEd/nGA==",
+      "mode": 420,
+      "size": 680113
+    },
+    "lib/src/entrypoints/lazy-recorder.js.map": {
+      "checkedAt": 1764662919594,
+      "integrity": "sha512-iRm3sVhvTmmLhRqlmcKc22FAgnEyZgnt9sTCTUzdTXOvDQAXqYfBH3d73gvVfKX3MdtAwh5CfYZEuMXzvLrCxg==",
+      "mode": 420,
+      "size": 1106
+    },
+    "lib/src/utils/logger.js.map": {
+      "checkedAt": 1764662919595,
+      "integrity": "sha512-voQyG5Sb+rsY/Go9IajDgS+gslhk+nvLq1lztAGpPoQH1OxfyvEB5NQmPeLGY0ujwWASnIxu1Pb9E/VtzkUgLA==",
+      "mode": 420,
+      "size": 3700
+    },
+    "lib/src/entrypoints/main.cjs.js.map": {
+      "checkedAt": 1764662919595,
+      "integrity": "sha512-2gsTIOzMvN6io6MPiAGgLVlna/BzC0Inf7HE8NTjVs9im4g2daAAjmna5S7Wb1x/3mzNseVAkq3/eh6brqjnqg==",
+      "mode": 420,
+      "size": 576
+    },
+    "dist/main.js.map": {
+      "checkedAt": 1764662919597,
+      "integrity": "sha512-pyMyLS47RmmoK3Mmet0T3yZ1Jg4a1OdHVmxF+DUAskqj97/E7+kdZkaMIasxVzFS7UW9V8wQNzVOEPCWYdGDWw==",
+      "mode": 420,
+      "size": 927794
+    },
+    "lib/src/entrypoints/module.es.js.map": {
+      "checkedAt": 1764662919597,
+      "integrity": "sha512-FRoRSNl9WC83V+ooD5fhFabY4FpB4DA+pPpe9okGKUVCWTW0PlsLxwjqiqCIKYKX8fP3KD0sybzba2fc1M8C9A==",
+      "mode": 420,
+      "size": 377
+    },
+    "lib/src/entrypoints/module.full.es.js.map": {
+      "checkedAt": 1764662919598,
+      "integrity": "sha512-tmS5VaRHSHn1W5UvVKsthKG+RVGqlNwJjM5pHybDUTIviZK1Del393UCG2Y6UJJxyO7vi6lL43mZGYfeo+LffQ==",
+      "mode": 420,
+      "size": 365
+    },
+    "dist/module.full.js.map": {
+      "checkedAt": 1764662919602,
+      "integrity": "sha512-+mlW+uVPbD1qYUtTxnk48KyhC+0HqktwlVRTRVkujFSdvoiRmkASsIylVdtLBqtyTM/J5pn8VVfy3wbaKajXcA==",
+      "mode": 420,
+      "size": 1575278
+    },
+    "lib/src/entrypoints/module.full.no-external.es.js.map": {
+      "checkedAt": 1764662919603,
+      "integrity": "sha512-/v0bWEz50R/8CAcz3XaMs/zIwhGRCZ7uEEehXcePA6oCTIfrNyIORBG2Zmo74GoTpY+GCQcKvzzf2VH95O5FXg==",
+      "mode": 420,
+      "size": 413
+    },
+    "dist/module.full.no-external.js.map": {
+      "checkedAt": 1764662919612,
+      "integrity": "sha512-o33k/sfXwKB+0WPSyj6HIkpX2Zv+wQwfX8roBwT10cx5x2M6RUh+7JHj+e8sOO31/0wuAJnwe3/2vrQ9YtSx7A==",
+      "mode": 420,
+      "size": 1568782
+    },
+    "dist/module.js.map": {
+      "checkedAt": 1764662919613,
+      "integrity": "sha512-MdCtm9M1x/V02aZr/8hNnxdTHobxJ1I2kw50SSxLO4qEXVwn8xhAn8ADUrwfCAtPZO83yXzpn6PuLAXqZJ40EA==",
+      "mode": 420,
+      "size": 927780
+    },
+    "lib/src/entrypoints/module.no-external.es.js.map": {
+      "checkedAt": 1764662919614,
+      "integrity": "sha512-y0v48i+fOjzinpz0l6IAQhDahSK6ZypLcYM+lEuWkm5800b+hjkshbZPXysXiyM2w4bj8AsJpzDsFluzUV0SVQ==",
+      "mode": 420,
+      "size": 553
+    },
+    "dist/module.no-external.js.map": {
+      "checkedAt": 1764662919617,
+      "integrity": "sha512-GJ9JAW02m1HNSYC86lcNh/CCT57TUBZcdEOAf5ZEuJBP9qFyjFg3pWjqQdaJhuFFRhShKmX3VZQC/YiSdhLBMA==",
+      "mode": 420,
+      "size": 920747
+    },
+    "lib/src/extensions/replay/external/mutation-throttler.js.map": {
+      "checkedAt": 1764662919617,
+      "integrity": "sha512-IO3WgZPz373OcTowkqVqiISnvoAD+qz0OVbXPyGJ7ctpfC7OXJNvGuJEeZoe38pLRVZjO9+xptDPIWqc/TY4lQ==",
+      "mode": 420,
+      "size": 6688
+    },
+    "lib/src/extensions/replay/external/network-plugin.js.map": {
+      "checkedAt": 1764662919618,
+      "integrity": "sha512-aF7rSXuoIIp1Og2GJP2zqjTPFzuPoOcUwT4Te2pPNfxdtBhEh6QAT1nRC/9ipa0Es01fpNzWaChcnWgXvxCS6Q==",
+      "mode": 420,
+      "size": 43467
+    },
+    "lib/src/page-view.js.map": {
+      "checkedAt": 1764662919618,
+      "integrity": "sha512-Rnlk4Vyv11fddnv2G8sLmSrUP0F4yUKVGQDm6mNFet2vbcCgZAg07aRsf5+ThT79g/L2caBqz6I2/Bbmg3GGkA==",
+      "mode": 420,
+      "size": 9157
+    },
+    "lib/src/extensions/replay/rrweb-plugins/patch.js.map": {
+      "checkedAt": 1764662919619,
+      "integrity": "sha512-hrV4X86Gn94/D1jpfRYdhqWfcC1Vy6cdC+N3nOEKACQfKI1s+svFxLP7RbpMRal5MNXJkF0XEWhQ9faGCIXyQw==",
+      "mode": 420,
+      "size": 2665
+    },
+    "lib/src/posthog-core.js.map": {
+      "checkedAt": 1764662919620,
+      "integrity": "sha512-3N8aJ86z2V/lsMyQUla0e98W37h+k14SGMccJyW6mBXy3ibuBj/yruRrVJaG29Tt95YLnbgQzeaxPoE+B55drw==",
+      "mode": 420,
+      "size": 183193
+    },
+    "lib/src/posthog-exceptions.js.map": {
+      "checkedAt": 1764662919620,
+      "integrity": "sha512-vkWGKGRRhY0sUh9CtgbeOo45JHigov2k4HlnYFUfophUo0o7P1jf1hBlryNrKDAgrZy5vwl3Un5RS78Oe3LBIw==",
+      "mode": 420,
+      "size": 9421
+    },
+    "lib/src/posthog-featureflags.js.map": {
+      "checkedAt": 1764662919621,
+      "integrity": "sha512-WvN2O4NRa0fY1TtcXLFLLzDgymTsG5wb4Iku65ryyDa9SDqQy28tpF0PNKOnOV/LkHD1mlWkVmXSyAhV9GgG3w==",
+      "mode": 420,
+      "size": 63469
+    },
+    "lib/src/posthog-persistence.js.map": {
+      "checkedAt": 1764662919621,
+      "integrity": "sha512-Kn/3IEcIk3oqkfLl7tU2xvhdLKzEz+AGRD/Cq2iRfOruw+FSQ1XuV5FCNf6n8kSFKxGp7GFJOLxgP6TLiyGPCQ==",
+      "mode": 420,
+      "size": 21860
+    },
+    "dist/posthog-recorder.js.map": {
+      "checkedAt": 1764662919623,
+      "integrity": "sha512-LhbQU2IFPuOj3dRpt0YjuTZyWuRNzBymxG6IpmVdUnzx6HS1KEpYN3baPkokkLyi1sVqJt2Nn9TAIApJPo9Z5Q==",
+      "mode": 420,
+      "size": 1043357
+    },
+    "lib/src/entrypoints/posthog-recorder.js.map": {
+      "checkedAt": 1764662919623,
+      "integrity": "sha512-RdQrkxS2f4cP1AMeD0mHzJpj/nd81FrclWPe4cbQJhDIT8pgMsgiQ0M8G79iakI+YYgjhVDQkk4wC6GSnOlxrw==",
+      "mode": 420,
+      "size": 2179
+    },
+    "lib/src/posthog-surveys-types.js.map": {
+      "checkedAt": 1764662919624,
+      "integrity": "sha512-GbqwCLruzYDaoJzo1s5sBswfjw4+MbFxDsSaXEkL2QhD4rrsw0n1fzXds53uH+CgnlYDUWUsIBFSeT3wNevibQ==",
+      "mode": 420,
+      "size": 10249
+    },
+    "lib/src/posthog-surveys.js.map": {
+      "checkedAt": 1764662919624,
+      "integrity": "sha512-v6OLJo4FajGhb6l8iMwCktgkymp4Xo5i3g7Am6dCf/MypmGppO0JBnYQMV+EFCwe2ESf1y4pIpVFFt2F7gm6Cw==",
+      "mode": 420,
+      "size": 27331
+    },
+    "lib/src/extensions/surveys/components/PostHogLogo.jsx.map": {
+      "checkedAt": 1764662919625,
+      "integrity": "sha512-W2XQCi0m4tD7+A2rwCzyJetYbyuKJ8AjU9oc31YQsbf2YTiRiHojN49cQIsxNbP3T8DFkbtfqExZGSYq4nw2RA==",
+      "mode": 420,
+      "size": 673
+    },
+    "lib/src/customizations/posthogReduxLogger.js.map": {
+      "checkedAt": 1764662919636,
+      "integrity": "sha512-RkNeHnTty3AmKK/fwdht+E/+mAxNnFG2ShZy7VD9i4Qk9kOOvDWl58fTp84khgPyilUFd6Koofp/5KkrJmCbTg==",
+      "mode": 420,
+      "size": 19032
+    },
+    "lib/src/utils/property-utils.js.map": {
+      "checkedAt": 1764662919638,
+      "integrity": "sha512-z7W9+YRMJEBcxKGNX7jsF3h7A5/Z9QLBoL/8nZXe2mfLswwQQPCHj4QXUlOw3mf14NT+nmNoU0EklAe4+aCMqQ==",
+      "mode": 420,
+      "size": 3119
+    },
+    "lib/src/utils/prototype-utils.js.map": {
+      "checkedAt": 1764662919640,
+      "integrity": "sha512-6a5Y6mX8cfNOrs4XIw51rIO6SUNKOhsxt8X7YOPEUT3kRJjPZatxq65HkJdMo/fhXE5QA9oF6BzyJ+j20cwz+g==",
+      "mode": 420,
+      "size": 4146
+    },
+    "lib/src/extensions/surveys/components/QuestionHeader.jsx.map": {
+      "checkedAt": 1764662919640,
+      "integrity": "sha512-dgU8g1v2ZGCpchA2iSeiqIsMAb5mkybIY95vTJcOJS0GbSnMjjK5nlhWw06wH9MNm7vSeummtYBv6+RBbYYWfA==",
+      "mode": 420,
+      "size": 2816
+    },
+    "lib/src/extensions/surveys/components/QuestionTypes.jsx.map": {
+      "checkedAt": 1764662919641,
+      "integrity": "sha512-Oas9sE360s6mVupGXBxVLUS5KvKrtvAyA88++wj8nCjzDrfVAnm40GT2oeoyNpeoT8VtJ4RKfBn7AoqMNPbjVQ==",
+      "mode": 420,
+      "size": 34126
+    },
+    "lib/src/extensions/rageclick.js.map": {
+      "checkedAt": 1764662919642,
+      "integrity": "sha512-Ezxi4Hikvh0TuuK/zwNZ8LMueRelySe7DHwZ43xEgRVKcaY81GzpWRSa6gT2v9u406hzJ5wB85M1unKrsE1HaA==",
+      "mode": 420,
+      "size": 2141
+    },
+    "lib/src/rate-limiter.js.map": {
+      "checkedAt": 1764662919642,
+      "integrity": "sha512-0D+8hfFX8o4hIMC3ysR3qvNuUVMbQJCqpXAIDdkrryb4vkK5DK/b8WHP31WvYUoMyc6Ay3ulEETepGLgSoNuvg==",
+      "mode": 420,
+      "size": 6725
+    },
+    "dist/recorder-v2.js.map": {
+      "checkedAt": 1764662919643,
+      "integrity": "sha512-YwdjOTktRj+y/eh9ki8K50LNo5Lp6JujceX+W7Lskke4CD/qAcapdPrxXPeS+oVyDcILCbaJbbQ9Puf+OW/ADQ==",
+      "mode": 420,
+      "size": 432565
+    },
+    "lib/src/entrypoints/recorder-v2.js.map": {
+      "checkedAt": 1764662919644,
+      "integrity": "sha512-+if7RJWa3gdoebK1Rz/zMDCsFvpfgn3Jm1cvvdki3ByxRUYSUvDiEBMJQn52SXm8amy9AdoVuzMhVjWfHHv9rA==",
+      "mode": 420,
+      "size": 272
+    },
+    "dist/recorder.js.map": {
+      "checkedAt": 1764662919647,
+      "integrity": "sha512-BcpZB3gsVuFv7Ax2RHDhMEqQM560tZbyzp2qdsgTy7LpYTUwrPRHU8pkzohGsq5h5Rw2EzNTSzgXWSz9KipDMw==",
+      "mode": 420,
+      "size": 432562
+    },
+    "lib/src/entrypoints/recorder.js.map": {
+      "checkedAt": 1764662919648,
+      "integrity": "sha512-Z5i/c0WZaT8ircUszdWvMibllvawvQNjdktheh08yHShEAcWMP9Hm+bxMhp7mY4Bjk0OX7h1xx7mpjtlXF0JmQ==",
+      "mode": 420,
+      "size": 1820
+    },
+    "lib/src/utils/regex-utils.js.map": {
+      "checkedAt": 1764662919649,
+      "integrity": "sha512-Ikav8hOVuiGGtwtG9zolBn5B326qBusePBVFT2YDakor61fGach2CYDlIfeya+VP9ubZJiMRDk3YAHUvMYblBw==",
+      "mode": 420,
+      "size": 1026
+    },
+    "lib/src/remote-config.js.map": {
+      "checkedAt": 1764662919650,
+      "integrity": "sha512-J21WoRW3Au0WY21StziHSKFvcDh6e8erbwgma1VvT4HDAsZMREMPLbTY9twJIFJQhqMOVv+X1gb7XaECzjzlpQ==",
+      "mode": 420,
+      "size": 6265
+    },
+    "lib/src/request-queue.js.map": {
+      "checkedAt": 1764662919650,
+      "integrity": "sha512-JN+dJ3+/sNcgRSrbGqPt8SLeDmRnpcKRJRF1WBkvA5QPiuRpGN4XerRyGRZ934fnWMpWG64Yg+tSDuNwOAoZug==",
+      "mode": 420,
+      "size": 6620
+    },
+    "lib/src/utils/request-router.js.map": {
+      "checkedAt": 1764662919650,
+      "integrity": "sha512-dDCfb57MT98L40P8HAfcInKs0n37FATzosmTcJfmGWDh1+0nB/2HkU54SVrWS2cHTJC2BcGyJgzmqfLIp6fvaA==",
+      "mode": 420,
+      "size": 5220
+    },
+    "lib/src/utils/request-utils.js.map": {
+      "checkedAt": 1764662919651,
+      "integrity": "sha512-w8yE5WxzWZDXpnZKLMMucyPqEKp4I6Cp4ng6PFvzhI6RVXRVX/0UfTw/1cywuJijrctKI1FXP83CGmwcJhmhbQ==",
+      "mode": 420,
+      "size": 8380
+    },
+    "lib/src/request.js.map": {
+      "checkedAt": 1764662919651,
+      "integrity": "sha512-vfspEf/iwvN3MCI0fGyIF1KMIXTcY3xuqhsgB4cNxGxTx0mS1gTD0V6DXRE7B0vUgkbBZ0UVxaeB7FAA1JsJRQ==",
+      "mode": 420,
+      "size": 17054
+    },
+    "lib/src/retry-queue.js.map": {
+      "checkedAt": 1764662919652,
+      "integrity": "sha512-kzx8Oa+kw6WsRYixV3EvcyjY53cZhPLpH1j0J1EbVjie3NvNfVQajTvzcPX3bLQuyWvPOB+BJ9VOMtZ1633Fvg==",
+      "mode": 420,
+      "size": 9682
+    },
+    "lib/src/extensions/replay/types/rrweb-types.js.map": {
+      "checkedAt": 1764662919652,
+      "integrity": "sha512-IQu9yJ5m89H6isYOuucDnX/LNkmxmCiKb8ukEtyXx6wv9TGBU420eOyDLGwQfs76JSwWBZ+FsD9IKtgxO2WQlw==",
+      "mode": 420,
+      "size": 15304
+    },
+    "lib/src/extensions/replay/types/rrweb.js.map": {
+      "checkedAt": 1764662919653,
+      "integrity": "sha512-sqdh4bC/QTDC7YLxbcQKUHw4AcK8WnwnrFkkpTrL+bs+vBzW04AdXLcmtqAmlJltT4Sxf9A7hvBUfhg0YPMcTA==",
+      "mode": 420,
+      "size": 3866
+    },
+    "lib/src/extensions/sampling.js.map": {
+      "checkedAt": 1764662919654,
+      "integrity": "sha512-1c4lhkNWKk8ok+C3mLk7SvqaWF3OAEV+wsIPWELxQN2CgynVlP0A/wetWEACBI+Ws2LYOoy+ghu9Yg/gCoATHg==",
+      "mode": 420,
+      "size": 2123
+    },
+    "lib/src/scroll-manager.js.map": {
+      "checkedAt": 1764662919654,
+      "integrity": "sha512-M6rzDXJqAYBFBoZ3nv9/c3MF3IQiZ9VxjE+F4LGNeG/RNRIq4WfDqLAaRWP8HgJufW3M6dpEjEsE1rOLaGTQhQ==",
+      "mode": 420,
+      "size": 7432
+    },
+    "lib/src/extensions/segment-integration.js.map": {
+      "checkedAt": 1764662919655,
+      "integrity": "sha512-BHrGY9SfuRXB8ycVKcc8QjwEYfuXQv1pDPakZHp/VHhBizBYRCU5QT7xVXHyvUaYdEMoPKIbvH2B4X/4hb8foA==",
+      "mode": 420,
+      "size": 7947
+    },
+    "lib/src/extensions/sentry-integration.js.map": {
+      "checkedAt": 1764662919655,
+      "integrity": "sha512-y84/UZRCM3ASjWQR+9Y2Ff9Guo0nLzgNYb2q/A/wTy5jBoGoaRzgw2PcJuUyRVVdDJyhXKjFfYC5qgBFJLxIhQ==",
+      "mode": 420,
+      "size": 9910
+    },
+    "lib/src/session-props.js.map": {
+      "checkedAt": 1764662919656,
+      "integrity": "sha512-0H6TQpXW0AlwJnve453lTLi+zmQnbqXMMLVbYbD7BJb3FKkxzVDxPiA5xUTpzOHyRfmOQ6Bqs92Bnn13UTDKng==",
+      "mode": 420,
+      "size": 6448
+    },
+    "lib/src/extensions/replay/session-recording.js.map": {
+      "checkedAt": 1764662919656,
+      "integrity": "sha512-f/CHrUe+6PojTvpqWv3dlnbXuf/ZwYoKnA+8TdKpPkloV40NEhWaHFnjQt/ZBFrejjog74vjP4gY9p6Wf6ogvg==",
+      "mode": 420,
+      "size": 19607
+    },
+    "lib/src/sessionid.js.map": {
+      "checkedAt": 1764662919657,
+      "integrity": "sha512-yP2tQtTrxeGkkwvPT0tMABBi7yQN5xQR9bPc1F1ed1ZZohj0b5hbR4tlo7wdcE+VaArQjMBbeC/jyQ0oKtq+dg==",
+      "mode": 420,
+      "size": 24103
+    },
+    "lib/src/extensions/replay/external/sessionrecording-utils.js.map": {
+      "checkedAt": 1764662919659,
+      "integrity": "sha512-dQO0471DMl24Vtuf8Va31dRGa/V46ndcVNtLJFMdGVX9qGOjEorREUb7BTbizWv53VLMannOQsUXjCOeZfucvg==",
+      "mode": 420,
+      "size": 10825
+    },
+    "lib/src/customizations/setAllPersonProfilePropertiesAsPersonPropertiesForFlags.js.map": {
+      "checkedAt": 1764662919660,
+      "integrity": "sha512-PxsyLBM5HSDurS1iK8AQa/WxYbP0AfUqjUzsTG4zZoKcdEZklcyqlgq+VNIxb78M9VledjwpaKNnL5+qRsbGhA==",
+      "mode": 420,
+      "size": 2111
+    },
+    "lib/src/utils/simple-event-emitter.js.map": {
+      "checkedAt": 1764662919660,
+      "integrity": "sha512-0FTLSxHtXLSO8WKfZxrpewSAGslQsc9aCh0JjzfDPOxg0+1/aWTxc7YQbV3BnsUcKqn1dvXn80DXdVlvZ2qkLA==",
+      "mode": 420,
+      "size": 1867
+    },
+    "lib/src/site-apps.js.map": {
+      "checkedAt": 1764662919661,
+      "integrity": "sha512-hPZRJ/RlowoxxlNI7VmV3qRh1VZ6wzjEMTlG9R4rNAKkLbGM1pjuxjfc7QfO9wohNj07iy0NahWthdxxbc7MQQ==",
+      "mode": 420,
+      "size": 14304
+    },
+    "lib/src/storage.js.map": {
+      "checkedAt": 1764662919662,
+      "integrity": "sha512-DDa5sAB95ci+IBnFZ7tqYosaaG0FCg7jhisyGsG1DWsVpk/FYBqLo+cKuAV07HBsrXO+p2vCRBThYw2ffrzdfw==",
+      "mode": 420,
+      "size": 22516
+    },
+    "lib/src/extensions/utils/stylesheet-loader.js.map": {
+      "checkedAt": 1764662919662,
+      "integrity": "sha512-OH4befN1FNHNJ9Olu5Eq4oqMRkVC4AoX6LiUrOb975bDLsLMreEViIUll7qe9F0a+g4kRyU2sC2jpTBS9+Atcw==",
+      "mode": 420,
+      "size": 1515
+    },
+    "lib/src/utils/survey-event-receiver.js.map": {
+      "checkedAt": 1764662919663,
+      "integrity": "sha512-6hkyfN8I+Q0IHv4N2IqdvwAtDpCn3wxtrpusxapSGq0i/x7tgp35eyrAvPMqHD5N57ZCBr8VN9oc3r05rr8Zkw==",
+      "mode": 420,
+      "size": 15278
+    },
+    "lib/src/utils/survey-utils.js.map": {
+      "checkedAt": 1764662919663,
+      "integrity": "sha512-uOUokgHGquopA4dO8SPAHrFC9T1l+BgA0K7kAOZ6AlTqo5YFG5K8FWPTxImzIbulgJ7CiG5orLuSVppQocWlLQ==",
+      "mode": 420,
+      "size": 4205
+    },
+    "lib/src/extensions/surveys/surveys-extension-utils.jsx.map": {
+      "checkedAt": 1764662919663,
+      "integrity": "sha512-SkT9sEFFYdQiHbWte1e9JgkzzufeZUchozV/MqcR4uDEYP40WGEKokBYdSNlAqfCQ7nmNZidjLhD9cfB68FauA==",
+      "mode": 420,
+      "size": 45294
+    },
+    "lib/src/entrypoints/surveys-preview.es.js.map": {
+      "checkedAt": 1764662919664,
+      "integrity": "sha512-1Py13T7olm0sqOQFEEi+2333JgSUHbpcCv7WoxaRdpKu8qfGCIvhkMbxXKuE3idoJwFmIqjWGPdD/QOPG91Pfw==",
+      "mode": 420,
+      "size": 362
+    },
+    "dist/surveys-preview.js.map": {
+      "checkedAt": 1764662919665,
+      "integrity": "sha512-VAGs/xVAH3jpUwuRUE0P1ZMMRT49DH5/h/vhMGjofJfRicArd0xPwV0V87eSrd8ReKTlC+daM9hDyyYeUIsWHA==",
+      "mode": 420,
+      "size": 238769
+    },
+    "dist/surveys.js.map": {
+      "checkedAt": 1764662919668,
+      "integrity": "sha512-PPg6lQZtvWMStIGuH+M37G9d0laqDKYd1VlMPloiaAvuXB7xOBY0obzSxok1QySM9JJGt0ydr+sUuESrfRl7WA==",
+      "mode": 420,
+      "size": 267491
+    },
+    "lib/src/entrypoints/surveys.js.map": {
+      "checkedAt": 1764662919669,
+      "integrity": "sha512-soExDC5r9tXqLY/BlWQPmYH7gegs5OEx30Ky3WlbbbsGhuDl0YwtXKrMPZaVZu4MT3BKP0xX9iwNEIdmOtBCDg==",
+      "mode": 420,
+      "size": 884
+    },
+    "lib/src/extensions/surveys.jsx.map": {
+      "checkedAt": 1764662919669,
+      "integrity": "sha512-8kgeBHn/9sj9rkOIiAW4ADPSXuPFF8QxocAJhYOLoV6LhQlV2f0MEHuP0WS2e3n5e1okmSLd6uOhme1xUXsQWA==",
+      "mode": 420,
+      "size": 84198
+    },
+    "lib/src/extensions/toolbar.js.map": {
+      "checkedAt": 1764662919670,
+      "integrity": "sha512-8wIciCYHbsEsfHkphwJDCekheuZtmoYvD/w0UAJsNIQTVbuFbcqPjEkbvYJSLGUHXD9QrqDXH2bfCehZNJ7LTg==",
+      "mode": 420,
+      "size": 13844
+    },
+    "dist/tracing-headers.js.map": {
+      "checkedAt": 1764662919670,
+      "integrity": "sha512-cw//R73qh8Wd2OTIMVPLfIXst/te3qX6njWyXY0A3NwOtDpNEqBLaakAvNrTWJQE1vcQlG9+D8x0tSeIPFWxyA==",
+      "mode": 420,
+      "size": 26015
+    },
+    "lib/src/entrypoints/tracing-headers.js.map": {
+      "checkedAt": 1764662919671,
+      "integrity": "sha512-zfUJSyEDkcR3bjhHyijN3z+DDcsJ1KTaKcIk4j/81w9n0ljf282Pufj9ExWjc/UOAMroVUd+SVTaBb97cEqjwQ==",
+      "mode": 420,
+      "size": 6374
+    },
+    "lib/src/extensions/tracing-headers.js.map": {
+      "checkedAt": 1764662919672,
+      "integrity": "sha512-ZUEc3j1tIQY26xm8CEqSHkFzYbjbSc7e3i3PYuKqrWD5hP7qrhiM7Xpxd1AkdU8+bC6hQswXiRv8kZReYTOMVA==",
+      "mode": 420,
+      "size": 3764
+    },
+    "lib/src/extensions/replay/external/triggerMatching.js.map": {
+      "checkedAt": 1764662919673,
+      "integrity": "sha512-WJil/1ZBa4hWfysIKcJn38ApRj1zhE14m4SLId5HJVEjXYSJwEPijDiiaonZsLRAyTuke76YIvyuQ7ciJNiEMg==",
+      "mode": 420,
+      "size": 24595
+    },
+    "lib/src/utils/type-utils.js.map": {
+      "checkedAt": 1764662919673,
+      "integrity": "sha512-96ydLCCUYXJsxHhfFPRVdhSbOMO5txUKs7bm2WsTjOBlh9q/2HVdM4E4G7wYrIdB2wZQDdcGU1fmwS4PrnJ4sA==",
+      "mode": 420,
+      "size": 799
+    },
+    "lib/src/types.js.map": {
+      "checkedAt": 1764662919674,
+      "integrity": "sha512-eA8Qa4Skg0efisXWPqTF4DS6QRM8Xv4jzgnr1+Dun3g6R4LYwbCpnkFwEA00tUhRvK/wEi2PiYfcpoeCXigVaQ==",
+      "mode": 420,
+      "size": 63561
+    },
+    "lib/src/utils/user-agent-utils.js.map": {
+      "checkedAt": 1764662919674,
+      "integrity": "sha512-TTuCJHzY4DTqk2/PmpTwFVfPCVpg0SBgYXgGQa/JBBlWdoJ68ki32ioTAgZ4qqu/Hx/ZtQScQjHyY0Tcc18YPw==",
+      "mode": 420,
+      "size": 26754
+    },
+    "lib/src/uuidv7.js.map": {
+      "checkedAt": 1764662919675,
+      "integrity": "sha512-obVT3ioqHeydWw9wdTkQAG9Xt/O7MQmQ/LTPS3yPbsu7jGm9q0AV5QulzVNv8N066YpmfjWiRgL/wL2gWC9cCw==",
+      "mode": 420,
+      "size": 16239
+    },
+    "lib/src/web-experiments-types.js.map": {
+      "checkedAt": 1764662919675,
+      "integrity": "sha512-LXkuxI1hURlCn8gK5hbO4oar08Ec5i2V5GLZNY1Z85fwJXqyB51SmtXjQWvoh7GdAhzhpyxT5oWVyQ8bTk443w==",
+      "mode": 420,
+      "size": 1106
+    },
+    "lib/src/web-experiments.js.map": {
+      "checkedAt": 1764662919675,
+      "integrity": "sha512-KOuovsJz9c/z8TCsRkAvWWps5A3IHfAI4DrcWSqb7clO/bNKkk3UZoKemJelgGcVwQg3RGpua6iy/L/bYV9jeA==",
+      "mode": 420,
+      "size": 20203
+    },
+    "dist/web-vitals.js.map": {
+      "checkedAt": 1764662919676,
+      "integrity": "sha512-dPrCQxLyrI3rAm5ewQzDxbLd5gywxzU7d0mMkmSJNhzpMZJ61z+9GWilt6qh/juSutFFTpTs68rMLh6Xz0r/pw==",
+      "mode": 420,
+      "size": 37759
+    },
+    "lib/src/entrypoints/web-vitals.js.map": {
+      "checkedAt": 1764662919676,
+      "integrity": "sha512-zanGuzcomK0HI1ZWagdbXrlY0qdLEcIRR7Wc8S98vfpeuXz3+46Q2ZiG4ZZuzeSPnxAQOapbuuIGhw52O2EJ0Q==",
+      "mode": 420,
+      "size": 1365
+    },
+    "README.md": {
+      "checkedAt": 1764662919677,
+      "integrity": "sha512-jRM662TByR80o5j8vUduqIRI1AQ9SQOt8MKOu+FY/QiAi+Zu1LAf/MezpH+r7CjDZLEcFfLWqf0k3TqH0qo+eg==",
+      "mode": 420,
+      "size": 5197
+    },
+    "dist/src/extensions/surveys/action-matcher.d.ts": {
+      "checkedAt": 1764662919677,
+      "integrity": "sha512-jXficKtpcxtIjg9DO2HwI7ALzCgOLfXCMo/5Dm+7Du2PjQXr5v3zL952JGFbowFkFc1yUae5QqnmgxffktMLwQ==",
+      "mode": 420,
+      "size": 908
+    },
+    "lib/src/extensions/surveys/action-matcher.d.ts": {
+      "checkedAt": 1764662919677,
+      "integrity": "sha512-jXficKtpcxtIjg9DO2HwI7ALzCgOLfXCMo/5Dm+7Du2PjQXr5v3zL952JGFbowFkFc1yUae5QqnmgxffktMLwQ==",
+      "mode": 420,
+      "size": 908
+    },
+    "dist/src/entrypoints/all-external-dependencies.d.ts": {
+      "checkedAt": 1764662919678,
+      "integrity": "sha512-v0Hz/xKXAOI6A66kad55aKLQN1w16FJLzbJH2TwuXtXSoZfGdhJAr7bG8tO26rOMDplkuOSyzFdkwZThjCLjaA==",
+      "mode": 420,
+      "size": 162
+    },
+    "lib/src/entrypoints/all-external-dependencies.d.ts": {
+      "checkedAt": 1764662919678,
+      "integrity": "sha512-v0Hz/xKXAOI6A66kad55aKLQN1w16FJLzbJH2TwuXtXSoZfGdhJAr7bG8tO26rOMDplkuOSyzFdkwZThjCLjaA==",
+      "mode": 420,
+      "size": 162
+    },
+    "dist/src/entrypoints/array.d.ts": {
+      "checkedAt": 1764662919679,
+      "integrity": "sha512-CsbO+o2R6psIdXWdgjBF3UFsJLm5MkViDtUDEbjhGv7PVrfpAQ7yrqIZcBXsv8ZvaZwtz2NpAR/jVv8irApXEQ==",
+      "mode": 420,
+      "size": 66
+    },
+    "lib/src/entrypoints/array.d.ts": {
+      "checkedAt": 1764662919679,
+      "integrity": "sha512-CsbO+o2R6psIdXWdgjBF3UFsJLm5MkViDtUDEbjhGv7PVrfpAQ7yrqIZcBXsv8ZvaZwtz2NpAR/jVv8irApXEQ==",
+      "mode": 420,
+      "size": 66
+    },
+    "dist/src/entrypoints/array.full.d.ts": {
+      "checkedAt": 1764662919680,
+      "integrity": "sha512-Byn4XEmvLTHqdPIgThlwTRr/JNE4LG69ldBwrgbKblVYeBe9+sbcCNG47UO8yecC5/HFpwqMXdPeS33ENSLzzA==",
+      "mode": 420,
+      "size": 56
+    },
+    "lib/src/entrypoints/array.full.d.ts": {
+      "checkedAt": 1764662919680,
+      "integrity": "sha512-Byn4XEmvLTHqdPIgThlwTRr/JNE4LG69ldBwrgbKblVYeBe9+sbcCNG47UO8yecC5/HFpwqMXdPeS33ENSLzzA==",
+      "mode": 420,
+      "size": 56
+    },
+    "dist/src/entrypoints/array.full.es5.d.ts": {
+      "checkedAt": 1764662919680,
+      "integrity": "sha512-xm5lZJjfRE9vwBtumOdaBnbTcRq8h5BuqOs83QOzGYVXE5ksVIp8TpgtWk56IOvMdn0dRQWF0bClC5His6duTg==",
+      "mode": 420,
+      "size": 201
+    },
+    "lib/src/entrypoints/array.full.es5.d.ts": {
+      "checkedAt": 1764662919680,
+      "integrity": "sha512-xm5lZJjfRE9vwBtumOdaBnbTcRq8h5BuqOs83QOzGYVXE5ksVIp8TpgtWk56IOvMdn0dRQWF0bClC5His6duTg==",
+      "mode": 420,
+      "size": 201
+    },
+    "dist/src/entrypoints/array.full.no-external.d.ts": {
+      "checkedAt": 1764662919681,
+      "integrity": "sha512-lY333mgH33mTlg9Ui2FotZy0g1tZb0jKsR0v/dI2tIWsCNG0VQGXw4y6t5FZygDpJou0ZfIUR9lGQ4822/4fEA==",
+      "mode": 420,
+      "size": 68
+    },
+    "lib/src/entrypoints/array.full.no-external.d.ts": {
+      "checkedAt": 1764662919681,
+      "integrity": "sha512-lY333mgH33mTlg9Ui2FotZy0g1tZb0jKsR0v/dI2tIWsCNG0VQGXw4y6t5FZygDpJou0ZfIUR9lGQ4822/4fEA==",
+      "mode": 420,
+      "size": 68
+    },
+    "dist/src/entrypoints/array.no-external.d.ts": {
+      "checkedAt": 1764662919681,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "lib/src/entrypoints/array.no-external.d.ts": {
+      "checkedAt": 1764662919682,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "dist/src/autocapture-utils.d.ts": {
+      "checkedAt": 1764662919683,
+      "integrity": "sha512-GjilvWL6JokxhaKzIZ6HTmGPZZxFuiY2IiDNeM4gAtjq8p9or12cUB/gvL2psGRXvYVaiO0LDqDQn0nN2yP8Xw==",
+      "mode": 420,
+      "size": 1378
+    },
+    "lib/src/autocapture-utils.d.ts": {
+      "checkedAt": 1764662919683,
+      "integrity": "sha512-GjilvWL6JokxhaKzIZ6HTmGPZZxFuiY2IiDNeM4gAtjq8p9or12cUB/gvL2psGRXvYVaiO0LDqDQn0nN2yP8Xw==",
+      "mode": 420,
+      "size": 1378
+    },
+    "dist/src/autocapture.d.ts": {
+      "checkedAt": 1764662919683,
+      "integrity": "sha512-RdesRChW5StXRbbWFjDrFklLHbsodwrrIsu3gM/VZNxuJMydV2GhXFnBlLGQFLTLouJX4AMomQjw5gqpAYZ0cw==",
+      "mode": 420,
+      "size": 1588
+    },
+    "lib/src/autocapture.d.ts": {
+      "checkedAt": 1764662919683,
+      "integrity": "sha512-RdesRChW5StXRbbWFjDrFklLHbsodwrrIsu3gM/VZNxuJMydV2GhXFnBlLGQFLTLouJX4AMomQjw5gqpAYZ0cw==",
+      "mode": 420,
+      "size": 1588
+    },
+    "dist/src/customizations/before-send.d.ts": {
+      "checkedAt": 1764662919684,
+      "integrity": "sha512-BUkJgaevOmv8Ahl7+/14Q8C4DCGfzKQpwy4CqwOXHMHaZ4T9cAvsMUhKmCh9cy7oO/4WKltDo416yr2B6ojAwQ==",
+      "mode": 420,
+      "size": 1566
+    },
+    "lib/src/customizations/before-send.d.ts": {
+      "checkedAt": 1764662919684,
+      "integrity": "sha512-BUkJgaevOmv8Ahl7+/14Q8C4DCGfzKQpwy4CqwOXHMHaZ4T9cAvsMUhKmCh9cy7oO/4WKltDo416yr2B6ojAwQ==",
+      "mode": 420,
+      "size": 1566
+    },
+    "dist/src/utils/blocked-uas.d.ts": {
+      "checkedAt": 1764662919684,
+      "integrity": "sha512-eQlmCur7AcaVNMfkr2IivdgnMd/4zVZ+u3WmqF8bm8QE7x42dGE6bPhPFiG2+C/Vol7LtZ4dH2JaxGIn85rNWg==",
+      "mode": 420,
+      "size": 559
+    },
+    "lib/src/utils/blocked-uas.d.ts": {
+      "checkedAt": 1764662919684,
+      "integrity": "sha512-eQlmCur7AcaVNMfkr2IivdgnMd/4zVZ+u3WmqF8bm8QE7x42dGE6bPhPFiG2+C/Vol7LtZ4dH2JaxGIn85rNWg==",
+      "mode": 420,
+      "size": 559
+    },
+    "dist/src/extensions/surveys/components/BottomSection.d.ts": {
+      "checkedAt": 1764662919685,
+      "integrity": "sha512-poi7kVsmxSRH5ZBHyAdknYHFuDJxAnHbNNjScnWOZz5KEY3EzbPRkuyf9hkg60UGo9E6XSsHQzhpDl/j6QtC2Q==",
+      "mode": 420,
+      "size": 413
+    },
+    "lib/src/extensions/surveys/components/BottomSection.d.ts": {
+      "checkedAt": 1764662919685,
+      "integrity": "sha512-poi7kVsmxSRH5ZBHyAdknYHFuDJxAnHbNNjScnWOZz5KEY3EzbPRkuyf9hkg60UGo9E6XSsHQzhpDl/j6QtC2Q==",
+      "mode": 420,
+      "size": 413
+    },
+    "dist/src/config.d.ts": {
+      "checkedAt": 1764662919687,
+      "integrity": "sha512-LI5f9YPpZPhyjAEsO18ajOYEdNf6ccJ7gq3EigQf0uBofQ/YfIDrXJnIHkUnvXdKwnpzA8gk8CMM+UXb3FEynA==",
+      "mode": 420,
+      "size": 95
+    },
+    "dist/src/extensions/replay/external/config.d.ts": {
+      "checkedAt": 1764662919687,
+      "integrity": "sha512-OMmz0I3jjvhS89Io3OuYEAHxhQraRRtyAx/SpCXoo58jATFivKuyeaNz9ukqvP9ODWZLuv/UvbNQ0rR3s1aNGQ==",
+      "mode": 420,
+      "size": 625
+    },
+    "lib/src/config.d.ts": {
+      "checkedAt": 1764662919687,
+      "integrity": "sha512-LI5f9YPpZPhyjAEsO18ajOYEdNf6ccJ7gq3EigQf0uBofQ/YfIDrXJnIHkUnvXdKwnpzA8gk8CMM+UXb3FEynA==",
+      "mode": 420,
+      "size": 95
+    },
+    "lib/src/extensions/replay/external/config.d.ts": {
+      "checkedAt": 1764662919687,
+      "integrity": "sha512-OMmz0I3jjvhS89Io3OuYEAHxhQraRRtyAx/SpCXoo58jATFivKuyeaNz9ukqvP9ODWZLuv/UvbNQ0rR3s1aNGQ==",
+      "mode": 420,
+      "size": 625
+    },
+    "dist/src/extensions/surveys/components/ConfirmationMessage.d.ts": {
+      "checkedAt": 1764662919696,
+      "integrity": "sha512-Kei2mLYJkKFfwX+rRFHLcDwmgy9xwK2rMLCe/fqq0QBN9YXyEB/S8AUjGk6GTgsX+zypkfq/GYLyaKPL8ppT0w==",
+      "mode": 420,
+      "size": 467
+    },
+    "lib/src/extensions/surveys/components/ConfirmationMessage.d.ts": {
+      "checkedAt": 1764662919696,
+      "integrity": "sha512-Kei2mLYJkKFfwX+rRFHLcDwmgy9xwK2rMLCe/fqq0QBN9YXyEB/S8AUjGk6GTgsX+zypkfq/GYLyaKPL8ppT0w==",
+      "mode": 420,
+      "size": 467
+    },
+    "dist/src/consent.d.ts": {
+      "checkedAt": 1764662919703,
+      "integrity": "sha512-zMIfm5TXyhp9bNEocvzDCX2s58jqV5f8PYdtnsO3xM+KQbu9xh4w8vecj9dsJQtbbg4S7gn3JAm9wd8oh21x0g==",
+      "mode": 420,
+      "size": 686
+    },
+    "lib/src/consent.d.ts": {
+      "checkedAt": 1764662919703,
+      "integrity": "sha512-zMIfm5TXyhp9bNEocvzDCX2s58jqV5f8PYdtnsO3xM+KQbu9xh4w8vecj9dsJQtbbg4S7gn3JAm9wd8oh21x0g==",
+      "mode": 420,
+      "size": 686
+    },
+    "dist/src/constants.d.ts": {
+      "checkedAt": 1764662919704,
+      "integrity": "sha512-5QGVi3DCJ8iVfCXtyBfelbNpEsiysUK3pqfpF23ln3lHcea14iRbO4QMhQ4wR0RAuna6rU7OeTofpHdhQ5UkiQ==",
+      "mode": 420,
+      "size": 4117
+    },
+    "lib/src/constants.d.ts": {
+      "checkedAt": 1764662919704,
+      "integrity": "sha512-5QGVi3DCJ8iVfCXtyBfelbNpEsiysUK3pqfpF23ln3lHcea14iRbO4QMhQ4wR0RAuna6rU7OeTofpHdhQ5UkiQ==",
+      "mode": 420,
+      "size": 4117
+    },
+    "dist/src/entrypoints/crisp-chat-integration.d.ts": {
+      "checkedAt": 1764662919705,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "lib/src/entrypoints/crisp-chat-integration.d.ts": {
+      "checkedAt": 1764662919705,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "dist/src/entrypoints/customizations.full.d.ts": {
+      "checkedAt": 1764662919706,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "lib/src/entrypoints/customizations.full.d.ts": {
+      "checkedAt": 1764662919706,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "dist/src/entrypoints/dead-clicks-autocapture.d.ts": {
+      "checkedAt": 1764662919706,
+      "integrity": "sha512-e6Fnzt5Dc2khDPSqUilFd/anMaIm/Kz6Suy7yuZ+M3hILKwOmuXRT5hbeJPQfS3ifIs3qFSBR5KELpolQI5WIA==",
+      "mode": 420,
+      "size": 1069
+    },
+    "dist/src/extensions/dead-clicks-autocapture.d.ts": {
+      "checkedAt": 1764662919706,
+      "integrity": "sha512-QGmDNd8n8IvLAZagb+gFwvXTA86JAIg798huQWQP4nsKTr2aG07TGraOn7XdD5Mu1g49FsIizmWwuhvz/frmBg==",
+      "mode": 420,
+      "size": 1001
+    },
+    "lib/src/entrypoints/dead-clicks-autocapture.d.ts": {
+      "checkedAt": 1764662919706,
+      "integrity": "sha512-e6Fnzt5Dc2khDPSqUilFd/anMaIm/Kz6Suy7yuZ+M3hILKwOmuXRT5hbeJPQfS3ifIs3qFSBR5KELpolQI5WIA==",
+      "mode": 420,
+      "size": 1069
+    },
+    "lib/src/extensions/dead-clicks-autocapture.d.ts": {
+      "checkedAt": 1764662919706,
+      "integrity": "sha512-QGmDNd8n8IvLAZagb+gFwvXTA86JAIg798huQWQP4nsKTr2aG07TGraOn7XdD5Mu1g49FsIizmWwuhvz/frmBg==",
+      "mode": 420,
+      "size": 1001
+    },
+    "dist/src/extensions/replay/external/denylist.d.ts": {
+      "checkedAt": 1764662919707,
+      "integrity": "sha512-FIatUfx4kYcN1HnhCDKIqWfei+IQdo28SxSEnp2kwF9Qv+M6EZQIj56bCSgm2p3kKwwGMNOdc0itgPvjgyeSFg==",
+      "mode": 420,
+      "size": 218
+    },
+    "lib/src/extensions/replay/external/denylist.d.ts": {
+      "checkedAt": 1764662919707,
+      "integrity": "sha512-FIatUfx4kYcN1HnhCDKIqWfei+IQdo28SxSEnp2kwF9Qv+M6EZQIj56bCSgm2p3kKwwGMNOdc0itgPvjgyeSFg==",
+      "mode": 420,
+      "size": 218
+    },
+    "dist/src/utils/element-utils.d.ts": {
+      "checkedAt": 1764662919708,
+      "integrity": "sha512-iLxPFVZbCXPnyVNGJ4E7vID08csTq/2VbB8Tq4R5oNFzyjawofVL2WrSmmXeet0g/mIKOzFnaVVZJktidvjuig==",
+      "mode": 420,
+      "size": 465
+    },
+    "lib/src/utils/element-utils.d.ts": {
+      "checkedAt": 1764662919708,
+      "integrity": "sha512-iLxPFVZbCXPnyVNGJ4E7vID08csTq/2VbB8Tq4R5oNFzyjawofVL2WrSmmXeet0g/mIKOzFnaVVZJktidvjuig==",
+      "mode": 420,
+      "size": 465
+    },
+    "dist/src/utils/encode-utils.d.ts": {
+      "checkedAt": 1764662919708,
+      "integrity": "sha512-1oER27FqG3fKHjAhwHekfpRfhe9eSdYoRZm5sNJ0sMrv3s7857UviCJs+Uq4bMCfNw99JD8Esl4jlDRJ6VhcTw==",
+      "mode": 420,
+      "size": 246
+    },
+    "lib/src/utils/encode-utils.d.ts": {
+      "checkedAt": 1764662919708,
+      "integrity": "sha512-1oER27FqG3fKHjAhwHekfpRfhe9eSdYoRZm5sNJ0sMrv3s7857UviCJs+Uq4bMCfNw99JD8Esl4jlDRJ6VhcTw==",
+      "mode": 420,
+      "size": 246
+    },
+    "dist/src/utils/event-utils.d.ts": {
+      "checkedAt": 1764662919709,
+      "integrity": "sha512-j7BIO9/n5qRZBvaBrJBKfYnK50WITNHlxtPZKoFSrrLPWAWma9ojP1IUTuUtpsAyjIOXo7SYzqBuRaZRY13ZyA==",
+      "mode": 420,
+      "size": 1483
+    },
+    "lib/src/utils/event-utils.d.ts": {
+      "checkedAt": 1764662919709,
+      "integrity": "sha512-j7BIO9/n5qRZBvaBrJBKfYnK50WITNHlxtPZKoFSrrLPWAWma9ojP1IUTuUtpsAyjIOXo7SYzqBuRaZRY13ZyA==",
+      "mode": 420,
+      "size": 1483
+    },
+    "dist/src/entrypoints/exception-autocapture.d.ts": {
+      "checkedAt": 1764662919709,
+      "integrity": "sha512-EXFLFwEcrKqdBIU4SrHSjtTkURIiYOgneUFN+EcivJDCuFu33I/AXVaiVhZ9a46eju8CGvwx5FtKQ9E1dqs43w==",
+      "mode": 420,
+      "size": 440
+    },
+    "lib/src/entrypoints/exception-autocapture.d.ts": {
+      "checkedAt": 1764662919709,
+      "integrity": "sha512-EXFLFwEcrKqdBIU4SrHSjtTkURIiYOgneUFN+EcivJDCuFu33I/AXVaiVhZ9a46eju8CGvwx5FtKQ9E1dqs43w==",
+      "mode": 420,
+      "size": 440
+    },
+    "dist/src/extensions/external-integration.d.ts": {
+      "checkedAt": 1764662919710,
+      "integrity": "sha512-KlibH1xz8Ei+BElAYeBdd1QUneQqq37pdgs0a3ohUObyb5aDI6tuan6RctYfHUQYHy51NJfwLw9eY/UPaIOA3w==",
+      "mode": 420,
+      "size": 217
+    },
+    "lib/src/extensions/external-integration.d.ts": {
+      "checkedAt": 1764662919710,
+      "integrity": "sha512-KlibH1xz8Ei+BElAYeBdd1QUneQqq37pdgs0a3ohUObyb5aDI6tuan6RctYfHUQYHy51NJfwLw9eY/UPaIOA3w==",
+      "mode": 420,
+      "size": 217
+    },
+    "dist/src/entrypoints/external-scripts-loader.d.ts": {
+      "checkedAt": 1764662919711,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "lib/src/entrypoints/external-scripts-loader.d.ts": {
+      "checkedAt": 1764662919711,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "dist/src/utils/globals.d.ts": {
+      "checkedAt": 1764662919712,
+      "integrity": "sha512-H1wVPBCxk/F6ElARG/l37TqK7FDqoVMs2wjYbQLCGeawQ1BGBXNHR5H4aRiYycTUQ5kMYCZl9g8VxD7xEfyUsw==",
+      "mode": 420,
+      "size": 7616
+    },
+    "lib/src/utils/globals.d.ts": {
+      "checkedAt": 1764662919712,
+      "integrity": "sha512-H1wVPBCxk/F6ElARG/l37TqK7FDqoVMs2wjYbQLCGeawQ1BGBXNHR5H4aRiYycTUQ5kMYCZl9g8VxD7xEfyUsw==",
+      "mode": 420,
+      "size": 7616
+    },
+    "dist/src/heatmaps.d.ts": {
+      "checkedAt": 1764662919713,
+      "integrity": "sha512-/HiJmtcIEj301y/+4V3SjMAuuzxYBnjAflZaydR0CY0xo+o7whPsPQqfH1r6205vEzNSWWwPCy4oWiYYKKN6Pw==",
+      "mode": 420,
+      "size": 927
+    },
+    "lib/src/heatmaps.d.ts": {
+      "checkedAt": 1764662919713,
+      "integrity": "sha512-/HiJmtcIEj301y/+4V3SjMAuuzxYBnjAflZaydR0CY0xo+o7whPsPQqfH1r6205vEzNSWWwPCy4oWiYYKKN6Pw==",
+      "mode": 420,
+      "size": 927
+    },
+    "dist/src/extensions/history-autocapture.d.ts": {
+      "checkedAt": 1764662919713,
+      "integrity": "sha512-jpL1sGFJ9kgAQVag8U9z51+JR7tpk2G8KF394MmCgDY8numy6/iYD8972pEmE6EdssD5Z2Aecq+lkHVnY66OPA==",
+      "mode": 420,
+      "size": 758
+    },
+    "lib/src/extensions/history-autocapture.d.ts": {
+      "checkedAt": 1764662919713,
+      "integrity": "sha512-jpL1sGFJ9kgAQVag8U9z51+JR7tpk2G8KF394MmCgDY8numy6/iYD8972pEmE6EdssD5Z2Aecq+lkHVnY66OPA==",
+      "mode": 420,
+      "size": 758
+    },
+    "dist/src/extensions/surveys/icons.d.ts": {
+      "checkedAt": 1764662919714,
+      "integrity": "sha512-eKWOdg2Ys+verjhcfH/uK+DItmh866fW/qCAz+kbP/PTUapFRW0bXz4AtzTpvEjZq5UrrbN9bxCkFZG9+6nfpQ==",
+      "mode": 420,
+      "size": 402
+    },
+    "lib/src/extensions/surveys/icons.d.ts": {
+      "checkedAt": 1764662919714,
+      "integrity": "sha512-eKWOdg2Ys+verjhcfH/uK+DItmh866fW/qCAz+kbP/PTUapFRW0bXz4AtzTpvEjZq5UrrbN9bxCkFZG9+6nfpQ==",
+      "mode": 420,
+      "size": 402
+    },
+    "dist/src/customizations/index.d.ts": {
+      "checkedAt": 1764662919714,
+      "integrity": "sha512-IO7qXxBhCKpnMofPf9WE66wdDr7kAeU/WtUbNH/gYybEjCvWQPEqTTHv+9UwCvEMiZTdoF4J3XKtLqGTbOMxmA==",
+      "mode": 420,
+      "size": 248
+    },
+    "dist/src/extensions/exception-autocapture/index.d.ts": {
+      "checkedAt": 1764662919715,
+      "integrity": "sha512-p1RLtFn0s6sNW2PbmBjikQQDJOQUIf4FaineKOWWGIrxvyMxMHd/28zloTVyInlYvPucI/xoQzqYxedTH+047w==",
+      "mode": 420,
+      "size": 709
+    },
+    "dist/src/extensions/web-vitals/index.d.ts": {
+      "checkedAt": 1764662919715,
+      "integrity": "sha512-qc8VUU1EK3dWzmFE4C5ZByGHdaZ9A++0dJQA9qSiIL4DdBaYiDFS2taeqUdmwAoEuSPtDrEw1mHQp42xxXTN4w==",
+      "mode": 420,
+      "size": 850
+    },
+    "dist/src/utils/index.d.ts": {
+      "checkedAt": 1764662919716,
+      "integrity": "sha512-YnVjYPA5H3SL15yN0HnJeVeH8rlgFOqTl9SHSHyZUuwljDKGekCzEHLC97hWbVSh2mlmoH9zvl4rflYol4ojlw==",
+      "mode": 420,
+      "size": 2419
+    },
+    "lib/src/customizations/index.d.ts": {
+      "checkedAt": 1764662919714,
+      "integrity": "sha512-IO7qXxBhCKpnMofPf9WE66wdDr7kAeU/WtUbNH/gYybEjCvWQPEqTTHv+9UwCvEMiZTdoF4J3XKtLqGTbOMxmA==",
+      "mode": 420,
+      "size": 248
+    },
+    "lib/src/extensions/exception-autocapture/index.d.ts": {
+      "checkedAt": 1764662919715,
+      "integrity": "sha512-p1RLtFn0s6sNW2PbmBjikQQDJOQUIf4FaineKOWWGIrxvyMxMHd/28zloTVyInlYvPucI/xoQzqYxedTH+047w==",
+      "mode": 420,
+      "size": 709
+    },
+    "lib/src/extensions/web-vitals/index.d.ts": {
+      "checkedAt": 1764662919715,
+      "integrity": "sha512-qc8VUU1EK3dWzmFE4C5ZByGHdaZ9A++0dJQA9qSiIL4DdBaYiDFS2taeqUdmwAoEuSPtDrEw1mHQp42xxXTN4w==",
+      "mode": 420,
+      "size": 850
+    },
+    "lib/src/utils/index.d.ts": {
+      "checkedAt": 1764662919716,
+      "integrity": "sha512-YnVjYPA5H3SL15yN0HnJeVeH8rlgFOqTl9SHSHyZUuwljDKGekCzEHLC97hWbVSh2mlmoH9zvl4rflYol4ojlw==",
+      "mode": 420,
+      "size": 2419
+    },
+    "react/dist/types/index.d.ts": {
+      "checkedAt": 1764662919716,
+      "integrity": "sha512-24CsJFv2txdEQiRB50U8u/hnakCTN9efbJAtHfhlUM4f/npALmQdWKvQR8AzJJPrr8+SH3TfmsZpm99Jjv99aA==",
+      "mode": 420,
+      "size": 3042
+    },
+    "dist/src/entrypoints/intercom-integration.d.ts": {
+      "checkedAt": 1764662919716,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "lib/src/entrypoints/intercom-integration.d.ts": {
+      "checkedAt": 1764662919717,
+      "integrity": "sha512-TuHIj4w/TkzTTLbAAzm/nW0Db/St469J6HHMiWa4THKdi3VJKsxkE8mmZKwApXlYIjrBPEIp2oxi6+alPk94Pw==",
+      "mode": 420,
+      "size": 11
+    },
+    "dist/src/extensions/replay/external/lazy-loaded-session-recorder.d.ts": {
+      "checkedAt": 1764662919717,
+      "integrity": "sha512-ofcsM1JzEdTY3324x63sdkNtgg8gqXS1GTu0pMiL7jkrswLT644UNStTMagg0gsYnuHQ1x3PSXVdXjY89Xh/PQ==",
+      "mode": 420,
+      "size": 5501
+    },
+    "lib/src/extensions/replay/external/lazy-loaded-session-recorder.d.ts": {
+      "checkedAt": 1764662919717,
+      "integrity": "sha512-ofcsM1JzEdTY3324x63sdkNtgg8gqXS1GTu0pMiL7jkrswLT644UNStTMagg0gsYnuHQ1x3PSXVdXjY89Xh/PQ==",
+      "mode": 420,
+      "size": 5501
+    },
+    "dist/src/entrypoints/lazy-recorder.d.ts": {
+      "checkedAt": 1764662919717,
+      "integrity": "sha512-m3kaeyHFxMh819y5gYdA978qDt+7tzGxTLWGk3ANBKEJzguGvTL/9zG0pswre2NcRehtI/bhEmLT4TKIqigWsA==",
+      "mode": 420,
+      "size": 28
+    },
+    "lib/src/entrypoints/lazy-recorder.d.ts": {
+      "checkedAt": 1764662919717,
+      "integrity": "sha512-m3kaeyHFxMh819y5gYdA978qDt+7tzGxTLWGk3ANBKEJzguGvTL/9zG0pswre2NcRehtI/bhEmLT4TKIqigWsA==",
+      "mode": 420,
+      "size": 28
+    },
+    "dist/src/utils/logger.d.ts": {
+      "checkedAt": 1764662919719,
+      "integrity": "sha512-qIcs8Fo/8k1PuEgrrnUU3bcaJ/HupUinp/dgf5QTuUYZwQqqKW2r9EeSVLScdUh+i8C9vsDPMXDtzSlneQe4kw==",
+      "mode": 420,
+      "size": 413
+    },
+    "lib/src/utils/logger.d.ts": {
+      "checkedAt": 1764662919719,
+      "integrity": "sha512-qIcs8Fo/8k1PuEgrrnUU3bcaJ/HupUinp/dgf5QTuUYZwQqqKW2r9EeSVLScdUh+i8C9vsDPMXDtzSlneQe4kw==",
+      "mode": 420,
+      "size": 413
+    },
+    "dist/src/entrypoints/main.cjs.d.ts": {
+      "checkedAt": 1764662919719,
+      "integrity": "sha512-PoiynnEMhRt/bGNVePgTA104WK9JYTR68lWfIvZFUrYKM+QtvGr7XeElukzQ0XhXI8XypxqCk+8CfgHD5aDBig==",
+      "mode": 420,
+      "size": 236
+    },
+    "lib/src/entrypoints/main.cjs.d.ts": {
+      "checkedAt": 1764662919719,
+      "integrity": "sha512-PoiynnEMhRt/bGNVePgTA104WK9JYTR68lWfIvZFUrYKM+QtvGr7XeElukzQ0XhXI8XypxqCk+8CfgHD5aDBig==",
+      "mode": 420,
+      "size": 236
+    },
+    "dist/module.d.ts": {
+      "checkedAt": 1764662919720,
+      "integrity": "sha512-dAFz4pdvo6mbWfq1QwktjbEZrpr/dbaiKaT2IlTZTCx+B5Fp0qV5lH9Jmv7DbPeNnD7OBgEojo+RBzCsCP8q3A==",
+      "mode": 420,
+      "size": 167202
+    },
+    "dist/src/entrypoints/module.es.d.ts": {
+      "checkedAt": 1764662919720,
+      "integrity": "sha512-lWw7Jb62f1RYtgGygQ7mxrOW1N9WgQAvOb7jAHeq2rHw2EDuJJuNnuj65PbsFsxScm3k0RujGbjtfBuXQl3gnA==",
+      "mode": 420,
+      "size": 148
+    },
+    "lib/src/entrypoints/module.es.d.ts": {
+      "checkedAt": 1764662919720,
+      "integrity": "sha512-lWw7Jb62f1RYtgGygQ7mxrOW1N9WgQAvOb7jAHeq2rHw2EDuJJuNnuj65PbsFsxScm3k0RujGbjtfBuXQl3gnA==",
+      "mode": 420,
+      "size": 148
+    },
+    "dist/module.full.d.ts": {
+      "checkedAt": 1764662919720,
+      "integrity": "sha512-dAFz4pdvo6mbWfq1QwktjbEZrpr/dbaiKaT2IlTZTCx+B5Fp0qV5lH9Jmv7DbPeNnD7OBgEojo+RBzCsCP8q3A==",
+      "mode": 420,
+      "size": 167202
+    },
+    "dist/src/entrypoints/module.full.es.d.ts": {
+      "checkedAt": 1764662919720,
+      "integrity": "sha512-P/8AACPjxpt1g29BV4dRoN89lQ/Sz8eydmdvPLDmZLj3kSEjlzrOoqtwHjLiMJ5VjC+ywuQ34HTV+1049I90pQ==",
+      "mode": 420,
+      "size": 126
+    },
+    "lib/src/entrypoints/module.full.es.d.ts": {
+      "checkedAt": 1764662919720,
+      "integrity": "sha512-P/8AACPjxpt1g29BV4dRoN89lQ/Sz8eydmdvPLDmZLj3kSEjlzrOoqtwHjLiMJ5VjC+ywuQ34HTV+1049I90pQ==",
+      "mode": 420,
+      "size": 126
+    },
+    "dist/module.full.no-external.d.ts": {
+      "checkedAt": 1764662919720,
+      "integrity": "sha512-dAFz4pdvo6mbWfq1QwktjbEZrpr/dbaiKaT2IlTZTCx+B5Fp0qV5lH9Jmv7DbPeNnD7OBgEojo+RBzCsCP8q3A==",
+      "mode": 420,
+      "size": 167202
+    },
+    "dist/src/entrypoints/module.full.no-external.es.d.ts": {
+      "checkedAt": 1764662919721,
+      "integrity": "sha512-7Ku4hunnbqrOVCWSq2Boe9oKlq2yvDFx9jFn9WyAxs83CsQ1Umo9gpN1J63S1N/ZX1xylUFGowlOy9NvyMGdoQ==",
+      "mode": 420,
+      "size": 150
+    },
+    "lib/src/entrypoints/module.full.no-external.es.d.ts": {
+      "checkedAt": 1764662919721,
+      "integrity": "sha512-7Ku4hunnbqrOVCWSq2Boe9oKlq2yvDFx9jFn9WyAxs83CsQ1Umo9gpN1J63S1N/ZX1xylUFGowlOy9NvyMGdoQ==",
+      "mode": 420,
+      "size": 150
+    },
+    "dist/module.no-external.d.ts": {
+      "checkedAt": 1764662919720,
+      "integrity": "sha512-dAFz4pdvo6mbWfq1QwktjbEZrpr/dbaiKaT2IlTZTCx+B5Fp0qV5lH9Jmv7DbPeNnD7OBgEojo+RBzCsCP8q3A==",
+      "mode": 420,
+      "size": 167202
+    },
+    "dist/src/entrypoints/module.no-external.es.d.ts": {
+      "checkedAt": 1764662919721,
+      "integrity": "sha512-Rp081eo/YO1lKy/JsTeosjk6Tsy8ia2n36nVq+Y2rYNzzqpghQN2W+JYsNHvsUHidt9QTA6MUeU2UffC+jf/7g==",
+      "mode": 420,
+      "size": 200
+    },
+    "lib/src/entrypoints/module.no-external.es.d.ts": {
+      "checkedAt": 1764662919721,
+      "integrity": "sha512-Rp081eo/YO1lKy/JsTeosjk6Tsy8ia2n36nVq+Y2rYNzzqpghQN2W+JYsNHvsUHidt9QTA6MUeU2UffC+jf/7g==",
+      "mode": 420,
+      "size": 200
+    },
+    "dist/src/extensions/replay/external/mutation-throttler.d.ts": {
+      "checkedAt": 1764662919722,
+      "integrity": "sha512-loJt+UUTtFA+Y0EjqhIp9zxn6yYhS3C6T0+q6TFGbPerp3CyNK9ebUws5BxbBZwE69at9IviPoYTAuWt1RltfA==",
+      "mode": 420,
+      "size": 683
+    },
+    "lib/src/extensions/replay/external/mutation-throttler.d.ts": {
+      "checkedAt": 1764662919722,
+      "integrity": "sha512-loJt+UUTtFA+Y0EjqhIp9zxn6yYhS3C6T0+q6TFGbPerp3CyNK9ebUws5BxbBZwE69at9IviPoYTAuWt1RltfA==",
+      "mode": 420,
+      "size": 683
+    },
+    "dist/src/extensions/replay/external/network-plugin.d.ts": {
+      "checkedAt": 1764662919722,
+      "integrity": "sha512-3BsS4HHHD4PBoa/sczMWdtRm8tklxIxE/yUwJJ4N0FKdYSxLHGaFkmtly6+Ip37PcsACJHpFdnYRges139mKMw==",
+      "mode": 420,
+      "size": 740
+    },
+    "lib/src/extensions/replay/external/network-plugin.d.ts": {
+      "checkedAt": 1764662919722,
+      "integrity": "sha512-3BsS4HHHD4PBoa/sczMWdtRm8tklxIxE/yUwJJ4N0FKdYSxLHGaFkmtly6+Ip37PcsACJHpFdnYRges139mKMw==",
+      "mode": 420,
+      "size": 740
+    },
+    "dist/src/page-view.d.ts": {
+      "checkedAt": 1764662919723,
+      "integrity": "sha512-PRWjWKPwOZi1xJlqn1e7KuFHTif1pb77bdNmnnMOAccOur/gz6TaoVz0YABpmbnzxE5WpP+dKhBDv4Itxuoagw==",
+      "mode": 420,
+      "size": 1053
+    },
+    "lib/src/page-view.d.ts": {
+      "checkedAt": 1764662919723,
+      "integrity": "sha512-PRWjWKPwOZi1xJlqn1e7KuFHTif1pb77bdNmnnMOAccOur/gz6TaoVz0YABpmbnzxE5WpP+dKhBDv4Itxuoagw==",
+      "mode": 420,
+      "size": 1053
+    },
+    "dist/src/extensions/replay/rrweb-plugins/patch.d.ts": {
+      "checkedAt": 1764662919723,
+      "integrity": "sha512-qIzA5LQ07qEV1ydj6PuvDqU73J/FsgggJGdQdPjc8+BelvfYqFziacWjgJIWM18FYP4CUZ0SXD+W+G6ZWqJ5fg==",
+      "mode": 420,
+      "size": 140
+    },
+    "lib/src/extensions/replay/rrweb-plugins/patch.d.ts": {
+      "checkedAt": 1764662919723,
+      "integrity": "sha512-qIzA5LQ07qEV1ydj6PuvDqU73J/FsgggJGdQdPjc8+BelvfYqFziacWjgJIWM18FYP4CUZ0SXD+W+G6ZWqJ5fg==",
+      "mode": 420,
+      "size": 140
+    },
+    "dist/src/posthog-core.d.ts": {
+      "checkedAt": 1764662919723,
+      "integrity": "sha512-EQBFDsQxrVKlEFVxPCJnto3+59FpKbJezaQrs0ynhNOIQLdnvDEtxEl4ecPFrdQj0NzfF3pTVFyMXAhdVZe0dw==",
+      "mode": 420,
+      "size": 54762
+    },
+    "lib/src/posthog-core.d.ts": {
+      "checkedAt": 1764662919723,
+      "integrity": "sha512-EQBFDsQxrVKlEFVxPCJnto3+59FpKbJezaQrs0ynhNOIQLdnvDEtxEl4ecPFrdQj0NzfF3pTVFyMXAhdVZe0dw==",
+      "mode": 420,
+      "size": 54762
+    },
+    "dist/src/posthog-exceptions.d.ts": {
+      "checkedAt": 1764662919724,
+      "integrity": "sha512-26zBTdOGdTs5l6NW1aVd0GjbifqmZ+5PYCiM09H91WONtp5tjoBLqu9/ds8KZDVQcmBZvZuRs85X3aCXmEWT9g==",
+      "mode": 420,
+      "size": 823
+    },
+    "lib/src/posthog-exceptions.d.ts": {
+      "checkedAt": 1764662919724,
+      "integrity": "sha512-26zBTdOGdTs5l6NW1aVd0GjbifqmZ+5PYCiM09H91WONtp5tjoBLqu9/ds8KZDVQcmBZvZuRs85X3aCXmEWT9g==",
+      "mode": 420,
+      "size": 823
+    },
+    "dist/src/posthog-featureflags.d.ts": {
+      "checkedAt": 1764662919724,
+      "integrity": "sha512-vNHlAff1+rSXe6xudb1YdLUtusxewalsjmxbSoEw/SgXU9B7hGE6tmR0AyN1c4E6VSCLbyWxn5A0rc6DZ9ZUEA==",
+      "mode": 420,
+      "size": 6566
+    },
+    "lib/src/posthog-featureflags.d.ts": {
+      "checkedAt": 1764662919724,
+      "integrity": "sha512-vNHlAff1+rSXe6xudb1YdLUtusxewalsjmxbSoEw/SgXU9B7hGE6tmR0AyN1c4E6VSCLbyWxn5A0rc6DZ9ZUEA==",
+      "mode": 420,
+      "size": 6566
+    },
+    "dist/src/posthog-persistence.d.ts": {
+      "checkedAt": 1764662919725,
+      "integrity": "sha512-w1x5YDH+mnlRA7hBuxT1Tq/67Q6ydzEvPTLJxmwgxVmNQx5+Un82u5RFQIGyWNmRiigpk2bjFrvJaTA5gBW+Lw==",
+      "mode": 420,
+      "size": 2358
+    },
+    "lib/src/posthog-persistence.d.ts": {
+      "checkedAt": 1764662919725,
+      "integrity": "sha512-w1x5YDH+mnlRA7hBuxT1Tq/67Q6ydzEvPTLJxmwgxVmNQx5+Un82u5RFQIGyWNmRiigpk2bjFrvJaTA5gBW+Lw==",
+      "mode": 420,
+      "size": 2358
+    },
+    "dist/src/entrypoints/posthog-recorder.d.ts": {
+      "checkedAt": 1764662919725,
+      "integrity": "sha512-1zrp4XG2gLvaYot0fzaAvk+DB3xemlUe83e23aNaafAgztXT5YTNmwGKFCtN+QhCYCuooJDPnitqjCpSqh5mPA==",
+      "mode": 420,
+      "size": 91
+    },
+    "lib/src/entrypoints/posthog-recorder.d.ts": {
+      "checkedAt": 1764662919725,
+      "integrity": "sha512-1zrp4XG2gLvaYot0fzaAvk+DB3xemlUe83e23aNaafAgztXT5YTNmwGKFCtN+QhCYCuooJDPnitqjCpSqh5mPA==",
+      "mode": 420,
+      "size": 91
+    },
+    "dist/src/posthog-surveys-types.d.ts": {
+      "checkedAt": 1764662919726,
+      "integrity": "sha512-/tgpypwthbgfnXt5cm2gCbGC2lbAUWL+xChwDkbuxTFiAccSi65TU21tlywZVSp21IdXdvPn4TCt5Rt1kZdvLw==",
+      "mode": 420,
+      "size": 7927
+    },
+    "lib/src/posthog-surveys-types.d.ts": {
+      "checkedAt": 1764662919726,
+      "integrity": "sha512-/tgpypwthbgfnXt5cm2gCbGC2lbAUWL+xChwDkbuxTFiAccSi65TU21tlywZVSp21IdXdvPn4TCt5Rt1kZdvLw==",
+      "mode": 420,
+      "size": 7927
+    },
+    "dist/src/posthog-surveys.d.ts": {
+      "checkedAt": 1764662919727,
+      "integrity": "sha512-VrZSXftT85w6Zc9LVWDi/rykjpwpYi6Cmr3T+EZEzcWKMsNE77s8vCLNdh32nEogve4RO7yxoZp01sExX7d6/A==",
+      "mode": 420,
+      "size": 2463
+    },
+    "lib/src/posthog-surveys.d.ts": {
+      "checkedAt": 1764662919727,
+      "integrity": "sha512-VrZSXftT85w6Zc9LVWDi/rykjpwpYi6Cmr3T+EZEzcWKMsNE77s8vCLNdh32nEogve4RO7yxoZp01sExX7d6/A==",
+      "mode": 420,
+      "size": 2463
+    },
+    "dist/src/extensions/surveys/components/PostHogLogo.d.ts": {
+      "checkedAt": 1764662919728,
+      "integrity": "sha512-hNP2TRcuomyhT69HOyHJjyytF9k68aOERUzg0ZDYWarQ1BJQUuPuiVw8emjNzV3AlyrFD4vLB+dt2teuvhnV0g==",
+      "mode": 420,
+      "size": 52
+    },
+    "lib/src/extensions/surveys/components/PostHogLogo.d.ts": {
+      "checkedAt": 1764662919728,
+      "integrity": "sha512-hNP2TRcuomyhT69HOyHJjyytF9k68aOERUzg0ZDYWarQ1BJQUuPuiVw8emjNzV3AlyrFD4vLB+dt2teuvhnV0g==",
+      "mode": 420,
+      "size": 52
+    },
+    "dist/src/customizations/posthogReduxLogger.d.ts": {
+      "checkedAt": 1764662919728,
+      "integrity": "sha512-pjjhB/asz+Ur2MacWUsfO5uQarPbny9tcRTK4xtwo5f4rHmo8Dy+vtxK3i0npLPZvRF1PT+iwb7FVfjJAkcOVg==",
+      "mode": 420,
+      "size": 5080
+    },
+    "lib/src/customizations/posthogReduxLogger.d.ts": {
+      "checkedAt": 1764662919728,
+      "integrity": "sha512-pjjhB/asz+Ur2MacWUsfO5uQarPbny9tcRTK4xtwo5f4rHmo8Dy+vtxK3i0npLPZvRF1PT+iwb7FVfjJAkcOVg==",
+      "mode": 420,
+      "size": 5080
+    },
+    "dist/src/utils/property-utils.d.ts": {
+      "checkedAt": 1764662919728,
+      "integrity": "sha512-LfcK36BlxFE91/qGrZ4uWsdWu4iUnqQZapY3zG1K3jf5j0nLCfUldWfMgIKA2/oGxTtDas/ySS/W8FXAxUDkDg==",
+      "mode": 420,
+      "size": 332
+    },
+    "lib/src/utils/property-utils.d.ts": {
+      "checkedAt": 1764662919728,
+      "integrity": "sha512-LfcK36BlxFE91/qGrZ4uWsdWu4iUnqQZapY3zG1K3jf5j0nLCfUldWfMgIKA2/oGxTtDas/ySS/W8FXAxUDkDg==",
+      "mode": 420,
+      "size": 332
+    },
+    "dist/src/utils/prototype-utils.d.ts": {
+      "checkedAt": 1764662919729,
+      "integrity": "sha512-4nb+kiyDyGjr8mv1pWrnh8TzyODQAEwuQcuBoB4qFrPh3/Lik9/z9tvqtILdCqNRupIPGO5QUuFzOXSJh23a6A==",
+      "mode": 420,
+      "size": 793
+    },
+    "lib/src/utils/prototype-utils.d.ts": {
+      "checkedAt": 1764662919729,
+      "integrity": "sha512-4nb+kiyDyGjr8mv1pWrnh8TzyODQAEwuQcuBoB4qFrPh3/Lik9/z9tvqtILdCqNRupIPGO5QUuFzOXSJh23a6A==",
+      "mode": 420,
+      "size": 793
+    },
+    "dist/src/extensions/surveys/components/QuestionHeader.d.ts": {
+      "checkedAt": 1764662919729,
+      "integrity": "sha512-0xFZidp7GctYosrL1fxwrLg8DgHb6KrbcoiNxjo+rAVrZz/kwIqFH9AYqkYkl1F9/I0q6NcCCQZDJqEW9Eu4nA==",
+      "mode": 420,
+      "size": 438
+    },
+    "lib/src/extensions/surveys/components/QuestionHeader.d.ts": {
+      "checkedAt": 1764662919729,
+      "integrity": "sha512-0xFZidp7GctYosrL1fxwrLg8DgHb6KrbcoiNxjo+rAVrZz/kwIqFH9AYqkYkl1F9/I0q6NcCCQZDJqEW9Eu4nA==",
+      "mode": 420,
+      "size": 438
+    },
+    "dist/src/extensions/surveys/components/QuestionTypes.d.ts": {
+      "checkedAt": 1764662919730,
+      "integrity": "sha512-Cciajeomu46Ak+O++Hgki4bxtKHWa2NPuga7WozMVqWf2SAo3ZggFlAuhl0htWtTtrqWMnnfZBzJt0I3MF76cA==",
+      "mode": 420,
+      "size": 1613
+    },
+    "lib/src/extensions/surveys/components/QuestionTypes.d.ts": {
+      "checkedAt": 1764662919730,
+      "integrity": "sha512-Cciajeomu46Ak+O++Hgki4bxtKHWa2NPuga7WozMVqWf2SAo3ZggFlAuhl0htWtTtrqWMnnfZBzJt0I3MF76cA==",
+      "mode": 420,
+      "size": 1613
+    },
+    "dist/src/extensions/rageclick.d.ts": {
+      "checkedAt": 1764662919730,
+      "integrity": "sha512-H40hDxR87mQJ2MOvWh/iq9uzwrtePsWJtHAFXtKHINmFcD1P7o4zEHou6ckvz8rFX40VJbATCQTiJs08MlqDow==",
+      "mode": 420,
+      "size": 209
+    },
+    "lib/src/extensions/rageclick.d.ts": {
+      "checkedAt": 1764662919730,
+      "integrity": "sha512-H40hDxR87mQJ2MOvWh/iq9uzwrtePsWJtHAFXtKHINmFcD1P7o4zEHou6ckvz8rFX40VJbATCQTiJs08MlqDow==",
+      "mode": 420,
+      "size": 209
+    },
+    "dist/src/rate-limiter.d.ts": {
+      "checkedAt": 1764662919731,
+      "integrity": "sha512-HMGQB8VbrhnwUQBNDqX1J8pPOgsCoaDAO0FwH4GvdcOsZYoLlc4EXkyfHuTkdbtrbrJetttOpfBYOD78myDyTw==",
+      "mode": 420,
+      "size": 586
+    },
+    "lib/src/rate-limiter.d.ts": {
+      "checkedAt": 1764662919731,
+      "integrity": "sha512-HMGQB8VbrhnwUQBNDqX1J8pPOgsCoaDAO0FwH4GvdcOsZYoLlc4EXkyfHuTkdbtrbrJetttOpfBYOD78myDyTw==",
+      "mode": 420,
+      "size": 586
+    },
+    "dist/src/entrypoints/recorder-v2.d.ts": {
+      "checkedAt": 1764662919717,
+      "integrity": "sha512-m3kaeyHFxMh819y5gYdA978qDt+7tzGxTLWGk3ANBKEJzguGvTL/9zG0pswre2NcRehtI/bhEmLT4TKIqigWsA==",
+      "mode": 420,
+      "size": 28
+    },
+    "lib/src/entrypoints/recorder-v2.d.ts": {
+      "checkedAt": 1764662919717,
+      "integrity": "sha512-m3kaeyHFxMh819y5gYdA978qDt+7tzGxTLWGk3ANBKEJzguGvTL/9zG0pswre2NcRehtI/bhEmLT4TKIqigWsA==",
+      "mode": 420,
+      "size": 28
+    },
+    "dist/src/entrypoints/recorder.d.ts": {
+      "checkedAt": 1764662919732,
+      "integrity": "sha512-Csbg0rM7Sby3OqNXJfSUXbxcciF3Jm5/HdlXlYIsRffMsxf5sFovmTdYrGA+Ghg07RYMqmjPZV9VwbwDYCXmDg==",
+      "mode": 420,
+      "size": 83
+    },
+    "lib/src/entrypoints/recorder.d.ts": {
+      "checkedAt": 1764662919732,
+      "integrity": "sha512-Csbg0rM7Sby3OqNXJfSUXbxcciF3Jm5/HdlXlYIsRffMsxf5sFovmTdYrGA+Ghg07RYMqmjPZV9VwbwDYCXmDg==",
+      "mode": 420,
+      "size": 83
+    },
+    "dist/src/utils/regex-utils.d.ts": {
+      "checkedAt": 1764662919734,
+      "integrity": "sha512-Lavl6ocFint15df2bTTYHQh4Fb6JXKDc0+RFIe6DuN9MurX3IC7XmlYUwoV3y4sv/X+aTUjjpS1qcNtCIAR94w==",
+      "mode": 420,
+      "size": 144
+    },
+    "lib/src/utils/regex-utils.d.ts": {
+      "checkedAt": 1764662919734,
+      "integrity": "sha512-Lavl6ocFint15df2bTTYHQh4Fb6JXKDc0+RFIe6DuN9MurX3IC7XmlYUwoV3y4sv/X+aTUjjpS1qcNtCIAR94w==",
+      "mode": 420,
+      "size": 144
+    },
+    "dist/src/remote-config.d.ts": {
+      "checkedAt": 1764662919735,
+      "integrity": "sha512-rwhs3Fq8o3LqcZw4wqC4xJgidlyVuCwORZgnQPOqwbu8WDuubVVoIpcenwhEmdZ+HuU14yYmz2Ey1V8FyebBHQ==",
+      "mode": 420,
+      "size": 360
+    },
+    "lib/src/remote-config.d.ts": {
+      "checkedAt": 1764662919735,
+      "integrity": "sha512-rwhs3Fq8o3LqcZw4wqC4xJgidlyVuCwORZgnQPOqwbu8WDuubVVoIpcenwhEmdZ+HuU14yYmz2Ey1V8FyebBHQ==",
+      "mode": 420,
+      "size": 360
+    },
+    "dist/src/request-queue.d.ts": {
+      "checkedAt": 1764662919735,
+      "integrity": "sha512-aCYVPeRvmTUIqEqIamYW5IBe3WmXmvIrfIwNlVK+JujLzHVtvtSLU8jw+vuzssBqqykpwT03q0LzNEF4W/S5wg==",
+      "mode": 420,
+      "size": 569
+    },
+    "lib/src/request-queue.d.ts": {
+      "checkedAt": 1764662919735,
+      "integrity": "sha512-aCYVPeRvmTUIqEqIamYW5IBe3WmXmvIrfIwNlVK+JujLzHVtvtSLU8jw+vuzssBqqykpwT03q0LzNEF4W/S5wg==",
+      "mode": 420,
+      "size": 569
+    },
+    "dist/src/utils/request-router.d.ts": {
+      "checkedAt": 1764662919736,
+      "integrity": "sha512-qlK2Puu/QhJ0VOdaOLNMaLbie5H4jM4TrZIiJW+Vh55/0iGktBqYha7w0UpGNI+6fyWm2w4G7faMWPIztR1Wog==",
+      "mode": 420,
+      "size": 854
+    },
+    "lib/src/utils/request-router.d.ts": {
+      "checkedAt": 1764662919736,
+      "integrity": "sha512-qlK2Puu/QhJ0VOdaOLNMaLbie5H4jM4TrZIiJW+Vh55/0iGktBqYha7w0UpGNI+6fyWm2w4G7faMWPIztR1Wog==",
+      "mode": 420,
+      "size": 854
+    },
+    "dist/src/utils/request-utils.d.ts": {
+      "checkedAt": 1764662919737,
+      "integrity": "sha512-vftL7AhacT2aDS+6SO4UFW2KvfXYS1NgNTxz5ZEDAp9eVRRnBHLJ4VH239LSKREvlMl24l9NJb4QyiVg7y/EJA==",
+      "mode": 420,
+      "size": 819
+    },
+    "lib/src/utils/request-utils.d.ts": {
+      "checkedAt": 1764662919737,
+      "integrity": "sha512-vftL7AhacT2aDS+6SO4UFW2KvfXYS1NgNTxz5ZEDAp9eVRRnBHLJ4VH239LSKREvlMl24l9NJb4QyiVg7y/EJA==",
+      "mode": 420,
+      "size": 819
+    },
+    "dist/src/request.d.ts": {
+      "checkedAt": 1764662919737,
+      "integrity": "sha512-wCw7gVy/RAmvo9jFvzxsXLIsOSb3nbUZF6NNMwCrHYI0hj75BkeQbtG17DNRi86JXQTRoYKAzJb+eS56oTwWDQ==",
+      "mode": 420,
+      "size": 340
+    },
+    "lib/src/request.d.ts": {
+      "checkedAt": 1764662919737,
+      "integrity": "sha512-wCw7gVy/RAmvo9jFvzxsXLIsOSb3nbUZF6NNMwCrHYI0hj75BkeQbtG17DNRi86JXQTRoYKAzJb+eS56oTwWDQ==",
+      "mode": 420,
+      "size": 340
+    },
+    "dist/src/retry-queue.d.ts": {
+      "checkedAt": 1764662919738,
+      "integrity": "sha512-SwuzNqRaClJcKuUsE5WHEJAQuHqrJQKgF8mZXBkvO30QwvJsIRIIHwaacUnErWq2SuC9rISiBNQKws7ZEGnnmA==",
+      "mode": 420,
+      "size": 869
+    },
+    "lib/src/retry-queue.d.ts": {
+      "checkedAt": 1764662919738,
+      "integrity": "sha512-SwuzNqRaClJcKuUsE5WHEJAQuHqrJQKgF8mZXBkvO30QwvJsIRIIHwaacUnErWq2SuC9rISiBNQKws7ZEGnnmA==",
+      "mode": 420,
+      "size": 869
+    },
+    "dist/src/extensions/replay/types/rrweb-types.d.ts": {
+      "checkedAt": 1764662919738,
+      "integrity": "sha512-BEhgvuB1EYhFMkFgWTCiUQ7LDkmD4bwLc822sbx+iDN6Y7ciH5QZ4kx9mnDvvfsUzFWE7pkRQ8F1ktir9tWqWQ==",
+      "mode": 420,
+      "size": 12401
+    },
+    "lib/src/extensions/replay/types/rrweb-types.d.ts": {
+      "checkedAt": 1764662919738,
+      "integrity": "sha512-BEhgvuB1EYhFMkFgWTCiUQ7LDkmD4bwLc822sbx+iDN6Y7ciH5QZ4kx9mnDvvfsUzFWE7pkRQ8F1ktir9tWqWQ==",
+      "mode": 420,
+      "size": 12401
+    },
+    "dist/src/extensions/replay/types/rrweb.d.ts": {
+      "checkedAt": 1764662919739,
+      "integrity": "sha512-/7x+vxifFx4g5UGKgCRWgvGz7WAXuVZvhXZ3emtle4BrzajxCVUzxtSP0JjL8vjjPMb5Xgapk1OzVA9EHkBKuA==",
+      "mode": 420,
+      "size": 2502
+    },
+    "lib/src/extensions/replay/types/rrweb.d.ts": {
+      "checkedAt": 1764662919739,
+      "integrity": "sha512-/7x+vxifFx4g5UGKgCRWgvGz7WAXuVZvhXZ3emtle4BrzajxCVUzxtSP0JjL8vjjPMb5Xgapk1OzVA9EHkBKuA==",
+      "mode": 420,
+      "size": 2502
+    },
+    "dist/src/extensions/sampling.d.ts": {
+      "checkedAt": 1764662919740,
+      "integrity": "sha512-n9AX4FnVpzlM2zkmqcaEJwf46BBTuXNWLXMWDOSwe1/izx5h5ZMAOPZgSzda+fzitAa1lPFQZmWFGdkBwHuEUA==",
+      "mode": 420,
+      "size": 353
+    },
+    "lib/src/extensions/sampling.d.ts": {
+      "checkedAt": 1764662919740,
+      "integrity": "sha512-n9AX4FnVpzlM2zkmqcaEJwf46BBTuXNWLXMWDOSwe1/izx5h5ZMAOPZgSzda+fzitAa1lPFQZmWFGdkBwHuEUA==",
+      "mode": 420,
+      "size": 353
+    },
+    "dist/src/scroll-manager.d.ts": {
+      "checkedAt": 1764662919741,
+      "integrity": "sha512-oydkKsCf3SF8RXQR0Sp4wD3S8O3lVFMLB+1bg3i1erH1XCG91t0Zcn9m3p0/Sz1fX6Yyw3cNHYfD9Xn+gMnA0A==",
+      "mode": 420,
+      "size": 616
+    },
+    "lib/src/scroll-manager.d.ts": {
+      "checkedAt": 1764662919741,
+      "integrity": "sha512-oydkKsCf3SF8RXQR0Sp4wD3S8O3lVFMLB+1bg3i1erH1XCG91t0Zcn9m3p0/Sz1fX6Yyw3cNHYfD9Xn+gMnA0A==",
+      "mode": 420,
+      "size": 616
+    },
+    "dist/src/extensions/segment-integration.d.ts": {
+      "checkedAt": 1764662919741,
+      "integrity": "sha512-81n7iV9kmdD9jV3oXPwvB1dv9kyy+Ph8rvejzSLYttNpTlAdpdSpV+WiXaIPrvGYgJVPGynfkNocAVVDCJGUnA==",
+      "mode": 420,
+      "size": 1665
+    },
+    "lib/src/extensions/segment-integration.d.ts": {
+      "checkedAt": 1764662919741,
+      "integrity": "sha512-81n7iV9kmdD9jV3oXPwvB1dv9kyy+Ph8rvejzSLYttNpTlAdpdSpV+WiXaIPrvGYgJVPGynfkNocAVVDCJGUnA==",
+      "mode": 420,
+      "size": 1665
+    },
+    "dist/src/extensions/sentry-integration.d.ts": {
+      "checkedAt": 1764662919741,
+      "integrity": "sha512-90ha6rZ6qZTkIaOe9B528/mgVbETYDJQI5zF3tkeSrzcUVzwjUjJ/beLUj0GW/VdyPWX9PV5vM/hrLTIz1IlbA==",
+      "mode": 420,
+      "size": 2371
+    },
+    "lib/src/extensions/sentry-integration.d.ts": {
+      "checkedAt": 1764662919741,
+      "integrity": "sha512-90ha6rZ6qZTkIaOe9B528/mgVbETYDJQI5zF3tkeSrzcUVzwjUjJ/beLUj0GW/VdyPWX9PV5vM/hrLTIz1IlbA==",
+      "mode": 420,
+      "size": 2371
+    },
+    "dist/src/session-props.d.ts": {
+      "checkedAt": 1764662919746,
+      "integrity": "sha512-HjQd2sb0KBuQCdrypIhp8AJ0nxafYTz42Li9eyxm+GwXDRw58hihVEnU6u+HuUptc2/V7E9LPBJ46gq0Dvpn8Q==",
+      "mode": 420,
+      "size": 1223
+    },
+    "lib/src/session-props.d.ts": {
+      "checkedAt": 1764662919746,
+      "integrity": "sha512-HjQd2sb0KBuQCdrypIhp8AJ0nxafYTz42Li9eyxm+GwXDRw58hihVEnU6u+HuUptc2/V7E9LPBJ46gq0Dvpn8Q==",
+      "mode": 420,
+      "size": 1223
+    },
+    "dist/src/extensions/replay/session-recording.d.ts": {
+      "checkedAt": 1764662919749,
+      "integrity": "sha512-MpYgyJdhAb/SMW7j172L6WLkv5PKH8gggJ/ULFDD2QvTMeCuQlIgqyTmj+td2Is4iD4hZR2FMedAZzfpwHK5Dg==",
+      "mode": 420,
+      "size": 3150
+    },
+    "lib/src/extensions/replay/session-recording.d.ts": {
+      "checkedAt": 1764662919749,
+      "integrity": "sha512-MpYgyJdhAb/SMW7j172L6WLkv5PKH8gggJ/ULFDD2QvTMeCuQlIgqyTmj+td2Is4iD4hZR2FMedAZzfpwHK5Dg==",
+      "mode": 420,
+      "size": 3150
+    },
+    "dist/src/sessionid.d.ts": {
+      "checkedAt": 1764662919750,
+      "integrity": "sha512-SsRkog0fAJ4Hs9Kh3v3rfEVQHVpVXSIp5MtlqMnp5Ydwf0dR8TE3tJZtyhx7ee42yUw+i02vJpaGneIc/k0HsA==",
+      "mode": 420,
+      "size": 1914
+    },
+    "lib/src/sessionid.d.ts": {
+      "checkedAt": 1764662919750,
+      "integrity": "sha512-SsRkog0fAJ4Hs9Kh3v3rfEVQHVpVXSIp5MtlqMnp5Ydwf0dR8TE3tJZtyhx7ee42yUw+i02vJpaGneIc/k0HsA==",
+      "mode": 420,
+      "size": 1914
+    },
+    "dist/src/extensions/replay/external/sessionrecording-utils.d.ts": {
+      "checkedAt": 1764662919768,
+      "integrity": "sha512-46sV3ioJBx7scN4D9J/8s8xNtTr2G3Vsl6P8vd+Cm5kK1YlzZa45XZg7Tn9nCXFs+60ATLPjvTdDVeOFrp/zrA==",
+      "mode": 420,
+      "size": 1387
+    },
+    "lib/src/extensions/replay/external/sessionrecording-utils.d.ts": {
+      "checkedAt": 1764662919768,
+      "integrity": "sha512-46sV3ioJBx7scN4D9J/8s8xNtTr2G3Vsl6P8vd+Cm5kK1YlzZa45XZg7Tn9nCXFs+60ATLPjvTdDVeOFrp/zrA==",
+      "mode": 420,
+      "size": 1387
+    },
+    "dist/src/customizations/setAllPersonProfilePropertiesAsPersonPropertiesForFlags.d.ts": {
+      "checkedAt": 1764662919770,
+      "integrity": "sha512-SobtY9LkUfDnFdADNrL4wIu3AE7AASMn0ux8h7ad3wcvltoxzE5OLqBVGQqJe9cgD+38DdT/jHSkjlhUxNMYpg==",
+      "mode": 420,
+      "size": 149
+    },
+    "lib/src/customizations/setAllPersonProfilePropertiesAsPersonPropertiesForFlags.d.ts": {
+      "checkedAt": 1764662919770,
+      "integrity": "sha512-SobtY9LkUfDnFdADNrL4wIu3AE7AASMn0ux8h7ad3wcvltoxzE5OLqBVGQqJe9cgD+38DdT/jHSkjlhUxNMYpg==",
+      "mode": 420,
+      "size": 149
+    },
+    "dist/src/utils/simple-event-emitter.d.ts": {
+      "checkedAt": 1764662919771,
+      "integrity": "sha512-2EbFyz7h+1OaqE+7B85IC87wmoGazSwV4hy/Jzmf73gG1dNtkJhqR/si8QdXK0s8/FOuNnGJ0XOjHBK/xS4bfw==",
+      "mode": 420,
+      "size": 200
+    },
+    "lib/src/utils/simple-event-emitter.d.ts": {
+      "checkedAt": 1764662919771,
+      "integrity": "sha512-2EbFyz7h+1OaqE+7B85IC87wmoGazSwV4hy/Jzmf73gG1dNtkJhqR/si8QdXK0s8/FOuNnGJ0XOjHBK/xS4bfw==",
+      "mode": 420,
+      "size": 200
+    },
+    "dist/src/site-apps.d.ts": {
+      "checkedAt": 1764662919772,
+      "integrity": "sha512-dL+HRZYy5yW5Mo1pruZaNA0WDYydS+FbJkla3mANnn+CmfbfCCHdaDUsm08IzXGHulPt8SlYOmh99G0dXXzZeA==",
+      "mode": 420,
+      "size": 675
+    },
+    "lib/src/site-apps.d.ts": {
+      "checkedAt": 1764662919772,
+      "integrity": "sha512-dL+HRZYy5yW5Mo1pruZaNA0WDYydS+FbJkla3mANnn+CmfbfCCHdaDUsm08IzXGHulPt8SlYOmh99G0dXXzZeA==",
+      "mode": 420,
+      "size": 675
+    },
+    "dist/src/storage.d.ts": {
+      "checkedAt": 1764662919773,
+      "integrity": "sha512-oh/TAxhStqm2a2pDsT0gD8X767bBbAKrosOxuSQ0w2iHM4Z6YQye0gQ1u0VQAB67WBG1hQOHzAMOZ6k2jnZIBQ==",
+      "mode": 420,
+      "size": 1196
+    },
+    "lib/src/storage.d.ts": {
+      "checkedAt": 1764662919773,
+      "integrity": "sha512-oh/TAxhStqm2a2pDsT0gD8X767bBbAKrosOxuSQ0w2iHM4Z6YQye0gQ1u0VQAB67WBG1hQOHzAMOZ6k2jnZIBQ==",
+      "mode": 420,
+      "size": 1196
+    },
+    "dist/src/extensions/utils/stylesheet-loader.d.ts": {
+      "checkedAt": 1764662919774,
+      "integrity": "sha512-qGRa436MhH3lTZie/XKMS1J6lr8hxL46zvAm4U8A1IcbaJs0TPVZKGTf2eucYR1++2Rv8QdgLqZ+dvSzMbzpCQ==",
+      "mode": 420,
+      "size": 173
+    },
+    "lib/src/extensions/utils/stylesheet-loader.d.ts": {
+      "checkedAt": 1764662919774,
+      "integrity": "sha512-qGRa436MhH3lTZie/XKMS1J6lr8hxL46zvAm4U8A1IcbaJs0TPVZKGTf2eucYR1++2Rv8QdgLqZ+dvSzMbzpCQ==",
+      "mode": 420,
+      "size": 173
+    },
+    "dist/src/utils/survey-event-receiver.d.ts": {
+      "checkedAt": 1764662919774,
+      "integrity": "sha512-kuWFoTJw0slj4k3jEEZZaBTOj4NEohcFN5PyKWwp32RXsY3gB43y+bJu6wD2GZybfC5x95HWHHCjtLbAvRQgkQ==",
+      "mode": 420,
+      "size": 816
+    },
+    "lib/src/utils/survey-event-receiver.d.ts": {
+      "checkedAt": 1764662919774,
+      "integrity": "sha512-kuWFoTJw0slj4k3jEEZZaBTOj4NEohcFN5PyKWwp32RXsY3gB43y+bJu6wD2GZybfC5x95HWHHCjtLbAvRQgkQ==",
+      "mode": 420,
+      "size": 816
+    },
+    "dist/src/utils/survey-utils.d.ts": {
+      "checkedAt": 1764662919775,
+      "integrity": "sha512-MYAV1Fq31hxeUim9W9MJkBCXpL+opaeeLK/DYgnv8UlEgU6Xb3ERFF7yu0g8lL9yQoqF2As/2n/EAte4T75FUA==",
+      "mode": 420,
+      "size": 1291
+    },
+    "lib/src/utils/survey-utils.d.ts": {
+      "checkedAt": 1764662919775,
+      "integrity": "sha512-MYAV1Fq31hxeUim9W9MJkBCXpL+opaeeLK/DYgnv8UlEgU6Xb3ERFF7yu0g8lL9yQoqF2As/2n/EAte4T75FUA==",
+      "mode": 420,
+      "size": 1291
+    },
+    "dist/src/extensions/surveys/surveys-extension-utils.d.ts": {
+      "checkedAt": 1764662919775,
+      "integrity": "sha512-edaRhMY6UBCzja6ISnoml6tCKas8L/8OB55PjPvxAstks4pXUIsjW/+dJEE2i5rUK94h/+zzu10K3vCnJP19Jw==",
+      "mode": 420,
+      "size": 5104
+    },
+    "lib/src/extensions/surveys/surveys-extension-utils.d.ts": {
+      "checkedAt": 1764662919775,
+      "integrity": "sha512-edaRhMY6UBCzja6ISnoml6tCKas8L/8OB55PjPvxAstks4pXUIsjW/+dJEE2i5rUK94h/+zzu10K3vCnJP19Jw==",
+      "mode": 420,
+      "size": 5104
+    },
+    "dist/surveys-preview.d.ts": {
+      "checkedAt": 1764662919776,
+      "integrity": "sha512-U2S4S5+JcTHjjI7Rk7HCdZKEaZLoiy05CxG1eMGzFk0nqPDbvALuPNqA/q4HqR30HA9qlUUnc/0z11yS2RJzUA==",
+      "mode": 420,
+      "size": 163492
+    },
+    "dist/src/entrypoints/surveys-preview.es.d.ts": {
+      "checkedAt": 1764662919777,
+      "integrity": "sha512-i3wabJsaxpHkZgTUb6oK3/f2ZjXe28PnIgHdkgDaOiqmcoshIXHL1xAun063HYynF0AL9EYVHz9u64UCmOiRLA==",
+      "mode": 420,
+      "size": 110
+    },
+    "lib/src/entrypoints/surveys-preview.es.d.ts": {
+      "checkedAt": 1764662919777,
+      "integrity": "sha512-i3wabJsaxpHkZgTUb6oK3/f2ZjXe28PnIgHdkgDaOiqmcoshIXHL1xAun063HYynF0AL9EYVHz9u64UCmOiRLA==",
+      "mode": 420,
+      "size": 110
+    },
+    "dist/src/entrypoints/surveys.d.ts": {
+      "checkedAt": 1764662919777,
+      "integrity": "sha512-fa0V94/xFWt7PNF8tfvhHp+UW3eqyDVjX+SlPTgwCgrbiV6BOsjnq4gXJkOSAqkh745CLfDR+W7B8sJzlCukOA==",
+      "mode": 420,
+      "size": 89
+    },
+    "dist/src/extensions/surveys.d.ts": {
+      "checkedAt": 1764662919778,
+      "integrity": "sha512-7frULn6oI9r6LUWwOYA6VW4IN71sS8HVVcMv6x/LI+nVYNY0spkVFYuwssspGNoOQCFKL9nSWqQWCA0RMxpVMg==",
+      "mode": 420,
+      "size": 5746
+    },
+    "lib/src/entrypoints/surveys.d.ts": {
+      "checkedAt": 1764662919777,
+      "integrity": "sha512-fa0V94/xFWt7PNF8tfvhHp+UW3eqyDVjX+SlPTgwCgrbiV6BOsjnq4gXJkOSAqkh745CLfDR+W7B8sJzlCukOA==",
+      "mode": 420,
+      "size": 89
+    },
+    "lib/src/extensions/surveys.d.ts": {
+      "checkedAt": 1764662919778,
+      "integrity": "sha512-7frULn6oI9r6LUWwOYA6VW4IN71sS8HVVcMv6x/LI+nVYNY0spkVFYuwssspGNoOQCFKL9nSWqQWCA0RMxpVMg==",
+      "mode": 420,
+      "size": 5746
+    },
+    "dist/src/extensions/toolbar.d.ts": {
+      "checkedAt": 1764662919778,
+      "integrity": "sha512-mnvOai8esAeSEeIbAH7o0jiZCLBV4SSCfKs8tTXhoO43khCxtmSoc+35dVIwGX3x9qpsAq80leKnvQpBo4wItg==",
+      "mode": 420,
+      "size": 1004
+    },
+    "lib/src/extensions/toolbar.d.ts": {
+      "checkedAt": 1764662919778,
+      "integrity": "sha512-mnvOai8esAeSEeIbAH7o0jiZCLBV4SSCfKs8tTXhoO43khCxtmSoc+35dVIwGX3x9qpsAq80leKnvQpBo4wItg==",
+      "mode": 420,
+      "size": 1004
+    },
+    "dist/src/entrypoints/tracing-headers.d.ts": {
+      "checkedAt": 1764662919779,
+      "integrity": "sha512-Q3VLHtMr3DCkJepYBHdzhC+lX8wGjNowgrGq4gKmrX/WYZfZwenYMPV9ZbawhycChLuEgWIYKyTDcW7CTvsK+Q==",
+      "mode": 420,
+      "size": 323
+    },
+    "dist/src/extensions/tracing-headers.d.ts": {
+      "checkedAt": 1764662919780,
+      "integrity": "sha512-EXXJet1pkk3X5dkDJ6JAeNFAAivdnzwV4J1FZNRa+ogvmcw7Mm4TXNE9VMesG9XVgur1hYp6xd3WZ02uMVlfMw==",
+      "mode": 420,
+      "size": 302
+    },
+    "lib/src/entrypoints/tracing-headers.d.ts": {
+      "checkedAt": 1764662919779,
+      "integrity": "sha512-Q3VLHtMr3DCkJepYBHdzhC+lX8wGjNowgrGq4gKmrX/WYZfZwenYMPV9ZbawhycChLuEgWIYKyTDcW7CTvsK+Q==",
+      "mode": 420,
+      "size": 323
+    },
+    "lib/src/extensions/tracing-headers.d.ts": {
+      "checkedAt": 1764662919780,
+      "integrity": "sha512-EXXJet1pkk3X5dkDJ6JAeNFAAivdnzwV4J1FZNRa+ogvmcw7Mm4TXNE9VMesG9XVgur1hYp6xd3WZ02uMVlfMw==",
+      "mode": 420,
+      "size": 302
+    },
+    "dist/src/extensions/replay/external/triggerMatching.d.ts": {
+      "checkedAt": 1764662919781,
+      "integrity": "sha512-mykmM3ZVyxRwRa7ItG+5RsQukvmQuisce2Jo/zcGCj9cPd9vypjj/y2pmIwGvfk4OxfRRG50krFXDdTNgrbWvw==",
+      "mode": 420,
+      "size": 4462
+    },
+    "lib/src/extensions/replay/external/triggerMatching.d.ts": {
+      "checkedAt": 1764662919781,
+      "integrity": "sha512-mykmM3ZVyxRwRa7ItG+5RsQukvmQuisce2Jo/zcGCj9cPd9vypjj/y2pmIwGvfk4OxfRRG50krFXDdTNgrbWvw==",
+      "mode": 420,
+      "size": 4462
+    },
+    "dist/src/utils/type-utils.d.ts": {
+      "checkedAt": 1764662919782,
+      "integrity": "sha512-cuG2KduDOUTp8ummFF0iWlq4/VnV20/txD70lkdU2Zky6FQUdXyGtLWR+fUto4Vl1m3QpngzRV2w1PWR5jJJDA==",
+      "mode": 420,
+      "size": 122
+    },
+    "lib/src/utils/type-utils.d.ts": {
+      "checkedAt": 1764662919782,
+      "integrity": "sha512-cuG2KduDOUTp8ummFF0iWlq4/VnV20/txD70lkdU2Zky6FQUdXyGtLWR+fUto4Vl1m3QpngzRV2w1PWR5jJJDA==",
+      "mode": 420,
+      "size": 122
+    },
+    "dist/src/types.d.ts": {
+      "checkedAt": 1764662919782,
+      "integrity": "sha512-uJq/8IMtqSsP2To1U5kHlRwfug5LRtDNQrxb2rM0gzF6Ni8ly78stMe0zCbU7OB7ixSJXCBxqmVVmk8g5STKhw==",
+      "mode": 420,
+      "size": 58434
+    },
+    "lib/src/types.d.ts": {
+      "checkedAt": 1764662919782,
+      "integrity": "sha512-uJq/8IMtqSsP2To1U5kHlRwfug5LRtDNQrxb2rM0gzF6Ni8ly78stMe0zCbU7OB7ixSJXCBxqmVVmk8g5STKhw==",
+      "mode": 420,
+      "size": 58434
+    },
+    "dist/src/utils/user-agent-utils.d.ts": {
+      "checkedAt": 1764662919783,
+      "integrity": "sha512-hBTbtaX6oZJG1rdOX4EynzjtsrUoM0BCv3ZboTP1nvpQk4oRSAsoDfcuv9oRKim4dlC7Glyc3ug4RDvELqY2PA==",
+      "mode": 420,
+      "size": 965
+    },
+    "lib/src/utils/user-agent-utils.d.ts": {
+      "checkedAt": 1764662919783,
+      "integrity": "sha512-hBTbtaX6oZJG1rdOX4EynzjtsrUoM0BCv3ZboTP1nvpQk4oRSAsoDfcuv9oRKim4dlC7Glyc3ug4RDvELqY2PA==",
+      "mode": 420,
+      "size": 965
+    },
+    "dist/src/uuidv7.d.ts": {
+      "checkedAt": 1764662919783,
+      "integrity": "sha512-zxaHC6ff5+DpVTnSIBsjiD7na2UAUmGfuujZP5iWW8rbZ0psSqw+Qt8p1Du3m3e+M4doFt+XGOLJWHODPF3Okg==",
+      "mode": 420,
+      "size": 1652
+    },
+    "lib/src/uuidv7.d.ts": {
+      "checkedAt": 1764662919783,
+      "integrity": "sha512-zxaHC6ff5+DpVTnSIBsjiD7na2UAUmGfuujZP5iWW8rbZ0psSqw+Qt8p1Du3m3e+M4doFt+XGOLJWHODPF3Okg==",
+      "mode": 420,
+      "size": 1652
+    },
+    "dist/src/web-experiments-types.d.ts": {
+      "checkedAt": 1764662919783,
+      "integrity": "sha512-WpM+EBM6FFjUE9rIkkyCOSDOoVCJeSOogp9/rqMfaxo7zw2dCvlvV1g7x3h/hoy0gRJVdPa8Wpe2XQU13yFC5w==",
+      "mode": 420,
+      "size": 932
+    },
+    "lib/src/web-experiments-types.d.ts": {
+      "checkedAt": 1764662919783,
+      "integrity": "sha512-WpM+EBM6FFjUE9rIkkyCOSDOoVCJeSOogp9/rqMfaxo7zw2dCvlvV1g7x3h/hoy0gRJVdPa8Wpe2XQU13yFC5w==",
+      "mode": 420,
+      "size": 932
+    },
+    "dist/src/web-experiments.d.ts": {
+      "checkedAt": 1764662919784,
+      "integrity": "sha512-dGAAc3sdCas6QlzNyLRecoMMr6kkwz2Hu11LwUERLlrdPMBzZZjl2dOjoLstUOH8qlorKznZzesrGntE31/hog==",
+      "mode": 420,
+      "size": 1009
+    },
+    "lib/src/web-experiments.d.ts": {
+      "checkedAt": 1764662919784,
+      "integrity": "sha512-dGAAc3sdCas6QlzNyLRecoMMr6kkwz2Hu11LwUERLlrdPMBzZZjl2dOjoLstUOH8qlorKznZzesrGntE31/hog==",
+      "mode": 420,
+      "size": 1009
+    },
+    "dist/src/entrypoints/web-vitals.d.ts": {
+      "checkedAt": 1764662919784,
+      "integrity": "sha512-JdcIONJq0x3793RRnD6csyCguUPlQL1JK+2yl8EMhWaR1LlWBSo12KcIJDUPu3xkaaQVCLwdLN105dFHpbv1Rw==",
+      "mode": 420,
+      "size": 728
+    },
+    "lib/src/entrypoints/web-vitals.d.ts": {
+      "checkedAt": 1764662919784,
+      "integrity": "sha512-JdcIONJq0x3793RRnD6csyCguUPlQL1JK+2yl8EMhWaR1LlWBSo12KcIJDUPu3xkaaQVCLwdLN105dFHpbv1Rw==",
+      "mode": 420,
+      "size": 728
+    },
+    "lib/tsconfig.tsbuildinfo": {
+      "checkedAt": 1764662919785,
+      "integrity": "sha512-2PhWcqmFg5hYU5udVWMfBeel7klU4ssBEmV87MLc6cbKIcpy7lW8agLxDtmoIwjsUZzjgAHLX+HeMkjX0xJQ5Q==",
+      "mode": 420,
+      "size": 4046
+    },
+    "LICENSE": {
+      "checkedAt": 1764662919785,
+      "integrity": "sha512-XfqCZwpjPhZMJlhNMrw3NzXcGU4RoiXt6YcTb85zE12pLybu8h3ecERC+6Zu7zpjJjMI30WXK5A3bm+oJ9u3Eg==",
+      "mode": 420,
+      "size": 13288
+    }
+  }
+}

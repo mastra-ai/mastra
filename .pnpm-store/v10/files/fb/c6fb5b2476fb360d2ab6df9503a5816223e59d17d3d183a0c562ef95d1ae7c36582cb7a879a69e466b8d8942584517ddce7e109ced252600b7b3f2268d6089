@@ -1,0 +1,42 @@
+"use client";
+
+// src/ui/user-action-bar.tsx
+import { forwardRef } from "react";
+import { PencilIcon } from "lucide-react";
+import { TooltipIconButton } from "./base/tooltip-icon-button.mjs";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import { useThreadConfig } from "./thread-config.mjs";
+import { useThread, ActionBarPrimitive } from "@assistant-ui/react";
+import { jsx } from "react/jsx-runtime";
+var useAllowEdit = (ensureCapability = false) => {
+  const { userMessage: { allowEdit = true } = {} } = useThreadConfig();
+  const editSupported = useThread((t) => t.capabilities.edit);
+  return allowEdit && (!ensureCapability || editSupported);
+};
+var UserActionBar = () => {
+  const allowEdit = useAllowEdit(true);
+  if (!allowEdit) return null;
+  return /* @__PURE__ */ jsx(UserActionBarRoot, { hideWhenRunning: true, autohide: "not-last", children: /* @__PURE__ */ jsx(UserActionBarEdit, {}) });
+};
+UserActionBar.displayName = "UserActionBar";
+var UserActionBarRoot = withDefaults(ActionBarPrimitive.Root, {
+  className: "aui-user-action-bar-root"
+});
+UserActionBarRoot.displayName = "UserActionBarRoot";
+var UserActionBarEdit = forwardRef((props, ref) => {
+  const {
+    strings: { userMessage: { edit: { tooltip = "Edit" } = {} } = {} } = {}
+  } = useThreadConfig();
+  const allowEdit = useAllowEdit();
+  return /* @__PURE__ */ jsx(ActionBarPrimitive.Edit, { disabled: !allowEdit, asChild: true, children: /* @__PURE__ */ jsx(TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(PencilIcon, {}) }) });
+});
+UserActionBarEdit.displayName = "UserActionBarEdit";
+var exports = {
+  Root: UserActionBarRoot,
+  Edit: UserActionBarEdit
+};
+var user_action_bar_default = Object.assign(UserActionBar, exports);
+export {
+  user_action_bar_default as default
+};
+//# sourceMappingURL=user-action-bar.mjs.map

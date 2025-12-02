@@ -1,0 +1,94 @@
+"use strict";
+"use client";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/thread-list-item.tsx
+var thread_list_item_exports = {};
+__export(thread_list_item_exports, {
+  default: () => thread_list_item_default
+});
+module.exports = __toCommonJS(thread_list_item_exports);
+var import_react = require("react");
+var import_lucide_react = require("lucide-react");
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_tooltip_icon_button = require("./base/tooltip-icon-button.js");
+var import_react2 = require("@assistant-ui/react");
+var import_thread_config = require("./thread-config.js");
+var import_classnames = __toESM(require("classnames"));
+var import_jsx_runtime = require("react/jsx-runtime");
+var ThreadListItem = () => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(ThreadListItemRoot, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadListItemTrigger, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadListItemTitle, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadListItemArchive, {})
+  ] });
+};
+var ThreadListItemRoot = (0, import_withDefaults.withDefaults)(import_react2.ThreadListItemPrimitive.Root, {
+  className: "aui-thread-list-item"
+});
+ThreadListItemRoot.displayName = "ThreadListItemRoot";
+var ThreadListItemTrigger = (0, import_withDefaults.withDefaults)(import_react2.ThreadListItemPrimitive.Trigger, {
+  className: "aui-thread-list-item-trigger"
+});
+var ThreadListItemTitle = (0, import_react.forwardRef)(({ className, ...props }, ref) => {
+  const config = (0, import_thread_config.useThreadConfig)();
+  const fallback = config.strings?.threadList?.item?.title?.fallback ?? "New Chat";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    "p",
+    {
+      ref,
+      className: (0, import_classnames.default)("aui-thread-list-item-title", className),
+      ...props,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ThreadListItemPrimitive.Title, { fallback })
+    }
+  );
+});
+ThreadListItemTitle.displayName = "ThreadListItemTitle";
+var ThreadListItemArchive = (0, import_react.forwardRef)(({ className, ...props }, ref) => {
+  const config = (0, import_thread_config.useThreadConfig)();
+  const tooltip = config.strings?.threadList?.item?.archive?.tooltip ?? "Archive thread";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ThreadListItemPrimitive.Archive, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    import_tooltip_icon_button.TooltipIconButton,
+    {
+      ref,
+      className: (0, import_classnames.default)("aui-thread-list-item-archive", className),
+      variant: "ghost",
+      tooltip,
+      ...props,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ArchiveIcon, {})
+    }
+  ) });
+});
+ThreadListItemArchive.displayName = "ThreadListItemArchive";
+var exports2 = {
+  Root: ThreadListItemRoot,
+  Title: ThreadListItemTitle,
+  Archive: ThreadListItemArchive
+};
+var thread_list_item_default = Object.assign(ThreadListItem, exports2);
+//# sourceMappingURL=thread-list-item.js.map

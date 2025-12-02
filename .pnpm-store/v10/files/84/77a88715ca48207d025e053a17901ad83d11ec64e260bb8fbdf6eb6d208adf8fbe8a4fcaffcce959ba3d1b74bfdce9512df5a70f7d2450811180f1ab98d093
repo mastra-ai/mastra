@@ -1,0 +1,1 @@
+{"version":3,"file":"CLIENT_GETNAME.d.ts","sourceRoot":"","sources":["../../../lib/commands/CLIENT_GETNAME.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,eAAe,EAAE,SAAS,EAAW,MAAM,eAAe,CAAC;;;;IAKlE;;;OAGG;gDACkB,aAAa;mCAGY,eAAe,GAAG,SAAS;;AAV3E,wBAW6B"}

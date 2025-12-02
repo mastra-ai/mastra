@@ -1,0 +1,64 @@
+{
+  "name": "json11",
+  "version": "2.0.2",
+  "description": "JSON for humans and machines",
+  "bin": "./dist/cli.mjs",
+  "browser": "./dist/umd/index.js",
+  "exports": {
+    "import": "./dist/es/index.mjs",
+    "require": "./dist/cjs/index.cjs"
+  },
+  "main": "./dist/cjs/index.cjs",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "src/",
+    "dist/"
+  ],
+  "scripts": {
+    "build": "npm run build:lib && npm run build:cli && npm run build:mini && npm run build:type",
+    "build:lib": "vite build",
+    "build:cli": "vite build --mode cli",
+    "build:mini": "MINIFY=true vite build",
+    "build:type": "dts-bundle-generator -o ./dist/index.d.ts ./src/index.ts --no-banner --export-referenced-types --umd-module-name=JSON11",
+    "generate-unicode": "node build/unicode.js",
+    "lint": "eslint .",
+    "lint-fix": "eslint --fix .",
+    "test": "vitest --run",
+    "prepublishOnly": "npm i && npm run test && npm run lint && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AMoo-Miki/json11.git"
+  },
+  "keywords": [
+    "json",
+    "json5",
+    "json11",
+    "es2020",
+    "ecmascript"
+  ],
+  "author": "AMoo-Miki",
+  "contributors": [
+    "Aseem Kishore <aseem.kishore@gmail.com>",
+    "Max Nanasy <max.nanasy@gmail.com>",
+    "Andrew Eisenberg <andrew@eisenberg.as>",
+    "Jordan Tucker <jordanbtucker@gmail.com>"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/AMoo-Miki/json11/issues"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.3.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@vitest/coverage-istanbul": "^1.6.0",
+    "dts-bundle-generator": "^9.5.1",
+    "eslint": "^9.3.0",
+    "globals": "^15.3.0",
+    "regenerate": "^1.4.0",
+    "unicode-10.0.0": "^0.7.5",
+    "vite": "^5.2.11",
+    "vitest": "^1.6.0"
+  }
+}

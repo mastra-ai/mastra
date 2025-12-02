@@ -1,0 +1,288 @@
+"use strict";
+/**
+ * Official TypeScript SDK for turbopuffer.com's API
+ * Something missing or should be improved? Email morgan@turbopuffer.com.
+ *
+ * Based off the initial work of https://github.com/holocron-hq! Thank you ❤️
+ */
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Namespace = exports.Turbopuffer = void 0;
+const createHTTPClient_1 = require("./createHTTPClient");
+const helpers_1 = require("./helpers");
+/* Base Client */
+class Turbopuffer {
+    constructor({ apiKey, baseUrl = "https://api.turbopuffer.com", connectTimeout = 10 * 1000, connectionIdleTimeout = 60 * 1000, warmConnections = 0, compression = true, }) {
+        this.http = (0, createHTTPClient_1.createHTTPClient)(baseUrl, apiKey, connectTimeout, connectionIdleTimeout, warmConnections, compression);
+    }
+    /**
+     * List all your namespaces.
+     * See: https://turbopuffer.com/docs/reference/namespaces
+     */
+    async namespaces({ cursor, prefix, page_size, } = {}) {
+        return (await this.http.doRequest({
+            method: "GET",
+            path: "/v1/namespaces",
+            query: {
+                cursor,
+                prefix,
+                page_size: page_size ? page_size.toString() : undefined,
+            },
+            retryable: true,
+        })).body;
+    }
+    /**
+     * Creates a namespace object to operate on. Operations
+     * should be called on the Namespace object itself.
+     */
+    namespace(id) {
+        return new Namespace(this, id);
+    }
+}
+exports.Turbopuffer = Turbopuffer;
+class Namespace {
+    constructor(client, id) {
+        this.client = client;
+        this.id = id;
+    }
+    /**
+     * Creates or updates vectors.
+     * See: https://turbopuffer.com/docs/reference/upsert
+     *
+     * Note: Will automatically batch according to the client's configured batch size.
+     */
+    async upsert({ vectors, distance_metric, schema, encryption, batchSize = 10000, }) {
+        for (let i = 0; i < vectors.length; i += batchSize) {
+            const batch = vectors.slice(i, i + batchSize);
+            await this.client.http.doRequest({
+                method: "POST",
+                path: `/v1/namespaces/${this.id}`,
+                compress: batch.length > 10,
+                body: {
+                    upserts: batch,
+                    distance_metric,
+                    schema,
+                    encryption,
+                },
+                retryable: true, // Upserts are idempotent
+            });
+        }
+    }
+    /**
+     * Deletes vectors (by IDs).
+     */
+    async delete({ ids }) {
+        await this.client.http.doRequest({
+            method: "POST",
+            path: `/v1/namespaces/${this.id}`,
+            compress: ids.length > 500,
+            body: {
+                ids: ids,
+                vectors: new Array(ids.length).fill(null),
+            },
+            retryable: true,
+        });
+    }
+    /**
+     * Deletes vectors (by filter).
+     */
+    async deleteByFilter({ filters }) {
+        var _a;
+        const response = await this.client.http.doRequest({
+            method: "POST",
+            path: `/v1/namespaces/${this.id}`,
+            compress: false,
+            body: {
+                delete_by_filter: filters,
+            },
+            retryable: true,
+        });
+        return ((_a = response === null || response === void 0 ? void 0 : response.body) === null || _a === void 0 ? void 0 : _a.rows_affected) || 0;
+    }
+    /**
+     * Queries vectors.
+     * See: https://turbopuffer.com/docs/reference/query
+     */
+    async query(_a) {
+        var params = __rest(_a, []);
+        const resultsWithMetrics = await this.queryWithMetrics(params);
+        return resultsWithMetrics.results;
+    }
+    /**
+     * Queries vectors and returns performance metrics along with the results.
+     * See: https://turbopuffer.com/docs/reference/query
+     */
+    async queryWithMetrics(_a) {
+        var params = __rest(_a, []);
+        const response = await this.client.http.doRequest({
+            method: "POST",
+            path: `/v1/namespaces/${this.id}/query`,
+            body: params,
+            retryable: true,
+            compress: true,
+        });
+        const serverTimingStr = response.headers["server-timing"];
+        const serverTiming = serverTimingStr
+            ? (0, helpers_1.parseServerTiming)(serverTimingStr)
+            : {};
+        return {
+            results: response.body,
+            metrics: {
+                approx_namespace_size: (0, helpers_1.parseIntMetric)(response.headers["x-turbopuffer-approx-namespace-size"]),
+                cache_hit_ratio: (0, helpers_1.parseFloatMetric)(serverTiming["cache.hit_ratio"]),
+                cache_temperature: serverTiming["cache.temperature"],
+                processing_time: (0, helpers_1.parseIntMetric)(serverTiming["processing_time.dur"]),
+                query_execution_time: (0, helpers_1.parseIntMetric)(serverTiming["query_execution_time.dur"]),
+                exhaustive_search_count: (0, helpers_1.parseIntMetric)(serverTiming["exhaustive_search.count"]),
+                response_time: response.request_timing.response_time,
+                body_read_time: response.request_timing.body_read_time,
+                decompress_time: response.request_timing.decompress_time,
+                deserialize_time: response.request_timing.deserialize_time,
+                compress_time: response.request_timing.compress_time,
+            },
+        };
+    }
+    /**
+     * Warm the cache.
+     */
+    async hintCacheWarm() {
+        return (await this.client.http.doRequest({
+            method: "GET",
+            path: `/v1/namespaces/${this.id}/hint_cache_warm`,
+            retryable: true,
+        })).body;
+    }
+    /**
+     * Export all vectors at full precision.
+     * See: https://turbopuffer.com/docs/reference/list
+     */
+    async export(params) {
+        const response = await this.client.http.doRequest({
+            method: "GET",
+            path: `/v1/namespaces/${this.id}`,
+            query: { cursor: params === null || params === void 0 ? void 0 : params.cursor },
+            retryable: true,
+        });
+        const body = response.body;
+        return {
+            vectors: (0, helpers_1.fromColumnar)(body),
+            next_cursor: body.next_cursor,
+        };
+    }
+    /**
+     * Fetches the approximate number of vectors in a namespace.
+     */
+    async approxNumVectors() {
+        return (await this.metadata()).approx_count;
+    }
+    async metadata() {
+        const response = await this.client.http.doRequest({
+            method: "HEAD",
+            path: `/v1/namespaces/${this.id}`,
+            retryable: true,
+        });
+        return {
+            id: this.id,
+            approx_count: parseInt(response.headers["x-turbopuffer-approx-num-vectors"]),
+            dimensions: parseInt(response.headers["x-turbopuffer-dimensions"]),
+            created_at: new Date(response.headers["x-turbopuffer-created-at"]),
+        };
+    }
+    /**
+     * Checks if a namespace exists.
+     */
+    async exists() {
+        try {
+            await this.metadata();
+            return true;
+        }
+        catch (e) {
+            if (e instanceof helpers_1.TurbopufferError && e.status === 404) {
+                return false;
+            }
+            throw e;
+        }
+    }
+    /**
+     * Delete a namespace fully (all data).
+     * See: https://turbopuffer.com/docs/reference/delete-namespace
+     */
+    async deleteAll() {
+        await this.client.http.doRequest({
+            method: "DELETE",
+            path: `/v1/namespaces/${this.id}`,
+            retryable: true,
+        });
+    }
+    /**
+     * Evaluates the recall performance of ANN queries in a namespace.
+     * See: https://turbopuffer.com/docs/reference/recall
+     */
+    async recall({ num, top_k, filters, queries, }) {
+        return (await this.client.http.doRequest({
+            method: "POST",
+            path: `/v1/namespaces/${this.id}/_debug/recall`,
+            compress: queries && queries.length > 10,
+            body: {
+                num,
+                top_k,
+                filters,
+                queries: queries
+                    ? queries.reduce((acc, value) => acc.concat(value), [])
+                    : undefined,
+            },
+            retryable: true,
+        })).body;
+    }
+    /**
+     * Returns the current schema for the namespace.
+     * See: https://turbopuffer.com/docs/schema
+     */
+    async schema() {
+        return (await this.client.http.doRequest({
+            method: "GET",
+            path: `/v1/namespaces/${this.id}/schema`,
+            retryable: true,
+        })).body;
+    }
+    /**
+     * Updates the schema for a namespace.
+     * Returns the final schema after updates are done.
+     * See https://turbopuffer.com/docs/schema for specifics on allowed updates.
+     */
+    async updateSchema(updatedSchema) {
+        return (await this.client.http.doRequest({
+            method: "POST",
+            path: `/v1/namespaces/${this.id}/schema`,
+            body: updatedSchema,
+            retryable: true,
+        })).body;
+    }
+    /**
+     * Copies all documents from another namespace to this namespace.
+     * See: https://turbopuffer.com/docs/upsert#parameters `copy_from_namespace`
+     * for specifics on how this works.
+     */
+    async copyFromNamespace(sourceNamespace) {
+        await this.client.http.doRequest({
+            method: "POST",
+            path: `/v1/namespaces/${this.id}`,
+            body: {
+                copy_from_namespace: sourceNamespace,
+            },
+            retryable: true,
+        });
+    }
+}
+exports.Namespace = Namespace;
+//# sourceMappingURL=turbopuffer.js.map

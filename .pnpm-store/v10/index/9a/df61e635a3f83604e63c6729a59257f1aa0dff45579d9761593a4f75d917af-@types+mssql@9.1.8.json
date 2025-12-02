@@ -1,0 +1,37 @@
+{
+  "name": "@types/mssql",
+  "version": "9.1.8",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662927719,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662927720,
+      "integrity": "sha512-AFuhDbFATMdpU5zMeK2KoEZW8BlAN2J0IMJyvY0PQeg5lHpIzoNlGaz9e2Q1rfdsIMzBfzR5rGx18vhd63UMFQ==",
+      "mode": 420,
+      "size": 840
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662927722,
+      "integrity": "sha512-0D75IK3RgSC2OXhXiSQm910Z2leWbNeiUrMjLlCDQAh8Wb+WXdM6ehZebIiLFH45KiHuDCnWTGmbaSOzyxryHQ==",
+      "mode": 420,
+      "size": 18089
+    },
+    "msnodesqlv8.d.ts": {
+      "checkedAt": 1764662927723,
+      "integrity": "sha512-KdwOr1jiLVbHRJ5dwqG3a+vHUBCRk6+2SdXnxAcK4C/xq2zLK735G3k7Le+JoKXgKO3hO5fdoKCPaXGRWRHkng==",
+      "mode": 420,
+      "size": 106
+    },
+    "package.json": {
+      "checkedAt": 1764662927724,
+      "integrity": "sha512-2pmxSPcq/AZxZWm+HaKJPAC0Ul4lK9d/ogq66loXykZ2k6Oj/n1180q2TlNlxN32KZSkexIFPeI4WBfAyqh5qg==",
+      "mode": 420,
+      "size": 1652
+    }
+  }
+}

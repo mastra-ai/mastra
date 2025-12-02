@@ -1,0 +1,1 @@
+{"version":3,"file":"LiveMetadataEvent.d.ts","sourceRoot":"","sources":["../../../../src/lib/types/LiveMetadataEvent.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,iBAAiB;IAChC,IAAI,EAAE,UAAU,CAAC;IACjB,eAAe,EAAE,MAAM,CAAC;IACxB,UAAU,EAAE,MAAM,CAAC;IACnB,MAAM,EAAE,MAAM,CAAC;IACf,OAAO,EAAE,MAAM,CAAC;IAChB,QAAQ,EAAE,MAAM,CAAC;IACjB,QAAQ,EAAE,MAAM,CAAC;CAClB"}

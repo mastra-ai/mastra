@@ -1,0 +1,88 @@
+{
+  "name": "@openrouter/sdk",
+  "version": "0.1.27",
+  "author": "OpenRouter",
+  "description": "The OpenRouter TypeScript SDK is a type-safe toolkit for building AI applications with access to 300+ language models through a unified API.",
+  "keywords": [
+    "openrouter",
+    "sdk",
+    "typescript",
+    "api",
+    "client",
+    "library",
+    "rest",
+    "http",
+    "agent",
+    "ai",
+    "openai",
+    "models",
+    "llm"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./esm/index.js",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./esm/index.d.ts",
+      "default": "./esm/index.js"
+    },
+    "./package.json": "./package.json",
+    "./types": {
+      "source": "./src/types/index.ts",
+      "types": "./esm/types/index.d.ts",
+      "default": "./esm/types/index.js"
+    },
+    "./models/errors": {
+      "source": "./src/models/errors/index.ts",
+      "types": "./esm/models/errors/index.d.ts",
+      "default": "./esm/models/errors/index.js"
+    },
+    "./models": {
+      "source": "./src/models/index.ts",
+      "types": "./esm/models/index.d.ts",
+      "default": "./esm/models/index.js"
+    },
+    "./models/operations": {
+      "source": "./src/models/operations/index.ts",
+      "types": "./esm/models/operations/index.d.ts",
+      "default": "./esm/models/operations/index.js"
+    },
+    "./*.js": {
+      "source": "./src/*.ts",
+      "types": "./esm/*.d.ts",
+      "default": "./esm/*.js"
+    },
+    "./*": {
+      "source": "./src/*.ts",
+      "types": "./esm/*.d.ts",
+      "default": "./esm/*.js"
+    }
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenRouterTeam/typescript-sdk.git"
+  },
+  "scripts": {
+    "lint": "eslint --cache --max-warnings=0 src",
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.19.0",
+    "@types/node": "^22.13.12",
+    "dotenv": "^16.4.7",
+    "eslint": "^9.19.0",
+    "globals": "^15.14.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.26.0",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  }
+}

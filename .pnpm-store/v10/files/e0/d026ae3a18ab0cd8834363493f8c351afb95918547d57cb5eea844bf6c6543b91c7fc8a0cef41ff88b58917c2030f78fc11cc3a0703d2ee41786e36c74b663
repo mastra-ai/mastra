@@ -1,0 +1,36 @@
+{
+    "name": "@types/content-disposition",
+    "version": "0.5.9",
+    "description": "TypeScript definitions for content-disposition",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/content-disposition",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Stefan Reichel",
+            "githubUsername": "bomret",
+            "url": "https://github.com/bomret"
+        },
+        {
+            "name": "Piotr Błażejewicz",
+            "githubUsername": "peterblazejewicz",
+            "url": "https://github.com/peterblazejewicz"
+        },
+        {
+            "name": "Sebastian Beltran",
+            "githubUsername": "bjohansebas",
+            "url": "https://github.com/bjohansebas"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/content-disposition"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "peerDependencies": {},
+    "typesPublisherContentHash": "eb4b56363bdb8d50fe15f9eaef87d31adef8899a61da907f3b2ca9f537c87697",
+    "typeScriptVersion": "5.1"
+}

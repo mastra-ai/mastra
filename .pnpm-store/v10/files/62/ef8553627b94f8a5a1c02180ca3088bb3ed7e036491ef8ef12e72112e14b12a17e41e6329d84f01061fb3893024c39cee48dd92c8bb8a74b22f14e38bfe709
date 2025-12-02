@@ -1,0 +1,5 @@
+couchbase-cxx-client (@COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@-@COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@) unstable; urgency=medium
+
+  * Automated build.
+
+ -- Couchbase SDK Team <support@couchbase.com>  @COUCHBASE_CXX_CLIENT_DEB_DATE@

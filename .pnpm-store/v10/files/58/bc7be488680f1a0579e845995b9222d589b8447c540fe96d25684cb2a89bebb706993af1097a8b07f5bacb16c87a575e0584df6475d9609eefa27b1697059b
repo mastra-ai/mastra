@@ -1,0 +1,29 @@
+'use strict';
+
+var chunkDSNPWVIG_cjs = require('./chunk-DSNPWVIG.cjs');
+
+// src/base.ts
+var MastraBase = class {
+  component = chunkDSNPWVIG_cjs.RegisteredLogger.LLM;
+  logger;
+  name;
+  constructor({ component, name }) {
+    this.component = component || chunkDSNPWVIG_cjs.RegisteredLogger.LLM;
+    this.name = name;
+    this.logger = new chunkDSNPWVIG_cjs.ConsoleLogger({ name: `${this.component} - ${this.name}` });
+  }
+  /**
+   * Set the logger for the agent
+   * @param logger
+   */
+  __setLogger(logger) {
+    this.logger = logger;
+    if (this.component !== chunkDSNPWVIG_cjs.RegisteredLogger.LLM) {
+      this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
+    }
+  }
+};
+
+exports.MastraBase = MastraBase;
+//# sourceMappingURL=chunk-KEXGB7FK.cjs.map
+//# sourceMappingURL=chunk-KEXGB7FK.cjs.map

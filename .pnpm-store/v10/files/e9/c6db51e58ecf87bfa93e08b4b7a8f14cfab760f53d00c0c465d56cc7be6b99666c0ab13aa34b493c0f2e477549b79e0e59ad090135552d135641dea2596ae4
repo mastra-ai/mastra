@@ -1,0 +1,36 @@
+{
+  "name": "@lezer/php",
+  "version": "1.0.5",
+  "description": "Lezer-based PHP grammar",
+  "main": "dist/index.cjs",
+  "type": "module",
+  "exports": {
+    "import": "./dist/index.js",
+    "require": "./dist/index.cjs"
+  },
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "author": "Marijn Haverbeke <marijn@haverbeke.berlin>",
+  "license": "MIT",
+  "devDependencies": {
+    "@lezer/generator": "^1.2.2",
+    "mocha": "^10.2.0",
+    "rollup": "^2.52.2",
+    "@rollup/plugin-node-resolve": "^9.0.0"
+  },
+  "dependencies": {
+    "@lezer/common": "^1.2.0",
+    "@lezer/highlight": "^1.0.0",
+    "@lezer/lr": "^1.1.0"
+  },
+  "repository": {
+    "type" : "git",
+    "url" : "https://github.com/lezer-parser/php.git"
+  },
+  "scripts": {
+    "build": "lezer-generator src/php.grammar -o src/parser && rollup -c",
+    "build-debug": "lezer-generator src/php.grammar --names -o src/parser && rollup -c",
+    "prepare": "npm run build",
+    "test": "mocha test/test-*.js"
+  }
+}

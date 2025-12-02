@@ -1,0 +1,169 @@
+"use strict";
+"use client";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/attachment-ui.tsx
+var attachment_ui_exports = {};
+__export(attachment_ui_exports, {
+  default: () => attachment_ui_default
+});
+module.exports = __toCommonJS(attachment_ui_exports);
+var import_react = require("react");
+var import_lucide_react = require("lucide-react");
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_thread_config = require("./thread-config.js");
+var import_tooltip_icon_button = require("./base/tooltip-icon-button.js");
+var import_react2 = require("@assistant-ui/react");
+var import_base = require("./base/index.js");
+var import_dialog = require("./base/dialog.js");
+var import_react_avatar = require("@radix-ui/react-avatar");
+var import_shallow = require("zustand/shallow");
+var import_react_dialog = require("@radix-ui/react-dialog");
+var import_jsx_runtime = (
+  // eslint-disable-next-line @next/next/no-img-element
+  require("react/jsx-runtime")
+);
+var AttachmentRoot = (0, import_withDefaults.withDefaults)(import_react2.AttachmentPrimitive.Root, {
+  className: "aui-attachment-root"
+});
+var AttachmentContent = (0, import_withDefaults.withDefaults)("div", {
+  className: "aui-attachment-content"
+});
+AttachmentRoot.displayName = "AttachmentRoot";
+var useFileSrc = (file) => {
+  const [src, setSrc] = (0, import_react.useState)(void 0);
+  (0, import_react.useEffect)(() => {
+    if (!file) {
+      setSrc(void 0);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setSrc(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [file]);
+  return src;
+};
+var useAttachmentSrc = () => {
+  const { file, src } = (0, import_react2.useAttachment)(
+    (0, import_shallow.useShallow)((a) => {
+      if (a.type !== "image") return {};
+      if (a.file) return { file: a.file };
+      const src2 = a.content?.filter((c) => c.type === "image")[0]?.image;
+      if (!src2) return {};
+      return { src: src2 };
+    })
+  );
+  return useFileSrc(file) ?? src;
+};
+var AttachmentPreview = ({ src }) => {
+  const [isLoaded, setIsLoaded] = (0, import_react.useState)(false);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    "img",
+    {
+      src,
+      style: {
+        width: "auto",
+        height: "auto",
+        maxWidth: "75dvh",
+        maxHeight: "75dvh",
+        display: isLoaded ? "block" : "none",
+        overflow: "clip"
+      },
+      onLoad: () => setIsLoaded(true),
+      alt: "Preview"
+    }
+  );
+};
+var AttachmentPreviewDialog = ({ children }) => {
+  const src = useAttachmentSrc();
+  if (!src) return children;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_dialog.Dialog, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_dialog.DialogTrigger, { className: "aui-attachment-preview-trigger", asChild: true, children }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_dialog.DialogContent, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react_dialog.DialogTitle, { className: "aui-sr-only", children: "Image Attachment Preview" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AttachmentPreview, { src })
+    ] })
+  ] });
+};
+var AttachmentThumb = () => {
+  const isImage = (0, import_react2.useAttachment)((a) => a.type === "image");
+  const src = useAttachmentSrc();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_base.AvatarRoot, { className: "aui-attachment-thumb", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react_avatar.AvatarFallback, { delayMs: isImage ? 200 : 0, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileIcon, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_base.AvatarImage, { src })
+  ] });
+};
+var AttachmentUI = () => {
+  const canRemove = (0, import_react2.useAttachment)((a) => a.source !== "message");
+  const typeLabel = (0, import_react2.useAttachment)((a) => {
+    const type = a.type;
+    switch (type) {
+      case "image":
+        return "Image";
+      case "document":
+        return "Document";
+      case "file":
+        return "File";
+      default:
+        const _exhaustiveCheck = type;
+        throw new Error(`Unknown attachment type: ${_exhaustiveCheck}`);
+    }
+  });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_base.Tooltip, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(AttachmentRoot, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AttachmentPreviewDialog, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_base.TooltipTrigger, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(AttachmentContent, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AttachmentThumb, {}),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "aui-attachment-text", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "aui-attachment-name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.AttachmentPrimitive.Name, {}) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "aui-attachment-type", children: typeLabel })
+        ] })
+      ] }) }) }),
+      canRemove && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AttachmentRemove, {})
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_base.TooltipContent, { side: "top", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.AttachmentPrimitive.Name, {}) })
+  ] });
+};
+AttachmentUI.displayName = "Attachment";
+var AttachmentRemove = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: {
+      composer: { removeAttachment: { tooltip = "Remove file" } = {} } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.AttachmentPrimitive.Remove, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    import_tooltip_icon_button.TooltipIconButton,
+    {
+      tooltip,
+      className: "aui-attachment-remove",
+      side: "top",
+      ...props,
+      ref,
+      children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CircleXIcon, {})
+    }
+  ) });
+});
+AttachmentRemove.displayName = "AttachmentRemove";
+var exports2 = {
+  Root: AttachmentRoot,
+  Remove: AttachmentRemove
+};
+var attachment_ui_default = Object.assign(AttachmentUI, exports2);
+//# sourceMappingURL=attachment-ui.js.map

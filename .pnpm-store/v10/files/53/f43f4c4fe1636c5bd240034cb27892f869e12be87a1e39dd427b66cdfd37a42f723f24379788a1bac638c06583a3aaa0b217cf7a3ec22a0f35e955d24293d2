@@ -1,0 +1,1 @@
+{"version":3,"file":"BranchPickerNumber.d.ts","sourceRoot":"","sources":["../../../src/primitives/branchPicker/BranchPickerNumber.tsx"],"names":[],"mappings":"AAEA,OAAO,KAAK,EAAE,EAAE,EAAE,MAAM,OAAO,CAAC;AAQhC,yBAAiB,2BAA2B,CAAC;IAC3C,KAAY,KAAK,GAAG,MAAM,CAAC,MAAM,EAAE,KAAK,CAAC,CAAC;CAC3C;AAED,eAAO,MAAM,2BAA2B,EAAE,EAAE,CAC1C,2BAA2B,CAAC,KAAK,CAIlC,CAAC"}

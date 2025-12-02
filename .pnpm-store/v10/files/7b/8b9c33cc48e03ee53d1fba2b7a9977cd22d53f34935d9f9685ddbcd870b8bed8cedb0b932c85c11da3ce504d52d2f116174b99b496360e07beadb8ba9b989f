@@ -1,0 +1,22 @@
+{
+  "name": "@dmsnell/diff-match-patch",
+  "version": "1.1.0",
+  "license": "Apache-2.0",
+  "description": "Efficient and human-readable text diffs with helpers",
+  "keywords": [
+    "diff",
+    "diff-match-patch",
+    "google-diff-match-patch"
+  ],
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "prepublishOnly": "npm test",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dmsnell/diff-match-patch.git"
+  }
+}

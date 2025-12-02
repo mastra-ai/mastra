@@ -1,0 +1,79 @@
+{
+  "name": "@opentelemetry/exporter-logs-otlp-grpc",
+  "version": "0.57.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662915124,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662915130,
+      "integrity": "sha512-qwKjYcQRAOaesEbkA0maX9Envagrf+Chd1MUTkQRoK+PLD74ikTIvokWMbFGxwF1RdQm2tudvZW5F1n4QloMsA==",
+      "mode": 420,
+      "size": 1431
+    },
+    "build/src/OTLPLogExporter.js": {
+      "checkedAt": 1764662915137,
+      "integrity": "sha512-bYnnqShIAYp/uDRh2yPLugFuzNAnPu1ca/8eG4OT3jdIKZjAoLrwJrI0aYvJl0PynmMnLJxnfBrXyRM88QNEoQ==",
+      "mode": 420,
+      "size": 1460
+    },
+    "build/src/version.js": {
+      "checkedAt": 1764662915137,
+      "integrity": "sha512-ZZqxsmnMyJKrqCHWReCdbiITzXTzSplD80N5Ah7tEH1ISKNejjohjyz919QRc061nmds1+uFq1BlcIqYUDSH4A==",
+      "mode": 420,
+      "size": 833
+    },
+    "package.json": {
+      "checkedAt": 1764662915139,
+      "integrity": "sha512-9I3ndvjoVfA07wLLnS/o8oBKj9J+073dVlUEnSXTuiFJTH3L3AbIodxyL2Wws2bWv1POHclFofPZXR7jX+jQbw==",
+      "mode": 420,
+      "size": 2506
+    },
+    "build/src/index.js.map": {
+      "checkedAt": 1764662915140,
+      "integrity": "sha512-PE87k36zSjQFH10WHvBxpIAhrURnq/xDW3oLGpNGYit4RPAOfDslKrIzQeGbJ34puw7FA+FIq8t0FFb/p8Z8dg==",
+      "mode": 420,
+      "size": 1004
+    },
+    "build/src/OTLPLogExporter.js.map": {
+      "checkedAt": 1764662915144,
+      "integrity": "sha512-+H3pLaLgDo8AHzvsDjvEnzX+qlXp1QoTIdTFgQtRCTU2RkcM1U9vHjQS9Jl3t+Y5wtKvcHH3ccChIu/koxCQiQ==",
+      "mode": 420,
+      "size": 1911
+    },
+    "build/src/version.js.map": {
+      "checkedAt": 1764662915144,
+      "integrity": "sha512-xYXklFaoTdlYRT/zkWr5G1y18XLG5amebsH2uUGSi7+yGuahhkCnxIrd8sAiiANinYzwWd4G8E9Jmn273hcPqQ==",
+      "mode": 420,
+      "size": 922
+    },
+    "README.md": {
+      "checkedAt": 1764662915145,
+      "integrity": "sha512-0jndVquWHADYpNEYbjMbIB71nCl86SZCovfwuWltfMdmMz8gPZB7kvsL+Th9jtP1+wUD6H1cwWodZYiu+ylGRQ==",
+      "mode": 420,
+      "size": 5252
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662915146,
+      "integrity": "sha512-P3SKKASOUnz/34WokOcB20VINoh6246czbTwqXtEKl9f+WK+CsgGFdnD6stTzxOpfM1YDinM9j9wTXEZv+ubOw==",
+      "mode": 420,
+      "size": 70
+    },
+    "build/src/OTLPLogExporter.d.ts": {
+      "checkedAt": 1764662915147,
+      "integrity": "sha512-fIukfcAxTWr6Kd8jCx5YWk6TD2X8Rx/i+Ws37ybopf5Cah9ZMA36QENMZFrgs4Vh3HuHP+WwP9RBFz5w/hLjWA==",
+      "mode": 420,
+      "size": 489
+    },
+    "build/src/version.d.ts": {
+      "checkedAt": 1764662915148,
+      "integrity": "sha512-+u1vTBB4fbX+7I/2jMzpAleoi2I3rTR2JJSL756xSYnXJ6qeGE0+1h6LR5H/c4mJo1dq4G/PNYDM5VIKR8OK5Q==",
+      "mode": 420,
+      "size": 78
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"AUTH.d.ts","sourceRoot":"","sources":["../../../lib/commands/AUTH.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,aAAa,EAAE,iBAAiB,EAAW,MAAM,eAAe,CAAC;AAE1E,MAAM,WAAW,WAAW;IAC1B,QAAQ,CAAC,EAAE,aAAa,CAAC;IACzB,QAAQ,EAAE,aAAa,CAAC;CACzB;;;;IAKC;;;;;;OAMG;gDACkB,aAAa,0BAA0B,WAAW;mCAOzB,kBAAkB,IAAI,CAAC;;AAjBvE,wBAkB6B"}

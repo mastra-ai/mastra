@@ -1,0 +1,6 @@
+import { z } from 'zod/v4';
+
+declare function getDefaultValueInZodStack(schema: z.ZodType): any;
+declare function getDefaultValues(schema: z.ZodObject): Record<string, any>;
+
+export { getDefaultValueInZodStack, getDefaultValues };

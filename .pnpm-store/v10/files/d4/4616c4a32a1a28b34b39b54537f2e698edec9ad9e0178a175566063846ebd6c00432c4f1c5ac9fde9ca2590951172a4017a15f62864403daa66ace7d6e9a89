@@ -1,0 +1,3 @@
+export { Configurations, type ActivityLogSettings, type AntiVirusSettings, type BlockPageSettings, type BodyScanningSettings, type BrowserIsolationSettings, type CustomCertificateSettings, type ExtendedEmailMatching, type FipsSettings, type GatewayConfigurationSettings, type NotificationSettings, type ProtocolDetection, type TLSSettings, type ConfigurationUpdateResponse, type ConfigurationEditResponse, type ConfigurationGetResponse, type ConfigurationUpdateParams, type ConfigurationEditParams, type ConfigurationGetParams, } from "./configurations.js";
+export { CustomCertificate, type CustomCertificateGetParams } from "./custom-certificate.js";
+//# sourceMappingURL=index.d.ts.map

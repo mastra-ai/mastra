@@ -1,0 +1,1 @@
+{"version":3,"file":"relevance-score-provider.d.ts","sourceRoot":"","sources":["../../src/relevance/relevance-score-provider.ts"],"names":[],"mappings":"AACA,MAAM,WAAW,sBAAsB;IACrC,iBAAiB,CAAC,KAAK,EAAE,MAAM,EAAE,KAAK,EAAE,MAAM,GAAG,OAAO,CAAC,MAAM,CAAC,CAAC;CAClE;AAGD,wBAAgB,sBAAsB,CAAC,KAAK,EAAE,MAAM,EAAE,IAAI,EAAE,MAAM,GAAG,MAAM,CAQ1E"}

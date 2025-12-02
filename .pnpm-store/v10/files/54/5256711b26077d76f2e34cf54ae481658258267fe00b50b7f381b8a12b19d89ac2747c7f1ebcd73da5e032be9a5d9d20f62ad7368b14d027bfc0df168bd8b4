@@ -1,0 +1,1 @@
+{"version":3,"file":"Token.d.ts","sourceRoot":"","sources":["../../../src/api/resources/Token.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,SAAS,EAAE,MAAM,QAAQ,CAAC;AAExC,qBAAa,KAAK;IACJ,QAAQ,CAAC,GAAG,EAAE,MAAM;gBAAX,GAAG,EAAE,MAAM;IAEhC,MAAM,CAAC,QAAQ,CAAC,IAAI,EAAE,SAAS,GAAG,KAAK;CAGxC"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"onnx-value.d.ts","sourceRoot":"","sources":["../../lib/onnx-value.ts"],"names":[],"mappings":"AAGA,OAAO,EAAE,MAAM,EAAE,MAAM,aAAa,CAAC;AAErC,MAAM,MAAM,aAAa,GAAG,KAAK,CAAC;AAElC;;;;GAIG;AACH,MAAM,MAAM,SAAS,GAAG,MAAM,GAAG,aAAa,CAAC;AAE/C;;GAEG;AACH,MAAM,MAAM,qBAAqB,GAAG,MAAM,CAAC,YAAY,CAAC"}

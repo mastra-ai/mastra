@@ -1,0 +1,73 @@
+{
+  "name": "@opentelemetry/instrumentation-redis-4",
+  "version": "0.46.1",
+  "description": "OpenTelemetry instrumentation for `redis` v4 database client for Redis",
+  "main": "build/src/index.js",
+  "types": "build/src/index.d.ts",
+  "repository": "open-telemetry/opentelemetry-js-contrib",
+  "scripts": {
+    "test": "nyc mocha --require '@opentelemetry/contrib-test-utils' 'test/redis.test.ts'",
+    "test:debug": "cross-env RUN_REDIS_TESTS_LOCAL=true mocha --inspect-brk --no-timeouts test/redis.test.ts",
+    "test:local": "cross-env RUN_REDIS_TESTS_LOCAL=true npm run test",
+    "test:docker:run": "docker run --rm -d --name otel-redis -p 63790:6379 redis:alpine",
+    "test:docker:stop": "docker stop otel-redis",
+    "test-all-versions": "tav",
+    "test-all-versions:local": "cross-env RUN_REDIS_TESTS_LOCAL=true npm run test-all-versions",
+    "tdd": "npm run test -- --watch-extensions ts --watch",
+    "clean": "rimraf build/*",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "lint:readme": "node ../../../scripts/lint-readme.js",
+    "prewatch": "npm run precompile",
+    "version:update": "node ../../../scripts/version-update.js",
+    "compile": "tsc -p .",
+    "prepublishOnly": "npm run compile"
+  },
+  "keywords": [
+    "instrumentation",
+    "nodejs",
+    "opentelemetry",
+    "profiling",
+    "redis",
+    "tracing"
+  ],
+  "author": "OpenTelemetry Authors",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=14"
+  },
+  "files": [
+    "build/src/**/*.js",
+    "build/src/**/*.js.map",
+    "build/src/**/*.d.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.3.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.3.0",
+    "@opentelemetry/context-async-hooks": "^1.8.0",
+    "@opentelemetry/contrib-test-utils": "^0.45.1",
+    "@opentelemetry/core": "^1.8.0",
+    "@opentelemetry/sdk-trace-base": "^1.8.0",
+    "@opentelemetry/sdk-trace-node": "^1.8.0",
+    "@types/mocha": "7.0.2",
+    "@types/node": "18.18.14",
+    "cross-env": "7.0.3",
+    "nyc": "15.1.0",
+    "redis": "4.1.0",
+    "rimraf": "5.0.10",
+    "test-all-versions": "6.1.0",
+    "typescript": "4.4.4"
+  },
+  "dependencies": {
+    "@opentelemetry/instrumentation": "^0.57.1",
+    "@opentelemetry/redis-common": "^0.36.2",
+    "@opentelemetry/semantic-conventions": "^1.27.0"
+  },
+  "homepage": "https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/plugins/node/opentelemetry-instrumentation-redis-4#readme",
+  "gitHead": "1eb77007669bae87fe5664d68ba6533b95275d52"
+}

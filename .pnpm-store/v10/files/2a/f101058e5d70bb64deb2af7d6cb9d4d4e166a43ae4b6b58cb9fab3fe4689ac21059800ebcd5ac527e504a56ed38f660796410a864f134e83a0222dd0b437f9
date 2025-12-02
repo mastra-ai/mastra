@@ -1,0 +1,138 @@
+// src/azure-openai-provider.ts
+import {
+  OpenAIChatLanguageModel,
+  OpenAICompletionLanguageModel,
+  OpenAIEmbeddingModel,
+  OpenAIImageModel,
+  OpenAIResponsesLanguageModel,
+  OpenAISpeechModel,
+  OpenAITranscriptionModel
+} from "@ai-sdk/openai/internal";
+import {
+  loadApiKey,
+  loadSetting,
+  withUserAgentSuffix
+} from "@ai-sdk/provider-utils";
+
+// src/azure-openai-tools.ts
+import {
+  codeInterpreter,
+  fileSearch,
+  imageGeneration,
+  webSearchPreview
+} from "@ai-sdk/openai/internal";
+var azureOpenaiTools = {
+  codeInterpreter,
+  fileSearch,
+  imageGeneration,
+  webSearchPreview
+};
+
+// src/version.ts
+var VERSION = true ? "2.0.74" : "0.0.0-test";
+
+// src/azure-openai-provider.ts
+function createAzure(options = {}) {
+  var _a;
+  const getHeaders = () => {
+    const baseHeaders = {
+      "api-key": loadApiKey({
+        apiKey: options.apiKey,
+        environmentVariableName: "AZURE_API_KEY",
+        description: "Azure OpenAI"
+      }),
+      ...options.headers
+    };
+    return withUserAgentSuffix(baseHeaders, `ai-sdk/azure/${VERSION}`);
+  };
+  const getResourceName = () => loadSetting({
+    settingValue: options.resourceName,
+    settingName: "resourceName",
+    environmentVariableName: "AZURE_RESOURCE_NAME",
+    description: "Azure OpenAI resource name"
+  });
+  const apiVersion = (_a = options.apiVersion) != null ? _a : "v1";
+  const url = ({ path, modelId }) => {
+    var _a2;
+    const baseUrlPrefix = (_a2 = options.baseURL) != null ? _a2 : `https://${getResourceName()}.openai.azure.com/openai`;
+    let fullUrl;
+    if (options.useDeploymentBasedUrls) {
+      fullUrl = new URL(`${baseUrlPrefix}/deployments/${modelId}${path}`);
+    } else {
+      fullUrl = new URL(`${baseUrlPrefix}/v1${path}`);
+    }
+    fullUrl.searchParams.set("api-version", apiVersion);
+    return fullUrl.toString();
+  };
+  const createChatModel = (deploymentName) => new OpenAIChatLanguageModel(deploymentName, {
+    provider: "azure.chat",
+    url,
+    headers: getHeaders,
+    fetch: options.fetch
+  });
+  const createCompletionModel = (modelId) => new OpenAICompletionLanguageModel(modelId, {
+    provider: "azure.completion",
+    url,
+    headers: getHeaders,
+    fetch: options.fetch
+  });
+  const createEmbeddingModel = (modelId) => new OpenAIEmbeddingModel(modelId, {
+    provider: "azure.embeddings",
+    headers: getHeaders,
+    url,
+    fetch: options.fetch
+  });
+  const createResponsesModel = (modelId) => new OpenAIResponsesLanguageModel(modelId, {
+    provider: "azure.responses",
+    url,
+    headers: getHeaders,
+    fetch: options.fetch,
+    fileIdPrefixes: ["assistant-"]
+  });
+  const createImageModel = (modelId) => new OpenAIImageModel(modelId, {
+    provider: "azure.image",
+    url,
+    headers: getHeaders,
+    fetch: options.fetch
+  });
+  const createTranscriptionModel = (modelId) => new OpenAITranscriptionModel(modelId, {
+    provider: "azure.transcription",
+    url,
+    headers: getHeaders,
+    fetch: options.fetch
+  });
+  const createSpeechModel = (modelId) => new OpenAISpeechModel(modelId, {
+    provider: "azure.speech",
+    url,
+    headers: getHeaders,
+    fetch: options.fetch
+  });
+  const provider = function(deploymentId) {
+    if (new.target) {
+      throw new Error(
+        "The Azure OpenAI model function cannot be called with the new keyword."
+      );
+    }
+    return createChatModel(deploymentId);
+  };
+  provider.languageModel = createChatModel;
+  provider.chat = createChatModel;
+  provider.completion = createCompletionModel;
+  provider.embedding = createEmbeddingModel;
+  provider.image = createImageModel;
+  provider.imageModel = createImageModel;
+  provider.textEmbedding = createEmbeddingModel;
+  provider.textEmbeddingModel = createEmbeddingModel;
+  provider.responses = createResponsesModel;
+  provider.transcription = createTranscriptionModel;
+  provider.speech = createSpeechModel;
+  provider.tools = azureOpenaiTools;
+  return provider;
+}
+var azure = createAzure();
+export {
+  VERSION,
+  azure,
+  createAzure
+};
+//# sourceMappingURL=index.mjs.map

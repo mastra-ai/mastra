@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../src/model-context/frame/index.ts"],"sourcesContent":["export * from \"./AssistantFrameHost\";\nexport * from \"./AssistantFrameProvider\";\nexport * from \"./AssistantFrameTypes\";\nexport * from \"./useAssistantFrameHost\";\n"],"mappings":";AAAA,cAAc;AACd,cAAc;AACd,cAAc;AACd,cAAc;","names":[]}

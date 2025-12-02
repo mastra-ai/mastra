@@ -1,0 +1,40 @@
+import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV1 } from '../../ai-sdk.types.d.ts';
+import type { JSONSchema7 } from 'json-schema';
+import type { z, ZodSchema } from 'zod';
+import type { TracingPolicy } from '../../observability/index.js';
+import type { ScoringData } from './base.types.js';
+import type { ModelRouterModelId } from './provider-registry.js';
+export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema ? z.infer<Output> : Output extends JSONSchema7 ? unknown : undefined;
+export type TripwireProperties = {
+    tripwire?: boolean;
+    tripwireReason?: string;
+};
+export type ScoringProperties = {
+    scoringData?: ScoringData;
+};
+export type OpenAICompatibleConfig = {
+    id: `${string}/${string}`;
+    url?: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+} | {
+    providerId: string;
+    modelId: string;
+    url?: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+};
+type DoStreamResultPromise = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;
+export type MastraLanguageModelV2 = Omit<LanguageModelV2, 'doGenerate' | 'doStream'> & {
+    doGenerate: (options: LanguageModelV2CallOptions) => DoStreamResultPromise;
+    doStream: (options: LanguageModelV2CallOptions) => DoStreamResultPromise;
+};
+export type MastraLanguageModelV1 = LanguageModelV1;
+export type MastraLanguageModel = MastraLanguageModelV1 | MastraLanguageModelV2;
+export type MastraModelConfig = LanguageModelV1 | LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
+export type MastraModelOptions = {
+    tracingPolicy?: TracingPolicy;
+};
+export {};
+//# sourceMappingURL=shared.types.d.ts.map

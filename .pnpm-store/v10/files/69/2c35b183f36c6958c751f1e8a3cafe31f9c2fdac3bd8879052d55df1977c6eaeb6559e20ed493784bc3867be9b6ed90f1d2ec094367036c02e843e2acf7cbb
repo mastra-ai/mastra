@@ -1,0 +1,75 @@
+import { z } from 'zod';
+import type { MastraMemory } from '../../../memory/memory.js';
+import type { StorageThreadType } from '../../../memory/types.js';
+import type { Span, SpanType } from '../../../observability/index.js';
+import type { RequestContext } from '../../../request-context/index.js';
+import type { OutputSchema } from '../../../stream/base/schema.js';
+import type { InnerAgentExecutionOptions } from '../../agent.types.js';
+import type { AgentMethodType } from '../../types.js';
+import type { AgentCapabilities } from './schema.js';
+interface PrepareToolsStepOptions<OUTPUT extends OutputSchema | undefined = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined> {
+    capabilities: AgentCapabilities;
+    options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+    threadFromArgs?: (Partial<StorageThreadType> & {
+        id: string;
+    }) | undefined;
+    resourceId?: string;
+    runId: string;
+    requestContext: RequestContext;
+    agentSpan: Span<SpanType.AGENT_RUN>;
+    methodType: AgentMethodType;
+    memory?: MastraMemory;
+}
+export declare function createPrepareToolsStep<OUTPUT extends OutputSchema | undefined = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined>({ capabilities, options, threadFromArgs, resourceId, runId, requestContext, agentSpan, methodType, memory, }: PrepareToolsStepOptions<OUTPUT, FORMAT>): import("../../../workflows").Step<"prepare-tools-step", z.ZodObject<any, z.UnknownKeysParam, z.ZodTypeAny, {
+    [x: string]: any;
+}, {
+    [x: string]: any;
+}>, z.ZodObject<{}, "strip", z.ZodTypeAny, {}, {}>, z.ZodObject<{
+    convertedTools: z.ZodRecord<z.ZodString, z.ZodObject<{
+        id: z.ZodOptional<z.ZodString>;
+        description: z.ZodOptional<z.ZodString>;
+        parameters: z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodAny]>;
+        outputSchema: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodAny]>>;
+        execute: z.ZodOptional<z.ZodFunction<z.ZodTuple<[z.ZodAny, z.ZodAny], null>, z.ZodPromise<z.ZodAny>>>;
+        type: z.ZodOptional<z.ZodUnion<[z.ZodLiteral<"function">, z.ZodLiteral<"provider-defined">, z.ZodUndefined]>>;
+        args: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "strip", z.ZodTypeAny, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }>>;
+}, "strip", z.ZodTypeAny, {
+    convertedTools: Record<string, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }>;
+}, {
+    convertedTools: Record<string, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }>;
+}>, z.ZodType<any, z.ZodTypeDef, any>, z.ZodType<any, z.ZodTypeDef, any>, import("../../../workflows").DefaultEngineType>;
+export {};
+//# sourceMappingURL=prepare-tools-step.d.ts.map

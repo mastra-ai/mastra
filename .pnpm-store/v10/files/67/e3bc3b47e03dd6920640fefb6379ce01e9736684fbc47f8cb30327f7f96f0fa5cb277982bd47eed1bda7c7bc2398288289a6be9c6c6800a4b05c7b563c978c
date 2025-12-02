@@ -1,0 +1,1 @@
+{"version":3,"sources":["io/whatwg/iterable.ts"],"names":[],"mappings":"AAkBA,OAAO,EAAE,wBAAwB,EAAE,MAAM,wBAAwB,CAAC;AAQlE,cAAc;AACd,wBAAgB,WAAW,CAAC,CAAC,EAAE,MAAM,EAAE,QAAQ,CAAC,CAAC,CAAC,GAAG,aAAa,CAAC,CAAC,CAAC,EAAE,OAAO,CAAC,EAAE,wBAAwB,GAAG,cAAc,CAAC,CAAC,CAAC,CAK5H","file":"iterable.d.ts","sourceRoot":"../../src"}

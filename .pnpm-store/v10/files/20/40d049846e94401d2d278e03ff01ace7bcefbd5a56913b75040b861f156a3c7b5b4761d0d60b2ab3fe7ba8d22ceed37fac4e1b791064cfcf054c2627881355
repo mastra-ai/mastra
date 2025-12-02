@@ -1,0 +1,53 @@
+{
+  "name": "efrt",
+  "description": "neato compression of key-value data",
+  "version": "2.7.0",
+  "main": "./src/index.js",
+  "unpkg": "./builds/efrt.min.js",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "require": "./builds/efrt.cjs",
+      "import": "./src/index.js",
+      "default": "./builds/efrt.cjs"
+    },
+    "./unpack": {
+      "import": "./src/unpack/index.js",
+      "default": "./builds/efrt-unpack.min.js"
+    }
+  },
+  "author": "Spencer Kelly <spencermountain@gmail.com> (http://spencermounta.in)",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/spencermountain/efrt.git"
+  },
+  "scripts": {
+    "build": "node ./scripts/version.js && rollup -c ",
+    "test": "tape \"./tests/*.test.js\" | tap-dancer",
+    "testb": "TESTENV=prod tape-es \"./tests/*.test.js\" | tap-dancer",
+    "watch": "amble ./scratch"
+  },
+  "files": [
+    "builds/",
+    "src/"
+  ],
+  "engines": {
+    "node": ">=12.0.0"
+  },
+  "prettier": {
+    "trailingComma": "none",
+    "tabWidth": 2,
+    "semi": false,
+    "singleQuote": true,
+    "printWidth": 100
+  },
+  "devDependencies": {
+    "amble": "1.3.0",
+    "rollup": "2.77.2",
+    "rollup-plugin-terser": "7.0.2",
+    "tap-dancer": "0.3.4",
+    "tape": "5.5.3"
+  },
+  "license": "MIT"
+}

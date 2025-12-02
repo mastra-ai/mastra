@@ -1,0 +1,963 @@
+types:
+  TextToSpeechConvertRequestOutputFormat:
+    enum:
+      - mp3_22050_32
+      - mp3_44100_32
+      - mp3_44100_64
+      - mp3_44100_96
+      - mp3_44100_128
+      - mp3_44100_192
+      - pcm_8000
+      - pcm_16000
+      - pcm_22050
+      - pcm_24000
+      - pcm_44100
+      - pcm_48000
+      - ulaw_8000
+      - alaw_8000
+      - opus_48000_32
+      - opus_48000_64
+      - opus_48000_96
+      - opus_48000_128
+      - opus_48000_192
+    docs: >-
+      Output format of the generated audio. Formatted as
+      codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is
+      represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be
+      subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires
+      you to be subscribed to Pro tier or above. Note that the μ-law format
+      (sometimes written mu-law, often approximated as u-law) is commonly used
+      for Twilio audio inputs.
+    default: mp3_44100_128
+    source:
+      openapi: openapi.json
+  BodyTextToSpeechV1TextToSpeechVoiceIdPostApplyTextNormalization:
+    enum:
+      - auto
+      - 'on'
+      - 'off'
+    docs: >-
+      This parameter controls text normalization with three modes: 'auto', 'on',
+      and 'off'. When set to 'auto', the system will automatically decide
+      whether to apply text normalization (e.g., spelling out numbers). With
+      'on', text normalization will always be applied, while with 'off', it will
+      be skipped. Cannot be turned on for 'eleven_turbo_v2_5' or
+      'eleven_flash_v2_5' models.
+    default: auto
+    inline: true
+    source:
+      openapi: openapi.json
+  TextToSpeechConvertWithTimestampsRequestOutputFormat:
+    enum:
+      - mp3_22050_32
+      - mp3_44100_32
+      - mp3_44100_64
+      - mp3_44100_96
+      - mp3_44100_128
+      - mp3_44100_192
+      - pcm_8000
+      - pcm_16000
+      - pcm_22050
+      - pcm_24000
+      - pcm_44100
+      - pcm_48000
+      - ulaw_8000
+      - alaw_8000
+      - opus_48000_32
+      - opus_48000_64
+      - opus_48000_96
+      - opus_48000_128
+      - opus_48000_192
+    docs: >-
+      Output format of the generated audio. Formatted as
+      codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is
+      represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be
+      subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires
+      you to be subscribed to Pro tier or above. Note that the μ-law format
+      (sometimes written mu-law, often approximated as u-law) is commonly used
+      for Twilio audio inputs.
+    default: mp3_44100_128
+    source:
+      openapi: openapi.json
+  BodyTextToSpeechWithTimestampsV1TextToSpeechVoiceIdWithTimestampsPostApplyTextNormalization:
+    enum:
+      - auto
+      - 'on'
+      - 'off'
+    docs: >-
+      This parameter controls text normalization with three modes: 'auto', 'on',
+      and 'off'. When set to 'auto', the system will automatically decide
+      whether to apply text normalization (e.g., spelling out numbers). With
+      'on', text normalization will always be applied, while with 'off', it will
+      be skipped. Cannot be turned on for 'eleven_turbo_v2_5' or
+      'eleven_flash_v2_5' models.
+    default: auto
+    inline: true
+    source:
+      openapi: openapi.json
+  TextToSpeechConvertAsStreamRequestOutputFormat:
+    enum:
+      - mp3_22050_32
+      - mp3_44100_32
+      - mp3_44100_64
+      - mp3_44100_96
+      - mp3_44100_128
+      - mp3_44100_192
+      - pcm_8000
+      - pcm_16000
+      - pcm_22050
+      - pcm_24000
+      - pcm_44100
+      - pcm_48000
+      - ulaw_8000
+      - alaw_8000
+      - opus_48000_32
+      - opus_48000_64
+      - opus_48000_96
+      - opus_48000_128
+      - opus_48000_192
+    docs: >-
+      Output format of the generated audio. Formatted as
+      codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is
+      represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be
+      subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires
+      you to be subscribed to Pro tier or above. Note that the μ-law format
+      (sometimes written mu-law, often approximated as u-law) is commonly used
+      for Twilio audio inputs.
+    default: mp3_44100_128
+    source:
+      openapi: openapi.json
+  BodyTextToSpeechStreamingV1TextToSpeechVoiceIdStreamPostApplyTextNormalization:
+    enum:
+      - auto
+      - 'on'
+      - 'off'
+    docs: >-
+      This parameter controls text normalization with three modes: 'auto', 'on',
+      and 'off'. When set to 'auto', the system will automatically decide
+      whether to apply text normalization (e.g., spelling out numbers). With
+      'on', text normalization will always be applied, while with 'off', it will
+      be skipped. Cannot be turned on for 'eleven_turbo_v2_5' or
+      'eleven_flash_v2_5' models.
+    default: auto
+    inline: true
+    source:
+      openapi: openapi.json
+  TextToSpeechStreamWithTimestampsRequestOutputFormat:
+    enum:
+      - mp3_22050_32
+      - mp3_44100_32
+      - mp3_44100_64
+      - mp3_44100_96
+      - mp3_44100_128
+      - mp3_44100_192
+      - pcm_8000
+      - pcm_16000
+      - pcm_22050
+      - pcm_24000
+      - pcm_44100
+      - pcm_48000
+      - ulaw_8000
+      - alaw_8000
+      - opus_48000_32
+      - opus_48000_64
+      - opus_48000_96
+      - opus_48000_128
+      - opus_48000_192
+    docs: >-
+      Output format of the generated audio. Formatted as
+      codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is
+      represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be
+      subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires
+      you to be subscribed to Pro tier or above. Note that the μ-law format
+      (sometimes written mu-law, often approximated as u-law) is commonly used
+      for Twilio audio inputs.
+    default: mp3_44100_128
+    source:
+      openapi: openapi.json
+  BodyTextToSpeechStreamingWithTimestampsV1TextToSpeechVoiceIdStreamWithTimestampsPostApplyTextNormalization:
+    enum:
+      - auto
+      - 'on'
+      - 'off'
+    docs: >-
+      This parameter controls text normalization with three modes: 'auto', 'on',
+      and 'off'. When set to 'auto', the system will automatically decide
+      whether to apply text normalization (e.g., spelling out numbers). With
+      'on', text normalization will always be applied, while with 'off', it will
+      be skipped. Cannot be turned on for 'eleven_turbo_v2_5' or
+      'eleven_flash_v2_5' models.
+    default: auto
+    inline: true
+    source:
+      openapi: openapi.json
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    convert:
+      path: /v1/text-to-speech/{voice_id}
+      method: POST
+      auth: false
+      docs: >-
+        Converts text into speech using a voice of your choice and returns
+        audio.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. Use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+      display-name: Create speech
+      request:
+        name: TextToSpeechRequest
+        query-parameters:
+          enable_logging:
+            type: optional<boolean>
+            default: true
+            docs: >-
+              When enable_logging is set to false zero retention mode will be
+              used for the request. This will mean history features are
+              unavailable for this request, including request stitching. Zero
+              retention mode may only be used by enterprise customers.
+          optimize_streaming_latency:
+            type: optional<integer>
+            docs: >
+              You can turn on latency optimizations at some cost of quality. The
+              best possible final latency varies by model. Possible values:
+
+              0 - default mode (no latency optimizations)
+
+              1 - normal latency optimizations (about 50% of possible latency
+              improvement of option 3)
+
+              2 - strong latency optimizations (about 75% of possible latency
+              improvement of option 3)
+
+              3 - max latency optimizations
+
+              4 - max latency optimizations, but also with text normalizer
+              turned off for even more latency savings (best latency, but can
+              mispronounce eg numbers and dates).
+
+
+              Defaults to None.
+            availability: deprecated
+          output_format:
+            type: optional<TextToSpeechConvertRequestOutputFormat>
+            default: mp3_44100_128
+            docs: >-
+              Output format of the generated audio. Formatted as
+              codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at
+              32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate
+              requires you to be subscribed to Creator tier or above. PCM with
+              44.1kHz sample rate requires you to be subscribed to Pro tier or
+              above. Note that the μ-law format (sometimes written mu-law, often
+              approximated as u-law) is commonly used for Twilio audio inputs.
+        body:
+          properties:
+            text:
+              type: string
+              docs: The text that will get converted into speech.
+            model_id:
+              type: optional<string>
+              docs: >-
+                Identifier of the model that will be used, you can query them
+                using GET /v1/models. The model needs to have support for text
+                to speech, you can check this using the can_do_text_to_speech
+                property.
+              default: eleven_multilingual_v2
+            language_code:
+              type: optional<string>
+              docs: >-
+                Language code (ISO 639-1) used to enforce a language for the
+                model. Currently only Turbo v2.5 and Flash v2.5 support language
+                enforcement. For other models, an error will be returned if
+                language code is provided.
+            voice_settings:
+              type: optional<root.VoiceSettings>
+              docs: >-
+                Voice settings overriding stored settings for the given voice.
+                They are applied only on the given request.
+            pronunciation_dictionary_locators:
+              type: >-
+                optional<list<root.PronunciationDictionaryVersionLocatorRequestModel>>
+              docs: >-
+                A list of pronunciation dictionary locators (id, version_id) to
+                be applied to the text. They will be applied in order. You may
+                have up to 3 locators per request
+            seed:
+              type: optional<integer>
+              docs: >-
+                If specified, our system will make a best effort to sample
+                deterministically, such that repeated requests with the same
+                seed and parameters should return the same result. Determinism
+                is not guaranteed. Must be integer between 0 and 4294967295.
+            previous_text:
+              type: optional<string>
+              docs: >-
+                The text that came before the text of the current request. Can
+                be used to improve the speech's continuity when concatenating
+                together multiple generations or to influence the speech's
+                continuity in the current generation.
+            next_text:
+              type: optional<string>
+              docs: >-
+                The text that comes after the text of the current request. Can
+                be used to improve the speech's continuity when concatenating
+                together multiple generations or to influence the speech's
+                continuity in the current generation.
+            previous_request_ids:
+              type: optional<list<string>>
+              docs: >-
+                A list of request_id of the samples that were generated before
+                this generation. Can be used to improve the speech's continuity
+                when splitting up a large task into multiple requests. The
+                results will be best when the same model is used across the
+                generations. In case both previous_text and previous_request_ids
+                is send, previous_text will be ignored. A maximum of 3
+                request_ids can be send.
+            next_request_ids:
+              type: optional<list<string>>
+              docs: >-
+                A list of request_id of the samples that come after this
+                generation. next_request_ids is especially useful for
+                maintaining the speech's continuity when regenerating a sample
+                that has had some audio quality issues. For example, if you have
+                generated 3 speech clips, and you want to improve clip 2,
+                passing the request id of clip 3 as a next_request_id (and that
+                of clip 1 as a previous_request_id) will help maintain natural
+                flow in the combined speech. The results will be best when the
+                same model is used across the generations. In case both
+                next_text and next_request_ids is send, next_text will be
+                ignored. A maximum of 3 request_ids can be send.
+            use_pvc_as_ivc:
+              type: optional<boolean>
+              docs: >-
+                If true, we won't use PVC version of the voice for the
+                generation but the IVC version. This is a temporary workaround
+                for higher latency in PVC versions.
+              default: false
+              availability: deprecated
+            apply_text_normalization:
+              type: >-
+                optional<BodyTextToSpeechV1TextToSpeechVoiceIdPostApplyTextNormalization>
+              docs: >-
+                This parameter controls text normalization with three modes:
+                'auto', 'on', and 'off'. When set to 'auto', the system will
+                automatically decide whether to apply text normalization (e.g.,
+                spelling out numbers). With 'on', text normalization will always
+                be applied, while with 'off', it will be skipped. Cannot be
+                turned on for 'eleven_turbo_v2_5' or 'eleven_flash_v2_5' models.
+              default: auto
+            apply_language_text_normalization:
+              type: optional<boolean>
+              docs: >-
+                This parameter controls language text normalization. This helps
+                with proper pronunciation of text in some supported languages.
+                WARNING: This parameter can heavily increase the latency of the
+                request. Currently only supported for Japanese.
+              default: false
+        content-type: application/json
+      response:
+        docs: The generated audio file
+        type: file
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: JBFqnCBsd6RMkjVDRZzb
+          query-parameters:
+            output_format: mp3_44100_128
+          request:
+            text: The first move is what sets everything in motion.
+            model_id: eleven_multilingual_v2
+    convert_with_timestamps:
+      path: /v1/text-to-speech/{voice_id}/with-timestamps
+      method: POST
+      auth: false
+      docs: >-
+        Generate speech from text with precise character-level timing
+        information for audio-text synchronization.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+      display-name: Create speech with timing
+      request:
+        name: TextToSpeechWithTimestampsRequest
+        query-parameters:
+          enable_logging:
+            type: optional<boolean>
+            default: true
+            docs: >-
+              When enable_logging is set to false zero retention mode will be
+              used for the request. This will mean history features are
+              unavailable for this request, including request stitching. Zero
+              retention mode may only be used by enterprise customers.
+          optimize_streaming_latency:
+            type: optional<integer>
+            docs: >
+              You can turn on latency optimizations at some cost of quality. The
+              best possible final latency varies by model. Possible values:
+
+              0 - default mode (no latency optimizations)
+
+              1 - normal latency optimizations (about 50% of possible latency
+              improvement of option 3)
+
+              2 - strong latency optimizations (about 75% of possible latency
+              improvement of option 3)
+
+              3 - max latency optimizations
+
+              4 - max latency optimizations, but also with text normalizer
+              turned off for even more latency savings (best latency, but can
+              mispronounce eg numbers and dates).
+
+
+              Defaults to None.
+            availability: deprecated
+          output_format:
+            type: optional<TextToSpeechConvertWithTimestampsRequestOutputFormat>
+            default: mp3_44100_128
+            docs: >-
+              Output format of the generated audio. Formatted as
+              codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at
+              32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate
+              requires you to be subscribed to Creator tier or above. PCM with
+              44.1kHz sample rate requires you to be subscribed to Pro tier or
+              above. Note that the μ-law format (sometimes written mu-law, often
+              approximated as u-law) is commonly used for Twilio audio inputs.
+        body:
+          properties:
+            text:
+              type: string
+              docs: The text that will get converted into speech.
+            model_id:
+              type: optional<string>
+              docs: >-
+                Identifier of the model that will be used, you can query them
+                using GET /v1/models. The model needs to have support for text
+                to speech, you can check this using the can_do_text_to_speech
+                property.
+              default: eleven_multilingual_v2
+            language_code:
+              type: optional<string>
+              docs: >-
+                Language code (ISO 639-1) used to enforce a language for the
+                model. Currently only Turbo v2.5 and Flash v2.5 support language
+                enforcement. For other models, an error will be returned if
+                language code is provided.
+            voice_settings:
+              type: optional<root.VoiceSettings>
+              docs: >-
+                Voice settings overriding stored settings for the given voice.
+                They are applied only on the given request.
+            pronunciation_dictionary_locators:
+              type: >-
+                optional<list<root.PronunciationDictionaryVersionLocatorRequestModel>>
+              docs: >-
+                A list of pronunciation dictionary locators (id, version_id) to
+                be applied to the text. They will be applied in order. You may
+                have up to 3 locators per request
+            seed:
+              type: optional<integer>
+              docs: >-
+                If specified, our system will make a best effort to sample
+                deterministically, such that repeated requests with the same
+                seed and parameters should return the same result. Determinism
+                is not guaranteed. Must be integer between 0 and 4294967295.
+            previous_text:
+              type: optional<string>
+              docs: >-
+                The text that came before the text of the current request. Can
+                be used to improve the speech's continuity when concatenating
+                together multiple generations or to influence the speech's
+                continuity in the current generation.
+            next_text:
+              type: optional<string>
+              docs: >-
+                The text that comes after the text of the current request. Can
+                be used to improve the speech's continuity when concatenating
+                together multiple generations or to influence the speech's
+                continuity in the current generation.
+            previous_request_ids:
+              type: optional<list<string>>
+              docs: >-
+                A list of request_id of the samples that were generated before
+                this generation. Can be used to improve the speech's continuity
+                when splitting up a large task into multiple requests. The
+                results will be best when the same model is used across the
+                generations. In case both previous_text and previous_request_ids
+                is send, previous_text will be ignored. A maximum of 3
+                request_ids can be send.
+            next_request_ids:
+              type: optional<list<string>>
+              docs: >-
+                A list of request_id of the samples that come after this
+                generation. next_request_ids is especially useful for
+                maintaining the speech's continuity when regenerating a sample
+                that has had some audio quality issues. For example, if you have
+                generated 3 speech clips, and you want to improve clip 2,
+                passing the request id of clip 3 as a next_request_id (and that
+                of clip 1 as a previous_request_id) will help maintain natural
+                flow in the combined speech. The results will be best when the
+                same model is used across the generations. In case both
+                next_text and next_request_ids is send, next_text will be
+                ignored. A maximum of 3 request_ids can be send.
+            use_pvc_as_ivc:
+              type: optional<boolean>
+              docs: >-
+                If true, we won't use PVC version of the voice for the
+                generation but the IVC version. This is a temporary workaround
+                for higher latency in PVC versions.
+              default: false
+              availability: deprecated
+            apply_text_normalization:
+              type: >-
+                optional<BodyTextToSpeechWithTimestampsV1TextToSpeechVoiceIdWithTimestampsPostApplyTextNormalization>
+              docs: >-
+                This parameter controls text normalization with three modes:
+                'auto', 'on', and 'off'. When set to 'auto', the system will
+                automatically decide whether to apply text normalization (e.g.,
+                spelling out numbers). With 'on', text normalization will always
+                be applied, while with 'off', it will be skipped. Cannot be
+                turned on for 'eleven_turbo_v2_5' or 'eleven_flash_v2_5' models.
+              default: auto
+            apply_language_text_normalization:
+              type: optional<boolean>
+              docs: >-
+                This parameter controls language text normalization. This helps
+                with proper pronunciation of text in some supported languages.
+                WARNING: This parameter can heavily increase the latency of the
+                request. Currently only supported for Japanese.
+              default: false
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AudioWithTimestampsResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            text: This is a test for the API of ElevenLabs.
+          response:
+            body:
+              audio_base64: base64_encoded_audio_string
+              alignment:
+                characters:
+                  - H
+                  - e
+                  - l
+                  - l
+                  - o
+                character_start_times_seconds:
+                  - 0
+                  - 0.1
+                  - 0.2
+                  - 0.3
+                  - 0.4
+                character_end_times_seconds:
+                  - 0.1
+                  - 0.2
+                  - 0.3
+                  - 0.4
+                  - 0.5
+              normalized_alignment:
+                characters:
+                  - H
+                  - e
+                  - l
+                  - l
+                  - o
+                character_start_times_seconds:
+                  - 0
+                  - 0.1
+                  - 0.2
+                  - 0.3
+                  - 0.4
+                character_end_times_seconds:
+                  - 0.1
+                  - 0.2
+                  - 0.3
+                  - 0.4
+                  - 0.5
+    convert_as_stream:
+      path: /v1/text-to-speech/{voice_id}/stream
+      method: POST
+      auth: false
+      docs: >-
+        Converts text into speech using a voice of your choice and returns audio
+        as an audio stream.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. Use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+      display-name: Stream speech
+      request:
+        name: StreamTextToSpeechRequest
+        query-parameters:
+          enable_logging:
+            type: optional<boolean>
+            default: true
+            docs: >-
+              When enable_logging is set to false zero retention mode will be
+              used for the request. This will mean history features are
+              unavailable for this request, including request stitching. Zero
+              retention mode may only be used by enterprise customers.
+          optimize_streaming_latency:
+            type: optional<integer>
+            docs: >
+              You can turn on latency optimizations at some cost of quality. The
+              best possible final latency varies by model. Possible values:
+
+              0 - default mode (no latency optimizations)
+
+              1 - normal latency optimizations (about 50% of possible latency
+              improvement of option 3)
+
+              2 - strong latency optimizations (about 75% of possible latency
+              improvement of option 3)
+
+              3 - max latency optimizations
+
+              4 - max latency optimizations, but also with text normalizer
+              turned off for even more latency savings (best latency, but can
+              mispronounce eg numbers and dates).
+
+
+              Defaults to None.
+            availability: deprecated
+          output_format:
+            type: optional<TextToSpeechConvertAsStreamRequestOutputFormat>
+            default: mp3_44100_128
+            docs: >-
+              Output format of the generated audio. Formatted as
+              codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at
+              32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate
+              requires you to be subscribed to Creator tier or above. PCM with
+              44.1kHz sample rate requires you to be subscribed to Pro tier or
+              above. Note that the μ-law format (sometimes written mu-law, often
+              approximated as u-law) is commonly used for Twilio audio inputs.
+        body:
+          properties:
+            text:
+              type: string
+              docs: The text that will get converted into speech.
+            model_id:
+              type: optional<string>
+              docs: >-
+                Identifier of the model that will be used, you can query them
+                using GET /v1/models. The model needs to have support for text
+                to speech, you can check this using the can_do_text_to_speech
+                property.
+              default: eleven_multilingual_v2
+            language_code:
+              type: optional<string>
+              docs: >-
+                Language code (ISO 639-1) used to enforce a language for the
+                model. Currently only Turbo v2.5 and Flash v2.5 support language
+                enforcement. For other models, an error will be returned if
+                language code is provided.
+            voice_settings:
+              type: optional<root.VoiceSettings>
+              docs: >-
+                Voice settings overriding stored settings for the given voice.
+                They are applied only on the given request.
+            pronunciation_dictionary_locators:
+              type: >-
+                optional<list<root.PronunciationDictionaryVersionLocatorRequestModel>>
+              docs: >-
+                A list of pronunciation dictionary locators (id, version_id) to
+                be applied to the text. They will be applied in order. You may
+                have up to 3 locators per request
+            seed:
+              type: optional<integer>
+              docs: >-
+                If specified, our system will make a best effort to sample
+                deterministically, such that repeated requests with the same
+                seed and parameters should return the same result. Determinism
+                is not guaranteed. Must be integer between 0 and 4294967295.
+            previous_text:
+              type: optional<string>
+              docs: >-
+                The text that came before the text of the current request. Can
+                be used to improve the speech's continuity when concatenating
+                together multiple generations or to influence the speech's
+                continuity in the current generation.
+            next_text:
+              type: optional<string>
+              docs: >-
+                The text that comes after the text of the current request. Can
+                be used to improve the speech's continuity when concatenating
+                together multiple generations or to influence the speech's
+                continuity in the current generation.
+            previous_request_ids:
+              type: optional<list<string>>
+              docs: >-
+                A list of request_id of the samples that were generated before
+                this generation. Can be used to improve the speech's continuity
+                when splitting up a large task into multiple requests. The
+                results will be best when the same model is used across the
+                generations. In case both previous_text and previous_request_ids
+                is send, previous_text will be ignored. A maximum of 3
+                request_ids can be send.
+            next_request_ids:
+              type: optional<list<string>>
+              docs: >-
+                A list of request_id of the samples that come after this
+                generation. next_request_ids is especially useful for
+                maintaining the speech's continuity when regenerating a sample
+                that has had some audio quality issues. For example, if you have
+                generated 3 speech clips, and you want to improve clip 2,
+                passing the request id of clip 3 as a next_request_id (and that
+                of clip 1 as a previous_request_id) will help maintain natural
+                flow in the combined speech. The results will be best when the
+                same model is used across the generations. In case both
+                next_text and next_request_ids is send, next_text will be
+                ignored. A maximum of 3 request_ids can be send.
+            use_pvc_as_ivc:
+              type: optional<boolean>
+              docs: >-
+                If true, we won't use PVC version of the voice for the
+                generation but the IVC version. This is a temporary workaround
+                for higher latency in PVC versions.
+              default: false
+              availability: deprecated
+            apply_text_normalization:
+              type: >-
+                optional<BodyTextToSpeechStreamingV1TextToSpeechVoiceIdStreamPostApplyTextNormalization>
+              docs: >-
+                This parameter controls text normalization with three modes:
+                'auto', 'on', and 'off'. When set to 'auto', the system will
+                automatically decide whether to apply text normalization (e.g.,
+                spelling out numbers). With 'on', text normalization will always
+                be applied, while with 'off', it will be skipped. Cannot be
+                turned on for 'eleven_turbo_v2_5' or 'eleven_flash_v2_5' models.
+              default: auto
+            apply_language_text_normalization:
+              type: optional<boolean>
+              docs: >-
+                This parameter controls language text normalization. This helps
+                with proper pronunciation of text in some supported languages.
+                WARNING: This parameter can heavily increase the latency of the
+                request. Currently only supported for Japanese.
+              default: false
+        content-type: application/json
+      response:
+        docs: Streaming audio data
+        type: file
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: JBFqnCBsd6RMkjVDRZzb
+          query-parameters:
+            output_format: mp3_44100_128
+          request:
+            text: The first move is what sets everything in motion.
+            model_id: eleven_multilingual_v2
+    stream_with_timestamps:
+      path: /v1/text-to-speech/{voice_id}/stream/with-timestamps
+      method: POST
+      auth: false
+      docs: >-
+        Converts text into speech using a voice of your choice and returns a
+        stream of JSONs containing audio as a base64 encoded string together
+        with information on when which character was spoken.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            ID of the voice to be used. Use the [Get
+            voices](/docs/api-reference/voices/search) endpoint list all the
+            available voices.
+      display-name: Stream speech with timing
+      request:
+        name: StreamTextToSpeechWithTimestampsRequest
+        query-parameters:
+          enable_logging:
+            type: optional<boolean>
+            default: true
+            docs: >-
+              When enable_logging is set to false zero retention mode will be
+              used for the request. This will mean history features are
+              unavailable for this request, including request stitching. Zero
+              retention mode may only be used by enterprise customers.
+          optimize_streaming_latency:
+            type: optional<integer>
+            docs: >
+              You can turn on latency optimizations at some cost of quality. The
+              best possible final latency varies by model. Possible values:
+
+              0 - default mode (no latency optimizations)
+
+              1 - normal latency optimizations (about 50% of possible latency
+              improvement of option 3)
+
+              2 - strong latency optimizations (about 75% of possible latency
+              improvement of option 3)
+
+              3 - max latency optimizations
+
+              4 - max latency optimizations, but also with text normalizer
+              turned off for even more latency savings (best latency, but can
+              mispronounce eg numbers and dates).
+
+
+              Defaults to None.
+            availability: deprecated
+          output_format:
+            type: optional<TextToSpeechStreamWithTimestampsRequestOutputFormat>
+            default: mp3_44100_128
+            docs: >-
+              Output format of the generated audio. Formatted as
+              codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at
+              32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate
+              requires you to be subscribed to Creator tier or above. PCM with
+              44.1kHz sample rate requires you to be subscribed to Pro tier or
+              above. Note that the μ-law format (sometimes written mu-law, often
+              approximated as u-law) is commonly used for Twilio audio inputs.
+        body:
+          properties:
+            text:
+              type: string
+              docs: The text that will get converted into speech.
+            model_id:
+              type: optional<string>
+              docs: >-
+                Identifier of the model that will be used, you can query them
+                using GET /v1/models. The model needs to have support for text
+                to speech, you can check this using the can_do_text_to_speech
+                property.
+              default: eleven_multilingual_v2
+            language_code:
+              type: optional<string>
+              docs: >-
+                Language code (ISO 639-1) used to enforce a language for the
+                model. Currently only Turbo v2.5 and Flash v2.5 support language
+                enforcement. For other models, an error will be returned if
+                language code is provided.
+            voice_settings:
+              type: optional<root.VoiceSettings>
+              docs: >-
+                Voice settings overriding stored settings for the given voice.
+                They are applied only on the given request.
+            pronunciation_dictionary_locators:
+              type: >-
+                optional<list<root.PronunciationDictionaryVersionLocatorRequestModel>>
+              docs: >-
+                A list of pronunciation dictionary locators (id, version_id) to
+                be applied to the text. They will be applied in order. You may
+                have up to 3 locators per request
+            seed:
+              type: optional<integer>
+              docs: >-
+                If specified, our system will make a best effort to sample
+                deterministically, such that repeated requests with the same
+                seed and parameters should return the same result. Determinism
+                is not guaranteed. Must be integer between 0 and 4294967295.
+            previous_text:
+              type: optional<string>
+              docs: >-
+                The text that came before the text of the current request. Can
+                be used to improve the speech's continuity when concatenating
+                together multiple generations or to influence the speech's
+                continuity in the current generation.
+            next_text:
+              type: optional<string>
+              docs: >-
+                The text that comes after the text of the current request. Can
+                be used to improve the speech's continuity when concatenating
+                together multiple generations or to influence the speech's
+                continuity in the current generation.
+            previous_request_ids:
+              type: optional<list<string>>
+              docs: >-
+                A list of request_id of the samples that were generated before
+                this generation. Can be used to improve the speech's continuity
+                when splitting up a large task into multiple requests. The
+                results will be best when the same model is used across the
+                generations. In case both previous_text and previous_request_ids
+                is send, previous_text will be ignored. A maximum of 3
+                request_ids can be send.
+            next_request_ids:
+              type: optional<list<string>>
+              docs: >-
+                A list of request_id of the samples that come after this
+                generation. next_request_ids is especially useful for
+                maintaining the speech's continuity when regenerating a sample
+                that has had some audio quality issues. For example, if you have
+                generated 3 speech clips, and you want to improve clip 2,
+                passing the request id of clip 3 as a next_request_id (and that
+                of clip 1 as a previous_request_id) will help maintain natural
+                flow in the combined speech. The results will be best when the
+                same model is used across the generations. In case both
+                next_text and next_request_ids is send, next_text will be
+                ignored. A maximum of 3 request_ids can be send.
+            use_pvc_as_ivc:
+              type: optional<boolean>
+              docs: >-
+                If true, we won't use PVC version of the voice for the
+                generation but the IVC version. This is a temporary workaround
+                for higher latency in PVC versions.
+              default: false
+              availability: deprecated
+            apply_text_normalization:
+              type: >-
+                optional<BodyTextToSpeechStreamingWithTimestampsV1TextToSpeechVoiceIdStreamWithTimestampsPostApplyTextNormalization>
+              docs: >-
+                This parameter controls text normalization with three modes:
+                'auto', 'on', and 'off'. When set to 'auto', the system will
+                automatically decide whether to apply text normalization (e.g.,
+                spelling out numbers). With 'on', text normalization will always
+                be applied, while with 'off', it will be skipped. Cannot be
+                turned on for 'eleven_turbo_v2_5' or 'eleven_flash_v2_5' models.
+              default: auto
+            apply_language_text_normalization:
+              type: optional<boolean>
+              docs: >-
+                This parameter controls language text normalization. This helps
+                with proper pronunciation of text in some supported languages.
+                WARNING: This parameter can heavily increase the latency of the
+                request. Currently only supported for Japanese.
+              default: false
+        content-type: application/json
+      response-stream:
+        docs: Stream of transcription chunks
+        type: root.StreamingAudioChunkWithTimestampsResponse
+        format: json
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: JBFqnCBsd6RMkjVDRZzb
+          query-parameters:
+            output_format: mp3_44100_128
+          request:
+            text: The first move is what sets everything in motion.
+            model_id: eleven_multilingual_v2
+  source:
+    openapi: openapi.json

@@ -1,0 +1,412 @@
+'use strict';
+
+var chunk556MJ7CL_cjs = require('../../chunk-556MJ7CL.cjs');
+var chunkBMAFVZ2D_cjs = require('../../chunk-BMAFVZ2D.cjs');
+var chunkTWH4PTDG_cjs = require('../../chunk-TWH4PTDG.cjs');
+var pMap = require('p-map');
+var z = require('zod');
+
+function _interopDefault (e) { return e && e.__esModule ? e : { default: e }; }
+
+var pMap__default = /*#__PURE__*/_interopDefault(pMap);
+var z__default = /*#__PURE__*/_interopDefault(z);
+
+// src/evals/scoreTraces/scoreTraces.ts
+async function scoreTraces({
+  scorerId,
+  targets,
+  mastra
+}) {
+  const workflow = mastra.__getInternalWorkflow("__batch-scoring-traces");
+  try {
+    const run = await workflow.createRun();
+    await run.start({ inputData: { targets, scorerId } });
+  } catch (error) {
+    const mastraError = new chunkTWH4PTDG_cjs.MastraError(
+      {
+        category: "SYSTEM",
+        domain: "SCORER",
+        id: "MASTRA_SCORER_FAILED_TO_RUN_TRACE_SCORING",
+        details: {
+          scorerId,
+          targets: JSON.stringify(targets)
+        }
+      },
+      error
+    );
+    mastra.getLogger()?.trackException(mastraError);
+    mastra.getLogger()?.error(mastraError.toString());
+  }
+}
+
+// src/evals/scoreTraces/utils.ts
+function buildSpanTree(spans) {
+  const spanMap = /* @__PURE__ */ new Map();
+  const childrenMap = /* @__PURE__ */ new Map();
+  const rootSpans = [];
+  for (const span of spans) {
+    spanMap.set(span.spanId, span);
+  }
+  for (const span of spans) {
+    if (span.parentSpanId === null) {
+      rootSpans.push(span);
+    } else {
+      const siblings = childrenMap.get(span.parentSpanId) || [];
+      siblings.push(span);
+      childrenMap.set(span.parentSpanId, siblings);
+    }
+  }
+  for (const children of childrenMap.values()) {
+    children.sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+  }
+  rootSpans.sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+  return { spanMap, childrenMap, rootSpans };
+}
+function getChildrenOfType(spanTree, parentSpanId, spanType) {
+  const children = spanTree.childrenMap.get(parentSpanId) || [];
+  return children.filter((span) => span.spanType === spanType);
+}
+function normalizeMessageContent(content) {
+  if (typeof content === "string") {
+    return content;
+  }
+  const textParts = content.filter((part) => part.type === "text");
+  return textParts.length > 0 ? textParts[textParts.length - 1]?.text || "" : "";
+}
+function createMastraDBMessage(message, createdAt, id = "") {
+  const contentText = normalizeMessageContent(message.content);
+  const role = message.role;
+  return {
+    id,
+    role,
+    content: {
+      format: 2,
+      parts: [{ type: "text", text: contentText }],
+      content: contentText
+    },
+    createdAt: new Date(createdAt)
+  };
+}
+function extractInputMessages(agentSpan) {
+  const input = agentSpan.input;
+  if (typeof input === "string") {
+    return [
+      createMastraDBMessage(
+        {
+          role: "user",
+          content: input
+        },
+        agentSpan.startedAt
+      )
+    ];
+  }
+  if (Array.isArray(input)) {
+    return input.map((msg) => createMastraDBMessage(msg, agentSpan.startedAt));
+  }
+  if (input && typeof input === "object" && Array.isArray(input.messages)) {
+    return input.messages.map((msg) => createMastraDBMessage(msg, agentSpan.startedAt));
+  }
+  return [];
+}
+function extractSystemMessages(llmSpan) {
+  return (llmSpan.input?.messages || []).filter((msg) => msg.role === "system").map((msg) => ({
+    role: "system",
+    content: normalizeMessageContent(msg.content)
+  }));
+}
+function extractRememberedMessages(llmSpan, currentInputContent) {
+  const messages = (llmSpan.input?.messages || []).filter((msg) => msg.role !== "system").filter((msg) => normalizeMessageContent(msg.content) !== currentInputContent);
+  return messages.map((msg) => createMastraDBMessage(msg, llmSpan.startedAt));
+}
+function reconstructToolInvocations(spanTree, parentSpanId) {
+  const toolSpans = getChildrenOfType(spanTree, parentSpanId, "tool_call" /* TOOL_CALL */);
+  return toolSpans.map((toolSpan) => ({
+    toolCallId: toolSpan.spanId,
+    toolName: toolSpan.attributes?.toolId || "",
+    args: toolSpan.input || {},
+    result: toolSpan.output || {},
+    state: "result"
+  }));
+}
+function validateTrace(trace) {
+  if (!trace) {
+    throw new Error("Trace is null or undefined");
+  }
+  if (!trace.spans || !Array.isArray(trace.spans)) {
+    throw new Error("Trace must have a spans array");
+  }
+  if (trace.spans.length === 0) {
+    throw new Error("Trace has no spans");
+  }
+  const spanIds = new Set(trace.spans.map((span) => span.spanId));
+  for (const span of trace.spans) {
+    if (span.parentSpanId && !spanIds.has(span.parentSpanId)) {
+      throw new Error(`Span ${span.spanId} references non-existent parent ${span.parentSpanId}`);
+    }
+  }
+}
+function findPrimaryLLMSpan(spanTree, rootAgentSpan) {
+  const directLLMSpans = getChildrenOfType(spanTree, rootAgentSpan.spanId, "model_generation" /* MODEL_GENERATION */);
+  if (directLLMSpans.length > 0) {
+    return directLLMSpans[0];
+  }
+  throw new Error("No model generation span found in trace");
+}
+function prepareTraceForTransformation(trace) {
+  validateTrace(trace);
+  const spanTree = buildSpanTree(trace.spans);
+  const rootAgentSpan = spanTree.rootSpans.find((span) => span.spanType === "agent_run");
+  if (!rootAgentSpan) {
+    throw new Error("No root agent_run span found in trace");
+  }
+  return { spanTree, rootAgentSpan };
+}
+function transformTraceToScorerInputAndOutput(trace) {
+  const { spanTree, rootAgentSpan } = prepareTraceForTransformation(trace);
+  if (!rootAgentSpan.output) {
+    throw new Error("Root agent span has no output");
+  }
+  const primaryLLMSpan = findPrimaryLLMSpan(spanTree, rootAgentSpan);
+  const inputMessages = extractInputMessages(rootAgentSpan);
+  const systemMessages = extractSystemMessages(primaryLLMSpan);
+  const currentInputContent = inputMessages[0]?.content.content || "";
+  const rememberedMessages = extractRememberedMessages(primaryLLMSpan, currentInputContent);
+  const input = {
+    inputMessages,
+    rememberedMessages,
+    systemMessages,
+    taggedSystemMessages: {}
+    // Todo: Support tagged system messages
+  };
+  const toolInvocations = reconstructToolInvocations(spanTree, rootAgentSpan.spanId);
+  const responseText = rootAgentSpan.output.text || "";
+  const parts = [];
+  for (const toolInvocation of toolInvocations) {
+    parts.push({
+      type: "tool-invocation",
+      toolInvocation
+    });
+  }
+  if (responseText.trim()) {
+    parts.push({
+      type: "text",
+      text: responseText
+    });
+  }
+  const responseMessage = {
+    id: "",
+    role: "assistant",
+    content: {
+      format: 2,
+      parts,
+      // Type assertion needed due to providerMetadata optional field
+      content: responseText,
+      toolInvocations
+      // Always include, even if empty array
+    },
+    createdAt: new Date(rootAgentSpan.endedAt || rootAgentSpan.startedAt)
+  };
+  const output = [responseMessage];
+  return {
+    input,
+    output
+  };
+}
+
+// src/evals/scoreTraces/scoreTracesWorkflow.ts
+var getTraceStep = chunk556MJ7CL_cjs.createStep({
+  id: "__process-trace-scoring",
+  inputSchema: z__default.default.object({
+    targets: z__default.default.array(
+      z__default.default.object({
+        traceId: z__default.default.string(),
+        spanId: z__default.default.string().optional()
+      })
+    ),
+    scorerId: z__default.default.string()
+  }),
+  outputSchema: z__default.default.any(),
+  execute: async ({ inputData, tracingContext, mastra }) => {
+    const logger = mastra.getLogger();
+    if (!logger) {
+      console.warn(
+        "[scoreTracesWorkflow] Logger not initialized: no debug or error logs will be recorded for scoring traces."
+      );
+    }
+    const storage = mastra.getStorage();
+    if (!storage) {
+      const mastraError = new chunkTWH4PTDG_cjs.MastraError({
+        id: "MASTRA_STORAGE_NOT_FOUND_FOR_TRACE_SCORING",
+        domain: "STORAGE" /* STORAGE */,
+        category: "SYSTEM" /* SYSTEM */,
+        text: "Storage not found for trace scoring",
+        details: {
+          scorerId: inputData.scorerId
+        }
+      });
+      logger?.error(mastraError.toString());
+      logger?.trackException(mastraError);
+      return;
+    }
+    let scorer;
+    try {
+      scorer = mastra.getScorerById(inputData.scorerId);
+    } catch (error) {
+      const mastraError = new chunkTWH4PTDG_cjs.MastraError(
+        {
+          id: "MASTRA_SCORER_NOT_FOUND_FOR_TRACE_SCORING",
+          domain: "SCORER" /* SCORER */,
+          category: "SYSTEM" /* SYSTEM */,
+          text: `Scorer not found for trace scoring`,
+          details: {
+            scorerId: inputData.scorerId
+          }
+        },
+        error
+      );
+      logger?.error(mastraError.toString());
+      logger?.trackException(mastraError);
+      return;
+    }
+    await pMap__default.default(
+      inputData.targets,
+      async (target) => {
+        try {
+          await runScorerOnTarget({ storage, scorer, target, tracingContext });
+        } catch (error) {
+          const mastraError = new chunkTWH4PTDG_cjs.MastraError(
+            {
+              id: "MASTRA_SCORER_FAILED_TO_RUN_SCORER_ON_TRACE",
+              domain: "SCORER" /* SCORER */,
+              category: "SYSTEM" /* SYSTEM */,
+              details: {
+                scorerId: scorer.id,
+                spanId: target.spanId || "",
+                traceId: target.traceId
+              }
+            },
+            error
+          );
+          logger?.error(mastraError.toString());
+          logger?.trackException(mastraError);
+        }
+      },
+      { concurrency: 3 }
+    );
+  }
+});
+async function runScorerOnTarget({
+  storage,
+  scorer,
+  target,
+  tracingContext
+}) {
+  const trace = await storage.getTrace(target.traceId);
+  if (!trace) {
+    throw new Error(`Trace not found for scoring, traceId: ${target.traceId}`);
+  }
+  let span;
+  if (target.spanId) {
+    span = trace.spans.find((span2) => span2.spanId === target.spanId);
+  } else {
+    span = trace.spans.find((span2) => span2.parentSpanId === null);
+  }
+  if (!span) {
+    throw new Error(
+      `Span not found for scoring, traceId: ${target.traceId}, spanId: ${target.spanId ?? "Not provided"}`
+    );
+  }
+  const scorerRun = buildScorerRun({
+    scorerType: scorer.type === "agent" ? "agent" : void 0,
+    tracingContext,
+    trace,
+    targetSpan: span
+  });
+  const result = await scorer.run(scorerRun);
+  const scorerResult = {
+    ...result,
+    scorer: {
+      id: scorer.id,
+      name: scorer.name || scorer.id,
+      description: scorer.description
+    },
+    traceId: target.traceId,
+    spanId: target.spanId,
+    entityId: span.name,
+    entityType: span.spanType,
+    entity: { traceId: span.traceId, spanId: span.spanId },
+    source: "TEST",
+    scorerId: scorer.id
+  };
+  const savedScoreRecord = await validateAndSaveScore({ storage, scorerResult });
+  await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
+}
+async function validateAndSaveScore({ storage, scorerResult }) {
+  const payloadToSave = chunkBMAFVZ2D_cjs.saveScorePayloadSchema.parse(scorerResult);
+  const result = await storage.saveScore(payloadToSave);
+  return result.score;
+}
+function buildScorerRun({
+  scorerType,
+  tracingContext,
+  trace,
+  targetSpan
+}) {
+  let runPayload;
+  if (scorerType === "agent") {
+    const { input, output } = transformTraceToScorerInputAndOutput(trace);
+    runPayload = {
+      input,
+      output
+    };
+  } else {
+    runPayload = { input: targetSpan.input, output: targetSpan.output };
+  }
+  runPayload.tracingContext = tracingContext;
+  return runPayload;
+}
+async function attachScoreToSpan({
+  storage,
+  span,
+  scoreRecord
+}) {
+  const existingLinks = span.links || [];
+  const link = {
+    type: "score",
+    scoreId: scoreRecord.id,
+    scorerName: scoreRecord.scorer.id,
+    score: scoreRecord.score,
+    createdAt: scoreRecord.createdAt
+  };
+  await storage.updateSpan({
+    spanId: span.spanId,
+    traceId: span.traceId,
+    updates: { links: [...existingLinks, link] }
+  });
+}
+var scoreTracesWorkflow = chunk556MJ7CL_cjs.createWorkflow({
+  id: "__batch-scoring-traces",
+  inputSchema: z__default.default.object({
+    targets: z__default.default.array(
+      z__default.default.object({
+        traceId: z__default.default.string(),
+        spanId: z__default.default.string().optional()
+      })
+    ),
+    scorerId: z__default.default.string()
+  }),
+  outputSchema: z__default.default.any(),
+  steps: [getTraceStep],
+  options: {
+    tracingPolicy: {
+      internal: 15 /* ALL */
+    },
+    validateInputs: false
+  }
+});
+scoreTracesWorkflow.then(getTraceStep).commit();
+
+exports.scoreTraces = scoreTraces;
+exports.scoreTracesWorkflow = scoreTracesWorkflow;
+//# sourceMappingURL=index.cjs.map
+//# sourceMappingURL=index.cjs.map

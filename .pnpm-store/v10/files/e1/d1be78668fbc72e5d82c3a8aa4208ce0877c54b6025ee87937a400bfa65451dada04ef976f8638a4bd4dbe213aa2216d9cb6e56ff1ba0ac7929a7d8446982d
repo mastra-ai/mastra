@@ -1,0 +1,99 @@
+"use client";
+
+// src/ui/assistant-modal.tsx
+import { forwardRef } from "react";
+import { BotIcon, ChevronDownIcon } from "lucide-react";
+import { AssistantModalPrimitive } from "@assistant-ui/react";
+import Thread from "./thread.mjs";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import { TooltipIconButton } from "./base/tooltip-icon-button.mjs";
+import {
+  ThreadConfigProvider,
+  useThreadConfig
+} from "./thread-config.mjs";
+import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+var AssistantModal = (config) => {
+  return /* @__PURE__ */ jsxs(AssistantModalRoot, { config, children: [
+    /* @__PURE__ */ jsx(AssistantModalTrigger, {}),
+    /* @__PURE__ */ jsx(AssistantModalContent, { children: /* @__PURE__ */ jsx(Thread, {}) })
+  ] });
+};
+AssistantModal.displayName = "AssistantModal";
+var AssistantModalRoot = ({
+  config,
+  ...props
+}) => {
+  return /* @__PURE__ */ jsx(ThreadConfigProvider, { config, children: /* @__PURE__ */ jsx(AssistantModalPrimitive.Root, { ...props }) });
+};
+AssistantModalRoot.displayName = "AssistantModalRoot";
+var AssistantModalTrigger = forwardRef((props, ref) => {
+  return /* @__PURE__ */ jsx(AssistantModalAnchor, { children: /* @__PURE__ */ jsx(AssistantModalPrimitive.Trigger, { asChild: true, children: /* @__PURE__ */ jsx(AssistantModalButton, { ...props, ref }) }) });
+});
+AssistantModalTrigger.displayName = "AssistantModalTrigger";
+var AssistantModalAnchor = withDefaults(AssistantModalPrimitive.Anchor, {
+  className: "aui-root aui-modal-anchor"
+});
+AssistantModalAnchor.displayName = "AssistantModalAnchor";
+var ModalButtonStyled = withDefaults(TooltipIconButton, {
+  variant: "default",
+  className: "aui-modal-button"
+});
+var AssistantModalButton = forwardRef(({ "data-state": state, ...rest }, ref) => {
+  const {
+    strings: {
+      assistantModal: {
+        open: {
+          button: { tooltip: openTooltip = "Close Assistant" } = {}
+        } = {},
+        closed: {
+          button: { tooltip: closedTooltip = "Open Assistant" } = {}
+        } = {}
+      } = {}
+    } = {}
+  } = useThreadConfig();
+  const tooltip = state === "open" ? openTooltip : closedTooltip;
+  return /* @__PURE__ */ jsx(
+    ModalButtonStyled,
+    {
+      side: "left",
+      tooltip,
+      "data-state": state,
+      ...rest,
+      ref,
+      children: rest.children ?? /* @__PURE__ */ jsxs(Fragment, { children: [
+        /* @__PURE__ */ jsx(
+          BotIcon,
+          {
+            "data-state": state,
+            className: "aui-modal-button-closed-icon"
+          }
+        ),
+        /* @__PURE__ */ jsx(
+          ChevronDownIcon,
+          {
+            "data-state": state,
+            className: "aui-modal-button-open-icon"
+          }
+        )
+      ] })
+    }
+  );
+});
+AssistantModalButton.displayName = "AssistantModalButton";
+var AssistantModalContent = withDefaults(AssistantModalPrimitive.Content, {
+  className: "aui-root aui-modal-content",
+  sideOffset: 16
+});
+AssistantModalContent.displayName = "AssistantModalContent";
+var exports = {
+  Root: AssistantModalRoot,
+  Trigger: AssistantModalTrigger,
+  Content: AssistantModalContent,
+  Button: AssistantModalButton,
+  Anchor: AssistantModalAnchor
+};
+var assistant_modal_default = Object.assign(AssistantModal, exports);
+export {
+  assistant_modal_default as default
+};
+//# sourceMappingURL=assistant-modal.mjs.map

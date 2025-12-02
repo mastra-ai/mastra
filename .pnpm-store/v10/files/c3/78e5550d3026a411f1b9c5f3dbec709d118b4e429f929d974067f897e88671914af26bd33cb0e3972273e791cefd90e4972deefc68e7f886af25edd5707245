@@ -1,0 +1,50 @@
+{
+  "name": "find-workspaces",
+  "version": "0.3.1",
+  "keywords": [
+    "workspaces",
+    "packages",
+    "monorepo",
+    "yarn",
+    "npm",
+    "pnpm",
+    "lerna",
+    "bolt"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joshuajaco/find-workspaces.git"
+  },
+  "license": "MIT",
+  "exports": "./dist/index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "format": "prettier -w .",
+    "format:check": "prettier -c .",
+    "lint": "eslint --ignore-path .gitignore --max-warnings 0 .",
+    "prepublishOnly": "npm run build",
+    "test": "nyc -r=lcov -r=text node --trace-warnings -r ts-node/register --test \"**/*.test.ts\""
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.2",
+    "pkg-types": "^1.0.3",
+    "yaml": "^2.3.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "@typescript-eslint/eslint-plugin": "^7.0.1",
+    "@typescript-eslint/parser": "^7.0.1",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "nyc": "^15.1.0",
+    "prettier": "^3.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

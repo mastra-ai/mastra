@@ -1,0 +1,23 @@
+import type { z as zV3 } from 'zod/v3';
+import type { z as zV4 } from 'zod/v4';
+export declare function isOptional<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodOptional<any>;
+export declare function isOptional<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodOptional<any>;
+export declare function isObj<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodObject<any>;
+export declare function isObj<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodObject;
+export declare function isNull<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodNull;
+export declare function isNull<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodNull;
+export declare function isArr<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodArray<any>;
+export declare function isArr<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodArray;
+export declare function isUnion<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodUnion<any>;
+export declare function isUnion<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodUnion;
+export declare function isString<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodString;
+export declare function isString<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodString;
+export declare function isNumber<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodNumber;
+export declare function isNumber<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodNumber;
+export declare function isDate<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodDate;
+export declare function isDate<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodDate;
+export declare function isDefault<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodDefault<any>;
+export declare function isDefault<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodDefault;
+export declare function isNullable<Z extends typeof zV3>(z: Z): (v: any) => v is zV3.ZodNullable<any>;
+export declare function isNullable<Z extends typeof zV4>(z: Z): (v: any) => v is zV4.ZodNullable;
+//# sourceMappingURL=zodTypes.d.ts.map

@@ -1,0 +1,69 @@
+import { ProviderV1, LanguageModelV1, EmbeddingModelV1 } from '@ai-sdk/provider';
+import { FetchFunction } from '@ai-sdk/provider-utils';
+
+type CohereChatModelId = 'command-a-03-2025' | 'command-r7b-12-2024' | 'command-r-plus-04-2024' | 'command-r-plus' | 'command-r-08-2024' | 'command-r-03-2024' | 'command-r' | 'command' | 'command-nightly' | 'command-light' | 'command-light-nightly' | (string & {});
+interface CohereChatSettings {
+}
+
+type CohereEmbeddingModelId = 'embed-english-v3.0' | 'embed-multilingual-v3.0' | 'embed-english-light-v3.0' | 'embed-multilingual-light-v3.0' | 'embed-english-v2.0' | 'embed-english-light-v2.0' | 'embed-multilingual-v2.0' | (string & {});
+interface CohereEmbeddingSettings {
+    /**
+     * Specifies the type of input passed to the model. Default is `search_query`.
+     *
+     * - "search_document": Used for embeddings stored in a vector database for search use-cases.
+     * - "search_query": Used for embeddings of search queries run against a vector DB to find relevant documents.
+     * - "classification": Used for embeddings passed through a text classifier.
+     * - "clustering": Used for embeddings run through a clustering algorithm.
+     */
+    inputType?: 'search_document' | 'search_query' | 'classification' | 'clustering';
+    /**
+     * Specifies how the API will handle inputs longer than the maximum token length.
+     * Default is `END`.
+     *
+     * - "NONE": If selected, when the input exceeds the maximum input token length will return an error.
+     * - "START": Will discard the start of the input until the remaining input is exactly the maximum input token length for the model.
+     * - "END": Will discard the end of the input until the remaining input is exactly the maximum input token length for the model.
+     */
+    truncate?: 'NONE' | 'START' | 'END';
+}
+
+interface CohereProvider extends ProviderV1 {
+    (modelId: CohereChatModelId, settings?: CohereChatSettings): LanguageModelV1;
+    /**
+  Creates a model for text generation.
+  */
+    languageModel(modelId: CohereChatModelId, settings?: CohereChatSettings): LanguageModelV1;
+    embedding(modelId: CohereEmbeddingModelId, settings?: CohereEmbeddingSettings): EmbeddingModelV1<string>;
+    textEmbeddingModel(modelId: CohereEmbeddingModelId, settings?: CohereEmbeddingSettings): EmbeddingModelV1<string>;
+}
+interface CohereProviderSettings {
+    /**
+  Use a different URL prefix for API calls, e.g. to use proxy servers.
+  The default prefix is `https://api.cohere.com/v2`.
+     */
+    baseURL?: string;
+    /**
+  API key that is being send using the `Authorization` header.
+  It defaults to the `COHERE_API_KEY` environment variable.
+     */
+    apiKey?: string;
+    /**
+  Custom headers to include in the requests.
+       */
+    headers?: Record<string, string>;
+    /**
+  Custom fetch implementation. You can use it as a middleware to intercept requests,
+  or to provide a custom fetch implementation for e.g. testing.
+      */
+    fetch?: FetchFunction;
+}
+/**
+Create a Cohere AI provider instance.
+ */
+declare function createCohere(options?: CohereProviderSettings): CohereProvider;
+/**
+Default Cohere provider instance.
+ */
+declare const cohere: CohereProvider;
+
+export { type CohereProvider, type CohereProviderSettings, cohere, createCohere };

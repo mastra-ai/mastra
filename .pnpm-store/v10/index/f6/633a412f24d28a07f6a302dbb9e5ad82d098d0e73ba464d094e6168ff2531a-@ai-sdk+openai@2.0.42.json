@@ -1,0 +1,109 @@
+{
+  "name": "@ai-sdk/openai",
+  "version": "2.0.42",
+  "requiresBuild": false,
+  "files": {
+    "dist/index.js": {
+      "checkedAt": 1764662916764,
+      "integrity": "sha512-YPX9ABNIZ/0ZxVAyEk8Bw3VQ+O5j6FcE9i8FydD6EV1evGvX3QDeji4D1cvcWspO9xsOnyaRAYDBRTLfDpb0jg==",
+      "mode": 420,
+      "size": 151577
+    },
+    "dist/internal/index.js": {
+      "checkedAt": 1764662916768,
+      "integrity": "sha512-k40lyW0UwLJMawMMgkSWStQZErfAWSlmpZnbuEHDZ2WPXJouFAcSnDT8fVwtnI6tVNG40nmNyW54pzEAC3Ka0A==",
+      "mode": 420,
+      "size": 147329
+    },
+    "package.json": {
+      "checkedAt": 1764662916769,
+      "integrity": "sha512-iKbaCPwnyZXjAas3L9Kex/7ss8oH0u6qXryVHlKTdlVezRoVwd7v8UiMP67UeGzV1j/moGHNhsT5P75SV1WkZw==",
+      "mode": 420,
+      "size": 1876
+    },
+    "dist/index.js.map": {
+      "checkedAt": 1764662916770,
+      "integrity": "sha512-p/0Lj1pmnGsfVtE9281KaG35XHwEWSKXUH2Dyj5dv5LcB45Cmngs0AuTnLtLQWV2t8vXTnU9yBheyihWxLhhsw==",
+      "mode": 420,
+      "size": 266159
+    },
+    "dist/internal/index.js.map": {
+      "checkedAt": 1764662916771,
+      "integrity": "sha512-ybyMW5Q94SVAoi6btmJaZDjwFlCWvN5lXsCF6kCUVDCXc2zopacckvawPDc8XOVLu3hs46H8g5OfhwniJVr+zQ==",
+      "mode": 420,
+      "size": 252961
+    },
+    "dist/index.mjs.map": {
+      "checkedAt": 1764662916777,
+      "integrity": "sha512-Ff0X4zYF/up5PnieP6CtYEgoQmsETuXIxJqq55guiGGvVA/XHczlxo7cYjAvV2QDcy/IKjB9R4ZB/AY/KBXMZg==",
+      "mode": 420,
+      "size": 267998
+    },
+    "dist/internal/index.mjs.map": {
+      "checkedAt": 1764662916778,
+      "integrity": "sha512-6oHWNr/zXWicyOMnDMYkY1za5fcqqMa2d/XAkHLJxyQrNe9St6dhcS9Px9DJ1bFlzXYuDT0101U2tgT9Tfd+cg==",
+      "mode": 420,
+      "size": 254195
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662916779,
+      "integrity": "sha512-daKaSpWvw4yAlivGLjnQ2lL66hY1CrPsnQU9a/3wX7ZZMGydYouPepkffg7P74m2uQNwPbL/JNJq+Vo7wvZdPA==",
+      "mode": 420,
+      "size": 49754
+    },
+    "README.md": {
+      "checkedAt": 1764662916779,
+      "integrity": "sha512-TVOfVgetYSo/wn/h+VUkENsWYbbVCu+s0Rvxn8FoBdh/mfpUfJxvDABRMZAcJppS73B6xaijIlG10nM9PT3ERg==",
+      "mode": 420,
+      "size": 954
+    },
+    "dist/index.mjs": {
+      "checkedAt": 1764662916780,
+      "integrity": "sha512-yEDODztprLHeYUs6oILzP9slDGHREZ308oz0xgQqfx0oIyDO4qX9wNUk7QNikRDY6BJqqJgLraYuzP7yfpNz3w==",
+      "mode": 420,
+      "size": 144035
+    },
+    "dist/internal/index.mjs": {
+      "checkedAt": 1764662916781,
+      "integrity": "sha512-fQkALGRtU3DBlbfLKKQmW5gMsowDMN+9+rd2D6by8B27tFsnK9+Et94zJvhuxxY/vyxFoFBIbPirIpq1SI8oHA==",
+      "mode": 420,
+      "size": 138495
+    },
+    "dist/index.d.mts": {
+      "checkedAt": 1764662916782,
+      "integrity": "sha512-b8BsIjtOJ7nmJASvCVNE9uI/vXhmyHzIvmpOBeMau2B0d4HNQqLDUU6Fjt70tARtZdNMGPHqRTr1DOf/83QwSQ==",
+      "mode": 420,
+      "size": 14937
+    },
+    "dist/internal/index.d.mts": {
+      "checkedAt": 1764662916783,
+      "integrity": "sha512-rtMp8ZuVvseGlneuJJ+FlWKk/R9+Ej1fIHmP5nSGtEYG2HAEFXMVsPg5xxI8uCuO5GmfcLAAFvsFtmB7eby3GQ==",
+      "mode": 420,
+      "size": 22401
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662916782,
+      "integrity": "sha512-b8BsIjtOJ7nmJASvCVNE9uI/vXhmyHzIvmpOBeMau2B0d4HNQqLDUU6Fjt70tARtZdNMGPHqRTr1DOf/83QwSQ==",
+      "mode": 420,
+      "size": 14937
+    },
+    "dist/internal/index.d.ts": {
+      "checkedAt": 1764662916783,
+      "integrity": "sha512-rtMp8ZuVvseGlneuJJ+FlWKk/R9+Ej1fIHmP5nSGtEYG2HAEFXMVsPg5xxI8uCuO5GmfcLAAFvsFtmB7eby3GQ==",
+      "mode": 420,
+      "size": 22401
+    },
+    "internal.d.ts": {
+      "checkedAt": 1764662916783,
+      "integrity": "sha512-kw4qdpeEu5D3W3YY4z1uDsG5QzIarMdbaGVM0TM/AgP7jCxQaCbPBq8yr1ywJP4sZhgV16iD6YxwGjzkgL3yGw==",
+      "mode": 420,
+      "size": 33
+    },
+    "LICENSE": {
+      "checkedAt": 1764662916784,
+      "integrity": "sha512-Hy/GyQA/R7TOAufwk+QAO9zWXfXfc4CKfq9YYSLiryc+CIjF6Vg6bBNIPzluRVfS8debb0WWE4isWP/PAFn+Vw==",
+      "mode": 420,
+      "size": 552
+    }
+  }
+}

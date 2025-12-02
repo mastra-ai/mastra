@@ -1,0 +1,13 @@
+{
+    "name": "Test Organization",
+    "object": "organization",
+    "id": "org_01EHT88Z8J8795GZNQ4ZP1J81T",
+    "allow_profiles_outside_organization": false,
+    "domains": [
+        {
+            "domain": "example.com",
+            "object": "organization_domain",
+            "id": "org_domain_01EHT88Z8WZEFWYPM6EC9BX2R8"
+        }
+    ]
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"type-helper.d.ts","sourceRoot":"","sources":["../../lib/type-helper.ts"],"names":[],"mappings":"AAGA;;;;;;;;;;;;;;;;;;;;;;GAsBG;AACH,MAAM,MAAM,gBAAgB,CAAC,IAAI,SAAS,MAAM,EAAE,QAAQ,GAAG,OAAO,IAAI,OAAO,UAAU,SAAS;KAC/F,CAAC,IAAI,IAAI,GAAG;QAAE,SAAS,EAAE,MAAM,CAAC,CAAA;KAAE;CACpC,GACG,CAAC,GACD,QAAQ,CAAC"}

@@ -1,0 +1,61 @@
+{
+  "name": "bent",
+  "version": "7.3.12",
+  "requiresBuild": false,
+  "files": {
+    "src/browser.js": {
+      "checkedAt": 1764662928032,
+      "integrity": "sha512-CmGKbvBo8H9rgWawEyI/eaiCbbypqAJ1GTyj9XRSmMB4PAoIdmfZNuUPDfjG+fpW9ocJX0faUndo20GhhL6IUA==",
+      "mode": 420,
+      "size": 2175
+    },
+    "src/core.js": {
+      "checkedAt": 1764662928035,
+      "integrity": "sha512-rkSl1YO273pRyBVp31XjqAx+rftzyVuaTcyGubZhoKnibnWo6FwyMyeXfdoDYu0iPMgEdOiQbbVUlWgix3zoag==",
+      "mode": 420,
+      "size": 1334
+    },
+    "src/nodejs.js": {
+      "checkedAt": 1764662928036,
+      "integrity": "sha512-m886cAoAGxKLwCl2PJbjJOwfePmsfwVICNp2eEEg2v2222Mmz6enpZe3zNdumrYuBWVvdlZbsFJi5Nv2Npt0OA==",
+      "mode": 420,
+      "size": 4939
+    },
+    "test/test-basics.js": {
+      "checkedAt": 1764662928037,
+      "integrity": "sha512-tPv8aRTxE8LL/RXEwxJT+DxPOjcGTZ0Kt9ijFn4Th4D0JhHyLY+j3KfNspq3SgESsTplejBFgIcygXvmXzvcJA==",
+      "mode": 420,
+      "size": 7075
+    },
+    "test/test-compression.js": {
+      "checkedAt": 1764662928039,
+      "integrity": "sha512-/5oKpQ4FMXxyrvjY1Hu9w0tkDvf1tZpqYgDadB7bI69n1RbRbC8DR+7BQGVZOBOz8A9BOCz6NfKE0ftYD9L/WA==",
+      "mode": 420,
+      "size": 1913
+    },
+    "test/test-errors.js": {
+      "checkedAt": 1764662928040,
+      "integrity": "sha512-wx0TcUKuZ8y3uMXjxxKM758VH2dbdBhGqYnTVk5/rkzgkFDWHUVIAp+W9JazKul7j7El6QkeCUgk0ICo0g+tcA==",
+      "mode": 420,
+      "size": 2875
+    },
+    "package.json": {
+      "checkedAt": 1764662928041,
+      "integrity": "sha512-5YrbZGPTwkzj1Lh0ctXyTqGF7yNJRHqCI8hQdOTyi860vDIsY+fqx9Gk1KrqOvaoTgfQBtc9jnI0UPJYwWlKOw==",
+      "mode": 420,
+      "size": 1001
+    },
+    "README.md": {
+      "checkedAt": 1764662928041,
+      "integrity": "sha512-kaxcLlA4vDxsz2Ca0xVc+aZfYq5rXIVdzbm0BShZ1dVJe4U78M2NvaSJpBLYgr5sJVeFC9N67jnqybW+owdMsA==",
+      "mode": 420,
+      "size": 3843
+    },
+    ".github/workflows/mikeals-workflow.yml": {
+      "checkedAt": 1764662928043,
+      "integrity": "sha512-WxqOf1gYxS0tQhjvatPJRUakALNORM1aKLrZcLoQ79xMwHOFEnUYi1xW+EJvaJeVHxH29PdTgf3qDkc6qALgsQ==",
+      "mode": 420,
+      "size": 1532
+    }
+  }
+}

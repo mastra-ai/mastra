@@ -1,0 +1,225 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/index.ts
+var index_exports = {};
+__export(index_exports, {
+  ZOD_FIELD_CONFIG_SYMBOL: () => ZOD_FIELD_CONFIG_SYMBOL,
+  ZodProvider: () => ZodProvider,
+  fieldConfig: () => fieldConfig,
+  getDefaultValueInZodStack: () => getDefaultValueInZodStack,
+  getDefaultValues: () => getDefaultValues,
+  getFieldConfigInZodStack: () => getFieldConfigInZodStack,
+  inferFieldType: () => inferFieldType,
+  parseSchema: () => parseSchema,
+  validateSchema: () => validateSchema
+});
+module.exports = __toCommonJS(index_exports);
+
+// src/v3/schema-parser.ts
+var import_zod3 = require("zod");
+
+// src/v3/field-type-inference.ts
+var import_zod = require("zod");
+function inferFieldType(schema, fieldConfig2) {
+  if (fieldConfig2?.fieldType) {
+    return fieldConfig2.fieldType;
+  }
+  if (schema instanceof import_zod.z.ZodObject) return "object";
+  if (schema instanceof import_zod.z.ZodString) return "string";
+  if (schema instanceof import_zod.z.ZodNumber) return "number";
+  if (schema instanceof import_zod.z.ZodBoolean) return "boolean";
+  if (schema instanceof import_zod.z.ZodDate) return "date";
+  if (schema instanceof import_zod.z.ZodEnum) return "select";
+  if (schema instanceof import_zod.z.ZodNativeEnum) return "select";
+  if (schema instanceof import_zod.z.ZodArray) return "array";
+  return "string";
+}
+
+// src/v3/default-values.ts
+var import_zod2 = require("zod");
+function getDefaultValueInZodStack(schema) {
+  if (schema instanceof import_zod2.z.ZodDefault) {
+    return schema._def.defaultValue();
+  }
+  if (schema instanceof import_zod2.z.ZodEffects) {
+    return getDefaultValueInZodStack(schema.innerType());
+  }
+  return void 0;
+}
+function getDefaultValues(schema) {
+  const objectSchema = schema instanceof import_zod2.z.ZodEffects ? schema.innerType() : schema;
+  const shape = objectSchema.shape;
+  const defaultValues = {};
+  for (const [key, field] of Object.entries(shape)) {
+    const defaultValue = getDefaultValueInZodStack(field);
+    if (defaultValue !== void 0) {
+      defaultValues[key] = defaultValue;
+    }
+  }
+  return defaultValues;
+}
+
+// src/v3/field-config.ts
+var ZOD_FIELD_CONFIG_SYMBOL = Symbol("GetFieldConfig");
+function fieldConfig(config) {
+  const refinementFunction = () => {
+  };
+  refinementFunction[ZOD_FIELD_CONFIG_SYMBOL] = config;
+  return refinementFunction;
+}
+function getFieldConfigInZodStack(schema) {
+  const typedSchema = schema;
+  if (typedSchema._def.typeName === "ZodEffects") {
+    const effect = typedSchema._def.effect;
+    const refinementFunction = effect.refinement;
+    if (ZOD_FIELD_CONFIG_SYMBOL in refinementFunction) {
+      return refinementFunction[ZOD_FIELD_CONFIG_SYMBOL];
+    }
+  }
+  if ("innerType" in typedSchema._def) {
+    return getFieldConfigInZodStack(
+      typedSchema._def.innerType
+    );
+  }
+  if ("schema" in typedSchema._def) {
+    return getFieldConfigInZodStack(
+      typedSchema._def.schema
+    );
+  }
+  return void 0;
+}
+
+// src/v3/schema-parser.ts
+function parseField(key, schema) {
+  const baseSchema = getBaseSchema(schema);
+  const fieldConfig2 = getFieldConfigInZodStack(schema);
+  const type = inferFieldType(baseSchema, fieldConfig2);
+  const defaultValue = getDefaultValueInZodStack(schema);
+  const options = baseSchema._def.values;
+  let optionValues = [];
+  if (options) {
+    if (!Array.isArray(options)) {
+      optionValues = Object.entries(options);
+    } else {
+      optionValues = options.map((value) => [value, value]);
+    }
+  }
+  let subSchema = [];
+  if (baseSchema instanceof import_zod3.z.ZodObject) {
+    subSchema = Object.entries(baseSchema.shape).map(
+      ([key2, field]) => parseField(key2, field)
+    );
+  }
+  if (baseSchema instanceof import_zod3.z.ZodArray) {
+    subSchema = [parseField("0", baseSchema._def.type)];
+  }
+  return {
+    key,
+    type,
+    required: !schema.isOptional(),
+    default: defaultValue,
+    description: baseSchema.description,
+    fieldConfig: fieldConfig2,
+    options: optionValues,
+    schema: subSchema
+  };
+}
+function getBaseSchema(schema) {
+  if ("innerType" in schema._def) {
+    return getBaseSchema(schema._def.innerType);
+  }
+  if ("schema" in schema._def) {
+    return getBaseSchema(schema._def.schema);
+  }
+  return schema;
+}
+function parseSchema(schema) {
+  const objectSchema = schema instanceof import_zod3.z.ZodEffects ? schema.innerType() : schema;
+  const shape = objectSchema.shape;
+  const fields = Object.entries(shape).map(
+    ([key, field]) => parseField(key, field)
+  );
+  return { fields };
+}
+
+// src/v3/validator.ts
+var import_zod4 = require("zod");
+function validateSchema(schema, values) {
+  try {
+    schema.parse(values);
+    return { success: true, data: values };
+  } catch (error) {
+    if (error instanceof import_zod4.z.ZodError) {
+      return { success: false, errors: error.errors };
+    }
+    throw error;
+  }
+}
+
+// src/v3/provider.ts
+var import_zod5 = require("zod");
+var ZodProvider = class {
+  /**
+   * Provider to use Zod schemas for AutoForm
+   *
+   * @param schema - Zod schema to use for validation
+   */
+  constructor(schema) {
+    this.schema = schema;
+    if (!schema) {
+      throw new Error("ZodProvider: schema is required");
+    }
+  }
+  parseSchema() {
+    return parseSchema(this.schema);
+  }
+  validateSchema(values) {
+    try {
+      const data = this.schema.parse(values);
+      return { success: true, data };
+    } catch (error) {
+      if (error instanceof import_zod5.z.ZodError) {
+        return {
+          success: false,
+          errors: error.errors.map((error2) => ({
+            path: error2.path,
+            message: error2.message
+          }))
+        };
+      }
+      throw error;
+    }
+  }
+  getDefaultValues() {
+    return getDefaultValues(this.schema);
+  }
+};
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  ZOD_FIELD_CONFIG_SYMBOL,
+  ZodProvider,
+  fieldConfig,
+  getDefaultValueInZodStack,
+  getDefaultValues,
+  getFieldConfigInZodStack,
+  inferFieldType,
+  parseSchema,
+  validateSchema
+});

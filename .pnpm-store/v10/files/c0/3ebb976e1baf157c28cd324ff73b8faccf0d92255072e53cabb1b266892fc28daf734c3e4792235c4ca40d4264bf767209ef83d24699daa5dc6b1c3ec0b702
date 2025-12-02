@@ -1,0 +1,18 @@
+import type { MastraLanguageModel } from '../llm/model/shared.types.js';
+import type { TracingContext } from '../observability/index.js';
+import { MastraModelOutput } from '../stream/index.js';
+import type { OutputSchema } from '../stream/base/schema.js';
+import type { InnerAgentExecutionOptions } from './agent.types.js';
+import type { MessageList } from './message-list/index.js';
+export declare class TripWire extends Error {
+    constructor(reason: string);
+}
+export declare const getModelOutputForTripwire: <OUTPUT extends OutputSchema | undefined = undefined, FORMAT extends "aisdk" | "mastra" | undefined = undefined>({ tripwireReason, runId, tracingContext, options, model, messageList, }: {
+    tripwireReason: string;
+    runId: string;
+    tracingContext: TracingContext;
+    options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+    model: MastraLanguageModel;
+    messageList: MessageList;
+}) => Promise<MastraModelOutput<OUTPUT>>;
+//# sourceMappingURL=trip-wire.d.ts.map

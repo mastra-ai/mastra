@@ -1,0 +1,31 @@
+{
+  "name": "@esbuild-kit/esm-loader",
+  "version": "2.6.5",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662910813,
+      "integrity": "sha512-GTo7rtO9J+JCun/8mWPCIRC8N3ftZ72dpYEsqKXapL8Zz/ZGReM0DtAHQhw8GLG8KlR1nCYGkYNAkHcitlr1JA==",
+      "mode": 420,
+      "size": 1088
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662910814,
+      "integrity": "sha512-d8t5WKIEiBhKnGmTULBrHbF3eOdTey4KKJ3FvG50el2MSjyQPgsVYRrOxr82CG9qBXmOkf/OVkGJsbmTa8lteQ==",
+      "mode": 493,
+      "size": 4512
+    },
+    "package.json": {
+      "checkedAt": 1764662910816,
+      "integrity": "sha512-Q1KWB4MOx0luBp79jRfYiVSiU4qgsCwQkKStuBTsBgMAWVPdlG5H7nGDVUX/MP6psRvCYdbbVDMPqBgdA/2fAQ==",
+      "mode": 420,
+      "size": 627
+    },
+    "README.md": {
+      "checkedAt": 1764662910817,
+      "integrity": "sha512-dW2/fnh6TNduZ17bW9g8QNqqSXFoHv79WMUZMdDM8HiNXu1WCTCiqcEUVP4/AKo1HxJC5H3u83P1Q0HAjqbfQg==",
+      "mode": 420,
+      "size": 7137
+    }
+  }
+}

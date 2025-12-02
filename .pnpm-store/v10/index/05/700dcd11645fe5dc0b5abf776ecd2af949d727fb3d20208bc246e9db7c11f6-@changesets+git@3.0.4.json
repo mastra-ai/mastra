@@ -1,0 +1,73 @@
+{
+  "name": "@changesets/git",
+  "version": "3.0.4",
+  "requiresBuild": false,
+  "files": {
+    "dist/changesets-git.cjs.js": {
+      "checkedAt": 1764662904031,
+      "integrity": "sha512-9SGK+ayA3W6vA8xAOReehl2lG3crAWjeCut5rkD9TdrbyOzdrcBMWzaLBONEclDUEi0lEBHq91Mgoz9YiaJysw==",
+      "mode": 420,
+      "size": 9466
+    },
+    "dist/changesets-git.esm.js": {
+      "checkedAt": 1764662904032,
+      "integrity": "sha512-6pFfsP3k7DPtpkjIEJkcO/OROp9T+qtRvdYSTfPEkdo5KBxJmfydbXTmCCkzgie3t4rMplXAnpXRqu3yPOkw0g==",
+      "mode": 420,
+      "size": 8205
+    },
+    "package.json": {
+      "checkedAt": 1764662904033,
+      "integrity": "sha512-D4KvPFWrEDqq7z2AQGthLUpObU28D0ijTZ4kJ+GvM030oRmxl7pgrIYSfG/c355NMQRNCp59FDpCigupd/rW+Q==",
+      "mode": 420,
+      "size": 991
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662904034,
+      "integrity": "sha512-o6q4NblrxdLGv77HhGVDvveKhj4Y+FAB5jLvPeXdSmU+6Y9m8YxbVlT6M/9k94AcNkGB4zM1bszIo6T6zK7IZA==",
+      "mode": 420,
+      "size": 16605
+    },
+    "README.md": {
+      "checkedAt": 1764662904035,
+      "integrity": "sha512-wnU0OtlI7odcL9lJkYe0dsjY2c/B3Lj3Pi4OXfQUzSXRYoyFiwwUThUdNhW24tAKCZK+0s/mfC+SWqMrQbqcPw==",
+      "mode": 420,
+      "size": 371
+    },
+    "dist/changesets-git.cjs.mjs": {
+      "checkedAt": 1764662904037,
+      "integrity": "sha512-YdvX1U0j4PxqikUGfoBplythwjICXzBLfMv0W6e/Uuxs/olShn3Jb0D4Fb65zyeHwJBCR1TTKs9glHf62kf/Tw==",
+      "mode": 420,
+      "size": 305
+    },
+    "dist/changesets-git.cjs.d.mts": {
+      "checkedAt": 1764662904039,
+      "integrity": "sha512-CB4Yrq+O1IGjeE0Xk8Blu5uFanuNYxmIZSy03PIQMMD+a4+SC0ZZ31TseIzGqyK9usrJDdChJBTpyp5Z8RCvhA==",
+      "mode": 420,
+      "size": 294
+    },
+    "dist/changesets-git.cjs.d.ts": {
+      "checkedAt": 1764662904042,
+      "integrity": "sha512-StVhvv7Kx/L1k5VIi1/HUzfaQbFMHhhSWKQOp/I7fstNbxLb4wRulF8Ho7QAc1jdqWCTvyG/GLVBOEM3t9YLKQ==",
+      "mode": 420,
+      "size": 290
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662904042,
+      "integrity": "sha512-1Q188JIt21DlS4A5rYNjU2aOgEn1BJcPHgaLu1Yme5Sg2kLrksRkz1AbaAQODD2RyYFdlmv1o9CtMjQdsXG3Dw==",
+      "mode": 420,
+      "size": 1783
+    },
+    "src/index.test.ts": {
+      "checkedAt": 1764662904043,
+      "integrity": "sha512-2SkvVRyI7i6LR3ajZel3rpP79xO93+Ny4TiYRbXBTj/8epPK+c7IwXzhjUTgMVy9h8GF97Qen84u7W9vpLuUTg==",
+      "mode": 420,
+      "size": 26321
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662904045,
+      "integrity": "sha512-5pSYiyX2N6gOLfL2vG0Xaw0sO/UhuKw5GjOROHJGm5wJufOP+J2fHbhZKhgBlvEkrewyeUJdLfUVwAmUtETICw==",
+      "mode": 420,
+      "size": 9171
+    }
+  }
+}

@@ -1,0 +1,216 @@
+imports:
+  root: __package__.yml
+types:
+  BodyCreatePodcastV1StudioPodcastsPostMode:
+    discriminant: type
+    base-properties: {}
+    docs: >-
+      The type of podcast to generate. Can be 'conversation', an interaction
+      between two voices, or 'bulletin', a monologue.
+    union:
+      conversation:
+        type: root.PodcastConversationMode
+      bulletin:
+        type: root.PodcastBulletinMode
+    source:
+      openapi: openapi.json
+  BodyCreatePodcastV1StudioPodcastsPostSourceItem:
+    discriminant: type
+    base-properties: {}
+    union:
+      text:
+        type: root.PodcastTextSource
+      url:
+        type: root.PodcastUrlSource
+    source:
+      openapi: openapi.json
+  BodyCreatePodcastV1StudioPodcastsPostSource:
+    discriminated: false
+    docs: The source content for the Podcast.
+    union:
+      - type: root.PodcastTextSource
+      - type: root.PodcastUrlSource
+      - list<BodyCreatePodcastV1StudioPodcastsPostSourceItem>
+    source:
+      openapi: openapi.json
+    inline: true
+  BodyCreatePodcastV1StudioPodcastsPostQualityPreset:
+    enum:
+      - standard
+      - high
+      - highest
+      - ultra
+      - ultra_lossless
+    docs: >
+      Output quality of the generated audio. Must be one of:
+
+      standard - standard output format, 128kbps with 44.1kHz sample rate.
+
+      high - high quality output format, 192kbps with 44.1kHz sample rate and
+      major improvements on our side. Using this setting increases the credit
+      cost by 20%.
+
+      ultra - ultra quality output format, 192kbps with 44.1kHz sample rate and
+      highest improvements on our side. Using this setting increases the credit
+      cost by 50%.
+
+      ultra lossless - ultra quality output format, 705.6kbps with 44.1kHz
+      sample rate and highest improvements on our side in a fully lossless
+      format. Using this setting increases the credit cost by 100%.
+    default: standard
+    inline: true
+    source:
+      openapi: openapi.json
+  BodyCreatePodcastV1StudioPodcastsPostDurationScale:
+    enum:
+      - short
+      - default
+      - long
+    docs: |
+      Duration of the generated podcast. Must be one of:
+      short - produces podcasts shorter than 3 minutes.
+      default - produces podcasts roughly between 3-7 minutes.
+      long - prodces podcasts longer than 7 minutes.
+    default: default
+    inline: true
+    source:
+      openapi: openapi.json
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    create_podcast:
+      path: /v1/studio/podcasts
+      method: POST
+      auth: false
+      docs: >-
+        Create and auto-convert a podcast project. Currently, the LLM cost is
+        covered by us but you will still be charged for the audio generation. In
+        the future, you will be charged for both the LLM and audio generation
+        costs.
+      source:
+        openapi: openapi.json
+      display-name: Create Podcast
+      request:
+        name: BodyCreatePodcastV1StudioPodcastsPost
+        body:
+          properties:
+            model_id:
+              type: string
+              docs: >-
+                The ID of the model to be used for this Studio project, you can
+                query GET /v1/models to list all available models.
+            mode:
+              display-name: Mode
+              type: BodyCreatePodcastV1StudioPodcastsPostMode
+              docs: >-
+                The type of podcast to generate. Can be 'conversation', an
+                interaction between two voices, or 'bulletin', a monologue.
+            source:
+              display-name: Source
+              type: BodyCreatePodcastV1StudioPodcastsPostSource
+              docs: The source content for the Podcast.
+            quality_preset:
+              type: optional<BodyCreatePodcastV1StudioPodcastsPostQualityPreset>
+              docs: >
+                Output quality of the generated audio. Must be one of:
+
+                standard - standard output format, 128kbps with 44.1kHz sample
+                rate.
+
+                high - high quality output format, 192kbps with 44.1kHz sample
+                rate and major improvements on our side. Using this setting
+                increases the credit cost by 20%.
+
+                ultra - ultra quality output format, 192kbps with 44.1kHz sample
+                rate and highest improvements on our side. Using this setting
+                increases the credit cost by 50%.
+
+                ultra lossless - ultra quality output format, 705.6kbps with
+                44.1kHz sample rate and highest improvements on our side in a
+                fully lossless format. Using this setting increases the credit
+                cost by 100%.
+              default: standard
+            duration_scale:
+              type: optional<BodyCreatePodcastV1StudioPodcastsPostDurationScale>
+              docs: |
+                Duration of the generated podcast. Must be one of:
+                short - produces podcasts shorter than 3 minutes.
+                default - produces podcasts roughly between 3-7 minutes.
+                long - prodces podcasts longer than 7 minutes.
+              default: default
+            language:
+              type: optional<string>
+              docs: >-
+                An optional language of the Studio project. Two-letter language
+                code (ISO 639-1).
+              validation:
+                minLength: 2
+                maxLength: 2
+            highlights:
+              type: optional<list<string>>
+              docs: >-
+                A brief summary or highlights of the Studio project's content,
+                providing key points or themes. This should be between 10 and 70
+                characters.
+            callback_url:
+              type: optional<string>
+              docs: >-
+                A url that will be called by our service when the Studio project
+                is converted. Request will contain a json blob containing the
+                status of the conversion
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.PodcastProjectResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            model_id: 21m00Tcm4TlvDq8ikWAM
+            mode:
+              conversation:
+                host_voice_id: aw1NgEzBg83R7vgmiJt6
+                guest_voice_id: aw1NgEzBg83R7vgmiJt7
+              type: conversation
+            source:
+              text: This is a test podcast.
+          response:
+            body:
+              project:
+                project_id: aw1NgEzBg83R7vgmiJt6
+                name: My Project
+                create_date_unix: 1714204800
+                default_title_voice_id: JBFqnCBsd6RMkjVDRZzb
+                default_paragraph_voice_id: JBFqnCBsd6RMkjVDRZzb
+                default_model_id: eleven_multilingual_v2
+                last_conversion_date_unix: 1714204800
+                can_be_downloaded: true
+                title: My Project
+                author: John Doe
+                description: This is a description of my project.
+                genres:
+                  - Novel
+                  - Short Story
+                cover_image_url: https://example.com/cover.jpg
+                target_audience: children
+                language: en
+                content_type: Novel
+                original_publication_date: '2025-01-01'
+                mature_content: false
+                isbn_number: 978-90-274-3964-2
+                volume_normalization: true
+                state: default
+                access_level: viewer
+                fiction: fiction
+                quality_check_on: false
+                quality_check_on_when_bulk_convert: false
+                creation_meta:
+                  creation_progress: 0.5
+                  status: pending
+                  type: blank
+                source_type: blank
+                chapters_enabled: true
+  source:
+    openapi: openapi.json

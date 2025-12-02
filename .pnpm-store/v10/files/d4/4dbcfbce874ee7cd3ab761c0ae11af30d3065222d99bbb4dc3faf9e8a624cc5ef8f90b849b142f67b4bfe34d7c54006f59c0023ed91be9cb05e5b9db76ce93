@@ -1,0 +1,124 @@
+'use strict';
+
+// src/logger/constants.ts
+var RegisteredLogger = {
+  AGENT: "AGENT",
+  OBSERVABILITY: "OBSERVABILITY",
+  AUTH: "AUTH",
+  NETWORK: "NETWORK",
+  WORKFLOW: "WORKFLOW",
+  LLM: "LLM",
+  TTS: "TTS",
+  VOICE: "VOICE",
+  VECTOR: "VECTOR",
+  BUNDLER: "BUNDLER",
+  DEPLOYER: "DEPLOYER",
+  MEMORY: "MEMORY",
+  STORAGE: "STORAGE",
+  EMBEDDINGS: "EMBEDDINGS",
+  MCP_SERVER: "MCP_SERVER",
+  SERVER_CACHE: "SERVER_CACHE"
+};
+var LogLevel = {
+  DEBUG: "debug",
+  INFO: "info",
+  WARN: "warn",
+  ERROR: "error",
+  NONE: "silent"
+};
+
+// src/logger/logger.ts
+var MastraLogger = class {
+  name;
+  level;
+  transports;
+  constructor(options = {}) {
+    this.name = options.name || "Mastra";
+    this.level = options.level || LogLevel.ERROR;
+    this.transports = new Map(Object.entries(options.transports || {}));
+  }
+  getTransports() {
+    return this.transports;
+  }
+  trackException(_error) {
+  }
+  async listLogs(transportId, params) {
+    if (!transportId || !this.transports.has(transportId)) {
+      return { logs: [], total: 0, page: params?.page ?? 1, perPage: params?.perPage ?? 100, hasMore: false };
+    }
+    return this.transports.get(transportId).listLogs(params) ?? {
+      logs: [],
+      total: 0,
+      page: params?.page ?? 1,
+      perPage: params?.perPage ?? 100,
+      hasMore: false
+    };
+  }
+  async listLogsByRunId({
+    transportId,
+    runId,
+    fromDate,
+    toDate,
+    logLevel,
+    filters,
+    page,
+    perPage
+  }) {
+    if (!transportId || !this.transports.has(transportId) || !runId) {
+      return { logs: [], total: 0, page: page ?? 1, perPage: perPage ?? 100, hasMore: false };
+    }
+    return this.transports.get(transportId).listLogsByRunId({ runId, fromDate, toDate, logLevel, filters, page, perPage }) ?? {
+      logs: [],
+      total: 0,
+      page: page ?? 1,
+      perPage: perPage ?? 100,
+      hasMore: false
+    };
+  }
+};
+
+// src/logger/default-logger.ts
+var createLogger = (options) => {
+  const logger = new ConsoleLogger(options);
+  logger.warn(`createLogger is deprecated. Please use "new ConsoleLogger()" from "@mastra/core/logger" instead.`);
+  return logger;
+};
+var ConsoleLogger = class extends MastraLogger {
+  constructor(options = {}) {
+    super(options);
+  }
+  debug(message, ...args) {
+    if (this.level === LogLevel.DEBUG) {
+      console.info(message, ...args);
+    }
+  }
+  info(message, ...args) {
+    if (this.level === LogLevel.INFO || this.level === LogLevel.DEBUG) {
+      console.info(message, ...args);
+    }
+  }
+  warn(message, ...args) {
+    if (this.level === LogLevel.WARN || this.level === LogLevel.INFO || this.level === LogLevel.DEBUG) {
+      console.info(message, ...args);
+    }
+  }
+  error(message, ...args) {
+    if (this.level === LogLevel.ERROR || this.level === LogLevel.WARN || this.level === LogLevel.INFO || this.level === LogLevel.DEBUG) {
+      console.error(message, ...args);
+    }
+  }
+  async listLogs(_transportId, _params) {
+    return { logs: [], total: 0, page: _params?.page ?? 1, perPage: _params?.perPage ?? 100, hasMore: false };
+  }
+  async listLogsByRunId(_args) {
+    return { logs: [], total: 0, page: _args.page ?? 1, perPage: _args.perPage ?? 100, hasMore: false };
+  }
+};
+
+exports.ConsoleLogger = ConsoleLogger;
+exports.LogLevel = LogLevel;
+exports.MastraLogger = MastraLogger;
+exports.RegisteredLogger = RegisteredLogger;
+exports.createLogger = createLogger;
+//# sourceMappingURL=chunk-DSNPWVIG.cjs.map
+//# sourceMappingURL=chunk-DSNPWVIG.cjs.map

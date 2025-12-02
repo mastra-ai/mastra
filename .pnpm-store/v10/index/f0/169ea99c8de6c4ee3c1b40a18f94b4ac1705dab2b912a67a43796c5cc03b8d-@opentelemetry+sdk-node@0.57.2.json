@@ -1,0 +1,115 @@
+{
+  "name": "@opentelemetry/sdk-node",
+  "version": "0.57.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662915109,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662915110,
+      "integrity": "sha512-Rrhq30adERJfvYtvPa/YAH5GC2dAt9DgdjodiZLOdgV70dDykQD4C8KwJ2ciI1yFdNpDOx8NfqQigjbeAmNRiA==",
+      "mode": 420,
+      "size": 1595
+    },
+    "build/src/sdk.js": {
+      "checkedAt": 1764662915110,
+      "integrity": "sha512-bT8QeAhHXzd7/JuHg02ynC4HlvwH7ilTffyKWOHIAmOpcvE7qX+9szspA+bO4vANQa+h4u+IeTOAy2MxzJ2Uwg==",
+      "mode": 420,
+      "size": 17764
+    },
+    "build/src/types.js": {
+      "checkedAt": 1764662915111,
+      "integrity": "sha512-X3FFbfMCfefi1pYtFj0GysmT+at2Amx9JXS4dvj0nxS1R/xPNhwoc7/Zwl/pat3SuyEnsoaN9NkkP3E+6VRrcQ==",
+      "mode": 420,
+      "size": 716
+    },
+    "build/src/utils.js": {
+      "checkedAt": 1764662915111,
+      "integrity": "sha512-69SCNy+4A4U5LIlm+p0wA0VQKUudn2S5+WioECxGUh8ehnIhBMg0/xEAQGE2AoIPngNtRnZ+s+PCFe0T8GUyCw==",
+      "mode": 420,
+      "size": 6940
+    },
+    "build/src/version.js": {
+      "checkedAt": 1764662915112,
+      "integrity": "sha512-ZZqxsmnMyJKrqCHWReCdbiITzXTzSplD80N5Ah7tEH1ISKNejjohjyz919QRc061nmds1+uFq1BlcIqYUDSH4A==",
+      "mode": 420,
+      "size": 833
+    },
+    "package.json": {
+      "checkedAt": 1764662915112,
+      "integrity": "sha512-BYdvfeIPvwGpEsv95PRX2uCZzcCyJ6m8g3VpnuBYMGa4oC2VC+L6x4iEAkgOzpaUCX5M3fnjiUcJ1tHW+eZWpw==",
+      "mode": 420,
+      "size": 3046
+    },
+    "build/src/index.js.map": {
+      "checkedAt": 1764662915113,
+      "integrity": "sha512-gGrHrW05vAxyiXP1Ay1uRaVj1dlstmQC9AcTo1hlyyiG0VuPB2AC3IKb/iSU7EAqyBrpslRd3dfu8iNNByJvyw==",
+      "mode": 420,
+      "size": 1630
+    },
+    "build/src/sdk.js.map": {
+      "checkedAt": 1764662915134,
+      "integrity": "sha512-91jvzPBNEK0wTMLkwdIVagtJdWEPtu2gAvwU+CEGqg+KsYN22xgd074ay2EZPkSaqbOMVvJj0LnItM69gD+isA==",
+      "mode": 420,
+      "size": 26877
+    },
+    "build/src/types.js.map": {
+      "checkedAt": 1764662915135,
+      "integrity": "sha512-t1FYSrxVqQESfDmc5cwvN0BeEWBjUyf1cxiv7ktY6U5pbM9wNYm4L7duXLTp58Z/evDaOUv4rWueA7zPFTgdWw==",
+      "mode": 420,
+      "size": 2077
+    },
+    "build/src/utils.js.map": {
+      "checkedAt": 1764662915136,
+      "integrity": "sha512-FNaBoCtmRcBkBdsXWDv/TnBYKdx7vERUKhyYAoeyrgMfh0xg7Ox7mvObOkK5v+ipRY5arsXMtorZDWC07zd1FA==",
+      "mode": 420,
+      "size": 10094
+    },
+    "build/src/version.js.map": {
+      "checkedAt": 1764662915136,
+      "integrity": "sha512-xYXklFaoTdlYRT/zkWr5G1y18XLG5amebsH2uUGSi7+yGuahhkCnxIrd8sAiiANinYzwWd4G8E9Jmn273hcPqQ==",
+      "mode": 420,
+      "size": 922
+    },
+    "README.md": {
+      "checkedAt": 1764662915137,
+      "integrity": "sha512-Ub458KJ6EeeZemWYAFAkE35fN0M236kv+I5UHwjLGI94xms4yAnQun8CQFUMtUKJu8fHTKk2XUV/6pm2XOD8Nw==",
+      "mode": 420,
+      "size": 11825
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662915138,
+      "integrity": "sha512-6xYkgZoU5GxjfOjKP7gB3nZ7gZSFKxLnlsG1gHk5Pdp2YVr6tCsZpElY2jCElrtWjBc5PAvaXaeB/rzOWShtQQ==",
+      "mode": 420,
+      "size": 570
+    },
+    "build/src/sdk.d.ts": {
+      "checkedAt": 1764662915140,
+      "integrity": "sha512-Ev8tzfBO4X2vBwMVTxFH7oVULaJBdEpR8+w1EBanffw8F2u9xpB3pGjnEswNJuiRh3HyblFZcuV31EaxeqQIHg==",
+      "mode": 420,
+      "size": 1549
+    },
+    "build/src/types.d.ts": {
+      "checkedAt": 1764662915140,
+      "integrity": "sha512-5irP0nNr0SWMKjKD2tIBB2l2IS2k63PiWelBCYrIKRFht5WH6j1myK5vTZ4muuffho33adfNFkNoyaPVuoJMeQ==",
+      "mode": 420,
+      "size": 1327
+    },
+    "build/src/utils.d.ts": {
+      "checkedAt": 1764662915146,
+      "integrity": "sha512-H3dhDw5vNiCyUlZxazFvix6Aun5fhwLIqK4is0rvyysmZeXGJXcajmHhCNRSz/Zf4PZfPLONF6ChPS+2HkIsBw==",
+      "mode": 420,
+      "size": 430
+    },
+    "build/src/version.d.ts": {
+      "checkedAt": 1764662915147,
+      "integrity": "sha512-+u1vTBB4fbX+7I/2jMzpAleoi2I3rTR2JJSL756xSYnXJ6qeGE0+1h6LR5H/c4mJo1dq4G/PNYDM5VIKR8OK5Q==",
+      "mode": 420,
+      "size": 78
+    }
+  }
+}

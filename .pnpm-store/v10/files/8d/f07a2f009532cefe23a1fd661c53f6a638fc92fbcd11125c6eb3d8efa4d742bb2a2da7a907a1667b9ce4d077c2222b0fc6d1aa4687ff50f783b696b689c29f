@@ -1,0 +1,422 @@
+imports:
+  root: ../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get_all:
+      path: /v1/studio/projects/{project_id}/chapters
+      method: GET
+      auth: false
+      docs: Returns a list of a Studio project's chapters.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: The ID of the Studio project.
+      display-name: List Chapters
+      response:
+        docs: Successful Response
+        type: root.GetChaptersResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              chapters:
+                - chapter_id: aw1NgEzBg83R7vgmiJt6
+                  name: Chapter 1
+                  last_conversion_date_unix: 1714204800
+                  conversion_progress: 0.5
+                  can_be_downloaded: true
+                  state: converting
+                  statistics:
+                    characters_unconverted: 1000
+                    characters_converted: 500
+                    paragraphs_converted: 20
+                    paragraphs_unconverted: 10
+                  last_conversion_error: Error message
+    create:
+      path: /v1/studio/projects/{project_id}/chapters
+      method: POST
+      auth: false
+      docs: Creates a new chapter either as blank or from a URL.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: The ID of the Studio project.
+      display-name: Create Chapter
+      request:
+        name: BodyCreateChapterV1StudioProjectsProjectIdChaptersPost
+        body:
+          properties:
+            name:
+              type: string
+              docs: The name of the chapter, used for identification only.
+            from_url:
+              type: optional<string>
+              docs: >-
+                An optional URL from which we will extract content to initialize
+                the Studio project. If this is set, 'from_url' must be null. If
+                neither 'from_url' or 'from_document' are provided we will
+                initialize the Studio project as blank.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddChapterResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            name: Chapter 1
+          response:
+            body:
+              chapter:
+                chapter_id: aw1NgEzBg83R7vgmiJt6
+                name: Chapter 1
+                last_conversion_date_unix: 1714204800
+                conversion_progress: 0.5
+                can_be_downloaded: true
+                state: converting
+                statistics:
+                  characters_unconverted: 1000
+                  characters_converted: 500
+                  paragraphs_converted: 20
+                  paragraphs_unconverted: 10
+                last_conversion_error: Error message
+                content:
+                  blocks:
+                    - block_id: block_id
+                      nodes:
+                        - voice_id: voice_id
+                          text: text
+                          type: tts_node
+    get:
+      path: /v1/studio/projects/{project_id}/chapters/{chapter_id}
+      method: GET
+      auth: false
+      docs: Returns information about a specific chapter.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: >-
+            The ID of the project to be used. You can use the [List
+            projects](/docs/api-reference/studio/get-projects) endpoint to list
+            all the available projects.
+        chapter_id:
+          type: string
+          docs: >-
+            The ID of the chapter to be used. You can use the [List project
+            chapters](/docs/api-reference/studio/get-chapters) endpoint to list
+            all the available chapters.
+      display-name: Get Chapter
+      response:
+        docs: Successful Response
+        type: root.ChapterWithContentResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+            chapter_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              chapter_id: aw1NgEzBg83R7vgmiJt6
+              name: Chapter 1
+              last_conversion_date_unix: 1714204800
+              conversion_progress: 0.5
+              can_be_downloaded: true
+              state: converting
+              statistics:
+                characters_unconverted: 1000
+                characters_converted: 500
+                paragraphs_converted: 20
+                paragraphs_unconverted: 10
+              last_conversion_error: Error message
+              content:
+                blocks:
+                  - block_id: block_id
+                    nodes:
+                      - voice_id: voice_id
+                        text: text
+                        type: tts_node
+    edit:
+      path: /v1/studio/projects/{project_id}/chapters/{chapter_id}
+      method: POST
+      auth: false
+      docs: Updates a chapter.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: >-
+            The ID of the project to be used. You can use the [List
+            projects](/docs/api-reference/studio/get-projects) endpoint to list
+            all the available projects.
+        chapter_id:
+          type: string
+          docs: >-
+            The ID of the chapter to be used. You can use the [List project
+            chapters](/docs/api-reference/studio/get-chapters) endpoint to list
+            all the available chapters.
+      display-name: Update Chapter
+      request:
+        name: BodyUpdateChapterV1StudioProjectsProjectIdChaptersChapterIdPost
+        body:
+          properties:
+            name:
+              type: optional<string>
+              docs: The name of the chapter, used for identification only.
+            content:
+              type: optional<root.ChapterContentInputModel>
+              docs: The chapter content to use.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.EditChapterResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+            chapter_id: 21m00Tcm4TlvDq8ikWAM
+          request: {}
+          response:
+            body:
+              chapter:
+                chapter_id: aw1NgEzBg83R7vgmiJt6
+                name: Chapter 1
+                last_conversion_date_unix: 1714204800
+                conversion_progress: 0.5
+                can_be_downloaded: true
+                state: converting
+                statistics:
+                  characters_unconverted: 1000
+                  characters_converted: 500
+                  paragraphs_converted: 20
+                  paragraphs_unconverted: 10
+                last_conversion_error: Error message
+                content:
+                  blocks:
+                    - block_id: block_id
+                      nodes:
+                        - voice_id: voice_id
+                          text: text
+                          type: tts_node
+    delete:
+      path: /v1/studio/projects/{project_id}/chapters/{chapter_id}
+      method: DELETE
+      auth: false
+      docs: Deletes a chapter.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: >-
+            The ID of the project to be used. You can use the [List
+            projects](/docs/api-reference/studio/get-projects) endpoint to list
+            all the available projects.
+        chapter_id:
+          type: string
+          docs: >-
+            The ID of the chapter to be used. You can use the [List project
+            chapters](/docs/api-reference/studio/get-chapters) endpoint to list
+            all the available chapters.
+      display-name: Delete Chapter
+      response:
+        docs: Successful Response
+        type: root.DeleteChapterResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+            chapter_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              status: ok
+    convert:
+      path: /v1/studio/projects/{project_id}/chapters/{chapter_id}/convert
+      method: POST
+      auth: false
+      docs: Starts conversion of a specific chapter.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: >-
+            The ID of the project to be used. You can use the [List
+            projects](/docs/api-reference/studio/get-projects) endpoint to list
+            all the available projects.
+        chapter_id:
+          type: string
+          docs: >-
+            The ID of the chapter to be used. You can use the [List project
+            chapters](/docs/api-reference/studio/get-chapters) endpoint to list
+            all the available chapters.
+      display-name: Convert Chapter
+      response:
+        docs: Successful Response
+        type: root.ConvertChapterResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+            chapter_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              status: ok
+    get_all_snapshots:
+      path: /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots
+      method: GET
+      auth: false
+      docs: >-
+        Gets information about all the snapshots of a chapter. Each snapshot can
+        be downloaded as audio. Whenever a chapter is converted a snapshot will
+        automatically be created.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: >-
+            The ID of the project to be used. You can use the [List
+            projects](/docs/api-reference/studio/get-projects) endpoint to list
+            all the available projects.
+        chapter_id:
+          type: string
+          docs: >-
+            The ID of the chapter to be used. You can use the [List project
+            chapters](/docs/api-reference/studio/get-chapters) endpoint to list
+            all the available chapters.
+      display-name: List Chapter Snapshots
+      response:
+        docs: Successful Response
+        type: root.ChapterSnapshotsResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+            chapter_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              snapshots:
+                - chapter_snapshot_id: aw1NgEzBg83R7vgmiJt1
+                  project_id: aw1NgEzBg83R7vgmiJt2
+                  chapter_id: aw1NgEzBg83R7vgmiJt3
+                  created_at_unix: 1714204800
+                  name: My Chapter Snapshot
+    get_chapter_snapshot:
+      path: >-
+        /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots/{chapter_snapshot_id}
+      method: GET
+      auth: false
+      docs: Returns the chapter snapshot.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: The ID of the Studio project.
+        chapter_id:
+          type: string
+          docs: The ID of the chapter.
+        chapter_snapshot_id:
+          type: string
+          docs: The ID of the chapter snapshot.
+      display-name: Get Chapter Snapshot
+      response:
+        docs: Successful Response
+        type: root.ChapterSnapshotExtendedResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+            chapter_id: 21m00Tcm4TlvDq8ikWAM
+            chapter_snapshot_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              chapter_snapshot_id: aw1NgEzBg83R7vgmiJt1
+              project_id: aw1NgEzBg83R7vgmiJt2
+              chapter_id: aw1NgEzBg83R7vgmiJt3
+              created_at_unix: 1714204800
+              name: My Chapter Snapshot
+              character_alignments:
+                - characters:
+                    - characters
+                  character_start_times_seconds:
+                    - 1.1
+                  character_end_times_seconds:
+                    - 1.1
+    stream_snapshot:
+      path: >-
+        /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots/{chapter_snapshot_id}/stream
+      method: POST
+      auth: false
+      docs: >-
+        Stream the audio from a chapter snapshot. Use `GET
+        /v1/studio/projects/{project_id}/chapters/{chapter_id}/snapshots` to
+        return the snapshots of a chapter.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: >-
+            The ID of the project to be used. You can use the [List
+            projects](/docs/api-reference/studio/get-projects) endpoint to list
+            all the available projects.
+        chapter_id:
+          type: string
+          docs: >-
+            The ID of the chapter to be used. You can use the [List project
+            chapters](/docs/api-reference/studio/get-chapters) endpoint to list
+            all the available chapters.
+        chapter_snapshot_id:
+          type: string
+          docs: >-
+            The ID of the chapter snapshot to be used. You can use the [List
+            project chapter snapshots](/docs/api-reference/studio/get-snapshots)
+            endpoint to list all the available snapshots.
+      display-name: Stream Chapter Audio
+      request:
+        name: >-
+          BodyStreamChapterAudioV1StudioProjectsProjectIdChaptersChapterIdSnapshotsChapterSnapshotIdStreamPost
+        body:
+          properties:
+            convert_to_mpeg:
+              type: optional<boolean>
+              docs: Whether to convert the audio to mpeg format.
+              default: false
+        content-type: application/json
+      response:
+        docs: Streaming audio data
+        type: file
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+  source:
+    openapi: openapi.json

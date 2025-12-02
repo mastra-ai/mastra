@@ -1,0 +1,61 @@
+{
+  "name": "jws",
+  "version": "4.0.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662906995,
+      "integrity": "sha512-xpBUsJ9xgvPzlwMTEHoJg/gd0N4rfujm0CDIe6wFGoSD92S0hGJQRFR6VUP+XL+yh2v1fPHUD/9nqA2MLHMTtw==",
+      "mode": 436,
+      "size": 1068
+    },
+    "lib/data-stream.js": {
+      "checkedAt": 1764662906996,
+      "integrity": "sha512-r6qUQXA01CfiqOKlFAqECCML19O24vWg7uSfrnO4KYRMjFvOsSQ1cC/qcOWnXJ0jkXjHthCpgOWGQuCYQseG2g==",
+      "mode": 436,
+      "size": 1242
+    },
+    "index.js": {
+      "checkedAt": 1764662906996,
+      "integrity": "sha512-2Bvde3FNn6VdW5G2rzC08jAq/uXRMsoyre0n77ZD2mzIF1KcCulCyHQ2w9LaiMbmhOAV39VCBxyFHwatjSDnBQ==",
+      "mode": 436,
+      "size": 609
+    },
+    "lib/sign-stream.js": {
+      "checkedAt": 1764662906997,
+      "integrity": "sha512-SIN1mMZoVoCgtHjdIQHbdlmbN4Q0vK5x8ZukDeriflEBd1dLRdBAJAIDix8Z9e+9fVI3+fYGonKSjlNe+vJk5g==",
+      "mode": 436,
+      "size": 2197
+    },
+    "lib/tostring.js": {
+      "checkedAt": 1764662906998,
+      "integrity": "sha512-lhcM3uu3UNGUX+kZ6fq/QVc9c2wdXAz1mRf+ik2eDn+5QOcDEC5FTZU9e9oSvg0iT66IxBGJhEhuK2menhUp+g==",
+      "mode": 436,
+      "size": 262
+    },
+    "lib/verify-stream.js": {
+      "checkedAt": 1764662906998,
+      "integrity": "sha512-eZwU1Gvk90xe6/RRwEj9AVZbkx1K0J9aqEiByb4zMXpESjLkI7JmB0iqlFABc4NQIkqUt1NeHHeTJUh5DdURtA==",
+      "mode": 436,
+      "size": 3226
+    },
+    "package.json": {
+      "checkedAt": 1764662906999,
+      "integrity": "sha512-ufh4uPPs/1BfTG7QCLVzJMyQM6wA1mJJT7Y+bp2xDgGk9a7pephJVRyDd8aOt/bCjpxDPpZh1RW4kOVhqGZ1og==",
+      "mode": 436,
+      "size": 671
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662907002,
+      "integrity": "sha512-CFSqzQU7XT6OxTsCTLHhIu2DChhVMy/y0J3zwijCOWkGA0gPZZFvrtP+sjtv+YcwnHGXuWBW4NKVCFBPZ6NQxA==",
+      "mode": 436,
+      "size": 1474
+    },
+    "readme.md": {
+      "checkedAt": 1764662907003,
+      "integrity": "sha512-F9OTl4bzNyFF88JM/1KVW4OATnDc4q34x4L4vfOoMvjhE1HzZ2ZcCnFOK0MpXRfIXXOJ44H8MfB71Tm32+25mA==",
+      "mode": 436,
+      "size": 6933
+    }
+  }
+}

@@ -1,0 +1,23 @@
+import { type FC } from "react";
+import { AssistantModalPrimitive } from "@assistant-ui/react";
+import { TooltipIconButton } from "./base/tooltip-icon-button";
+import { ThreadConfig, ThreadConfigProviderProps } from "./thread-config";
+declare const AssistantModal: FC<ThreadConfig>;
+declare namespace AssistantModalRoot {
+    type Props = AssistantModalPrimitive.Root.Props & ThreadConfigProviderProps;
+}
+declare const AssistantModalRoot: FC<AssistantModalRoot.Props>;
+declare const exports: {
+    Root: FC<AssistantModalRoot.Props>;
+    Trigger: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+    Content: import("react").ForwardRefExoticComponent<Partial<Omit<Omit<import("@radix-ui/react-popover").PopoverContentProps & import("react").RefAttributes<HTMLDivElement>, "ref"> & {
+        dissmissOnInteractOutside?: boolean | undefined;
+    } & import("react").RefAttributes<HTMLDivElement>, "ref">> & import("react").RefAttributes<HTMLDivElement>>;
+    Button: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & {
+        "data-state"?: "open" | "closed";
+    } & import("react").RefAttributes<HTMLButtonElement>>;
+    Anchor: import("react").ForwardRefExoticComponent<Partial<Omit<Omit<import("@radix-ui/react-popover").PopoverAnchorProps & import("react").RefAttributes<HTMLDivElement>, "ref"> & import("react").RefAttributes<HTMLDivElement>, "ref">> & import("react").RefAttributes<HTMLDivElement>>;
+};
+declare const _default: typeof AssistantModal & typeof exports;
+export default _default;
+//# sourceMappingURL=assistant-modal.d.ts.map

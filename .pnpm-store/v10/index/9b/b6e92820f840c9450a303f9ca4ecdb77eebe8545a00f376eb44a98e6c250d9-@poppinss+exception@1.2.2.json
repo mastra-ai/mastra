@@ -1,0 +1,43 @@
+{
+  "name": "@poppinss/exception",
+  "version": "1.2.2",
+  "requiresBuild": false,
+  "files": {
+    "build/index.js": {
+      "checkedAt": 1764662924056,
+      "integrity": "sha512-T9ZxNLHv/980y8YoZENjvsfgY7yuHKGZzxqP969U+mfo+HGsUm7QJEi5PSLKb+4MaH6TfBty25Sl+x9Z9LLVzg==",
+      "mode": 420,
+      "size": 1678
+    },
+    "package.json": {
+      "checkedAt": 1764662924056,
+      "integrity": "sha512-RxxnEoHcFSBMGUkxZI4RI4+jlYaaqsyboEMjhHdQpK5tOLbK1oftfQ8Nr2JdxXBV7SMb0nnN5YJkJH9lM53vcQ==",
+      "mode": 420,
+      "size": 2544
+    },
+    "LICENSE.md": {
+      "checkedAt": 1764662924057,
+      "integrity": "sha512-FVMjC6Sd5888ye3gM2q2kesmA3UkVn5mpEnOtsci9Yrq0VMa5Z9VqJK95K8ofe1teiemv/5eLkvu2HSlcogxGQ==",
+      "mode": 420,
+      "size": 1062
+    },
+    "README.md": {
+      "checkedAt": 1764662924057,
+      "integrity": "sha512-6wKexI5211zBluXSiETFfuUMzvwNEJOYM1VndcM38LQplun4RS+iL1tdhtorJpfFFQ6sHIJv8x7CZPDfQvmjsA==",
+      "mode": 420,
+      "size": 2573
+    },
+    "build/src/exception.d.ts": {
+      "checkedAt": 1764662924059,
+      "integrity": "sha512-rUaXgcQZAo8jSTDO0Y28yvhknn2FwQ9oAjO9i1UVe8Wz4pXYgb95NzYTixl5ftF17eprh0In2fOcdP2cyppMQQ==",
+      "mode": 420,
+      "size": 2153
+    },
+    "build/index.d.ts": {
+      "checkedAt": 1764662924061,
+      "integrity": "sha512-jqDAaZHY5sNdC6Bz1rbMTpVEeG10i5CGjd5nzvKvr5o1NS8t4NUGERGTyMb1PV6nvO1s+JTp1nzu0/qv2wydxg==",
+      "mode": 420,
+      "size": 36
+    }
+  }
+}

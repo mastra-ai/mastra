@@ -1,0 +1,6 @@
+import { exit } from 'node:process';
+import { showCommand } from '../helpers/cmds.js';
+export const testCommand = (cmdr) => {
+    showCommand(cmdr);
+    exit(0);
+};

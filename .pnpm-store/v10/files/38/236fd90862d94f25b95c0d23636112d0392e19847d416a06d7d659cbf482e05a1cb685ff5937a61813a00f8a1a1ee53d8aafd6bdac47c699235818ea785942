@@ -1,0 +1,1 @@
+{"version":3,"file":"ZCOUNT.d.ts","sourceRoot":"","sources":["../../../lib/commands/ZCOUNT.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,aAAa,EAAE,WAAW,EAAW,MAAM,eAAe,CAAC;;;;IAMlE;;;;;;OAMG;gDAEO,aAAa,OAChB,aAAa,OACb,MAAM,GAAG,aAAa,OACtB,MAAM,GAAG,aAAa;mCASiB,WAAW;;AAvB3D,wBAwB6B"}

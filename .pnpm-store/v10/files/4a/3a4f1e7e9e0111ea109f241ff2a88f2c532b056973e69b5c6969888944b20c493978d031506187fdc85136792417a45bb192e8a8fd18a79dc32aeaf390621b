@@ -1,0 +1,1 @@
+{"version":3,"file":"CLIENT_SETNAME.d.ts","sourceRoot":"","sources":["../../../lib/commands/CLIENT_SETNAME.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,aAAa,EAAE,iBAAiB,EAAW,MAAM,eAAe,CAAC;;;;IAKxE;;;;OAIG;gDACkB,aAAa,QAAQ,aAAa;mCAGT,kBAAkB,IAAI,CAAC;;AAXvE,wBAY6B"}

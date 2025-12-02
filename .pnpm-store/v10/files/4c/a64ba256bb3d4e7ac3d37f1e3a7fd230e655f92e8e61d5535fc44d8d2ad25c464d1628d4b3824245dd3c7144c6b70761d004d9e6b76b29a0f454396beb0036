@@ -1,0 +1,91 @@
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/index.ts
+var ui_exports = {};
+__export(ui_exports, {
+  AssistantActionBar: () => import_assistant_action_bar.default,
+  AssistantMessage: () => import_assistant_message.default,
+  AssistantModal: () => import_assistant_modal.default,
+  AttachmentUI: () => import_attachment_ui.default,
+  BranchPicker: () => import_branch_picker.default,
+  CodeHeader: () => import_code_header.CodeHeader,
+  Composer: () => import_composer.default,
+  ContentPart: () => import_content_part.default,
+  EditComposer: () => import_edit_composer.default,
+  Thread: () => import_thread.default,
+  ThreadConfigProvider: () => import_thread_config.ThreadConfigProvider,
+  ThreadList: () => import_thread_list.default,
+  ThreadListItem: () => import_thread_list_item.default,
+  ThreadWelcome: () => import_thread_welcome.default,
+  UserActionBar: () => import_user_action_bar.default,
+  UserMessage: () => import_user_message.default,
+  makeMarkdownText: () => import_markdown_text.makeMarkdownText,
+  useThreadConfig: () => import_thread_config.useThreadConfig
+});
+module.exports = __toCommonJS(ui_exports);
+var import_thread_config = require("./thread-config.js");
+var import_assistant_action_bar = __toESM(require("./assistant-action-bar.js"));
+var import_assistant_message = __toESM(require("./assistant-message.js"));
+var import_assistant_modal = __toESM(require("./assistant-modal.js"));
+var import_branch_picker = __toESM(require("./branch-picker.js"));
+var import_composer = __toESM(require("./composer.js"));
+var import_content_part = __toESM(require("./content-part.js"));
+var import_attachment_ui = __toESM(require("./attachment-ui.js"));
+var import_edit_composer = __toESM(require("./edit-composer.js"));
+var import_thread = __toESM(require("./thread.js"));
+var import_thread_list = __toESM(require("./thread-list.js"));
+var import_thread_list_item = __toESM(require("./thread-list-item.js"));
+var import_thread_welcome = __toESM(require("./thread-welcome.js"));
+var import_user_message = __toESM(require("./user-message.js"));
+var import_user_action_bar = __toESM(require("./user-action-bar.js"));
+var import_markdown_text = require("./markdown/markdown-text.js");
+var import_code_header = require("./markdown/code-header.js");
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  AssistantActionBar,
+  AssistantMessage,
+  AssistantModal,
+  AttachmentUI,
+  BranchPicker,
+  CodeHeader,
+  Composer,
+  ContentPart,
+  EditComposer,
+  Thread,
+  ThreadConfigProvider,
+  ThreadList,
+  ThreadListItem,
+  ThreadWelcome,
+  UserActionBar,
+  UserMessage,
+  makeMarkdownText,
+  useThreadConfig
+});
+//# sourceMappingURL=index.js.map

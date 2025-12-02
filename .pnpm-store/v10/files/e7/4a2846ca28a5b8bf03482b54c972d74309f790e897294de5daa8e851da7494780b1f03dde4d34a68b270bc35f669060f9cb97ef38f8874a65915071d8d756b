@@ -1,0 +1,262 @@
+types:
+  HistoryGetAllRequestSource:
+    enum:
+      - TTS
+      - STS
+    source:
+      openapi: openapi.json
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get_all:
+      path: /v1/history
+      method: GET
+      auth: false
+      docs: Returns a list of your generated audio.
+      source:
+        openapi: openapi.json
+      display-name: Get generated items
+      request:
+        name: HistoryGetAllRequest
+        query-parameters:
+          page_size:
+            type: optional<integer>
+            default: 100
+            docs: >-
+              How many history items to return at maximum. Can not exceed 1000,
+              defaults to 100.
+          start_after_history_item_id:
+            type: optional<string>
+            docs: >-
+              After which ID to start fetching, use this parameter to paginate
+              across a large collection of history items. In case this parameter
+              is not provided history items will be fetched starting from the
+              most recently created one ordered descending by their creation
+              date.
+          voice_id:
+            type: optional<string>
+            docs: >-
+              ID of the voice to be filtered for. You can use the [Get
+              voices](/docs/api-reference/voices/search) endpoint list all the
+              available voices.
+          search:
+            type: optional<string>
+            docs: >-
+              Search term used for filtering history items. If provided, source
+              becomes required.
+          source:
+            type: optional<HistoryGetAllRequestSource>
+            docs: Source of the generated history item
+      response:
+        docs: Successful Response
+        type: root.GetSpeechHistoryResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              history:
+                - history_item_id: ja9xsmfGhxYcymxGcOGB
+                  request_id: BF0BZg4IwLGBlaVjv9Im
+                  voice_id: 21m00Tcm4TlvDq8ikWAM
+                  model_id: eleven_multilingual_v2
+                  voice_name: Rachel
+                  voice_category: premade
+                  text: Hello, world!
+                  date_unix: 1714650306
+                  character_count_change_from: 17189
+                  character_count_change_to: 17231
+                  content_type: audio/mpeg
+                  state: created
+                  settings:
+                    similarity_boost: 0.5
+                    stability: 0.71
+                    style: 0
+                    use_speaker_boost: true
+                  feedback:
+                    thumbs_up: true
+                    feedback: This is an example of test feedback.
+                    emotions: true
+                    inaccurate_clone: false
+                    glitches: true
+                    audio_quality: true
+                    other: false
+                    review_status: not_reviewed
+                  share_link_id: share_link_id
+                  source: TTS
+                  alignments:
+                    alignment:
+                      characters:
+                        - characters
+                      character_start_times_seconds:
+                        - 1.1
+                      character_end_times_seconds:
+                        - 1.1
+                    normalized_alignment:
+                      characters:
+                        - characters
+                      character_start_times_seconds:
+                        - 1.1
+                      character_end_times_seconds:
+                        - 1.1
+              last_history_item_id: ja9xsmfGhxYcymxGcOGB
+              has_more: true
+    get:
+      path: /v1/history/{history_item_id}
+      method: GET
+      auth: false
+      docs: Retrieves a history item.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        history_item_id:
+          type: string
+          docs: >-
+            ID of the history item to be used. You can use the [Get generated
+            items](/docs/api-reference/history/get-all) endpoint to retrieve a
+            list of history items.
+      display-name: Get history item
+      response:
+        docs: Successful Response
+        type: root.SpeechHistoryItemResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            history_item_id: VW7YKqPnjY4h39yTbx2L
+          response:
+            body:
+              history_item_id: ja9xsmfGhxYcymxGcOGB
+              request_id: BF0BZg4IwLGBlaVjv9Im
+              voice_id: 21m00Tcm4TlvDq8ikWAM
+              model_id: eleven_multilingual_v2
+              voice_name: Rachel
+              voice_category: premade
+              text: Hello, world!
+              date_unix: 1714650306
+              character_count_change_from: 17189
+              character_count_change_to: 17231
+              content_type: audio/mpeg
+              state: created
+              settings:
+                similarity_boost: 0.5
+                stability: 0.71
+                style: 0
+                use_speaker_boost: true
+              feedback:
+                thumbs_up: true
+                feedback: This is an example of test feedback.
+                emotions: true
+                inaccurate_clone: false
+                glitches: true
+                audio_quality: true
+                other: false
+                review_status: not_reviewed
+              share_link_id: share_link_id
+              source: TTS
+              alignments:
+                alignment:
+                  characters:
+                    - characters
+                  character_start_times_seconds:
+                    - 1.1
+                  character_end_times_seconds:
+                    - 1.1
+                normalized_alignment:
+                  characters:
+                    - characters
+                  character_start_times_seconds:
+                    - 1.1
+                  character_end_times_seconds:
+                    - 1.1
+    delete:
+      path: /v1/history/{history_item_id}
+      method: DELETE
+      auth: false
+      docs: Delete a history item by its ID
+      source:
+        openapi: openapi.json
+      path-parameters:
+        history_item_id:
+          type: string
+          docs: >-
+            ID of the history item to be used. You can use the [Get generated
+            items](/docs/api-reference/history/get-all) endpoint to retrieve a
+            list of history items.
+      display-name: Delete history item
+      response:
+        docs: Successful Response
+        type: root.DeleteHistoryItemResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            history_item_id: VW7YKqPnjY4h39yTbx2L
+          response:
+            body:
+              status: ok
+    get_audio:
+      path: /v1/history/{history_item_id}/audio
+      method: GET
+      auth: false
+      docs: Returns the audio of an history item.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        history_item_id:
+          type: string
+          docs: >-
+            ID of the history item to be used. You can use the [Get generated
+            items](/docs/api-reference/history/get-all) endpoint to retrieve a
+            list of history items.
+      display-name: Get audio from history item
+      response:
+        docs: The audio file of the history item.
+        type: file
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+    download:
+      path: /v1/history/download
+      method: POST
+      auth: false
+      docs: >-
+        Download one or more history items. If one history item ID is provided,
+        we will return a single audio file. If more than one history item IDs
+        are provided, we will provide the history items packed into a .zip file.
+      source:
+        openapi: openapi.json
+      display-name: Download history items
+      request:
+        name: DownloadHistoryRequest
+        body:
+          properties:
+            history_item_ids:
+              docs: >-
+                A list of history items to download, you can get IDs of history
+                items and other metadata using the GET
+                https://api.elevenlabs.io/v1/history endpoint.
+              type: list<string>
+            output_format:
+              type: optional<string>
+              docs: >-
+                Output format to transcode the audio file, can be wav or
+                default.
+        content-type: application/json
+      response:
+        docs: >-
+          The requested audio file, or a zip file containing multiple audio
+          files when multiple history items are requested.
+        type: file
+        status-code: 200
+      errors:
+        - root.BadRequestError
+        - root.UnprocessableEntityError
+  source:
+    openapi: openapi.json

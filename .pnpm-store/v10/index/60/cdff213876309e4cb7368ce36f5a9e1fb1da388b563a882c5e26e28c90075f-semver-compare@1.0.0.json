@@ -1,0 +1,55 @@
+{
+  "name": "semver-compare",
+  "version": "1.0.0",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662918291,
+      "integrity": "sha512-iX4yodS0p+NuYEHhmxV8Vt657fy6gp7WLuHXnaSCDv/n3PoNN6YN7zV/aTeiw9P71q7HehC37jCmzVAS2JIHlg==",
+      "mode": 436,
+      "size": 659
+    },
+    "LICENSE": {
+      "checkedAt": 1764662918291,
+      "integrity": "sha512-UYETA37gNUDKrmMFiphSX5pKZ0Jb2MNZb2l77Vrh0gU/5292uFpO77gMxRn3sD02jPS0RSiMTKfKy151I/M5Yg==",
+      "mode": 436,
+      "size": 1073
+    },
+    "index.js": {
+      "checkedAt": 1764662918291,
+      "integrity": "sha512-KHKMKQhW/Qf/SrfzlfHkyA/Q3xFkSGb8c/YL66VUS3dsVZRpZRLNNWcsb+gtZ6VWmvejhb2SrtBBsyBPtiiQ1A==",
+      "mode": 436,
+      "size": 372
+    },
+    ".travis.yml": {
+      "checkedAt": 1764662918292,
+      "integrity": "sha512-72+pB7rbhLnL4iZSHdTOD0u19t54J5und/0H9pHgzMY9PXf9wJ7Ky5lTYi29m9Xz6RlolZkvL3q3GwBZ0+s1tw==",
+      "mode": 436,
+      "size": 87
+    },
+    "example/cmp.js": {
+      "checkedAt": 1764662918292,
+      "integrity": "sha512-D9LJbPhkii3GEgpUNzr7SvU5sFa0WzNvza2iFEYQkpcDILkP/npXpqvkgRZq5oj2/gd0lN6Yb2rWRfk3IzC7Pw==",
+      "mode": 436,
+      "size": 210
+    },
+    "example/lex.js": {
+      "checkedAt": 1764662918293,
+      "integrity": "sha512-enrOBiOamgDcXiDY6dpuOiqhBHEJ+TVOM8y28W7dCDjheZAlijEGMfSPKzX0eAtu3epi9WbXntDVa94H8c+kRg==",
+      "mode": 436,
+      "size": 181
+    },
+    "readme.markdown": {
+      "checkedAt": 1764662918294,
+      "integrity": "sha512-FFzDU98aF8JagUI7XqiKzxUWFCQ3LHc/fFrXp6CzfxiTU2LeF+f2ulp1x+xtedVa8Ms0bl/1rZdd9hhu+L9xog==",
+      "mode": 436,
+      "size": 1025
+    },
+    "test/cmp.js": {
+      "checkedAt": 1764662918294,
+      "integrity": "sha512-gC5/ndz7akfYmuWB/UgE+mPtmPb0Ccx6Qlgf7hy1Q6SZu6JQ8bs/u1xq8mAjRJBIKwp0owxYGSrP0DjHDsHciQ==",
+      "mode": 436,
+      "size": 444
+    }
+  }
+}

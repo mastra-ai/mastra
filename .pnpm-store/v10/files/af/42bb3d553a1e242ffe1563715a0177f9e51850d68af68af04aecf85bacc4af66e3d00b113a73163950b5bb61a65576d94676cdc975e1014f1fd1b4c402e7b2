@@ -1,0 +1,74 @@
+{
+  "name": "@napi-rs/simple-git",
+  "version": "0.1.22",
+  "main": "index.js",
+  "types": "./index.d.ts",
+  "repository": {
+    "url": "https://github.com/Brooooooklyn/simple-git"
+  },
+  "napi": {
+    "binaryName": "simple-git",
+    "targets": [
+      "x86_64-pc-windows-msvc",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-gnu",
+      "i686-pc-windows-msvc",
+      "armv7-unknown-linux-gnueabihf",
+      "aarch64-apple-darwin",
+      "aarch64-linux-android",
+      "x86_64-unknown-freebsd",
+      "aarch64-unknown-linux-musl",
+      "aarch64-pc-windows-msvc",
+      "armv7-linux-androideabi",
+      "powerpc64le-unknown-linux-gnu",
+      "s390x-unknown-linux-gnu"
+    ]
+  },
+  "ava": {
+    "timeout": "3m",
+    "workerThreads": false
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@napi-rs/cli": "^3.1.5",
+    "@types/node": "^24.3.0",
+    "ava": "^6.4.1",
+    "pretty-ms": "^9.2.0"
+  },
+  "engines": {
+    "node": ">= 10"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "preversion": "napi build --platform && git add .",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "ava",
+    "version": "napi version"
+  },
+  "packageManager": "yarn@4.9.2",
+  "optionalDependencies": {
+    "@napi-rs/simple-git-win32-x64-msvc": "0.1.22",
+    "@napi-rs/simple-git-darwin-x64": "0.1.22",
+    "@napi-rs/simple-git-linux-x64-gnu": "0.1.22",
+    "@napi-rs/simple-git-linux-x64-musl": "0.1.22",
+    "@napi-rs/simple-git-linux-arm64-gnu": "0.1.22",
+    "@napi-rs/simple-git-win32-ia32-msvc": "0.1.22",
+    "@napi-rs/simple-git-linux-arm-gnueabihf": "0.1.22",
+    "@napi-rs/simple-git-darwin-arm64": "0.1.22",
+    "@napi-rs/simple-git-android-arm64": "0.1.22",
+    "@napi-rs/simple-git-freebsd-x64": "0.1.22",
+    "@napi-rs/simple-git-linux-arm64-musl": "0.1.22",
+    "@napi-rs/simple-git-win32-arm64-msvc": "0.1.22",
+    "@napi-rs/simple-git-android-arm-eabi": "0.1.22",
+    "@napi-rs/simple-git-linux-ppc64-gnu": "0.1.22",
+    "@napi-rs/simple-git-linux-s390x-gnu": "0.1.22"
+  }
+}

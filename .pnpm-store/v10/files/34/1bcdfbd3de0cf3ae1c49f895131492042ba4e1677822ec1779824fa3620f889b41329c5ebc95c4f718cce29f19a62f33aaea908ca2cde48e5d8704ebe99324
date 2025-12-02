@@ -1,0 +1,1 @@
+{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../src/resources/custom-hostnames/index.ts"],"names":[],"mappings":"AAEA,OAAO,EAAE,eAAe,EAAE,MAAM,0BAA0B,CAAC;AAC3D,OAAO,EAAE,eAAe,EAAE,MAAM,oBAAoB,CAAC;AACrD,OAAO,EACL,cAAc,EACd,KAAK,4BAA4B,EACjC,KAAK,4BAA4B,EACjC,KAAK,yBAAyB,EAC9B,KAAK,0BAA0B,EAC/B,KAAK,0BAA0B,EAC/B,KAAK,uBAAuB,GAC7B,MAAM,mBAAmB,CAAC"}

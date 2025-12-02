@@ -1,0 +1,91 @@
+/*! @azure/msal-browser v4.25.1 2025-10-17 */
+'use strict';
+import { AuthenticationScheme } from '@azure/msal-common/browser';
+import { DEFAULT_NATIVE_BROKER_HANDSHAKE_TIMEOUT_MS } from '../../config/Configuration.mjs';
+import { PlatformAuthExtensionHandler } from './PlatformAuthExtensionHandler.mjs';
+import { PlatformAuthDOMHandler } from './PlatformAuthDOMHandler.mjs';
+import { BrowserCacheLocation } from '../../utils/BrowserConstants.mjs';
+import { PLATFORM_AUTH_DOM_SUPPORT } from '../../cache/CacheKeys.mjs';
+
+/*
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License.
+ */
+async function getPlatformAuthProvider(logger, performanceClient, correlationId, nativeBrokerHandshakeTimeout) {
+    logger.trace("getPlatformAuthProvider called", correlationId);
+    const enablePlatformBrokerDOMSupport = isDomEnabledForPlatformAuth();
+    logger.trace("Has client allowed platform auth via DOM API: " +
+        enablePlatformBrokerDOMSupport);
+    let platformAuthProvider;
+    try {
+        if (enablePlatformBrokerDOMSupport) {
+            // Check if DOM platform API is supported first
+            platformAuthProvider = await PlatformAuthDOMHandler.createProvider(logger, performanceClient, correlationId);
+        }
+        if (!platformAuthProvider) {
+            logger.trace("Platform auth via DOM API not available, checking for extension");
+            /*
+             * If DOM APIs are not available, check if browser extension is available.
+             * Platform authentication via DOM APIs is preferred over extension APIs.
+             */
+            platformAuthProvider =
+                await PlatformAuthExtensionHandler.createProvider(logger, nativeBrokerHandshakeTimeout ||
+                    DEFAULT_NATIVE_BROKER_HANDSHAKE_TIMEOUT_MS, performanceClient);
+        }
+    }
+    catch (e) {
+        logger.trace("Platform auth not available", e);
+    }
+    return platformAuthProvider;
+}
+/**
+ * Returns true if the DOM API support for platform auth is enabled in session storage
+ * @returns boolean
+ * @deprecated
+ */
+function isDomEnabledForPlatformAuth() {
+    let sessionStorage;
+    try {
+        sessionStorage = window[BrowserCacheLocation.SessionStorage];
+        // Mute errors if it's a non-browser environment or cookies are blocked.
+        return sessionStorage?.getItem(PLATFORM_AUTH_DOM_SUPPORT) === "true";
+    }
+    catch (e) {
+        return false;
+    }
+}
+/**
+ * Returns boolean indicating whether or not the request should attempt to use native broker
+ * @param logger
+ * @param config
+ * @param platformAuthProvider
+ * @param authenticationScheme
+ */
+function isPlatformAuthAllowed(config, logger, platformAuthProvider, authenticationScheme) {
+    logger.trace("isPlatformAuthAllowed called");
+    if (!config.system.allowPlatformBroker) {
+        logger.trace("isPlatformAuthAllowed: allowPlatformBroker is not enabled, returning false");
+        // Developer disabled WAM
+        return false;
+    }
+    if (!platformAuthProvider) {
+        logger.trace("isPlatformAuthAllowed: Platform auth provider is not initialized, returning false");
+        // Platform broker auth providers are not available
+        return false;
+    }
+    if (authenticationScheme) {
+        switch (authenticationScheme) {
+            case AuthenticationScheme.BEARER:
+            case AuthenticationScheme.POP:
+                logger.trace("isPlatformAuthAllowed: authenticationScheme is supported, returning true");
+                return true;
+            default:
+                logger.trace("isPlatformAuthAllowed: authenticationScheme is not supported, returning false");
+                return false;
+        }
+    }
+    return true;
+}
+
+export { getPlatformAuthProvider, isDomEnabledForPlatformAuth, isPlatformAuthAllowed };
+//# sourceMappingURL=PlatformAuthProvider.mjs.map

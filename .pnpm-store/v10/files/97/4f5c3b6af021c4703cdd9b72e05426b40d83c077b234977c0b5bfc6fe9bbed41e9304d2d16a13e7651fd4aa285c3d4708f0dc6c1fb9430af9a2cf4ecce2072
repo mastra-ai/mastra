@@ -1,0 +1,4 @@
+[
+    "../../protos/google/cloud/texttospeech/v1beta1/cloud_tts.proto",
+    "../../protos/google/cloud/texttospeech/v1beta1/cloud_tts_lrs.proto"
+]

@@ -1,0 +1,37 @@
+{
+  "name": "@napi-rs/simple-git",
+  "version": "0.1.22",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662905138,
+      "integrity": "sha512-Uw5X6O63G0P6n1tQI6J6xcfyKZbP8+/Z7p2wzVXjILQpU14F0KCVi06Dyam/KLxzGr2hb0IS3NIrb1QdVpisZA==",
+      "mode": 420,
+      "size": 1074
+    },
+    "index.js": {
+      "checkedAt": 1764662905139,
+      "integrity": "sha512-0xc7tmPQJJbalF0nEZrrIWHdgF7Lh6zPcaUP262QeAQjj3H1dTH9XR+xWNoG9f9VfnYwOdUWhoUcF0Jpr+zAQQ==",
+      "mode": 420,
+      "size": 23305
+    },
+    "package.json": {
+      "checkedAt": 1764662905140,
+      "integrity": "sha512-r0K7PVU6HiQv/hVjcVoBd/nlGFDWivaK8Ers+FusxK9m49ALETpzFjlQtbthplV22UZ2zcl14QFPH9G0xALnsg==",
+      "mode": 420,
+      "size": 2218
+    },
+    "README.md": {
+      "checkedAt": 1764662905141,
+      "integrity": "sha512-tNz9ZQnWMoAEmwkkl1Fbd7V7QG1dPHUK9BPdO5Mc1Kyqd17QC8haRchuraE0L/jDZ3plabbbnL6S5s0Zxw0eTA==",
+      "mode": 420,
+      "size": 4277
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662905142,
+      "integrity": "sha512-tfkl99qg8yM5/9VznUetRU3qGWv518pCIh2HJTRf3KHmGXXMz2pfAFlmRq0hDKMm+xA5x3UgCfOSS6iyrKGz0A==",
+      "mode": 420,
+      "size": 41837
+    }
+  }
+}

@@ -1,0 +1,1 @@
+var e={black:"\x1B[30m",red:"\x1B[31m",green:"\x1B[32m",gray:"\x1B[90m",yellow:"\x1B[33m",blue:"\x1B[34m",magenta:"\x1B[35m",cyan:"\x1B[36m",white:"\x1B[37m"};var m={deleted:e.red,var:e.red,err:e.red,kwd:e.red,num:e.yellow,class:e.yellow,cmnt:e.gray,insert:e.green,str:e.green,bool:e.cyan,type:e.blue,oper:e.blue,section:e.magenta,func:e.magenta};export{m as default};

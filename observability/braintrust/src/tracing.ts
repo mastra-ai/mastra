@@ -363,16 +363,64 @@ export class BraintrustExporter extends BaseExporter {
     });
   }
 
+  /**
+   * Extract input for Braintrust display.
+   * For MODEL_GENERATION spans, extracts the messages array from { messages: [...] } structure.
+   * This improves Braintrust UI display (issue #9822).
+   */
+  private extractInput(input: any, spanType: SpanType): any {
+    if (input === undefined) return undefined;
+
+    // For MODEL_GENERATION spans, extract messages array if wrapped
+    if (spanType === SpanType.MODEL_GENERATION) {
+      // If input is { messages: [...] }, extract just the messages array
+      if (input && typeof input === 'object' && !Array.isArray(input) && Array.isArray(input.messages)) {
+        return input.messages;
+      }
+    }
+
+    // Pass through as-is for other cases
+    return input;
+  }
+
+  /**
+   * Extract output for Braintrust display.
+   * For MODEL_GENERATION spans, extracts plain text from { text: '...' } or { content: '...' } structures.
+   * This improves Braintrust UI display (issue #9822).
+   */
+  private extractOutput(output: any, spanType: SpanType): any {
+    if (output === undefined) return undefined;
+
+    // For MODEL_GENERATION spans, extract plain text if wrapped
+    if (spanType === SpanType.MODEL_GENERATION) {
+      if (output && typeof output === 'object' && !Array.isArray(output)) {
+        // Prefer 'text' field (AI SDK v5 format)
+        if (typeof output.text === 'string') {
+          return output.text;
+        }
+        // Fall back to 'content' field (OpenAI format)
+        if (typeof output.content === 'string') {
+          return output.content;
+        }
+      }
+    }
+
+    // Pass through as-is for other cases
+    return output;
+  }
+
   private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
     const payload: Record<string, any> = {};
 
-    // Core span data
-    if (span.input !== undefined) {
-      payload.input = span.input;
+    // Core span data - extract for better Braintrust UI display
+    const extractedInput = this.extractInput(span.input, span.type);
+    if (extractedInput !== undefined) {
+      payload.input = extractedInput;
     }
 
-    if (span.output !== undefined) {
-      payload.output = span.output;
+    const extractedOutput = this.extractOutput(span.output, span.type);
+    if (extractedOutput !== undefined) {
+      payload.output = extractedOutput;
     }
 
     // Initialize metrics and metadata objects

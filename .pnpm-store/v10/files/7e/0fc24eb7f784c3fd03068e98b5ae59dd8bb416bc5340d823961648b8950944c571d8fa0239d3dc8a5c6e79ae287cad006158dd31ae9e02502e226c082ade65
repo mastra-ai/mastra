@@ -1,0 +1,1 @@
+{"version":3,"file":"GetProjectInvitesResponse.d.ts","sourceRoot":"","sources":["../../../../src/lib/types/GetProjectInvitesResponse.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,yBAAyB;IACxC,OAAO,EAAE,MAAM,EAAE,CAAC;CACnB;AAED,UAAU,MAAM;IACd,KAAK,EAAE,MAAM,CAAC;IACd,KAAK,EAAE,MAAM,CAAC;CACf"}

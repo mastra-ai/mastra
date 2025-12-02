@@ -1,0 +1,139 @@
+{
+  "author": "Spencer Kelly <spencermountain@gmail.com> (http://spencermounta.in)",
+  "name": "compromise",
+  "description": "modest natural language processing",
+  "version": "14.14.4",
+  "module": "./src/three.js",
+  "main": "./src/three.js",
+  "unpkg": "./builds/compromise.js",
+  "type": "module",
+  "sideEffects": false,
+  "types": "./types/three.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./types/three.d.ts",
+        "default": "./src/three.js"
+      },
+      "require": {
+        "types": "./types/three.d.cts",
+        "default": "./builds/three/compromise-three.cjs"
+      }
+    },
+    "./tokenize": {
+      "import": {
+        "types": "./types/one.d.ts",
+        "default": "./src/one.js"
+      },
+      "require": {
+        "types": "./types/one.d.cts",
+        "default": "./builds/one/compromise-one.cjs"
+      }
+    },
+    "./one": {
+      "import": {
+        "types": "./types/one.d.ts",
+        "default": "./src/one.js"
+      },
+      "require": {
+        "types": "./types/one.d.cts",
+        "default": "./builds/one/compromise-one.cjs"
+      }
+    },
+    "./two": {
+      "import": {
+        "types": "./types/two.d.ts",
+        "default": "./src/two.js"
+      },
+      "require": {
+        "types": "./types/two.d.cts",
+        "default": "./builds/two/compromise-two.cjs"
+      }
+    },
+    "./three": {
+      "import": {
+        "types": "./types/three.d.ts",
+        "default": "./src/three.js"
+      },
+      "require": {
+        "types": "./types/three.d.cts",
+        "default": "./builds/three/compromise-three.cjs"
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/spencermountain/compromise.git"
+  },
+  "homepage": "https://github.com/spencermountain/compromise",
+  "engines": {
+    "node": ">=12.0.0"
+  },
+  "scripts": {
+    "build": "npm run version && rollup -c --silent",
+    "watch": "node --watch ./scratch.js",
+    "pack": "node ./scripts/pack.js",
+    "version": "node ./scripts/version.js",
+    "test": "tape \"./tests/**/*.test.js\" | tap-dancer",
+    "testb": "npm run test:smoke && cross-env TESTENV=prod npm run test",
+    "test:one": "tape \"./tests/one/**/*.test.js\" | tap-dancer",
+    "test:two": "tape \"./tests/two/**/*.test.js\" | tap-dancer",
+    "test:three": "tape \"./tests/three/**/*.test.js\" | tap-dancer",
+    "test:smoke": "tape \"./scripts/test/smoke.test.js\" | tap-dancer",
+    "test:plugins": "tape \"./plugins/**/tests/**/*.test.js\" | tap-dancer",
+    "stress": "node scripts/test/stress.js",
+    "debug": "node ./scripts/debug.js",
+    "match": "node ./scripts/match.js",
+    "coverage": "c8 -r lcov -n 'src/**/*' -n 'plugins/**/*' npm run test",
+    "perf": "node ./scripts/perf/index.js",
+    "flame": "clinic flame -- node ./scripts/perf/flame",
+    "lint": "eslint src",
+    "plugins:ci": "node ./scripts/plugins.js npm ci",
+    "plugins:build": "node ./scripts/plugins.js npm run build"
+  },
+  "files": [
+    "builds/",
+    "types/",
+    "src/",
+    "tokenize/",
+    "one/",
+    "two/",
+    "three/"
+  ],
+  "keywords": [
+    "nlp"
+  ],
+  "prettier": {
+    "trailingComma": "es5",
+    "tabWidth": 2,
+    "semi": false,
+    "singleQuote": true,
+    "printWidth": 120,
+    "arrowParens": "avoid"
+  },
+  "dependencies": {
+    "efrt": "2.7.0",
+    "grad-school": "0.0.5",
+    "suffix-thumb": "5.0.2"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "15.3.0",
+    "@rollup/plugin-terser": "0.4.4",
+    "cross-env": "^7.0.3",
+    "eslint": "9.16.0",
+    "eslint-plugin-regexp": "2.7.0",
+    "nlp-corpus": "4.4.0",
+    "rollup": "4.28.0",
+    "rollup-plugin-filesize-check": "1.2.0",
+    "shelljs": "0.8.5",
+    "tap-dancer": "0.3.4",
+    "tape": "5.9.0"
+  },
+  "eslintIgnore": [
+    "builds/*.js",
+    "*.ts",
+    "_old/**",
+    "_tests/**"
+  ],
+  "license": "MIT"
+}

@@ -1,0 +1,4 @@
+[
+    "../../protos/google/pubsub/v1/pubsub.proto",
+    "../../protos/google/pubsub/v1/schema.proto"
+]

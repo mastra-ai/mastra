@@ -1,0 +1,60 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
+import type { EmbeddingModel as EmbeddingModelV1 } from '../ai-sdk.types.d.ts';
+import { MastraBase } from '../base.js';
+import type { VectorFilter } from './filter/index.js';
+import type { CreateIndexParams, UpsertVectorParams, QueryVectorParams, IndexStats, QueryResult, UpdateVectorParams, DeleteVectorParams, DeleteVectorsParams, DescribeIndexParams, DeleteIndexParams } from './types.js';
+export type MastraEmbeddingModel<T> = EmbeddingModelV1<T> | EmbeddingModelV2<T>;
+export declare abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
+    id: string;
+    constructor({ id }: {
+        id: string;
+    });
+    get indexSeparator(): string;
+    abstract query(params: QueryVectorParams<Filter>): Promise<QueryResult[]>;
+    abstract upsert(params: UpsertVectorParams): Promise<string[]>;
+    abstract createIndex(params: CreateIndexParams): Promise<void>;
+    abstract listIndexes(): Promise<string[]>;
+    abstract describeIndex(params: DescribeIndexParams): Promise<IndexStats>;
+    abstract deleteIndex(params: DeleteIndexParams): Promise<void>;
+    abstract updateVector(params: UpdateVectorParams<Filter>): Promise<void>;
+    abstract deleteVector(params: DeleteVectorParams): Promise<void>;
+    /**
+     * Delete multiple vectors by IDs or metadata filter.
+     *
+     * This enables bulk deletion and source-based vector management.
+     * Implementations should throw MastraError with appropriate error code
+     * if the operation is not supported.
+     *
+     * @param params - Parameters including indexName and either ids or filter (mutually exclusive)
+     * @throws {MastraError} If operation is not supported or parameters are invalid
+     *
+     * @example
+     * ```ts
+     * // Delete all chunks from a document
+     * await vectorStore.deleteVectors({
+     *   indexName: 'docs',
+     *   filter: { source_id: 'manual.pdf' }
+     * });
+     *
+     * // Delete multiple vectors by ID
+     * await vectorStore.deleteVectors({
+     *   indexName: 'docs',
+     *   ids: ['vec_1', 'vec_2', 'vec_3']
+     * });
+     *
+     * // Delete old temporary documents
+     * await vectorStore.deleteVectors({
+     *   indexName: 'docs',
+     *   filter: {
+     *     $and: [
+     *       { bucket: 'temp' },
+     *       { indexed_at: { $lt: '2025-01-01' } }
+     *     ]
+     *   }
+     * });
+     * ```
+     */
+    abstract deleteVectors(params: DeleteVectorsParams<Filter>): Promise<void>;
+    protected validateExistingIndex(indexName: string, dimension: number, metric: string): Promise<void>;
+}
+//# sourceMappingURL=vector.d.ts.map

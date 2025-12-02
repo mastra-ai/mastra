@@ -1,0 +1,25 @@
+{
+	"$id": "/inference/schemas/depth-estimation/input.json",
+	"$schema": "http://json-schema.org/draft-06/schema#",
+	"description": "Inputs for Depth Estimation inference",
+	"title": "DepthEstimationInput",
+	"type": "object",
+	"properties": {
+		"inputs": {
+			"description": "The input image data"
+		},
+		"parameters": {
+			"description": "Additional inference parameters",
+			"$ref": "#/$defs/DepthEstimationParameters"
+		}
+	},
+	"$defs": {
+		"DepthEstimationParameters": {
+			"title": "DepthEstimationParameters",
+			"description": "Additional inference parameters for Depth Estimation",
+			"type": "object",
+			"properties": {}
+		}
+	},
+	"required": ["inputs"]
+}

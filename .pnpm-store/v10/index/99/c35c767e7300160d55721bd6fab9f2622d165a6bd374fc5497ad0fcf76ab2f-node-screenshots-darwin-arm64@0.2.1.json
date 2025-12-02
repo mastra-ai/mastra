@@ -1,0 +1,25 @@
+{
+  "name": "node-screenshots-darwin-arm64",
+  "version": "0.2.1",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662911099,
+      "integrity": "sha512-E9Wxp3pueHprt19aCogac0chk3QCe5W6DA1rWPoX118x9rIMy8BjlPZNBPSeN8zr2XbTZOlP+Wd2MPGH2YEt0A==",
+      "mode": 420,
+      "size": 297
+    },
+    "README.md": {
+      "checkedAt": 1764662911100,
+      "integrity": "sha512-1FpRwRHKbLK84mDxpT3tsg8x9iZX6XVtu0X9IG2rroBlrZLuwf2KEK8BkkstpcExjwp/4zr8KE24wSV9Ixd+wg==",
+      "mode": 420,
+      "size": 102
+    },
+    "node-screenshots.darwin-arm64.node": {
+      "checkedAt": 1764662911101,
+      "integrity": "sha512-pMsuw451pf2H7dpfKzKS/WCdjnGUZ3O4nK95PDwBSwlg2B2+eoKuKRVnUTw9rnhTwpyM4oJ9melvcG6BPIB/Mw==",
+      "mode": 420,
+      "size": 605672
+    }
+  }
+}

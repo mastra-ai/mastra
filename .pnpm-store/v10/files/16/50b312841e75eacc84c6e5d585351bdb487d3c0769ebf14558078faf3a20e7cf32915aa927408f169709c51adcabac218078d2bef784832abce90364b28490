@@ -1,0 +1,41 @@
+{
+  "name": "better-path-resolve",
+  "version": "1.0.0",
+  "description": "A better path.resolve() that normalizes paths on Windows",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ],
+  "scripts": {
+    "test": "mos t && node test",
+    "md": "mos"
+  },
+  "engines": {
+    "node": ">=4"
+  },
+  "repository": "https://github.com/zkochan/packages/tree/master/better-path-resolve",
+  "keywords": [
+  ],
+  "author": {
+    "name": "Zoltan Kochan",
+    "url": "https://www.kochan.io"
+  },
+  "mos": {
+    "plugins": [
+      "readme"
+    ],
+    "installation": {
+      "useShortAlias": true
+    }
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/zkochan/packages/tree/master/better-path-resolve#readme",
+  "dependencies": {
+    "is-windows": "^1.0.0"
+  },
+  "devDependencies": {
+    "mos": "^2.0.0-alpha.3",
+    "mos-plugin-readme": "^1.0.4",
+    "tape": "^4.6.3"
+  }
+}

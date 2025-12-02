@@ -1,0 +1,73 @@
+{
+  "version": "1.1.0",
+  "name": "@lukeed/csprng",
+  "repository": "lukeed/csprng",
+  "description": "An alias package for `crypto.randomBytes` in Node.js and/or browsers",
+  "unpkg": "browser/index.min.js",
+  "browser": "browser/index.mjs",
+  "module": "node/index.mjs",
+  "main": "node/index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "author": {
+    "name": "Luke Edwards",
+    "email": "luke.edwards05@gmail.com",
+    "url": "https://lukeed.com"
+  },
+  "exports": {
+    ".": {
+      "browser": {
+        "types": "./browser/index.d.ts",
+        "import": "./browser/index.mjs",
+        "require": "./browser/index.js"
+      },
+      "types": "./node/index.d.ts",
+      "import": "./node/index.mjs",
+      "require": "./node/index.js"
+    },
+    "./node": {
+      "types": "./node/index.d.ts",
+      "import": "./node/index.mjs",
+      "require": "./node/index.js"
+    },
+    "./browser": {
+      "types": "./browser/index.d.ts",
+      "import": "./browser/index.mjs",
+      "require": "./browser/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=8"
+  },
+  "scripts": {
+    "build": "bundt",
+    "test": "uvu -r esm test"
+  },
+  "files": [
+    "*.d.ts",
+    "browser",
+    "node"
+  ],
+  "modes": {
+    "browser": "src/browser.js",
+    "node": "src/node.js"
+  },
+  "keywords": [
+    "crypto",
+    "browser",
+    "isomorphic",
+    "getRandomValues",
+    "randomFill",
+    "random",
+    "csprng"
+  ],
+  "devDependencies": {
+    "bundt": "1.1.1",
+    "esm": "3.2.25",
+    "uvu": "0.5.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

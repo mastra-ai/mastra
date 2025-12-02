@@ -1,0 +1,31 @@
+import type * as misc from 'memfs/lib/node/types/misc';
+import { Nfsv4FType } from '../constants';
+export declare class NfsFsStats implements misc.IStats<number> {
+    uid: number;
+    gid: number;
+    rdev: number;
+    blksize: number;
+    ino: number;
+    size: number;
+    blocks: number;
+    atime: Date;
+    mtime: Date;
+    ctime: Date;
+    birthtime: Date;
+    atimeMs: number;
+    mtimeMs: number;
+    ctimeMs: number;
+    birthtimeMs: number;
+    dev: number;
+    mode: number;
+    nlink: number;
+    private type;
+    constructor(uid: number, gid: number, rdev: number, blksize: number, ino: number, size: number, blocks: number, atime: Date, mtime: Date, ctime: Date, birthtime: Date, atimeMs: number, mtimeMs: number, ctimeMs: number, birthtimeMs: number, dev: number, mode: number, nlink: number, type: Nfsv4FType);
+    isDirectory(): boolean;
+    isFile(): boolean;
+    isBlockDevice(): boolean;
+    isCharacterDevice(): boolean;
+    isSymbolicLink(): boolean;
+    isFIFO(): boolean;
+    isSocket(): boolean;
+}

@@ -1,0 +1,61 @@
+import type { CoreMessage } from '../../ai-sdk.types.d.ts';
+import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent/index.js';
+import type { TracingContext } from '../../observability/index.js';
+import type { RequestContext } from '../../request-context/index.js';
+import { Workflow } from '../../workflows/index.js';
+import type { WorkflowResult } from '../../workflows/index.js';
+import type { MastraScorer } from '../base.js';
+type RunEvalsDataItem<TTarget = unknown> = {
+    input: TTarget extends Workflow<any, any> ? any : TTarget extends Agent ? string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[] : unknown;
+    groundTruth?: any;
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+};
+type WorkflowScorerConfig = {
+    workflow?: MastraScorer<any, any, any, any>[];
+    steps?: Record<string, MastraScorer<any, any, any, any>[]>;
+};
+type RunEvalsResult = {
+    scores: Record<string, any>;
+    summary: {
+        totalItems: number;
+    };
+};
+export declare function runEvals<TAgent extends Agent>(config: {
+    data: RunEvalsDataItem<TAgent>[];
+    scorers: MastraScorer<any, any, any, any>[];
+    target: TAgent;
+    onItemComplete?: (params: {
+        item: RunEvalsDataItem<TAgent>;
+        targetResult: ReturnType<Agent['generate']>;
+        scorerResults: Record<string, any>;
+    }) => void | Promise<void>;
+    concurrency?: number;
+}): Promise<RunEvalsResult>;
+export declare function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any>>(config: {
+    data: RunEvalsDataItem<TWorkflow>[];
+    scorers: MastraScorer<any, any, any, any>[];
+    target: TWorkflow;
+    onItemComplete?: (params: {
+        item: RunEvalsDataItem<TWorkflow>;
+        targetResult: WorkflowResult<any, any, any, any>;
+        scorerResults: Record<string, any>;
+    }) => void | Promise<void>;
+    concurrency?: number;
+}): Promise<RunEvalsResult>;
+export declare function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any>>(config: {
+    data: RunEvalsDataItem<TWorkflow>[];
+    scorers: WorkflowScorerConfig;
+    target: TWorkflow;
+    onItemComplete?: (params: {
+        item: RunEvalsDataItem<TWorkflow>;
+        targetResult: WorkflowResult<any, any, any, any>;
+        scorerResults: {
+            workflow?: Record<string, any>;
+            steps?: Record<string, Record<string, any>>;
+        };
+    }) => void | Promise<void>;
+    concurrency?: number;
+}): Promise<RunEvalsResult>;
+export {};
+//# sourceMappingURL=index.d.ts.map

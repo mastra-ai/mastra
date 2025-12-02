@@ -1,0 +1,1 @@
+{"version":3,"file":"tensor-conversion-impl.d.ts","sourceRoot":"","sources":["../../lib/tensor-conversion-impl.ts"],"names":[],"mappings":"AAGA,OAAO,EAAE,sBAAsB,EAAE,wBAAwB,EAAE,MAAM,wBAAwB,CAAC;AAC1F,OAAO,EAAE,MAAM,EAAE,MAAM,aAAa,CAAC;AAErC;;GAEG;AACH,eAAO,MAAM,eAAe,WAAY,MAAM,YAAY,sBAAsB,KAAG,MA8FlF,CAAC;AAEF;;GAEG;AACH,eAAO,MAAM,iBAAiB,WAAY,MAAM,YAAY,wBAAwB,KAAG,SAyGtF,CAAC"}

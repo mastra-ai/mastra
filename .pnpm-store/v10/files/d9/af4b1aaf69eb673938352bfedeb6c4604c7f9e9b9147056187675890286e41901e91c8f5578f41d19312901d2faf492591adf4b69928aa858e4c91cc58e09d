@@ -1,0 +1,946 @@
+import type { WritableStream } from 'stream/web';
+import type { ToolSet } from 'ai-v5';
+import type { OutputSchema } from '../../../stream/base/schema.js';
+import type { ChunkType } from '../../../stream/types.js';
+import type { LoopRun } from '../../types.js';
+interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> extends LoopRun<Tools, OUTPUT> {
+    controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+    writer: WritableStream<ChunkType<OUTPUT>>;
+}
+export declare function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(params: AgenticLoopParams<Tools, OUTPUT>): import("../../../workflows").Workflow<import("../../../workflows").DefaultEngineType, import("../../../workflows").Step<string, any, any, any, any, any, import("../../../workflows").DefaultEngineType>[], "agentic-loop", import("zod").ZodObject<any, import("zod").UnknownKeysParam, import("zod").ZodTypeAny, {
+    [x: string]: any;
+}, {
+    [x: string]: any;
+}>, import("zod").ZodObject<{
+    messageId: import("zod").ZodString;
+    messages: import("zod").ZodObject<{
+        all: import("zod").ZodArray<import("zod").ZodAny, "many">;
+        user: import("zod").ZodArray<import("zod").ZodAny, "many">;
+        nonUser: import("zod").ZodArray<import("zod").ZodAny, "many">;
+    }, "strip", import("zod").ZodTypeAny, {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    }, {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    }>;
+    output: import("zod").ZodObject<{
+        text: import("zod").ZodOptional<import("zod").ZodString>;
+        reasoning: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        reasoningText: import("zod").ZodOptional<import("zod").ZodString>;
+        files: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        toolCalls: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        toolResults: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        sources: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        staticToolCalls: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        dynamicToolCalls: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        staticToolResults: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        dynamicToolResults: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        usage: import("zod").ZodObject<{
+            inputTokens: import("zod").ZodNumber;
+            outputTokens: import("zod").ZodNumber;
+            totalTokens: import("zod").ZodNumber;
+            reasoningTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+            cachedInputTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+        }, "strip", import("zod").ZodTypeAny, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }>;
+        steps: import("zod").ZodArray<import("zod").ZodAny, "many">;
+    }, "strip", import("zod").ZodTypeAny, {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    }, {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    }>;
+    metadata: import("zod").ZodObject<{
+        id: import("zod").ZodOptional<import("zod").ZodString>;
+        model: import("zod").ZodOptional<import("zod").ZodString>;
+        modelId: import("zod").ZodOptional<import("zod").ZodString>;
+        modelMetadata: import("zod").ZodOptional<import("zod").ZodObject<{
+            modelId: import("zod").ZodString;
+            modelVersion: import("zod").ZodString;
+            modelProvider: import("zod").ZodString;
+        }, "strip", import("zod").ZodTypeAny, {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        }, {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        }>>;
+        timestamp: import("zod").ZodOptional<import("zod").ZodDate>;
+        providerMetadata: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+        headers: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodString>>;
+        request: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+    }, "strip", import("zod").ZodTypeAny, {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    }, {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    }>;
+    stepResult: import("zod").ZodObject<{
+        reason: import("zod").ZodString;
+        warnings: import("zod").ZodArray<import("zod").ZodAny, "many">;
+        isContinued: import("zod").ZodBoolean;
+        logprobs: import("zod").ZodOptional<import("zod").ZodAny>;
+        totalUsage: import("zod").ZodOptional<import("zod").ZodObject<{
+            inputTokens: import("zod").ZodNumber;
+            outputTokens: import("zod").ZodNumber;
+            totalTokens: import("zod").ZodNumber;
+            reasoningTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+            cachedInputTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+        }, "strip", import("zod").ZodTypeAny, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }>>;
+        headers: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodString>>;
+        messageId: import("zod").ZodOptional<import("zod").ZodString>;
+        request: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+    }, "strip", import("zod").ZodTypeAny, {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    }, {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    }>;
+}, "strip", import("zod").ZodTypeAny, {
+    output: {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    };
+    messageId: string;
+    messages: {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    };
+    metadata: {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    };
+    stepResult: {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    };
+}, {
+    output: {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    };
+    messageId: string;
+    messages: {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    };
+    metadata: {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    };
+    stepResult: {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    };
+}>, import("zod").ZodObject<{
+    messageId: import("zod").ZodString;
+    messages: import("zod").ZodObject<{
+        all: import("zod").ZodArray<import("zod").ZodAny, "many">;
+        user: import("zod").ZodArray<import("zod").ZodAny, "many">;
+        nonUser: import("zod").ZodArray<import("zod").ZodAny, "many">;
+    }, "strip", import("zod").ZodTypeAny, {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    }, {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    }>;
+    output: import("zod").ZodObject<{
+        text: import("zod").ZodOptional<import("zod").ZodString>;
+        reasoning: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        reasoningText: import("zod").ZodOptional<import("zod").ZodString>;
+        files: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        toolCalls: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        toolResults: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        sources: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        staticToolCalls: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        dynamicToolCalls: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        staticToolResults: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        dynamicToolResults: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        usage: import("zod").ZodObject<{
+            inputTokens: import("zod").ZodNumber;
+            outputTokens: import("zod").ZodNumber;
+            totalTokens: import("zod").ZodNumber;
+            reasoningTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+            cachedInputTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+        }, "strip", import("zod").ZodTypeAny, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }>;
+        steps: import("zod").ZodArray<import("zod").ZodAny, "many">;
+    }, "strip", import("zod").ZodTypeAny, {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    }, {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    }>;
+    metadata: import("zod").ZodObject<{
+        id: import("zod").ZodOptional<import("zod").ZodString>;
+        model: import("zod").ZodOptional<import("zod").ZodString>;
+        modelId: import("zod").ZodOptional<import("zod").ZodString>;
+        modelMetadata: import("zod").ZodOptional<import("zod").ZodObject<{
+            modelId: import("zod").ZodString;
+            modelVersion: import("zod").ZodString;
+            modelProvider: import("zod").ZodString;
+        }, "strip", import("zod").ZodTypeAny, {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        }, {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        }>>;
+        timestamp: import("zod").ZodOptional<import("zod").ZodDate>;
+        providerMetadata: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+        headers: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodString>>;
+        request: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+    }, "strip", import("zod").ZodTypeAny, {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    }, {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    }>;
+    stepResult: import("zod").ZodObject<{
+        reason: import("zod").ZodString;
+        warnings: import("zod").ZodArray<import("zod").ZodAny, "many">;
+        isContinued: import("zod").ZodBoolean;
+        logprobs: import("zod").ZodOptional<import("zod").ZodAny>;
+        totalUsage: import("zod").ZodOptional<import("zod").ZodObject<{
+            inputTokens: import("zod").ZodNumber;
+            outputTokens: import("zod").ZodNumber;
+            totalTokens: import("zod").ZodNumber;
+            reasoningTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+            cachedInputTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+        }, "strip", import("zod").ZodTypeAny, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }>>;
+        headers: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodString>>;
+        messageId: import("zod").ZodOptional<import("zod").ZodString>;
+        request: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+    }, "strip", import("zod").ZodTypeAny, {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    }, {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    }>;
+}, "strip", import("zod").ZodTypeAny, {
+    output: {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    };
+    messageId: string;
+    messages: {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    };
+    metadata: {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    };
+    stepResult: {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    };
+}, {
+    output: {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    };
+    messageId: string;
+    messages: {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    };
+    metadata: {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    };
+    stepResult: {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    };
+}>, import("zod").ZodObject<{
+    messageId: import("zod").ZodString;
+    messages: import("zod").ZodObject<{
+        all: import("zod").ZodArray<import("zod").ZodAny, "many">;
+        user: import("zod").ZodArray<import("zod").ZodAny, "many">;
+        nonUser: import("zod").ZodArray<import("zod").ZodAny, "many">;
+    }, "strip", import("zod").ZodTypeAny, {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    }, {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    }>;
+    output: import("zod").ZodObject<{
+        text: import("zod").ZodOptional<import("zod").ZodString>;
+        reasoning: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        reasoningText: import("zod").ZodOptional<import("zod").ZodString>;
+        files: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        toolCalls: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        toolResults: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        sources: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        staticToolCalls: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        dynamicToolCalls: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        staticToolResults: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        dynamicToolResults: import("zod").ZodOptional<import("zod").ZodArray<import("zod").ZodAny, "many">>;
+        usage: import("zod").ZodObject<{
+            inputTokens: import("zod").ZodNumber;
+            outputTokens: import("zod").ZodNumber;
+            totalTokens: import("zod").ZodNumber;
+            reasoningTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+            cachedInputTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+        }, "strip", import("zod").ZodTypeAny, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }>;
+        steps: import("zod").ZodArray<import("zod").ZodAny, "many">;
+    }, "strip", import("zod").ZodTypeAny, {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    }, {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    }>;
+    metadata: import("zod").ZodObject<{
+        id: import("zod").ZodOptional<import("zod").ZodString>;
+        model: import("zod").ZodOptional<import("zod").ZodString>;
+        modelId: import("zod").ZodOptional<import("zod").ZodString>;
+        modelMetadata: import("zod").ZodOptional<import("zod").ZodObject<{
+            modelId: import("zod").ZodString;
+            modelVersion: import("zod").ZodString;
+            modelProvider: import("zod").ZodString;
+        }, "strip", import("zod").ZodTypeAny, {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        }, {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        }>>;
+        timestamp: import("zod").ZodOptional<import("zod").ZodDate>;
+        providerMetadata: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+        headers: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodString>>;
+        request: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+    }, "strip", import("zod").ZodTypeAny, {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    }, {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    }>;
+    stepResult: import("zod").ZodObject<{
+        reason: import("zod").ZodString;
+        warnings: import("zod").ZodArray<import("zod").ZodAny, "many">;
+        isContinued: import("zod").ZodBoolean;
+        logprobs: import("zod").ZodOptional<import("zod").ZodAny>;
+        totalUsage: import("zod").ZodOptional<import("zod").ZodObject<{
+            inputTokens: import("zod").ZodNumber;
+            outputTokens: import("zod").ZodNumber;
+            totalTokens: import("zod").ZodNumber;
+            reasoningTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+            cachedInputTokens: import("zod").ZodOptional<import("zod").ZodNumber>;
+        }, "strip", import("zod").ZodTypeAny, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }>>;
+        headers: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodString>>;
+        messageId: import("zod").ZodOptional<import("zod").ZodString>;
+        request: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+    }, "strip", import("zod").ZodTypeAny, {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    }, {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    }>;
+}, "strip", import("zod").ZodTypeAny, {
+    output: {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    };
+    messageId: string;
+    messages: {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    };
+    metadata: {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    };
+    stepResult: {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    };
+}, {
+    output: {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    };
+    messageId: string;
+    messages: {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    };
+    metadata: {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    };
+    stepResult: {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    };
+}>>;
+export {};
+//# sourceMappingURL=index.d.ts.map

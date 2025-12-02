@@ -1,0 +1,59 @@
+import { APIResource } from "../../../../../resource.js";
+import * as Core from "../../../../../core.js";
+import * as PoliciesAPI from "../policies.js";
+import { SplitTunnelIncludesSinglePage } from "../policies.js";
+export declare class Includes extends APIResource {
+    /**
+     * Sets the list of routes included in the WARP client's tunnel for a specific
+     * device settings profile.
+     *
+     * @example
+     * ```ts
+     * // Automatically fetches more pages as needed.
+     * for await (const splitTunnelInclude of client.zeroTrust.devices.policies.custom.includes.update(
+     *   'f174e90a-fafe-4643-bbbc-4a0ed4fc8415',
+     *   {
+     *     account_id: '699d98642c564d2e855e9661899b7252',
+     *     body: [{ address: '192.0.2.0/24' }],
+     *   },
+     * )) {
+     *   // ...
+     * }
+     * ```
+     */
+    update(policyId: string, params: IncludeUpdateParams, options?: Core.RequestOptions): Core.PagePromise<SplitTunnelIncludesSinglePage, PoliciesAPI.SplitTunnelInclude>;
+    /**
+     * Fetches the list of routes included in the WARP client's tunnel for a specific
+     * device settings profile.
+     *
+     * @example
+     * ```ts
+     * // Automatically fetches more pages as needed.
+     * for await (const splitTunnelInclude of client.zeroTrust.devices.policies.custom.includes.get(
+     *   'f174e90a-fafe-4643-bbbc-4a0ed4fc8415',
+     *   { account_id: '699d98642c564d2e855e9661899b7252' },
+     * )) {
+     *   // ...
+     * }
+     * ```
+     */
+    get(policyId: string, params: IncludeGetParams, options?: Core.RequestOptions): Core.PagePromise<SplitTunnelIncludesSinglePage, PoliciesAPI.SplitTunnelInclude>;
+}
+export interface IncludeUpdateParams {
+    /**
+     * Path param:
+     */
+    account_id: string;
+    /**
+     * Body param:
+     */
+    body: Array<PoliciesAPI.SplitTunnelIncludeParam>;
+}
+export interface IncludeGetParams {
+    account_id: string;
+}
+export declare namespace Includes {
+    export { type IncludeUpdateParams as IncludeUpdateParams, type IncludeGetParams as IncludeGetParams };
+}
+export { SplitTunnelIncludesSinglePage };
+//# sourceMappingURL=includes.d.ts.map

@@ -1,0 +1,237 @@
+import { JSONValue } from "../values/index.js";
+
+/**
+ * The value exported by your Convex project in `auth.config.ts`.
+ *
+ * ```ts
+ * import { AuthConfig } from "convex/server";
+ *
+ * export default {
+ *   providers: [
+ *     {
+ *       domain: "https://your.issuer.url.com",
+ *       applicationID: "your-application-id",
+ *     },
+ *   ],
+ * } satisfies AuthConfig;
+ * ```
+ */
+export type AuthConfig = {
+  providers: AuthProvider[];
+};
+
+/**
+ * An authentication provider allowed to issue JWTs for your app.
+ *
+ * See: https://docs.convex.dev/auth/advanced/custom-auth and https://docs.convex.dev/auth/advanced/custom-jwt
+ */
+export type AuthProvider =
+  // OIDC provider
+  | {
+      /**
+       * Tokens issued by the auth provider must have this application ID
+       * in their audiences.
+       */
+      applicationID: string;
+
+      /**
+       * The domain of the OIDC auth provider.
+       */
+      domain: string;
+    }
+  // Custom JWT provider (see https://docs.convex.dev/auth/advanced/custom-jwt)
+  | {
+      type: "customJwt";
+
+      /**
+       * Tokens issued by the auth provider must have this application ID
+       * in their audiences.
+       *
+       * Warning: omitting applicationID is often insecure
+       * (see https://docs.convex.dev/auth/advanced/custom-jwt#warning-omitting-applicationid-is-often-insecure).
+       */
+      applicationID?: string;
+
+      /**
+       * The issuer of the JWT auth provider (e.g. `https://auth.example.com`)
+       */
+      issuer: string;
+
+      /**
+       * The URL to fetch the JWKS (e.g. `https://auth.example.com/.well-known/jwks.json`)
+       */
+      jwks: string;
+
+      /**
+       * The algorithm used to sign the JWT tokens. Convex currently only
+       * supports RS256 and ES256.
+       */
+      algorithm: "RS256" | "ES256";
+    };
+
+/**
+ * Information about an authenticated user, derived from a
+ * [JWT](https://datatracker.ietf.org/doc/html/rfc7519).
+ *
+ * The only fields guaranteed to be present are
+ * {@link UserIdentity.tokenIdentifier} and {@link UserIdentity.issuer}. All
+ * remaining fields may or may not be present depending on the information given
+ * by the identity provider.
+ *
+ * The explicitly listed fields are derived from the OpenID Connect (OIDC) standard fields,
+ * see the [OIDC specification](https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims)
+ * for more information on these fields.
+ *
+ * Any additional fields are custom claims that may be present in the JWT,
+ * and their type depends on your identity provider configuration. If you
+ * know the type of the field, you can assert it in TypeScript like this
+ * (for example as a `string`):
+ *
+ * ```typescript
+ * const identity = await ctx.auth.getUserIdentity();
+ * if (identity === null) {
+ *   return null;
+ * }
+ * const customClaim = identity.custom_claim as string;
+ * ```
+ *
+ * @public
+ */
+export interface UserIdentity {
+  /**
+   * A stable and globally unique string for this identity (i.e. no other
+   * user, even from a different identity provider, will have the same string.)
+   *
+   * JWT claims: `sub` + `iss`
+   */
+  readonly tokenIdentifier: string;
+
+  /**
+   * Identifier for the end-user from the identity provider, not necessarily
+   * unique across different providers.
+   *
+   * JWT claim: `sub`
+   */
+  readonly subject: string;
+
+  /**
+   * The hostname of the identity provider used to authenticate this user.
+   *
+   * JWT claim: `iss`
+   */
+  readonly issuer: string;
+
+  /**
+   * JWT claim: `name`
+   */
+  readonly name?: string;
+
+  /**
+   * JWT claim: `given_name`
+   */
+  readonly givenName?: string;
+
+  /**
+   * JWT claim: `family_name`
+   */
+  readonly familyName?: string;
+
+  /**
+   * JWT claim: `nickname`
+   */
+  readonly nickname?: string;
+
+  /**
+   * JWT claim: `preferred_username`
+   */
+  readonly preferredUsername?: string;
+
+  /**
+   * JWT claim: `profile`
+   */
+  readonly profileUrl?: string;
+
+  /**
+   * JWT claim: `picture`
+   */
+  readonly pictureUrl?: string;
+
+  /**
+   * JWT claim: `email`
+   */
+  readonly email?: string;
+
+  /**
+   * JWT claim: `email_verified`
+   */
+  readonly emailVerified?: boolean;
+
+  /**
+   * JWT claim: `gender`
+   */
+  readonly gender?: string;
+
+  /**
+   * JWT claim: `birthdate`
+   */
+  readonly birthday?: string;
+
+  /**
+   * JWT claim: `zoneinfo`
+   */
+  readonly timezone?: string;
+
+  /**
+   * JWT claim: `locale`
+   */
+  readonly language?: string;
+
+  /**
+   * JWT claim: `phone_number`
+   */
+  readonly phoneNumber?: string;
+
+  /**
+   * JWT claim: `phone_number_verified`
+   */
+  readonly phoneNumberVerified?: boolean;
+
+  /**
+   * JWT claim: `address`
+   */
+  readonly address?: string;
+
+  /**
+   * JWT claim: `updated_at`
+   */
+  readonly updatedAt?: string;
+
+  /**
+   * Any custom claims.
+   */
+  [key: string]: JSONValue | undefined;
+}
+
+export type UserIdentityAttributes = Omit<
+  UserIdentity,
+  // tokenIdentifier is always generated by us
+  "tokenIdentifier"
+>;
+
+/**
+ * An interface to access information about the currently authenticated user
+ * within Convex query and mutation functions.
+ *
+ * @public
+ */
+export interface Auth {
+  /**
+   * Get details about the currently authenticated user.
+   *
+   * @returns A promise that resolves to a {@link UserIdentity} if the Convex
+   * client was configured with a valid ID token, or if not, will:
+   * + returns `null` on Convex queries, mutations, actions.
+   * + `throw` on HTTP Actions.
+   */
+  getUserIdentity(): Promise<UserIdentity | null>;
+}

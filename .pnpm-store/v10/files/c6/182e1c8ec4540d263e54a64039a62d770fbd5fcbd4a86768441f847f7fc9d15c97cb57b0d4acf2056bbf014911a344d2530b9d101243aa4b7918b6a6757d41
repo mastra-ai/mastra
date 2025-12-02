@@ -1,0 +1,48 @@
+{
+  "name": "grad-school",
+  "version": "0.0.5",
+  "description": "graph logic and traversal",
+  "main": "./src/index.js",
+  "unpkg": "./builds/grad-school.cjs",
+  "module": "./builds/grad-school.mjs",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "require": "./builds/grad-school.cjs",
+      "import": "./builds/grad-school.mjs",
+      "default": "./builds/grad-school.cjs"
+    }
+  },
+  "scripts": {
+    "watch": "amble ./scratch.js",
+    "build": "rollup -c --silent",
+    "test": "tape \"./tests/**/*.test.js\" | tap-dancer"
+  },
+  "files": [
+    "src/",
+    "builds/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spencermountain/grounder.git"
+  },
+  "engines": {
+    "node": ">=8.0.0"
+  },
+  "author": "Spencer Kelly <spencermountain@gmail.com> (http://spencermounta.in)",
+  "bugs": {
+    "url": "https://github.com/spencermountain/grounder/issues"
+  },
+  "homepage": "https://github.com/spencermountain/grounder#readme",
+  "devDependencies": {
+    "rollup": "2.75.5",
+    "rollup-plugin-terser": "^7.0.2",
+    "tap-dancer": "0.3.4",
+    "tape": "5.5.3"
+  },
+  "eslintIgnore": [
+    "builds/*.js"
+  ],
+  "license": "MIT"
+}

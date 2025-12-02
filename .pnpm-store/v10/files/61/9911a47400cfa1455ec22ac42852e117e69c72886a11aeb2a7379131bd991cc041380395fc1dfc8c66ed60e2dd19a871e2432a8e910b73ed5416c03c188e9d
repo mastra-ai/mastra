@@ -1,0 +1,83 @@
+{
+  "name": "@firebase/database",
+  "version": "1.1.0",
+  "description": "",
+  "author": "Firebase <firebase-support@google.com> (https://firebase.google.com/)",
+  "main": "dist/index.node.cjs.js",
+  "browser": "dist/index.esm.js",
+  "module": "dist/index.esm.js",
+  "standalone": "dist/index.standalone.js",
+  "exports": {
+    ".": {
+      "types": "./dist/public.d.ts",
+      "node": {
+        "import": "./dist/node-esm/index.node.esm.js",
+        "require": "./dist/index.node.cjs.js"
+      },
+      "standalone": "./dist/index.standalone.js",
+      "browser": {
+        "require": "./dist/index.cjs.js",
+        "import": "./dist/index.esm.js"
+      },
+      "default": "./dist/index.esm.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "lint": "eslint -c .eslintrc.js '**/*.ts' --ignore-path '../../.gitignore'",
+    "lint:fix": "eslint --fix -c .eslintrc.js '**/*.ts'  --ignore-path '../../.gitignore'",
+    "prettier": "prettier --write '*.js' '*.ts' '@(src|test)/**/*.ts'",
+    "build": "rollup -c rollup.config.js && yarn api-report",
+    "build:deps": "lerna run --scope @firebase/'{app,database}' --include-dependencies build",
+    "dev": "rollup -c -w",
+    "test": "run-p --npm-path npm lint test:emulator",
+    "test:ci": "node ../../scripts/run_tests_in_ci.js -s test:emulator",
+    "test:all": "run-p --npm-path npm lint test:browser test:node",
+    "test:browser": "karma start",
+    "test:node": "TS_NODE_FILES=true TS_NODE_CACHE=NO TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' nyc --reporter lcovonly -- mocha 'test/{,!(browser)/**/}*.test.ts' --file src/index.node.ts --config ../../config/mocharc.node.js",
+    "test:emulator": "ts-node --compiler-options='{\"module\":\"commonjs\"}' ../../scripts/emulator-testing/database-test-runner.ts",
+    "trusted-type-check": "tsec -p tsconfig.json --noEmit",
+    "api-report": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' ts-node ../../repo-scripts/prune-dts/extract-public-api.ts --package database --packageRoot . --typescriptDts ./dist/src/index.d.ts --rollupDts ./dist/private.d.ts --untrimmedRollupDts ./dist/internal.d.ts --publicDts ./dist/public.d.ts && yarn api-report:api-json",
+    "api-report:api-json": "rm -rf temp && api-extractor run --local --verbose",
+    "doc": "api-documenter markdown --input temp --output docs",
+    "typings:public": "node ../../scripts/build/use_typings.js ./dist/public.d.ts"
+  },
+  "license": "Apache-2.0",
+  "peerDependencies": {},
+  "dependencies": {
+    "@firebase/logger": "0.5.0",
+    "@firebase/util": "1.13.0",
+    "@firebase/component": "0.7.0",
+    "@firebase/app-check-interop-types": "0.3.3",
+    "@firebase/auth-interop-types": "0.2.4",
+    "faye-websocket": "0.11.4",
+    "tslib": "^2.1.0"
+  },
+  "devDependencies": {
+    "@firebase/app": "0.14.0",
+    "rollup": "2.79.2",
+    "rollup-plugin-typescript2": "0.36.0",
+    "typescript": "5.5.4"
+  },
+  "repository": {
+    "directory": "packages/database",
+    "type": "git",
+    "url": "git+https://github.com/firebase/firebase-js-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/firebase/firebase-js-sdk/issues"
+  },
+  "typings": "./dist/public.d.ts",
+  "nyc": {
+    "extension": [
+      ".ts"
+    ],
+    "reportDir": "./coverage/node"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

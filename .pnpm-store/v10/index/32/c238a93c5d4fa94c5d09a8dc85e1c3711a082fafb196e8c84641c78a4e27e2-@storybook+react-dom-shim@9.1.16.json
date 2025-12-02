@@ -1,0 +1,67 @@
+{
+  "name": "@storybook/react-dom-shim",
+  "version": "9.1.16",
+  "requiresBuild": false,
+  "files": {
+    "README.md": {
+      "checkedAt": 1764662909358,
+      "integrity": "sha512-TdXhfptRWDKAMoSfKmNWKR0r66UP2IIav+WT3zQUN/iTJmTrl6rF+fN+HGHB08BhaiX1IVRDxRyY1+2jkef/gw==",
+      "mode": 420,
+      "size": 289
+    },
+    "dist/preset.d.ts": {
+      "checkedAt": 1764662909360,
+      "integrity": "sha512-lcl4KP83pUpqHhBojFoEUX2MTHkx/ucycpvKlNjipz2EuarHCP0kqEuAj9IuLSBMiK6PdwplKQVWy1sGdG640A==",
+      "mode": 420,
+      "size": 241
+    },
+    "dist/preset.js": {
+      "checkedAt": 1764662909364,
+      "integrity": "sha512-It+wXioK7YJSzLsJ8sSbioEltgvuWCNAxqol63tKib1uDkb7gPyjfeBFWq6OKZ5S1+xxbBvGuWiX4uqyF96KyA==",
+      "mode": 420,
+      "size": 2367
+    },
+    "dist/react-16.d.ts": {
+      "checkedAt": 1764662909365,
+      "integrity": "sha512-+i+u8btVQovjbADapo4x5cr+L559qcExhKCK/Xb/K0rxX0hP5dKYArvCp5SELFXWfNd1sVA3L3Dogc7I15O9CQ==",
+      "mode": 420,
+      "size": 216
+    },
+    "dist/react-16.js": {
+      "checkedAt": 1764662909369,
+      "integrity": "sha512-D/WGADioNZ1hIB9sFjUb8BAGttHgT0e5ffho17u+OjhS8zDfjy771qjr/UmNVlwXbBPHxJC3GLBSwsVI58Y58g==",
+      "mode": 420,
+      "size": 1335
+    },
+    "dist/react-16.mjs": {
+      "checkedAt": 1764662909371,
+      "integrity": "sha512-2GP900cOocwz4UOE53bpptmm9rBMIDNca2PRZwoU9R8Fb4yVxPzZNxgD9I5xjwc5Tt+CUP7jq4NtDadiYo3GKQ==",
+      "mode": 420,
+      "size": 244
+    },
+    "dist/react-18.d.ts": {
+      "checkedAt": 1764662909377,
+      "integrity": "sha512-8rptO1UbYQ2WAexUp6As4F4ohGW1wZNyMaCFpAEyjVQCH2rlM5hztvZDknMk3eEHwhBaSZwVpi0s3BKiMwNJZQ==",
+      "mode": 420,
+      "size": 322
+    },
+    "dist/react-18.js": {
+      "checkedAt": 1764662909378,
+      "integrity": "sha512-03M6i6K/+pi4+Cq0OB1LGUjSzXfWE+QES5GBRmQ/FqOtz2lVVSjk3jIMgs5TnsS016B9tOu52loAmgT3rpnckg==",
+      "mode": 420,
+      "size": 2194
+    },
+    "dist/react-18.mjs": {
+      "checkedAt": 1764662909381,
+      "integrity": "sha512-GDQ3NEw0q0U6UrNuQmhMZuZ9t6tAq1dJBcvk9BRO7LRu5LhxBPevUIAU4F+3mbnlVhUxHNOaz+JfHrJtDtX6pw==",
+      "mode": 420,
+      "size": 1105
+    },
+    "package.json": {
+      "checkedAt": 1764662909381,
+      "integrity": "sha512-74fvvP7dBmpCG82pfllYiPNVhcCLo0OfEJGd6H9MRLOaLzrkwkg3n/zYkUSB7sWPE7GyuFdJW4HLnsHCuRik0A==",
+      "mode": 420,
+      "size": 1883
+    }
+  }
+}

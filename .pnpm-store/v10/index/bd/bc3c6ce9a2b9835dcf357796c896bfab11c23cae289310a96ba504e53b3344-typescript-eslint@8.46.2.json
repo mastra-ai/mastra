@@ -1,0 +1,73 @@
+{
+  "name": "typescript-eslint",
+  "version": "8.46.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662916502,
+      "integrity": "sha512-t0z/UCQ+RY4AylIo7v6ZCtzCdS9pMnC0+yB0VQa2A+1S+oV4noJtM9o2SOJfDVq7GqTVK4GsuGR2QO4Nb/K7kw==",
+      "mode": 420,
+      "size": 1097
+    },
+    "dist/compatibility-types.js": {
+      "checkedAt": 1764662916502,
+      "integrity": "sha512-cnO5CGf8zKWoBFy6X1GXn4TRlJ/WzL8fPoh6jHE/UQMqUvAt6FH7TaJh1l1KDfmwEHYLwnKvFbCWxrgNAfXFDg==",
+      "mode": 420,
+      "size": 318
+    },
+    "dist/config-helper.js": {
+      "checkedAt": 1764662916504,
+      "integrity": "sha512-h1+YwShIlTqpJoi3xA0T4grRYEIQc4jN+lzFzGxwiBP8eX3gRcE50YFLsDExLjzzGB6dCbD/skmll0HiWXo0rw==",
+      "mode": 420,
+      "size": 6270
+    },
+    "dist/getTSConfigRootDirFromStack.js": {
+      "checkedAt": 1764662916505,
+      "integrity": "sha512-03Ih+mhVdGBug4PAil2nHaIr4uPfbUqECs5DJqCoa+orJzsvvJfshQaqKVLRCKnk3+Tma2H11LKuARMgc5+JRQ==",
+      "mode": 420,
+      "size": 2414
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662916506,
+      "integrity": "sha512-3FlcvGqBlOQF6C05HHxF0MEHnJdnPO84yIcNdEwlsu0M1WOjcoRKtEyqgZAl5g4msr1clIPpgXAl1Io75sPXbQ==",
+      "mode": 420,
+      "size": 7358
+    },
+    "package.json": {
+      "checkedAt": 1764662916507,
+      "integrity": "sha512-5aRdOYEZHEPRlkFe6ivqm9DYZHDkjl1zfByhGtVFdbgUZ9Ge+sPFUQwl+9TGu/q6lceEoenXahV6KBec14qftQ==",
+      "mode": 420,
+      "size": 2212
+    },
+    "README.md": {
+      "checkedAt": 1764662916508,
+      "integrity": "sha512-rwU2ejXtXem3Poej7HGGzlzBK1kzZk/6gZDqrDC20+sc7Huh8CJGAZe+oyfmgE8dLr9lco3QuDjQ9YxjhJfTPQ==",
+      "mode": 420,
+      "size": 688
+    },
+    "dist/compatibility-types.d.ts": {
+      "checkedAt": 1764662916509,
+      "integrity": "sha512-7Y5AonfiPTJ/Slruuyn6iPTk3sdDyyXGbZ9XsM9CpG6Gaj72K8yBkh5UBBRYMI38+ZBsw+GvCEb00Id6B9Ny5Q==",
+      "mode": 420,
+      "size": 346
+    },
+    "dist/config-helper.d.ts": {
+      "checkedAt": 1764662916510,
+      "integrity": "sha512-Xblm9MqLYpOKF9SUfPqb9R9Oaeqhpbl5EuZCFRGKG/QnTTBwkp5ugNDeqMnvvBomU/fH9pi8bjtS/MVcBTlNxA==",
+      "mode": 420,
+      "size": 2121
+    },
+    "dist/getTSConfigRootDirFromStack.d.ts": {
+      "checkedAt": 1764662916510,
+      "integrity": "sha512-HWltvJsUa9N4ftmAwU92i04GCIJkz9tIGwyUoPymFepbdwVl6EM181RwoaakBwB+fmNniKzVVkwMQBlJJqNAsg==",
+      "mode": 420,
+      "size": 263
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662916511,
+      "integrity": "sha512-aJ3sklKOjueBedV78pKsFRtfE08k1D37ft3RuI3kyUpYPEI5X4NZWBjitQ5cR4HT/Tt0caIpCIfNbSDfGIZ9lg==",
+      "mode": 420,
+      "size": 8143
+    }
+  }
+}

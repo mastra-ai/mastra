@@ -1,0 +1,222 @@
+"use strict";
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DenseUnion = exports.Union = exports.Struct = exports.List = exports.Decimal = exports.TimeNanosecond = exports.TimeMicrosecond = exports.TimeMillisecond = exports.TimeSecond = exports.Time = exports.TimestampNanosecond = exports.TimestampMicrosecond = exports.TimestampMillisecond = exports.TimestampSecond = exports.Timestamp = exports.DateMillisecond = exports.DateDay = exports.Date_ = exports.FixedSizeBinary = exports.LargeBinary = exports.Binary = exports.LargeUtf8 = exports.Utf8 = exports.Float64 = exports.Float32 = exports.Float16 = exports.Float = exports.Uint64 = exports.Uint32 = exports.Uint16 = exports.Uint8 = exports.Int64 = exports.Int32 = exports.Int16 = exports.Int8 = exports.Int = exports.Bool = exports.Null = exports.DataType = exports.makeData = exports.Data = exports.MetadataVersion = exports.IntervalUnit = exports.UnionMode = exports.Precision = exports.TimeUnit = exports.DateUnit = exports.BufferType = exports.Type = exports.MessageHeader = void 0;
+exports.TimeBuilder = exports.Uint64Builder = exports.Uint32Builder = exports.Uint16Builder = exports.Uint8Builder = exports.Int64Builder = exports.Int32Builder = exports.Int16Builder = exports.Int8Builder = exports.IntBuilder = exports.Float64Builder = exports.Float32Builder = exports.Float16Builder = exports.FloatBuilder = exports.FixedSizeBinaryBuilder = exports.DictionaryBuilder = exports.DecimalBuilder = exports.DateMillisecondBuilder = exports.DateDayBuilder = exports.DateBuilder = exports.NullBuilder = exports.BoolBuilder = exports.builderThroughAsyncIterable = exports.builderThroughIterable = exports.tableFromJSON = exports.vectorFromArray = exports.makeBuilder = exports.Builder = exports.StructRow = exports.MapRow = exports.Field = exports.Schema = exports.Visitor = exports.makeVector = exports.Vector = exports.tableFromArrays = exports.makeTable = exports.Table = exports.Map_ = exports.FixedSizeList = exports.DurationNanosecond = exports.DurationMicrosecond = exports.DurationMillisecond = exports.DurationSecond = exports.Duration = exports.IntervalYearMonth = exports.IntervalDayTime = exports.Interval = exports.Dictionary = exports.SparseUnion = void 0;
+exports.util = exports.RecordBatch = exports.Message = exports.JSONMessageReader = exports.AsyncMessageReader = exports.MessageReader = exports.tableFromIPC = exports.tableToIPC = exports.RecordBatchJSONWriter = exports.RecordBatchStreamWriter = exports.RecordBatchFileWriter = exports.RecordBatchWriter = exports.AsyncRecordBatchStreamReader = exports.AsyncRecordBatchFileReader = exports.RecordBatchStreamReader = exports.RecordBatchFileReader = exports.RecordBatchReader = exports.AsyncByteQueue = exports.AsyncByteStream = exports.ByteStream = exports.DenseUnionBuilder = exports.SparseUnionBuilder = exports.UnionBuilder = exports.StructBuilder = exports.MapBuilder = exports.FixedSizeListBuilder = exports.ListBuilder = exports.LargeBinaryBuilder = exports.BinaryBuilder = exports.LargeUtf8Builder = exports.Utf8Builder = exports.DurationNanosecondBuilder = exports.DurationMicrosecondBuilder = exports.DurationMillisecondBuilder = exports.DurationSecondBuilder = exports.DurationBuilder = exports.IntervalYearMonthBuilder = exports.IntervalDayTimeBuilder = exports.IntervalBuilder = exports.TimestampNanosecondBuilder = exports.TimestampMicrosecondBuilder = exports.TimestampMillisecondBuilder = exports.TimestampSecondBuilder = exports.TimestampBuilder = exports.TimeNanosecondBuilder = exports.TimeMicrosecondBuilder = exports.TimeMillisecondBuilder = exports.TimeSecondBuilder = void 0;
+var message_header_js_1 = require("./fb/message-header.js");
+Object.defineProperty(exports, "MessageHeader", { enumerable: true, get: function () { return message_header_js_1.MessageHeader; } });
+var enum_js_1 = require("./enum.js");
+Object.defineProperty(exports, "Type", { enumerable: true, get: function () { return enum_js_1.Type; } });
+Object.defineProperty(exports, "BufferType", { enumerable: true, get: function () { return enum_js_1.BufferType; } });
+Object.defineProperty(exports, "DateUnit", { enumerable: true, get: function () { return enum_js_1.DateUnit; } });
+Object.defineProperty(exports, "TimeUnit", { enumerable: true, get: function () { return enum_js_1.TimeUnit; } });
+Object.defineProperty(exports, "Precision", { enumerable: true, get: function () { return enum_js_1.Precision; } });
+Object.defineProperty(exports, "UnionMode", { enumerable: true, get: function () { return enum_js_1.UnionMode; } });
+Object.defineProperty(exports, "IntervalUnit", { enumerable: true, get: function () { return enum_js_1.IntervalUnit; } });
+Object.defineProperty(exports, "MetadataVersion", { enumerable: true, get: function () { return enum_js_1.MetadataVersion; } });
+var data_js_1 = require("./data.js");
+Object.defineProperty(exports, "Data", { enumerable: true, get: function () { return data_js_1.Data; } });
+Object.defineProperty(exports, "makeData", { enumerable: true, get: function () { return data_js_1.makeData; } });
+var type_js_1 = require("./type.js");
+Object.defineProperty(exports, "DataType", { enumerable: true, get: function () { return type_js_1.DataType; } });
+Object.defineProperty(exports, "Null", { enumerable: true, get: function () { return type_js_1.Null; } });
+Object.defineProperty(exports, "Bool", { enumerable: true, get: function () { return type_js_1.Bool; } });
+Object.defineProperty(exports, "Int", { enumerable: true, get: function () { return type_js_1.Int; } });
+Object.defineProperty(exports, "Int8", { enumerable: true, get: function () { return type_js_1.Int8; } });
+Object.defineProperty(exports, "Int16", { enumerable: true, get: function () { return type_js_1.Int16; } });
+Object.defineProperty(exports, "Int32", { enumerable: true, get: function () { return type_js_1.Int32; } });
+Object.defineProperty(exports, "Int64", { enumerable: true, get: function () { return type_js_1.Int64; } });
+Object.defineProperty(exports, "Uint8", { enumerable: true, get: function () { return type_js_1.Uint8; } });
+Object.defineProperty(exports, "Uint16", { enumerable: true, get: function () { return type_js_1.Uint16; } });
+Object.defineProperty(exports, "Uint32", { enumerable: true, get: function () { return type_js_1.Uint32; } });
+Object.defineProperty(exports, "Uint64", { enumerable: true, get: function () { return type_js_1.Uint64; } });
+Object.defineProperty(exports, "Float", { enumerable: true, get: function () { return type_js_1.Float; } });
+Object.defineProperty(exports, "Float16", { enumerable: true, get: function () { return type_js_1.Float16; } });
+Object.defineProperty(exports, "Float32", { enumerable: true, get: function () { return type_js_1.Float32; } });
+Object.defineProperty(exports, "Float64", { enumerable: true, get: function () { return type_js_1.Float64; } });
+Object.defineProperty(exports, "Utf8", { enumerable: true, get: function () { return type_js_1.Utf8; } });
+Object.defineProperty(exports, "LargeUtf8", { enumerable: true, get: function () { return type_js_1.LargeUtf8; } });
+Object.defineProperty(exports, "Binary", { enumerable: true, get: function () { return type_js_1.Binary; } });
+Object.defineProperty(exports, "LargeBinary", { enumerable: true, get: function () { return type_js_1.LargeBinary; } });
+Object.defineProperty(exports, "FixedSizeBinary", { enumerable: true, get: function () { return type_js_1.FixedSizeBinary; } });
+Object.defineProperty(exports, "Date_", { enumerable: true, get: function () { return type_js_1.Date_; } });
+Object.defineProperty(exports, "DateDay", { enumerable: true, get: function () { return type_js_1.DateDay; } });
+Object.defineProperty(exports, "DateMillisecond", { enumerable: true, get: function () { return type_js_1.DateMillisecond; } });
+Object.defineProperty(exports, "Timestamp", { enumerable: true, get: function () { return type_js_1.Timestamp; } });
+Object.defineProperty(exports, "TimestampSecond", { enumerable: true, get: function () { return type_js_1.TimestampSecond; } });
+Object.defineProperty(exports, "TimestampMillisecond", { enumerable: true, get: function () { return type_js_1.TimestampMillisecond; } });
+Object.defineProperty(exports, "TimestampMicrosecond", { enumerable: true, get: function () { return type_js_1.TimestampMicrosecond; } });
+Object.defineProperty(exports, "TimestampNanosecond", { enumerable: true, get: function () { return type_js_1.TimestampNanosecond; } });
+Object.defineProperty(exports, "Time", { enumerable: true, get: function () { return type_js_1.Time; } });
+Object.defineProperty(exports, "TimeSecond", { enumerable: true, get: function () { return type_js_1.TimeSecond; } });
+Object.defineProperty(exports, "TimeMillisecond", { enumerable: true, get: function () { return type_js_1.TimeMillisecond; } });
+Object.defineProperty(exports, "TimeMicrosecond", { enumerable: true, get: function () { return type_js_1.TimeMicrosecond; } });
+Object.defineProperty(exports, "TimeNanosecond", { enumerable: true, get: function () { return type_js_1.TimeNanosecond; } });
+Object.defineProperty(exports, "Decimal", { enumerable: true, get: function () { return type_js_1.Decimal; } });
+Object.defineProperty(exports, "List", { enumerable: true, get: function () { return type_js_1.List; } });
+Object.defineProperty(exports, "Struct", { enumerable: true, get: function () { return type_js_1.Struct; } });
+Object.defineProperty(exports, "Union", { enumerable: true, get: function () { return type_js_1.Union; } });
+Object.defineProperty(exports, "DenseUnion", { enumerable: true, get: function () { return type_js_1.DenseUnion; } });
+Object.defineProperty(exports, "SparseUnion", { enumerable: true, get: function () { return type_js_1.SparseUnion; } });
+Object.defineProperty(exports, "Dictionary", { enumerable: true, get: function () { return type_js_1.Dictionary; } });
+Object.defineProperty(exports, "Interval", { enumerable: true, get: function () { return type_js_1.Interval; } });
+Object.defineProperty(exports, "IntervalDayTime", { enumerable: true, get: function () { return type_js_1.IntervalDayTime; } });
+Object.defineProperty(exports, "IntervalYearMonth", { enumerable: true, get: function () { return type_js_1.IntervalYearMonth; } });
+Object.defineProperty(exports, "Duration", { enumerable: true, get: function () { return type_js_1.Duration; } });
+Object.defineProperty(exports, "DurationSecond", { enumerable: true, get: function () { return type_js_1.DurationSecond; } });
+Object.defineProperty(exports, "DurationMillisecond", { enumerable: true, get: function () { return type_js_1.DurationMillisecond; } });
+Object.defineProperty(exports, "DurationMicrosecond", { enumerable: true, get: function () { return type_js_1.DurationMicrosecond; } });
+Object.defineProperty(exports, "DurationNanosecond", { enumerable: true, get: function () { return type_js_1.DurationNanosecond; } });
+Object.defineProperty(exports, "FixedSizeList", { enumerable: true, get: function () { return type_js_1.FixedSizeList; } });
+Object.defineProperty(exports, "Map_", { enumerable: true, get: function () { return type_js_1.Map_; } });
+var table_js_1 = require("./table.js");
+Object.defineProperty(exports, "Table", { enumerable: true, get: function () { return table_js_1.Table; } });
+Object.defineProperty(exports, "makeTable", { enumerable: true, get: function () { return table_js_1.makeTable; } });
+Object.defineProperty(exports, "tableFromArrays", { enumerable: true, get: function () { return table_js_1.tableFromArrays; } });
+var vector_js_1 = require("./vector.js");
+Object.defineProperty(exports, "Vector", { enumerable: true, get: function () { return vector_js_1.Vector; } });
+Object.defineProperty(exports, "makeVector", { enumerable: true, get: function () { return vector_js_1.makeVector; } });
+var visitor_js_1 = require("./visitor.js");
+Object.defineProperty(exports, "Visitor", { enumerable: true, get: function () { return visitor_js_1.Visitor; } });
+var schema_js_1 = require("./schema.js");
+Object.defineProperty(exports, "Schema", { enumerable: true, get: function () { return schema_js_1.Schema; } });
+Object.defineProperty(exports, "Field", { enumerable: true, get: function () { return schema_js_1.Field; } });
+var map_js_1 = require("./row/map.js");
+Object.defineProperty(exports, "MapRow", { enumerable: true, get: function () { return map_js_1.MapRow; } });
+var struct_js_1 = require("./row/struct.js");
+Object.defineProperty(exports, "StructRow", { enumerable: true, get: function () { return struct_js_1.StructRow; } });
+var builder_js_1 = require("./builder.js");
+Object.defineProperty(exports, "Builder", { enumerable: true, get: function () { return builder_js_1.Builder; } });
+var factories_js_1 = require("./factories.js");
+Object.defineProperty(exports, "makeBuilder", { enumerable: true, get: function () { return factories_js_1.makeBuilder; } });
+Object.defineProperty(exports, "vectorFromArray", { enumerable: true, get: function () { return factories_js_1.vectorFromArray; } });
+Object.defineProperty(exports, "tableFromJSON", { enumerable: true, get: function () { return factories_js_1.tableFromJSON; } });
+Object.defineProperty(exports, "builderThroughIterable", { enumerable: true, get: function () { return factories_js_1.builderThroughIterable; } });
+Object.defineProperty(exports, "builderThroughAsyncIterable", { enumerable: true, get: function () { return factories_js_1.builderThroughAsyncIterable; } });
+var bool_js_1 = require("./builder/bool.js");
+Object.defineProperty(exports, "BoolBuilder", { enumerable: true, get: function () { return bool_js_1.BoolBuilder; } });
+var null_js_1 = require("./builder/null.js");
+Object.defineProperty(exports, "NullBuilder", { enumerable: true, get: function () { return null_js_1.NullBuilder; } });
+var date_js_1 = require("./builder/date.js");
+Object.defineProperty(exports, "DateBuilder", { enumerable: true, get: function () { return date_js_1.DateBuilder; } });
+Object.defineProperty(exports, "DateDayBuilder", { enumerable: true, get: function () { return date_js_1.DateDayBuilder; } });
+Object.defineProperty(exports, "DateMillisecondBuilder", { enumerable: true, get: function () { return date_js_1.DateMillisecondBuilder; } });
+var decimal_js_1 = require("./builder/decimal.js");
+Object.defineProperty(exports, "DecimalBuilder", { enumerable: true, get: function () { return decimal_js_1.DecimalBuilder; } });
+var dictionary_js_1 = require("./builder/dictionary.js");
+Object.defineProperty(exports, "DictionaryBuilder", { enumerable: true, get: function () { return dictionary_js_1.DictionaryBuilder; } });
+var fixedsizebinary_js_1 = require("./builder/fixedsizebinary.js");
+Object.defineProperty(exports, "FixedSizeBinaryBuilder", { enumerable: true, get: function () { return fixedsizebinary_js_1.FixedSizeBinaryBuilder; } });
+var float_js_1 = require("./builder/float.js");
+Object.defineProperty(exports, "FloatBuilder", { enumerable: true, get: function () { return float_js_1.FloatBuilder; } });
+Object.defineProperty(exports, "Float16Builder", { enumerable: true, get: function () { return float_js_1.Float16Builder; } });
+Object.defineProperty(exports, "Float32Builder", { enumerable: true, get: function () { return float_js_1.Float32Builder; } });
+Object.defineProperty(exports, "Float64Builder", { enumerable: true, get: function () { return float_js_1.Float64Builder; } });
+var int_js_1 = require("./builder/int.js");
+Object.defineProperty(exports, "IntBuilder", { enumerable: true, get: function () { return int_js_1.IntBuilder; } });
+Object.defineProperty(exports, "Int8Builder", { enumerable: true, get: function () { return int_js_1.Int8Builder; } });
+Object.defineProperty(exports, "Int16Builder", { enumerable: true, get: function () { return int_js_1.Int16Builder; } });
+Object.defineProperty(exports, "Int32Builder", { enumerable: true, get: function () { return int_js_1.Int32Builder; } });
+Object.defineProperty(exports, "Int64Builder", { enumerable: true, get: function () { return int_js_1.Int64Builder; } });
+Object.defineProperty(exports, "Uint8Builder", { enumerable: true, get: function () { return int_js_1.Uint8Builder; } });
+Object.defineProperty(exports, "Uint16Builder", { enumerable: true, get: function () { return int_js_1.Uint16Builder; } });
+Object.defineProperty(exports, "Uint32Builder", { enumerable: true, get: function () { return int_js_1.Uint32Builder; } });
+Object.defineProperty(exports, "Uint64Builder", { enumerable: true, get: function () { return int_js_1.Uint64Builder; } });
+var time_js_1 = require("./builder/time.js");
+Object.defineProperty(exports, "TimeBuilder", { enumerable: true, get: function () { return time_js_1.TimeBuilder; } });
+Object.defineProperty(exports, "TimeSecondBuilder", { enumerable: true, get: function () { return time_js_1.TimeSecondBuilder; } });
+Object.defineProperty(exports, "TimeMillisecondBuilder", { enumerable: true, get: function () { return time_js_1.TimeMillisecondBuilder; } });
+Object.defineProperty(exports, "TimeMicrosecondBuilder", { enumerable: true, get: function () { return time_js_1.TimeMicrosecondBuilder; } });
+Object.defineProperty(exports, "TimeNanosecondBuilder", { enumerable: true, get: function () { return time_js_1.TimeNanosecondBuilder; } });
+var timestamp_js_1 = require("./builder/timestamp.js");
+Object.defineProperty(exports, "TimestampBuilder", { enumerable: true, get: function () { return timestamp_js_1.TimestampBuilder; } });
+Object.defineProperty(exports, "TimestampSecondBuilder", { enumerable: true, get: function () { return timestamp_js_1.TimestampSecondBuilder; } });
+Object.defineProperty(exports, "TimestampMillisecondBuilder", { enumerable: true, get: function () { return timestamp_js_1.TimestampMillisecondBuilder; } });
+Object.defineProperty(exports, "TimestampMicrosecondBuilder", { enumerable: true, get: function () { return timestamp_js_1.TimestampMicrosecondBuilder; } });
+Object.defineProperty(exports, "TimestampNanosecondBuilder", { enumerable: true, get: function () { return timestamp_js_1.TimestampNanosecondBuilder; } });
+var interval_js_1 = require("./builder/interval.js");
+Object.defineProperty(exports, "IntervalBuilder", { enumerable: true, get: function () { return interval_js_1.IntervalBuilder; } });
+Object.defineProperty(exports, "IntervalDayTimeBuilder", { enumerable: true, get: function () { return interval_js_1.IntervalDayTimeBuilder; } });
+Object.defineProperty(exports, "IntervalYearMonthBuilder", { enumerable: true, get: function () { return interval_js_1.IntervalYearMonthBuilder; } });
+var duration_js_1 = require("./builder/duration.js");
+Object.defineProperty(exports, "DurationBuilder", { enumerable: true, get: function () { return duration_js_1.DurationBuilder; } });
+Object.defineProperty(exports, "DurationSecondBuilder", { enumerable: true, get: function () { return duration_js_1.DurationSecondBuilder; } });
+Object.defineProperty(exports, "DurationMillisecondBuilder", { enumerable: true, get: function () { return duration_js_1.DurationMillisecondBuilder; } });
+Object.defineProperty(exports, "DurationMicrosecondBuilder", { enumerable: true, get: function () { return duration_js_1.DurationMicrosecondBuilder; } });
+Object.defineProperty(exports, "DurationNanosecondBuilder", { enumerable: true, get: function () { return duration_js_1.DurationNanosecondBuilder; } });
+var utf8_js_1 = require("./builder/utf8.js");
+Object.defineProperty(exports, "Utf8Builder", { enumerable: true, get: function () { return utf8_js_1.Utf8Builder; } });
+var largeutf8_js_1 = require("./builder/largeutf8.js");
+Object.defineProperty(exports, "LargeUtf8Builder", { enumerable: true, get: function () { return largeutf8_js_1.LargeUtf8Builder; } });
+var binary_js_1 = require("./builder/binary.js");
+Object.defineProperty(exports, "BinaryBuilder", { enumerable: true, get: function () { return binary_js_1.BinaryBuilder; } });
+var largebinary_js_1 = require("./builder/largebinary.js");
+Object.defineProperty(exports, "LargeBinaryBuilder", { enumerable: true, get: function () { return largebinary_js_1.LargeBinaryBuilder; } });
+var list_js_1 = require("./builder/list.js");
+Object.defineProperty(exports, "ListBuilder", { enumerable: true, get: function () { return list_js_1.ListBuilder; } });
+var fixedsizelist_js_1 = require("./builder/fixedsizelist.js");
+Object.defineProperty(exports, "FixedSizeListBuilder", { enumerable: true, get: function () { return fixedsizelist_js_1.FixedSizeListBuilder; } });
+var map_js_2 = require("./builder/map.js");
+Object.defineProperty(exports, "MapBuilder", { enumerable: true, get: function () { return map_js_2.MapBuilder; } });
+var struct_js_2 = require("./builder/struct.js");
+Object.defineProperty(exports, "StructBuilder", { enumerable: true, get: function () { return struct_js_2.StructBuilder; } });
+var union_js_1 = require("./builder/union.js");
+Object.defineProperty(exports, "UnionBuilder", { enumerable: true, get: function () { return union_js_1.UnionBuilder; } });
+Object.defineProperty(exports, "SparseUnionBuilder", { enumerable: true, get: function () { return union_js_1.SparseUnionBuilder; } });
+Object.defineProperty(exports, "DenseUnionBuilder", { enumerable: true, get: function () { return union_js_1.DenseUnionBuilder; } });
+var stream_js_1 = require("./io/stream.js");
+Object.defineProperty(exports, "ByteStream", { enumerable: true, get: function () { return stream_js_1.ByteStream; } });
+Object.defineProperty(exports, "AsyncByteStream", { enumerable: true, get: function () { return stream_js_1.AsyncByteStream; } });
+Object.defineProperty(exports, "AsyncByteQueue", { enumerable: true, get: function () { return stream_js_1.AsyncByteQueue; } });
+var reader_js_1 = require("./ipc/reader.js");
+Object.defineProperty(exports, "RecordBatchReader", { enumerable: true, get: function () { return reader_js_1.RecordBatchReader; } });
+Object.defineProperty(exports, "RecordBatchFileReader", { enumerable: true, get: function () { return reader_js_1.RecordBatchFileReader; } });
+Object.defineProperty(exports, "RecordBatchStreamReader", { enumerable: true, get: function () { return reader_js_1.RecordBatchStreamReader; } });
+Object.defineProperty(exports, "AsyncRecordBatchFileReader", { enumerable: true, get: function () { return reader_js_1.AsyncRecordBatchFileReader; } });
+Object.defineProperty(exports, "AsyncRecordBatchStreamReader", { enumerable: true, get: function () { return reader_js_1.AsyncRecordBatchStreamReader; } });
+var writer_js_1 = require("./ipc/writer.js");
+Object.defineProperty(exports, "RecordBatchWriter", { enumerable: true, get: function () { return writer_js_1.RecordBatchWriter; } });
+Object.defineProperty(exports, "RecordBatchFileWriter", { enumerable: true, get: function () { return writer_js_1.RecordBatchFileWriter; } });
+Object.defineProperty(exports, "RecordBatchStreamWriter", { enumerable: true, get: function () { return writer_js_1.RecordBatchStreamWriter; } });
+Object.defineProperty(exports, "RecordBatchJSONWriter", { enumerable: true, get: function () { return writer_js_1.RecordBatchJSONWriter; } });
+var serialization_js_1 = require("./ipc/serialization.js");
+Object.defineProperty(exports, "tableToIPC", { enumerable: true, get: function () { return serialization_js_1.tableToIPC; } });
+Object.defineProperty(exports, "tableFromIPC", { enumerable: true, get: function () { return serialization_js_1.tableFromIPC; } });
+var message_js_1 = require("./ipc/message.js");
+Object.defineProperty(exports, "MessageReader", { enumerable: true, get: function () { return message_js_1.MessageReader; } });
+Object.defineProperty(exports, "AsyncMessageReader", { enumerable: true, get: function () { return message_js_1.AsyncMessageReader; } });
+Object.defineProperty(exports, "JSONMessageReader", { enumerable: true, get: function () { return message_js_1.JSONMessageReader; } });
+var message_js_2 = require("./ipc/metadata/message.js");
+Object.defineProperty(exports, "Message", { enumerable: true, get: function () { return message_js_2.Message; } });
+var recordbatch_js_1 = require("./recordbatch.js");
+Object.defineProperty(exports, "RecordBatch", { enumerable: true, get: function () { return recordbatch_js_1.RecordBatch; } });
+const util_bn_ = require("./util/bn.js");
+const util_int_ = require("./util/int.js");
+const util_bit_ = require("./util/bit.js");
+const util_math_ = require("./util/math.js");
+const util_buffer_ = require("./util/buffer.js");
+const util_vector_ = require("./util/vector.js");
+const util_pretty_ = require("./util/pretty.js");
+const typecomparator_js_1 = require("./visitor/typecomparator.js");
+/** @ignore */
+exports.util = Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, util_bn_), util_int_), util_bit_), util_math_), util_buffer_), util_vector_), util_pretty_), { compareSchemas: typecomparator_js_1.compareSchemas,
+    compareFields: typecomparator_js_1.compareFields,
+    compareTypes: typecomparator_js_1.compareTypes });
+
+//# sourceMappingURL=Arrow.js.map

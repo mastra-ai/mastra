@@ -1,0 +1,90 @@
+{
+  "name": "@speed-highlight/core",
+  "version": "1.2.7",
+  "description": "🌈 Light, fast, and easy to use, dependencies free javascript syntax highlighter, with automatic language detection",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/node/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./detect": {
+      "import": "./dist/detect.js",
+      "require": "./dist/node/detect.js",
+      "types": "./dist/detect.d.ts"
+    },
+    "./terminal": {
+      "import": "./dist/terminal.js",
+      "require": "./dist/node/terminal.js",
+      "types": "./dist/terminal.d.ts"
+    },
+    "./themes/*.css": "./dist/themes/*.css"
+  },
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "build": "bash .github/workflows/build.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/speed-highlight/core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/speed-highlight/core/issues"
+  },
+  "keywords": [
+    "javascript",
+    "syntax-highlighting",
+    "language",
+    "fast",
+    "js",
+    "simple",
+    "highlighter",
+    "regex",
+    "highlighting",
+    "highlightjs",
+    "small",
+    "deno"
+  ],
+  "author": "matubu",
+  "license": "CC0-1.0",
+  "homepage": "https://github.com/speed-highlight/core#readme",
+  "devDependencies": {
+    "@semantic-release/git": "^10.0.1",
+    "esbuild": "^0.21.5",
+    "lightningcss-cli": "^1.25.1",
+    "semantic-release": "^24.0.0",
+    "typescript": "^5.3.3"
+  },
+  "release": {
+    "branches": [
+      "main"
+    ],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/npm",
+      "@semantic-release/git",
+      "@semantic-release/github"
+    ]
+  },
+  "private": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "files": [
+    "dist"
+  ],
+  "typesVersions": {
+    "*": {
+      "*": [
+        "dist/*",
+        "dist"
+      ]
+    }
+  },
+  "type": "module"
+}

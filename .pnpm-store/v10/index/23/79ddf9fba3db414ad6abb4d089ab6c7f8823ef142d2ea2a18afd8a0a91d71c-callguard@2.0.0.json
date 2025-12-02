@@ -1,0 +1,37 @@
+{
+  "name": "callguard",
+  "version": "2.0.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662923521,
+      "integrity": "sha512-Z7QLbbHFCpqt/1a6tjR5+UvkgLQEo8YjgYI1DRp6KnSjzjTfTc8tSvjqgDYYdHJameVyVqma5PNHpJsnl/EqNg==",
+      "mode": 420,
+      "size": 1073
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662923522,
+      "integrity": "sha512-GP3MVUb7NSIJKrjfzOJVrz0/2Bc2JjY72ldPuDcwXW4WmIbQZY2jy2oLskk2F9aTosIfZgt0te7+MDxf3bV3ZQ==",
+      "mode": 420,
+      "size": 2635
+    },
+    "package.json": {
+      "checkedAt": 1764662923523,
+      "integrity": "sha512-pM6tT85dPVFufpNOYyL8mLuyoZDUqAoJn6XN+l7lZyOcHqN5g+9Ju9yFvivmCTJyuPFf5qmsmRqeXF3R9yyDRA==",
+      "mode": 420,
+      "size": 1145
+    },
+    "README.md": {
+      "checkedAt": 1764662923527,
+      "integrity": "sha512-otCPdp83at9dcNdoXl4PoheQ4HIVXRIypnd9XroONlKwjey+xde4Ya8XWa5v+EoB9SERftS/wZ8JYvB6QaAJZQ==",
+      "mode": 420,
+      "size": 5708
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662923528,
+      "integrity": "sha512-kux02BQ9vKqTeLo84iwFkJ2Eeyo0vYVWWV179qsKDqTwAAFBbPTpIWn4Q4lOe6TdQI5TEvREMhXL0VMHUcJ75A==",
+      "mode": 420,
+      "size": 4631
+    }
+  }
+}

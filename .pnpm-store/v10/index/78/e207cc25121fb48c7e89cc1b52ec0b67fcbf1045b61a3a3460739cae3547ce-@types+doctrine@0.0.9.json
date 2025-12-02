@@ -1,0 +1,31 @@
+{
+  "name": "@types/doctrine",
+  "version": "0.0.9",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662909663,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662909664,
+      "integrity": "sha512-l0G5JBcvAHxhKnlkZclIYjWai/jNBxBTDdOxv0nIzUFjw2exrzjUYnrGlPjzl3RxEsCbxlMQk/FOE2c30/HzgQ==",
+      "mode": 420,
+      "size": 460
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662909667,
+      "integrity": "sha512-+CKiGcbv7OevAWbmH14cEXsFU+Uyd25CAvPzOuXxMW+ikalU4QDcJ/9A3LWmuodc6kwMJABisIJSPyoehZSzdQ==",
+      "mode": 420,
+      "size": 6111
+    },
+    "package.json": {
+      "checkedAt": 1764662909667,
+      "integrity": "sha512-Niuj9MpagJo9j1zoozhFYShyFmdHgS5euDOwPZfjpb+xxUtBoqTn9KogXrUntsoJtLPZ6fhwLPpFiB6iS+PqFA==",
+      "mode": 420,
+      "size": 780
+    }
+  }
+}

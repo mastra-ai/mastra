@@ -1,0 +1,55 @@
+{
+  "name": "vite-plugin-lib-inject-css",
+  "version": "2.2.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662922156,
+      "integrity": "sha512-lcW7CPWUl/adZ6hBcMV1CHLtx50zA4mgAgbvQok8JNqo57j+SQJ+5LzRZ2Oj6qW8+rFXZTcmv03+uo+YYKcZlA==",
+      "mode": 420,
+      "size": 1066
+    },
+    "dist/index.cjs": {
+      "checkedAt": 1764662922157,
+      "integrity": "sha512-NHwYzSZ4fJB0Lkw8Gn2j0i7GuVqB1lKLkd/tae2fa7VVOaAd++cnRKp/psja6PgW4HVLScxEsuhPf00PzCWpJQ==",
+      "mode": 420,
+      "size": 5129
+    },
+    "dist/index.d.cts": {
+      "checkedAt": 1764662922157,
+      "integrity": "sha512-XgmDaiV/H7hwe2Mtof7MaQgxUjqhzrMrjvqDX+/WkGey3UV6sWbkHgZw5QrqdxZbTT6nnmG6io2mTRtDC0wv6g==",
+      "mode": 420,
+      "size": 192
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662922164,
+      "integrity": "sha512-MlfF2BtG2VFDn/qMEG0+nt1ucdZCa7DERrfIkpeQibSD7Dh0ggO4lAyK1yAsuuPyMSlKTe4BUpiigwPHdJmkxg==",
+      "mode": 420,
+      "size": 3322
+    },
+    "package.json": {
+      "checkedAt": 1764662922165,
+      "integrity": "sha512-unIex4N4vz0U8b2se0MsFOyGwMNzmsGjHB6feSjta6pTFnaLwY4eXxW/NPSs9EJL+/xaiK+8+QQvZeAV03vgDQ==",
+      "mode": 420,
+      "size": 1650
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662922166,
+      "integrity": "sha512-OtKHCRKLCAZ56Ne3t06pgaYPEoN+tcU07i3fS3xRgIHBrLbsCH19k/1L5nzH/vZBG2+/oWW2gM98QQ5p2VC5CQ==",
+      "mode": 420,
+      "size": 2566
+    },
+    "README.md": {
+      "checkedAt": 1764662922167,
+      "integrity": "sha512-qXvpEuOUy1DFE+Vgzu8r280kz1iSmdqvOChNPjzG53P9/u5Ea4dNQEEpOy5TwMHh+WKl/i6CIgsOdN4doxmQNQ==",
+      "mode": 420,
+      "size": 9925
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662922157,
+      "integrity": "sha512-XgmDaiV/H7hwe2Mtof7MaQgxUjqhzrMrjvqDX+/WkGey3UV6sWbkHgZw5QrqdxZbTT6nnmG6io2mTRtDC0wv6g==",
+      "mode": 420,
+      "size": 192
+    }
+  }
+}

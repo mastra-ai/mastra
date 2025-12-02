@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../src/cli/lib/components/constants.ts"],
+  "sourcesContent": ["export const DEFINITION_FILENAME_TS = \"convex.config.ts\";\nexport const DEFINITION_FILENAME_JS = \"convex.config.js\";\n"],
+  "mappings": ";AAAO,aAAM,yBAAyB;AAC/B,aAAM,yBAAyB;",
+  "names": []
+}

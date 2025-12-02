@@ -1,0 +1,2 @@
+include-projects:
+  - couchbase-sdk-cxx

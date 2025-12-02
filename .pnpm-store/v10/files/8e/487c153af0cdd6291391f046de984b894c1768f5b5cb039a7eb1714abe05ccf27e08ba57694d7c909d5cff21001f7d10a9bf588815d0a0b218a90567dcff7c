@@ -1,0 +1,1 @@
+{"version":3,"file":"AbstractApi.d.ts","sourceRoot":"","sources":["../../../src/api/endpoints/AbstractApi.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,YAAY,CAAC;AAElD,8BAAsB,WAAW;IACnB,SAAS,CAAC,OAAO,EAAE,eAAe;gBAAxB,OAAO,EAAE,eAAe;IAE9C,SAAS,CAAC,SAAS,CAAC,EAAE,EAAE,MAAM;CAK/B"}

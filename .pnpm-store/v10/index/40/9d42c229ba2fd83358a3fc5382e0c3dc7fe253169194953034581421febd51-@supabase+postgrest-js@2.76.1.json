@@ -1,0 +1,511 @@
+{
+  "name": "@supabase/postgrest-js",
+  "version": "2.76.1",
+  "requiresBuild": false,
+  "files": {
+    "dist/cjs/types/common/common.js": {
+      "checkedAt": 1764662929036,
+      "integrity": "sha512-vEaoeaNEPwQ5M2PtPQlQC6effT0VrfXqfwWsTiT1yW05Fe73ixdhA8JHwwSfACR/tVyZEv6LaLFDr84EzNLVBg==",
+      "mode": 420,
+      "size": 173
+    },
+    "dist/cjs/constants.js": {
+      "checkedAt": 1764662929037,
+      "integrity": "sha512-CkYSLRnG+M4XYwmw8Ewv4aUAnP/sA+bt3I+sRk1Cg1K4Xcwd+knOqoACtn5Jh588JxlHI73qxNHmNDNzk3YfBQ==",
+      "mode": 420,
+      "size": 272
+    },
+    "dist/cjs/index.js": {
+      "checkedAt": 1764662929038,
+      "integrity": "sha512-Q920j36YMCfJGq9shCm4cv9TnYEG5wB1Akjlql3EJB5vf4bqtU5Faeva3Y8+N9wXngKnloyCev7t6me2rroCMg==",
+      "mode": 420,
+      "size": 1638
+    },
+    "dist/cjs/select-query-parser/parser.js": {
+      "checkedAt": 1764662929039,
+      "integrity": "sha512-qcqa9caEZQoheKR74si5aZnsokDeu53HQAlxaiEykRAFMN5brVIAKivDF+jKj4L6Iwn7PcGRqej7WzLVYz0G8w==",
+      "mode": 420,
+      "size": 325
+    },
+    "dist/cjs/PostgrestBuilder.js": {
+      "checkedAt": 1764662929040,
+      "integrity": "sha512-zibaBBQX4P/sEI1PXxnePUV5obn+q4JZL17DPD0WfarlLItv3oVd9KtmyBOlvIGmfMcCgqU0OgfhNCSi4pRXcQ==",
+      "mode": 420,
+      "size": 9195
+    },
+    "dist/cjs/PostgrestClient.js": {
+      "checkedAt": 1764662929041,
+      "integrity": "sha512-tRDI2TvxnrERz0B3dQfdgyNM8akEmqgcotVj0y8MQOlAj5S3fbbd3eJSqF6W/E9NWycd+/9wkc8KUrIAVf7Gew==",
+      "mode": 420,
+      "size": 4350
+    },
+    "dist/cjs/PostgrestError.js": {
+      "checkedAt": 1764662929053,
+      "integrity": "sha512-E1Ncx9jpprM7kLowJvkY5cQbMc3Kk6LayeYclp//uyqRjgcyLw7b3Ms+1wb+kgI33TVIMeHx8tXKLEb3gLt3wg==",
+      "mode": 420,
+      "size": 529
+    },
+    "dist/cjs/PostgrestFilterBuilder.js": {
+      "checkedAt": 1764662929056,
+      "integrity": "sha512-+eejn+hbRayFFnbsueL6XNEGge667Y6ViH0oMuEVdfY05N9Ao/UAsdzNWZuexW5uikkY6ZERejoHT0ffL+4yxA==",
+      "mode": 420,
+      "size": 13547
+    },
+    "dist/cjs/PostgrestQueryBuilder.js": {
+      "checkedAt": 1764662929057,
+      "integrity": "sha512-9GUUQzlOzL6Vmhlorwc6Dg27QljzW0NFYuTg7L+pBg7D1FbIjyvcGHPNeR5MhbelpgNaL9BYTxU8/ZDJZJf4aQ==",
+      "mode": 420,
+      "size": 9368
+    },
+    "dist/cjs/PostgrestTransformBuilder.js": {
+      "checkedAt": 1764662929058,
+      "integrity": "sha512-gzicozpDu0H9dWmfdsAKnVn8vNXGmWkfMp5Fi6wkekHg7c0EhkxgRRI4CeQ0OKqQqBFXySlaw0VLUdmZZWwF3Q==",
+      "mode": 420,
+      "size": 8795
+    },
+    "dist/cjs/select-query-parser/result.js": {
+      "checkedAt": 1764662929059,
+      "integrity": "sha512-SPLqPenqGKlVwjpikpYvTYlk+UNWFHSPRQCi9W+EEqoO1aVvg3z04OEtwvlp2hmxtce1AUOmjeaRU4J7Ve/72A==",
+      "mode": 420,
+      "size": 111
+    },
+    "dist/cjs/types/common/rpc.js": {
+      "checkedAt": 1764662929059,
+      "integrity": "sha512-KUE+pHWyhK0GBZiCk+S+HNMLb5g5NhUcnECykifrCoQ6aQOXHpByfvhnWzENHqBGl/i3KLxdNW5K+0cCj98cGQ==",
+      "mode": 420,
+      "size": 108
+    },
+    "dist/cjs/select-query-parser/types.js": {
+      "checkedAt": 1764662929060,
+      "integrity": "sha512-nhU68BdqPrnDQLwwwBa2/FQQRm6PTNXOCac/25gmXJN8MGd/us9Sb/dVXJPn2oVcihcP12eYp0aT4/28wYI4Cg==",
+      "mode": 420,
+      "size": 110
+    },
+    "dist/cjs/types/types.js": {
+      "checkedAt": 1764662929061,
+      "integrity": "sha512-nhU68BdqPrnDQLwwwBa2/FQQRm6PTNXOCac/25gmXJN8MGd/us9Sb/dVXJPn2oVcihcP12eYp0aT4/28wYI4Cg==",
+      "mode": 420,
+      "size": 110
+    },
+    "dist/cjs/select-query-parser/utils.js": {
+      "checkedAt": 1764662929061,
+      "integrity": "sha512-YZ6kSSjbk5V8sVbpNq3IPFBjg0oIbGqUPfg8gpMH6FspRmib0jZNZI5ZxnGLXyHo04IsLcJhf4AhABthFV+V+A==",
+      "mode": 420,
+      "size": 110
+    },
+    "dist/cjs/version.js": {
+      "checkedAt": 1764662929061,
+      "integrity": "sha512-L/qn1Q8gT/IlOOrX+XrvH5OXvHuCCUNxaPeM0QOsyPfVPvT6aPB9M6E3mW2OiQOOHL6zzeQugC0NjwcO2urRkw==",
+      "mode": 420,
+      "size": 580
+    },
+    "package.json": {
+      "checkedAt": 1764662929062,
+      "integrity": "sha512-ztGCRF6DRfDodJ5qG3O4Q6bpavhMvmxs2YKy6BgRnOK+F4j4SOumFjybkd7JgXH+oJlwfx64Tfk3Ww3b42GLnA==",
+      "mode": 420,
+      "size": 2815
+    },
+    "dist/cjs/types/common/common.d.ts.map": {
+      "checkedAt": 1764662929063,
+      "integrity": "sha512-E9txunmJhJQUBIiQ4czDHg/l97EDNclQ+l6UYBWBBFSqUI/mPt58c0NCyBDDukgFrfUtZcM+sov8jtmaSEW7hA==",
+      "mode": 420,
+      "size": 1600
+    },
+    "dist/cjs/types/common/common.js.map": {
+      "checkedAt": 1764662929064,
+      "integrity": "sha512-3mgE0GDM4QHz+Ig5WNZCCZZtzxp99/bUwuK83jZvDHBrJ2+6tXylIVBCjaopwl944tXgDo8mjfJb+7nQKi5LbQ==",
+      "mode": 420,
+      "size": 138
+    },
+    "dist/cjs/constants.d.ts.map": {
+      "checkedAt": 1764662929064,
+      "integrity": "sha512-mcGMx362FwM8hzNOfwESEJZnj291dDJOi1zymEj7fn0L8jpUFzcdn59q/V2pgs+DeZcKKND+00ZcTEmhnvpcDw==",
+      "mode": 420,
+      "size": 146
+    },
+    "dist/cjs/constants.js.map": {
+      "checkedAt": 1764662929065,
+      "integrity": "sha512-sAtWtmoF0Xu9kOQdZd6CVflOVv7TRMXlgRk3C3duiDHySUG6rLX4ZIcS2nHP3D84brA+JKTzOVWnMrXpF4EW/A==",
+      "mode": 420,
+      "size": 191
+    },
+    "dist/cjs/index.d.ts.map": {
+      "checkedAt": 1764662929066,
+      "integrity": "sha512-huQGDzn9ZEKZ+wpTsKquUL8sS6T7oKwSLWEyIliu676EG8Tu0PfNQ3NuMLEMbdXdob8AalVB3T6+Mz+PqAbSxA==",
+      "mode": 420,
+      "size": 630
+    },
+    "dist/cjs/index.js.map": {
+      "checkedAt": 1764662929067,
+      "integrity": "sha512-BnjA9sPSTvMDn23ONbzo8OFtCy6ctqEKS6cJ7Hg/yFINc+Yb2pJbOEUnob8R3V/MhEXwd+50GC/tokk6KT0t0Q==",
+      "mode": 420,
+      "size": 508
+    },
+    "dist/cjs/select-query-parser/parser.d.ts.map": {
+      "checkedAt": 1764662929068,
+      "integrity": "sha512-5gKLaTg5T0fheLIBLZDqG6wRep7m+v+f7M6QjlvRqprTqqXGusROSqUHvSNy81PW7he9gbrXNyRsC3NNsK/+Rw==",
+      "mode": 420,
+      "size": 12400
+    },
+    "dist/cjs/select-query-parser/parser.js.map": {
+      "checkedAt": 1764662929071,
+      "integrity": "sha512-JPkGQ8Nc3oyGTKDHNNrMhzx+YC/i73zPGZwFH+AaybAmHsnRUWOsg9+bVyJcpL/7VMSf1LUb00U4dqx6x2Wg/Q==",
+      "mode": 420,
+      "size": 155
+    },
+    "dist/cjs/PostgrestBuilder.d.ts.map": {
+      "checkedAt": 1764662929071,
+      "integrity": "sha512-8x0ntZZIMZTxEdW/rHJ3bXHgUW0n+1gtvuWPSZo8OFMxCBMqdbjK9TNB1YbofVSxv00h8CU2J+Dl6RNCbdx1cA==",
+      "mode": 420,
+      "size": 2366
+    },
+    "dist/cjs/PostgrestBuilder.js.map": {
+      "checkedAt": 1764662929072,
+      "integrity": "sha512-8RD7MSU/tG1OQFwUPn/DWlK5VzJti10hqZ4M8h0vgQM+UTEaf8z/Uok6/DgOHBHWvyV0loIJZQsln8bC+3+pxQ==",
+      "mode": 420,
+      "size": 5582
+    },
+    "dist/cjs/PostgrestClient.d.ts.map": {
+      "checkedAt": 1764662929073,
+      "integrity": "sha512-Ct69t+LHC8aummHOWyniKV3KM/C85sEIwdiiKuW90acLfPzn46JtsVl12qsEzHx8yW4kFnvGJYmvk6uBU3EKtQ==",
+      "mode": 420,
+      "size": 2345
+    },
+    "dist/cjs/PostgrestClient.js.map": {
+      "checkedAt": 1764662929073,
+      "integrity": "sha512-ujXxT7b9ymh4D4AmVFD3/MHCbOQfRDF1nCcUbLnpJ2zOahSrJSKZPlnfSJQrlQ0e5inla3w4S6wnJZLtrsnUTg==",
+      "mode": 420,
+      "size": 2222
+    },
+    "dist/cjs/PostgrestError.d.ts.map": {
+      "checkedAt": 1764662929074,
+      "integrity": "sha512-2DMes/8z/7X0ZlsFFh3xmTFUsm+nxPiwm51cCRZQvSwO1jgWk4zaoTobYt7F5B6siv6DKpECkyCgqziig79GwA==",
+      "mode": 420,
+      "size": 380
+    },
+    "dist/cjs/PostgrestError.js.map": {
+      "checkedAt": 1764662929075,
+      "integrity": "sha512-7Nh7V2gyXtXi9fBlFAvZHEzU4BLHoLJc12wHaR340Sovsq/nowrUHQhsYaE5moapiFHaQO8P/c8IY1W5NQUTlw==",
+      "mode": 420,
+      "size": 424
+    },
+    "dist/cjs/PostgrestFilterBuilder.d.ts.map": {
+      "checkedAt": 1764662929076,
+      "integrity": "sha512-UKLheSspo5ZqKMrcwXTcF8BiAoL4lyBUIXt3YouW8pIuiWABo/+LSoyLOrq+ETCa1Je90u7taLTaYyWQqSs15Q==",
+      "mode": 420,
+      "size": 7385
+    },
+    "dist/cjs/PostgrestFilterBuilder.js.map": {
+      "checkedAt": 1764662929076,
+      "integrity": "sha512-wYad9U/aBRrNtq1VG4Fdsz0yRx0h5dNlFYU4dQcbRYqvoWXifkvMQu+mHlMvzBVJsf7CJa4wHgtRxQ6TzfzJDw==",
+      "mode": 420,
+      "size": 6517
+    },
+    "dist/cjs/PostgrestQueryBuilder.d.ts.map": {
+      "checkedAt": 1764662929077,
+      "integrity": "sha512-oRlsxhTdStL8RqZhSP/twNiSFGDwcMPPCNT+H767QtRCOnJUrp8haXvqxI2WPzK4hgb9d0SdpqH5iqM5phqtKQ==",
+      "mode": 420,
+      "size": 3193
+    },
+    "dist/cjs/PostgrestQueryBuilder.js.map": {
+      "checkedAt": 1764662929078,
+      "integrity": "sha512-yq/32/WRFnSuQSFe9Z0nL8WPHlmirtUTiwFpsT2Dlh6JVf52pKfz/PsvsELHbZXovKUSJOHLr7tE4+mjxW7Ygw==",
+      "mode": 420,
+      "size": 4633
+    },
+    "dist/cjs/PostgrestTransformBuilder.d.ts.map": {
+      "checkedAt": 1764662929079,
+      "integrity": "sha512-djM4PpdhtwaidHDqK0hDUvBtL7kq+JVFXER4s0VeiymG7wZGC2QRIwpUAbcqTOwb0DGargb150GYIIgbmsB7lw==",
+      "mode": 420,
+      "size": 3228
+    },
+    "dist/cjs/PostgrestTransformBuilder.js.map": {
+      "checkedAt": 1764662929079,
+      "integrity": "sha512-OefoIgUbEpShkTGdd+MGs12tpLRFJS1dyzWphtrhL9mQtOoW1Y37XXvhlpmtF/RyB+TOL3qSTjpNHXeLya4SWw==",
+      "mode": 420,
+      "size": 4200
+    },
+    "dist/cjs/select-query-parser/result.d.ts.map": {
+      "checkedAt": 1764662929082,
+      "integrity": "sha512-KQYl+T4VL/LLqiG/U6mIx1UImvvG7uJ1lT9j6mttHncL9ZispRpZbErZDtht+YTaZ8gg/AXsJGgyNQF9KHVdCQ==",
+      "mode": 420,
+      "size": 11638
+    },
+    "dist/cjs/select-query-parser/result.js.map": {
+      "checkedAt": 1764662929084,
+      "integrity": "sha512-ETkGjwnCdQmUZiY16BX1FjoaLz9JPjHgH/OgTmfKu9NjbWCMfgU5SdxQbwgiyySq5Hln2j2d3wJzdZL9hjadjw==",
+      "mode": 420,
+      "size": 130
+    },
+    "dist/cjs/types/common/rpc.d.ts.map": {
+      "checkedAt": 1764662929094,
+      "integrity": "sha512-zkyy3b5UprKs4zF2K/2YrE1492DhIhgM2+eYdNnxN59fk/3uNuHN+tmP6jRqVF1s0mmfANkjTfhM20GZ2ZfD2g==",
+      "mode": 420,
+      "size": 4558
+    },
+    "dist/cjs/types/common/rpc.js.map": {
+      "checkedAt": 1764662929096,
+      "integrity": "sha512-9jZGybM/01pjX1Sj1KYCDg2W5UubKOEB4cTgLZBPZcN0KA0Dm06GGlNc8blz5o1x74M7QSpxE5iwdXOYrfqK6w==",
+      "mode": 420,
+      "size": 120
+    },
+    "dist/cjs/select-query-parser/types.d.ts.map": {
+      "checkedAt": 1764662929096,
+      "integrity": "sha512-1gQHWoEmkKYmDC8SH5fAq/z5mNKltb8O9JIxp/Np8O9FRaAe98xtWoot3NUjl727zhDV03cA0nXCzLGegN+9Dg==",
+      "mode": 420,
+      "size": 3001
+    },
+    "dist/cjs/types/types.d.ts.map": {
+      "checkedAt": 1764662929097,
+      "integrity": "sha512-J2FVl090kwqgsrlqwGkgU5HENGOoaZ86UG++dM9O21fq5u0K3B2YKxYFEN/COcu4p2NErc+PrBhLGUdiMaLSbA==",
+      "mode": 420,
+      "size": 4324
+    },
+    "dist/cjs/select-query-parser/types.js.map": {
+      "checkedAt": 1764662929098,
+      "integrity": "sha512-wdoT+0Aiym4lTIz0VAeFWmEdpJ+rxc22NuBxZYtrv0xQjYpev2dCRhqspygIYGIZMcbuR2S0T8utYTO5XiBdKw==",
+      "mode": 420,
+      "size": 128
+    },
+    "dist/cjs/types/types.js.map": {
+      "checkedAt": 1764662929099,
+      "integrity": "sha512-DHZEr4hVh6EGcDgRSatiMYF7SzwzpI8QgiFig2gqJZo++2ZXjJvAXtZuf7Bu8czyJ1Mc0bAzWpkL1DTJi0P4Nw==",
+      "mode": 420,
+      "size": 114
+    },
+    "dist/cjs/select-query-parser/utils.d.ts.map": {
+      "checkedAt": 1764662929101,
+      "integrity": "sha512-xQRsrm6M+HwoXHu2+rKqr7PM7fecMDjZIpN/epnVS+R921oU2Qrt/94/E4oOC/jJDdOXS14GMVt43kM95JRoEQ==",
+      "mode": 420,
+      "size": 17819
+    },
+    "dist/cjs/select-query-parser/utils.js.map": {
+      "checkedAt": 1764662929102,
+      "integrity": "sha512-1Wg45GyTfP7zJV3YvVv8JXkAbxUohiRaW0OjZWUvNMtAOw7uyXhMb9dDKb/tHd5xIQFcQBOTSjgHu28QOGwZZg==",
+      "mode": 420,
+      "size": 128
+    },
+    "dist/cjs/version.d.ts.map": {
+      "checkedAt": 1764662929103,
+      "integrity": "sha512-brf17NZA1SVFiZuEBHTTt23gEpUya3M3bMbq4ImFRMjk+wGp187cD1ICo1QK29BwV1VtMsIWghMiObjpwaQLiw==",
+      "mode": 420,
+      "size": 140
+    },
+    "dist/cjs/version.js.map": {
+      "checkedAt": 1764662929103,
+      "integrity": "sha512-RyE40d5fpzU1YpfQ0Osj7nnyX9I0fLOqc68KXF2JB/r72DFE9ZPMdQicX/Je8R4wlEUJq4yc2GhpihcsS2ZAzA==",
+      "mode": 420,
+      "size": 219
+    },
+    "README.md": {
+      "checkedAt": 1764662929104,
+      "integrity": "sha512-xTKlRxNxX65BjkSoCFLtCPS5HqfAa7aCPyrokP0OD/90GdgiIHXUiTMfXaaiMUz3SG1PvIJ1XeAwAXtGyRKXwQ==",
+      "mode": 420,
+      "size": 6606
+    },
+    "dist/esm/wrapper.mjs": {
+      "checkedAt": 1764662929105,
+      "integrity": "sha512-LH0cHaS9NjpZ73arjxY5ob9ePjZ13SUW8IkV0kLdHW4LgQHXNMIZsKezAJbl/f5W8mbMFeQ1r5J0+zV47SQKCA==",
+      "mode": 420,
+      "size": 530
+    },
+    "dist/cjs/types/common/common.d.ts": {
+      "checkedAt": 1764662929106,
+      "integrity": "sha512-JOIxqdg6IvFr5rxo9EUzjUAcdKWjtfG2Zi/AR18iB90lgYR5/+BXWjC4RwRk9/FMXNcppKaPG8id8vJGWksq+g==",
+      "mode": 420,
+      "size": 1380
+    },
+    "src/types/common/common.ts": {
+      "checkedAt": 1764662929107,
+      "integrity": "sha512-0aDg3Ks7nBCbyB5/8fAQ5wLxkLc0BHidfw4eomqLKxMJ3LE+276UJ81f5oOP7axVey6Tp/xTX3FYTa8r5cqsng==",
+      "mode": 420,
+      "size": 1325
+    },
+    "dist/cjs/constants.d.ts": {
+      "checkedAt": 1764662929108,
+      "integrity": "sha512-4pu8tndd+NipCBzL5UxKaFg0/w85pLOeE+Z9V41Qq/89LxiYghnVO7sPPdBQ4Cl5AZ0DwbrrzxcjbQK333oyXg==",
+      "mode": 420,
+      "size": 111
+    },
+    "src/constants.ts": {
+      "checkedAt": 1764662929108,
+      "integrity": "sha512-LpRt2Bw6FBGK2TXe7CZi7kiiUD14sQu7hljs0nQ9B/EUK3pp9DDBz42A/gFaleR+2j94u2IJtb1OszJqbee3aQ==",
+      "mode": 420,
+      "size": 114
+    },
+    "dist/cjs/index.d.ts": {
+      "checkedAt": 1764662929109,
+      "integrity": "sha512-HFcoDJ5b0IGzt6dDS7cmutSLIHWuboxlZ0QdehC6B6b+KnVE0mRMrk6lVspSIxPMJdCQI/kDRRwMxp0O4lGAAg==",
+      "mode": 420,
+      "size": 1222
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662929111,
+      "integrity": "sha512-ckxG+U7oguY9ZXkrdqqu/PuWjs2ZynIb9jYL/XjADOnF0rItz8nwS1+wEIQYySHZFW5t6+6VGBuwFLXbbaLGCg==",
+      "mode": 420,
+      "size": 1160
+    },
+    "dist/cjs/select-query-parser/parser.d.ts": {
+      "checkedAt": 1764662929114,
+      "integrity": "sha512-yu10THYSDPc+17U5c45oi0DBjU1QfR4J+sqAhiJj26H/zjol/37PyXVxxScssKt/l3y0Cv3m+jTqwX9g98t6kg==",
+      "mode": 420,
+      "size": 15554
+    },
+    "src/select-query-parser/parser.ts": {
+      "checkedAt": 1764662929115,
+      "integrity": "sha512-VX2QYY+jO+3Pt6owoFOa3nWNxIymGFrSSCrIO8Gt2bh1DA0DcF/1sbtAddwj6AqINZ2O1opwtM2G83wwtXHHTg==",
+      "mode": 420,
+      "size": 18910
+    },
+    "dist/cjs/PostgrestBuilder.d.ts": {
+      "checkedAt": 1764662929115,
+      "integrity": "sha512-Fq7jnA5S9IP0oE1YtTsVR+3kTjB126+MGr87f9BQEJTUCSKXBlILXbpRUFvDP9y7mC34QcmsreqUlCtg90NSpg==",
+      "mode": 420,
+      "size": 3808
+    },
+    "src/PostgrestBuilder.ts": {
+      "checkedAt": 1764662929116,
+      "integrity": "sha512-8AS9GF1jO1q5VHUtMzggR1AuUIv8WrZHHSVeKNfjTQBZ5bM/ITxGmDRdQ9zeM4kdySrzpf4WhiUFl69bFU0mIw==",
+      "mode": 420,
+      "size": 9704
+    },
+    "dist/cjs/PostgrestClient.d.ts": {
+      "checkedAt": 1764662929118,
+      "integrity": "sha512-jwmLkVlE8QYr/NyrexM/UV3bS1biG90VM69uDlWHaeFDrFNANdyxnmsMDSnqMhKM0eJWQ7CmxC/edwLyilzwCg==",
+      "mode": 420,
+      "size": 4174
+    },
+    "src/PostgrestClient.ts": {
+      "checkedAt": 1764662929118,
+      "integrity": "sha512-J4NyAGNfUV8aTDfq/6+KY52NBe6JUBaffVSVXadVltk5esR8oaqcUtd19q5m67diPUHTRD8I016+h0dZoTBGjQ==",
+      "mode": 420,
+      "size": 5989
+    },
+    "dist/cjs/PostgrestError.d.ts": {
+      "checkedAt": 1764662929120,
+      "integrity": "sha512-ID1++6idUNrVNpjoXTkmsj5SNG6YRev4k8NhL8zDR6F38W8fUY9eT8rS0ypRq9PP50JM5zWXFcajnkhDIf4jpA==",
+      "mode": 420,
+      "size": 410
+    },
+    "src/PostgrestError.ts": {
+      "checkedAt": 1764662929134,
+      "integrity": "sha512-eBUsfCG7Rdgf4wk6Yo4zXBXszW6kQpNCKeS5VnWWUwU4qHk6R5V3ctXoqEO5K+uLgxnHxUZn26ajQwW4/iqPLA==",
+      "mode": 420,
+      "size": 477
+    },
+    "dist/cjs/PostgrestFilterBuilder.d.ts": {
+      "checkedAt": 1764662929134,
+      "integrity": "sha512-dSuumKG2auOI8xQH4tDejSpa1dCD+l/ZJACSrHxD4E62J9z3itoyGbWj34DfrSBXuNDwXxqyI+cHz1DrLk/HdA==",
+      "mode": 420,
+      "size": 8399
+    },
+    "src/PostgrestFilterBuilder.ts": {
+      "checkedAt": 1764662929136,
+      "integrity": "sha512-2HuobuvB1fj9ia/W4yKrnzLRIyozpVhfWUk7lr/FdEJFkgFPHFvDw1hwx3i3/9xtBN7AROOGO/qHEElb2X0/lw==",
+      "mode": 420,
+      "size": 20960
+    },
+    "dist/cjs/PostgrestQueryBuilder.d.ts": {
+      "checkedAt": 1764662929137,
+      "integrity": "sha512-542vbq//No0IyAWNIz6WR/1VHL7v4Ws8c707q9hmVihJiDu8cjuKf+fUy3ylP3pcS9XLf37nq7jY6v+fJn4JIw==",
+      "mode": 420,
+      "size": 5178
+    },
+    "src/PostgrestQueryBuilder.ts": {
+      "checkedAt": 1764662929137,
+      "integrity": "sha512-iiUABJtF/J8oLyFrsUhD9tivrtBM2Lbn4iSkdXhQP3ZRYcLB0lXkX3+pv4/CVN0bf0xekID+Q8FmV+CiFghFOQ==",
+      "mode": 420,
+      "size": 11942
+    },
+    "dist/cjs/PostgrestTransformBuilder.d.ts": {
+      "checkedAt": 1764662929138,
+      "integrity": "sha512-V0m+BRXVKXDdkHLTBvYVzkzm0NXK2WghIuhueydoeXIlPjfLrdsy7jrgS+hfEV5FlgynvyAdXSxZ87pN03IPLA==",
+      "mode": 420,
+      "size": 7292
+    },
+    "src/PostgrestTransformBuilder.ts": {
+      "checkedAt": 1764662929141,
+      "integrity": "sha512-oJJ+9LtX+D7HKS4Q22nffNTeyuMdFawWJL5U29mF8XT7CnTKmx6dfaC6MHleaufOjUglu1yYKvDg1GFr/spQpw==",
+      "mode": 420,
+      "size": 12214
+    },
+    "dist/cjs/select-query-parser/result.d.ts": {
+      "checkedAt": 1764662929141,
+      "integrity": "sha512-vOGtcBSrsoM251ENPwUJVBWDLqxxHljCdENLoR02njjxwSTfzX35zKpC1kootojlRCQw2KcgWkYTZOMbGrUbzA==",
+      "mode": 420,
+      "size": 15635
+    },
+    "src/select-query-parser/result.ts": {
+      "checkedAt": 1764662929142,
+      "integrity": "sha512-v9DHEv7wcDGX6DxJR0DT6O/3mDmF7lgdCovdCCfp2cshfHX7vMgd12BqB3vn/2VujV++/mO1ZqUgLjjxG2bugQ==",
+      "mode": 420,
+      "size": 21891
+    },
+    "dist/cjs/types/common/rpc.d.ts": {
+      "checkedAt": 1764662929148,
+      "integrity": "sha512-k+ba96nUf1JpBW6PuLf8d86kTz8FNdpqgy5QGFGH7OAxK+PrYYOZzKXFlf17ox0v73FEmPO1Q2zky41y02XyVw==",
+      "mode": 420,
+      "size": 3866
+    },
+    "src/types/common/rpc.ts": {
+      "checkedAt": 1764662929149,
+      "integrity": "sha512-4mxgXY/jE14ChlFtfGblQM3UCqGblVyRgtNda5XnoLNzlVX9KGU/boY3vfHXuRGAQipO86DpniQBKK8tHnLxKA==",
+      "mode": 420,
+      "size": 5587
+    },
+    "dist/cjs/select-query-parser/types.d.ts": {
+      "checkedAt": 1764662929150,
+      "integrity": "sha512-+DjcWpU/+zPOHjJjrVFsidWazXKHvKGEbNSOdvOCnL0zjpUMdkyTA8+jfcNxOopFmF51LvN2+zsS1+oZ4r5QEA==",
+      "mode": 420,
+      "size": 2852
+    },
+    "dist/cjs/types/types.d.ts": {
+      "checkedAt": 1764662929153,
+      "integrity": "sha512-dHvgGV23o7LXoQYGzmO4RYLNiNxM26U8sJnQUtmXuNXi+sRW3gcUht7ZJxBRooprNfPkYU3zFlzzqX1fXBPN3Q==",
+      "mode": 420,
+      "size": 4332
+    },
+    "src/select-query-parser/types.ts": {
+      "checkedAt": 1764662929153,
+      "integrity": "sha512-fKSgCI1JPUVjfEqLb+Nymj4LBL9F0pnmoz8AYIr119W24OuWR6x+N611M/nPWIaXmqFr7DfOJDOzdZz0iCeirQ==",
+      "mode": 420,
+      "size": 3414
+    },
+    "src/types/types.ts": {
+      "checkedAt": 1764662929154,
+      "integrity": "sha512-uGia/ufYgiwOfEBef+UQ4YmKEkVjHgsr6TzuJ3d8mDrG0aeQnSYQZHleMiL/B+DbZAM1BA8nfVqTI0VGL2GbAQ==",
+      "mode": 420,
+      "size": 6208
+    },
+    "dist/cjs/select-query-parser/utils.d.ts": {
+      "checkedAt": 1764662929154,
+      "integrity": "sha512-WTh3OD4J3NDAtW770tIBFNR77/4gwI97yhmAIcYCxQTxFA9lGnTQyyv/B1vmYvbtomUSBXAMVmI8EL2OmQaqyw==",
+      "mode": 420,
+      "size": 20474
+    },
+    "src/select-query-parser/utils.ts": {
+      "checkedAt": 1764662929155,
+      "integrity": "sha512-2UAC/pY4njvwR6k3RvsyaAQSCpVD/2hq4C1lV4ohoU0+CmZ8FPcEcI/lDXz/1lqGrDbIu4nEtipCQ/mapH5HEA==",
+      "mode": 420,
+      "size": 25131
+    },
+    "dist/cjs/version.d.ts": {
+      "checkedAt": 1764662929156,
+      "integrity": "sha512-j7v6D6x2ATTEH98FIZ+2wtc7DCshj7cdXQ89unhi76FQ4a4FkaUMSINJ+U852/84xJdOxtKk8MigIM64LePerQ==",
+      "mode": 420,
+      "size": 78
+    },
+    "src/version.ts": {
+      "checkedAt": 1764662929156,
+      "integrity": "sha512-25XK7ESHagdLHsg3oAO79C4POot2xNZNh1Wf/jVpeWnhphR0dNlqcSHAJNf7/BCUZuknv2LHPQfrnNLodLZi/w==",
+      "mode": 420,
+      "size": 446
+    },
+    "dist/tsconfig.tsbuildinfo": {
+      "checkedAt": 1764662929156,
+      "integrity": "sha512-geYAqmxhuZYQP72GRfH19zafbJHyKXMPqbL+TLCtchNkS06DhOCF7yDp5+tx5SsGLikmOZek6z+eIjYqxgrSuw==",
+      "mode": 420,
+      "size": 51729
+    }
+  }
+}

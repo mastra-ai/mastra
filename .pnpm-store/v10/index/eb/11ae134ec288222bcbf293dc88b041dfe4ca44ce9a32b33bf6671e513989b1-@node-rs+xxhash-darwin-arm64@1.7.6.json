@@ -1,0 +1,25 @@
+{
+  "name": "@node-rs/xxhash-darwin-arm64",
+  "version": "1.7.6",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662912828,
+      "integrity": "sha512-4DKycYxbsCb5K1AS0RE3qSQOed8ljECShAy5GqvMpqtJM/NiCG+d7+QvjYcsuQwx1ZR+Aq6+hEBWWDrTftdZsA==",
+      "mode": 420,
+      "size": 839
+    },
+    "README.md": {
+      "checkedAt": 1764662912830,
+      "integrity": "sha512-reT4FdrY/QKe0lCfOZs9GYFCzLgpoFeP1vfPmZNL3ILtaz5T9jnMlOBlXG1x6HwTvKdx0l9m7pkTl/anJTfexA==",
+      "mode": 420,
+      "size": 100
+    },
+    "xxhash.darwin-arm64.node": {
+      "checkedAt": 1764662912831,
+      "integrity": "sha512-0GA/R9jXiPV6Ty0kbK2j2OzN4rShLJiHxL44t6ilohkaiA0uZXcyTeTvLLiWRdd0nEN93o+ek69pwNhOgAiBwA==",
+      "mode": 420,
+      "size": 504224
+    }
+  }
+}

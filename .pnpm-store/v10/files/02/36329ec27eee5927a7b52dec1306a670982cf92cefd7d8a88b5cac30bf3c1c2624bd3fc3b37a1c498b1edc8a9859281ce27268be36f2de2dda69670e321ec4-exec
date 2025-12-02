@@ -1,0 +1,41 @@
+{
+  "name": "atomically",
+  "repository": "github:fabiospampinato/atomically",
+  "description": "Read and write files atomically and reliably.",
+  "version": "2.0.3",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "benchmark": "tsex benchmark",
+    "benchmarkLwatch": "tsex benchmark --watch",
+    "clean": "tsex clean",
+    "compile": "tsex compile",
+    "compile:watch": "tsex compile --watch",
+    "test:init": "esbuild --bundle --target=es2020 --platform=node --format=cjs src/index.ts > test/atomically.cjs",
+    "test": "npm run test:init && tap --no-check-coverage --no-coverage-report",
+    "test:watch": "npm run test:init && tap --no-check-coverage --no-coverage-report --watch",
+    "prepublishOnly": "npm run clean && npm run compile && npm run test"
+  },
+  "keywords": [
+    "atomic",
+    "read",
+    "write",
+    "file",
+    "reliable"
+  ],
+  "dependencies": {
+    "stubborn-fs": "^1.2.5",
+    "when-exit": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.4.6",
+    "esbuild": "^0.18.17",
+    "require-inject": "^1.4.4",
+    "tap": "^16.3.8",
+    "tsex": "^3.0.0",
+    "typescript": "^5.1.6",
+    "write-file-atomic": "^5.0.1"
+  }
+}

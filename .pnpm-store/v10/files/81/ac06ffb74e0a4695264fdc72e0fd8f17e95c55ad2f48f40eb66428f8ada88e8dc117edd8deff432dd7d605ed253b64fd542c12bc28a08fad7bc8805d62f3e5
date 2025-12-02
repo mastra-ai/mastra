@@ -1,0 +1,86 @@
+import { z } from 'zod';
+import type { SystemMessage } from '../../../llm/index.js';
+import type { MastraMemory } from '../../../memory/memory.js';
+import type { MemoryConfig, StorageThreadType } from '../../../memory/types.js';
+import type { Span, SpanType } from '../../../observability/index.js';
+import type { RequestContext } from '../../../request-context/index.js';
+import type { OutputSchema } from '../../../stream/base/schema.js';
+import type { InnerAgentExecutionOptions } from '../../agent.types.js';
+import { MessageList } from '../../message-list/index.js';
+import type { AgentMethodType } from '../../types.js';
+import type { AgentCapabilities } from './schema.js';
+interface PrepareMemoryStepOptions<OUTPUT extends OutputSchema | undefined = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined> {
+    capabilities: AgentCapabilities;
+    options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+    threadFromArgs?: (Partial<StorageThreadType> & {
+        id: string;
+    }) | undefined;
+    resourceId?: string;
+    runId: string;
+    requestContext: RequestContext;
+    agentSpan: Span<SpanType.AGENT_RUN>;
+    methodType: AgentMethodType;
+    instructions: SystemMessage;
+    memoryConfig?: MemoryConfig;
+    memory?: MastraMemory;
+}
+export declare function createPrepareMemoryStep<OUTPUT extends OutputSchema | undefined = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined>({ capabilities, options, threadFromArgs, resourceId, runId, requestContext, instructions, memoryConfig, memory, }: PrepareMemoryStepOptions<OUTPUT, FORMAT>): import("../../../workflows").Step<"prepare-memory-step", z.ZodObject<any, z.UnknownKeysParam, z.ZodTypeAny, {
+    [x: string]: any;
+}, {
+    [x: string]: any;
+}>, z.ZodObject<{}, "strip", z.ZodTypeAny, {}, {}>, z.ZodObject<{
+    threadExists: z.ZodBoolean;
+    thread: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+        title: z.ZodOptional<z.ZodString>;
+        resourceId: z.ZodString;
+        createdAt: z.ZodDate;
+        updatedAt: z.ZodDate;
+        metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "strip", z.ZodTypeAny, {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    }, {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    }>>;
+    messageList: z.ZodType<MessageList, z.ZodTypeDef, MessageList>;
+    tripwire: z.ZodOptional<z.ZodBoolean>;
+    tripwireReason: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    threadExists: boolean;
+    messageList: MessageList;
+    tripwire?: boolean | undefined;
+    thread?: {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    } | undefined;
+    tripwireReason?: string | undefined;
+}, {
+    threadExists: boolean;
+    messageList: MessageList;
+    tripwire?: boolean | undefined;
+    thread?: {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    } | undefined;
+    tripwireReason?: string | undefined;
+}>, z.ZodType<any, z.ZodTypeDef, any>, z.ZodType<any, z.ZodTypeDef, any>, import("../../../workflows").DefaultEngineType>;
+export {};
+//# sourceMappingURL=prepare-memory-step.d.ts.map

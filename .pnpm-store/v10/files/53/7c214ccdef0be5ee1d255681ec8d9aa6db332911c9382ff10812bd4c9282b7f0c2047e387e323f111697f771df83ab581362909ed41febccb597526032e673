@@ -1,0 +1,64 @@
+{
+  "name": "@supabase/storage-js",
+  "version": "2.76.1",
+  "description": "Isomorphic storage client for Supabase.",
+  "keywords": [
+    "javascript",
+    "typescript",
+    "supabase"
+  ],
+  "homepage": "https://github.com/supabase/supabase-js/tree/master/packages/core/storage-js",
+  "bugs": "https://github.com/supabase/supabase-js/issues",
+  "license": "MIT",
+  "author": "Supabase",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "main": "dist/main/index.js",
+  "module": "dist/module/index.js",
+  "types": "dist/module/index.d.ts",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supabase/supabase-js.git",
+    "directory": "packages/core/storage-js"
+  },
+  "scripts": {
+    "clean": "rimraf dist docs/v2",
+    "build": "npm run clean && npm run build:main && npm run build:module && npm run build:umd",
+    "build:main": "tsc -p tsconfig.json",
+    "build:module": "tsc -p tsconfig.module.json",
+    "build:umd": "webpack",
+    "test:storage": "npx nx test:clean storage-js && npx nx test:infra storage-js && npx nx test:suite storage-js && npx nx test:clean storage-js",
+    "test:suite": "jest --runInBand --coverage",
+    "test:infra": "cd infra && docker compose down && docker compose up -d --build && sleep 10",
+    "test:clean": "cd infra && docker compose down --remove-orphans",
+    "docs": "typedoc --entryPoints src/index.ts --out docs/v2 --entryPoints src/packages/* --excludePrivate --excludeProtected",
+    "docs:json": "typedoc --json docs/v2/spec.json --entryPoints src/index.ts --entryPoints src/packages/* --excludePrivate --excludeExternals --excludeProtected"
+  },
+  "dependencies": {
+    "@supabase/node-fetch": "2.6.15",
+    "tslib": "2.8.1"
+  },
+  "devDependencies": {
+    "form-data": "^4.0.0",
+    "husky": "^4.3.0",
+    "jest-environment-jsdom": "^29.5.0",
+    "pretty-quick": "^3.1.0",
+    "ts-jest": "^29.0.0",
+    "ts-loader": "^9.4.2",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.1"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "pretty-quick --staged"
+    }
+  },
+  "jsdelivr": "dist/umd/supabase.js",
+  "unpkg": "dist/umd/supabase.js",
+  "publishConfig": {
+    "access": "public"
+  }
+}

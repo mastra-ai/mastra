@@ -1,0 +1,103 @@
+{
+    "interfaces": {
+        "google.pubsub.v1.Publisher": {
+            "retry_codes": {
+                "non_idempotent": [],
+                "idempotent": [
+                    "DEADLINE_EXCEEDED",
+                    "UNAVAILABLE"
+                ],
+                "unavailable": [
+                    "UNAVAILABLE"
+                ],
+                "cancelled_unknown_deadline_exceeded_resource_exhausted_aborted_internal_unavailable": [
+                    "CANCELLED",
+                    "UNKNOWN",
+                    "DEADLINE_EXCEEDED",
+                    "RESOURCE_EXHAUSTED",
+                    "ABORTED",
+                    "INTERNAL",
+                    "UNAVAILABLE"
+                ],
+                "unknown_aborted_unavailable": [
+                    "UNKNOWN",
+                    "ABORTED",
+                    "UNAVAILABLE"
+                ]
+            },
+            "retry_params": {
+                "default": {
+                    "initial_retry_delay_millis": 100,
+                    "retry_delay_multiplier": 1.3,
+                    "max_retry_delay_millis": 60000,
+                    "initial_rpc_timeout_millis": 60000,
+                    "rpc_timeout_multiplier": 1,
+                    "max_rpc_timeout_millis": 60000,
+                    "total_timeout_millis": 600000
+                },
+                "693222d32e887d96c8faeadca469f7763ccda85a": {
+                    "initial_retry_delay_millis": 100,
+                    "retry_delay_multiplier": 4,
+                    "max_retry_delay_millis": 60000,
+                    "initial_rpc_timeout_millis": 60000,
+                    "rpc_timeout_multiplier": 1,
+                    "max_rpc_timeout_millis": 60000,
+                    "total_timeout_millis": 600000
+                }
+            },
+            "methods": {
+                "CreateTopic": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "UpdateTopic": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "Publish": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "cancelled_unknown_deadline_exceeded_resource_exhausted_aborted_internal_unavailable",
+                    "retry_params_name": "693222d32e887d96c8faeadca469f7763ccda85a",
+                    "bundling": {
+                        "element_count_threshold": 100,
+                        "request_byte_threshold": 1048576,
+                        "delay_threshold_millis": 10,
+                        "element_count_limit": 1000
+                    }
+                },
+                "GetTopic": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                },
+                "ListTopics": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                },
+                "ListTopicSubscriptions": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                },
+                "ListTopicSnapshots": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                },
+                "DeleteTopic": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "DetachSubscription": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                }
+            }
+        }
+    }
+}

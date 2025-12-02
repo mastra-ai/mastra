@@ -1,0 +1,89 @@
+{
+  "name": "cross-env",
+  "version": "10.1.0",
+  "description": "Run scripts that set and use environment variables across platforms",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "cross-env": "./dist/bin/cross-env.js",
+    "cross-env-shell": "./dist/bin/cross-env-shell.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "zshy",
+    "dev": "zshy --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "node e2e/test-cross-env.js && node e2e/test-cross-env-shell.js && node e2e/test-default-values.js",
+    "validate": "npm run build && npm run typecheck && npm run lint && npm run format:check && npm run test:run"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "cross-environment",
+    "environment variable",
+    "windows",
+    "cross-platform"
+  ],
+  "author": "Kent C. Dodds <me@kentcdodds.com> (https://kentcdodds.com)",
+  "license": "MIT",
+  "dependencies": {
+    "@epic-web/invariant": "^1.0.0",
+    "cross-spawn": "^7.0.6"
+  },
+  "devDependencies": {
+    "@epic-web/config": "^1.21.1",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^24.1.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
+    "eslint": "^9.32.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "zshy": "^0.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kentcdodds/cross-env.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kentcdodds/cross-env/issues"
+  },
+  "homepage": "https://github.com/kentcdodds/cross-env#readme",
+  "zshy": {
+    "cjs": false,
+    "exports": {
+      ".": "./src/index.ts",
+      "./bin/cross-env": "./src/bin/cross-env.ts",
+      "./bin/cross-env-shell": "./src/bin/cross-env-shell.ts"
+    }
+  },
+  "prettier": "@epic-web/config/prettier",
+  "module": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bin/cross-env": {
+      "types": "./dist/bin/cross-env.d.ts",
+      "import": "./dist/bin/cross-env.js"
+    },
+    "./bin/cross-env-shell": {
+      "types": "./dist/bin/cross-env-shell.d.ts",
+      "import": "./dist/bin/cross-env-shell.js"
+    }
+  }
+}

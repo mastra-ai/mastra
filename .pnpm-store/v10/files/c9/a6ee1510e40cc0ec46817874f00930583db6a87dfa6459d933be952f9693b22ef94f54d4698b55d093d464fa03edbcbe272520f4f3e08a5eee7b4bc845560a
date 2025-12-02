@@ -1,0 +1,106 @@
+{
+  "name": "lucide-react",
+  "description": "A Lucide icon library package for React applications",
+  "version": "0.475.0",
+  "license": "ISC",
+  "homepage": "https://lucide.dev",
+  "bugs": "https://github.com/lucide-icons/lucide/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lucide-icons/lucide.git",
+    "directory": "packages/lucide-react"
+  },
+  "keywords": [
+    "Lucide",
+    "React",
+    "Feather",
+    "Icons",
+    "Icon",
+    "SVG",
+    "Feather Icons",
+    "Fontawesome",
+    "Font Awesome"
+  ],
+  "author": "Eric Fennis",
+  "amdName": "lucide-react",
+  "source": "src/lucide-react.ts",
+  "main": "dist/esm/lucide-react.js",
+  "types": "dist/lucide-react.d.ts",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/lucide-react.d.ts",
+      "import": "./dist/esm/lucide-react.js",
+      "browser": "./dist/esm/lucide-react.js",
+      "require": "./dist/cjs/lucide-react.js",
+      "node": "./dist/cjs/lucide-react.js"
+    },
+    "./icons": {
+      "types": "./dist/lucide-react.d.ts",
+      "import": "./dist/esm/lucide-react.js",
+      "browser": "./dist/esm/lucide-react.js",
+      "require": "./dist/cjs/lucide-react.js",
+      "node": "./dist/cjs/lucide-react.js"
+    },
+    "./icons/*": {
+      "types": "./dist/icons/*.d.ts",
+      "import": "./dist/esm/icons/*.js",
+      "browser": "./dist/esm/icons/*.js",
+      "require": "./dist/cjs/icons/*.js",
+      "node": "./dist/cjs/icons/*.js"
+    },
+    "./dynamic": {
+      "types": "./dist/dynamic.d.ts",
+      "import": "./dist/esm/dynamic.js",
+      "browser": "./dist/esm/dynamic.js",
+      "require": "./dist/cjs/dynamic.js",
+      "node": "./dist/cjs/dynamic.js"
+    },
+    "./dynamicIconImports": {
+      "types": "./dist/dynamicIconImports.d.ts",
+      "import": "./dist/esm/dynamicIconImports.js",
+      "browser": "./dist/esm/dynamicIconImports.js",
+      "require": "./dist/cjs/dynamicIconImports.js",
+      "node": "./dist/cjs/dynamicIconImports.js"
+    },
+    "./src/*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.6",
+    "@testing-library/react": "^14.1.2",
+    "@types/react": "^18.2.37",
+    "@vitejs/plugin-react": "^4.2.1",
+    "jest-serializer-html": "^7.1.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "rollup": "^4.22.4",
+    "rollup-plugin-dts": "^6.1.0",
+    "rollup-plugin-preserve-directives": "^0.4.0",
+    "typescript": "^4.9.5",
+    "vite": "5.1.8",
+    "vitest": "^1.1.1",
+    "@lucide/build-icons": "1.1.0",
+    "@lucide/shared": "1.0.0",
+    "@lucide/rollup-plugins": "1.0.0"
+  },
+  "peerDependencies": {
+    "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+  },
+  "scripts": {
+    "build": "pnpm clean && pnpm copy:license && pnpm build:icons && pnpm typecheck && pnpm build:bundles",
+    "copy:license": "cp ../../LICENSE ./LICENSE",
+    "clean": "rm -rf dist && rm -rf stats && rm -rf ./src/icons/*.ts && rm -f dynamicIconImports.*",
+    "build:icons": "build-icons --output=./src --templateSrc=./scripts/exportTemplate.mjs --renderUniqueKey --withAliases --withDynamicImports --separateAliasesFile --aliasesFileExtension=.ts --iconFileExtension=.ts --exportFileName=index.ts",
+    "build:bundles": "rollup -c ./rollup.config.mjs",
+    "typecheck": "tsc",
+    "typecheck:watch": "tsc -w",
+    "test": "pnpm build:icons && vitest run",
+    "test:watch": "vitest watch",
+    "version": "pnpm version --git-tag-version=false"
+  }
+}

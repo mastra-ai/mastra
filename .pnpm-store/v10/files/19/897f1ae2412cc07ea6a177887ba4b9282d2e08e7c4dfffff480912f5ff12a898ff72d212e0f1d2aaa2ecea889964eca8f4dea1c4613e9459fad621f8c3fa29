@@ -1,0 +1,94 @@
+//#region rolldown:runtime
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+	if (from && typeof from === "object" || typeof from === "function") for (var keys = __getOwnPropNames(from), i = 0, n = keys.length, key; i < n; i++) {
+		key = keys[i];
+		if (!__hasOwnProp.call(to, key) && key !== except) __defProp(to, key, {
+			get: ((k) => from[k]).bind(null, key),
+			enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
+		});
+	}
+	return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", {
+	value: mod,
+	enumerable: true
+}) : target, mod));
+
+//#endregion
+const pathe = __toESM(require("pathe"));
+const picomatch = __toESM(require("picomatch"));
+
+//#region src/path.ts
+/**
+* Converts path separators to forward slash.
+*/
+function normalizePath(filename) {
+	return filename.replaceAll("\\", "/");
+}
+
+//#endregion
+//#region src/utils.ts
+const isArray = Array.isArray;
+function toArray(thing) {
+	if (isArray(thing)) return thing;
+	if (thing == null) return [];
+	return [thing];
+}
+
+//#endregion
+//#region src/filter.ts
+const escapeMark = "[_#EsCaPe#_]";
+function getMatcherString(id, resolutionBase) {
+	if (resolutionBase === false || (0, pathe.isAbsolute)(id) || id.startsWith("**")) return normalizePath(id);
+	const basePath = normalizePath((0, pathe.resolve)(resolutionBase || "")).replaceAll(/[-^$*+?.()|[\]{}]/g, `${escapeMark}$&`);
+	return (0, pathe.join)(basePath, normalizePath(id)).replaceAll(escapeMark, "\\");
+}
+/**
+* Constructs a filter function which can be used to determine whether or not
+* certain modules should be operated upon.
+* @param include If `include` is omitted or has zero length, filter will return `true` by default.
+* @param exclude ID must not match any of the `exclude` patterns.
+* @param options Additional options.
+* @param options.resolve Optionally resolves the patterns against a directory other than `process.cwd()`.
+* If a `string` is specified, then the value will be used as the base directory.
+* Relative paths will be resolved against `process.cwd()` first.
+* If `false`, then the patterns will not be resolved against any directory.
+* This can be useful if you want to create a filter for virtual module names.
+*/
+function createFilter(include, exclude, options) {
+	const resolutionBase = options && options.resolve;
+	const getMatcher = (id) => id instanceof RegExp ? id : { test: (what) => {
+		const pattern = getMatcherString(id, resolutionBase);
+		const fn = (0, picomatch.default)(pattern, { dot: true });
+		const result = fn(what);
+		return result;
+	} };
+	const includeMatchers = toArray(include).map(getMatcher);
+	const excludeMatchers = toArray(exclude).map(getMatcher);
+	if (!includeMatchers.length && !excludeMatchers.length) return (id) => typeof id === "string" && !id.includes("\0");
+	return function result(id) {
+		if (typeof id !== "string") return false;
+		if (id.includes("\0")) return false;
+		const pathId = normalizePath(id);
+		for (const matcher of excludeMatchers) {
+			if (matcher instanceof RegExp) matcher.lastIndex = 0;
+			if (matcher.test(pathId)) return false;
+		}
+		for (const matcher of includeMatchers) {
+			if (matcher instanceof RegExp) matcher.lastIndex = 0;
+			if (matcher.test(pathId)) return true;
+		}
+		return !includeMatchers.length;
+	};
+}
+
+//#endregion
+exports.createFilter = createFilter;
+exports.normalizePath = normalizePath;
+exports.toArray = toArray;

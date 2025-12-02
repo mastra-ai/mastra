@@ -1,0 +1,25 @@
+import { type FC } from "react";
+import { TooltipIconButton } from "./base/tooltip-icon-button";
+import { ComposerPrimitive } from "@assistant-ui/react";
+declare const Composer: FC;
+declare const exports: {
+    Root: import("react").ForwardRefExoticComponent<Partial<Omit<Omit<import("react").ClassAttributes<HTMLFormElement> & import("react").FormHTMLAttributes<HTMLFormElement> & {
+        asChild?: boolean;
+    }, "ref"> & import("react").RefAttributes<HTMLFormElement>, "ref">> & import("react").RefAttributes<HTMLFormElement>>;
+    Input: import("react").ForwardRefExoticComponent<Omit<Partial<Omit<import("react-textarea-autosize").TextareaAutosizeProps & {
+        asChild?: boolean | undefined;
+        submitOnEnter?: boolean | undefined;
+        cancelOnEscape?: boolean | undefined;
+        unstable_focusOnRunStart?: boolean | undefined;
+        unstable_focusOnScrollToBottom?: boolean | undefined;
+        unstable_focusOnThreadSwitched?: boolean | undefined;
+    } & import("react").RefAttributes<HTMLTextAreaElement>, "ref">> & import("react").RefAttributes<HTMLTextAreaElement>, "ref"> & import("react").RefAttributes<HTMLTextAreaElement>>;
+    Action: FC;
+    Send: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+    Cancel: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+    AddAttachment: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+    Attachments: FC<Partial<ComposerPrimitive.Attachments.Props>>;
+};
+declare const _default: typeof Composer & typeof exports;
+export default _default;
+//# sourceMappingURL=composer.d.ts.map

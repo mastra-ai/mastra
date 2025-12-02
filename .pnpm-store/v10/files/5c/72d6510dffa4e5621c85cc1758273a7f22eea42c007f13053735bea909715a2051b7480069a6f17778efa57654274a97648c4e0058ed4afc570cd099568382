@@ -1,0 +1,2 @@
+import { AuthenticateUserWithEmailVerificationCredentials, AuthenticateWithEmailVerificationOptions, SerializedAuthenticateWithEmailVerificationOptions } from '../interfaces/authenticate-with-email-verification-options.interface';
+export declare const serializeAuthenticateWithEmailVerificationOptions: (options: AuthenticateWithEmailVerificationOptions & AuthenticateUserWithEmailVerificationCredentials) => SerializedAuthenticateWithEmailVerificationOptions;

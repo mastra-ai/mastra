@@ -1,0 +1,51 @@
+{
+  "name": "canonicalize",
+  "version": "1.0.8",
+  "description": "JSON canonicalize function ",
+  "main": "lib/canonicalize.js",
+  "types": "lib/canonicalize.d.ts",
+  "directories": {
+    "example": "examples",
+    "lib": "lib"
+  },
+  "scripts": {
+    "pretest": "semistandard --fix",
+    "test": "ava",
+    "coverage": "nyc npm test",
+    "coveragehtml": "nyc report -r html",
+    "precoveragehtml": "npm run coverage",
+    "coveralls": "nyc report --reporter=text-lcov | coveralls"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/erdtman/canonicalize.git"
+  },
+  "keywords": [
+    "json",
+    "canonical",
+    "canonicalize",
+    "signing",
+    "crypto"
+  ],
+  "contributors": [
+    {
+      "name": "Samuel Erdtman",
+      "email": "samuel@erdtman.se"
+    },
+    {
+      "name": "Anders Rundgren",
+      "email": "anders.rundgren.net@gmail.com "
+    }
+  ],
+  "devDependencies": {
+    "ava": "*",
+    "semistandard": "*",
+    "jsonfile": "*",
+    "nyc": "*"
+  },
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/erdtman/canonicalize/issues"
+  },
+  "homepage": "https://github.com/erdtman/canonicalize#readme"
+}

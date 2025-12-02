@@ -1,0 +1,149 @@
+# The auto type
+
+void foo() {
+  auto x = 1;
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList),
+    CompoundStatement(
+      Declaration(auto, InitDeclarator(Identifier, Number)))))
+
+
+# Namespaced types
+
+std::string my_string;
+std::vector<int>::size_typ my_string;
+
+==>
+
+Program(
+  Declaration(
+    ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+    Identifier),
+  Declaration(
+    ScopedTypeIdentifier(
+      TemplateType(
+        ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+        TemplateArgumentList(TypeDescriptor(PrimitiveType))),
+      TypeIdentifier),
+    Identifier))
+
+
+# Dependent type names
+
+template<typename T>
+struct X : B<T>
+{
+    typename T::A* pa;
+};
+
+==>
+
+Program(
+  TemplateDeclaration(template,
+    TemplateParameterList(TypeParameterDeclaration(typename, TypeIdentifier)),
+    StructSpecifier(struct,
+      TypeIdentifier,
+      BaseClassClause(
+        TemplateType(TypeIdentifier, TemplateArgumentList(TypeDescriptor(TypeIdentifier)))),
+      FieldDeclarationList(
+        FieldDeclaration(
+          DependentType(typename, ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier)),
+          PointerDeclarator(FieldIdentifier))))))
+
+
+# Template types with empty argument lists
+
+use_future_t<> use_future;
+
+==>
+
+Program(
+  Declaration(TemplateType(TypeIdentifier, TemplateArgumentList), Identifier))
+
+
+# Function types as template arguments
+
+typedef std::function<T(int)> MyFunc;
+typedef std::function<void(int)> b;
+
+==>
+
+Program(
+  TypeDefinition(typedef,
+    TemplateType(
+      ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+      TemplateArgumentList(
+        TypeDescriptor(
+          TypeIdentifier,
+          AbstractFunctionDeclarator(ParameterList(
+            ParameterDeclaration(PrimitiveType)))))),
+    TypeIdentifier),
+  TypeDefinition(typedef,
+    TemplateType(
+      ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+      TemplateArgumentList(
+        TypeDescriptor(
+          PrimitiveType,
+          AbstractFunctionDeclarator(ParameterList(
+            ParameterDeclaration(PrimitiveType)))))),
+    TypeIdentifier))
+
+
+# Decltype
+
+decltype(A) x;
+decltype(B) foo(void x, decltype(C) y);
+template<typename T, typename U> auto add(T t, U u) -> decltype(t + u);
+
+==>
+
+Program(
+  Declaration(
+    Decltype(decltype, Identifier),
+    Identifier),
+  Declaration(
+    Decltype(decltype, Identifier),
+    FunctionDeclarator(Identifier,
+      ParameterList(
+        ParameterDeclaration(PrimitiveType, Identifier),
+        ParameterDeclaration(Decltype(decltype, Identifier), Identifier)))),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TypeParameterDeclaration(typename, TypeIdentifier),
+      TypeParameterDeclaration(typename, TypeIdentifier)),
+    Declaration(
+      auto,
+      FunctionDeclarator(
+        Identifier,
+        ParameterList(
+          ParameterDeclaration(TypeIdentifier, Identifier),
+          ParameterDeclaration(TypeIdentifier, Identifier)),
+        TrailingReturnType(
+          Decltype(decltype, BinaryExpression(Identifier, ArithOp, Identifier)))))))
+
+
+# Trailing return type
+
+auto a::foo() const -> const A<B>& {}
+
+==>
+
+Program(
+  FunctionDefinition(
+    auto,
+    FunctionDeclarator(
+      ScopedIdentifier(NamespaceIdentifier, Identifier),
+      ParameterList,
+      const,
+      TrailingReturnType(
+        const,
+        TemplateType(TypeIdentifier, TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+        AbstractReferenceDeclarator)),
+      CompoundStatement))
+

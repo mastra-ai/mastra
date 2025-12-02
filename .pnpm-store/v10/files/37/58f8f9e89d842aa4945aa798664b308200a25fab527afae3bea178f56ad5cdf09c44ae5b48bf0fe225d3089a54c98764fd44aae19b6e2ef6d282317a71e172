@@ -1,0 +1,1 @@
+{"version":3,"file":"GetProjectsResponse.d.ts","sourceRoot":"","sources":["../../../../src/lib/types/GetProjectsResponse.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,mBAAmB;IAClC,QAAQ,EAAE,OAAO,EAAE,CAAC;CACrB;AAED,UAAU,OAAO;IACf,UAAU,EAAE,MAAM,CAAC;IACnB,IAAI,EAAE,MAAM,CAAC;CACd"}

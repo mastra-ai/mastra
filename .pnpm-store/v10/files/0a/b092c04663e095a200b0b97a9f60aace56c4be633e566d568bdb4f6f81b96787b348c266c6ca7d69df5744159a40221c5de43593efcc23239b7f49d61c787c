@@ -1,0 +1,75 @@
+{
+  "name": "already",
+  "description": "Promise extensions; finally, map, filter, etc",
+  "license": "MIT",
+  "version": "2.2.1",
+  "author": "Gustaf Räntilä <g.rantila@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grantila/already"
+  },
+  "files": [
+    "dist",
+    "dist-mjs"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "import": "./dist-mjs/index.js",
+    "require": "./dist/index.js"
+  },
+  "scripts": {
+    "build:dist": "scripts/build.sh dist ./tsconfig.prod.json --module CommonJS -t ES2019",
+    "build:dist-mjs": "scripts/build.sh dist-mjs ./tsconfig.prod.json --module ESNext -t ES2019",
+    "build:test-out": "scripts/build.sh test-out ./tsconfig.test.json",
+    "build:test-out-mjs": "scripts/build.sh test-out-mjs ./tsconfig.test.json --module CommonJS -t esnext && scripts/rewrite-mjs-test.js",
+    "build:lib": "concurrently 'yarn build:dist' 'yarn build:dist-mjs'",
+    "build:test": "concurrently 'yarn build:test-out' 'yarn build:test-out-mjs'",
+    "build": "yarn build:lib && yarn build:test",
+    "lint": "true",
+    "jest": "node_modules/.bin/jest --coverage",
+    "test": "yarn lint && yarn jest",
+    "buildtest": "yarn build && yarn test",
+    "cz": "git-cz"
+  },
+  "pre-commit": [
+    "build",
+    "test"
+  ],
+  "keywords": [
+    "promise",
+    "concurrency",
+    "map",
+    "filter",
+    "props",
+    "tap",
+    "each",
+    "defer",
+    "deferred",
+    "concurrent",
+    "extensions",
+    "utilities"
+  ],
+  "devDependencies": {
+    "@babel/plugin-syntax-optional-chaining": "^7.8.3",
+    "@babel/plugin-transform-modules-commonjs": "^7.12.1",
+    "@babel/preset-typescript": "^7.12.7",
+    "@types/jest": "^26.0.15",
+    "commitizen": "^4.2.2",
+    "concurrently": "^6.2.0",
+    "cz-conventional-changelog": "^3.3.0",
+    "jest": "^26.6.3",
+    "pre-commit": "1.x",
+    "rimraf": "^3.0.2",
+    "trace-unhandled": "^2.0.1",
+    "ts-jest": "^26.4.4",
+    "tslint": "6.1.3",
+    "typescript": "4.3.4"
+  },
+  "dependencies": {},
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  }
+}

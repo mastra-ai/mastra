@@ -1,0 +1,55 @@
+{
+  "name": "@drizzle-team/brocli",
+  "version": "0.10.2",
+  "requiresBuild": false,
+  "files": {
+    "index.cjs": {
+      "checkedAt": 1764662910822,
+      "integrity": "sha512-DsqAJsiTyS/0PA+d86nML2d6J15zu/+GTLxvJP0CVHT6hGog3f2xNd9Kc7a4tenetoGMqQ550jCtvQLCuQuvXw==",
+      "mode": 420,
+      "size": 52347
+    },
+    "index.d.cts": {
+      "checkedAt": 1764662910823,
+      "integrity": "sha512-OAIoWQ8oB3UsuxjAiffnhYokhnd4A9a8gKjlmjzgGLDGrhTVEpc34XfH1MWAeS4aN86Q10hDCdr5Rl1fjZ673A==",
+      "mode": 420,
+      "size": 14576
+    },
+    "index.js": {
+      "checkedAt": 1764662910824,
+      "integrity": "sha512-YDl/hwtMD0QsSUHJ20GSbxU8acEE7XFJWe5j/DJ/e4wRLovA7nnFBhIUAK2mavtUL2MD/HLOGfcdtdUhiVLdbw==",
+      "mode": 420,
+      "size": 51592
+    },
+    "package.json": {
+      "checkedAt": 1764662910825,
+      "integrity": "sha512-ac9yVyNO+JU9g7xJjPBMxdBKmPPkI5IlcKX6p5ltVnLln4zBFlgMg8xIzzns+7LtFSOF+LYEgSaM6Meo5xx8ow==",
+      "mode": 493,
+      "size": 1483
+    },
+    "index.cjs.map": {
+      "checkedAt": 1764662910826,
+      "integrity": "sha512-Y8H0yNQoHhNdBUJtHr1itu7fNn8nlsXcl0P5zAwytXsoMnXTrZXC3sXF0ZQlBEPxJg53EBaEQpCqYRvSNydwiw==",
+      "mode": 420,
+      "size": 105619
+    },
+    "index.js.map": {
+      "checkedAt": 1764662910826,
+      "integrity": "sha512-vKRzEc4FRBXYqKHP5agw+zqhlvv1Tml54Mjrz3ohfCXXWswXLlgz043Rw/lDCYVPXfPD91VwO00QWYWghNKQeQ==",
+      "mode": 420,
+      "size": 104146
+    },
+    "README.md": {
+      "checkedAt": 1764662910828,
+      "integrity": "sha512-H7t1BX3yDTsCbvEckqyGVffwBzdUIYPzvIjItaKdsHneyG1dVCfKypPx3C0iaCegPedFUaDJStyvjhmov2Ld8Q==",
+      "mode": 493,
+      "size": 16053
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662910823,
+      "integrity": "sha512-OAIoWQ8oB3UsuxjAiffnhYokhnd4A9a8gKjlmjzgGLDGrhTVEpc34XfH1MWAeS4aN86Q10hDCdr5Rl1fjZ673A==",
+      "mode": 420,
+      "size": 14576
+    }
+  }
+}

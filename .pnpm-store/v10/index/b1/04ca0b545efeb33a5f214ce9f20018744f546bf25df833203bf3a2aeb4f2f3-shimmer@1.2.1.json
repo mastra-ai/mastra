@@ -1,0 +1,67 @@
+{
+  "name": "shimmer",
+  "version": "1.2.1",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662914468,
+      "integrity": "sha512-BnrjVLAjo0Tlpeo2KPVbps9VWP3w5J53deSPz0yyhFB49cdXA5w86VANb8zJ8As0iFsPxt++WfnY97OXgPoHnQ==",
+      "mode": 420,
+      "size": 586
+    },
+    ".travis.yml": {
+      "checkedAt": 1764662914469,
+      "integrity": "sha512-lY16ZCRCNGwpTWq/MFMYRfZpWs/uqEXEMm/AwVuwUVTx3eT6rvD5zeg8kIUePZ3fP8Yez/1zc7rMdmltGP+Jow==",
+      "mode": 420,
+      "size": 71
+    },
+    "index.js": {
+      "checkedAt": 1764662914469,
+      "integrity": "sha512-m4af/J31/1edokNl6S5CaMkNJm8hUcO5PtOB7ru4nSjRYrkAfMD7B9DF9ogccu9boq9trqvcnVFcVRoc7SzdVQ==",
+      "mode": 420,
+      "size": 2943
+    },
+    "LICENSE": {
+      "checkedAt": 1764662914470,
+      "integrity": "sha512-O5HOH0fZXLvEjk8553Jfq5DwmKaYbtPi2O804lqzzCZIQMPC5BvBVn0UgExOXo3n1KqSQ9DH7E12pofNbDr1Ig==",
+      "mode": 420,
+      "size": 1327
+    },
+    "README.md": {
+      "checkedAt": 1764662914471,
+      "integrity": "sha512-Z2ZwyFc+2qBfAN8yRFgehID4x5gR+nhkMwFmr5QJHbq90OzlyMAaSqnS2Eo/0eTVKJH2zVaVuQz4EdzwVl/HbA==",
+      "mode": 420,
+      "size": 3205
+    },
+    "test/init.tap.js": {
+      "checkedAt": 1764662914472,
+      "integrity": "sha512-3QFzCBKTPpiXZOsVbnyYHdF+mcS3deZv6kBU0cVfpaUAPjHEumw2TP/nJKBZSrp+jRj1i+TAZcYCpYsPjK8Qrg==",
+      "mode": 420,
+      "size": 1138
+    },
+    "test/massUnwrap.tap.js": {
+      "checkedAt": 1764662914473,
+      "integrity": "sha512-lMmMYitPJll872fMbD+kejwwvE7ZRzvlaORU2sTQCS5Ur5Os1lIMPL5sTMCEKmOOOViqISXea/F3RT876AdSlg==",
+      "mode": 420,
+      "size": 4023
+    },
+    "test/massWrap.tap.js": {
+      "checkedAt": 1764662914475,
+      "integrity": "sha512-HjVIOus8Gjt3QfUCWz/i1P2mtKPwQFhgHMjJdCfFCEGkNpYJx0A1tg7cawwbCfgsYMheVIxHBP/AzF9MNPrtLg==",
+      "mode": 420,
+      "size": 4744
+    },
+    "test/unwrap.tap.js": {
+      "checkedAt": 1764662914475,
+      "integrity": "sha512-uHAydxiMSn/6N+PQGxCheXIfNoMG2Ox33UXNOQsP+Ev9+9nW+eygMM37GRjKSHbu6sC1akkag6KhsvnjqfgRGg==",
+      "mode": 420,
+      "size": 2728
+    },
+    "test/wrap.tap.js": {
+      "checkedAt": 1764662914476,
+      "integrity": "sha512-Tb8wzxFs4DN4cNb0bepVpxucoNso1aW5PZkH7OJshq92pXPY954afRXdwotFzN/QWPNI57cqfWFvY+DT3K8urA==",
+      "mode": 420,
+      "size": 3964
+    }
+  }
+}

@@ -1,0 +1,28 @@
+"use client";
+
+// src/make-syntax-highlighter.tsx
+import { jsx } from "react/jsx-runtime";
+var makeMakeSyntaxHighlighter = (SyntaxHighlighter) => (config) => {
+  const PrismSyntaxHighlighter = ({
+    components: { Pre, Code },
+    language,
+    code
+  }) => {
+    return /* @__PURE__ */ jsx(
+      SyntaxHighlighter,
+      {
+        PreTag: Pre,
+        CodeTag: Code,
+        ...config,
+        language,
+        children: code
+      }
+    );
+  };
+  PrismSyntaxHighlighter.displayName = "PrismSyntaxHighlighter";
+  return PrismSyntaxHighlighter;
+};
+export {
+  makeMakeSyntaxHighlighter
+};
+//# sourceMappingURL=make-syntax-highlighter.js.map

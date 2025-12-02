@@ -1,0 +1,478 @@
+import type { ReasoningPart } from '@ai-sdk/provider-utils-v5';
+import type { LanguageModelV2FinishReason, LanguageModelV2CallWarning, SharedV2ProviderMetadata, LanguageModelV2Source } from '@ai-sdk/provider-v5';
+import type { LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '../../ai-sdk.types.d.ts';
+import type { StepResult, ModelMessage, LanguageModelUsage, ToolSet, TypedToolCall, TypedToolResult, StaticToolCall, StaticToolResult, DynamicToolCall, DynamicToolResult, GeneratedFile } from 'ai-v5';
+import z from 'zod';
+import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema.js';
+export interface LLMIterationStepResult {
+    reason: LanguageModelV2FinishReason | 'abort';
+    warnings: LanguageModelV2CallWarning[];
+    isContinued: boolean;
+    logprobs?: LanguageModelV1LogProbs;
+    totalUsage: LanguageModelUsage;
+    headers?: Record<string, string>;
+    messageId?: string;
+    request?: LanguageModelRequestMetadata;
+}
+export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
+    text?: string;
+    reasoning?: ReasoningPart[];
+    reasoningText?: string;
+    files?: GeneratedFile[];
+    toolCalls?: TypedToolCall<Tools>[];
+    toolResults?: TypedToolResult<Tools>[];
+    sources?: LanguageModelV2Source[];
+    staticToolCalls?: StaticToolCall<Tools>[];
+    dynamicToolCalls?: DynamicToolCall[];
+    staticToolResults?: StaticToolResult<Tools>[];
+    dynamicToolResults?: DynamicToolResult[];
+    usage: LanguageModelUsage;
+    steps: StepResult<Tools>[];
+    object?: InferSchemaOutput<OUTPUT>;
+}
+export interface LLMIterationMetadata {
+    id?: string;
+    model?: string;
+    modelId?: string;
+    modelMetadata?: {
+        modelId: string;
+        modelVersion: string;
+        modelProvider: string;
+    };
+    timestamp?: Date;
+    providerMetadata?: SharedV2ProviderMetadata;
+    headers?: Record<string, string>;
+    request?: LanguageModelRequestMetadata;
+}
+export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
+    messageId: string;
+    messages: {
+        all: ModelMessage[];
+        user: ModelMessage[];
+        nonUser: ModelMessage[];
+    };
+    output: LLMIterationOutput<Tools, OUTPUT>;
+    metadata: LLMIterationMetadata;
+    stepResult: LLMIterationStepResult;
+}
+export declare const llmIterationStepResultSchema: z.ZodObject<{
+    reason: z.ZodString;
+    warnings: z.ZodArray<z.ZodAny, "many">;
+    isContinued: z.ZodBoolean;
+    logprobs: z.ZodOptional<z.ZodAny>;
+    totalUsage: z.ZodOptional<z.ZodObject<{
+        inputTokens: z.ZodNumber;
+        outputTokens: z.ZodNumber;
+        totalTokens: z.ZodNumber;
+        reasoningTokens: z.ZodOptional<z.ZodNumber>;
+        cachedInputTokens: z.ZodOptional<z.ZodNumber>;
+    }, "strip", z.ZodTypeAny, {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        reasoningTokens?: number | undefined;
+        cachedInputTokens?: number | undefined;
+    }, {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        reasoningTokens?: number | undefined;
+        cachedInputTokens?: number | undefined;
+    }>>;
+    headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    messageId: z.ZodOptional<z.ZodString>;
+    request: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, "strip", z.ZodTypeAny, {
+    reason: string;
+    isContinued: boolean;
+    warnings: any[];
+    messageId?: string | undefined;
+    headers?: Record<string, string> | undefined;
+    logprobs?: any;
+    request?: Record<string, any> | undefined;
+    totalUsage?: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        reasoningTokens?: number | undefined;
+        cachedInputTokens?: number | undefined;
+    } | undefined;
+}, {
+    reason: string;
+    isContinued: boolean;
+    warnings: any[];
+    messageId?: string | undefined;
+    headers?: Record<string, string> | undefined;
+    logprobs?: any;
+    request?: Record<string, any> | undefined;
+    totalUsage?: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        reasoningTokens?: number | undefined;
+        cachedInputTokens?: number | undefined;
+    } | undefined;
+}>;
+export declare const llmIterationOutputSchema: z.ZodObject<{
+    messageId: z.ZodString;
+    messages: z.ZodObject<{
+        all: z.ZodArray<z.ZodAny, "many">;
+        user: z.ZodArray<z.ZodAny, "many">;
+        nonUser: z.ZodArray<z.ZodAny, "many">;
+    }, "strip", z.ZodTypeAny, {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    }, {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    }>;
+    output: z.ZodObject<{
+        text: z.ZodOptional<z.ZodString>;
+        reasoning: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+        reasoningText: z.ZodOptional<z.ZodString>;
+        files: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+        toolCalls: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+        toolResults: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+        sources: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+        staticToolCalls: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+        dynamicToolCalls: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+        staticToolResults: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+        dynamicToolResults: z.ZodOptional<z.ZodArray<z.ZodAny, "many">>;
+        usage: z.ZodObject<{
+            inputTokens: z.ZodNumber;
+            outputTokens: z.ZodNumber;
+            totalTokens: z.ZodNumber;
+            reasoningTokens: z.ZodOptional<z.ZodNumber>;
+            cachedInputTokens: z.ZodOptional<z.ZodNumber>;
+        }, "strip", z.ZodTypeAny, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }>;
+        steps: z.ZodArray<z.ZodAny, "many">;
+    }, "strip", z.ZodTypeAny, {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    }, {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    }>;
+    metadata: z.ZodObject<{
+        id: z.ZodOptional<z.ZodString>;
+        model: z.ZodOptional<z.ZodString>;
+        modelId: z.ZodOptional<z.ZodString>;
+        modelMetadata: z.ZodOptional<z.ZodObject<{
+            modelId: z.ZodString;
+            modelVersion: z.ZodString;
+            modelProvider: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        }, {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        }>>;
+        timestamp: z.ZodOptional<z.ZodDate>;
+        providerMetadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+        request: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "strip", z.ZodTypeAny, {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    }, {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    }>;
+    stepResult: z.ZodObject<{
+        reason: z.ZodString;
+        warnings: z.ZodArray<z.ZodAny, "many">;
+        isContinued: z.ZodBoolean;
+        logprobs: z.ZodOptional<z.ZodAny>;
+        totalUsage: z.ZodOptional<z.ZodObject<{
+            inputTokens: z.ZodNumber;
+            outputTokens: z.ZodNumber;
+            totalTokens: z.ZodNumber;
+            reasoningTokens: z.ZodOptional<z.ZodNumber>;
+            cachedInputTokens: z.ZodOptional<z.ZodNumber>;
+        }, "strip", z.ZodTypeAny, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }, {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        }>>;
+        headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+        messageId: z.ZodOptional<z.ZodString>;
+        request: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "strip", z.ZodTypeAny, {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    }, {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    }>;
+}, "strip", z.ZodTypeAny, {
+    output: {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    };
+    messageId: string;
+    messages: {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    };
+    metadata: {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    };
+    stepResult: {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    };
+}, {
+    output: {
+        usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        };
+        steps: any[];
+        text?: string | undefined;
+        reasoning?: any[] | undefined;
+        files?: any[] | undefined;
+        sources?: any[] | undefined;
+        toolCalls?: any[] | undefined;
+        toolResults?: any[] | undefined;
+        reasoningText?: string | undefined;
+        staticToolCalls?: any[] | undefined;
+        dynamicToolCalls?: any[] | undefined;
+        staticToolResults?: any[] | undefined;
+        dynamicToolResults?: any[] | undefined;
+    };
+    messageId: string;
+    messages: {
+        user: any[];
+        all: any[];
+        nonUser: any[];
+    };
+    metadata: {
+        id?: string | undefined;
+        providerMetadata?: Record<string, any> | undefined;
+        modelId?: string | undefined;
+        model?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        request?: Record<string, any> | undefined;
+        timestamp?: Date | undefined;
+        modelMetadata?: {
+            modelId: string;
+            modelVersion: string;
+            modelProvider: string;
+        } | undefined;
+    };
+    stepResult: {
+        reason: string;
+        isContinued: boolean;
+        warnings: any[];
+        messageId?: string | undefined;
+        headers?: Record<string, string> | undefined;
+        logprobs?: any;
+        request?: Record<string, any> | undefined;
+        totalUsage?: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number | undefined;
+            cachedInputTokens?: number | undefined;
+        } | undefined;
+    };
+}>;
+export declare const toolCallInputSchema: z.ZodObject<{
+    toolCallId: z.ZodString;
+    toolName: z.ZodString;
+    args: z.ZodRecord<z.ZodString, z.ZodAny>;
+    providerMetadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    providerExecuted: z.ZodOptional<z.ZodBoolean>;
+    output: z.ZodOptional<z.ZodAny>;
+}, "strip", z.ZodTypeAny, {
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    providerMetadata?: Record<string, any> | undefined;
+    providerExecuted?: boolean | undefined;
+    output?: any;
+}, {
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    providerMetadata?: Record<string, any> | undefined;
+    providerExecuted?: boolean | undefined;
+    output?: any;
+}>;
+export declare const toolCallOutputSchema: z.ZodObject<{
+    toolCallId: z.ZodString;
+    toolName: z.ZodString;
+    args: z.ZodRecord<z.ZodString, z.ZodAny>;
+    providerMetadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    providerExecuted: z.ZodOptional<z.ZodBoolean>;
+    output: z.ZodOptional<z.ZodAny>;
+} & {
+    result: z.ZodAny;
+    error: z.ZodOptional<z.ZodAny>;
+}, "strip", z.ZodTypeAny, {
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    error?: any;
+    providerMetadata?: Record<string, any> | undefined;
+    providerExecuted?: boolean | undefined;
+    output?: any;
+    result?: any;
+}, {
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    error?: any;
+    providerMetadata?: Record<string, any> | undefined;
+    providerExecuted?: boolean | undefined;
+    output?: any;
+    result?: any;
+}>;
+//# sourceMappingURL=schema.d.ts.map

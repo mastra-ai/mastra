@@ -1,0 +1,135 @@
+# Integer literals
+
+0;
+0___0;
+123;
+0usize;
+123i32;
+123u32;
+123_u32;
+0xff_u8;
+0o70_i16;
+0b1111_1111_1001_0000_i32;
+1u128;
+
+==>
+
+SourceFile(
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer),
+  ExpressionStatement(Integer))
+
+
+# Floating-point literals
+
+123.123;
+2.;
+123.0f64;
+0.1f64;
+0.1f32;
+12E+99_f64;
+
+==>
+
+SourceFile(
+  ExpressionStatement(Float),
+  ExpressionStatement(Float),
+  ExpressionStatement(Float),
+  ExpressionStatement(Float),
+  ExpressionStatement(Float),
+  ExpressionStatement(Float))
+
+
+# String literals
+
+"";
+"abc";
+b"foo\nbar";
+"foo\
+    bar";
+"\"foo\"";
+"/* foo bar */ foo bar";
+"foo\x42\x43bar";
+"foo \x42  \x43 bar";
+
+==>
+
+SourceFile(
+  ExpressionStatement(String),
+  ExpressionStatement(String),
+  ExpressionStatement(String(Escape)),
+  ExpressionStatement(String(Escape)),
+  ExpressionStatement(String(Escape, Escape)),
+  ExpressionStatement(String),
+  ExpressionStatement(String(Escape, Escape)),
+  ExpressionStatement(String(Escape, Escape)))
+
+
+# Raw string literals
+
+r#"abc"#; r##"ok"##;
+r##"foo #"# bar"##;
+r###"foo ##"## bar"###;
+r######"foo ##### bar"######;
+
+==>
+
+SourceFile(
+  ExpressionStatement(RawString),
+  ExpressionStatement(RawString),
+  ExpressionStatement(RawString),
+  ExpressionStatement(RawString),
+  ExpressionStatement(RawString))
+
+
+# Raw byte string literals
+
+br#"abc"#;
+br##"abc"##;
+
+==>
+
+SourceFile(
+  ExpressionStatement(RawString),
+  ExpressionStatement(RawString))
+
+
+# Character literals
+
+'a';
+'\'';
+'\0';
+b'x';
+'\t';
+'\xff';
+'\\';
+
+==>
+
+SourceFile(
+  ExpressionStatement(Char),
+  ExpressionStatement(Char),
+  ExpressionStatement(Char),
+  ExpressionStatement(Char),
+  ExpressionStatement(Char),
+  ExpressionStatement(Char),
+  ExpressionStatement(Char))
+
+
+# Boolean literals
+
+true;
+false;
+
+==>
+
+SourceFile(ExpressionStatement(Boolean), ExpressionStatement(Boolean))
+

@@ -1,0 +1,4 @@
+import { MarkdownTextPrimitiveProps } from "@assistant-ui/react-markdown";
+export type MakeMarkdownTextProps = MarkdownTextPrimitiveProps;
+export declare const makeMarkdownText: ({ className, components: userComponents, ...rest }?: MakeMarkdownTextProps) => import("react").NamedExoticComponent<{}>;
+//# sourceMappingURL=markdown-text.d.ts.map

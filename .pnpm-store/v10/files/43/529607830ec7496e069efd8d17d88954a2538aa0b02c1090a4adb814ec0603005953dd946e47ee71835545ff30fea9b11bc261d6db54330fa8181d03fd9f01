@@ -1,0 +1,31 @@
+{
+  "name": "@esbuild-kit/esm-loader",
+  "version": "2.6.5",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Node.js loader for compiling TypeScript modules to ESM",
+  "keywords": [
+    "esbuild",
+    "loader",
+    "node",
+    "esm",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": "esbuild-kit/esm-loader",
+  "author": {
+    "name": "Hiroki Osame",
+    "email": "hiroki.osame@gmail.com"
+  },
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "exports": "./dist/index.js",
+  "dependencies": {
+    "@esbuild-kit/core-utils": "^3.3.2",
+    "get-tsconfig": "^4.7.0"
+  }
+}

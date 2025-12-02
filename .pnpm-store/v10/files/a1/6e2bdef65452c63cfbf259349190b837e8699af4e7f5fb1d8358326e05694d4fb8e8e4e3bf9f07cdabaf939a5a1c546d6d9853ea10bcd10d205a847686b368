@@ -1,0 +1,29 @@
+{
+  "name": "@firebase/database-types",
+  "version": "1.0.16",
+  "description": "@firebase/database Types",
+  "author": "Firebase <firebase-support@google.com> (https://firebase.google.com/)",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "tsc",
+    "test:ci": "node ../../scripts/run_tests_in_ci.js"
+  },
+  "files": [
+    "index.d.ts"
+  ],
+  "dependencies": {
+    "@firebase/app-types": "0.9.3",
+    "@firebase/util": "1.13.0"
+  },
+  "repository": {
+    "directory": "packages/database-types",
+    "type": "git",
+    "url": "git+https://github.com/firebase/firebase-js-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/firebase/firebase-js-sdk/issues"
+  },
+  "devDependencies": {
+    "typescript": "5.5.4"
+  }
+}

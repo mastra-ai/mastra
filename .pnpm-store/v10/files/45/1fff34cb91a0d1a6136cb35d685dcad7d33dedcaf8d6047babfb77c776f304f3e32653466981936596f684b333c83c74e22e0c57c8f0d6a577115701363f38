@@ -1,0 +1,1 @@
+{"version":3,"file":"common.d.ts","sourceRoot":"","sources":["../../../../src/cli/codegen_templates/common.ts"],"names":[],"mappings":"AAAA,wBAAgB,MAAM,CAAC,kBAAkB,EAAE,MAAM,UAWhD;AAED,wBAAgB,UAAU,CACxB,OAAO,EAAE,MAAM,EACf,IAAI,EAAE,QAAQ,GAAG,UAAU,GAAG,SAAS,UAWxC;AAED;;;;;;GAMG;AACH,wBAAgB,cAAc,CAAC,CAAC,EAAE,MAAM,EAAE,CAAC,EAAE,MAAM,GAAG,MAAM,CAE3D"}

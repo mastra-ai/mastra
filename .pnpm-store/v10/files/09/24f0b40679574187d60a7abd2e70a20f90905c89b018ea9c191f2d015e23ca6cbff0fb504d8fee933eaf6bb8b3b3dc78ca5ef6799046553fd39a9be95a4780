@@ -1,0 +1,176 @@
+import type { WritableStream } from 'stream/web';
+import type { UIMessage } from '../ai-sdk.types.d.ts';
+import type { JSONSchema7 } from 'json-schema';
+import type { z, ZodSchema } from 'zod';
+import type { MastraLLMV1 } from '../llm/model/index.js';
+import type { GenerateObjectResult, GenerateTextResult, StreamObjectResult, StreamTextResult } from '../llm/model/base.types.js';
+import type { MastraLanguageModel } from '../llm/model/shared.types.js';
+import type { Mastra } from '../mastra/index.js';
+import type { MastraMemory } from '../memory/memory.js';
+import type { MemoryConfig } from '../memory/types.js';
+import type { TracingContext, TracingProperties } from '../observability/index.js';
+import type { InputProcessor, OutputProcessor } from '../processors/index.js';
+import { RequestContext } from '../request-context/index.js';
+import type { ChunkType } from '../stream/types.js';
+import type { CoreTool } from '../tools/types.js';
+import type { DynamicArgument } from '../types/index.js';
+import type { MessageListInput, MastraDBMessage, UIMessageWithMetadata } from './message-list/index.js';
+import { MessageList } from './message-list/index.js';
+import { SaveQueueManager } from './save-queue/index.js';
+import type { AgentGenerateOptions, AgentStreamOptions, AgentInstructions, ToolsetsInput, ToolsInput, AgentMethodType } from './types.js';
+/**
+ * Interface for accessing Agent methods needed by the legacy handler.
+ * This allows the legacy handler to work with Agent without directly accessing private members.
+ */
+export interface AgentLegacyCapabilities {
+    /** Logger instance */
+    logger: {
+        debug: (message: string, meta?: any) => void;
+        error: (message: string, meta?: any) => void;
+        warn: (message: string, meta?: any) => void;
+    };
+    /** Agent name for logging */
+    name: string;
+    /** Agent ID */
+    id: string;
+    /** Mastra instance for generating IDs */
+    mastra?: Mastra;
+    /** Get default generate options for legacy */
+    getDefaultGenerateOptionsLegacy(options: {
+        requestContext?: RequestContext;
+    }): AgentGenerateOptions | Promise<AgentGenerateOptions>;
+    /** Get default stream options for legacy */
+    getDefaultStreamOptionsLegacy(options: {
+        requestContext?: RequestContext;
+    }): AgentStreamOptions | Promise<AgentStreamOptions>;
+    /** Check if agent has own memory */
+    hasOwnMemory(): boolean;
+    /** Get instructions */
+    getInstructions(options: {
+        requestContext: RequestContext;
+    }): Promise<AgentInstructions>;
+    /** Get LLM instance */
+    getLLM(options: {
+        requestContext: RequestContext;
+    }): Promise<MastraLLMV1>;
+    /** Get memory instance */
+    getMemory(options: {
+        requestContext: RequestContext;
+    }): Promise<MastraMemory | undefined>;
+    /** Convert tools for LLM */
+    convertTools(args: {
+        toolsets?: ToolsetsInput;
+        clientTools?: ToolsInput;
+        threadId?: string;
+        resourceId?: string;
+        runId?: string;
+        requestContext: RequestContext;
+        tracingContext?: TracingContext;
+        writableStream?: WritableStream<ChunkType>;
+        methodType: AgentMethodType;
+    }): Promise<Record<string, CoreTool>>;
+    /** Get memory messages */
+    getMemoryMessages(args: {
+        resourceId?: string;
+        threadId: string;
+        vectorMessageSearch: string;
+        memoryConfig?: MemoryConfig;
+        requestContext: RequestContext;
+    }): Promise<{
+        messages: MastraDBMessage[];
+    }>;
+    /** Run input processors */
+    __runInputProcessors(args: {
+        requestContext: RequestContext;
+        tracingContext: TracingContext;
+        messageList: MessageList;
+        inputProcessorOverrides?: InputProcessor[];
+    }): Promise<{
+        messageList: MessageList;
+        tripwireTriggered: boolean;
+        tripwireReason: string;
+    }>;
+    /** Get most recent user message */
+    getMostRecentUserMessage(messages: Array<UIMessage | UIMessageWithMetadata>): UIMessage | UIMessageWithMetadata | undefined;
+    /** Generate title for thread */
+    genTitle(userMessage: UIMessage | UIMessageWithMetadata, requestContext: RequestContext, tracingContext: TracingContext, titleModel?: DynamicArgument<MastraLanguageModel>, titleInstructions?: DynamicArgument<string>): Promise<string | undefined>;
+    /** Resolve title generation config */
+    resolveTitleGenerationConfig(generateTitleConfig: boolean | {
+        model: DynamicArgument<MastraLanguageModel>;
+        instructions?: DynamicArgument<string>;
+    } | undefined): {
+        shouldGenerate: boolean;
+        model?: DynamicArgument<MastraLanguageModel>;
+        instructions?: DynamicArgument<string>;
+    };
+    /** Save step messages */
+    saveStepMessages(args: {
+        saveQueueManager: SaveQueueManager;
+        result: any;
+        messageList: MessageList;
+        threadId?: string;
+        memoryConfig?: MemoryConfig;
+        runId: string;
+    }): Promise<void>;
+    /** Convert instructions to string */
+    convertInstructionsToString(instructions: AgentInstructions): string;
+    /** Options for tracing policy */
+    tracingPolicy?: any;
+    /** Agent network append flag */
+    _agentNetworkAppend?: boolean;
+    /** List resolved output processors */
+    listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]>;
+    /** Run output processors */
+    __runOutputProcessors(args: {
+        requestContext: RequestContext;
+        tracingContext: TracingContext;
+        messageList: MessageList;
+        outputProcessorOverrides?: OutputProcessor[];
+    }): Promise<{
+        messageList: MessageList;
+        tripwireTriggered: boolean;
+        tripwireReason: string;
+    }>;
+    /** Run scorers */
+    runScorers(args: {
+        messageList: MessageList;
+        runId: string;
+        requestContext: RequestContext;
+        structuredOutput?: boolean;
+        overrideScorers?: Record<string, any>;
+        threadId?: string;
+        resourceId?: string;
+        tracingContext: TracingContext;
+    }): Promise<void>;
+}
+/**
+ * Handler class for legacy Agent functionality (v1 models).
+ * Encapsulates all legacy-specific streaming and generation logic.
+ */
+export declare class AgentLegacyHandler {
+    private capabilities;
+    constructor(capabilities: AgentLegacyCapabilities);
+    /**
+     * Prepares message list and tools before LLM execution and handles memory persistence after.
+     * This is the legacy version that only works with v1 models.
+     * @internal
+     */
+    private __primitive;
+    /**
+     * Prepares options and handlers for LLM text/object generation or streaming.
+     * This is the legacy version that only works with v1 models.
+     * @internal
+     */
+    private prepareLLMOptions;
+    /**
+     * Legacy implementation of generate method using AI SDK v4 models.
+     * Use this method if you need to continue using AI SDK v4 models.
+     */
+    generateLegacy<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(messages: MessageListInput, generateOptions?: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT>): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>>;
+    /**
+     * Legacy implementation of stream method using AI SDK v4 models.
+     * Use this method if you need to continue using AI SDK v4 models.
+     */
+    streamLegacy<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(messages: MessageListInput, streamOptions?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT>): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties)>;
+}
+//# sourceMappingURL=agent-legacy.d.ts.map

@@ -1,0 +1,1478 @@
+"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; }// util/db_fields.ts
+var TRANSACTION_ID_FIELD = "_xact_id";
+var OBJECT_DELETE_FIELD = "_object_delete";
+var CREATED_FIELD = "created";
+var ID_FIELD = "id";
+var IS_MERGE_FIELD = "_is_merge";
+var MERGE_PATHS_FIELD = "_merge_paths";
+var AUDIT_SOURCE_FIELD = "_audit_source";
+var AUDIT_METADATA_FIELD = "_audit_metadata";
+var VALID_SOURCES = ["app", "api", "external"];
+var PARENT_ID_FIELD = "_parent_id";
+var ASYNC_SCORING_CONTROL_FIELD = "_async_scoring_control";
+var SKIP_ASYNC_SCORING_FIELD = "_skip_async_scoring";
+
+// util/span_identifier_v3.ts
+var _uuid = require('uuid'); var uuid3 = _interopRequireWildcard(_uuid); var uuid2 = _interopRequireWildcard(_uuid); var uuid = _interopRequireWildcard(_uuid);
+
+// util/span_identifier_v2.ts
+
+
+// util/span_identifier_v1.ts
+
+var _v3 = require('zod/v3');
+function tryMakeUuid(s) {
+  try {
+    const ret = uuid.parse(s);
+    if (ret.length !== 16) {
+      throw new Error();
+    }
+    return { bytes: Buffer.from(ret), isUUID: true };
+  } catch (e) {
+    return { bytes: Buffer.from(s, "utf-8"), isUUID: false };
+  }
+}
+var ENCODING_VERSION_NUMBER = 1;
+var INVALID_ENCODING_ERRMSG = "SpanComponents string is not properly encoded. This may be due to a version mismatch between the SDK library used to export the span and the library used to decode it. Please make sure you are using the same SDK version across the board";
+var SpanObjectTypeV1 = /* @__PURE__ */ ((SpanObjectTypeV12) => {
+  SpanObjectTypeV12[SpanObjectTypeV12["EXPERIMENT"] = 1] = "EXPERIMENT";
+  SpanObjectTypeV12[SpanObjectTypeV12["PROJECT_LOGS"] = 2] = "PROJECT_LOGS";
+  return SpanObjectTypeV12;
+})(SpanObjectTypeV1 || {});
+var SpanObjectTypeV1EnumSchema = _v3.z.nativeEnum(SpanObjectTypeV1);
+var SpanRowIdsV1 = class {
+  
+  
+  
+  constructor(args) {
+    this.rowId = args.rowId;
+    this.spanId = args.spanId;
+    this.rootSpanId = args.rootSpanId;
+    if (!this.rowId) {
+      throw new Error("rowId must be nonempty string");
+    }
+    if (!this.spanId) {
+      throw new Error("spanId must be nonempty string");
+    }
+    if (!this.rootSpanId) {
+      throw new Error("rootSpanId must be nonempty string");
+    }
+  }
+  toObject() {
+    return {
+      rowId: this.rowId,
+      spanId: this.spanId,
+      rootSpanId: this.rootSpanId
+    };
+  }
+};
+var SpanComponentsV1 = class _SpanComponentsV1 {
+  
+  
+  
+  constructor(args) {
+    this.objectType = args.objectType;
+    this.objectId = args.objectId;
+    this.rowIds = args.rowIds;
+  }
+  toStr() {
+    const allBuffers = [];
+    const { bytes: rowIdBytes, isUUID: rowIdIsUUID } = this.rowIds ? tryMakeUuid(this.rowIds.rowId) : { bytes: Buffer.from(""), isUUID: false };
+    allBuffers.push(
+      Buffer.from([
+        ENCODING_VERSION_NUMBER,
+        this.objectType,
+        this.rowIds ? 1 : 0,
+        rowIdIsUUID ? 1 : 0
+      ])
+    );
+    const { bytes: objectIdBytes, isUUID: objectIdIsUUID } = tryMakeUuid(
+      this.objectId
+    );
+    if (!objectIdIsUUID) {
+      throw new Error("object_id component must be a valid UUID");
+    }
+    allBuffers.push(objectIdBytes);
+    if (this.rowIds) {
+      const { bytes: spanIdBytes, isUUID: spanIdIsUUID } = tryMakeUuid(
+        this.rowIds.spanId
+      );
+      if (!spanIdIsUUID) {
+        throw new Error("span_id component must be a valid UUID");
+      }
+      const { bytes: rootSpanIdBytes, isUUID: rootSpanIdIsUUID } = tryMakeUuid(
+        this.rowIds.rootSpanId
+      );
+      if (!rootSpanIdIsUUID) {
+        throw new Error("root_span_id component must be a valid UUID");
+      }
+      allBuffers.push(spanIdBytes, rootSpanIdBytes, rowIdBytes);
+    }
+    return Buffer.concat(allBuffers).toString("base64");
+  }
+  static fromStr(s) {
+    try {
+      const rawBytes = Buffer.from(s, "base64");
+      if (rawBytes[0] !== ENCODING_VERSION_NUMBER) {
+        throw new Error();
+      }
+      const objectType = SpanObjectTypeV1EnumSchema.parse(rawBytes[1]);
+      if (![0, 1].includes(rawBytes[2])) {
+        throw new Error();
+      }
+      if (![0, 1].includes(rawBytes[3])) {
+        throw new Error();
+      }
+      const hasRowId = rawBytes[2] == 1;
+      const rowIdIsUUID = rawBytes[3] == 1;
+      const objectId = uuid.stringify(rawBytes.subarray(4, 20));
+      const rowIds = (() => {
+        if (!hasRowId) {
+          return void 0;
+        }
+        const spanId = uuid.stringify(rawBytes.subarray(20, 36));
+        const rootSpanId = uuid.stringify(rawBytes.subarray(36, 52));
+        const rowId = rowIdIsUUID ? uuid.stringify(rawBytes.subarray(52)) : rawBytes.subarray(52).toString("utf-8");
+        return new SpanRowIdsV1({ rowId, spanId, rootSpanId });
+      })();
+      return new _SpanComponentsV1({ objectType, objectId, rowIds });
+    } catch (e) {
+      throw new Error(INVALID_ENCODING_ERRMSG);
+    }
+  }
+  objectIdFields() {
+    switch (this.objectType) {
+      case 1 /* EXPERIMENT */:
+        return { experiment_id: this.objectId };
+      case 2 /* PROJECT_LOGS */:
+        return { project_id: this.objectId, log_id: "g" };
+      default:
+        throw new Error("Impossible");
+    }
+  }
+  toObject() {
+    return {
+      objectType: this.objectType,
+      objectId: this.objectId,
+      rowIds: _optionalChain([this, 'access', _2 => _2.rowIds, 'optionalAccess', _3 => _3.toObject, 'call', _4 => _4()])
+    };
+  }
+};
+
+// util/span_identifier_v2.ts
+
+function tryMakeUuid2(s) {
+  try {
+    const ret = uuid2.parse(s);
+    if (ret.length !== 16) {
+      throw new Error();
+    }
+    return { bytes: Buffer.from(ret), isUUID: true };
+  } catch (e) {
+    return { bytes: Buffer.from(s, "utf-8"), isUUID: false };
+  }
+}
+var ENCODING_VERSION_NUMBER2 = 2;
+var INVALID_ENCODING_ERRMSG2 = `SpanComponents string is not properly encoded. This library only supports encoding versions up to ${ENCODING_VERSION_NUMBER2}. Please make sure the SDK library used to decode the SpanComponents is at least as new as any library used to encode it.`;
+var INTEGER_ENCODING_NUM_BYTES = 4;
+var SpanObjectTypeV2 = /* @__PURE__ */ ((SpanObjectTypeV22) => {
+  SpanObjectTypeV22[SpanObjectTypeV22["EXPERIMENT"] = 1] = "EXPERIMENT";
+  SpanObjectTypeV22[SpanObjectTypeV22["PROJECT_LOGS"] = 2] = "PROJECT_LOGS";
+  return SpanObjectTypeV22;
+})(SpanObjectTypeV2 || {});
+var SpanObjectTypeV2EnumSchema = _v3.z.nativeEnum(SpanObjectTypeV2);
+var SpanRowIdsV2 = class {
+  
+  
+  
+  constructor(args) {
+    this.rowId = args.rowId;
+    this.spanId = args.spanId;
+    this.rootSpanId = args.rootSpanId;
+    if (!this.rowId) {
+      throw new Error("rowId must be nonempty string");
+    }
+    if (!this.spanId) {
+      throw new Error("spanId must be nonempty string");
+    }
+    if (!this.rootSpanId) {
+      throw new Error("rootSpanId must be nonempty string");
+    }
+  }
+  toObject() {
+    return {
+      rowId: this.rowId,
+      spanId: this.spanId,
+      rootSpanId: this.rootSpanId
+    };
+  }
+};
+var SpanComponentsV2 = class _SpanComponentsV2 {
+  
+  
+  
+  
+  constructor(args) {
+    this.objectType = args.objectType;
+    this.objectId = args.objectId;
+    this.computeObjectMetadataArgs = args.computeObjectMetadataArgs;
+    this.rowIds = args.rowIds;
+    if (!(this.objectId || this.computeObjectMetadataArgs)) {
+      throw new Error(
+        "Must provide either objectId or computeObjectMetadataArgs"
+      );
+    }
+  }
+  toStr() {
+    const allBuffers = [];
+    const { bytes: rowIdBytes, isUUID: rowIdIsUUID } = this.rowIds ? tryMakeUuid2(this.rowIds.rowId) : { bytes: Buffer.from(""), isUUID: false };
+    allBuffers.push(
+      Buffer.from([
+        ENCODING_VERSION_NUMBER2,
+        this.objectType,
+        this.objectId ? 1 : 0,
+        this.computeObjectMetadataArgs ? 1 : 0,
+        this.rowIds ? 1 : 0,
+        rowIdIsUUID ? 1 : 0
+      ])
+    );
+    if (this.objectId) {
+      const { bytes: objectIdBytes, isUUID: objectIdIsUUID } = tryMakeUuid2(
+        this.objectId
+      );
+      if (!objectIdIsUUID) {
+        throw new Error("object_id component must be a valid UUID");
+      }
+      allBuffers.push(objectIdBytes);
+    }
+    if (this.computeObjectMetadataArgs) {
+      const computeObjectMetadataBytes = Buffer.from(
+        JSON.stringify(this.computeObjectMetadataArgs),
+        "utf-8"
+      );
+      const serializedLenBytes = Buffer.alloc(INTEGER_ENCODING_NUM_BYTES);
+      serializedLenBytes.writeInt32BE(computeObjectMetadataBytes.length);
+      allBuffers.push(serializedLenBytes, computeObjectMetadataBytes);
+    }
+    if (this.rowIds) {
+      const { bytes: spanIdBytes, isUUID: spanIdIsUUID } = tryMakeUuid2(
+        this.rowIds.spanId
+      );
+      if (!spanIdIsUUID) {
+        throw new Error("span_id component must be a valid UUID");
+      }
+      const { bytes: rootSpanIdBytes, isUUID: rootSpanIdIsUUID } = tryMakeUuid2(
+        this.rowIds.rootSpanId
+      );
+      if (!rootSpanIdIsUUID) {
+        throw new Error("root_span_id component must be a valid UUID");
+      }
+      allBuffers.push(spanIdBytes, rootSpanIdBytes, rowIdBytes);
+    }
+    return Buffer.concat(allBuffers).toString("base64");
+  }
+  static fromStr(s) {
+    try {
+      const rawBytes = Buffer.from(s, "base64");
+      if (rawBytes[0] < ENCODING_VERSION_NUMBER2) {
+        const spanComponentsOld = SpanComponentsV1.fromStr(s);
+        return new _SpanComponentsV2({
+          objectType: SpanObjectTypeV2EnumSchema.parse(
+            spanComponentsOld.objectType
+          ),
+          objectId: spanComponentsOld.objectId,
+          rowIds: spanComponentsOld.rowIds ? new SpanRowIdsV2({
+            rowId: spanComponentsOld.rowIds.rowId,
+            spanId: spanComponentsOld.rowIds.spanId,
+            rootSpanId: spanComponentsOld.rowIds.rootSpanId
+          }) : void 0
+        });
+      }
+      if (rawBytes[0] !== ENCODING_VERSION_NUMBER2) {
+        throw new Error();
+      }
+      const objectType = SpanObjectTypeV2EnumSchema.parse(rawBytes[1]);
+      for (let i = 2; i < 6; ++i) {
+        if (![0, 1].includes(rawBytes[i])) {
+          throw new Error();
+        }
+      }
+      const hasObjectId = rawBytes[2] == 1;
+      const hasComputeObjectMetadataArgs = rawBytes[3] == 1;
+      const hasRowId = rawBytes[4] == 1;
+      const rowIdIsUUID = rawBytes[5] == 1;
+      let byteCursor = 6;
+      let objectId = void 0;
+      if (hasObjectId) {
+        const nextByteCursor = byteCursor + 16;
+        objectId = uuid2.stringify(
+          rawBytes.subarray(byteCursor, nextByteCursor)
+        );
+        byteCursor = nextByteCursor;
+      }
+      let computeObjectMetadataArgs;
+      if (hasComputeObjectMetadataArgs) {
+        let nextByteCursor = byteCursor + INTEGER_ENCODING_NUM_BYTES;
+        const serializedLenBytes = rawBytes.readInt32BE(byteCursor);
+        byteCursor = nextByteCursor;
+        nextByteCursor = byteCursor + serializedLenBytes;
+        computeObjectMetadataArgs = JSON.parse(
+          rawBytes.subarray(byteCursor, nextByteCursor).toString("utf-8")
+        );
+        byteCursor = nextByteCursor;
+      }
+      const rowIds = (() => {
+        if (!hasRowId) {
+          return void 0;
+        }
+        let nextByteCursor = byteCursor + 16;
+        const spanId = uuid2.stringify(
+          rawBytes.subarray(byteCursor, nextByteCursor)
+        );
+        byteCursor = nextByteCursor;
+        nextByteCursor = byteCursor + 16;
+        const rootSpanId = uuid2.stringify(
+          rawBytes.subarray(byteCursor, nextByteCursor)
+        );
+        byteCursor = nextByteCursor;
+        const rowId = rowIdIsUUID ? uuid2.stringify(rawBytes.subarray(byteCursor)) : rawBytes.subarray(byteCursor).toString("utf-8");
+        return new SpanRowIdsV2({ rowId, spanId, rootSpanId });
+      })();
+      return new _SpanComponentsV2({
+        objectType,
+        objectId,
+        computeObjectMetadataArgs,
+        rowIds
+      });
+    } catch (e) {
+      throw new Error(INVALID_ENCODING_ERRMSG2);
+    }
+  }
+  objectIdFields() {
+    if (!this.objectId) {
+      throw new Error(
+        "Impossible: cannot invoke `object_id_fields` unless SpanComponentsV2 is initialized with an `object_id`"
+      );
+    }
+    switch (this.objectType) {
+      case 1 /* EXPERIMENT */:
+        return { experiment_id: this.objectId };
+      case 2 /* PROJECT_LOGS */:
+        return { project_id: this.objectId, log_id: "g" };
+      default:
+        throw new Error("Impossible");
+    }
+  }
+  toObject() {
+    return {
+      objectType: this.objectType,
+      objectId: this.objectId,
+      computeObjectMetadataArgs: this.computeObjectMetadataArgs,
+      rowIds: _optionalChain([this, 'access', _5 => _5.rowIds, 'optionalAccess', _6 => _6.toObject, 'call', _7 => _7()])
+    };
+  }
+};
+
+// util/span_identifier_v3.ts
+
+
+// util/bytes.ts
+function concatUint8Arrays(...arrays) {
+  const totalLength = arrays.reduce((acc, arr) => acc + arr.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const arr of arrays) {
+    result.set(arr, offset);
+    offset += arr.length;
+  }
+  return result;
+}
+function uint8ArrayToBase64(uint8Array) {
+  let binary = "";
+  for (let i = 0; i < uint8Array.length; i++) {
+    binary += String.fromCharCode(uint8Array[i]);
+  }
+  return btoa(binary);
+}
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const uint8Array = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    uint8Array[i] = binary.charCodeAt(i);
+  }
+  return uint8Array;
+}
+function uint8ArrayToString(uint8Array) {
+  const decoder = new TextDecoder("utf-8");
+  return decoder.decode(uint8Array);
+}
+function stringToUint8Array(str) {
+  const encoder = new TextEncoder();
+  return encoder.encode(str);
+}
+
+// util/span_identifier_v3.ts
+function tryMakeUuid3(s) {
+  try {
+    const ret = uuid3.parse(s);
+    if (ret.length !== 16) {
+      throw new Error();
+    }
+    return { bytes: new Uint8Array(ret), isUUID: true };
+  } catch (e2) {
+    return { bytes: void 0, isUUID: false };
+  }
+}
+var ENCODING_VERSION_NUMBER3 = 3;
+var INVALID_ENCODING_ERRMSG3 = `SpanComponents string is not properly encoded. This library only supports encoding versions up to ${ENCODING_VERSION_NUMBER3}. Please make sure the SDK library used to decode the SpanComponents is at least as new as any library used to encode it.`;
+var SpanObjectTypeV3 = /* @__PURE__ */ ((SpanObjectTypeV32) => {
+  SpanObjectTypeV32[SpanObjectTypeV32["EXPERIMENT"] = 1] = "EXPERIMENT";
+  SpanObjectTypeV32[SpanObjectTypeV32["PROJECT_LOGS"] = 2] = "PROJECT_LOGS";
+  SpanObjectTypeV32[SpanObjectTypeV32["PLAYGROUND_LOGS"] = 3] = "PLAYGROUND_LOGS";
+  return SpanObjectTypeV32;
+})(SpanObjectTypeV3 || {});
+var spanObjectTypeV3EnumSchema = _v3.z.nativeEnum(SpanObjectTypeV3);
+function spanObjectTypeV3ToString(objectType) {
+  switch (objectType) {
+    case 1 /* EXPERIMENT */:
+      return "experiment";
+    case 2 /* PROJECT_LOGS */:
+      return "project_logs";
+    case 3 /* PLAYGROUND_LOGS */:
+      return "playground_logs";
+    default:
+      const x = objectType;
+      throw new Error(`Unknown SpanObjectTypeV3: ${x}`);
+  }
+}
+var InternalSpanComponentUUIDFields = /* @__PURE__ */ ((InternalSpanComponentUUIDFields2) => {
+  InternalSpanComponentUUIDFields2[InternalSpanComponentUUIDFields2["OBJECT_ID"] = 1] = "OBJECT_ID";
+  InternalSpanComponentUUIDFields2[InternalSpanComponentUUIDFields2["ROW_ID"] = 2] = "ROW_ID";
+  InternalSpanComponentUUIDFields2[InternalSpanComponentUUIDFields2["SPAN_ID"] = 3] = "SPAN_ID";
+  InternalSpanComponentUUIDFields2[InternalSpanComponentUUIDFields2["ROOT_SPAN_ID"] = 4] = "ROOT_SPAN_ID";
+  return InternalSpanComponentUUIDFields2;
+})(InternalSpanComponentUUIDFields || {});
+var internalSpanComponentUUIDFieldsEnumSchema = _v3.z.nativeEnum(
+  InternalSpanComponentUUIDFields
+);
+var _INTERNAL_SPAN_COMPONENT_UUID_FIELDS_ID_TO_NAME = {
+  [1 /* OBJECT_ID */]: "object_id",
+  [2 /* ROW_ID */]: "row_id",
+  [3 /* SPAN_ID */]: "span_id",
+  [4 /* ROOT_SPAN_ID */]: "root_span_id"
+};
+var spanComponentsV3Schema = _v3.z.object({
+  object_type: spanObjectTypeV3EnumSchema,
+  // TODO(manu): We should have a more elaborate zod schema for
+  // `propagated_event`. This will required zod-ifying the contents of
+  // sdk/js/util/object.ts.
+  propagated_event: _v3.z.record(_v3.z.unknown()).nullish()
+}).and(
+  _v3.z.union([
+    // Must provide one or the other.
+    _v3.z.object({
+      object_id: _v3.z.string().nullish(),
+      compute_object_metadata_args: _v3.z.optional(_v3.z.null())
+    }),
+    _v3.z.object({
+      object_id: _v3.z.optional(_v3.z.null()),
+      compute_object_metadata_args: _v3.z.record(_v3.z.unknown())
+    })
+  ])
+).and(
+  _v3.z.union([
+    // Either all of these must be provided or none.
+    _v3.z.object({
+      row_id: _v3.z.string(),
+      span_id: _v3.z.string(),
+      root_span_id: _v3.z.string()
+    }),
+    _v3.z.object({
+      row_id: _v3.z.optional(_v3.z.null()),
+      span_id: _v3.z.optional(_v3.z.null()),
+      root_span_id: _v3.z.optional(_v3.z.null())
+    })
+  ])
+);
+var SpanComponentsV3 = class _SpanComponentsV3 {
+  constructor(data) {
+    this.data = data;
+  }
+  toStr() {
+    const jsonObj = {
+      compute_object_metadata_args: this.data.compute_object_metadata_args || void 0,
+      propagated_event: this.data.propagated_event || void 0
+    };
+    const allBuffers = [];
+    allBuffers.push(
+      new Uint8Array([ENCODING_VERSION_NUMBER3, this.data.object_type])
+    );
+    const uuidEntries = [];
+    function addUuidField(origVal, fieldId) {
+      const ret = tryMakeUuid3(origVal);
+      if (ret.isUUID) {
+        uuidEntries.push(
+          concatUint8Arrays(new Uint8Array([fieldId]), ret.bytes)
+        );
+      } else {
+        jsonObj[_INTERNAL_SPAN_COMPONENT_UUID_FIELDS_ID_TO_NAME[fieldId]] = origVal;
+      }
+    }
+    if (this.data.object_id) {
+      addUuidField(
+        this.data.object_id,
+        1 /* OBJECT_ID */
+      );
+    }
+    if (this.data.row_id) {
+      addUuidField(this.data.row_id, 2 /* ROW_ID */);
+    }
+    if (this.data.span_id) {
+      addUuidField(this.data.span_id, 3 /* SPAN_ID */);
+    }
+    if (this.data.root_span_id) {
+      addUuidField(
+        this.data.root_span_id,
+        4 /* ROOT_SPAN_ID */
+      );
+    }
+    if (uuidEntries.length > 255) {
+      throw new Error("Impossible: too many UUID entries to encode");
+    }
+    allBuffers.push(new Uint8Array([uuidEntries.length]));
+    allBuffers.push(...uuidEntries);
+    if (Object.keys(jsonObj).length > 0) {
+      allBuffers.push(stringToUint8Array(JSON.stringify(jsonObj)));
+    }
+    return uint8ArrayToBase64(concatUint8Arrays(...allBuffers));
+  }
+  static fromStr(s) {
+    try {
+      const rawBytes = base64ToUint8Array(s);
+      const jsonObj = {};
+      if (rawBytes[0] < ENCODING_VERSION_NUMBER3) {
+        const spanComponentsOld = SpanComponentsV2.fromStr(s);
+        jsonObj["object_type"] = spanComponentsOld.objectType;
+        jsonObj["object_id"] = spanComponentsOld.objectId;
+        jsonObj["compute_object_metadata_args"] = spanComponentsOld.computeObjectMetadataArgs;
+        if (spanComponentsOld.rowIds) {
+          jsonObj["row_id"] = spanComponentsOld.rowIds.rowId;
+          jsonObj["span_id"] = spanComponentsOld.rowIds.spanId;
+          jsonObj["root_span_id"] = spanComponentsOld.rowIds.rootSpanId;
+        }
+      } else {
+        jsonObj["object_type"] = rawBytes[1];
+        const numUuidEntries = rawBytes[2];
+        let byteOffset = 3;
+        for (let i = 0; i < numUuidEntries; ++i) {
+          const fieldId = internalSpanComponentUUIDFieldsEnumSchema.parse(
+            rawBytes[byteOffset]
+          );
+          const fieldBytes = rawBytes.subarray(byteOffset + 1, byteOffset + 17);
+          byteOffset += 17;
+          jsonObj[_INTERNAL_SPAN_COMPONENT_UUID_FIELDS_ID_TO_NAME[fieldId]] = uuid3.stringify(fieldBytes);
+        }
+        if (byteOffset < rawBytes.length) {
+          const remainingJsonObj = JSON.parse(
+            uint8ArrayToString(rawBytes.subarray(byteOffset))
+          );
+          Object.assign(jsonObj, remainingJsonObj);
+        }
+      }
+      return _SpanComponentsV3.fromJsonObj(jsonObj);
+    } catch (e3) {
+      throw new Error(INVALID_ENCODING_ERRMSG3);
+    }
+  }
+  objectIdFields() {
+    if (!this.data.object_id) {
+      throw new Error(
+        "Impossible: cannot invoke `objectIdFields` unless SpanComponentsV3 is initialized with an `object_id`"
+      );
+    }
+    switch (this.data.object_type) {
+      case 1 /* EXPERIMENT */:
+        return { experiment_id: this.data.object_id };
+      case 2 /* PROJECT_LOGS */:
+        return { project_id: this.data.object_id, log_id: "g" };
+      case 3 /* PLAYGROUND_LOGS */:
+        return { prompt_session_id: this.data.object_id, log_id: "x" };
+      default:
+        const _ = this.data.object_type;
+        throw new Error("Impossible");
+    }
+  }
+  async export() {
+    return this.toStr();
+  }
+  static fromJsonObj(jsonObj) {
+    return new _SpanComponentsV3(spanComponentsV3Schema.parse(jsonObj));
+  }
+};
+
+// util/http_headers.ts
+var BT_FOUND_EXISTING_HEADER = "x-bt-found-existing";
+var BT_CURSOR_HEADER = "x-bt-cursor";
+var BT_IMPERSONATE_USER = "x-bt-impersonate-user";
+var BT_PARENT = "x-bt-parent";
+var EXPERIMENT_ID_PREFIX = "experiment_id:";
+var PROJECT_ID_PREFIX = "project_id:";
+var PROJECT_NAME_PREFIX = "project_name:";
+var PLAYGROUND_ID_PREFIX = "playground_id:";
+function resolveParentHeader(header) {
+  if (header.startsWith(EXPERIMENT_ID_PREFIX)) {
+    return new SpanComponentsV3({
+      object_type: 1 /* EXPERIMENT */,
+      object_id: header.substring(EXPERIMENT_ID_PREFIX.length)
+    });
+  } else if (header.startsWith(PROJECT_ID_PREFIX)) {
+    return new SpanComponentsV3({
+      object_type: 2 /* PROJECT_LOGS */,
+      object_id: header.substring(PROJECT_ID_PREFIX.length)
+    });
+  } else if (header.startsWith(PLAYGROUND_ID_PREFIX)) {
+    return new SpanComponentsV3({
+      object_type: 3 /* PLAYGROUND_LOGS */,
+      object_id: header.substring(PLAYGROUND_ID_PREFIX.length)
+    });
+  } else if (header.startsWith(PROJECT_NAME_PREFIX)) {
+    const projectName = header.substring(PROJECT_NAME_PREFIX.length);
+    return new SpanComponentsV3({
+      object_type: 2 /* PROJECT_LOGS */,
+      compute_object_metadata_args: {
+        project_name: projectName
+      }
+    });
+  }
+  return SpanComponentsV3.fromStr(header);
+}
+
+// util/type_util.ts
+function isObject(value) {
+  return value instanceof Object && !(value instanceof Array);
+}
+function isArray(value) {
+  return value instanceof Array;
+}
+function isObjectOrArray(value) {
+  return value instanceof Object;
+}
+function isEmpty(a) {
+  return a === void 0 || a === null;
+}
+function notEmpty(a) {
+  if (!isEmpty(a)) {
+    return a;
+  } else {
+    throw new Error(`Unexpected empty value ${a}`);
+  }
+}
+function isNumber(a) {
+  return typeof a === "number" || typeof a === "bigint";
+}
+
+// util/object_util.ts
+function mergeDictsWithPaths({
+  mergeInto,
+  mergeFrom,
+  mergePaths
+}) {
+  const mergePathsSerialized = new Set(
+    mergePaths.map((p) => JSON.stringify(p))
+  );
+  return mergeDictsWithPathsHelper({
+    mergeInto,
+    mergeFrom,
+    path: [],
+    mergePaths: mergePathsSerialized
+  });
+}
+function mergeDictsWithPathsHelper({
+  mergeInto,
+  mergeFrom,
+  path,
+  mergePaths
+}) {
+  Object.entries(mergeFrom).forEach(([k, mergeFromV]) => {
+    const fullPath = path.concat([k]);
+    const fullPathSerialized = JSON.stringify(fullPath);
+    const mergeIntoV = recordFind(mergeInto, k);
+    if (isObject(mergeIntoV) && isObject(mergeFromV) && !mergePaths.has(fullPathSerialized)) {
+      mergeDictsWithPathsHelper({
+        mergeInto: mergeIntoV,
+        mergeFrom: mergeFromV,
+        path: fullPath,
+        mergePaths
+      });
+    } else {
+      if (mergeFromV !== void 0) {
+        mergeInto[k] = mergeFromV;
+      }
+    }
+  });
+  return mergeInto;
+}
+function mergeDicts(mergeInto, mergeFrom) {
+  return mergeDictsWithPaths({ mergeInto, mergeFrom, mergePaths: [] });
+}
+function forEachMissingKey({
+  lhs,
+  rhs,
+  fn
+}) {
+  function helper(lhs2, rhs2, path) {
+    if (lhs2 instanceof Object) {
+      if (!(rhs2 instanceof Object)) {
+        return;
+      }
+      const lhsRec = lhs2;
+      const rhsRec = rhs2;
+      for (const [k, v] of Object.entries(rhsRec)) {
+        if (!(k in lhsRec)) {
+          fn({ lhs: lhsRec, k, v, path });
+        } else {
+          helper(lhsRec[k], rhsRec[k], [...path, k]);
+        }
+      }
+    }
+  }
+  helper(lhs, rhs, []);
+}
+function mapAt(m, k) {
+  const ret = m.get(k);
+  if (ret === void 0) {
+    throw new Error(`Map does not contain key ${k}`);
+  }
+  return ret;
+}
+function mapSetDefault(m, k, _default) {
+  const ret = m.get(k);
+  if (ret === void 0) {
+    m.set(k, _default);
+    return _default;
+  } else {
+    return ret;
+  }
+}
+function mapSetNotPresent(m, k, v) {
+  if (m.has(k)) {
+    throw new Error(`Map already contains key ${k}`);
+  }
+  return m.set(k, v);
+}
+function recordFind(m, k) {
+  return m[k];
+}
+function recordAt(m, k) {
+  const ret = recordFind(m, k);
+  if (ret === void 0) {
+    throw new Error(`Record does not contain key ${String(k)}`);
+  }
+  return ret;
+}
+function recordSetDefault(m, k, _default) {
+  const ret = recordFind(m, k);
+  if (ret === void 0) {
+    m[k] = _default;
+    return _default;
+  } else {
+    return ret;
+  }
+}
+function getRecordKeys(obj) {
+  return Object.keys(obj);
+}
+function getObjValueByPath(row, path) {
+  let curr = row;
+  for (const p of path) {
+    if (!isObjectOrArray(curr)) {
+      return null;
+    }
+    curr = curr[p];
+  }
+  return curr;
+}
+
+// util/graph_util.ts
+function depthFirstSearch(args) {
+  const { graph, firstVisitF, lastVisitF } = args;
+  for (const vs of graph.values()) {
+    for (const v of vs.values()) {
+      if (!graph.has(v)) {
+        throw new Error(`Outgoing vertex ${v} must be a key in the graph`);
+      }
+    }
+  }
+  const firstVisitedVertices = /* @__PURE__ */ new Set();
+  const visitationOrder = _nullishCoalesce(args.visitationOrder, () => ( [...graph.keys()]));
+  const events = visitationOrder.map((vertex) => ({ eventType: "first", vertex, extras: {} })).reverse();
+  while (events.length) {
+    const { eventType, vertex, extras } = events.pop();
+    if (eventType === "last") {
+      _optionalChain([lastVisitF, 'optionalCall', _8 => _8(vertex)]);
+      continue;
+    }
+    if (firstVisitedVertices.has(vertex)) {
+      continue;
+    }
+    firstVisitedVertices.add(vertex);
+    _optionalChain([firstVisitF, 'optionalCall', _9 => _9(vertex, { parentVertex: extras.parentVertex })]);
+    events.push({ eventType: "last", vertex, extras: {} });
+    mapAt(graph, vertex).forEach((child) => {
+      events.push({
+        eventType: "first",
+        vertex: child,
+        extras: { parentVertex: vertex }
+      });
+    });
+  }
+}
+function undirectedConnectedComponents(graph) {
+  const directedGraph = new Map(
+    [...graph.vertices].map((v) => [v, /* @__PURE__ */ new Set()])
+  );
+  for (const [i, j] of graph.edges) {
+    mapAt(directedGraph, i).add(j);
+    mapAt(directedGraph, j).add(i);
+  }
+  let labelCounter = 0;
+  const vertexLabels = /* @__PURE__ */ new Map();
+  const firstVisitF = (vertex, args) => {
+    const label = _optionalChain([args, 'optionalAccess', _10 => _10.parentVertex]) !== void 0 ? mapAt(vertexLabels, _optionalChain([args, 'optionalAccess', _11 => _11.parentVertex])) : labelCounter++;
+    vertexLabels.set(vertex, label);
+  };
+  depthFirstSearch({ graph: directedGraph, firstVisitF });
+  const output = Array.from({ length: labelCounter }).map(() => []);
+  for (const [vertex, label] of vertexLabels.entries()) {
+    output[label].push(vertex);
+  }
+  return output;
+}
+function topologicalSort(graph, visitationOrder) {
+  const reverseOrdering = [];
+  const lastVisitF = (vertex) => {
+    reverseOrdering.push(vertex);
+  };
+  depthFirstSearch({ graph, lastVisitF, visitationOrder });
+  return reverseOrdering.reverse();
+}
+
+// util/merge_row_batch.ts
+function generateMergedRowKey(row, useParentIdForId) {
+  return JSON.stringify(
+    [
+      "org_id",
+      "project_id",
+      "experiment_id",
+      "dataset_id",
+      "prompt_session_id",
+      "log_id",
+      _nullishCoalesce(useParentIdForId, () => ( false)) ? PARENT_ID_FIELD : "id"
+    ].map((k) => row[k])
+  );
+}
+var MERGE_ROW_SKIP_FIELDS = [
+  "created",
+  "span_id",
+  "root_span_id",
+  "span_parents",
+  "_parent_id"
+  // TODO: handle merge paths.
+];
+function popMergeRowSkipFields(row) {
+  const popped = {};
+  for (const field of MERGE_ROW_SKIP_FIELDS) {
+    if (field in row) {
+      popped[field] = row[field];
+      delete row[field];
+    }
+  }
+  return popped;
+}
+function restoreMergeRowSkipFields(row, skipFields) {
+  for (const field of MERGE_ROW_SKIP_FIELDS) {
+    delete row[field];
+    if (field in skipFields) {
+      row[field] = skipFields[field];
+    }
+  }
+}
+function mergeRowBatch(rows) {
+  for (const row of rows) {
+    if (row.id === void 0) {
+      throw new Error(
+        "Logged row is missing an id. This is an internal braintrust error. Please contact us at info@braintrust.dev for help"
+      );
+    }
+  }
+  const rowGroups = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const key = generateMergedRowKey(row);
+    const existingRow = rowGroups.get(key);
+    if (existingRow !== void 0 && row[IS_MERGE_FIELD]) {
+      const skipFields = popMergeRowSkipFields(existingRow);
+      const preserveNoMerge = !existingRow[IS_MERGE_FIELD];
+      mergeDicts(existingRow, row);
+      restoreMergeRowSkipFields(existingRow, skipFields);
+      if (preserveNoMerge) {
+        delete existingRow[IS_MERGE_FIELD];
+      }
+    } else {
+      rowGroups.set(key, row);
+    }
+  }
+  const merged = [...rowGroups.values()];
+  const rowToLabel = new Map(
+    merged.map((r, i) => [generateMergedRowKey(r), i])
+  );
+  const graph = new Map(
+    Array.from({ length: merged.length }).map((_, i) => [i, /* @__PURE__ */ new Set()])
+  );
+  merged.forEach((r, i) => {
+    const parentId = r[PARENT_ID_FIELD];
+    if (!parentId) {
+      return;
+    }
+    const parentRowKey = generateMergedRowKey(
+      r,
+      true
+      /* useParentIdForId */
+    );
+    const parentLabel = rowToLabel.get(parentRowKey);
+    if (parentLabel !== void 0) {
+      mapAt(graph, parentLabel).add(i);
+    }
+  });
+  const connectedComponents = undirectedConnectedComponents({
+    vertices: new Set(graph.keys()),
+    edges: new Set(
+      [...graph.entries()].flatMap(
+        ([k, vs]) => [...vs].map((v) => {
+          const ret = [k, v];
+          return ret;
+        })
+      )
+    )
+  });
+  const buckets = connectedComponents.map(
+    (cc) => topologicalSort(
+      graph,
+      cc
+      /* visitationOrder */
+    )
+  );
+  return buckets.map((bucket) => bucket.map((i) => merged[i]));
+}
+function batchItems(args) {
+  let { items } = args;
+  const batchMaxNumItems = _nullishCoalesce(args.batchMaxNumItems, () => ( Number.POSITIVE_INFINITY));
+  const batchMaxNumBytes = _nullishCoalesce(args.batchMaxNumBytes, () => ( Number.POSITIVE_INFINITY));
+  const output = [];
+  let nextItems = [];
+  let batchSet = [];
+  let batch = [];
+  let batchLen = 0;
+  function addToBatch(item) {
+    batch.push(item);
+    batchLen += item.length;
+  }
+  function flushBatch() {
+    batchSet.push(batch);
+    batch = [];
+    batchLen = 0;
+  }
+  while (items.length) {
+    for (const bucket of items) {
+      let i = 0;
+      for (const item of bucket) {
+        if (batch.length === 0 || item.length + batchLen < batchMaxNumBytes && batch.length < batchMaxNumItems) {
+          addToBatch(item);
+        } else if (i === 0) {
+          flushBatch();
+          addToBatch(item);
+        } else {
+          break;
+        }
+        ++i;
+      }
+      if (i < bucket.length) {
+        nextItems.push(bucket.slice(i));
+      }
+      if (batchLen >= batchMaxNumBytes || batch.length > batchMaxNumItems) {
+        flushBatch();
+      }
+    }
+    if (batch.length) {
+      flushBatch();
+    }
+    if (batchSet.length) {
+      output.push(batchSet);
+      batchSet = [];
+    }
+    items = nextItems;
+    nextItems = [];
+  }
+  return output;
+}
+
+// util/object.ts
+var DEFAULT_IS_LEGACY_DATASET = false;
+function ensureDatasetRecord(r, legacy) {
+  if (legacy) {
+    return ensureLegacyDatasetRecord(r);
+  } else {
+    return ensureNewDatasetRecord(r);
+  }
+}
+function ensureLegacyDatasetRecord(r) {
+  if ("output" in r) {
+    return r;
+  }
+  const row = {
+    ...r,
+    output: r.expected
+  };
+  delete row.expected;
+  return row;
+}
+function ensureNewDatasetRecord(r) {
+  if ("expected" in r) {
+    return r;
+  }
+  const row = {
+    ...r,
+    tags: null,
+    expected: r.output
+  };
+  delete row.output;
+  return row;
+}
+
+// util/json_util.ts
+function deterministicReplacer(_key, value) {
+  return value instanceof Object && !(value instanceof Array) ? Object.keys(value).sort().reduce((sorted, key) => {
+    sorted[key] = value[key];
+    return sorted;
+  }, {}) : value;
+}
+function constructJsonArray(items) {
+  return `[${items.join(",")}]`;
+}
+
+// util/string_util.ts
+function _urljoin(...parts) {
+  return parts.map(
+    (x, i) => x.replace(/^\//, "").replace(i < parts.length - 1 ? /\/$/ : "", "")
+  ).filter((x) => x.trim() !== "").join("/");
+}
+function capitalize(s, sep) {
+  const items = sep ? s.split(sep) : [s];
+  return items.map((s2) => s2 ? s2.charAt(0).toUpperCase() + s2.slice(1) : s2).join(sep || "");
+}
+function lowercase(s, sep) {
+  const items = sep ? s.split(sep) : [s];
+  return items.map((s2) => s2 ? s2.charAt(0).toLowerCase() + s2.slice(1) : s2).join(sep || "");
+}
+function snakeToCamelCase(s) {
+  return s.split("_").map((s2) => capitalize(s2)).join("");
+}
+function snakeToTitleCase(s) {
+  return capitalize(s, "_").replace("_", " ");
+}
+function camelToSnakeCase(s) {
+  return s.replace(/([A-Z])/g, (m) => "_" + m.toLowerCase()).replace(/^_/, "");
+}
+
+// util/span_identifier_v4.ts
+
+var ENCODING_VERSION_NUMBER_V4 = 4;
+function tryMakeHexTraceId(s) {
+  try {
+    if (typeof s === "string" && s.length === 32) {
+      const bytes = new Uint8Array(16);
+      for (let i = 0; i < 16; i++) {
+        const hex = s.substr(i * 2, 2);
+        const byte = parseInt(hex, 16);
+        if (isNaN(byte)) throw new Error();
+        bytes[i] = byte;
+      }
+      return { bytes, isHex: true };
+    }
+  } catch (e4) {
+  }
+  return { bytes: void 0, isHex: false };
+}
+function tryMakeHexSpanId(s) {
+  try {
+    if (typeof s === "string" && s.length === 16) {
+      const bytes = new Uint8Array(8);
+      for (let i = 0; i < 8; i++) {
+        const hex = s.substr(i * 2, 2);
+        const byte = parseInt(hex, 16);
+        if (isNaN(byte)) throw new Error();
+        bytes[i] = byte;
+      }
+      return { bytes, isHex: true };
+    }
+  } catch (e5) {
+  }
+  return { bytes: void 0, isHex: false };
+}
+var INVALID_ENCODING_ERRMSG_V4 = `SpanComponents string is not properly encoded. This library only supports encoding versions up to ${ENCODING_VERSION_NUMBER_V4}. Please make sure the SDK library used to decode the SpanComponents is at least as new as any library used to encode it.`;
+var FIELDS_ID_TO_NAME = {
+  [1 /* OBJECT_ID */]: "object_id",
+  [2 /* ROW_ID */]: "row_id",
+  [3 /* SPAN_ID */]: "span_id",
+  [4 /* ROOT_SPAN_ID */]: "root_span_id"
+};
+var spanComponentsV4Schema = _v3.z.object({
+  object_type: spanObjectTypeV3EnumSchema,
+  propagated_event: _v3.z.record(_v3.z.unknown()).nullish()
+}).and(
+  _v3.z.union([
+    // Must provide one or the other.
+    _v3.z.object({
+      object_id: _v3.z.string().nullish(),
+      compute_object_metadata_args: _v3.z.optional(_v3.z.null())
+    }),
+    _v3.z.object({
+      object_id: _v3.z.optional(_v3.z.null()),
+      compute_object_metadata_args: _v3.z.record(_v3.z.unknown())
+    })
+  ])
+).and(
+  _v3.z.union([
+    // Either all of these must be provided or none.
+    _v3.z.object({
+      row_id: _v3.z.string(),
+      span_id: _v3.z.string(),
+      root_span_id: _v3.z.string()
+    }),
+    _v3.z.object({
+      row_id: _v3.z.optional(_v3.z.null()),
+      span_id: _v3.z.optional(_v3.z.null()),
+      root_span_id: _v3.z.optional(_v3.z.null())
+    })
+  ])
+);
+var SpanComponentsV4 = class _SpanComponentsV4 {
+  constructor(data) {
+    this.data = data;
+  }
+  toStr() {
+    const jsonObj = {
+      compute_object_metadata_args: this.data.compute_object_metadata_args || void 0,
+      propagated_event: this.data.propagated_event || void 0
+    };
+    Object.keys(jsonObj).forEach((key) => {
+      if (jsonObj[key] === void 0) {
+        delete jsonObj[key];
+      }
+    });
+    const allBuffers = [];
+    allBuffers.push(
+      new Uint8Array([ENCODING_VERSION_NUMBER_V4, this.data.object_type])
+    );
+    const hexEntries = [];
+    function addHexField(origVal, fieldId) {
+      let hexResult;
+      if (fieldId === 3 /* SPAN_ID */) {
+        hexResult = tryMakeHexSpanId(origVal);
+      } else if (fieldId === 4 /* ROOT_SPAN_ID */) {
+        hexResult = tryMakeHexTraceId(origVal);
+      } else {
+        hexResult = { bytes: void 0, isHex: false };
+      }
+      if (hexResult.isHex) {
+        hexEntries.push(
+          concatUint8Arrays(new Uint8Array([fieldId]), hexResult.bytes)
+        );
+      } else {
+        jsonObj[FIELDS_ID_TO_NAME[fieldId]] = origVal;
+      }
+    }
+    if (this.data.object_id) {
+      addHexField(this.data.object_id, 1 /* OBJECT_ID */);
+    }
+    if (this.data.row_id) {
+      addHexField(this.data.row_id, 2 /* ROW_ID */);
+    }
+    if (this.data.span_id) {
+      addHexField(this.data.span_id, 3 /* SPAN_ID */);
+    }
+    if (this.data.root_span_id) {
+      addHexField(this.data.root_span_id, 4 /* ROOT_SPAN_ID */);
+    }
+    if (hexEntries.length > 255) {
+      throw new Error("Impossible: too many hex entries to encode");
+    }
+    allBuffers.push(new Uint8Array([hexEntries.length]));
+    allBuffers.push(...hexEntries);
+    if (Object.keys(jsonObj).length > 0) {
+      allBuffers.push(stringToUint8Array(JSON.stringify(jsonObj)));
+    }
+    return uint8ArrayToBase64(concatUint8Arrays(...allBuffers));
+  }
+  static fromStr(s) {
+    try {
+      const rawBytes = base64ToUint8Array(s);
+      const jsonObj = {};
+      if (rawBytes[0] < ENCODING_VERSION_NUMBER_V4) {
+        const v3Components = SpanComponentsV3.fromStr(s);
+        jsonObj["object_type"] = v3Components.data.object_type;
+        jsonObj["object_id"] = v3Components.data.object_id;
+        jsonObj["compute_object_metadata_args"] = v3Components.data.compute_object_metadata_args;
+        jsonObj["row_id"] = v3Components.data.row_id;
+        jsonObj["span_id"] = v3Components.data.span_id;
+        jsonObj["root_span_id"] = v3Components.data.root_span_id;
+        jsonObj["propagated_event"] = v3Components.data.propagated_event;
+      } else {
+        jsonObj["object_type"] = rawBytes[1];
+        const numHexEntries = rawBytes[2];
+        let byteOffset = 3;
+        for (let i = 0; i < numHexEntries; i++) {
+          const fieldId = rawBytes[byteOffset];
+          if (fieldId === 3 /* SPAN_ID */) {
+            const hexBytes = rawBytes.subarray(byteOffset + 1, byteOffset + 9);
+            byteOffset += 9;
+            jsonObj[FIELDS_ID_TO_NAME[fieldId]] = Array.from(
+              hexBytes,
+              (b) => b.toString(16).padStart(2, "0")
+            ).join("");
+          } else if (fieldId === 4 /* ROOT_SPAN_ID */) {
+            const hexBytes = rawBytes.subarray(byteOffset + 1, byteOffset + 17);
+            byteOffset += 17;
+            jsonObj[FIELDS_ID_TO_NAME[fieldId]] = Array.from(
+              hexBytes,
+              (b) => b.toString(16).padStart(2, "0")
+            ).join("");
+          } else {
+            const hexBytes = rawBytes.subarray(byteOffset + 1, byteOffset + 17);
+            byteOffset += 17;
+            jsonObj[FIELDS_ID_TO_NAME[fieldId]] = Array.from(
+              hexBytes,
+              (b) => b.toString(16).padStart(2, "0")
+            ).join("");
+          }
+        }
+        if (byteOffset < rawBytes.length) {
+          const remainingJsonObj = JSON.parse(
+            uint8ArrayToString(rawBytes.subarray(byteOffset))
+          );
+          Object.assign(jsonObj, remainingJsonObj);
+        }
+      }
+      return _SpanComponentsV4.fromJsonObj(jsonObj);
+    } catch (e6) {
+      throw new Error(INVALID_ENCODING_ERRMSG_V4);
+    }
+  }
+  objectIdFields() {
+    if (!this.data.object_id) {
+      throw new Error(
+        "Impossible: cannot invoke `objectIdFields` unless SpanComponentsV4 is initialized with an `object_id`"
+      );
+    }
+    switch (this.data.object_type) {
+      case 1 /* EXPERIMENT */:
+        return { experiment_id: this.data.object_id };
+      case 2 /* PROJECT_LOGS */:
+        return { project_id: this.data.object_id, log_id: "g" };
+      case 3 /* PLAYGROUND_LOGS */:
+        return { prompt_session_id: this.data.object_id, log_id: "x" };
+      default:
+        const _ = this.data.object_type;
+        throw new Error(`Invalid object_type ${this.data.object_type}`);
+    }
+  }
+  async export() {
+    return this.toStr();
+  }
+  static fromJsonObj(jsonObj) {
+    return new _SpanComponentsV4(spanComponentsV4Schema.parse(jsonObj));
+  }
+};
+function parseParent(parent) {
+  return typeof parent === "string" ? parent : parent ? new SpanComponentsV4({
+    object_type: parent.object_type === "experiment" ? 1 /* EXPERIMENT */ : parent.object_type === "playground_logs" ? 3 /* PLAYGROUND_LOGS */ : 2 /* PROJECT_LOGS */,
+    object_id: parent.object_id,
+    ...parent.row_ids ? {
+      row_id: parent.row_ids.id,
+      span_id: parent.row_ids.span_id,
+      root_span_id: parent.row_ids.root_span_id
+    } : {
+      row_id: void 0,
+      span_id: void 0,
+      root_span_id: void 0
+    },
+    propagated_event: parent.propagated_event
+  }).toStr() : void 0;
+}
+
+// util/span_types.ts
+var spanTypeAttributeValues = [
+  "llm",
+  "score",
+  "function",
+  "eval",
+  "task",
+  "tool"
+];
+var SpanTypeAttribute = /* @__PURE__ */ ((SpanTypeAttribute2) => {
+  SpanTypeAttribute2["LLM"] = "llm";
+  SpanTypeAttribute2["SCORE"] = "score";
+  SpanTypeAttribute2["FUNCTION"] = "function";
+  SpanTypeAttribute2["EVAL"] = "eval";
+  SpanTypeAttribute2["TASK"] = "task";
+  SpanTypeAttribute2["TOOL"] = "tool";
+  return SpanTypeAttribute2;
+})(SpanTypeAttribute || {});
+var spanPurposeAttributeValues = ["scorer"];
+
+// util/git_fields.ts
+function mergeGitMetadataSettings(s1, s2) {
+  if (s1.collect === "all") {
+    return s2;
+  } else if (s2.collect === "all") {
+    return s1;
+  } else if (s1.collect === "none") {
+    return s1;
+  } else if (s2.collect === "none") {
+    return s2;
+  }
+  const fields = (_nullishCoalesce(s1.fields, () => ( []))).filter((f) => (_nullishCoalesce(s2.fields, () => ( []))).includes(f));
+  const collect = fields.length > 0 ? "some" : "none";
+  return { collect, fields };
+}
+
+// util/xact-ids.ts
+var TOP_BITS = BigInt("0x0DE1") << BigInt(48);
+var MOD = BigInt(1) << BigInt(64);
+var COPRIME = BigInt("205891132094649");
+var COPRIME_INVERSE = BigInt("1522336535492693385");
+function modularMultiply(value, prime) {
+  return value * prime % MOD;
+}
+function prettifyXact(valueString) {
+  const value = BigInt(valueString);
+  const encoded = modularMultiply(value, COPRIME);
+  return encoded.toString(16).padStart(16, "0");
+}
+function loadPrettyXact(encodedHex) {
+  if (encodedHex.length !== 16) {
+    return encodedHex;
+  }
+  const value = BigInt(`0x${encodedHex}`);
+  const multipliedInverse = modularMultiply(value, COPRIME_INVERSE);
+  const withTopBits = TOP_BITS | multipliedInverse;
+  return withTopBits.toString();
+}
+
+// util/zod_util.ts
+
+var ExtraFieldsError = class extends Error {
+  constructor(key, path) {
+    super(
+      `Extraneous key ${JSON.stringify(key)} at path ${JSON.stringify(path)}`
+    );
+    this.key = key;
+    this.path = path;
+  }
+};
+function parseNoStrip(schema, input) {
+  const output = schema.parse(input);
+  forEachMissingKey({
+    lhs: output,
+    rhs: input,
+    fn: ({ k, path }) => {
+      throw new ExtraFieldsError(k, path);
+    }
+  });
+  return output;
+}
+function objectNullish(object) {
+  return new _v3.z.ZodObject({
+    ...object._def,
+    shape: () => Object.fromEntries(
+      Object.entries(object.shape).map(([k, v]) => [k, v.nullish()])
+    )
+  });
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+exports.ASYNC_SCORING_CONTROL_FIELD = ASYNC_SCORING_CONTROL_FIELD; exports.AUDIT_METADATA_FIELD = AUDIT_METADATA_FIELD; exports.AUDIT_SOURCE_FIELD = AUDIT_SOURCE_FIELD; exports.BT_CURSOR_HEADER = BT_CURSOR_HEADER; exports.BT_FOUND_EXISTING_HEADER = BT_FOUND_EXISTING_HEADER; exports.BT_IMPERSONATE_USER = BT_IMPERSONATE_USER; exports.BT_PARENT = BT_PARENT; exports.CREATED_FIELD = CREATED_FIELD; exports.DEFAULT_IS_LEGACY_DATASET = DEFAULT_IS_LEGACY_DATASET; exports.ExtraFieldsError = ExtraFieldsError; exports.ID_FIELD = ID_FIELD; exports.IS_MERGE_FIELD = IS_MERGE_FIELD; exports.MERGE_PATHS_FIELD = MERGE_PATHS_FIELD; exports.OBJECT_DELETE_FIELD = OBJECT_DELETE_FIELD; exports.PARENT_ID_FIELD = PARENT_ID_FIELD; exports.SKIP_ASYNC_SCORING_FIELD = SKIP_ASYNC_SCORING_FIELD; exports.SpanComponentsV1 = SpanComponentsV1; exports.SpanComponentsV2 = SpanComponentsV2; exports.SpanComponentsV3 = SpanComponentsV3; exports.SpanComponentsV4 = SpanComponentsV4; exports.SpanObjectTypeV1 = SpanObjectTypeV1; exports.SpanObjectTypeV2 = SpanObjectTypeV2; exports.SpanObjectTypeV3 = SpanObjectTypeV3; exports.SpanRowIdsV1 = SpanRowIdsV1; exports.SpanRowIdsV2 = SpanRowIdsV2; exports.SpanTypeAttribute = SpanTypeAttribute; exports.TRANSACTION_ID_FIELD = TRANSACTION_ID_FIELD; exports.VALID_SOURCES = VALID_SOURCES; exports._urljoin = _urljoin; exports.base64ToUint8Array = base64ToUint8Array; exports.batchItems = batchItems; exports.camelToSnakeCase = camelToSnakeCase; exports.capitalize = capitalize; exports.concatUint8Arrays = concatUint8Arrays; exports.constructJsonArray = constructJsonArray; exports.deterministicReplacer = deterministicReplacer; exports.ensureDatasetRecord = ensureDatasetRecord; exports.ensureLegacyDatasetRecord = ensureLegacyDatasetRecord; exports.ensureNewDatasetRecord = ensureNewDatasetRecord; exports.forEachMissingKey = forEachMissingKey; exports.getObjValueByPath = getObjValueByPath; exports.getRecordKeys = getRecordKeys; exports.isArray = isArray; exports.isEmpty = isEmpty; exports.isNumber = isNumber; exports.isObject = isObject; exports.isObjectOrArray = isObjectOrArray; exports.loadPrettyXact = loadPrettyXact; exports.lowercase = lowercase; exports.mapAt = mapAt; exports.mapSetDefault = mapSetDefault; exports.mapSetNotPresent = mapSetNotPresent; exports.mergeDicts = mergeDicts; exports.mergeDictsWithPaths = mergeDictsWithPaths; exports.mergeGitMetadataSettings = mergeGitMetadataSettings; exports.mergeRowBatch = mergeRowBatch; exports.notEmpty = notEmpty; exports.objectNullish = objectNullish; exports.parseNoStrip = parseNoStrip; exports.parseParent = parseParent; exports.prettifyXact = prettifyXact; exports.recordAt = recordAt; exports.recordFind = recordFind; exports.recordSetDefault = recordSetDefault; exports.resolveParentHeader = resolveParentHeader; exports.snakeToCamelCase = snakeToCamelCase; exports.snakeToTitleCase = snakeToTitleCase; exports.spanComponentsV3Schema = spanComponentsV3Schema; exports.spanComponentsV4Schema = spanComponentsV4Schema; exports.spanObjectTypeV3EnumSchema = spanObjectTypeV3EnumSchema; exports.spanObjectTypeV3ToString = spanObjectTypeV3ToString; exports.spanPurposeAttributeValues = spanPurposeAttributeValues; exports.spanTypeAttributeValues = spanTypeAttributeValues; exports.stringToUint8Array = stringToUint8Array; exports.uint8ArrayToBase64 = uint8ArrayToBase64; exports.uint8ArrayToString = uint8ArrayToString;

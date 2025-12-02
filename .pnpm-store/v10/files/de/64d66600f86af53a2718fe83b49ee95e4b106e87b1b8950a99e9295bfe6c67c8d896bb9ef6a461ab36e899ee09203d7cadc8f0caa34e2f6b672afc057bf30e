@@ -1,0 +1,95 @@
+{
+	"name": "conf",
+	"version": "13.1.0",
+	"description": "Simple config handling for your app or module",
+	"license": "MIT",
+	"repository": "sindresorhus/conf",
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		"types": "./dist/source/index.d.ts",
+		"default": "./dist/source/index.js"
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"test": "xo && npm run build && ava",
+		"build": "del-cli dist && tsc",
+		"prepack": "npm run build"
+	},
+	"files": [
+		"dist/source"
+	],
+	"keywords": [
+		"config",
+		"store",
+		"app",
+		"storage",
+		"conf",
+		"configuration",
+		"settings",
+		"preferences",
+		"json",
+		"data",
+		"persist",
+		"persistent",
+		"save",
+		"load",
+		"read",
+		"write",
+		"cache"
+	],
+	"dependencies": {
+		"ajv": "^8.17.1",
+		"ajv-formats": "^3.0.1",
+		"atomically": "^2.0.3",
+		"debounce-fn": "^6.0.0",
+		"dot-prop": "^9.0.0",
+		"env-paths": "^3.0.0",
+		"json-schema-typed": "^8.0.1",
+		"semver": "^7.6.3",
+		"uint8array-extras": "^1.4.0"
+	},
+	"devDependencies": {
+		"@sindresorhus/tsconfig": "^7.0.0",
+		"@types/node": "^22.10.1",
+		"@types/semver": "^7.5.8",
+		"ava": "^6.2.0",
+		"del": "^8.0.0",
+		"del-cli": "^6.0.0",
+		"delay": "^6.0.0",
+		"p-event": "^6.0.1",
+		"tempy": "^3.1.0",
+		"ts-node": "^10.9.2",
+		"tsd": "^0.31.2",
+		"typescript": "^5.7.2",
+		"xo": "^0.60.0"
+	},
+	"ava": {
+		"files": [
+			"test/*",
+			"!test/index.test-d.ts"
+		],
+		"timeout": "1m",
+		"extensions": {
+			"ts": "module"
+		},
+		"nodeArguments": [
+			"--loader=ts-node/esm"
+		],
+		"workerThreads": false
+	},
+	"xo": {
+		"rules": {
+			"@typescript-eslint/ban-ts-comment": "off",
+			"unicorn/prevent-abbreviations": "off"
+		}
+	}
+}

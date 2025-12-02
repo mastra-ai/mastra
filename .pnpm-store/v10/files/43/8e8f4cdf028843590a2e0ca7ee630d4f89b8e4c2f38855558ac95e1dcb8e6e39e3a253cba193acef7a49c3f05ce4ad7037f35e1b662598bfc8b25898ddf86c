@@ -1,0 +1,430 @@
+'use strict';
+
+var chunkTWH4PTDG_cjs = require('./chunk-TWH4PTDG.cjs');
+var chunkKEXGB7FK_cjs = require('./chunk-KEXGB7FK.cjs');
+var stream = require('stream');
+var aiV5 = require('ai-v5');
+
+// src/voice/voice.ts
+var MastraVoice = class extends chunkKEXGB7FK_cjs.MastraBase {
+  listeningModel;
+  speechModel;
+  speaker;
+  realtimeConfig;
+  constructor({ listeningModel, speechModel, speaker, realtimeConfig, name } = {}) {
+    super({
+      component: "VOICE",
+      name
+    });
+    this.listeningModel = listeningModel;
+    this.speechModel = speechModel;
+    this.speaker = speaker;
+    this.realtimeConfig = realtimeConfig;
+  }
+  updateConfig(_options) {
+    this.logger.warn("updateConfig not implemented by this voice provider");
+  }
+  /**
+   * Initializes a WebSocket or WebRTC connection for real-time communication
+   * @returns Promise that resolves when the connection is established
+   */
+  connect(_options) {
+    this.logger.warn("connect not implemented by this voice provider");
+    return Promise.resolve();
+  }
+  /**
+   * Relay audio data to the voice provider for real-time processing
+   * @param audioData Audio data to relay
+   */
+  send(_audioData) {
+    this.logger.warn("relay not implemented by this voice provider");
+    return Promise.resolve();
+  }
+  /**
+   * Trigger voice providers to respond
+   */
+  answer(_options) {
+    this.logger.warn("answer not implemented by this voice provider");
+    return Promise.resolve();
+  }
+  /**
+   * Equip the voice provider with instructions
+   * @param instructions Instructions to add
+   */
+  addInstructions(_instructions) {
+  }
+  /**
+   * Equip the voice provider with tools
+   * @param tools Array of tools to add
+   */
+  addTools(_tools) {
+  }
+  /**
+   * Disconnect from the WebSocket or WebRTC connection
+   */
+  close() {
+    this.logger.warn("close not implemented by this voice provider");
+  }
+  /**
+   * Register an event listener
+   * @param event Event name (e.g., 'speaking', 'writing', 'error')
+   * @param callback Callback function that receives event data
+   */
+  on(_event, _callback) {
+    this.logger.warn("on not implemented by this voice provider");
+  }
+  /**
+   * Remove an event listener
+   * @param event Event name (e.g., 'speaking', 'writing', 'error')
+   * @param callback Callback function to remove
+   */
+  off(_event, _callback) {
+    this.logger.warn("off not implemented by this voice provider");
+  }
+  /**
+   * Get available speakers/voices
+   * @returns Array of available voice IDs and their metadata
+   */
+  getSpeakers() {
+    this.logger.warn("getSpeakers not implemented by this voice provider");
+    return Promise.resolve([]);
+  }
+  /**
+   * Get available speakers/voices
+   * @returns Array of available voice IDs and their metadata
+   */
+  getListener() {
+    this.logger.warn("getListener not implemented by this voice provider");
+    return Promise.resolve({ enabled: false });
+  }
+};
+var AISDKSpeech = class extends MastraVoice {
+  model;
+  defaultVoice;
+  constructor(model, options) {
+    super({ name: "ai-sdk-speech" });
+    this.model = model;
+    this.defaultVoice = options?.voice;
+  }
+  async speak(input, options) {
+    const text = typeof input === "string" ? input : await this.streamToText(input);
+    const result = await aiV5.experimental_generateSpeech({
+      model: this.model,
+      text,
+      voice: options?.speaker || this.defaultVoice,
+      // Map speaker to AI SDK's voice parameter
+      language: options?.language,
+      providerOptions: options?.providerOptions,
+      abortSignal: options?.abortSignal,
+      headers: options?.headers
+    });
+    const stream$1 = new stream.PassThrough();
+    stream$1.end(Buffer.from(result.audio.uint8Array));
+    return stream$1;
+  }
+  async listen() {
+    throw new Error("AI SDK speech models do not support transcription. Use AISDKTranscription instead.");
+  }
+  async getSpeakers() {
+    return [];
+  }
+  async getListener() {
+    return { enabled: false };
+  }
+  async streamToText(stream) {
+    const chunks = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks).toString("utf-8");
+  }
+};
+var AISDKTranscription = class extends MastraVoice {
+  model;
+  constructor(model) {
+    super({ name: "ai-sdk-transcription" });
+    this.model = model;
+  }
+  async speak() {
+    throw new Error("AI SDK transcription models do not support text-to-speech. Use AISDKSpeech instead.");
+  }
+  async getSpeakers() {
+    return [];
+  }
+  async getListener() {
+    return { enabled: true };
+  }
+  /**
+   * Transcribe audio to text
+   * For enhanced metadata (segments, language, duration), use AI SDK's transcribe() directly
+   */
+  async listen(audioStream, options) {
+    const audioBuffer = await this.convertToBuffer(audioStream);
+    const result = await aiV5.experimental_transcribe({
+      model: this.model,
+      audio: audioBuffer,
+      providerOptions: options?.providerOptions,
+      abortSignal: options?.abortSignal,
+      headers: options?.headers
+    });
+    return result.text;
+  }
+  async convertToBuffer(audio) {
+    if (Buffer.isBuffer(audio)) return audio;
+    if (audio instanceof Uint8Array) return Buffer.from(audio);
+    if (typeof audio === "string") return Buffer.from(audio, "base64");
+    const chunks = [];
+    for await (const chunk of audio) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+};
+
+// src/voice/composite-voice.ts
+function isTranscriptionModel(obj) {
+  return obj && typeof obj === "object" && obj.modelId && obj.specificationVersion === "v2";
+}
+function isSpeechModel(obj) {
+  return obj && typeof obj === "object" && obj.modelId && obj.specificationVersion === "v2";
+}
+var CompositeVoice = class extends MastraVoice {
+  speakProvider;
+  listenProvider;
+  realtimeProvider;
+  constructor({
+    input,
+    output,
+    realtime
+  }) {
+    super();
+    if (input) {
+      this.listenProvider = isTranscriptionModel(input) ? new AISDKTranscription(input) : input;
+    }
+    if (output) {
+      this.speakProvider = isSpeechModel(output) ? new AISDKSpeech(output) : output;
+    }
+    this.realtimeProvider = realtime;
+  }
+  /**
+   * Convert text to speech using the configured provider
+   * @param input Text or text stream to convert to speech
+   * @param options Speech options including speaker and provider-specific options
+   * @returns Audio stream or void if in realtime mode
+   */
+  async speak(input, options) {
+    if (this.realtimeProvider) {
+      return this.realtimeProvider.speak(input, options);
+    } else if (this.speakProvider) {
+      return this.speakProvider.speak(input, options);
+    }
+    throw new chunkTWH4PTDG_cjs.MastraError({
+      id: "VOICE_COMPOSITE_NO_SPEAK_PROVIDER",
+      text: "No speak provider or realtime provider configured",
+      domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+      category: "USER" /* USER */
+    });
+  }
+  async listen(audioStream, options) {
+    if (this.realtimeProvider) {
+      return await this.realtimeProvider.listen(audioStream, options);
+    } else if (this.listenProvider) {
+      return await this.listenProvider.listen(audioStream, options);
+    }
+    throw new chunkTWH4PTDG_cjs.MastraError({
+      id: "VOICE_COMPOSITE_NO_LISTEN_PROVIDER",
+      text: "No listen provider or realtime provider configured",
+      domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+      category: "USER" /* USER */
+    });
+  }
+  async getSpeakers() {
+    if (this.realtimeProvider) {
+      return this.realtimeProvider.getSpeakers();
+    } else if (this.speakProvider) {
+      return this.speakProvider.getSpeakers();
+    }
+    throw new chunkTWH4PTDG_cjs.MastraError({
+      id: "VOICE_COMPOSITE_NO_SPEAKERS_PROVIDER",
+      text: "No speak provider or realtime provider configured",
+      domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+      category: "USER" /* USER */
+    });
+  }
+  async getListener() {
+    if (this.realtimeProvider) {
+      return this.realtimeProvider.getListener();
+    } else if (this.listenProvider) {
+      return this.listenProvider.getListener();
+    }
+    throw new chunkTWH4PTDG_cjs.MastraError({
+      id: "VOICE_COMPOSITE_NO_LISTENER_PROVIDER",
+      text: "No listener provider or realtime provider configured",
+      domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+      category: "USER" /* USER */
+    });
+  }
+  updateConfig(options) {
+    if (!this.realtimeProvider) {
+      return;
+    }
+    this.realtimeProvider.updateConfig(options);
+  }
+  /**
+   * Initializes a WebSocket or WebRTC connection for real-time communication
+   * @returns Promise that resolves when the connection is established
+   */
+  connect(options) {
+    if (!this.realtimeProvider) {
+      throw new chunkTWH4PTDG_cjs.MastraError({
+        id: "VOICE_COMPOSITE_NO_REALTIME_PROVIDER_CONNECT",
+        text: "No realtime provider configured",
+        domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+        category: "USER" /* USER */
+      });
+    }
+    return this.realtimeProvider.connect(options);
+  }
+  /**
+   * Relay audio data to the voice provider for real-time processing
+   * @param audioData Audio data to send
+   */
+  send(audioData) {
+    if (!this.realtimeProvider) {
+      throw new chunkTWH4PTDG_cjs.MastraError({
+        id: "VOICE_COMPOSITE_NO_REALTIME_PROVIDER_SEND",
+        text: "No realtime provider configured",
+        domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+        category: "USER" /* USER */
+      });
+    }
+    return this.realtimeProvider.send(audioData);
+  }
+  /**
+   * Trigger voice providers to respond
+   */
+  answer(options) {
+    if (!this.realtimeProvider) {
+      throw new chunkTWH4PTDG_cjs.MastraError({
+        id: "VOICE_COMPOSITE_NO_REALTIME_PROVIDER_ANSWER",
+        text: "No realtime provider configured",
+        domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+        category: "USER" /* USER */
+      });
+    }
+    return this.realtimeProvider.answer(options);
+  }
+  /**
+   * Equip the voice provider with instructions
+   * @param instructions Instructions to add
+   */
+  addInstructions(instructions) {
+    if (!this.realtimeProvider) {
+      return;
+    }
+    this.realtimeProvider.addInstructions(instructions);
+  }
+  /**
+   * Equip the voice provider with tools
+   * @param tools Array of tools to add
+   */
+  addTools(tools) {
+    if (!this.realtimeProvider) {
+      return;
+    }
+    this.realtimeProvider.addTools(tools);
+  }
+  /**
+   * Disconnect from the WebSocket or WebRTC connection
+   */
+  close() {
+    if (!this.realtimeProvider) {
+      throw new chunkTWH4PTDG_cjs.MastraError({
+        id: "VOICE_COMPOSITE_NO_REALTIME_PROVIDER_CLOSE",
+        text: "No realtime provider configured",
+        domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+        category: "USER" /* USER */
+      });
+    }
+    this.realtimeProvider.close();
+  }
+  /**
+   * Register an event listener
+   * @param event Event name (e.g., 'speaking', 'writing', 'error')
+   * @param callback Callback function that receives event data
+   */
+  on(event, callback) {
+    if (!this.realtimeProvider) {
+      throw new chunkTWH4PTDG_cjs.MastraError({
+        id: "VOICE_COMPOSITE_NO_REALTIME_PROVIDER_ON",
+        text: "No realtime provider configured",
+        domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+        category: "USER" /* USER */
+      });
+    }
+    this.realtimeProvider.on(event, callback);
+  }
+  /**
+   * Remove an event listener
+   * @param event Event name (e.g., 'speaking', 'writing', 'error')
+   * @param callback Callback function to remove
+   */
+  off(event, callback) {
+    if (!this.realtimeProvider) {
+      throw new chunkTWH4PTDG_cjs.MastraError({
+        id: "VOICE_COMPOSITE_NO_REALTIME_PROVIDER_OFF",
+        text: "No realtime provider configured",
+        domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+        category: "USER" /* USER */
+      });
+    }
+    this.realtimeProvider.off(event, callback);
+  }
+};
+
+// src/voice/default-voice.ts
+var DefaultVoice = class extends MastraVoice {
+  constructor() {
+    super();
+  }
+  async speak(_input) {
+    throw new chunkTWH4PTDG_cjs.MastraError({
+      id: "VOICE_DEFAULT_NO_SPEAK_PROVIDER",
+      text: "No voice provider configured",
+      domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+      category: "USER" /* USER */
+    });
+  }
+  async listen(_input) {
+    throw new chunkTWH4PTDG_cjs.MastraError({
+      id: "VOICE_DEFAULT_NO_LISTEN_PROVIDER",
+      text: "No voice provider configured",
+      domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+      category: "USER" /* USER */
+    });
+  }
+  async getSpeakers() {
+    throw new chunkTWH4PTDG_cjs.MastraError({
+      id: "VOICE_DEFAULT_NO_SPEAKERS_PROVIDER",
+      text: "No voice provider configured",
+      domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+      category: "USER" /* USER */
+    });
+  }
+  async getListener() {
+    throw new chunkTWH4PTDG_cjs.MastraError({
+      id: "VOICE_DEFAULT_NO_LISTENER_PROVIDER",
+      text: "No voice provider configured",
+      domain: "MASTRA_VOICE" /* MASTRA_VOICE */,
+      category: "USER" /* USER */
+    });
+  }
+};
+
+exports.AISDKSpeech = AISDKSpeech;
+exports.AISDKTranscription = AISDKTranscription;
+exports.CompositeVoice = CompositeVoice;
+exports.DefaultVoice = DefaultVoice;
+exports.MastraVoice = MastraVoice;
+//# sourceMappingURL=chunk-ISMGVGUM.cjs.map
+//# sourceMappingURL=chunk-ISMGVGUM.cjs.map

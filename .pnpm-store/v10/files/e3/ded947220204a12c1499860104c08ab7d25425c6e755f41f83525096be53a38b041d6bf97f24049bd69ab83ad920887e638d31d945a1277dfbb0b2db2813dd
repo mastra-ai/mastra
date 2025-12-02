@@ -1,0 +1,11 @@
+const ical = require('./node-ical');
+//const data = ical.parseFile('jonathan2.ics', function(err, data) {
+const data = ical.parseFile('test/test23.ics', function(err, data) {
+    if (err) console.log(err);
+    for (const k in data) {
+      const ev = data[k];
+      delete data[k];
+      console.log(k);
+      console.log(ev);
+    }
+});

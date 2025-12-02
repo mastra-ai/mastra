@@ -1,0 +1,704 @@
+# Identifiers
+
+fn main() {
+  abc;
+}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,BoundIdentifier, ParamList, Block(
+    ExpressionStatement(Identifier))))
+
+
+# Raw identifiers
+
+fn main() {
+  (r#abc as r#Def).r#ghi;
+}
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList,
+    Block(
+      ExpressionStatement(FieldExpression(
+        ParenthesizedExpression(
+          TypeCastExpression(Identifier, as, TypeIdentifier)),
+        FieldIdentifier)))))
+
+
+# Unary operator expressions
+
+-num;
+!bits;
+*boxed_thing;
+
+==>
+
+SourceFile(
+  ExpressionStatement(UnaryExpression(ArithOp, Identifier)),
+  ExpressionStatement(UnaryExpression(LogicOp, Identifier)),
+  ExpressionStatement(UnaryExpression(DerefOp, Identifier)))
+
+
+# Reference expressions
+
+&a;
+&mut self.name;
+
+==>
+
+SourceFile(
+  ExpressionStatement(ReferenceExpression(Identifier)),
+  ExpressionStatement(ReferenceExpression(mut, FieldExpression(self, FieldIdentifier))))
+
+# Try expressions
+
+a.unwrap()?;
+
+==>
+
+SourceFile(
+  ExpressionStatement(TryExpression(CallExpression(FieldExpression(Identifier, FieldIdentifier), ArgList))))
+
+# Binary operator expressions
+
+a * b;
+a / b;
+a % b;
+a + b;
+a - b;
+a >> b;
+a << b;
+a == b;
+a && b;
+a || b;
+
+==>
+
+SourceFile(
+  ExpressionStatement(BinaryExpression(Identifier, ArithOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, ArithOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, ArithOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, ArithOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, ArithOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, BitOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, BitOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, CompareOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, LogicOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, LogicOp, Identifier)))
+
+# Grouped expressions
+
+(0);
+(2 * (3 + 4));
+
+==>
+
+SourceFile(
+  ExpressionStatement(ParenthesizedExpression(Integer)),
+  ExpressionStatement(ParenthesizedExpression(BinaryExpression(
+    Integer,
+    ArithOp,
+    ParenthesizedExpression(BinaryExpression(Integer, ArithOp, Integer))))))
+
+
+# Range expressions
+
+1..2;
+3..;
+..4;
+..;
+1..b;
+a..b;
+
+==>
+
+SourceFile(
+  ExpressionStatement(RangeExpression(Integer, Integer)),
+  ExpressionStatement(RangeExpression(Integer)),
+  ExpressionStatement(RangeExpression(Integer)),
+  ExpressionStatement(RangeExpression),
+  ExpressionStatement(RangeExpression(Integer, Identifier)),
+  ExpressionStatement(RangeExpression(Identifier, Identifier)))
+
+
+# Assignment expressions
+
+x = y;
+
+==>
+
+SourceFile(
+  ExpressionStatement(AssignmentExpression(
+    Identifier,
+    Identifier)))
+
+
+# Compound assignment expressions
+
+x += 1;
+x += y;
+
+==>
+
+SourceFile(
+  ExpressionStatement(AssignmentExpression(Identifier, UpdateOp, Integer)),
+  ExpressionStatement(AssignmentExpression(Identifier, UpdateOp, Identifier)))
+
+
+# Type cast expressions
+
+1000 as u8;
+let character = integer as char;
+let size: f64 = len(values) as f64;
+
+==>
+
+SourceFile(
+  ExpressionStatement(TypeCastExpression(
+    Integer,
+    as,
+    TypeIdentifier)),
+  LetDeclaration(let,
+    BoundIdentifier,
+    TypeCastExpression(
+      Identifier,
+      as,
+      TypeIdentifier)),
+  LetDeclaration(let,
+    BoundIdentifier,
+    TypeIdentifier,
+    TypeCastExpression(
+      CallExpression(
+        Identifier,
+        ArgList(Identifier)),
+      as,
+      TypeIdentifier)))
+
+
+# Call expressions
+
+foo();
+add(1i32, 2i32);
+add(
+    1i32,
+    2i32,
+);
+
+==>
+
+SourceFile(
+  ExpressionStatement(CallExpression(
+    Identifier,
+    ArgList)),
+  ExpressionStatement(CallExpression(
+    Identifier,
+    ArgList(Integer, Integer))),
+  ExpressionStatement(CallExpression(
+    Identifier,
+    ArgList(Integer, Integer))))
+
+
+# Array expressions
+
+[];
+[1, 2, 3];
+["a", "b", "c"];
+[0; 128];
+
+==>
+
+SourceFile(
+  ExpressionStatement(ArrayExpression),
+  ExpressionStatement(ArrayExpression(
+    Integer,
+    Integer,
+    Integer)),
+  ExpressionStatement(ArrayExpression(
+    String,
+    String,
+    String)),
+  ExpressionStatement(ArrayExpression(
+    Integer,
+    Integer)))
+
+
+# Tuple expressions
+
+();
+(0,);
+let (x, y, z) = (1, 2, 3);
+
+==>
+
+SourceFile(
+  ExpressionStatement(UnitExpression),
+  ExpressionStatement(TupleExpression(Integer)),
+  LetDeclaration(let,
+    TuplePattern(BoundIdentifier, BoundIdentifier, BoundIdentifier),
+    TupleExpression(Integer, Integer, Integer)))
+
+
+# Struct expressions
+
+NothingInMe {};
+Point {x: 10.0, y: 20.0};
+let a = SomeStruct { field1, field2: expression, field3, };
+let u = game::User {name: "Joe", age: 35, score: 100_000};
+
+==>
+
+SourceFile(
+  ExpressionStatement(StructExpression(TypeIdentifier,
+    FieldInitializerList)),
+  ExpressionStatement(StructExpression(TypeIdentifier,
+    FieldInitializerList(
+      FieldInitializer(FieldIdentifier, Float),
+      FieldInitializer(FieldIdentifier, Float)))),
+  LetDeclaration(let,
+    BoundIdentifier,
+    StructExpression(
+      TypeIdentifier,
+      FieldInitializerList(
+        ShorthandFieldInitializer(
+          Identifier),
+        FieldInitializer(FieldIdentifier, Identifier),
+        ShorthandFieldInitializer(
+          Identifier)))),
+  LetDeclaration(let,
+    BoundIdentifier,
+    StructExpression(
+      ScopedTypeIdentifier(ScopeIdentifier, TypeIdentifier),
+      FieldInitializerList(
+        FieldInitializer(FieldIdentifier, String),
+        FieldInitializer(FieldIdentifier, Integer),
+        FieldInitializer(FieldIdentifier, Integer)))))
+
+
+# Struct expressions with update initializers
+
+let u = User{name, ..current_user()};
+
+==>
+
+SourceFile(
+  LetDeclaration(let,
+    BoundIdentifier,
+    StructExpression(
+      TypeIdentifier,
+      FieldInitializerList(
+        ShorthandFieldInitializer(
+          Identifier),
+        BaseFieldInitializer(CallExpression(Identifier, ArgList))))))
+
+
+# If expressions
+
+fn main() {
+  if n == 1 {
+  } else if n == 2 {
+  } else {
+  }
+}
+
+let y = if x == 5 { 10 } else { 15 };
+
+==>
+
+SourceFile(
+  FunctionItem(fn,
+    BoundIdentifier,
+    ParamList,
+    Block(
+      ExpressionStatement(IfExpression(if,
+        BinaryExpression(
+          Identifier,
+          CompareOp,
+          Integer),
+        Block,
+        else,
+        IfExpression(if,
+          BinaryExpression(
+            Identifier,
+            CompareOp,
+            Integer),
+          Block,
+          else,
+          Block))))),
+  LetDeclaration(let,
+    BoundIdentifier,
+    IfExpression(if,
+      BinaryExpression(
+        Identifier,
+        CompareOp,
+        Integer),
+      Block(ExpressionStatement(Integer)),
+      else,
+      Block(ExpressionStatement(Integer)))))
+
+
+# If let expressions
+
+if let ("Bacon", b) = dish {
+}
+
+==>
+
+SourceFile(
+  ExpressionStatement(IfExpression(if, LetDeclaration(let, TuplePattern(LiteralPattern(String), BoundIdentifier), Identifier),
+    Block)))
+
+
+# While let expressions
+
+while let ("Bacon", b) = dish {
+}
+
+==>
+
+SourceFile(
+  ExpressionStatement(WhileExpression(while,
+    LetDeclaration(let, TuplePattern(LiteralPattern(String), BoundIdentifier), Identifier),
+    Block)))
+
+
+# Match expressions
+
+match x {
+    1 => { "one" }
+    2 => "two",
+    -1 => 1,
+    -3.14 => 3,
+
+    #[attr1]
+    3 => "three",
+    macro!(4) => "four",
+    _ => "something else",
+}
+
+let msg = match x {
+    0 | 1 | 10 => "one of zero, one, or ten",
+    y if y < 20 => "less than 20, but not zero, one, or ten",
+    y if y == 200 =>
+      if a {
+        "200 (but this is not very stylish)"
+      }
+    _ => "something else",
+};
+
+==>
+
+SourceFile(
+  ExpressionStatement(MatchExpression(match,
+    Identifier,
+    MatchBlock(
+      MatchArm(
+        LiteralPattern(Integer),
+        Block(
+          ExpressionStatement(String))),
+      MatchArm(
+        LiteralPattern(Integer),
+        String),
+      MatchArm(
+        LiteralPattern(ArithOp, Integer),
+        Integer),
+      MatchArm(
+        LiteralPattern(ArithOp, Float),
+        Integer),
+      MatchArm(
+        Attribute(
+          MetaItem(
+            Identifier)),
+        LiteralPattern(Integer),
+        String),
+      MatchArm(
+        MacroPattern(
+          Identifier,
+          ParenthesizedTokens(
+            Integer)),
+        String),
+      MatchArm(_, String)))),
+  LetDeclaration(let,
+    BoundIdentifier,
+    MatchExpression(match,
+      Identifier,
+      MatchBlock(
+        MatchArm(
+          OrPattern(OrPattern(LiteralPattern(Integer), LiteralPattern(Integer)), LiteralPattern(Integer)),
+          String),
+        MatchArm(
+          BoundIdentifier,
+          Guard(if,
+            BinaryExpression(
+              Identifier,
+              CompareOp,
+              Integer)),
+          String),
+        MatchArm(
+          BoundIdentifier,
+          Guard(if,
+            BinaryExpression(
+              Identifier,
+              CompareOp,
+              Integer)),
+          IfExpression(if,
+            Identifier,
+            Block(
+              ExpressionStatement(String)))),
+        MatchArm(
+          _,
+          String)))))
+
+
+# While expressions
+
+while !done {
+  done = true;
+}
+
+==>
+
+SourceFile(
+  ExpressionStatement(WhileExpression(while,
+    UnaryExpression(LogicOp, Identifier),
+    Block(
+      ExpressionStatement(AssignmentExpression(
+        Identifier,
+        Boolean))))))
+
+# Loop expressions
+
+'outer: loop {
+  'inner: loop {
+    break 'outer;
+    break true;
+  }
+}
+
+==>
+
+SourceFile(
+  ExpressionStatement(LoopExpression(LoopLabel, loop, Block(
+    ExpressionStatement(LoopExpression(LoopLabel, loop, Block(
+      ExpressionStatement(BreakExpression(break,LoopLabel)),
+      ExpressionStatement(BreakExpression(break,Boolean)))))))))
+
+# For expressions
+
+for e in v {
+  bar(e);
+}
+
+for i in 0..256 {
+  bar(i);
+}
+
+'outer: for x in 0..10 {
+    'inner: for y in 0..10 {
+        if x % 2 == 0 { continue 'outer; }
+        if y % 2 == 0 { continue 'inner; }
+    }
+}
+
+==>
+
+SourceFile(
+  ExpressionStatement(ForExpression(for,BoundIdentifier, in, Identifier, Block(
+    ExpressionStatement(CallExpression(Identifier, ArgList(Identifier)))))),
+  ExpressionStatement(ForExpression(for,BoundIdentifier, in, RangeExpression(Integer, Integer), Block(
+    ExpressionStatement(CallExpression(Identifier, ArgList(Identifier)))))),
+  ExpressionStatement(ForExpression(LoopLabel, for, BoundIdentifier, in, RangeExpression(Integer, Integer), Block(
+    ExpressionStatement(ForExpression(LoopLabel, for, BoundIdentifier, in, RangeExpression(Integer, Integer), Block(
+      ExpressionStatement(IfExpression(if,BinaryExpression(BinaryExpression(Identifier, ArithOp, Integer), CompareOp, Integer),
+        Block(ExpressionStatement(ContinueExpression(continue,LoopLabel))))),
+      ExpressionStatement(IfExpression(if,BinaryExpression(BinaryExpression(Identifier, ArithOp, Integer), CompareOp, Integer),
+        Block(ExpressionStatement(ContinueExpression(continue,LoopLabel))))))))))))
+
+
+# Field expressions
+
+mystruct.myfield;
+foo().x;
+value.0.1.iter();
+1.max(2);
+
+==>
+
+SourceFile(
+  ExpressionStatement(FieldExpression(Identifier, FieldIdentifier)),
+  ExpressionStatement(FieldExpression(CallExpression(Identifier, ArgList), FieldIdentifier)),
+  ExpressionStatement(CallExpression(
+    FieldExpression(
+      FieldExpression(FieldExpression(Identifier, Integer), Integer),
+      FieldIdentifier),
+    ArgList)),
+  ExpressionStatement(CallExpression(
+    FieldExpression(Integer, FieldIdentifier), ArgList(Integer))))
+
+
+# Method call expressions
+
+mystruct.foo();
+
+==>
+
+SourceFile(ExpressionStatement(CallExpression(FieldExpression(Identifier, FieldIdentifier), ArgList)))
+
+
+# Index expressions
+
+([1, 2, 3, 4])[0];
+arr[10];
+arr[n];
+
+==>
+
+SourceFile(
+  ExpressionStatement(IndexExpression(
+    ParenthesizedExpression(
+      ArrayExpression(Integer, Integer, Integer, Integer)),
+    Integer)),
+  ExpressionStatement(IndexExpression(Identifier, Integer)),
+  ExpressionStatement(IndexExpression(Identifier, Identifier)))
+
+
+# Scoped functions
+
+a::b();
+C::<D>::e();
+::f();
+::g::h();
+
+==>
+
+SourceFile(
+  ExpressionStatement(CallExpression(
+    ScopedIdentifier(ScopeIdentifier, Identifier),
+    ArgList)),
+  ExpressionStatement(CallExpression(
+    ScopedIdentifier(
+      ScopeIdentifier, TypeArgList(TypeIdentifier),
+      Identifier),
+    ArgList)),
+  ExpressionStatement(CallExpression(ScopedIdentifier(Identifier), ArgList)),
+  ExpressionStatement(CallExpression(ScopedIdentifier(ScopeIdentifier, Identifier), ArgList)))
+
+
+# Scoped functions with fully qualified syntax
+
+<Dog as Animal>::eat(d);
+
+==>
+
+SourceFile(
+  ExpressionStatement(CallExpression(
+    ScopedIdentifier(
+      QualifiedScope(TypeIdentifier, as, TypeIdentifier),
+      Identifier),
+    ArgList(Identifier))))
+
+
+# Scoped functions with macros as types
+
+<Token![]>::foo();
+
+==>
+
+SourceFile(
+  ExpressionStatement(CallExpression(
+    ScopedIdentifier(
+      QualifiedScope(MacroInvocation(TypeIdentifier, BracketedTokens)),
+      Identifier),
+    ArgList)))
+
+
+# Generic functions
+
+std::sizeof::<u32>();
+foo::<8>();
+
+==>
+
+SourceFile(
+  ExpressionStatement(CallExpression(
+    GenericFunction(
+      ScopedIdentifier(
+        ScopeIdentifier,
+        Identifier),
+      TypeArgList(
+        TypeIdentifier)),
+    ArgList)),
+  ExpressionStatement(CallExpression(
+    GenericFunction(
+      Identifier,
+      TypeArgList(
+        Integer)),
+    ArgList)))
+
+
+# Closures
+
+a.map(|(b, c)| b.push(c));
+d.map(move |mut e| {
+    f(e);
+    g(e)
+});
+h(|| -> i { j });
+
+==>
+
+SourceFile(
+  ExpressionStatement(CallExpression(
+    FieldExpression(Identifier, FieldIdentifier),
+    ArgList(
+      ClosureExpression(
+        ParamList(Parameter(TuplePattern(BoundIdentifier, BoundIdentifier))),
+        CallExpression(
+          FieldExpression(Identifier, FieldIdentifier),
+          ArgList(Identifier)))))),
+  ExpressionStatement(CallExpression(
+    FieldExpression(Identifier, FieldIdentifier),
+    ArgList(
+      ClosureExpression(move,
+        ParamList(Parameter(mut, BoundIdentifier)),
+        Block(
+          ExpressionStatement(CallExpression(Identifier, ArgList(Identifier))),
+          ExpressionStatement(CallExpression(Identifier, ArgList(Identifier)))))))),
+  ExpressionStatement(CallExpression(
+    Identifier,
+    ArgList(
+      ClosureExpression(
+        ParamList,
+        TypeIdentifier,
+        Block(ExpressionStatement(Identifier)))))))
+
+
+# Closures with typed parameteres
+
+a.map(|b: usize| b.push(c));
+
+==>
+
+SourceFile(
+  ExpressionStatement(CallExpression(
+    FieldExpression(Identifier, FieldIdentifier),
+    ArgList(ClosureExpression(
+      ParamList(Parameter(BoundIdentifier, TypeIdentifier)),
+      CallExpression(FieldExpression(Identifier, FieldIdentifier), ArgList(Identifier)))))))
+
+
+# Unsafe blocks
+
+const a : A = unsafe { foo() };
+
+==>
+
+SourceFile(
+  ConstItem(const,
+    BoundIdentifier,
+    TypeIdentifier,
+    UnsafeBlock(unsafe, Block(ExpressionStatement(CallExpression(Identifier, ArgList))))))

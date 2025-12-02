@@ -1,0 +1,67 @@
+{
+  "name": "strnum",
+  "version": "2.1.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662913511,
+      "integrity": "sha512-6lkwQgMNgKESsa2vwQwHAqCR3XvayJb7KYfQ4s1arO6ksgiU5SJzS8v06W5J/prIVu+XFwCVvKiyn0nhmzFa4g==",
+      "mode": 420,
+      "size": 1077
+    },
+    "strnum.js": {
+      "checkedAt": 1764662913512,
+      "integrity": "sha512-StwEeg+2TtzPTR8fBRCrj9JOIoCRVGhq41lJ0mJS5Hw7wZAWwH5nAg+dXN5/KtN8wxC3jWQzMcnAho+YCfh7zg==",
+      "mode": 420,
+      "size": 5069
+    },
+    "strnum.test.js": {
+      "checkedAt": 1764662913513,
+      "integrity": "sha512-ZYltPwevbULaCOhmk3swm8j2iGLAO3gUUNlHqnAqs5BGIVfEQlQzQIluLfJAcc5GlTm7fEA42SGLvv7m9/JVFg==",
+      "mode": 420,
+      "size": 8649
+    },
+    "test.js": {
+      "checkedAt": 1764662913516,
+      "integrity": "sha512-7qvlRZ9EeDs/pt9AOJbsrvUP7R1DbYgDfR1//zqAB7nMArXur7b7aXvW1qqDs215yULm0zPsiQTW/FjK7NWQQw==",
+      "mode": 420,
+      "size": 354
+    },
+    ".vscode/launch.json": {
+      "checkedAt": 1764662913517,
+      "integrity": "sha512-TW8PU2AjlwmpF1EAvpy+R+hLRIasCvMUlmPImNaN3GEi8RPawDwmEXw0l1hqRFfX8425jYNPUjQYaMDh3kuh7Q==",
+      "mode": 420,
+      "size": 742
+    },
+    "package.json": {
+      "checkedAt": 1764662913518,
+      "integrity": "sha512-JRBdcAyRS3TPF7cOyBKpcbGQr4nFo3aF3MLQq0NSNPOlYrll7fxUK0M8vBIb2B2GUT7TWyFnl6gFzQaWh2gUpQ==",
+      "mode": 420,
+      "size": 636
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662913518,
+      "integrity": "sha512-f7Ld8c8i8gKLFoirJrNO8t/BK9DcL+GIGqCwyTyl1a04/QBLZKU646WzaLiy10LtSMnX+NjGZT5zn3igW+qQKA==",
+      "mode": 420,
+      "size": 772
+    },
+    "README.md": {
+      "checkedAt": 1764662913519,
+      "integrity": "sha512-GvL37eb3zSCuHQDnB47yGL6+HgVzqyvQoLUWDis1CwMGU5J8uEffuDyuHQ0cCdT51rFyQtijPrOFXECGtT6ztA==",
+      "mode": 420,
+      "size": 3711
+    },
+    ".github/SECURITY.md": {
+      "checkedAt": 1764662913520,
+      "integrity": "sha512-lvdG9jrlutKBIw3IWr9mmvk0HRdXTU2WM/MQfIj1An/AAcr61BsCeIr93MxmWL2A28ZH3yn5EEQWKKQg4UKpCw==",
+      "mode": 420,
+      "size": 453
+    },
+    "algo.stflow": {
+      "checkedAt": 1764662913522,
+      "integrity": "sha512-482niZwuNVqqrjxl1xC2zUu93Vw0d0+VlJef7lvOkaS9t5NjFOwTO+p+NKUK9g9osgH/oxtdMBZ189O+YASwNQ==",
+      "mode": 420,
+      "size": 1965
+    }
+  }
+}

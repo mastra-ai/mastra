@@ -1,0 +1,10 @@
+{
+  // Common configuration for everything
+  // living in the "src" directory.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true
+  },
+  "include": ["../global.d.ts", "./**/*.ts"],
+  "exclude": ["./**/*.test.ts"]
+}

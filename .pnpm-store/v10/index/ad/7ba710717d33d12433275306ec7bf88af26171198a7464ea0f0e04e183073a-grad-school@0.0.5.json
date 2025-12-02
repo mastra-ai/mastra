@@ -1,0 +1,121 @@
+{
+  "name": "grad-school",
+  "version": "0.0.5",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662917549,
+      "integrity": "sha512-5rmVxNTBraijwzQjlxMeWZF/HASvdc6pgwU+5e8PsVtGAvv74mBcQTM/ZNaFa3ISBJZ8qBAePiqySdhdYEmHxw==",
+      "mode": 420,
+      "size": 1070
+    },
+    "builds/grad-school.cjs": {
+      "checkedAt": 1764662917550,
+      "integrity": "sha512-MvvO6fsuHw8dEdnWh/YeiP+1G/3GcPNpoa+XUfZUrcjCTOK4Y99IZHZrHV1caVxqHtpzE/apFjwGhnmyLHKU7A==",
+      "mode": 420,
+      "size": 4657
+    },
+    "src/lib/_lib.js": {
+      "checkedAt": 1764662917551,
+      "integrity": "sha512-yWmV7i1SYQWancMkarbfSUCpDdYXgbHnSLSpljIFOyc9P9FtzN7ATT3FgN7uk5keod2xxkQs2tUAa/Z2nmPgDg==",
+      "mode": 420,
+      "size": 721
+    },
+    "src/input/_validate.js": {
+      "checkedAt": 1764662917551,
+      "integrity": "sha512-QlvtnI9OTLGH6USfAG6mOKxtjC/L6stFgPU8cL47klb/UdFTU0laeW2kHJRMX8dl3uPg4qcOe1kAomfoiOCYpg==",
+      "mode": 420,
+      "size": 281
+    },
+    "src/crawl/cache.js": {
+      "checkedAt": 1764662917552,
+      "integrity": "sha512-T4+Sn9IoXSCuuWrdCVJEBFHQymCsaCz1kFGppMqW2KEl8NGmE8F6xTyJhv1kPbpsQgChTu42VwzcdvRBI7DWyw==",
+      "mode": 420,
+      "size": 938
+    },
+    "src/lib/color.js": {
+      "checkedAt": 1764662917552,
+      "integrity": "sha512-Igr/YDOr+yThUNE/gv3pQ5zxe6Zh5sKdKSxn8amD58qoi8dVYE6FrDggJ07nMMg4S3lg8u8TjXkg8xJVxUZaew==",
+      "mode": 420,
+      "size": 530
+    },
+    "src/crawl/crawl.js": {
+      "checkedAt": 1764662917553,
+      "integrity": "sha512-o2XWJVYPaHkIBXSs2psJtsBNGHhTNM6shgtrlX1ho43Wmxlmm5jd50ofsR+F3i2w4LpBn6uYJUnN4cbiGySjyw==",
+      "mode": 420,
+      "size": 831
+    },
+    "src/crawl/fillDown.js": {
+      "checkedAt": 1764662917553,
+      "integrity": "sha512-CMkItZ8xM9eSlZ7ODY9XF/5flohZA9rbZEe/MmgDULAYm9Mcq/pzYLz04gPJbLHGTNGeU5rti9Gulvwxd5pUMg==",
+      "mode": 420,
+      "size": 943
+    },
+    "src/input/from-array.js": {
+      "checkedAt": 1764662917554,
+      "integrity": "sha512-w/aHx3xkTqPvC7+/ZNb0oKibURLwnMrIFxWsRT9we7v5Zo5hLYlFljtZ0IKOhA1IFJobxYj7dP44tz8b89UteQ==",
+      "mode": 420,
+      "size": 695
+    },
+    "src/input/from-text.js": {
+      "checkedAt": 1764662917555,
+      "integrity": "sha512-+jDl1uwjW16xh/p8vjXEPyOXLjCm07S/E/SmX5m4C66ASDhBMP04ElKVJyJdLm0sew+KSxhzu3ZPBp6H6oxciw==",
+      "mode": 420,
+      "size": 1964
+    },
+    "src/index.js": {
+      "checkedAt": 1764662917555,
+      "integrity": "sha512-G4dsDLBQGV5k3pIg9lPqTfAMJVuK+ZqDprDCjljd3pDR2DwEv7JQsgtVv3iXlPEwdDezLez1uWAiw43vs2qydQ==",
+      "mode": 420,
+      "size": 226
+    },
+    "src/input/index.js": {
+      "checkedAt": 1764662917556,
+      "integrity": "sha512-Vf0QDSpq8+JJ1rmLezUKL5/DYdSBHn6zzkq3POyE5g9R5+TiZnrEYgLpM0gWOcG6a7dYWBzyFv/dfxEgxT8nPg==",
+      "mode": 420,
+      "size": 527
+    },
+    "src/out/index.js": {
+      "checkedAt": 1764662917557,
+      "integrity": "sha512-58lJIqhSZqu3T4Asw8f3baXC4fBPwB7omI4regHK2twdrd4GTlNz2KReHcC/MR4NnEyDYERQVLa43WGpyj1J1A==",
+      "mode": 420,
+      "size": 494
+    },
+    "src/out/toArray.js": {
+      "checkedAt": 1764662917559,
+      "integrity": "sha512-Z1D8S+VSoFmy7OjZF3MZ34sfar2zqgv6eyr3kyeoRgLR+KWcALai8H5pgJsFDypJcxVLtgvN7OvHlDbLNwRueg==",
+      "mode": 420,
+      "size": 393
+    },
+    "src/out/toText.js": {
+      "checkedAt": 1764662917560,
+      "integrity": "sha512-kVYahgi7fwnKrJ4Tnc0crW+y+LAnbUi8z3xN+v4L5wvgelA5rsZ/tIGvZEYAYEORMpEl14X7Q5cFGJAdbvpDiA==",
+      "mode": 420,
+      "size": 560
+    },
+    "src/View.js": {
+      "checkedAt": 1764662917560,
+      "integrity": "sha512-4TRJX3oqDIvy2hfcjlJcIvTT0Pcs9qx16NinxkTqzhJAZU63Kd8BZMgiWtCoaJFS9FuCRCfm1bNvng1gmOKyjA==",
+      "mode": 420,
+      "size": 2400
+    },
+    "package.json": {
+      "checkedAt": 1764662917561,
+      "integrity": "sha512-xhguHI7EVA0mPlSmQDmmLXcPvV/L1KhnaEQfhH9/ydFcl8tXsNSs8gVrvwFJEaNE0lMLnRASQ6pLeRi2pnV9QQ==",
+      "mode": 420,
+      "size": 1188
+    },
+    "README.md": {
+      "checkedAt": 1764662917561,
+      "integrity": "sha512-Z+gdWvkjgewNCjeiyjZ+iDOxZi3bcDzvpLJTjMFWUJTyjuQtXIUvsGeX4PXulHc5JJ2mjQzhdeXBsQ8/ip6gVQ==",
+      "mode": 420,
+      "size": 3763
+    },
+    "builds/grad-school.mjs": {
+      "checkedAt": 1764662917562,
+      "integrity": "sha512-2cJjczZ8IW/FS691F9UOOxtyBj9lfSp+AVSZwjs/0HUAv543CeysjYpjetrBQm770rI5xhwB7O3C4ESq9efC4g==",
+      "mode": 420,
+      "size": 4439
+    }
+  }
+}

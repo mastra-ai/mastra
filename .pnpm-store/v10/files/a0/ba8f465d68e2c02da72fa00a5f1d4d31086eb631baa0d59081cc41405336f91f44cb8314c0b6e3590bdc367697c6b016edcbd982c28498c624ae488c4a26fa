@@ -1,0 +1,739 @@
+import { wrapMastra } from './chunk-KIZIOFZC.js';
+import { MastraError } from './chunk-JJ5O45LH.js';
+import { ToolStream } from './chunk-5O52O25J.js';
+import { isVercelTool, validateToolInput, validateToolOutput, validateToolSuspendData } from './chunk-XIDKHXNR.js';
+import { RequestContext } from './chunk-GRBGQ2GE.js';
+import { MastraBase } from './chunk-S6URFGCZ.js';
+import { createHash } from 'crypto';
+import jsonSchemaToZod from 'json-schema-to-zod';
+import { z } from 'zod';
+import { convertZodSchemaToAISDKSchema, OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer, GoogleSchemaCompatLayer, AnthropicSchemaCompatLayer, DeepSeekSchemaCompatLayer, MetaSchemaCompatLayer, applyCompatLayer } from '@mastra/schema-compat';
+
+var CoreToolBuilder = class extends MastraBase {
+  originalTool;
+  options;
+  logType;
+  constructor(input) {
+    super({ name: "CoreToolBuilder" });
+    this.originalTool = input.originalTool;
+    this.options = input.options;
+    this.logType = input.logType;
+  }
+  // Helper to get parameters based on tool type
+  getParameters = () => {
+    if (isVercelTool(this.originalTool)) {
+      let schema2 = this.originalTool.parameters ?? ("inputSchema" in this.originalTool ? this.originalTool.inputSchema : void 0) ?? z.object({});
+      if (typeof schema2 === "function") {
+        schema2 = schema2();
+      }
+      return schema2;
+    }
+    let schema = this.originalTool.inputSchema;
+    if (typeof schema === "function") {
+      schema = schema();
+    }
+    return schema;
+  };
+  getOutputSchema = () => {
+    if ("outputSchema" in this.originalTool) {
+      let schema = this.originalTool.outputSchema;
+      if (typeof schema === "function") {
+        schema = schema();
+      }
+      return schema;
+    }
+    return null;
+  };
+  getResumeSchema = () => {
+    if ("resumeSchema" in this.originalTool) {
+      let schema = this.originalTool.resumeSchema;
+      if (typeof schema === "function") {
+        schema = schema();
+      }
+      return schema;
+    }
+    return null;
+  };
+  getSuspendSchema = () => {
+    if ("suspendSchema" in this.originalTool) {
+      let schema = this.originalTool.suspendSchema;
+      if (typeof schema === "function") {
+        schema = schema();
+      }
+      return schema;
+    }
+    return null;
+  };
+  // For provider-defined tools, we need to include all required properties
+  buildProviderTool(tool) {
+    if ("type" in tool && tool.type === "provider-defined" && "id" in tool && typeof tool.id === "string" && tool.id.includes(".")) {
+      let parameters = "parameters" in tool ? tool.parameters : "inputSchema" in tool ? tool.inputSchema : void 0;
+      if (typeof parameters === "function") {
+        parameters = parameters();
+      }
+      let outputSchema = "outputSchema" in tool ? tool.outputSchema : void 0;
+      if (typeof outputSchema === "function") {
+        outputSchema = outputSchema();
+      }
+      let processedParameters;
+      if (parameters !== void 0 && parameters !== null) {
+        if (typeof parameters === "object" && "jsonSchema" in parameters) {
+          processedParameters = parameters;
+        } else {
+          processedParameters = convertZodSchemaToAISDKSchema(parameters);
+        }
+      }
+      let processedOutputSchema;
+      if (outputSchema !== void 0 && outputSchema !== null) {
+        if (typeof outputSchema === "object" && "jsonSchema" in outputSchema) {
+          processedOutputSchema = outputSchema;
+        } else {
+          processedOutputSchema = convertZodSchemaToAISDKSchema(outputSchema);
+        }
+      }
+      return {
+        ...processedOutputSchema ? { outputSchema: processedOutputSchema } : {},
+        type: "provider-defined",
+        id: tool.id,
+        args: "args" in this.originalTool ? this.originalTool.args : {},
+        description: tool.description,
+        parameters: processedParameters,
+        execute: this.originalTool.execute ? this.createExecute(
+          this.originalTool,
+          { ...this.options, description: this.originalTool.description },
+          this.logType
+        ) : void 0
+      };
+    }
+    return void 0;
+  }
+  createLogMessageOptions({ agentName, toolName, type }) {
+    if (!agentName) {
+      return {
+        start: `Executing tool ${toolName}`,
+        error: `Failed tool execution`
+      };
+    }
+    const prefix = `[Agent:${agentName}]`;
+    const toolType = type === "toolset" ? "toolset" : "tool";
+    return {
+      start: `${prefix} - Executing ${toolType} ${toolName}`,
+      error: `${prefix} - Failed ${toolType} execution`
+    };
+  }
+  createExecute(tool, options, logType, processedSchema) {
+    const { logger, mastra: _mastra, memory: _memory, requestContext, model, ...rest } = options;
+    const logModelObject = {
+      modelId: model?.modelId,
+      provider: model?.provider,
+      specificationVersion: model?.specificationVersion
+    };
+    const { start, error } = this.createLogMessageOptions({
+      agentName: options.agentName,
+      toolName: options.name,
+      type: logType
+    });
+    const execFunction = async (args, execOptions) => {
+      const tracingContext = execOptions.tracingContext || options.tracingContext;
+      const toolSpan = tracingContext?.currentSpan?.createChildSpan({
+        type: "tool_call" /* TOOL_CALL */,
+        name: `tool: '${options.name}'`,
+        input: args,
+        attributes: {
+          toolId: options.name,
+          toolDescription: options.description,
+          toolType: logType || "tool"
+        },
+        tracingPolicy: options.tracingPolicy
+      });
+      try {
+        let result;
+        let suspendData = null;
+        if (isVercelTool(tool)) {
+          result = await tool?.execute?.(args, execOptions);
+        } else {
+          const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
+          const baseContext = {
+            threadId: options.threadId,
+            resourceId: options.resourceId,
+            mastra: wrappedMastra,
+            memory: options.memory,
+            runId: options.runId,
+            requestContext: options.requestContext ?? new RequestContext(),
+            writer: new ToolStream(
+              {
+                prefix: "tool",
+                callId: execOptions.toolCallId,
+                name: options.name,
+                runId: options.runId
+              },
+              options.writableStream || execOptions.writableStream
+            ),
+            tracingContext: { currentSpan: toolSpan },
+            abortSignal: execOptions.abortSignal,
+            suspend: (args2) => {
+              suspendData = args2;
+              return execOptions.suspend?.(args2);
+            },
+            resumeData: execOptions.resumeData
+          };
+          const isAgentExecution = execOptions.toolCallId && execOptions.messages || options.agentName && options.threadId && !options.workflowId;
+          const isWorkflowExecution = !isAgentExecution && (options.workflow || options.workflowId);
+          let toolContext;
+          if (isAgentExecution) {
+            const { suspend, resumeData: resumeData2, threadId, resourceId, ...restBaseContext } = baseContext;
+            toolContext = {
+              ...restBaseContext,
+              agent: {
+                toolCallId: execOptions.toolCallId || "",
+                messages: execOptions.messages || [],
+                suspend,
+                resumeData: resumeData2,
+                threadId,
+                resourceId,
+                writableStream: execOptions.writableStream
+              }
+            };
+          } else if (isWorkflowExecution) {
+            const { suspend, resumeData: resumeData2, ...restBaseContext } = baseContext;
+            toolContext = {
+              ...restBaseContext,
+              workflow: options.workflow || {
+                runId: options.runId,
+                workflowId: options.workflowId,
+                state: options.state,
+                setState: options.setState,
+                suspend,
+                resumeData: resumeData2
+              }
+            };
+          } else if (execOptions.mcp) {
+            toolContext = {
+              ...baseContext,
+              mcp: execOptions.mcp
+            };
+          } else {
+            toolContext = baseContext;
+          }
+          const resumeData = execOptions.resumeData;
+          if (resumeData) {
+            const resumeSchema = this.getResumeSchema();
+            const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
+            if (resumeValidation.error) {
+              logger?.warn(`Tool resume data validation failed for '${options.name}'`, {
+                toolName: options.name,
+                errors: resumeValidation.error.validationErrors,
+                resumeData
+              });
+              toolSpan?.end({ output: resumeValidation.error });
+              return resumeValidation.error;
+            }
+          }
+          result = await tool?.execute?.(args, toolContext);
+        }
+        if (suspendData) {
+          const suspendSchema = this.getSuspendSchema();
+          const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
+          if (suspendValidation.error) {
+            logger?.warn(`Tool suspend data validation failed for '${options.name}'`, {
+              toolName: options.name,
+              errors: suspendValidation.error.validationErrors,
+              suspendData
+            });
+            toolSpan?.end({ output: suspendValidation.error });
+            return suspendValidation.error;
+          }
+        }
+        const skiptOutputValidation = !!(typeof result === "undefined" && suspendData);
+        const outputSchema = this.getOutputSchema();
+        const outputValidation = validateToolOutput(outputSchema, result, options.name, skiptOutputValidation);
+        if (outputValidation.error) {
+          logger?.warn(`Tool output validation failed for '${options.name}'`, {
+            toolName: options.name,
+            errors: outputValidation.error.validationErrors,
+            output: result
+          });
+          toolSpan?.end({ output: outputValidation.error });
+          return outputValidation.error;
+        }
+        toolSpan?.end({ output: outputValidation.data });
+        return outputValidation.data;
+      } catch (error2) {
+        toolSpan?.error({ error: error2 });
+        throw error2;
+      }
+    };
+    return async (args, execOptions) => {
+      let logger2 = options.logger || this.logger;
+      try {
+        logger2.debug(start, { ...rest, model: logModelObject, args });
+        const parameters = processedSchema || this.getParameters();
+        const { data, error: error2 } = validateToolInput(parameters, args, options.name);
+        if (error2) {
+          logger2.warn(`Tool input validation failed for '${options.name}'`, {
+            toolName: options.name,
+            errors: error2.validationErrors,
+            args
+          });
+          return error2;
+        }
+        args = data;
+        return await new Promise((resolve, reject) => {
+          setImmediate(async () => {
+            try {
+              const result = await execFunction(args, execOptions);
+              resolve(result);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
+      } catch (err) {
+        const mastraError = new MastraError(
+          {
+            id: "TOOL_EXECUTION_FAILED",
+            domain: "TOOL" /* TOOL */,
+            category: "USER" /* USER */,
+            details: {
+              errorMessage: String(error),
+              argsJson: JSON.stringify(args),
+              model: model?.modelId ?? ""
+            }
+          },
+          err
+        );
+        logger2.trackException(mastraError);
+        logger2.error(error, { ...rest, model: logModelObject, error: mastraError, args });
+        return mastraError;
+      }
+    };
+  }
+  buildV5() {
+    const builtTool = this.build();
+    if (!builtTool.parameters) {
+      throw new Error("Tool parameters are required");
+    }
+    const base = {
+      ...builtTool,
+      inputSchema: builtTool.parameters,
+      onInputStart: "onInputStart" in this.originalTool ? this.originalTool.onInputStart : void 0,
+      onInputDelta: "onInputDelta" in this.originalTool ? this.originalTool.onInputDelta : void 0,
+      onInputAvailable: "onInputAvailable" in this.originalTool ? this.originalTool.onInputAvailable : void 0,
+      onOutput: "onOutput" in this.originalTool ? this.originalTool.onOutput : void 0
+    };
+    if (builtTool.type === "provider-defined") {
+      const { execute, parameters, ...rest } = base;
+      const name = builtTool.id.split(".")[1] || builtTool.id;
+      return {
+        ...rest,
+        type: builtTool.type,
+        id: builtTool.id,
+        name,
+        args: builtTool.args
+      };
+    }
+    return base;
+  }
+  build() {
+    const providerTool = this.buildProviderTool(this.originalTool);
+    if (providerTool) {
+      return providerTool;
+    }
+    const model = this.options.model;
+    const schemaCompatLayers = [];
+    if (model) {
+      const supportsStructuredOutputs = model.specificationVersion !== "v2" ? model.supportsStructuredOutputs ?? false : false;
+      const modelInfo = {
+        modelId: model.modelId,
+        supportsStructuredOutputs,
+        provider: model.provider
+      };
+      schemaCompatLayers.push(
+        new OpenAIReasoningSchemaCompatLayer(modelInfo),
+        new OpenAISchemaCompatLayer(modelInfo),
+        new GoogleSchemaCompatLayer(modelInfo),
+        new AnthropicSchemaCompatLayer(modelInfo),
+        new DeepSeekSchemaCompatLayer(modelInfo),
+        new MetaSchemaCompatLayer(modelInfo)
+      );
+    }
+    let processedZodSchema;
+    let processedSchema;
+    const originalSchema = this.getParameters();
+    const applicableLayer = schemaCompatLayers.find((layer) => layer.shouldApply());
+    if (applicableLayer && originalSchema) {
+      processedZodSchema = applicableLayer.processZodType(originalSchema);
+      processedSchema = applyCompatLayer({
+        schema: originalSchema,
+        compatLayers: schemaCompatLayers,
+        mode: "aiSdkSchema"
+      });
+    } else if (originalSchema) {
+      processedZodSchema = originalSchema;
+      processedSchema = applyCompatLayer({
+        schema: originalSchema,
+        compatLayers: schemaCompatLayers,
+        mode: "aiSdkSchema"
+      });
+    } else {
+      processedZodSchema = void 0;
+      processedSchema = void 0;
+    }
+    let processedOutputSchema;
+    if (this.getOutputSchema()) {
+      processedOutputSchema = applyCompatLayer({
+        schema: this.getOutputSchema(),
+        compatLayers: [],
+        mode: "aiSdkSchema"
+      });
+    }
+    const definition = {
+      type: "function",
+      description: this.originalTool.description,
+      requireApproval: this.options.requireApproval,
+      execute: this.originalTool.execute ? this.createExecute(
+        this.originalTool,
+        { ...this.options, description: this.originalTool.description },
+        this.logType,
+        processedZodSchema
+        // Pass the processed Zod schema for validation
+      ) : void 0
+    };
+    return {
+      ...definition,
+      id: "id" in this.originalTool ? this.originalTool.id : void 0,
+      parameters: processedSchema ?? z.object({}),
+      outputSchema: processedOutputSchema
+    };
+  }
+};
+
+// src/utils.ts
+var delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function deepMerge(target, source) {
+  const output = { ...target };
+  if (!source) return output;
+  Object.keys(source).forEach((key) => {
+    const targetValue = output[key];
+    const sourceValue = source[key];
+    if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
+      output[key] = sourceValue;
+    } else if (sourceValue instanceof Object && targetValue instanceof Object && !Array.isArray(sourceValue) && !Array.isArray(targetValue)) {
+      output[key] = deepMerge(targetValue, sourceValue);
+    } else if (sourceValue !== void 0) {
+      output[key] = sourceValue;
+    }
+  });
+  return output;
+}
+function generateEmptyFromSchema(schema) {
+  try {
+    const parsedSchema = JSON.parse(schema);
+    if (!parsedSchema || parsedSchema.type !== "object" || !parsedSchema.properties) return {};
+    const obj = {};
+    const TYPE_DEFAULTS = {
+      string: "",
+      array: [],
+      object: {},
+      number: 0,
+      integer: 0,
+      boolean: false
+    };
+    for (const [key, prop] of Object.entries(parsedSchema.properties)) {
+      obj[key] = TYPE_DEFAULTS[prop.type] ?? null;
+    }
+    return obj;
+  } catch {
+    return {};
+  }
+}
+async function* maskStreamTags(stream, tag, options = {}) {
+  const { onStart, onEnd, onMask } = options;
+  const openTag = `<${tag}>`;
+  const closeTag = `</${tag}>`;
+  let buffer = "";
+  let fullContent = "";
+  let isMasking = false;
+  let isBuffering = false;
+  const trimOutsideDelimiter = (text, delimiter, trim) => {
+    if (!text.includes(delimiter)) {
+      return text;
+    }
+    const parts = text.split(delimiter);
+    if (trim === `before-start`) {
+      return `${delimiter}${parts[1]}`;
+    }
+    return `${parts[0]}${delimiter}`;
+  };
+  const startsWith = (text, pattern) => {
+    if (pattern.includes(openTag.substring(0, 3))) {
+      pattern = trimOutsideDelimiter(pattern, `<`, `before-start`);
+    }
+    return text.trim().startsWith(pattern.trim());
+  };
+  for await (const chunk of stream) {
+    fullContent += chunk;
+    if (isBuffering) buffer += chunk;
+    const chunkHasTag = startsWith(chunk, openTag);
+    const bufferHasTag = !chunkHasTag && isBuffering && startsWith(openTag, buffer);
+    let toYieldBeforeMaskedStartTag = ``;
+    if (!isMasking && (chunkHasTag || bufferHasTag)) {
+      isMasking = true;
+      isBuffering = false;
+      const taggedTextToMask = trimOutsideDelimiter(buffer, `<`, `before-start`);
+      if (taggedTextToMask !== buffer.trim()) {
+        toYieldBeforeMaskedStartTag = buffer.replace(taggedTextToMask, ``);
+      }
+      buffer = "";
+      onStart?.();
+    }
+    if (!isMasking && !isBuffering && startsWith(openTag, chunk) && chunk.trim() !== "") {
+      isBuffering = true;
+      buffer += chunk;
+      continue;
+    }
+    if (isBuffering && buffer && !startsWith(openTag, buffer)) {
+      yield buffer;
+      buffer = "";
+      isBuffering = false;
+      continue;
+    }
+    if (isMasking && fullContent.includes(closeTag)) {
+      onMask?.(chunk);
+      onEnd?.();
+      isMasking = false;
+      const lastFullContent = fullContent;
+      fullContent = ``;
+      const textUntilEndTag = trimOutsideDelimiter(lastFullContent, closeTag, "after-end");
+      if (textUntilEndTag !== lastFullContent) {
+        yield lastFullContent.replace(textUntilEndTag, ``);
+      }
+      continue;
+    }
+    if (isMasking) {
+      onMask?.(chunk);
+      if (toYieldBeforeMaskedStartTag) {
+        yield toYieldBeforeMaskedStartTag;
+      }
+      continue;
+    }
+    yield chunk;
+  }
+}
+function resolveSerializedZodOutput(schema) {
+  return Function("z", `"use strict";return (${schema});`)(z);
+}
+function isZodType(value) {
+  return typeof value === "object" && value !== null && "_def" in value && "parse" in value && typeof value.parse === "function" && "safeParse" in value && typeof value.safeParse === "function";
+}
+function createDeterministicId(input) {
+  return createHash("sha256").update(input).digest("hex").slice(0, 8);
+}
+function setVercelToolProperties(tool) {
+  const inputSchema = "inputSchema" in tool ? tool.inputSchema : convertVercelToolParameters(tool);
+  const toolId = !("id" in tool) ? tool.description ? `tool-${createDeterministicId(tool.description)}` : `tool-${Math.random().toString(36).substring(2, 9)}` : tool.id;
+  return {
+    ...tool,
+    id: toolId,
+    inputSchema
+  };
+}
+function ensureToolProperties(tools) {
+  const toolsWithProperties = Object.keys(tools).reduce((acc, key) => {
+    const tool = tools?.[key];
+    if (tool) {
+      if (isVercelTool(tool)) {
+        acc[key] = setVercelToolProperties(tool);
+      } else {
+        acc[key] = tool;
+      }
+    }
+    return acc;
+  }, {});
+  return toolsWithProperties;
+}
+function convertVercelToolParameters(tool) {
+  let schema = tool.parameters ?? z.object({});
+  if (typeof schema === "function") {
+    schema = schema();
+  }
+  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
+}
+function makeCoreTool(originalTool, options, logType) {
+  return new CoreToolBuilder({ originalTool, options, logType }).build();
+}
+function makeCoreToolV5(originalTool, options, logType) {
+  return new CoreToolBuilder({ originalTool, options, logType }).buildV5();
+}
+function createMastraProxy({ mastra, logger }) {
+  return new Proxy(mastra, {
+    get(target, prop) {
+      const hasProp = Reflect.has(target, prop);
+      if (hasProp) {
+        const value = Reflect.get(target, prop);
+        const isFunction = typeof value === "function";
+        if (isFunction) {
+          return value.bind(target);
+        }
+        return value;
+      }
+      if (prop === "logger") {
+        logger.warn(`Please use 'getLogger' instead, logger is deprecated`);
+        return Reflect.apply(target.getLogger, target, []);
+      }
+      if (prop === "storage") {
+        logger.warn(`Please use 'getStorage' instead, storage is deprecated`);
+        return Reflect.get(target, "storage");
+      }
+      if (prop === "agents") {
+        logger.warn(`Please use 'listAgents' instead, agents is deprecated`);
+        return Reflect.apply(target.listAgents, target, []);
+      }
+      if (prop === "tts") {
+        logger.warn(`Please use 'getTTS' instead, tts is deprecated`);
+        return Reflect.apply(target.getTTS, target, []);
+      }
+      if (prop === "vectors") {
+        logger.warn(`Please use 'getVectors' instead, vectors is deprecated`);
+        return Reflect.apply(target.getVectors, target, []);
+      }
+      if (prop === "memory") {
+        logger.warn(`Please use 'getMemory' instead, memory is deprecated`);
+        return Reflect.get(target, "memory");
+      }
+      return Reflect.get(target, prop);
+    }
+  });
+}
+function checkEvalStorageFields(traceObject, logger) {
+  const missingFields = [];
+  if (!traceObject.input) missingFields.push("input");
+  if (!traceObject.output) missingFields.push("output");
+  if (!traceObject.agentName) missingFields.push("agent_name");
+  if (!traceObject.metricName) missingFields.push("metric_name");
+  if (!traceObject.instructions) missingFields.push("instructions");
+  if (!traceObject.globalRunId) missingFields.push("global_run_id");
+  if (!traceObject.runId) missingFields.push("run_id");
+  if (missingFields.length > 0) {
+    if (logger) {
+      logger.warn("Skipping evaluation storage due to missing required fields", {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName
+      });
+    } else {
+      console.warn("Skipping evaluation storage due to missing required fields", {
+        missingFields,
+        runId: traceObject.runId,
+        agentName: traceObject.agentName
+      });
+    }
+    return false;
+  }
+  return true;
+}
+function detectSingleMessageCharacteristics(message) {
+  if (typeof message === "object" && message !== null && (message.role === "function" || // UI-only role
+  message.role === "data" || // UI-only role
+  "toolInvocations" in message || // UI-specific field
+  "parts" in message || // UI-specific field
+  "experimental_attachments" in message)) {
+    return "has-ui-specific-parts";
+  } else if (typeof message === "object" && message !== null && "content" in message && (Array.isArray(message.content) || // Core messages can have array content
+  "experimental_providerMetadata" in message || "providerOptions" in message)) {
+    return "has-core-specific-parts";
+  } else if (typeof message === "object" && message !== null && "role" in message && "content" in message && typeof message.content === "string" && ["system", "user", "assistant", "tool"].includes(message.role)) {
+    return "message";
+  } else {
+    return "other";
+  }
+}
+function isUiMessage(message) {
+  return detectSingleMessageCharacteristics(message) === `has-ui-specific-parts`;
+}
+function isCoreMessage(message) {
+  return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
+}
+var SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+function parseSqlIdentifier(name, kind = "identifier") {
+  if (!SQL_IDENTIFIER_PATTERN.test(name) || name.length > 63) {
+    throw new Error(
+      `Invalid ${kind}: ${name}. Must start with a letter or underscore, contain only letters, numbers, or underscores, and be at most 63 characters long.`
+    );
+  }
+  return name;
+}
+function parseFieldKey(key) {
+  if (!key) throw new Error("Field key cannot be empty");
+  const segments = key.split(".");
+  for (const segment of segments) {
+    if (!SQL_IDENTIFIER_PATTERN.test(segment) || segment.length > 63) {
+      throw new Error(`Invalid field key segment: ${segment} in ${key}`);
+    }
+  }
+  return key;
+}
+async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+  let retryCount = 0;
+  let lastError = null;
+  while (retryCount < maxRetries) {
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        throw new Error(`Request failed with status: ${response.status} ${response.statusText}`);
+      }
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      retryCount++;
+      if (retryCount >= maxRetries) {
+        break;
+      }
+      const delay2 = Math.min(1e3 * Math.pow(2, retryCount) * 1e3, 1e4);
+      await new Promise((resolve) => setTimeout(resolve, delay2));
+    }
+  }
+  throw lastError || new Error("Request failed after multiple retry attempts");
+}
+function omitKeys(obj, keysToOmit) {
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => !keysToOmit.includes(key)));
+}
+function selectFields(obj, fields) {
+  if (!obj || typeof obj !== "object") {
+    return obj;
+  }
+  const result = {};
+  for (const field of fields) {
+    const value = getNestedValue(obj, field);
+    if (value !== void 0) {
+      setNestedValue(result, field, value);
+    }
+  }
+  return result;
+}
+function getNestedValue(obj, path) {
+  return path.split(".").reduce((current, key) => {
+    return current && typeof current === "object" ? current[key] : void 0;
+  }, obj);
+}
+function setNestedValue(obj, path, value) {
+  const keys = path.split(".");
+  const lastKey = keys.pop();
+  if (!lastKey) {
+    return;
+  }
+  const target = keys.reduce((current, key) => {
+    if (!current[key] || typeof current[key] !== "object") {
+      current[key] = {};
+    }
+    return current[key];
+  }, obj);
+  target[lastKey] = value;
+}
+var removeUndefinedValues = (obj) => {
+  return Object.fromEntries(Object.entries(obj).filter(([_, value]) => value !== void 0));
+};
+
+export { checkEvalStorageFields, createMastraProxy, deepMerge, delay, ensureToolProperties, fetchWithRetry, generateEmptyFromSchema, getNestedValue, isCoreMessage, isUiMessage, isZodType, makeCoreTool, makeCoreToolV5, maskStreamTags, omitKeys, parseFieldKey, parseSqlIdentifier, removeUndefinedValues, resolveSerializedZodOutput, selectFields, setNestedValue };
+//# sourceMappingURL=chunk-PC6EKOWK.js.map
+//# sourceMappingURL=chunk-PC6EKOWK.js.map

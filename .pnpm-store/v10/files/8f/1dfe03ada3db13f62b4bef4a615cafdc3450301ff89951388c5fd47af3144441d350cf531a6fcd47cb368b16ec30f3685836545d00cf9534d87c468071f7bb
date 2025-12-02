@@ -1,0 +1,1 @@
+{"version":3,"file":"LINSERT.d.ts","sourceRoot":"","sources":["../../../lib/commands/LINSERT.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,aAAa,EAAE,WAAW,EAAW,MAAM,eAAe,CAAC;AAEpE,KAAK,eAAe,GAAG,QAAQ,GAAG,OAAO,CAAC;;;IAIxC;;;;;;;;;OASG;gDAEO,aAAa,OAChB,aAAa,YACR,eAAe,SAClB,aAAa,WACX,aAAa;mCAMsB,WAAW;;AAvB3D,wBAwB6B"}

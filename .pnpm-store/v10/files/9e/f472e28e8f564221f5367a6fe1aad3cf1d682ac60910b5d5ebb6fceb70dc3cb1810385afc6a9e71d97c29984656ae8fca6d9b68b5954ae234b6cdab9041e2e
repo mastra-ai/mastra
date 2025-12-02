@@ -1,0 +1,54 @@
+{
+  "name": "hpagent",
+  "version": "1.2.0",
+  "description": "A ready to use http and https agent for working with proxies that keeps connections alive!",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./index.js",
+      "import": "./index.mjs",
+      "types": "./index.d.ts"
+    },
+    "./*": "./*.js"
+  },
+  "scripts": {
+    "test": "standard && NODE_EXTRA_CA_CERTS=test/fixtures/certs_unit_test.pem ava -v test/*.test.js && NODE_EXTRA_CA_CERTS=test/fixtures/certs_unit_test.pem ./test/hang-socket/runner.sh && tsd",
+    "test-ci": "standard && ava -v test/*.test.js && tsd"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/delvedor/hpagent.git"
+  },
+  "keywords": [
+    "agent",
+    "http",
+    "https",
+    "secure",
+    "proxy",
+    "alive",
+    "keep-alive"
+  ],
+  "author": "Tomas Della Vedova",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/delvedor/hpagent/issues"
+  },
+  "homepage": "https://github.com/delvedor/hpagent#readme",
+  "tsd": {
+    "directory": "test"
+  },
+  "devDependencies": {
+    "ava": "^4.2.0",
+    "got": "^11.8.3",
+    "needle": "^3.1.0",
+    "node-fetch": "^2.6.7",
+    "proxy": "^1.0.2",
+    "simple-get": "^4.0.1",
+    "standard": "^17.0.0",
+    "tsd": "^0.24.1"
+  }
+}

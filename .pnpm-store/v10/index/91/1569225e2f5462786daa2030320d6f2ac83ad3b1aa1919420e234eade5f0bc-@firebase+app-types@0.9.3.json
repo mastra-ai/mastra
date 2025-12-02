@@ -1,0 +1,31 @@
+{
+  "name": "@firebase/app-types",
+  "version": "0.9.3",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662906916,
+      "integrity": "sha512-eeMeKg7b7+WSgwJfQq0jdi2Mb8fdSWbkcwlsTm9B2hB43EgXR06GxPjEnOoRTV6YG6869sf7WQaQlDaKUwlDcw==",
+      "mode": 420,
+      "size": 695
+    },
+    "README.md": {
+      "checkedAt": 1764662906917,
+      "integrity": "sha512-IRImzm3gStTCEke5cILnpykt/dg4HvK/IV0DHF4iEA4EJ7u1TxnTSgEVvdymxuGkGqqGOs6/Hz+z0NHB33ZJjQ==",
+      "mode": 420,
+      "size": 187
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662906922,
+      "integrity": "sha512-yzaQV33tJqmuKPgistiGVfydUc+TOxAtKjlVrT9bJYgFPPmY7IQzKxst0RyvIx2diCfCd4RimMWTNzoy2nRZ3A==",
+      "mode": 420,
+      "size": 3421
+    },
+    "private.d.ts": {
+      "checkedAt": 1764662906922,
+      "integrity": "sha512-gdlieiEAUgNIFuEEuyVvn+3G5D35A9a30pLWiQ9kV+pDFrn+lssQUv2FJrvJhGtaf8RXBGnMCWe/S38dw4VucQ==",
+      "mode": 420,
+      "size": 5255
+    }
+  }
+}

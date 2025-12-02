@@ -1,0 +1,54 @@
+import { ClientSDK } from "../lib/sdks.js";
+import { Analytics } from "./analytics.js";
+import { APIKeys } from "./apikeys.js";
+import { Beta } from "./beta.js";
+import { Chat } from "./chat.js";
+import { Completions } from "./completions.js";
+import { Credits } from "./credits.js";
+import { Embeddings } from "./embeddings.js";
+import { Endpoints } from "./endpoints.js";
+import { Generations } from "./generations.js";
+import { Models } from "./models.js";
+import { OAuth } from "./oauth.js";
+import { ParametersT } from "./parameters.js";
+import { Providers } from "./providers.js";
+import { ResponseWrapper } from "../lib/response-wrapper.js";
+import { RequestOptions } from "../lib/sdks.js";
+import { EnhancedTool, MaxToolRounds, ToolType } from "../lib/tool-types.js";
+import * as models from "../models/index.js";
+export { ToolType };
+export type { EnhancedTool, MaxToolRounds };
+export declare class OpenRouter extends ClientSDK {
+    private _beta?;
+    get beta(): Beta;
+    private _analytics?;
+    get analytics(): Analytics;
+    private _credits?;
+    get credits(): Credits;
+    private _embeddings?;
+    get embeddings(): Embeddings;
+    private _generations?;
+    get generations(): Generations;
+    private _models?;
+    get models(): Models;
+    private _endpoints?;
+    get endpoints(): Endpoints;
+    private _parameters?;
+    get parameters(): ParametersT;
+    private _providers?;
+    get providers(): Providers;
+    private _apiKeys?;
+    get apiKeys(): APIKeys;
+    private _oAuth?;
+    get oAuth(): OAuth;
+    private _chat?;
+    get chat(): Chat;
+    private _completions?;
+    get completions(): Completions;
+    callModel(request: Omit<models.OpenResponsesRequest, "stream" | "tools" | "input"> & {
+        input?: import("../funcs/callModel.js").CallModelInput;
+        tools?: import("../funcs/callModel.js").CallModelTools;
+        maxToolRounds?: MaxToolRounds;
+    }, options?: RequestOptions): ResponseWrapper;
+}
+//# sourceMappingURL=sdk.d.ts.map

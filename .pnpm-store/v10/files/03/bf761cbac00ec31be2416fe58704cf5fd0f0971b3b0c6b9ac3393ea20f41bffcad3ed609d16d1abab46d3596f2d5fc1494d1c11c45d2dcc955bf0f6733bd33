@@ -1,0 +1,48 @@
+imports:
+  root: ../../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    compute_rag_index:
+      path: /v1/convai/knowledge-base/{documentation_id}/rag-index
+      method: POST
+      auth: false
+      docs: >-
+        In case the document is not RAG indexed, it triggers rag indexing task,
+        otherwise it just returns the current status.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        documentation_id:
+          type: string
+          docs: >-
+            The id of a document from the knowledge base. This is returned on
+            document addition.
+      display-name: Compute Rag Index.
+      request:
+        name: RagIndexRequestModel
+        body:
+          properties:
+            model:
+              type: root.EmbeddingModelEnum
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.RagIndexResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            documentation_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            model: e5_mistral_7b_instruct
+          response:
+            body:
+              status: created
+              progress_percentage: 1.1
+      audiences:
+        - convai
+  source:
+    openapi: openapi.json

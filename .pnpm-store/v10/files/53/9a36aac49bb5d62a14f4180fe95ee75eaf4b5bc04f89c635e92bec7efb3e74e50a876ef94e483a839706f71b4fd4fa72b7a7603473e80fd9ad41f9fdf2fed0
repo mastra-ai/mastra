@@ -1,0 +1,970 @@
+Emoji,Unicode codepoint,Occurrences,Position,Negative,Neutral,Positive,Unicode name,Unicode block
+😂,0x1f602,14622,0.805100583,3614,4163,6845,FACE WITH TEARS OF JOY,Emoticons
+❤,0x2764,8050,0.746943086,355,1334,6361,HEAVY BLACK HEART,Dingbats
+♥,0x2665,7144,0.753806008,252,1942,4950,BLACK HEART SUIT,Miscellaneous Symbols
+😍,0x1f60d,6359,0.765292366,329,1390,4640,SMILING FACE WITH HEART-SHAPED EYES,Emoticons
+😭,0x1f62d,5526,0.803351976,2412,1218,1896,LOUDLY CRYING FACE,Emoticons
+😘,0x1f618,3648,0.854480172,193,702,2753,FACE THROWING A KISS,Emoticons
+😊,0x1f60a,3186,0.813302436,189,754,2243,SMILING FACE WITH SMILING EYES,Emoticons
+👌,0x1f44c,2925,0.805222883,274,728,1923,OK HAND SIGN,Miscellaneous Symbols and Pictographs
+💕,0x1f495,2400,0.765725889,99,683,1618,TWO HEARTS,Miscellaneous Symbols and Pictographs
+👏,0x1f44f,2336,0.787130164,243,634,1459,CLAPPING HANDS SIGN,Miscellaneous Symbols and Pictographs
+😁,0x1f601,2189,0.796151187,278,648,1263,GRINNING FACE WITH SMILING EYES,Emoticons
+☺,0x263a,2062,0.798633582,128,449,1485,WHITE SMILING FACE,Miscellaneous Symbols
+♡,0x2661,1975,0.763695423,102,448,1425,WHITE HEART SUIT,Miscellaneous Symbols
+👍,0x1f44d,1854,0.812125626,213,460,1181,THUMBS UP SIGN,Miscellaneous Symbols and Pictographs
+😩,0x1f629,1808,0.826213985,1069,336,403,WEARY FACE,Emoticons
+🙏,0x1f64f,1539,0.793847592,124,648,767,PERSON WITH FOLDED HANDS,Emoticons
+✌,0x270c,1534,0.790480332,173,476,885,VICTORY HAND,Dingbats
+😏,0x1f60f,1522,0.764977294,170,676,676,SMIRKING FACE,Emoticons
+😉,0x1f609,1521,0.844832651,151,513,857,WINKING FACE,Emoticons
+🙌,0x1f64c,1506,0.790600034,152,358,996,PERSON RAISING BOTH HANDS IN CELEBRATION,Emoticons
+🙈,0x1f648,1456,0.738880937,238,350,868,SEE-NO-EVIL MONKEY,Emoticons
+💪,0x1f4aa,1409,0.806704098,101,424,884,FLEXED BICEPS,Miscellaneous Symbols and Pictographs
+😄,0x1f604,1398,0.794972621,191,426,781,SMILING FACE WITH OPEN MOUTH AND SMILING EYES,Emoticons
+😒,0x1f612,1385,0.857620553,819,266,300,UNAMUSED FACE,Emoticons
+💃,0x1f483,1344,0.852764705,59,237,1048,DANCER,Miscellaneous Symbols and Pictographs
+💖,0x1f496,1263,0.762239109,54,254,955,SPARKLING HEART,Miscellaneous Symbols and Pictographs
+😃,0x1f603,1206,0.734782211,86,361,759,SMILING FACE WITH OPEN MOUTH,Emoticons
+😔,0x1f614,1205,0.86614594,559,263,383,PENSIVE FACE,Emoticons
+😱,0x1f631,1130,0.773313178,298,319,513,FACE SCREAMING IN FEAR,Emoticons
+🎉,0x1f389,1125,0.743635879,43,207,875,PARTY POPPER,Miscellaneous Symbols and Pictographs
+😜,0x1f61c,1035,0.822246602,115,333,587,FACE WITH STUCK-OUT TONGUE AND WINKING EYE,Emoticons
+☯,0x262f,992,0.383524015,5,981,6,YIN YANG,Miscellaneous Symbols
+🌸,0x1f338,946,0.570021571,37,255,654,CHERRY BLOSSOM,Miscellaneous Symbols and Pictographs
+💜,0x1f49c,939,0.730869962,41,241,657,PURPLE HEART,Miscellaneous Symbols and Pictographs
+💙,0x1f499,912,0.703047577,29,186,697,BLUE HEART,Miscellaneous Symbols and Pictographs
+✨,0x2728,848,0.560430162,43,463,342,SPARKLES,Dingbats
+😳,0x1f633,846,0.797185814,277,277,292,FLUSHED FACE,Emoticons
+💗,0x1f497,836,0.799725947,42,201,593,GROWING HEART,Miscellaneous Symbols and Pictographs
+★,0x2605,828,0.353316599,25,543,260,BLACK STAR,Miscellaneous Symbols
+█,0x2588,798,0.634172164,71,682,45,FULL BLOCK,Block Elements
+☀,0x2600,786,0.54553079,21,377,388,BLACK SUN WITH RAYS,Miscellaneous Symbols
+😡,0x1f621,756,0.861522028,403,81,272,POUTING FACE,Emoticons
+😎,0x1f60e,754,0.76564387,79,224,451,SMILING FACE WITH SUNGLASSES,Emoticons
+😢,0x1f622,749,0.813896833,288,168,293,CRYING FACE,Emoticons
+💋,0x1f48b,734,0.800580592,28,169,537,KISS MARK,Miscellaneous Symbols and Pictographs
+😋,0x1f60b,734,0.76498518,33,203,498,FACE SAVOURING DELICIOUS FOOD,Emoticons
+🙊,0x1f64a,725,0.740523086,97,197,431,SPEAK-NO-EVIL MONKEY,Emoticons
+😴,0x1f634,718,0.849922938,303,170,245,SLEEPING FACE,Emoticons
+🎶,0x1f3b6,701,0.797255889,67,189,445,MULTIPLE MUSICAL NOTES,Miscellaneous Symbols and Pictographs
+💞,0x1f49e,687,0.828705997,27,123,537,REVOLVING HEARTS,Miscellaneous Symbols and Pictographs
+😌,0x1f60c,665,0.847121229,93,157,415,RELIEVED FACE,Emoticons
+🔥,0x1f525,651,0.61555041,80,400,171,FIRE,Miscellaneous Symbols and Pictographs
+💯,0x1f4af,637,0.871819418,179,202,256,HUNDRED POINTS SYMBOL,Miscellaneous Symbols and Pictographs
+🔫,0x1f52b,604,0.893761284,298,126,180,PISTOL,Miscellaneous Symbols and Pictographs
+💛,0x1f49b,602,0.751631631,25,123,454,YELLOW HEART,Miscellaneous Symbols and Pictographs
+💁,0x1f481,549,0.839628793,105,159,285,INFORMATION DESK PERSON,Miscellaneous Symbols and Pictographs
+💚,0x1f49a,537,0.737498972,41,101,395,GREEN HEART,Miscellaneous Symbols and Pictographs
+♫,0x266b,533,0.396607039,33,313,187,BEAMED EIGHTH NOTES,Miscellaneous Symbols
+😞,0x1f61e,532,0.825187832,255,85,192,DISAPPOINTED FACE,Emoticons
+😆,0x1f606,527,0.809376422,81,148,298,SMILING FACE WITH OPEN MOUTH AND TIGHTLY-CLOSED EYES,Emoticons
+😝,0x1f61d,496,0.808808972,65,155,276,FACE WITH STUCK-OUT TONGUE AND TIGHTLY-CLOSED EYES,Emoticons
+😪,0x1f62a,482,0.858219873,208,105,169,SLEEPY FACE,Emoticons
+�,0xfffd,472,0.11293316,78,275,119,REPLACEMENT CHARACTER,Specials
+😫,0x1f62b,467,0.839517641,227,81,159,TIRED FACE,Emoticons
+😅,0x1f605,462,0.827654572,135,109,218,SMILING FACE WITH OPEN MOUTH AND COLD SWEAT,Emoticons
+👊,0x1f44a,458,0.824515864,121,111,226,FISTED HAND SIGN,Miscellaneous Symbols and Pictographs
+💀,0x1f480,456,0.739462262,214,123,119,SKULL,Miscellaneous Symbols and Pictographs
+😀,0x1f600,439,0.786284933,37,114,288,GRINNING FACE,Emoticons
+😚,0x1f61a,424,0.853414944,20,81,323,KISSING FACE WITH CLOSED EYES,Emoticons
+😻,0x1f63b,417,0.729665769,28,101,288,SMILING CAT FACE WITH HEART-SHAPED EYES,Emoticons
+©,0xa9,416,0.740148376,54,259,103,COPYRIGHT SIGN,Latin-1 Supplement
+👀,0x1f440,410,0.759422009,93,198,119,EYES,Miscellaneous Symbols and Pictographs
+💘,0x1f498,395,0.785036942,18,87,290,HEART WITH ARROW,Miscellaneous Symbols and Pictographs
+🐓,0x1f413,384,0.490808466,41,291,52,ROOSTER,Miscellaneous Symbols and Pictographs
+☕,0x2615,382,0.685215074,53,182,147,HOT BEVERAGE,Miscellaneous Symbols
+👋,0x1f44b,382,0.797944108,60,103,219,WAVING HAND SIGN,Miscellaneous Symbols and Pictographs
+✋,0x270b,378,0.838291817,124,82,172,RAISED HAND,Dingbats
+🎊,0x1f38a,363,0.72362175,20,59,284,CONFETTI BALL,Miscellaneous Symbols and Pictographs
+🍕,0x1f355,352,0.544580757,19,166,167,SLICE OF PIZZA,Miscellaneous Symbols and Pictographs
+❄,0x2744,349,0.760181984,34,103,212,SNOWFLAKE,Dingbats
+😥,0x1f625,341,0.881976694,108,83,150,DISAPPOINTED BUT RELIEVED FACE,Emoticons
+😕,0x1f615,340,0.856711865,205,66,69,CONFUSED FACE,Emoticons
+💥,0x1f4a5,329,0.587206232,23,234,72,COLLISION SYMBOL,Miscellaneous Symbols and Pictographs
+💔,0x1f494,328,0.835831574,136,96,96,BROKEN HEART,Miscellaneous Symbols and Pictographs
+😤,0x1f624,327,0.884007985,157,82,88,FACE WITH LOOK OF TRIUMPH,Emoticons
+😈,0x1f608,325,0.762497655,66,106,153,SMILING FACE WITH HORNS,Emoticons
+►,0x25ba,325,0.516489206,40,192,93,BLACK RIGHT-POINTING POINTER,Geometric Shapes
+✈,0x2708,322,0.521940266,13,161,148,AIRPLANE,Dingbats
+🔝,0x1f51d,303,0.798433666,26,106,171,TOP WITH UPWARDS ARROW ABOVE,Miscellaneous Symbols and Pictographs
+😰,0x1f630,302,0.919654285,132,44,126,FACE WITH OPEN MOUTH AND COLD SWEAT,Emoticons
+⚽,0x26bd,299,0.193496177,15,83,201,SOCCER BALL,Miscellaneous Symbols
+😑,0x1f611,299,0.844272967,154,85,60,EXPRESSIONLESS FACE,Emoticons
+👑,0x1f451,298,0.698804832,12,65,221,CROWN,Miscellaneous Symbols and Pictographs
+😹,0x1f639,295,0.8074145,88,77,130,CAT FACE WITH TEARS OF JOY,Emoticons
+👉,0x1f449,292,0.559175629,20,137,135,WHITE RIGHT POINTING BACKHAND INDEX,Miscellaneous Symbols and Pictographs
+🍃,0x1f343,291,0.572324349,29,122,140,LEAF FLUTTERING IN WIND,Miscellaneous Symbols and Pictographs
+🎁,0x1f381,288,0.709181399,11,45,232,WRAPPED PRESENT,Miscellaneous Symbols and Pictographs
+😠,0x1f620,288,0.849218089,163,49,76,ANGRY FACE,Emoticons
+🐧,0x1f427,284,0.540408727,11,131,142,PENGUIN,Miscellaneous Symbols and Pictographs
+☆,0x2606,282,0.563398192,8,144,130,WHITE STAR,Miscellaneous Symbols
+🍀,0x1f340,278,0.768496291,6,186,86,FOUR LEAF CLOVER,Miscellaneous Symbols and Pictographs
+🎈,0x1f388,277,0.718504213,4,68,205,BALLOON,Miscellaneous Symbols and Pictographs
+🎅,0x1f385,274,0.800786662,7,172,95,FATHER CHRISTMAS,Miscellaneous Symbols and Pictographs
+😓,0x1f613,273,0.844887359,118,59,96,FACE WITH COLD SWEAT,Emoticons
+😣,0x1f623,271,0.903307721,147,35,89,PERSEVERING FACE,Emoticons
+😐,0x1f610,270,0.882732825,150,76,44,NEUTRAL FACE,Emoticons
+✊,0x270a,270,0.858608998,37,79,154,RAISED FIST,Dingbats
+😨,0x1f628,269,0.813687927,117,73,79,FEARFUL FACE,Emoticons
+😖,0x1f616,268,0.868926665,130,50,88,CONFOUNDED FACE,Emoticons
+💤,0x1f4a4,267,0.800461854,38,91,138,SLEEPING SYMBOL,Miscellaneous Symbols and Pictographs
+💓,0x1f493,259,0.783045488,15,55,189,BEATING HEART,Miscellaneous Symbols and Pictographs
+👎,0x1f44e,258,0.914491346,128,51,79,THUMBS DOWN SIGN,Miscellaneous Symbols and Pictographs
+💦,0x1f4a6,252,0.779043752,35,62,155,SPLASHING SWEAT SYMBOL,Miscellaneous Symbols and Pictographs
+✔,0x2714,249,0.565237075,31,119,99,HEAVY CHECK MARK,Dingbats
+😷,0x1f637,246,0.840376534,117,54,75,FACE WITH MEDICAL MASK,Emoticons
+⚡,0x26a1,246,0.778780762,10,182,54,HIGH VOLTAGE SIGN,Miscellaneous Symbols
+🙋,0x1f64b,236,0.732500422,30,60,146,HAPPY PERSON RAISING ONE HAND,Emoticons
+🎄,0x1f384,236,0.632526433,15,79,142,CHRISTMAS TREE,Miscellaneous Symbols and Pictographs
+💩,0x1f4a9,229,0.839720048,94,68,67,PILE OF POO,Miscellaneous Symbols and Pictographs
+🎵,0x1f3b5,223,0.71526961,23,64,136,MUSICAL NOTE,Miscellaneous Symbols and Pictographs
+➡,0x27a1,222,0.478330444,2,185,35,BLACK RIGHTWARDS ARROW,Dingbats
+😛,0x1f61b,220,0.734419263,18,50,152,FACE WITH STUCK-OUT TONGUE,Emoticons
+😬,0x1f62c,214,0.793679841,57,58,99,GRIMACING FACE,Emoticons
+👯,0x1f46f,211,0.742043843,24,69,118,WOMAN WITH BUNNY EARS,Miscellaneous Symbols and Pictographs
+💎,0x1f48e,209,0.694054736,11,68,130,GEM STONE,Miscellaneous Symbols and Pictographs
+🌿,0x1f33f,208,0.600120585,1,125,82,HERB,Miscellaneous Symbols and Pictographs
+🎂,0x1f382,201,0.747999917,16,44,141,BIRTHDAY CAKE,Miscellaneous Symbols and Pictographs
+🌟,0x1f31f,199,0.654510913,11,111,77,GLOWING STAR,Miscellaneous Symbols and Pictographs
+🔮,0x1f52e,199,0.333161733,6,133,60,CRYSTAL BALL,Miscellaneous Symbols and Pictographs
+❗,0x2757,198,0.620120854,31,116,51,HEAVY EXCLAMATION MARK SYMBOL,Dingbats
+👫,0x1f46b,197,0.664270589,43,60,94,MAN AND WOMAN HOLDING HANDS,Miscellaneous Symbols and Pictographs
+🏆,0x1f3c6,194,0.705937446,6,39,149,TROPHY,Miscellaneous Symbols and Pictographs
+✖,0x2716,193,0.514517152,8,116,69,HEAVY MULTIPLICATION X,Dingbats
+☝,0x261d,191,0.7597726,27,77,87,WHITE UP POINTING INDEX,Miscellaneous Symbols
+😙,0x1f619,191,0.875675106,3,34,154,KISSING FACE WITH SMILING EYES,Emoticons
+⛄,0x26c4,191,0.738724736,14,62,115,SNOWMAN WITHOUT SNOW,Miscellaneous Symbols
+👅,0x1f445,190,0.738179133,23,55,112,TONGUE,Miscellaneous Symbols and Pictographs
+♪,0x266a,190,0.696314423,15,57,118,EIGHTH NOTE,Miscellaneous Symbols
+🍂,0x1f342,189,0.634540658,6,72,111,FALLEN LEAF,Miscellaneous Symbols and Pictographs
+💏,0x1f48f,185,0.72895246,33,46,106,KISS,Miscellaneous Symbols and Pictographs
+🔪,0x1f52a,183,0.764046479,38,94,51,HOCHO,Miscellaneous Symbols and Pictographs
+🌴,0x1f334,178,0.675890052,13,57,108,PALM TREE,Miscellaneous Symbols and Pictographs
+👈,0x1f448,174,0.701409121,14,71,89,WHITE LEFT POINTING BACKHAND INDEX,Miscellaneous Symbols and Pictographs
+🌹,0x1f339,172,0.664431116,3,61,108,ROSE,Miscellaneous Symbols and Pictographs
+🙆,0x1f646,171,0.839916616,15,54,102,FACE WITH OK GESTURE,Emoticons
+➜,0x279c,170,0.558506642,8,126,36,HEAVY ROUND-TIPPED RIGHTWARDS ARROW,Dingbats
+👻,0x1f47b,168,0.740824428,28,73,67,GHOST,Miscellaneous Symbols and Pictographs
+💰,0x1f4b0,168,0.827466509,26,73,69,MONEY BAG,Miscellaneous Symbols and Pictographs
+🍻,0x1f37b,165,0.745306588,17,45,103,CLINKING BEER MUGS,Miscellaneous Symbols and Pictographs
+🙅,0x1f645,165,0.838871886,76,47,42,FACE WITH NO GOOD GESTURE,Emoticons
+🌞,0x1f31e,162,0.709366196,3,64,95,SUN WITH FACE,Miscellaneous Symbols and Pictographs
+🍁,0x1f341,161,0.62398169,5,72,84,MAPLE LEAF,Miscellaneous Symbols and Pictographs
+⭐,0x2b50,159,0.600764348,5,55,99,WHITE MEDIUM STAR,Miscellaneous Symbols and Arrows
+▪,0x25aa,159,0.145166872,15,97,47,BLACK SMALL SQUARE,Geometric Shapes
+🎀,0x1f380,156,0.651799025,6,44,106,RIBBON,Miscellaneous Symbols and Pictographs
+━,0x2501,156,0.540249825,14,100,42,BOX DRAWINGS HEAVY HORIZONTAL,Box Drawing
+☷,0x2637,154,0.012407833,2,140,12,TRIGRAM FOR EARTH,Miscellaneous Symbols
+🐷,0x1f437,152,0.6026825,11,73,68,PIG FACE,Miscellaneous Symbols and Pictographs
+🙉,0x1f649,150,0.757694988,26,47,77,HEAR-NO-EVIL MONKEY,Emoticons
+🌺,0x1f33a,150,0.629472896,2,62,86,HIBISCUS,Miscellaneous Symbols and Pictographs
+💅,0x1f485,149,0.755747604,27,36,86,NAIL POLISH,Miscellaneous Symbols and Pictographs
+🐶,0x1f436,148,0.654155755,12,37,99,DOG FACE,Miscellaneous Symbols and Pictographs
+🌚,0x1f31a,148,0.759894657,23,32,93,NEW MOON WITH FACE,Miscellaneous Symbols and Pictographs
+👽,0x1f47d,146,0.612456875,13,73,60,EXTRATERRESTRIAL ALIEN,Miscellaneous Symbols and Pictographs
+🎤,0x1f3a4,144,0.67089174,17,40,87,MICROPHONE,Miscellaneous Symbols and Pictographs
+👭,0x1f46d,144,0.667223526,20,36,88,TWO WOMEN HOLDING HANDS,Miscellaneous Symbols and Pictographs
+🎧,0x1f3a7,142,0.842970526,18,46,78,HEADPHONE,Miscellaneous Symbols and Pictographs
+👆,0x1f446,138,0.78746414,16,60,62,WHITE UP POINTING BACKHAND INDEX,Miscellaneous Symbols and Pictographs
+🍸,0x1f378,138,0.662604118,12,38,88,COCKTAIL GLASS,Miscellaneous Symbols and Pictographs
+🍷,0x1f377,137,0.603671624,7,68,62,WINE GLASS,Miscellaneous Symbols and Pictographs
+®,0xae,137,0.353084876,9,80,48,REGISTERED SIGN,Latin-1 Supplement
+🍉,0x1f349,136,0.647778999,10,33,93,WATERMELON,Miscellaneous Symbols and Pictographs
+😇,0x1f607,135,0.781831331,9,36,90,SMILING FACE WITH HALO,Emoticons
+☑,0x2611,135,0.690061863,2,117,16,BALLOT BOX WITH CHECK,Miscellaneous Symbols
+🏃,0x1f3c3,135,0.735256148,12,55,68,RUNNER,Miscellaneous Symbols and Pictographs
+😿,0x1f63f,134,0.811560707,78,29,27,CRYING CAT FACE,Emoticons
+│,0x2502,134,0.483180302,0,87,47,BOX DRAWINGS LIGHT VERTICAL,Box Drawing
+💣,0x1f4a3,131,0.846726927,40,50,41,BOMB,Miscellaneous Symbols and Pictographs
+🍺,0x1f37a,131,0.68156608,8,49,74,BEER MUG,Miscellaneous Symbols and Pictographs
+▶,0x25b6,131,0.498359177,7,89,35,BLACK RIGHT-POINTING TRIANGLE,Geometric Shapes
+😲,0x1f632,129,0.853619885,50,38,41,ASTONISHED FACE,Emoticons
+🎸,0x1f3b8,125,0.605443071,1,57,67,GUITAR,Miscellaneous Symbols and Pictographs
+🍹,0x1f379,123,0.764164553,5,30,88,TROPICAL DRINK,Miscellaneous Symbols and Pictographs
+💫,0x1f4ab,121,0.614437663,4,51,66,DIZZY SYMBOL,Miscellaneous Symbols and Pictographs
+📚,0x1f4da,119,0.69163189,22,34,63,BOOKS,Miscellaneous Symbols and Pictographs
+😶,0x1f636,117,0.868667638,50,34,33,FACE WITHOUT MOUTH,Emoticons
+🌷,0x1f337,116,0.623397976,0,52,64,TULIP,Miscellaneous Symbols and Pictographs
+💝,0x1f49d,115,0.774410045,8,23,84,HEART WITH RIBBON,Miscellaneous Symbols and Pictographs
+💨,0x1f4a8,115,0.711396809,12,46,57,DASH SYMBOL,Miscellaneous Symbols and Pictographs
+🏈,0x1f3c8,114,0.823010837,7,38,69,AMERICAN FOOTBALL,Miscellaneous Symbols and Pictographs
+💍,0x1f48d,112,0.807520998,16,25,71,RING,Miscellaneous Symbols and Pictographs
+☔,0x2614,111,0.687353164,21,36,54,UMBRELLA WITH RAIN DROPS,Miscellaneous Symbols
+👸,0x1f478,111,0.654472403,6,30,75,PRINCESS,Miscellaneous Symbols and Pictographs
+🇪,0x1f1ea,109,0.698877291,2,36,71,REGIONAL INDICATOR SYMBOL LETTER E,Enclosed Alphanumeric Supplement
+░,0x2591,108,0.439438477,25,63,20,LIGHT SHADE,Block Elements
+🍩,0x1f369,107,0.708816106,15,35,57,DOUGHNUT,Miscellaneous Symbols and Pictographs
+👾,0x1f47e,105,0.55188131,1,64,40,ALIEN MONSTER,Miscellaneous Symbols and Pictographs
+☁,0x2601,104,0.595923185,14,43,47,CLOUD,Miscellaneous Symbols
+🌻,0x1f33b,104,0.607167343,1,41,62,SUNFLOWER,Miscellaneous Symbols and Pictographs
+😵,0x1f635,103,0.808813841,33,28,42,DIZZY FACE,Emoticons
+📒,0x1f4d2,102,0.473944671,0,98,4,LEDGER,Miscellaneous Symbols and Pictographs
+↿,0x21bf,102,0.710504202,0,34,68,UPWARDS HARPOON WITH BARB LEFTWARDS,Arrows
+🐯,0x1f42f,100,0.549561832,4,43,53,TIGER FACE,Miscellaneous Symbols and Pictographs
+👼,0x1f47c,99,0.683210618,17,31,51,BABY ANGEL,Miscellaneous Symbols and Pictographs
+🍔,0x1f354,98,0.636878313,16,38,44,HAMBURGER,Miscellaneous Symbols and Pictographs
+😸,0x1f638,97,0.782035657,11,34,52,GRINNING CAT FACE WITH SMILING EYES,Emoticons
+👶,0x1f476,96,0.745048578,13,27,56,BABY,Miscellaneous Symbols and Pictographs
+↾,0x21be,96,0.707142857,0,32,64,UPWARDS HARPOON WITH BARB RIGHTWARDS,Arrows
+💐,0x1f490,95,0.727586517,3,17,75,BOUQUET,Miscellaneous Symbols and Pictographs
+🌊,0x1f30a,95,0.779832163,8,30,57,WATER WAVE,Miscellaneous Symbols and Pictographs
+🍦,0x1f366,95,0.630275908,13,24,58,SOFT ICE CREAM,Miscellaneous Symbols and Pictographs
+🍓,0x1f353,94,0.689469367,3,23,68,STRAWBERRY,Miscellaneous Symbols and Pictographs
+👇,0x1f447,94,0.557020638,13,44,37,WHITE DOWN POINTING BACKHAND INDEX,Miscellaneous Symbols and Pictographs
+💆,0x1f486,92,0.814023638,24,23,45,FACE MASSAGE,Miscellaneous Symbols and Pictographs
+🍴,0x1f374,92,0.580197926,4,33,55,FORK AND KNIFE,Miscellaneous Symbols and Pictographs
+😧,0x1f627,92,0.774990088,36,26,30,ANGUISHED FACE,Emoticons
+🇸,0x1f1f8,91,0.654691493,8,27,56,REGIONAL INDICATOR SYMBOL LETTER S,Enclosed Alphanumeric Supplement
+😮,0x1f62e,90,0.774237435,16,33,41,FACE WITH OPEN MOUTH,Emoticons
+▓,0x2593,90,0.658247473,2,85,3,DARK SHADE,Block Elements
+🚫,0x1f6ab,88,0.702937729,48,32,8,NO ENTRY SIGN,Transport and Map Symbols
+😽,0x1f63d,88,0.754242708,11,14,63,KISSING CAT FACE WITH CLOSED EYES,Emoticons
+🌈,0x1f308,88,0.671884074,5,31,52,RAINBOW,Miscellaneous Symbols and Pictographs
+🙀,0x1f640,88,0.790729154,14,30,44,WEARY CAT FACE,Emoticons
+⚠,0x26a0,88,0.489084942,16,62,10,WARNING SIGN,Miscellaneous Symbols
+🎮,0x1f3ae,86,0.467430446,8,32,46,VIDEO GAME,Miscellaneous Symbols and Pictographs
+╯,0x256f,84,0.506910946,19,47,18,BOX DRAWINGS LIGHT ARC UP AND LEFT,Box Drawing
+🍆,0x1f346,84,0.7185031,6,37,41,AUBERGINE,Miscellaneous Symbols and Pictographs
+🍰,0x1f370,84,0.78250627,13,19,52,SHORTCAKE,Miscellaneous Symbols and Pictographs
+✓,0x2713,84,0.627535601,9,41,34,CHECK MARK,Dingbats
+👐,0x1f450,83,0.875981032,33,19,31,OPEN HANDS SIGN,Miscellaneous Symbols and Pictographs
+🙇,0x1f647,83,0.794293941,24,23,36,PERSON BOWING DEEPLY,Emoticons
+🍟,0x1f35f,83,0.650433666,14,29,40,FRENCH FRIES,Miscellaneous Symbols and Pictographs
+🍌,0x1f34c,82,0.540634157,10,25,47,BANANA,Miscellaneous Symbols and Pictographs
+💑,0x1f491,82,0.682682631,5,16,61,COUPLE WITH HEART,Miscellaneous Symbols and Pictographs
+👬,0x1f46c,82,0.622239773,29,29,24,TWO MEN HOLDING HANDS,Miscellaneous Symbols and Pictographs
+🐣,0x1f423,81,0.775650511,12,17,52,HATCHING CHICK,Miscellaneous Symbols and Pictographs
+🎃,0x1f383,81,0.723541282,6,19,56,JACK-O-LANTERN,Miscellaneous Symbols and Pictographs
+▬,0x25ac,81,0.33474298,0,42,39,BLACK RECTANGLE,Geometric Shapes
+￼,0xfffc,81,0.308958013,44,33,4,OBJECT REPLACEMENT CHARACTER,Specials
+😟,0x1f61f,80,0.824309355,28,18,34,WORRIED FACE,Emoticons
+🐾,0x1f43e,78,0.738983384,8,13,57,PAW PRINTS,Miscellaneous Symbols and Pictographs
+🎓,0x1f393,77,0.647134355,7,18,52,GRADUATION CAP,Miscellaneous Symbols and Pictographs
+🏊,0x1f3ca,77,0.65309632,2,27,48,SWIMMER,Miscellaneous Symbols and Pictographs
+🍫,0x1f36b,76,0.792701023,22,20,34,CHOCOLATE BAR,Miscellaneous Symbols and Pictographs
+📷,0x1f4f7,76,0.489732992,7,28,41,CAMERA,Miscellaneous Symbols and Pictographs
+👄,0x1f444,75,0.591674278,5,28,42,MOUTH,Miscellaneous Symbols and Pictographs
+🌼,0x1f33c,74,0.603679109,1,12,61,BLOSSOM,Miscellaneous Symbols and Pictographs
+🚶,0x1f6b6,74,0.796900446,28,29,17,PEDESTRIAN,Transport and Map Symbols
+🐱,0x1f431,73,0.544447706,10,14,49,CAT FACE,Miscellaneous Symbols and Pictographs
+║,0x2551,73,0.568238107,0,62,11,BOX DRAWINGS DOUBLE VERTICAL,Box Drawing
+🐸,0x1f438,72,0.845772164,24,30,18,FROG FACE,Miscellaneous Symbols and Pictographs
+🇺,0x1f1fa,71,0.682892538,8,15,48,REGIONAL INDICATOR SYMBOL LETTER U,Enclosed Alphanumeric Supplement
+👿,0x1f47f,70,0.910730779,47,15,8,IMP,Miscellaneous Symbols and Pictographs
+🚬,0x1f6ac,70,0.805066327,8,16,46,SMOKING SYMBOL,Transport and Map Symbols
+✿,0x273f,70,0.49871007,2,38,30,BLACK FLORETTE,Dingbats
+📖,0x1f4d6,68,0.709941199,18,20,30,OPEN BOOK,Miscellaneous Symbols and Pictographs
+🐒,0x1f412,68,0.639847887,1,29,38,MONKEY,Miscellaneous Symbols and Pictographs
+🌍,0x1f30d,68,0.623864265,5,16,47,EARTH GLOBE EUROPE-AFRICA,Miscellaneous Symbols and Pictographs
+┊,0x250a,68,0.681885417,0,0,68,BOX DRAWINGS LIGHT QUADRUPLE DASH VERTICAL,Box Drawing
+🐥,0x1f425,67,0.779887133,4,18,45,FRONT-FACING BABY CHICK,Miscellaneous Symbols and Pictographs
+🌀,0x1f300,66,0.553405789,10,39,17,CYCLONE,Miscellaneous Symbols and Pictographs
+🐼,0x1f43c,66,0.614422004,4,40,22,PANDA FACE,Miscellaneous Symbols and Pictographs
+🎥,0x1f3a5,66,0.675875827,8,30,28,MOVIE CAMERA,Miscellaneous Symbols and Pictographs
+💄,0x1f484,66,0.636585295,6,24,36,LIPSTICK,Miscellaneous Symbols and Pictographs
+💸,0x1f4b8,66,0.790337996,16,23,27,MONEY WITH WINGS,Miscellaneous Symbols and Pictographs
+⛔,0x26d4,65,0.405987251,5,22,38,NO ENTRY,Miscellaneous Symbols
+●,0x25cf,65,0.561224463,8,37,20,BLACK CIRCLE,Geometric Shapes
+🏀,0x1f3c0,64,0.807196812,13,21,30,BASKETBALL AND HOOP,Miscellaneous Symbols and Pictographs
+💉,0x1f489,64,0.749555976,11,18,35,SYRINGE,Miscellaneous Symbols and Pictographs
+💟,0x1f49f,63,0.787621444,3,12,48,HEART DECORATION,Miscellaneous Symbols and Pictographs
+🚗,0x1f697,62,0.638133891,8,31,23,AUTOMOBILE,Transport and Map Symbols
+😯,0x1f62f,62,0.859007902,16,22,24,HUSHED FACE,Emoticons
+📝,0x1f4dd,62,0.794711655,8,31,23,MEMO,Miscellaneous Symbols and Pictographs
+═,0x2550,62,0.441188106,0,61,1,BOX DRAWINGS DOUBLE HORIZONTAL,Box Drawing
+♦,0x2666,61,0.562227083,6,20,35,BLACK DIAMOND SUIT,Miscellaneous Symbols
+💭,0x1f4ad,60,0.687954711,10,27,23,THOUGHT BALLOON,Miscellaneous Symbols and Pictographs
+🌙,0x1f319,58,0.669389528,3,16,39,CRESCENT MOON,Miscellaneous Symbols and Pictographs
+🐟,0x1f41f,58,0.676573608,2,12,44,FISH,Miscellaneous Symbols and Pictographs
+👣,0x1f463,58,0.638779151,6,25,27,FOOTPRINTS,Miscellaneous Symbols and Pictographs
+☞,0x261e,58,0.725402078,0,51,7,WHITE RIGHT POINTING INDEX,Miscellaneous Symbols
+✂,0x2702,58,0.810271779,34,18,6,BLACK SCISSORS,Dingbats
+🗿,0x1f5ff,58,0.941936907,5,21,32,MOYAI,Miscellaneous Symbols and Pictographs
+🍝,0x1f35d,57,0.56442207,16,18,23,SPAGHETTI,Miscellaneous Symbols and Pictographs
+👪,0x1f46a,57,0.653303852,24,10,23,FAMILY,Miscellaneous Symbols and Pictographs
+🍭,0x1f36d,57,0.632538929,9,21,27,LOLLIPOP,Miscellaneous Symbols and Pictographs
+🌃,0x1f303,56,0.747623603,3,27,26,NIGHT WITH STARS,Miscellaneous Symbols and Pictographs
+❌,0x274c,56,0.612998,14,12,30,CROSS MARK,Dingbats
+🐰,0x1f430,55,0.707516692,4,13,38,RABBIT FACE,Miscellaneous Symbols and Pictographs
+💊,0x1f48a,55,0.675071279,8,14,33,PILL,Miscellaneous Symbols and Pictographs
+🚨,0x1f6a8,55,0.520959173,6,6,43,POLICE CARS REVOLVING LIGHT,Transport and Map Symbols
+😦,0x1f626,54,0.882218595,30,15,9,FROWNING FACE WITH OPEN MOUTH,Emoticons
+🍪,0x1f36a,54,0.736575166,10,16,28,COOKIE,Miscellaneous Symbols and Pictographs
+🍣,0x1f363,53,0.669970061,24,18,11,SUSHI,Miscellaneous Symbols and Pictographs
+╭,0x256d,53,0.490077251,3,38,12,BOX DRAWINGS LIGHT ARC DOWN AND RIGHT,Box Drawing
+✧,0x2727,53,0.398520727,1,33,19,WHITE FOUR POINTED STAR,Dingbats
+🎆,0x1f386,52,0.798520237,2,9,41,FIREWORKS,Miscellaneous Symbols and Pictographs
+╮,0x256e,52,0.422827361,5,35,12,BOX DRAWINGS LIGHT ARC DOWN AND LEFT,Box Drawing
+🎎,0x1f38e,51,0.417134709,0,2,49,JAPANESE DOLLS,Miscellaneous Symbols and Pictographs
+🇩,0x1f1e9,51,0.74501238,1,16,34,REGIONAL INDICATOR SYMBOL LETTER D,Enclosed Alphanumeric Supplement
+✅,0x2705,51,0.672789014,3,23,25,WHITE HEAVY CHECK MARK,Dingbats
+👹,0x1f479,49,0.70117277,13,20,16,JAPANESE OGRE,Miscellaneous Symbols and Pictographs
+📱,0x1f4f1,49,0.719713336,4,25,20,MOBILE PHONE,Miscellaneous Symbols and Pictographs
+🙍,0x1f64d,49,0.844922892,29,8,12,PERSON FROWNING,Emoticons
+🍑,0x1f351,49,0.739305631,12,12,25,PEACH,Miscellaneous Symbols and Pictographs
+🎼,0x1f3bc,49,0.636141803,2,28,19,MUSICAL SCORE,Miscellaneous Symbols and Pictographs
+🔊,0x1f50a,49,0.651738713,4,20,25,SPEAKER WITH THREE SOUND WAVES,Miscellaneous Symbols and Pictographs
+🌌,0x1f30c,47,0.750586217,5,11,31,MILKY WAY,Miscellaneous Symbols and Pictographs
+🍎,0x1f34e,47,0.75089759,6,19,22,RED APPLE,Miscellaneous Symbols and Pictographs
+🐻,0x1f43b,47,0.691609267,6,13,28,BEAR FACE,Miscellaneous Symbols and Pictographs
+─,0x2500,47,0.711348374,0,40,7,BOX DRAWINGS LIGHT HORIZONTAL,Box Drawing
+╰,0x2570,47,0.509745612,7,36,4,BOX DRAWINGS LIGHT ARC UP AND RIGHT,Box Drawing
+💇,0x1f487,46,0.678429189,7,16,23,HAIRCUT,Miscellaneous Symbols and Pictographs
+♬,0x266c,46,0.677442137,4,26,16,BEAMED SIXTEENTH NOTES,Miscellaneous Symbols
+♚,0x265a,46,0.389194579,0,44,2,BLACK CHESS KING,Miscellaneous Symbols
+🔴,0x1f534,45,0.655928061,1,24,20,LARGE RED CIRCLE,Miscellaneous Symbols and Pictographs
+🍱,0x1f371,45,0.58000953,25,10,10,BENTO BOX,Miscellaneous Symbols and Pictographs
+🍊,0x1f34a,45,0.697299999,6,13,26,TANGERINE,Miscellaneous Symbols and Pictographs
+🍒,0x1f352,45,0.619434077,6,18,21,CHERRIES,Miscellaneous Symbols and Pictographs
+🐭,0x1f42d,45,0.822545804,0,12,33,MOUSE FACE,Miscellaneous Symbols and Pictographs
+👟,0x1f45f,45,0.561642541,5,15,25,ATHLETIC SHOE,Miscellaneous Symbols and Pictographs
+🌎,0x1f30e,44,0.743438616,5,19,20,EARTH GLOBE AMERICAS,Miscellaneous Symbols and Pictographs
+🍍,0x1f34d,44,0.583336287,7,8,29,PINEAPPLE,Miscellaneous Symbols and Pictographs
+🐮,0x1f42e,43,0.846658768,2,12,29,COW FACE,Miscellaneous Symbols and Pictographs
+📲,0x1f4f2,43,0.598172133,7,18,18,MOBILE PHONE WITH RIGHTWARDS ARROW AT LEFT,Miscellaneous Symbols and Pictographs
+☼,0x263c,43,0.461142875,2,30,11,WHITE SUN WITH RAYS,Miscellaneous Symbols
+🌅,0x1f305,42,0.603551051,6,14,22,SUNRISE,Miscellaneous Symbols and Pictographs
+🇷,0x1f1f7,42,0.716327847,1,10,31,REGIONAL INDICATOR SYMBOL LETTER R,Enclosed Alphanumeric Supplement
+👠,0x1f460,42,0.637243017,6,14,22,HIGH-HEELED SHOE,Miscellaneous Symbols and Pictographs
+🌽,0x1f33d,42,0.648931091,5,12,25,EAR OF MAIZE,Miscellaneous Symbols and Pictographs
+💧,0x1f4a7,41,0.76764795,20,8,13,DROPLET,Miscellaneous Symbols and Pictographs
+❓,0x2753,41,0.614920844,7,24,10,BLACK QUESTION MARK ORNAMENT,Dingbats
+🍬,0x1f36c,41,0.784072191,8,9,24,CANDY,Miscellaneous Symbols and Pictographs
+😺,0x1f63a,40,0.825897808,8,7,25,SMILING CAT FACE WITH OPEN MOUTH,Emoticons
+🐴,0x1f434,40,0.795776393,8,21,11,HORSE FACE,Miscellaneous Symbols and Pictographs
+🚀,0x1f680,40,0.698479931,2,15,23,ROCKET,Transport and Map Symbols
+¦,0xa6,40,0.402048475,7,1,32,BROKEN BAR,Latin-1 Supplement
+💢,0x1f4a2,40,0.560644274,6,18,16,ANGER SYMBOL,Miscellaneous Symbols and Pictographs
+🎬,0x1f3ac,40,0.650028961,2,24,14,CLAPPER BOARD,Miscellaneous Symbols and Pictographs
+🍧,0x1f367,40,0.674847866,9,9,22,SHAVED ICE,Miscellaneous Symbols and Pictographs
+🍜,0x1f35c,40,0.577916931,9,5,26,STEAMING BOWL,Miscellaneous Symbols and Pictographs
+🐏,0x1f40f,40,0.975591533,2,12,26,RAM,Miscellaneous Symbols and Pictographs
+🐘,0x1f418,40,0.722256768,9,21,10,ELEPHANT,Miscellaneous Symbols and Pictographs
+👧,0x1f467,40,0.649498717,10,14,16,GIRL,Miscellaneous Symbols and Pictographs
+⠀,0x2800,40,0.377950694,6,26,8,BRAILLE PATTERN BLANK,Braille Patterns
+🏄,0x1f3c4,39,0.772893432,2,13,24,SURFER,Miscellaneous Symbols and Pictographs
+➤,0x27a4,39,0.382195298,0,26,13,BLACK RIGHTWARDS ARROWHEAD,Dingbats
+⬆,0x2b06,39,0.605681579,1,25,13,UPWARDS BLACK ARROW,Miscellaneous Symbols and Arrows
+🍋,0x1f34b,38,0.742802859,6,16,16,LEMON,Miscellaneous Symbols and Pictographs
+🆗,0x1f197,38,0.852316542,6,4,28,SQUARED OK,Enclosed Alphanumeric Supplement
+⚪,0x26aa,37,0.564780444,0,19,18,MEDIUM WHITE CIRCLE,Miscellaneous Symbols
+📺,0x1f4fa,37,0.61386867,3,16,18,TELEVISION,Miscellaneous Symbols and Pictographs
+🍅,0x1f345,37,0.838126825,9,5,23,TOMATO,Miscellaneous Symbols and Pictographs
+⛅,0x26c5,37,0.61632427,4,11,22,SUN BEHIND CLOUD,Miscellaneous Symbols
+🐢,0x1f422,37,0.621646684,6,17,14,TURTLE,Miscellaneous Symbols and Pictographs
+👙,0x1f459,37,0.697202004,3,11,23,BIKINI,Miscellaneous Symbols and Pictographs
+🏡,0x1f3e1,36,0.744478613,5,9,22,HOUSE WITH GARDEN,Miscellaneous Symbols and Pictographs
+🌾,0x1f33e,36,0.558280959,5,5,26,EAR OF RICE,Miscellaneous Symbols and Pictographs
+◉,0x25c9,36,0.046697697,0,26,10,FISHEYE,Geometric Shapes
+✏,0x270f,35,0.625100023,3,16,16,PENCIL,Dingbats
+🐬,0x1f42c,35,0.74664334,2,15,18,DOLPHIN,Miscellaneous Symbols and Pictographs
+🍤,0x1f364,35,0.513142123,6,21,8,FRIED SHRIMP,Miscellaneous Symbols and Pictographs
+🇹,0x1f1f9,35,0.584324615,0,13,22,REGIONAL INDICATOR SYMBOL LETTER T,Enclosed Alphanumeric Supplement
+♣,0x2663,35,0.666096972,4,14,17,BLACK CLUB SUIT,Miscellaneous Symbols
+🐝,0x1f41d,35,0.734687255,5,17,13,HONEYBEE,Miscellaneous Symbols and Pictographs
+🌝,0x1f31d,34,0.718124589,5,17,12,FULL MOON WITH FACE,Miscellaneous Symbols and Pictographs
+🇮,0x1f1ee,34,0.575925963,0,12,22,REGIONAL INDICATOR SYMBOL LETTER I,Enclosed Alphanumeric Supplement
+🔋,0x1f50b,34,0.583005086,22,8,4,BATTERY,Miscellaneous Symbols and Pictographs
+🐍,0x1f40d,34,0.622534826,3,15,16,SNAKE,Miscellaneous Symbols and Pictographs
+♔,0x2654,34,0.588904318,0,14,20,WHITE CHESS KING,Miscellaneous Symbols
+🍳,0x1f373,33,0.798473001,13,6,14,COOKING,Miscellaneous Symbols and Pictographs
+🔵,0x1f535,33,0.680543536,4,14,15,LARGE BLUE CIRCLE,Miscellaneous Symbols and Pictographs
+😾,0x1f63e,33,0.914644696,20,5,8,POUTING CAT FACE,Emoticons
+🌕,0x1f315,33,0.641921506,3,7,23,FULL MOON SYMBOL,Miscellaneous Symbols and Pictographs
+🐨,0x1f428,33,0.696298274,4,9,20,KOALA,Miscellaneous Symbols and Pictographs
+🔐,0x1f510,33,0.845213961,6,9,18,CLOSED LOCK WITH KEY,Miscellaneous Symbols and Pictographs
+💿,0x1f4bf,33,0.444466092,0,11,22,OPTICAL DISC,Miscellaneous Symbols and Pictographs
+❁,0x2741,33,0.492535753,0,31,2,EIGHT PETALLED OUTLINED BLACK FLORETTE,Dingbats
+🌳,0x1f333,32,0.536180131,2,11,19,DECIDUOUS TREE,Miscellaneous Symbols and Pictographs
+👰,0x1f470,32,0.787391801,3,9,20,BRIDE WITH VEIL,Miscellaneous Symbols and Pictographs
+❀,0x2740,32,0.443664362,0,18,14,WHITE FLORETTE,Dingbats
+⚓,0x2693,32,0.592872704,2,8,22,ANCHOR,Miscellaneous Symbols
+🚴,0x1f6b4,32,0.573441922,0,9,23,BICYCLIST,Transport and Map Symbols
+▀,0x2580,32,0.249971192,10,17,5,UPPER HALF BLOCK,Block Elements
+👗,0x1f457,31,0.703059819,5,13,13,DRESS,Miscellaneous Symbols and Pictographs
+➕,0x2795,31,0.034111266,4,5,22,HEAVY PLUS SIGN,Dingbats
+💬,0x1f4ac,30,0.635322751,4,10,16,SPEECH BALLOON,Miscellaneous Symbols and Pictographs
+▒,0x2592,30,0.5006455,2,27,1,MEDIUM SHADE,Block Elements
+🔜,0x1f51c,30,0.606237062,5,11,14,SOON WITH RIGHTWARDS ARROW ABOVE,Miscellaneous Symbols and Pictographs
+🍨,0x1f368,30,0.656537195,8,7,15,ICE CREAM,Miscellaneous Symbols and Pictographs
+💲,0x1f4b2,30,0.793676272,0,22,8,HEAVY DOLLAR SIGN,Miscellaneous Symbols and Pictographs
+⛽,0x26fd,30,0.287349631,1,23,6,FUEL PUMP,Miscellaneous Symbols
+🍙,0x1f359,29,0.566487361,5,10,14,RICE BALL,Miscellaneous Symbols and Pictographs
+🍗,0x1f357,29,0.674706178,9,9,11,POULTRY LEG,Miscellaneous Symbols and Pictographs
+🍲,0x1f372,29,0.672925496,7,11,11,POT OF FOOD,Miscellaneous Symbols and Pictographs
+🍥,0x1f365,29,0.57963379,22,4,3,FISH CAKE WITH SWIRL DESIGN,Miscellaneous Symbols and Pictographs
+▸,0x25b8,29,0.516844972,0,22,7,BLACK RIGHT-POINTING SMALL TRIANGLE,Geometric Shapes
+♛,0x265b,29,0.48995855,4,15,10,BLACK CHESS QUEEN,Miscellaneous Symbols
+😼,0x1f63c,28,0.855991066,5,7,16,CAT FACE WITH WRY SMILE,Emoticons
+🐙,0x1f419,28,0.677637628,2,12,14,OCTOPUS,Miscellaneous Symbols and Pictographs
+👨,0x1f468,28,0.693754806,2,8,18,MAN,Miscellaneous Symbols and Pictographs
+🍚,0x1f35a,28,0.636903275,6,2,20,COOKED RICE,Miscellaneous Symbols and Pictographs
+🍖,0x1f356,28,0.678553575,7,10,11,MEAT ON BONE,Miscellaneous Symbols and Pictographs
+♨,0x2668,28,0.664942237,0,1,27,HOT SPRINGS,Miscellaneous Symbols
+🎹,0x1f3b9,28,0.466337612,0,17,11,MUSICAL KEYBOARD,Miscellaneous Symbols and Pictographs
+♕,0x2655,28,0.621310417,0,16,12,WHITE CHESS QUEEN,Miscellaneous Symbols
+▃,0x2583,28,0.373188406,0,0,28,LOWER THREE EIGHTHS BLOCK,Block Elements
+🚘,0x1f698,27,0.649502793,8,9,10,ONCOMING AUTOMOBILE,Transport and Map Symbols
+🍏,0x1f34f,27,0.85243179,7,11,9,GREEN APPLE,Miscellaneous Symbols and Pictographs
+👩,0x1f469,27,0.731773327,9,7,11,WOMAN,Miscellaneous Symbols and Pictographs
+👦,0x1f466,27,0.606457886,5,13,9,BOY,Miscellaneous Symbols and Pictographs
+🇬,0x1f1ec,27,0.582061343,2,15,10,REGIONAL INDICATOR SYMBOL LETTER G,Enclosed Alphanumeric Supplement
+🇧,0x1f1e7,27,0.595070874,2,15,10,REGIONAL INDICATOR SYMBOL LETTER B,Enclosed Alphanumeric Supplement
+☠,0x2620,27,0.748862198,7,14,6,SKULL AND CROSSBONES,Miscellaneous Symbols
+🐠,0x1f420,26,0.767680777,4,6,16,TROPICAL FISH,Miscellaneous Symbols and Pictographs
+🚹,0x1f6b9,26,0.811646698,1,4,21,MENS SYMBOL,Transport and Map Symbols
+💵,0x1f4b5,26,0.806506343,3,9,14,BANKNOTE WITH DOLLAR SIGN,Miscellaneous Symbols and Pictographs
+✰,0x2730,26,0.19481227,0,3,23,SHADOWED WHITE STAR,Dingbats
+╠,0x2560,26,0.542511882,0,20,6,BOX DRAWINGS DOUBLE VERTICAL AND RIGHT,Box Drawing
+👛,0x1f45b,25,0.696359786,4,7,14,PURSE,Miscellaneous Symbols and Pictographs
+🚙,0x1f699,25,0.653234313,5,14,6,RECREATIONAL VEHICLE,Transport and Map Symbols
+🌱,0x1f331,25,0.561338235,0,9,16,SEEDLING,Miscellaneous Symbols and Pictographs
+💻,0x1f4bb,25,0.489415613,1,16,8,PERSONAL COMPUTER,Miscellaneous Symbols and Pictographs
+🌏,0x1f30f,25,0.681460526,3,10,12,EARTH GLOBE ASIA-AUSTRALIA,Miscellaneous Symbols and Pictographs
+▄,0x2584,25,0.464453824,8,11,6,LOWER HALF BLOCK,Block Elements
+👓,0x1f453,24,0.514451688,0,16,8,EYEGLASSES,Miscellaneous Symbols and Pictographs
+◄,0x25c4,24,0.671979253,0,18,6,BLACK LEFT-POINTING POINTER,Geometric Shapes
+⚾,0x26be,24,0.213609507,9,7,8,BASEBALL,Miscellaneous Symbols
+🌲,0x1f332,23,0.496443035,2,9,12,EVERGREEN TREE,Miscellaneous Symbols and Pictographs
+👴,0x1f474,23,0.783858479,5,7,11,OLDER MAN,Miscellaneous Symbols and Pictographs
+🏠,0x1f3e0,23,0.641777733,1,8,14,HOUSE BUILDING,Miscellaneous Symbols and Pictographs
+🍇,0x1f347,23,0.583781365,5,6,12,GRAPES,Miscellaneous Symbols and Pictographs
+🍘,0x1f358,23,0.620778046,5,3,15,RICE CRACKER,Miscellaneous Symbols and Pictographs
+🍛,0x1f35b,23,0.585489158,8,6,9,CURRY AND RICE,Miscellaneous Symbols and Pictographs
+🐇,0x1f407,23,0.96735812,4,9,10,RABBIT,Miscellaneous Symbols and Pictographs
+🔞,0x1f51e,23,0.814490975,6,12,5,NO ONE UNDER EIGHTEEN SYMBOL,Miscellaneous Symbols and Pictographs
+👵,0x1f475,23,0.818006874,5,2,16,OLDER WOMAN,Miscellaneous Symbols and Pictographs
+◀,0x25c0,23,0.221018064,0,16,7,BLACK LEFT-POINTING TRIANGLE,Geometric Shapes
+🔙,0x1f519,23,0.143848565,2,14,7,BACK WITH LEFTWARDS ARROW ABOVE,Miscellaneous Symbols and Pictographs
+🌵,0x1f335,23,0.670060172,6,6,11,CACTUS,Miscellaneous Symbols and Pictographs
+🐽,0x1f43d,22,0.647826714,5,9,8,PIG NOSE,Miscellaneous Symbols and Pictographs
+🍮,0x1f36e,22,0.701402915,10,5,7,CUSTARD,Miscellaneous Symbols and Pictographs
+🎇,0x1f387,22,0.820989335,1,3,18,FIREWORK SPARKLER,Miscellaneous Symbols and Pictographs
+🐎,0x1f40e,22,0.698088195,2,8,12,HORSE,Miscellaneous Symbols and Pictographs
+➔,0x2794,22,0.540918757,3,19,0,HEAVY WIDE-HEADED RIGHTWARDS ARROW,Dingbats
+💶,0x1f4b6,22,0.748289907,3,16,3,BANKNOTE WITH EURO SIGN,Miscellaneous Symbols and Pictographs
+🐤,0x1f424,22,0.838037285,1,7,14,BABY CHICK,Miscellaneous Symbols and Pictographs
+╩,0x2569,22,0.811363636,0,17,5,BOX DRAWINGS DOUBLE UP AND HORIZONTAL,Box Drawing
+🛀,0x1f6c0,21,0.904298381,6,6,9,BATH,Transport and Map Symbols
+🌑,0x1f311,21,0.603915537,2,6,13,NEW MOON SYMBOL,Miscellaneous Symbols and Pictographs
+🚲,0x1f6b2,21,0.582675365,1,10,10,BICYCLE,Transport and Map Symbols
+🐑,0x1f411,21,0.921935783,6,13,2,SHEEP,Miscellaneous Symbols and Pictographs
+🏁,0x1f3c1,21,0.618314821,0,9,12,CHEQUERED FLAG,Miscellaneous Symbols and Pictographs
+🍞,0x1f35e,21,0.710838498,6,8,7,BREAD,Miscellaneous Symbols and Pictographs
+🎾,0x1f3be,21,0.820392839,2,4,15,TENNIS RACQUET AND BALL,Miscellaneous Symbols and Pictographs
+╚,0x255a,21,0.714311764,0,14,7,BOX DRAWINGS DOUBLE UP AND RIGHT,Box Drawing
+🈹,0x1f239,21,0.349907717,1,12,8,SQUARED CJK UNIFIED IDEOGRAPH-5272,Enclosed Ideographic Supplement
+🐳,0x1f433,20,0.65571861,4,9,7,SPOUTING WHALE,Miscellaneous Symbols and Pictographs
+👮,0x1f46e,20,0.742230559,10,8,2,POLICE OFFICER,Miscellaneous Symbols and Pictographs
+☹,0x2639,20,0.776559964,14,4,2,WHITE FROWNING FACE,Miscellaneous Symbols
+🐵,0x1f435,20,0.63050797,1,7,12,MONKEY FACE,Miscellaneous Symbols and Pictographs
+✪,0x272a,20,0.287581918,0,13,7,CIRCLED WHITE STAR,Dingbats
+◕,0x25d5,20,0.594134042,0,10,10,CIRCLE WITH ALL BUT UPPER LEFT QUADRANT BLACK,Geometric Shapes
+🗼,0x1f5fc,20,0.653788547,1,6,13,TOKYO TOWER,Miscellaneous Symbols and Pictographs
+▐,0x2590,20,0.304138759,4,15,1,RIGHT HALF BLOCK,Block Elements
+♠,0x2660,20,0.533120829,0,13,7,BLACK SPADE SUIT,Miscellaneous Symbols
+┳,0x2533,20,0.399288134,10,8,2,BOX DRAWINGS HEAVY DOWN AND HORIZONTAL,Box Drawing
+👺,0x1f47a,19,0.824824563,8,7,4,JAPANESE GOBLIN,Miscellaneous Symbols and Pictographs
+🐚,0x1f41a,19,0.526458845,1,12,6,SPIRAL SHELL,Miscellaneous Symbols and Pictographs
+👂,0x1f442,19,0.68212761,7,8,4,EAR,Miscellaneous Symbols and Pictographs
+🗽,0x1f5fd,19,0.651087541,1,10,8,STATUE OF LIBERTY,Miscellaneous Symbols and Pictographs
+🍵,0x1f375,19,0.650326294,3,5,11,TEACUP WITHOUT HANDLE,Miscellaneous Symbols and Pictographs
+🆒,0x1f192,19,0.627794041,0,11,8,SQUARED COOL,Enclosed Alphanumeric Supplement
+🍯,0x1f36f,19,0.779822828,7,4,8,HONEY POT,Miscellaneous Symbols and Pictographs
+🐺,0x1f43a,19,0.734916913,2,10,7,WOLF FACE,Miscellaneous Symbols and Pictographs
+⇨,0x21e8,19,0.541146317,0,9,10,RIGHTWARDS WHITE ARROW,Arrows
+➨,0x27a8,19,0.558287039,2,12,5,HEAVY CONCAVE-POINTED BLACK RIGHTWARDS ARROW,Dingbats
+🌓,0x1f313,19,0.458297394,0,6,13,FIRST QUARTER MOON SYMBOL,Miscellaneous Symbols and Pictographs
+🔒,0x1f512,19,0.939297049,5,5,9,LOCK,Miscellaneous Symbols and Pictographs
+╬,0x256c,19,0.32158749,6,10,3,BOX DRAWINGS DOUBLE VERTICAL AND HORIZONTAL,Box Drawing
+👳,0x1f473,18,0.816081393,2,1,15,MAN WITH TURBAN,Miscellaneous Symbols and Pictographs
+🌂,0x1f302,18,0.784983076,2,9,7,CLOSED UMBRELLA,Miscellaneous Symbols and Pictographs
+🚌,0x1f68c,18,0.635613322,2,10,6,BUS,Transport and Map Symbols
+♩,0x2669,18,0.791816647,0,7,11,QUARTER NOTE,Miscellaneous Symbols
+🍡,0x1f361,18,0.699734257,5,9,4,DANGO,Miscellaneous Symbols and Pictographs
+❥,0x2765,18,0.440217022,0,13,5,ROTATED HEAVY BLACK HEART BULLET,Dingbats
+🎡,0x1f3a1,18,0.506097489,1,10,7,FERRIS WHEEL,Miscellaneous Symbols and Pictographs
+💌,0x1f48c,17,0.805000544,2,3,12,LOVE LETTER,Miscellaneous Symbols and Pictographs
+🐩,0x1f429,17,0.87034228,0,10,7,POODLE,Miscellaneous Symbols and Pictographs
+🌜,0x1f31c,17,0.604117045,0,7,10,LAST QUARTER MOON WITH FACE,Miscellaneous Symbols and Pictographs
+⌚,0x231a,17,0.64929786,2,9,6,WATCH,Miscellaneous Technical
+🚿,0x1f6bf,17,0.669217138,1,3,13,SHOWER,Transport and Map Symbols
+🐖,0x1f416,17,0.814054951,0,14,3,PIG,Miscellaneous Symbols and Pictographs
+🔆,0x1f506,17,0.604618098,0,6,11,HIGH BRIGHTNESS SYMBOL,Miscellaneous Symbols and Pictographs
+🌛,0x1f31b,17,0.679966738,0,6,11,FIRST QUARTER MOON WITH FACE,Miscellaneous Symbols and Pictographs
+💂,0x1f482,17,0.691282654,8,4,5,GUARDSMAN,Miscellaneous Symbols and Pictographs
+🐔,0x1f414,17,0.627149273,1,9,7,CHICKEN,Miscellaneous Symbols and Pictographs
+🙎,0x1f64e,17,0.640742988,8,2,7,PERSON WITH POUTING FACE,Emoticons
+🏩,0x1f3e9,16,0.587431016,2,4,10,LOVE HOTEL,Miscellaneous Symbols and Pictographs
+🇫,0x1f1eb,16,0.718033886,0,7,9,REGIONAL INDICATOR SYMBOL LETTER F,Enclosed Alphanumeric Supplement
+🔨,0x1f528,16,0.738603866,6,6,4,HAMMER,Miscellaneous Symbols and Pictographs
+📢,0x1f4e2,16,0.545722402,0,8,8,PUBLIC ADDRESS LOUDSPEAKER,Miscellaneous Symbols and Pictographs
+🐦,0x1f426,16,0.75753571,0,8,8,BIRD,Miscellaneous Symbols and Pictographs
+🐲,0x1f432,16,0.457546329,2,13,1,DRAGON FACE,Miscellaneous Symbols and Pictographs
+♻,0x267b,16,0.438690753,0,7,9,BLACK UNIVERSAL RECYCLING SYMBOL,Miscellaneous Symbols
+🌘,0x1f318,16,0.577817017,0,5,11,WANING CRESCENT MOON SYMBOL,Miscellaneous Symbols and Pictographs
+🍐,0x1f350,16,0.84457574,5,3,8,PEAR,Miscellaneous Symbols and Pictographs
+🌔,0x1f314,16,0.447188207,0,5,11,WAXING GIBBOUS MOON SYMBOL,Miscellaneous Symbols and Pictographs
+╥,0x2565,16,0.8694829,6,2,8,BOX DRAWINGS DOWN DOUBLE AND HORIZONTAL SINGLE,Box Drawing
+❊,0x274a,16,0.45212766,0,16,0,EIGHT TEARDROP-SPOKED PROPELLER ASTERISK,Dingbats
+👖,0x1f456,15,0.910194857,1,7,7,JEANS,Miscellaneous Symbols and Pictographs
+🚺,0x1f6ba,15,0.677226689,2,8,5,WOMENS SYMBOL,Transport and Map Symbols
+😗,0x1f617,15,0.714328477,1,2,12,KISSING FACE,Emoticons
+🎭,0x1f3ad,15,0.657660049,5,5,5,PERFORMING ARTS,Miscellaneous Symbols and Pictographs
+🐄,0x1f404,15,0.825887991,2,6,7,COW,Miscellaneous Symbols and Pictographs
+◟,0x25df,15,0.646546064,2,12,1,LOWER LEFT QUADRANT CIRCULAR ARC,Geometric Shapes
+🍢,0x1f362,15,0.684276452,5,7,3,ODEN,Miscellaneous Symbols and Pictographs
+🎨,0x1f3a8,15,0.490548154,1,10,4,ARTIST PALETTE,Miscellaneous Symbols and Pictographs
+⬇,0x2b07,15,0.631917187,2,4,9,DOWNWARDS BLACK ARROW,Miscellaneous Symbols and Arrows
+🚼,0x1f6bc,15,0.692874634,0,5,10,BABY SYMBOL,Transport and Map Symbols
+⛲,0x26f2,15,0.697309585,1,12,2,FOUNTAIN,Miscellaneous Symbols
+▁,0x2581,15,0.711319751,0,15,0,LOWER ONE EIGHTH BLOCK,Block Elements
+🇴,0x1f1f4,15,0.676124081,0,9,6,REGIONAL INDICATOR SYMBOL LETTER O,Enclosed Alphanumeric Supplement
+🌗,0x1f317,15,0.54681955,0,4,11,LAST QUARTER MOON SYMBOL,Miscellaneous Symbols and Pictographs
+🌖,0x1f316,15,0.534539354,0,4,11,WANING GIBBOUS MOON SYMBOL,Miscellaneous Symbols and Pictographs
+🔅,0x1f505,15,0.634782609,0,0,15,LOW BRIGHTNESS SYMBOL,Miscellaneous Symbols and Pictographs
+👜,0x1f45c,14,0.675482619,2,6,6,HANDBAG,Miscellaneous Symbols and Pictographs
+🐌,0x1f40c,14,0.421349764,0,3,11,SNAIL,Miscellaneous Symbols and Pictographs
+💼,0x1f4bc,14,0.573028381,1,3,10,BRIEFCASE,Miscellaneous Symbols and Pictographs
+🚕,0x1f695,14,0.526016674,3,8,3,TAXI,Transport and Map Symbols
+🐹,0x1f439,14,0.743700839,3,3,8,HAMSTER FACE,Miscellaneous Symbols and Pictographs
+🌠,0x1f320,14,0.761411531,2,1,11,SHOOTING STAR,Miscellaneous Symbols and Pictographs
+🐈,0x1f408,14,0.645414223,0,9,5,CAT,Miscellaneous Symbols and Pictographs
+⇧,0x21e7,14,0.461420203,0,12,2,UPWARDS WHITE ARROW,Arrows
+☎,0x260e,14,0.836709012,2,10,2,BLACK TELEPHONE,Miscellaneous Symbols
+🌁,0x1f301,14,0.744406749,1,9,4,FOGGY,Miscellaneous Symbols and Pictographs
+⚫,0x26ab,14,0.440912997,3,4,7,MEDIUM BLACK CIRCLE,Miscellaneous Symbols
+♧,0x2667,14,0.775062446,0,6,8,WHITE CLUB SUIT,Miscellaneous Symbols
+🏰,0x1f3f0,14,0.434066804,1,7,6,EUROPEAN CASTLE,Miscellaneous Symbols and Pictographs
+🚵,0x1f6b5,14,0.5561554,0,8,6,MOUNTAIN BICYCLIST,Transport and Map Symbols
+🎢,0x1f3a2,14,0.825803746,1,4,9,ROLLER COASTER,Miscellaneous Symbols and Pictographs
+🎷,0x1f3b7,14,0.759955203,0,3,11,SAXOPHONE,Miscellaneous Symbols and Pictographs
+🎐,0x1f390,14,0.290879701,0,11,3,WIND CHIME,Miscellaneous Symbols and Pictographs
+┈,0x2508,14,0.792740417,12,0,2,BOX DRAWINGS LIGHT QUADRUPLE DASH HORIZONTAL,Box Drawing
+╗,0x2557,14,0.361119833,0,8,6,BOX DRAWINGS DOUBLE DOWN AND LEFT,Box Drawing
+╱,0x2571,14,0.547959184,0,14,0,BOX DRAWINGS LIGHT DIAGONAL UPPER RIGHT TO LOWER LEFT,Box Drawing
+🌇,0x1f307,13,0.54287435,0,5,8,SUNSET OVER BUILDINGS,Miscellaneous Symbols and Pictographs
+⏰,0x23f0,13,0.645780266,2,2,9,ALARM CLOCK,Miscellaneous Technical
+⇩,0x21e9,13,0.503572636,0,13,0,DOWNWARDS WHITE ARROW,Arrows
+🚂,0x1f682,13,0.656030729,0,9,4,STEAM LOCOMOTIVE,Transport and Map Symbols
+◠,0x25e0,13,0.652555193,0,6,7,UPPER HALF CIRCLE,Geometric Shapes
+🎿,0x1f3bf,13,0.727391903,1,5,7,SKI AND SKI BOOT,Miscellaneous Symbols and Pictographs
+✦,0x2726,13,0.402369693,0,12,1,BLACK FOUR POINTED STAR,Dingbats
+🆔,0x1f194,13,0.479124776,0,1,12,SQUARED ID,Enclosed Alphanumeric Supplement
+⛪,0x26ea,13,0.38723933,2,7,4,CHURCH,Miscellaneous Symbols
+🌒,0x1f312,13,0.446222397,0,4,9,WAXING CRESCENT MOON SYMBOL,Miscellaneous Symbols and Pictographs
+🐪,0x1f42a,13,0.836925018,0,4,9,DROMEDARY CAMEL,Miscellaneous Symbols and Pictographs
+╔,0x2554,13,0.309824364,0,9,4,BOX DRAWINGS DOUBLE DOWN AND RIGHT,Box Drawing
+╝,0x255d,13,0.800037569,0,6,7,BOX DRAWINGS DOUBLE UP AND LEFT,Box Drawing
+👔,0x1f454,12,0.520012314,2,3,7,NECKTIE,Miscellaneous Symbols and Pictographs
+🔱,0x1f531,12,0.790792217,3,5,4,TRIDENT EMBLEM,Miscellaneous Symbols and Pictographs
+🆓,0x1f193,12,0.551459397,0,9,3,SQUARED FREE,Enclosed Alphanumeric Supplement
+🐋,0x1f40b,12,0.865813424,2,5,5,WHALE,Miscellaneous Symbols and Pictographs
+▽,0x25bd,12,0.843553507,1,4,7,WHITE DOWN-POINTING TRIANGLE,Geometric Shapes
+▂,0x2582,12,0.578512397,0,12,0,LOWER ONE QUARTER BLOCK,Block Elements
+🐛,0x1f41b,12,0.672751951,2,4,6,BUG,Miscellaneous Symbols and Pictographs
+👕,0x1f455,12,0.795097842,1,4,7,T-SHIRT,Miscellaneous Symbols and Pictographs
+🚋,0x1f68b,12,0.317741493,0,11,1,TRAM CAR,Transport and Map Symbols
+💳,0x1f4b3,12,0.83392297,1,4,7,CREDIT CARD,Miscellaneous Symbols and Pictographs
+🌆,0x1f306,12,0.764797204,2,6,4,CITYSCAPE AT DUSK,Miscellaneous Symbols and Pictographs
+🏧,0x1f3e7,12,0.888240175,0,0,12,AUTOMATED TELLER MACHINE,Miscellaneous Symbols and Pictographs
+💡,0x1f4a1,12,0.597619454,0,3,9,ELECTRIC LIGHT BULB,Miscellaneous Symbols and Pictographs
+🔹,0x1f539,12,0.170199929,2,6,4,SMALL BLUE DIAMOND,Miscellaneous Symbols and Pictographs
+⬅,0x2b05,12,0.662574787,0,5,7,LEFTWARDS BLACK ARROW,Miscellaneous Symbols and Arrows
+🍠,0x1f360,12,0.938678015,5,2,5,ROASTED SWEET POTATO,Miscellaneous Symbols and Pictographs
+🐫,0x1f42b,12,0.770082215,0,7,5,BACTRIAN CAMEL,Miscellaneous Symbols and Pictographs
+🏪,0x1f3ea,12,0.374437236,2,7,3,CONVENIENCE STORE,Miscellaneous Symbols and Pictographs
+۩,0x6e9,12,0.464312944,0,12,0,ARABIC PLACE OF SAJDAH,Arabic
+🇱,0x1f1f1,12,0.71333692,0,6,6,REGIONAL INDICATOR SYMBOL LETTER L,Enclosed Alphanumeric Supplement
+📹,0x1f4f9,11,0.718346535,1,3,7,VIDEO CAMERA,Miscellaneous Symbols and Pictographs
+👞,0x1f45e,11,0.779457078,1,3,7,MANS SHOE,Miscellaneous Symbols and Pictographs
+🚑,0x1f691,11,0.758087751,3,4,4,AMBULANCE,Transport and Map Symbols
+🆘,0x1f198,11,0.775131806,4,2,5,SQUARED SOS,Enclosed Alphanumeric Supplement
+👚,0x1f45a,11,0.810043786,0,3,8,WOMANS CLOTHES,Miscellaneous Symbols and Pictographs
+🚍,0x1f68d,11,0.659558885,4,2,5,ONCOMING BUS,Transport and Map Symbols
+□,0x25a1,11,0.673637431,7,0,4,WHITE SQUARE,Geometric Shapes
+🐂,0x1f402,11,0.774388184,1,7,3,OX,Miscellaneous Symbols and Pictographs
+🚣,0x1f6a3,11,0.712555862,0,3,8,ROWBOAT,Transport and Map Symbols
+✳,0x2733,11,0.37234627,0,11,0,EIGHT SPOKED ASTERISK,Dingbats
+🏉,0x1f3c9,11,0.837042609,0,4,7,RUGBY FOOTBALL,Miscellaneous Symbols and Pictographs
+🗻,0x1f5fb,11,0.723455901,0,3,8,MOUNT FUJI,Miscellaneous Symbols and Pictographs
+🐀,0x1f400,11,0.701470653,1,7,3,RAT,Miscellaneous Symbols and Pictographs
+╦,0x2566,11,0.22026307,0,6,5,BOX DRAWINGS DOUBLE DOWN AND HORIZONTAL,Box Drawing
+⛺,0x26fa,10,0.905848988,1,2,7,TENT,Miscellaneous Symbols
+🐕,0x1f415,10,0.879333592,1,5,4,DOG,Miscellaneous Symbols and Pictographs
+🏂,0x1f3c2,10,0.777003138,1,3,6,SNOWBOARDER,Miscellaneous Symbols and Pictographs
+👡,0x1f461,10,0.63543995,1,3,6,WOMANS SANDAL,Miscellaneous Symbols and Pictographs
+📻,0x1f4fb,10,0.726200366,1,4,5,RADIO,Miscellaneous Symbols and Pictographs
+✒,0x2712,10,0.543607437,1,5,4,BLACK NIB,Dingbats
+🌰,0x1f330,10,0.786442145,0,3,7,CHESTNUT,Miscellaneous Symbols and Pictographs
+🏢,0x1f3e2,10,0.542295544,0,8,2,OFFICE BUILDING,Miscellaneous Symbols and Pictographs
+🎒,0x1f392,10,0.614006372,1,2,7,SCHOOL SATCHEL,Miscellaneous Symbols and Pictographs
+⌒,0x2312,10,0.623939324,0,3,7,ARC,Miscellaneous Technical
+🏫,0x1f3eb,10,0.644209517,6,1,3,SCHOOL,Miscellaneous Symbols and Pictographs
+📴,0x1f4f4,10,0.981898981,1,0,9,MOBILE PHONE OFF,Miscellaneous Symbols and Pictographs
+🚢,0x1f6a2,10,0.817914113,3,1,6,SHIP,Transport and Map Symbols
+🚚,0x1f69a,10,0.479308081,2,7,1,DELIVERY TRUCK,Transport and Map Symbols
+🐉,0x1f409,10,0.628494919,0,8,2,DRAGON,Miscellaneous Symbols and Pictographs
+❒,0x2752,10,0.587413086,0,7,3,UPPER RIGHT SHADOWED WHITE SQUARE,Dingbats
+🐊,0x1f40a,10,0.84550756,2,5,3,CROCODILE,Miscellaneous Symbols and Pictographs
+🔔,0x1f514,10,0.713041475,0,0,10,BELL,Miscellaneous Symbols and Pictographs
+◢,0x25e2,10,0.571991872,0,2,8,BLACK LOWER RIGHT TRIANGLE,Geometric Shapes
+🏥,0x1f3e5,9,0.648092966,1,4,4,HOSPITAL,Miscellaneous Symbols and Pictographs
+❔,0x2754,9,0.787466861,3,3,3,WHITE QUESTION MARK ORNAMENT,Dingbats
+🚖,0x1f696,9,0.800144753,3,4,2,ONCOMING TAXI,Transport and Map Symbols
+🃏,0x1f0cf,9,0.685606875,3,2,4,PLAYING CARD BLACK JOKER,Playing Cards
+▼,0x25bc,9,0.656774297,2,4,3,BLACK DOWN-POINTING TRIANGLE,Geometric Shapes
+▌,0x258c,9,0.420711618,4,4,1,LEFT HALF BLOCK,Block Elements
+☛,0x261b,9,0.553782742,0,5,4,BLACK RIGHT POINTING INDEX,Miscellaneous Symbols
+✩,0x2729,9,0.265667997,0,9,0,STRESS OUTLINED WHITE STAR,Dingbats
+💒,0x1f492,9,0.79417208,0,3,6,WEDDING,Miscellaneous Symbols and Pictographs
+🚤,0x1f6a4,9,0.503972435,0,5,4,SPEEDBOAT,Transport and Map Symbols
+🐐,0x1f410,9,0.720583133,0,4,5,GOAT,Miscellaneous Symbols and Pictographs
+■,0x25a0,9,0.79044432,5,2,2,BLACK SQUARE,Geometric Shapes
+🔚,0x1f51a,9,0.868645196,1,3,5,END WITH LEFTWARDS ARROW ABOVE,Miscellaneous Symbols and Pictographs
+🎻,0x1f3bb,9,0.720880053,0,5,4,VIOLIN,Miscellaneous Symbols and Pictographs
+🔷,0x1f537,9,0.367845118,0,7,2,LARGE BLUE DIAMOND,Miscellaneous Symbols and Pictographs
+🚦,0x1f6a6,9,0.454265022,2,4,3,VERTICAL TRAFFIC LIGHT,Transport and Map Symbols
+🔓,0x1f513,9,0.802890324,3,2,4,OPEN LOCK,Miscellaneous Symbols and Pictographs
+🎽,0x1f3bd,9,0.903767713,0,4,5,RUNNING SHIRT WITH SASH,Miscellaneous Symbols and Pictographs
+📅,0x1f4c5,9,0.597376373,2,3,4,CALENDAR,Miscellaneous Symbols and Pictographs
+🎺,0x1f3ba,9,0.646180394,1,0,8,TRUMPET,Miscellaneous Symbols and Pictographs
+✯,0x272f,9,0.32090504,0,9,0,PINWHEEL STAR,Dingbats
+🍈,0x1f348,9,0.520981407,6,1,2,MELON,Miscellaneous Symbols and Pictographs
+✉,0x2709,9,0.44131007,1,4,4,ENVELOPE,Dingbats
+╣,0x2563,9,0.641758242,0,9,0,BOX DRAWINGS DOUBLE VERTICAL AND LEFT,Box Drawing
+◤,0x25e4,9,0.669223855,0,0,9,BLACK UPPER LEFT TRIANGLE,Geometric Shapes
+○,0x25cb,8,0.625334477,0,3,5,WHITE CIRCLE,Geometric Shapes
+🍼,0x1f37c,8,0.889794471,1,1,6,BABY BOTTLE,Miscellaneous Symbols and Pictographs
+📀,0x1f4c0,8,0.842924661,1,5,2,DVD,Miscellaneous Symbols and Pictographs
+🚛,0x1f69b,8,0.552176238,2,6,0,ARTICULATED LORRY,Transport and Map Symbols
+📓,0x1f4d3,8,0.835156432,1,4,3,NOTEBOOK,Miscellaneous Symbols and Pictographs
+☉,0x2609,8,0.985925307,0,6,2,SUN,Miscellaneous Symbols
+💴,0x1f4b4,8,0.837157842,3,4,1,BANKNOTE WITH YEN SIGN,Miscellaneous Symbols and Pictographs
+┼,0x253c,8,0.594639298,2,4,2,BOX DRAWINGS LIGHT VERTICAL AND HORIZONTAL,Box Drawing
+🐃,0x1f403,8,0.82964401,0,8,0,WATER BUFFALO,Miscellaneous Symbols and Pictographs
+➰,0x27b0,8,0.255281448,4,1,3,CURLY LOOP,Dingbats
+🔌,0x1f50c,8,0.84383834,3,3,2,ELECTRIC PLUG,Miscellaneous Symbols and Pictographs
+🍄,0x1f344,8,0.481955716,2,4,2,MUSHROOM,Miscellaneous Symbols and Pictographs
+📕,0x1f4d5,8,0.687815619,1,4,3,CLOSED BOOK,Miscellaneous Symbols and Pictographs
+📣,0x1f4e3,8,0.665290609,1,2,5,CHEERING MEGAPHONE,Miscellaneous Symbols and Pictographs
+🚓,0x1f693,8,0.654503222,0,5,3,POLICE CAR,Transport and Map Symbols
+🐗,0x1f417,8,0.756674318,0,3,5,BOAR,Miscellaneous Symbols and Pictographs
+↪,0x21aa,8,0.726671282,0,7,1,RIGHTWARDS ARROW WITH HOOK,Arrows
+⛳,0x26f3,8,0.659686501,0,1,7,FLAG IN HOLE,Miscellaneous Symbols
+┻,0x253b,8,0.436070741,6,0,2,BOX DRAWINGS HEAVY UP AND HORIZONTAL,Box Drawing
+┛,0x251b,8,0.711630126,0,2,6,BOX DRAWINGS HEAVY UP AND LEFT,Box Drawing
+┃,0x2503,8,0.495888704,0,4,4,BOX DRAWINGS HEAVY VERTICAL,Box Drawing
+👱,0x1f471,7,0.584040891,1,4,2,PERSON WITH BLOND HAIR,Miscellaneous Symbols and Pictographs
+⏳,0x23f3,7,0.829006815,3,1,3,HOURGLASS WITH FLOWING SAND,Miscellaneous Technical
+💺,0x1f4ba,7,0.499522738,1,3,3,SEAT,Miscellaneous Symbols and Pictographs
+🏇,0x1f3c7,7,0.829351657,3,2,2,HORSE RACING,Miscellaneous Symbols and Pictographs
+☻,0x263b,7,0.808078576,1,3,3,BLACK SMILING FACE,Miscellaneous Symbols
+📞,0x1f4de,7,0.639663641,0,3,4,TELEPHONE RECEIVER,Miscellaneous Symbols and Pictographs
+Ⓐ,0x24b6,7,0.467453036,2,4,1,CIRCLED LATIN CAPITAL LETTER A,Enclosed Alphanumerics
+🌉,0x1f309,7,0.848338345,0,2,5,BRIDGE AT NIGHT,Miscellaneous Symbols and Pictographs
+🚩,0x1f6a9,7,0.14668319,3,3,1,TRIANGULAR FLAG ON POST,Transport and Map Symbols
+✎,0x270e,7,0.547314568,0,2,5,LOWER RIGHT PENCIL,Dingbats
+📃,0x1f4c3,7,0.75418917,0,3,4,PAGE WITH CURL,Miscellaneous Symbols and Pictographs
+🏨,0x1f3e8,7,0.803363124,0,5,2,HOTEL,Miscellaneous Symbols and Pictographs
+📌,0x1f4cc,7,0.799054518,5,1,1,PUSHPIN,Miscellaneous Symbols and Pictographs
+♎,0x264e,7,0.85514993,2,4,1,LIBRA,Miscellaneous Symbols
+💷,0x1f4b7,7,0.573124902,0,3,4,BANKNOTE WITH POUND SIGN,Miscellaneous Symbols and Pictographs
+🚄,0x1f684,7,0.699813945,0,2,5,HIGH-SPEED TRAIN,Transport and Map Symbols
+▲,0x25b2,7,0.33783723,0,2,5,BLACK UP-POINTING TRIANGLE,Geometric Shapes
+⛵,0x26f5,7,0.323527212,0,2,5,SAILBOAT,Miscellaneous Symbols
+🔸,0x1f538,7,0.17210479,0,5,2,SMALL ORANGE DIAMOND,Miscellaneous Symbols and Pictographs
+⌛,0x231b,7,0.796787872,2,2,3,HOURGLASS,Miscellaneous Technical
+🚜,0x1f69c,7,0.76727505,0,0,7,TRACTOR,Transport and Map Symbols
+🐆,0x1f406,7,0.550090954,0,4,3,LEOPARD,Miscellaneous Symbols and Pictographs
+👒,0x1f452,7,0.843648743,1,3,3,WOMANS HAT,Miscellaneous Symbols and Pictographs
+❕,0x2755,7,0.86202303,1,3,3,WHITE EXCLAMATION MARK ORNAMENT,Dingbats
+🔛,0x1f51b,7,0.474006336,1,1,5,ON WITH EXCLAMATION MARK WITH LEFT RIGHT ARROW ABOVE,Miscellaneous Symbols and Pictographs
+♢,0x2662,7,0.868165215,0,4,3,WHITE DIAMOND SUIT,Miscellaneous Symbols
+🇲,0x1f1f2,7,0.786773623,0,3,4,REGIONAL INDICATOR SYMBOL LETTER M,Enclosed Alphanumeric Supplement
+❅,0x2745,7,0.247154472,0,1,6,TIGHT TRIFOLIATE SNOWFLAKE,Dingbats
+👝,0x1f45d,6,0.611228018,1,1,4,POUCH,Miscellaneous Symbols and Pictographs
+✞,0x271e,6,0.509389671,0,3,3,SHADOWED WHITE LATIN CROSS,Dingbats
+◡,0x25e1,6,0.946756676,0,4,2,LOWER HALF CIRCLE,Geometric Shapes
+🎋,0x1f38b,6,0.785515587,1,0,5,TANABATA TREE,Miscellaneous Symbols and Pictographs
+👥,0x1f465,6,0.83792517,1,2,3,BUSTS IN SILHOUETTE,Miscellaneous Symbols and Pictographs
+📵,0x1f4f5,6,0.794071373,1,3,2,NO MOBILE PHONES,Miscellaneous Symbols and Pictographs
+🐡,0x1f421,6,0.867288557,0,4,2,BLOWFISH,Miscellaneous Symbols and Pictographs
+◆,0x25c6,6,0.602165081,0,1,5,BLACK DIAMOND,Geometric Shapes
+🏯,0x1f3ef,6,0.529919889,0,5,1,JAPANESE CASTLE,Miscellaneous Symbols and Pictographs
+☂,0x2602,6,0.453390203,1,4,1,UMBRELLA,Miscellaneous Symbols
+🔭,0x1f52d,6,0.715984026,0,3,3,TELESCOPE,Miscellaneous Symbols and Pictographs
+🎪,0x1f3aa,6,0.607881289,0,4,2,CIRCUS TENT,Miscellaneous Symbols and Pictographs
+🐜,0x1f41c,6,0.879901961,0,2,4,ANT,Miscellaneous Symbols and Pictographs
+♌,0x264c,6,0.790409536,0,1,5,LEO,Miscellaneous Symbols
+☐,0x2610,6,0.538095238,6,0,0,BALLOT BOX,Miscellaneous Symbols
+👷,0x1f477,6,0.739199448,1,2,3,CONSTRUCTION WORKER,Miscellaneous Symbols and Pictographs
+↳,0x21b3,6,0.346428571,0,6,0,DOWNWARDS ARROW WITH TIP RIGHTWARDS,Arrows
+🔈,0x1f508,6,0.635444115,0,4,2,SPEAKER,Miscellaneous Symbols and Pictographs
+📄,0x1f4c4,6,0.624139531,0,0,6,PAGE FACING UP,Miscellaneous Symbols and Pictographs
+📍,0x1f4cd,6,0.48869302,1,3,2,ROUND PUSHPIN,Miscellaneous Symbols and Pictographs
+🚐,0x1f690,6,0.77642636,0,1,5,MINIBUS,Transport and Map Symbols
+🚔,0x1f694,6,0.521943521,1,4,1,ONCOMING POLICE CAR,Transport and Map Symbols
+🌋,0x1f30b,6,0.379680055,0,2,4,VOLCANO,Miscellaneous Symbols and Pictographs
+📡,0x1f4e1,6,0.553891601,1,2,3,SATELLITE ANTENNA,Miscellaneous Symbols and Pictographs
+⏩,0x23e9,6,0.7317139,0,5,1,BLACK RIGHT-POINTING DOUBLE TRIANGLE,Miscellaneous Technical
+🚳,0x1f6b3,6,0.102993951,0,0,6,NO BICYCLES,Transport and Map Symbols
+✘,0x2718,6,0.538602654,0,1,5,HEAVY BALLOT X,Dingbats
+۞,0x6de,6,0.471786165,0,6,0,ARABIC START OF RUB EL HIZB,Arabic
+☾,0x263e,6,0.452907711,0,6,0,LAST QUARTER MOON,Miscellaneous Symbols
+🅰,0x1f170,6,0.311138998,1,2,3,NEGATIVE SQUARED LATIN CAPITAL LETTER A,Enclosed Alphanumeric Supplement
+📥,0x1f4e5,6,0.981884058,0,6,0,INBOX TRAY,Miscellaneous Symbols and Pictographs
+🇼,0x1f1fc,6,0.734391905,0,3,3,REGIONAL INDICATOR SYMBOL LETTER W,Enclosed Alphanumeric Supplement
+┓,0x2513,6,0.51522533,0,2,4,BOX DRAWINGS HEAVY DOWN AND LEFT,Box Drawing
+┣,0x2523,6,0.487486157,0,2,4,BOX DRAWINGS HEAVY VERTICAL AND RIGHT,Box Drawing
+Ⓛ,0x24c1,6,0.726851852,0,3,3,CIRCLED LATIN CAPITAL LETTER L,Enclosed Alphanumerics
+Ⓔ,0x24ba,6,0.814814815,0,3,3,CIRCLED LATIN CAPITAL LETTER E,Enclosed Alphanumerics
+🔦,0x1f526,5,0.852648347,0,5,0,ELECTRIC TORCH,Miscellaneous Symbols and Pictographs
+👤,0x1f464,5,0.785820605,0,1,4,BUST IN SILHOUETTE,Miscellaneous Symbols and Pictographs
+🚁,0x1f681,5,0.509988852,0,4,1,HELICOPTER,Transport and Map Symbols
+🎠,0x1f3a0,5,0.57433687,0,2,3,CAROUSEL HORSE,Miscellaneous Symbols and Pictographs
+🐁,0x1f401,5,0.418555982,2,3,0,MOUSE,Miscellaneous Symbols and Pictographs
+📗,0x1f4d7,5,0.78915959,1,2,2,GREEN BOOK,Miscellaneous Symbols and Pictographs
+┐,0x2510,5,0.770866381,2,2,1,BOX DRAWINGS LIGHT DOWN AND LEFT,Box Drawing
+☮,0x262e,5,0.75037594,2,1,2,PEACE SYMBOL,Miscellaneous Symbols
+♂,0x2642,5,0.580233775,0,4,1,MALE SIGN,Miscellaneous Symbols
+◞,0x25de,5,0.722789157,1,3,1,LOWER RIGHT QUADRANT CIRCULAR ARC,Geometric Shapes
+📯,0x1f4ef,5,0.974048452,1,4,0,POSTAL HORN,Miscellaneous Symbols and Pictographs
+🔩,0x1f529,5,0.672722386,1,2,2,NUT AND BOLT,Miscellaneous Symbols and Pictographs
+👢,0x1f462,5,0.994117647,0,1,4,WOMANS BOOTS,Miscellaneous Symbols and Pictographs
+◂,0x25c2,5,0.198500589,0,3,2,BLACK LEFT-POINTING SMALL TRIANGLE,Geometric Shapes
+📰,0x1f4f0,5,0.860149569,1,1,3,NEWSPAPER,Miscellaneous Symbols and Pictographs
+📶,0x1f4f6,5,0.930492899,0,3,2,ANTENNA WITH BARS,Miscellaneous Symbols and Pictographs
+🚥,0x1f6a5,5,0.723893805,1,3,1,HORIZONTAL TRAFFIC LIGHT,Transport and Map Symbols
+🌄,0x1f304,5,0.285583654,0,4,1,SUNRISE OVER MOUNTAINS,Miscellaneous Symbols and Pictographs
+🗾,0x1f5fe,5,0.738585725,0,3,2,SILHOUETTE OF JAPAN,Miscellaneous Symbols and Pictographs
+🔶,0x1f536,5,0.786004057,0,3,2,LARGE ORANGE DIAMOND,Miscellaneous Symbols and Pictographs
+🏤,0x1f3e4,5,0.272575758,0,3,2,EUROPEAN POST OFFICE,Miscellaneous Symbols and Pictographs
+🎩,0x1f3a9,5,0.58647571,0,3,2,TOP HAT,Miscellaneous Symbols and Pictographs
+Ⓜ,0x24c2,5,0.765244502,1,1,3,CIRCLED LATIN CAPITAL LETTER M,Enclosed Alphanumerics
+🔧,0x1f527,5,0.677226399,4,0,1,WRENCH,Miscellaneous Symbols and Pictographs
+🐅,0x1f405,5,0.818550107,0,4,1,TIGER,Miscellaneous Symbols and Pictographs
+♮,0x266e,5,0.936640494,0,4,1,MUSIC NATURAL SIGN,Miscellaneous Symbols
+🅾,0x1f17e,5,0.977468672,2,2,1,NEGATIVE SQUARED LATIN CAPITAL LETTER O,Enclosed Alphanumeric Supplement
+🔄,0x1f504,5,0.971014493,0,5,0,ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS,Miscellaneous Symbols and Pictographs
+☄,0x2604,5,0.435373547,0,5,0,COMET,Miscellaneous Symbols
+☨,0x2628,5,0.457692308,0,5,0,CROSS OF LORRAINE,Miscellaneous Symbols
+📦,0x1f4e6,4,0.508942142,0,3,1,PACKAGE,Miscellaneous Symbols and Pictographs
+🚊,0x1f68a,4,0.412291392,1,1,2,TRAM,Transport and Map Symbols
+🔲,0x1f532,4,0.665449309,0,1,3,BLACK SQUARE BUTTON,Miscellaneous Symbols and Pictographs
+🔁,0x1f501,4,0.570472495,1,2,1,CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS,Miscellaneous Symbols and Pictographs
+△,0x25b3,4,0.595601141,0,3,1,WHITE UP-POINTING TRIANGLE,Geometric Shapes
+📆,0x1f4c6,4,0.839991723,0,0,4,TEAR-OFF CALENDAR,Miscellaneous Symbols and Pictographs
+❛,0x275b,4,0.735294118,0,2,2,HEAVY SINGLE TURNED COMMA QUOTATION MARK ORNAMENT,Dingbats
+📉,0x1f4c9,4,0.726505602,0,2,2,CHART WITH DOWNWARDS TREND,Miscellaneous Symbols and Pictographs
+▵,0x25b5,4,0.012558719,0,2,2,WHITE UP-POINTING SMALL TRIANGLE,Geometric Shapes
+🔎,0x1f50e,4,0.333026114,0,1,3,RIGHT-POINTING MAGNIFYING GLASS,Miscellaneous Symbols and Pictographs
+☜,0x261c,4,0.95068438,0,3,1,WHITE LEFT POINTING INDEX,Miscellaneous Symbols
+🇯,0x1f1ef,4,0.598500468,0,2,2,REGIONAL INDICATOR SYMBOL LETTER J,Enclosed Alphanumeric Supplement
+🇵,0x1f1f5,4,0.60602405,0,2,2,REGIONAL INDICATOR SYMBOL LETTER P,Enclosed Alphanumeric Supplement
+📘,0x1f4d8,4,0.729794868,1,1,2,BLUE BOOK,Miscellaneous Symbols and Pictographs
+✡,0x2721,4,0.542307692,0,4,0,STAR OF DAVID,Dingbats
+ⓔ,0x24d4,4,0.423106061,0,1,3,CIRCLED LATIN SMALL LETTER E,Enclosed Alphanumerics
+🔑,0x1f511,4,0.712219599,1,1,2,KEY,Miscellaneous Symbols and Pictographs
+🔃,0x1f503,4,0.480569642,1,2,1,CLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS,Miscellaneous Symbols and Pictographs
+👃,0x1f443,4,0.617338955,2,0,2,NOSE,Miscellaneous Symbols and Pictographs
+⭕,0x2b55,4,0.521859186,0,2,2,HEAVY LARGE CIRCLE,Miscellaneous Symbols and Arrows
+🔘,0x1f518,4,0.823106247,0,3,1,RADIO BUTTON,Miscellaneous Symbols and Pictographs
+ⓒ,0x24d2,4,0.078409091,2,0,2,CIRCLED LATIN SMALL LETTER C,Enclosed Alphanumerics
+🚭,0x1f6ad,4,0.691042031,0,0,4,NO SMOKING SYMBOL,Transport and Map Symbols
+🚉,0x1f689,4,0.517599805,0,1,3,STATION,Transport and Map Symbols
+🚪,0x1f6aa,4,0.459991145,0,1,3,DOOR,Transport and Map Symbols
+➳,0x27b3,4,0.689189189,0,2,2,WHITE-FEATHERED RIGHTWARDS ARROW,Dingbats
+🚃,0x1f683,4,0.867813709,0,1,3,RAILWAY CAR,Transport and Map Symbols
+┯,0x252f,4,0.588235294,2,2,0,BOX DRAWINGS DOWN LIGHT AND HORIZONTAL HEAVY,Box Drawing
+🏬,0x1f3ec,4,0.772435897,0,4,0,DEPARTMENT STORE,Miscellaneous Symbols and Pictographs
+☽,0x263d,4,0.827205882,0,4,0,FIRST QUARTER MOON,Miscellaneous Symbols
+🆙,0x1f199,4,0.459136213,0,2,2,SQUARED UP WITH EXCLAMATION MARK,Enclosed Alphanumeric Supplement
+🆖,0x1f196,4,0.32767456,1,1,2,SQUARED NG,Enclosed Alphanumeric Supplement
+☪,0x262a,4,0.5,0,4,0,STAR AND CRESCENT,Miscellaneous Symbols
+┗,0x2517,4,0.70743831,0,0,4,BOX DRAWINGS HEAVY UP AND RIGHT,Box Drawing
+🚮,0x1f6ae,4,0.705415215,2,0,2,PUT LITTER IN ITS PLACE SYMBOL,Transport and Map Symbols
+┫,0x252b,4,0.546428571,0,4,0,BOX DRAWINGS HEAVY VERTICAL AND LEFT,Box Drawing
+Ⓞ,0x24c4,4,0.6875,0,2,2,CIRCLED LATIN CAPITAL LETTER O,Enclosed Alphanumerics
+❇,0x2747,3,0.906565657,0,1,2,SPARKLE,Dingbats
+✴,0x2734,3,0.425259601,0,1,2,EIGHT POINTED BLACK STAR,Dingbats
+┌,0x250c,3,1,1,1,1,BOX DRAWINGS LIGHT DOWN AND RIGHT,Box Drawing
+☊,0x260a,3,0.627212773,0,0,3,ASCENDING NODE,Miscellaneous Symbols
+🔕,0x1f515,3,0.663273811,2,0,1,BELL WITH CANCELLATION STROKE,Miscellaneous Symbols and Pictographs
+⬛,0x2b1b,3,0.93331136,2,0,1,BLACK LARGE SQUARE,Miscellaneous Symbols and Arrows
+❝,0x275d,3,0.012385762,0,3,0,HEAVY DOUBLE TURNED COMMA QUOTATION MARK ORNAMENT,Dingbats
+❞,0x275e,3,0.348845599,0,3,0,HEAVY DOUBLE COMMA QUOTATION MARK ORNAMENT,Dingbats
+🚞,0x1f69e,3,0.401392441,0,1,2,MOUNTAIN RAILWAY,Transport and Map Symbols
+🍶,0x1f376,3,0.670454148,0,1,2,SAKE BOTTLE AND CUP,Miscellaneous Symbols and Pictographs
+🌐,0x1f310,3,0.661697723,0,1,2,GLOBE WITH MERIDIANS,Miscellaneous Symbols and Pictographs
+♀,0x2640,3,0.496259709,0,2,1,FEMALE SIGN,Miscellaneous Symbols
+🚅,0x1f685,3,0.60688385,0,1,2,HIGH-SPEED TRAIN WITH BULLET NOSE,Transport and Map Symbols
+🚒,0x1f692,3,0.372181638,1,2,0,FIRE ENGINE,Transport and Map Symbols
+➣,0x27a3,3,0.607657549,0,3,0,THREE-D BOTTOM-LIGHTED RIGHTWARDS ARROWHEAD,Dingbats
+♋,0x264b,3,0.66780619,0,2,1,CANCER,Miscellaneous Symbols
+♍,0x264d,3,0.921455436,0,1,2,VIRGO,Miscellaneous Symbols
+🕝,0x1f55d,3,0.673202614,1,2,0,CLOCK FACE TWO-THIRTY,Miscellaneous Symbols and Pictographs
+ⓐ,0x24d0,3,0.866666667,0,0,3,CIRCLED LATIN SMALL LETTER A,Enclosed Alphanumerics
+✗,0x2717,3,1,1,1,1,BALLOT X,Dingbats
+📙,0x1f4d9,3,0.985204154,1,0,2,ORANGE BOOK,Miscellaneous Symbols and Pictographs
+Ⓢ,0x24c8,3,0.837301587,0,2,1,CIRCLED LATIN CAPITAL LETTER S,Enclosed Alphanumerics
+📋,0x1f4cb,3,0.902676399,0,1,2,CLIPBOARD,Miscellaneous Symbols and Pictographs
+⇢,0x21e2,3,0.795568159,1,1,1,RIGHTWARDS DASHED ARROW,Arrows
+🎱,0x1f3b1,3,0.733061963,1,0,2,BILLIARDS,Miscellaneous Symbols and Pictographs
+🐞,0x1f41e,3,0.867149758,0,2,1,LADY BEETLE,Miscellaneous Symbols and Pictographs
+🔺,0x1f53a,3,0.331084568,0,2,1,UP-POINTING RED TRIANGLE,Miscellaneous Symbols and Pictographs
+ⓡ,0x24e1,3,0.476666667,0,0,3,CIRCLED LATIN SMALL LETTER R,Enclosed Alphanumerics
+🎍,0x1f38d,3,0.460928261,0,3,0,PINE DECORATION,Miscellaneous Symbols and Pictographs
+♤,0x2664,3,0.864386792,0,1,2,WHITE SPADE SUIT,Miscellaneous Symbols
+🎲,0x1f3b2,3,0.294190811,0,3,0,GAME DIE,Miscellaneous Symbols and Pictographs
+🎯,0x1f3af,3,0.928725808,0,1,2,DIRECT HIT,Miscellaneous Symbols and Pictographs
+〠,0x3020,3,0.589554531,0,3,0,POSTAL MARK FACE,CJK Symbols and Punctuation
+🔉,0x1f509,3,0.527173913,0,1,2,SPEAKER WITH ONE SOUND WAVE,Miscellaneous Symbols and Pictographs
+↩,0x21a9,3,0.790990991,0,0,3,LEFTWARDS ARROW WITH HOOK,Arrows
+🚾,0x1f6be,3,0.97979798,0,2,1,WATER CLOSET,Transport and Map Symbols
+🎣,0x1f3a3,3,0.661217721,2,1,0,FISHING POLE AND FISH,Miscellaneous Symbols and Pictographs
+🔣,0x1f523,3,0.73668039,0,2,1,INPUT SYMBOL FOR SYMBOLS,Miscellaneous Symbols and Pictographs
+❎,0x274e,3,0.376693767,3,0,0,NEGATIVE SQUARED CROSS MARK,Dingbats
+➥,0x27a5,3,0.607479234,0,2,1,HEAVY BLACK CURVED DOWNWARDS AND RIGHTWARDS ARROW,Dingbats
+🅱,0x1f171,3,0.753702885,0,3,0,NEGATIVE SQUARED LATIN CAPITAL LETTER B,Enclosed Alphanumeric Supplement
+🎌,0x1f38c,3,0.720638968,0,0,3,CROSSED FLAGS,Miscellaneous Symbols and Pictographs
+◣,0x25e3,3,0.1679015,0,2,1,BLACK LOWER LEFT TRIANGLE,Geometric Shapes
+⏬,0x23ec,3,0.798387097,0,0,3,BLACK DOWN-POINTING DOUBLE TRIANGLE,Miscellaneous Technical
+♭,0x266d,3,0.996296296,0,2,1,MUSIC FLAT SIGN,Miscellaneous Symbols
+💠,0x1f4a0,3,0.634782609,0,3,0,DIAMOND SHAPE WITH A DOT INSIDE,Miscellaneous Symbols and Pictographs
+ⓞ,0x24de,2,0.334090909,0,0,2,CIRCLED LATIN SMALL LETTER O,Enclosed Alphanumerics
+🔳,0x1f533,2,0.35921659,0,1,1,WHITE SQUARE BUTTON,Miscellaneous Symbols and Pictographs
+🏭,0x1f3ed,2,0.620360999,0,1,1,FACTORY,Miscellaneous Symbols and Pictographs
+🔰,0x1f530,2,0.612218045,0,2,0,JAPANESE SYMBOL FOR BEGINNER,Miscellaneous Symbols and Pictographs
+🎳,0x1f3b3,2,0.031697819,1,1,0,BOWLING,Miscellaneous Symbols and Pictographs
+☚,0x261a,2,0.536679293,0,0,2,BLACK LEFT POINTING INDEX,Miscellaneous Symbols
+➽,0x27bd,2,0.872727273,0,1,1,HEAVY WEDGE-TAILED RIGHTWARDS ARROW,Dingbats
+➫,0x27ab,2,0.22556391,0,1,1,BACK-TILTED SHADOWED WHITE RIGHTWARDS ARROW,Dingbats
+➖,0x2796,2,0.023088023,2,0,0,HEAVY MINUS SIGN,Dingbats
+🏮,0x1f3ee,2,0.949404762,0,2,0,IZAKAYA LANTERN,Miscellaneous Symbols and Pictographs
+📛,0x1f4db,2,0.964880952,0,2,0,NAME BADGE,Miscellaneous Symbols and Pictographs
+꒰,0xa4b0,2,0.744823477,0,1,1,YI RADICAL SHY,Yi Radicals
+꒱,0xa4b1,2,0.800983167,0,1,1,YI RADICAL VEP,Yi Radicals
+◝,0x25dd,2,0.847674607,1,1,0,UPPER RIGHT QUADRANT CIRCULAR ARC,Geometric Shapes
+📑,0x1f4d1,2,0.557971014,0,0,2,BOOKMARK TABS,Miscellaneous Symbols and Pictographs
+🎦,0x1f3a6,2,0.796610169,0,2,0,CINEMA,Miscellaneous Symbols and Pictographs
+ⓧ,0x24e7,2,0.96,0,0,2,CIRCLED LATIN SMALL LETTER X,Enclosed Alphanumerics
+🇨,0x1f1e8,2,0.935606061,0,2,0,REGIONAL INDICATOR SYMBOL LETTER C,Enclosed Alphanumeric Supplement
+🇳,0x1f1f3,2,0.623484848,0,2,0,REGIONAL INDICATOR SYMBOL LETTER N,Enclosed Alphanumeric Supplement
+🔟,0x1f51f,2,0.801587302,0,0,2,KEYCAP TEN,Miscellaneous Symbols and Pictographs
+〓,0x3013,2,0.533898305,0,0,2,GETA MARK,CJK Symbols and Punctuation
+ⓜ,0x24dc,2,0.743085399,0,1,1,CIRCLED LATIN SMALL LETTER M,Enclosed Alphanumerics
+➠,0x27a0,2,0.642857143,0,0,2,HEAVY DASHED TRIANGLE-HEADED RIGHTWARDS ARROW,Dingbats
+🚆,0x1f686,2,0.472714286,0,1,1,TRAIN,Transport and Map Symbols
+🚠,0x1f6a0,2,0.807469512,0,2,0,MOUNTAIN CABLEWAY,Transport and Map Symbols
+℅,0x2105,2,0.606150794,2,0,0,CARE OF,Letterlike Symbols
+☃,0x2603,2,0.566037736,0,1,1,SNOWMAN,Miscellaneous Symbols
+🚽,0x1f6bd,2,0.69047619,0,0,2,TOILET,Transport and Map Symbols
+📐,0x1f4d0,2,0.02970297,0,2,0,TRIANGULAR RULER,Miscellaneous Symbols and Pictographs
+ⓝ,0x24dd,2,0.393333333,0,0,2,CIRCLED LATIN SMALL LETTER N,Enclosed Alphanumerics
+✮,0x272e,2,0.211711712,0,2,0,HEAVY OUTLINED BLACK STAR,Dingbats
+⇦,0x21e6,2,0.489955357,0,0,2,LEFTWARDS WHITE ARROW,Arrows
+👲,0x1f472,2,0.382655827,0,1,1,MAN WITH GUA PI MAO,Miscellaneous Symbols and Pictographs
+🚡,0x1f6a1,2,0.622505543,1,1,0,AERIAL TRAMWAY,Transport and Map Symbols
+🎑,0x1f391,2,0.309294872,0,2,0,MOON VIEWING CEREMONY,Miscellaneous Symbols and Pictographs
+🔬,0x1f52c,2,0.727696078,0,0,2,MICROSCOPE,Miscellaneous Symbols and Pictographs
+➗,0x2797,2,0.018722944,1,1,0,HEAVY DIVISION SIGN,Dingbats
+📈,0x1f4c8,2,0.568724559,0,1,1,CHART WITH UPWARDS TREND,Miscellaneous Symbols and Pictographs
+⌘,0x2318,2,0.613333333,0,2,0,PLACE OF INTEREST SIGN,Miscellaneous Technical
+⏪,0x23ea,2,0.489035088,0,1,1,BLACK LEFT-POINTING DOUBLE TRIANGLE,Miscellaneous Technical
+╹,0x2579,2,0.952380952,0,2,0,BOX DRAWINGS HEAVY UP,Box Drawing
+◎,0x25ce,2,0.925,0,0,2,BULLSEYE,Geometric Shapes
+🔼,0x1f53c,2,0.358974359,0,2,0,UP-POINTING SMALL RED TRIANGLE,Miscellaneous Symbols and Pictographs
+꒦,0xa4a6,2,0.953125,2,0,0,YI RADICAL GGUO,Yi Radicals
+📎,0x1f4ce,2,0.044776119,0,0,2,PAPERCLIP,Miscellaneous Symbols and Pictographs
+⑅,0x2445,2,0.652173913,0,0,2,OCR BOW TIE,Optical Character Recognition
+⍝,0x235d,2,0.776859504,0,2,0,APL FUNCTIONAL SYMBOL UP SHOE JOT,Miscellaneous Technical
+📁,0x1f4c1,2,0.785714286,0,2,0,FILE FOLDER,Miscellaneous Symbols and Pictographs
+✭,0x272d,2,0.589285714,0,0,2,OUTLINED BLACK STAR,Dingbats
+➲,0x27b2,2,0.009615385,0,2,0,CIRCLED HEAVY WHITE RIGHTWARDS ARROW,Dingbats
+♓,0x2653,2,0.093023256,0,1,1,PISCES,Miscellaneous Symbols
+┏,0x250f,2,0.58778626,0,0,2,BOX DRAWINGS HEAVY DOWN AND RIGHT,Box Drawing
+☇,0x2607,2,0.99382716,0,0,2,LIGHTNING,Miscellaneous Symbols
+♺,0x267a,2,0.175,0,2,0,RECYCLING SYMBOL FOR GENERIC MATERIALS,Miscellaneous Symbols
+♞,0x265e,2,0.581967213,0,2,0,BLACK CHESS KNIGHT,Miscellaneous Symbols
+࿎,0xfce,2,0.232142857,2,0,0,TIBETAN SIGN RDEL NAG RDEL DKAR,Tibetan
+📠,0x1f4e0,2,1,0,2,0,FAX MACHINE,Miscellaneous Symbols and Pictographs
+👘,0x1f458,2,0.643678161,0,0,2,KIMONO,Miscellaneous Symbols and Pictographs
+↙,0x2199,2,0.206766917,0,0,2,SOUTH WEST ARROW,Arrows
+Ⓕ,0x24bb,2,0.652777778,0,1,1,CIRCLED LATIN CAPITAL LETTER F,Enclosed Alphanumerics
+Ⓦ,0x24cc,2,0.722222222,0,1,1,CIRCLED LATIN CAPITAL LETTER W,Enclosed Alphanumerics
+Ⓟ,0x24c5,2,0.791666667,0,1,1,CIRCLED LATIN CAPITAL LETTER P,Enclosed Alphanumerics
+🕑,0x1f551,2,0.988407728,0,1,1,CLOCK FACE TWO OCLOCK,Miscellaneous Symbols and Pictographs
+💽,0x1f4bd,1,0.566037736,0,1,0,MINIDISC,Miscellaneous Symbols and Pictographs
+🕛,0x1f55b,1,1,0,0,1,CLOCK FACE TWELVE OCLOCK,Miscellaneous Symbols and Pictographs
+🎫,0x1f3ab,1,0.452631579,0,1,0,TICKET,Miscellaneous Symbols and Pictographs
+♈,0x2648,1,0.524590164,1,0,0,ARIES,Miscellaneous Symbols
+📟,0x1f4df,1,0.991666667,0,1,0,PAGER,Miscellaneous Symbols and Pictographs
+℃,0x2103,1,0.2375,0,1,0,DEGREE CELSIUS,Letterlike Symbols
+↬,0x21ac,1,0.806818182,0,0,1,RIGHTWARDS ARROW WITH LOOP,Arrows
+🕒,0x1f552,1,0.039215686,0,1,0,CLOCK FACE THREE OCLOCK,Miscellaneous Symbols and Pictographs
+🇰,0x1f1f0,1,0.939393939,0,1,0,REGIONAL INDICATOR SYMBOL LETTER K,Enclosed Alphanumeric Supplement
+↱,0x21b1,1,0.537190083,0,1,0,UPWARDS ARROW WITH TIP RIGHTWARDS,Arrows
+✍,0x270d,1,1,0,0,1,WRITING HAND,Dingbats
+⇐,0x21d0,1,0.741007194,0,1,0,LEFTWARDS DOUBLE ARROW,Arrows
+🏦,0x1f3e6,1,1,0,0,1,BANK,Miscellaneous Symbols and Pictographs
+🔻,0x1f53b,1,0.575757576,0,0,1,DOWN-POINTING RED TRIANGLE,Miscellaneous Symbols and Pictographs
+ⓟ,0x24df,1,0.05,0,0,1,CIRCLED LATIN SMALL LETTER P,Enclosed Alphanumerics
+ⓕ,0x24d5,1,0.1,0,0,1,CIRCLED LATIN SMALL LETTER F,Enclosed Alphanumerics
+ⓘ,0x24d8,1,0.166666667,0,0,1,CIRCLED LATIN SMALL LETTER I,Enclosed Alphanumerics
+♿,0x267f,1,1,0,0,1,WHEELCHAIR SYMBOL,Miscellaneous Symbols
+⇗,0x21d7,1,0.761904762,0,0,1,NORTH EAST DOUBLE ARROW,Arrows
+⇘,0x21d8,1,0.857142857,0,0,1,SOUTH EAST DOUBLE ARROW,Arrows
+ⓨ,0x24e8,1,0.613333333,0,0,1,CIRCLED LATIN SMALL LETTER Y,Enclosed Alphanumerics
+ⓙ,0x24d9,1,0.68,0,0,1,CIRCLED LATIN SMALL LETTER J,Enclosed Alphanumerics
+▫,0x25ab,1,0.126760563,0,0,1,WHITE SMALL SQUARE,Geometric Shapes
+🔇,0x1f507,1,1,0,0,1,SPEAKER WITH CANCELLATION STROKE,Miscellaneous Symbols and Pictographs
+⌃,0x2303,1,0.611940299,1,0,0,UP ARROWHEAD,Miscellaneous Technical
+🔖,0x1f516,1,0.988888889,0,0,1,BOOKMARK,Miscellaneous Symbols and Pictographs
+📜,0x1f4dc,1,1,0,0,1,SCROLL,Miscellaneous Symbols and Pictographs
+♏,0x264f,1,0.772058824,0,1,0,SCORPIUS,Miscellaneous Symbols
+🚝,0x1f69d,1,0.966666667,0,0,1,MONORAIL,Transport and Map Symbols
+☢,0x2622,1,0.725,0,1,0,RADIOACTIVE SIGN,Miscellaneous Symbols
+🎏,0x1f38f,1,0.390243902,0,1,0,CARP STREAMER,Miscellaneous Symbols and Pictographs
+┘,0x2518,1,0.909090909,1,0,0,BOX DRAWINGS LIGHT UP AND LEFT,Box Drawing
+✝,0x271d,1,0.411764706,1,0,0,LATIN CROSS,Dingbats
+❖,0x2756,1,0.581967213,0,1,0,BLACK DIAMOND MINUS WHITE X,Dingbats
+⍣,0x2363,1,0.953125,1,0,0,APL FUNCTIONAL SYMBOL STAR DIAERESIS,Miscellaneous Technical
+📮,0x1f4ee,1,0.798319328,1,0,0,POSTBOX,Miscellaneous Symbols and Pictographs
+🕕,0x1f555,1,0.646153846,1,0,0,CLOCK FACE SIX OCLOCK,Miscellaneous Symbols and Pictographs
+🇭,0x1f1ed,1,0.236363636,0,1,0,REGIONAL INDICATOR SYMBOL LETTER H,Enclosed Alphanumeric Supplement
+◜,0x25dc,1,0.760330579,0,1,0,UPPER LEFT QUADRANT CIRCULAR ARC,Geometric Shapes
+🔯,0x1f52f,1,1,0,0,1,SIX POINTED STAR WITH MIDDLE DOT,Miscellaneous Symbols and Pictographs
+➸,0x27b8,1,0.364963504,0,0,1,HEAVY BLACK-FEATHERED RIGHTWARDS ARROW,Dingbats
+꒵,0xa4b5,1,0.927007299,0,0,1,YI RADICAL JJY,Yi Radicals
+🕥,0x1f565,1,0.811965812,1,0,0,CLOCK FACE TEN-THIRTY,Miscellaneous Symbols and Pictographs
+♙,0x2659,1,0.342857143,0,1,0,WHITE CHESS PAWN,Miscellaneous Symbols
+▿,0x25bf,1,0.432835821,0,1,0,WHITE DOWN-POINTING SMALL TRIANGLE,Geometric Shapes
+⚃,0x2683,1,0.918918919,0,1,0,DIE FACE-4,Miscellaneous Symbols
+✽,0x273d,1,0.99270073,0,0,1,HEAVY TEARDROP-SPOKED ASTERISK,Dingbats
+📼,0x1f4fc,1,1,0,0,1,VIDEOCASSETTE,Miscellaneous Symbols and Pictographs
+🕐,0x1f550,1,1,1,0,0,CLOCK FACE ONE OCLOCK,Miscellaneous Symbols and Pictographs
+🀄,0x1f004,1,1,0,0,1,MAHJONG TILE RED DRAGON,Mahjong Tiles
+✾,0x273e,1,0.023255814,0,1,0,SIX PETALLED BLACK AND WHITE FLORETTE,Dingbats
+✬,0x272c,1,0.955223881,0,0,1,BLACK CENTRE WHITE STAR,Dingbats
+🆑,0x1f191,1,0.983606557,0,1,0,SQUARED CL,Enclosed Alphanumeric Supplement
+✫,0x272b,1,0.923728814,0,0,1,OPEN CENTRE BLACK STAR,Dingbats
+🕔,0x1f554,1,0.742424242,1,0,0,CLOCK FACE FIVE OCLOCK,Miscellaneous Symbols and Pictographs
+❣,0x2763,1,0.471428571,0,0,1,HEAVY HEART EXCLAMATION MARK ORNAMENT,Dingbats
+➱,0x27b1,1,0.704347826,0,1,0,NOTCHED UPPER RIGHT-SHADOWED WHITE RIGHTWARDS ARROW,Dingbats
+🆕,0x1f195,1,0.669117647,0,1,0,SQUARED NEW,Enclosed Alphanumeric Supplement
+➢,0x27a2,1,0.242647059,0,1,0,THREE-D TOP-LIGHTED RIGHTWARDS ARROWHEAD,Dingbats
+↕,0x2195,1,0.735632184,0,1,0,UP DOWN ARROW,Arrows
+📫,0x1f4eb,1,0.384615385,0,0,1,CLOSED MAILBOX WITH RAISED FLAG,Miscellaneous Symbols and Pictographs
+🉐,0x1f250,1,0.03125,0,0,1,CIRCLED IDEOGRAPH ADVANTAGE,Enclosed Ideographic Supplement
+♊,0x264a,1,0.327586207,0,1,0,GEMINI,Miscellaneous Symbols
+🈂,0x1f202,1,0.466666667,1,0,0,SQUARED KATAKANA SA,Enclosed Ideographic Supplement
+🎰,0x1f3b0,1,0.421686747,1,0,0,SLOT MACHINE,Miscellaneous Symbols and Pictographs
+҂,0x482,1,0.519230769,1,0,0,CYRILLIC THOUSANDS SIGN,Cyrillic
+╤,0x2564,1,0.634615385,1,0,0,BOX DRAWINGS DOWN SINGLE AND HORIZONTAL DOUBLE,Box Drawing
+➛,0x279b,1,0.011627907,0,1,0,DRAFTING POINT RIGHTWARDS ARROW,Dingbats
+♝,0x265d,1,0.28,0,1,0,BLACK CHESS BISHOP,Miscellaneous Symbols
+❋,0x274b,1,0.888888889,0,1,0,HEAVY EIGHT TEARDROP-SPOKED PROPELLER ASTERISK,Dingbats
+✆,0x2706,1,0.557251908,0,1,0,TELEPHONE LOCATION SIGN,Dingbats
+📔,0x1f4d4,1,0.814814815,0,0,1,NOTEBOOK WITH DECORATIVE COVER,Miscellaneous Symbols and Pictographs

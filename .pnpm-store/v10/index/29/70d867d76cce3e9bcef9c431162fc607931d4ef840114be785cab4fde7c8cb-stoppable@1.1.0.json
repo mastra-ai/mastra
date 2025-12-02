@@ -1,0 +1,31 @@
+{
+  "name": "stoppable",
+  "version": "1.1.0",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662923853,
+      "integrity": "sha512-k/dCf0o7Rcr7P8mdm+dD37kyh9mBwNlXn0CDG8IYb6Cu6/w6AinFFHLSLDeOHbs0pwI34Vv/5LVmpFqS+iAhsQ==",
+      "mode": 420,
+      "size": 1269
+    },
+    "LICENSE": {
+      "checkedAt": 1764662923854,
+      "integrity": "sha512-FYfBeEdKVc2/L0Z8VrlleHAJ3ToL1cRWET6MnkQz52sYq4Fl/69CLSiOgN4HJlWPzkqJxh6zOYGFrHVMSZAldw==",
+      "mode": 420,
+      "size": 1106
+    },
+    "readme.md": {
+      "checkedAt": 1764662923854,
+      "integrity": "sha512-+dWH1d8cswC/DPKLVdYQ62RzOwr0lDuhXDQ4O+l/1yVy9veSEiY5nG3YExZYDx6s2ZLvuZzW8Sxx5QZ/koSCxA==",
+      "mode": 420,
+      "size": 3098
+    },
+    "lib/stoppable.js": {
+      "checkedAt": 1764662923855,
+      "integrity": "sha512-6o8iwjc7rQt0GqJ1nZvPqd8kA9CIHQeJDqe3G9gCdGddLyuSyPc24OsbxfSuMkPyV4oEk+onLF2kmdsnONziog==",
+      "mode": 420,
+      "size": 1615
+    }
+  }
+}

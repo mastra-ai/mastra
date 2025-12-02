@@ -1,0 +1,49 @@
+type AssistantTailwindPluginColors = {
+    border: string;
+    input: string;
+    ring: string;
+    background: string;
+    foreground: string;
+    primary: {
+        DEFAULT: string;
+        foreground: string;
+    };
+    secondary: {
+        DEFAULT: string;
+        foreground: string;
+    };
+    destructive: {
+        DEFAULT: string;
+        foreground: string;
+    };
+    muted: {
+        DEFAULT: string;
+        foreground: string;
+    };
+    accent: {
+        DEFAULT: string;
+        foreground: string;
+    };
+    popover: {
+        DEFAULT: string;
+        foreground: string;
+    };
+    card: {
+        DEFAULT: string;
+        foreground: string;
+    };
+};
+type AssisstantTailwindPluginOptions = {
+    components?: ("default-theme" | "base" | "thread" | "assistant-modal" | "markdown")[];
+    colors?: AssistantTailwindPluginColors;
+    shadcn?: boolean;
+};
+declare const auiPlugin: {
+    (options: AssisstantTailwindPluginOptions): {
+        handler: import("tailwindcss/types/config").PluginCreator;
+        config?: Partial<import("tailwindcss/types/config").Config>;
+    };
+    __isOptionsFunction: true;
+};
+export default auiPlugin;
+//# sourceMappingURL=index.d.ts.map

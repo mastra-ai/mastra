@@ -1,0 +1,1 @@
+{"version":3,"file":"GETSET.d.ts","sourceRoot":"","sources":["../../../lib/commands/GETSET.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,aAAa,EAAE,eAAe,EAAE,SAAS,EAAW,MAAM,eAAe,CAAC;;;IAIjF;;;;;OAKG;gDACkB,aAAa,OAAO,aAAa,SAAS,aAAa;mCAK9B,eAAe,GAAG,SAAS;;AAb3E,wBAc6B"}

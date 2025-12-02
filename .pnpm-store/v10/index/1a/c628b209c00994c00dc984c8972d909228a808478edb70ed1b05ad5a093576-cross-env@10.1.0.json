@@ -1,0 +1,97 @@
+{
+  "name": "cross-env",
+  "version": "10.1.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662930043,
+      "integrity": "sha512-8//iHdE8BY/g6NFSU2zZKR+1v958dhgzsNAWIlnZGNvwI3swNUeMdy0wPlbsjq+ieJ+RKTgam7F5M9DHG18MBg==",
+      "mode": 420,
+      "size": 1084
+    },
+    "dist/command.js": {
+      "checkedAt": 1764662930044,
+      "integrity": "sha512-vzUhxeTCztt3h391xjbfR5fgB1LfHR8CeowDdCQBwwPFGocNmoRABB6qAIfP1hqH87TN/r0y/H6EucQ5J7URAQ==",
+      "mode": 420,
+      "size": 1994
+    },
+    "dist/bin/cross-env-shell.js": {
+      "checkedAt": 1764662930044,
+      "integrity": "sha512-N6stU6bmPemACqyJbbCUnbEl9pxe8ktacDZyu9Efjm8qDsQC9OGObIPgmuO3NZqO3FkYYXenYTX+DanLYaFLIQ==",
+      "mode": 420,
+      "size": 110
+    },
+    "dist/bin/cross-env.js": {
+      "checkedAt": 1764662930045,
+      "integrity": "sha512-m5NVRYrEjyv8G6n9CMp/VQvt9foeQOOeJGfvk5ADkUUZAAocs6kWX4HMXTwTmOIs6ETo73JWx2zG8Lw6ilJATw==",
+      "mode": 420,
+      "size": 93
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662930045,
+      "integrity": "sha512-xZl8hyTqQhXWMrdyQqMiYqVATVjyVe03iWHeeytUzIMtbwdn0qit4SiCJw8v5lZ+Yc8H55fOPjFcDmlsHDx7vQ==",
+      "mode": 420,
+      "size": 3584
+    },
+    "dist/is-windows.js": {
+      "checkedAt": 1764662930046,
+      "integrity": "sha512-Ph/fi/qZ2w7qK8nZ+s5otZvPMozv45sUm7tEJaH6GNyLJbdRXwYhhMNDZyvXTBnw15+P2+wQad88lJk3XbivSA==",
+      "mode": 420,
+      "size": 248
+    },
+    "dist/variable.js": {
+      "checkedAt": 1764662930046,
+      "integrity": "sha512-TBbqiAJCh8wKQJLmW7E3Yvd5WAMyf7H9ELdiUCoX+nzmb8puPsY14cDYrndxmKCNCVht/uY2cNzualqYDSy+Dg==",
+      "mode": 420,
+      "size": 2462
+    },
+    "package.json": {
+      "checkedAt": 1764662930047,
+      "integrity": "sha512-4oYMKYSIvKP05zRHnKkYLzRi+zUviZPoFEno3jHmTL5okQ6jRJ+g7pTOr4KxDYKC3J+w7PNyoJoK5RnIH9vwvw==",
+      "mode": 420,
+      "size": 2483
+    },
+    "README.md": {
+      "checkedAt": 1764662930048,
+      "integrity": "sha512-SpnSK5iy/gEn95A0MuE7IIcq6uqTUyRIRBMLQVlsDIQDdNrIA6NKUP0H8KLmCYMIxXBoRjmMMO3r6rfomjxBMQ==",
+      "mode": 493,
+      "size": 6956
+    },
+    "dist/command.d.ts": {
+      "checkedAt": 1764662930049,
+      "integrity": "sha512-3qiXmdRMaGegPcKHKXqfzdzcyvTlRMWdW6DGg3/MQnsdAOJneayuQiPZg1X9Pj7oFpWjETKsoK1ZWUjqrjytIA==",
+      "mode": 420,
+      "size": 427
+    },
+    "dist/bin/cross-env-shell.d.ts": {
+      "checkedAt": 1764662930050,
+      "integrity": "sha512-fbtv3s/QbOT0YeVT7wpdIPG8xfBj2us9WSjE8okIzaA+BTOn6YF5Rg4kPgjdyCmapwzK4axzZOuUAqsQVLjSrA==",
+      "mode": 420,
+      "size": 31
+    },
+    "dist/bin/cross-env.d.ts": {
+      "checkedAt": 1764662930050,
+      "integrity": "sha512-fbtv3s/QbOT0YeVT7wpdIPG8xfBj2us9WSjE8okIzaA+BTOn6YF5Rg4kPgjdyCmapwzK4axzZOuUAqsQVLjSrA==",
+      "mode": 420,
+      "size": 31
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662930051,
+      "integrity": "sha512-C4fhMXeS9tl6LwjV4lRDRSSX02O37H8lBHKa5PBAtdw2sZLgpbNwqwkX/L8Y1X7doNB5kgVaYVILbwGr73chKg==",
+      "mode": 420,
+      "size": 245
+    },
+    "dist/is-windows.d.ts": {
+      "checkedAt": 1764662930052,
+      "integrity": "sha512-jVxaZPk3djUvAdh188EWa0j76w+l4NaOJCgBq2XWTRuLEyP3opbzhFrwRWjaEEoyczQn2lRf90ByDwIpLTkjEw==",
+      "mode": 420,
+      "size": 159
+    },
+    "dist/variable.d.ts": {
+      "checkedAt": 1764662930053,
+      "integrity": "sha512-v71O0EhcMytOUDjer/MztRniS436XmNk2wbHftlE7h9UsER89d22hnwetMwlnW8e3ckAbGs/iy0InI1v+Ql3QA==",
+      "mode": 420,
+      "size": 326
+    }
+  }
+}

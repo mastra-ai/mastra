@@ -1,0 +1,13 @@
+import type { StorageColumn } from './types.js';
+export declare const TABLE_WORKFLOW_SNAPSHOT = "mastra_workflow_snapshot";
+export declare const TABLE_MESSAGES = "mastra_messages";
+export declare const TABLE_THREADS = "mastra_threads";
+export declare const TABLE_TRACES = "mastra_traces";
+export declare const TABLE_RESOURCES = "mastra_resources";
+export declare const TABLE_SCORERS = "mastra_scorers";
+export declare const TABLE_SPANS = "mastra_ai_spans";
+export type TABLE_NAMES = typeof TABLE_WORKFLOW_SNAPSHOT | typeof TABLE_MESSAGES | typeof TABLE_THREADS | typeof TABLE_TRACES | typeof TABLE_RESOURCES | typeof TABLE_SCORERS | typeof TABLE_SPANS;
+export declare const SCORERS_SCHEMA: Record<string, StorageColumn>;
+export declare const SPAN_SCHEMA: Record<string, StorageColumn>;
+export declare const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>>;
+//# sourceMappingURL=constants.d.ts.map

@@ -1,0 +1,11 @@
+import type { RequestParams, RequestResponse, HTTPClient } from "../types";
+export default class DefaultHTTPClient implements HTTPClient {
+    private baseUrl;
+    private origin;
+    private apiKey;
+    readonly userAgent: string;
+    private compression;
+    constructor(baseUrl: string, apiKey: string, warmConnections: number, compression: boolean);
+    doRequest<T>({ method, path, query, body, compress, retryable, }: RequestParams): RequestResponse<T>;
+}
+//# sourceMappingURL=default.d.ts.map

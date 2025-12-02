@@ -1,0 +1,11 @@
+#!/bin/bash
+# Run the Convex CLI directly from source code.
+
+if [ "$(uname)" == "Darwin" ] || [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
+  SCRIPTDIR="$(echo "$0" | python3 -c 'import os; print(os.path.dirname(os.path.realpath(input())))')"
+  CONVEX_RUNNING_LIVE_IN_MONOREPO=1 "exec" "$SCRIPTDIR/../node_modules/.bin/tsx" "$SCRIPTDIR/../src/cli/index.ts" "$@"
+else # it's probably Windows
+  # This doesn't follow symlinks quite as correctly as the Mac/Linux solution above
+  CONVEXDIR="$(dirname "$(dirname "$0")")"
+  CONVEX_RUNNING_LIVE_IN_MONOREPO=1 "exec" "$CONVEXDIR/node_modules/.bin/tsx" "$CONVEXDIR/src/cli/index.ts" "$@"
+fi

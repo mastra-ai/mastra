@@ -1,0 +1,56 @@
+#header-actions {
+  display: flex;
+  flex-direction: row-reverse;
+}
+
+#toggle-theme-container {
+  position: relative;
+  display: inline-block;
+  padding-right: 0px;
+}
+
+#toggle-theme-container input[type='checkbox'] {
+  opacity: 0;
+  position: absolute;
+}
+
+#toggle-theme-label {
+  position: relative;
+  cursor: pointer;
+  border-radius: 50px;
+  display: inline-flex;
+}
+
+#toggle-theme-checkbox:focus + #toggle-theme-label {
+  outline: 2px solid var(--slate-a6);
+  outline-offset: 4px;
+}
+
+#light-theme-indicator,
+#dark-theme-indicator {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#toggle-theme-label svg {
+  width: 30px;
+  height: 30px;
+}
+
+#toggle-theme-container #dark-theme-indicator {
+  display: none;
+}
+
+#toggle-theme-container
+  input[type='checkbox']:checked
+  + #toggle-theme-label
+  #light-theme-indicator {
+  display: none;
+}
+
+#toggle-theme-container input[type='checkbox']:checked + #toggle-theme-label #dark-theme-indicator {
+  display: flex;
+}

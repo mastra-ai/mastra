@@ -1,0 +1,106 @@
+/* running indicator */
+:where(.aui-md-running):empty::after,
+:where(.aui-md-running) > :where(:not(ol):not(ul):not(pre)):last-child::after,
+:where(.aui-md-running) > pre:last-child code::after,
+:where(.aui-md-running)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child:not(:has(* > li)))::after,
+:where(.aui-md-running)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child:not(:has(* > li)))::after,
+:where(.aui-md-running)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)::after {
+  @apply animate-pulse font-sans content-['\25CF'] ltr:ml-1 rtl:mr-1;
+}
+
+/* typography */
+.aui-md-h1 {
+  @apply mb-8 scroll-m-20 text-4xl font-extrabold tracking-tight last:mb-0;
+}
+
+.aui-md-h2 {
+  @apply mb-4 mt-8 scroll-m-20 text-3xl font-semibold tracking-tight first:mt-0 last:mb-0;
+}
+
+.aui-md-h3 {
+  @apply mb-4 mt-6 scroll-m-20 text-2xl font-semibold tracking-tight first:mt-0 last:mb-0;
+}
+
+.aui-md-h4 {
+  @apply mb-4 mt-6 scroll-m-20 text-xl font-semibold tracking-tight first:mt-0 last:mb-0;
+}
+
+.aui-md-h5 {
+  @apply my-4 text-lg font-semibold first:mt-0 last:mb-0;
+}
+
+.aui-md-h6 {
+  @apply my-4 font-semibold first:mt-0 last:mb-0;
+}
+
+.aui-md-p {
+  @apply mb-5 mt-5 leading-7 first:mt-0 last:mb-0;
+}
+
+.aui-md-a {
+  @apply text-aui-primary font-medium underline underline-offset-4;
+}
+
+.aui-md-blockquote {
+  @apply border-l-2 pl-6 italic;
+}
+
+.aui-md-ul {
+  @apply my-5 ml-6 list-disc [&>li]:mt-2;
+}
+
+.aui-md-ol {
+  @apply my-5 ml-6 list-decimal [&>li]:mt-2;
+}
+
+.aui-md-hr {
+  @apply my-5 border-b;
+}
+
+.aui-md-table {
+  @apply my-5 w-full border-separate border-spacing-0 overflow-y-auto;
+}
+
+.aui-md-th {
+  @apply bg-aui-muted px-4 py-2 text-left font-bold first:rounded-tl-lg last:rounded-tr-lg [&[align=center]]:text-center [&[align=right]]:text-right;
+}
+
+.aui-md-td {
+  @apply border-b border-l px-4 py-2 text-left last:border-r [&[align=center]]:text-center [&[align=right]]:text-right;
+}
+
+.aui-md-tr {
+  @apply m-0 border-b p-0 first:border-t [&:last-child>td:first-child]:rounded-bl-lg [&:last-child>td:last-child]:rounded-br-lg;
+}
+
+.aui-md-sup {
+  @apply [&>a]:text-xs [&>a]:no-underline;
+}
+
+.aui-md-pre {
+  @apply overflow-x-auto rounded-b-lg bg-black p-4 text-white;
+}
+
+.aui-md-inline-code {
+  @apply bg-aui-muted rounded border font-semibold;
+}
+
+.aui-code-header-root {
+  @apply flex items-center justify-between gap-4 rounded-t-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white;
+}
+
+.aui-code-header-language {
+  @apply lowercase [&>span]:text-xs;
+}

@@ -1,0 +1,2 @@
+import type { AuthenticationRadarRiskDetectedEventData, AuthenticationRadarRiskDetectedEventResponseData } from '../interfaces';
+export declare const deserializeAuthenticationRadarRiskDetectedEvent: (authenticationRadarRiskDetectedEvent: AuthenticationRadarRiskDetectedEventResponseData) => AuthenticationRadarRiskDetectedEventData;

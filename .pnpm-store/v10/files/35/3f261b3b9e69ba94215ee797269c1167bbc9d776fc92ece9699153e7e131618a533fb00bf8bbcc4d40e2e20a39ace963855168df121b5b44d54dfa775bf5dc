@@ -1,0 +1,41 @@
+{
+  "name": "@json-schema-tools/traverse",
+  "version": "1.11.0",
+  "description": "This package exports a method that will traverse a JSON-Schema, calling a mutation function for each sub schema found. It is useful for building tools to work with JSON Schemas.",
+  "main": "build/index.js",
+  "bugs": {
+    "url": "https://github.com/json-schema-tools/traverse/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/json-schema-tools/traverse.git"
+  },
+  "homepage": "json-schema.tools",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:docs": "typedoc",
+    "test": "jest --coverage",
+    "lint": "eslint . --ext .ts --fix"
+  },
+  "author": "Zachary Belford<belfordz66@gmail.com>",
+  "license": "Apache-2.0",
+  "files": [
+    "build",
+    "!build/**/*.test.*"
+  ],
+  "devDependencies": {
+    "@json-schema-tools/meta-schema": "^1.7.5",
+    "@types/jest": "^29.1.1",
+    "@types/node": "^22.7.9",
+    "@typescript-eslint/eslint-plugin": "^5.39.0",
+    "@typescript-eslint/parser": "^5.39.0",
+    "eslint": "^8.24.0",
+    "jest": "^29.1.2",
+    "ts-jest": "^29.0.3",
+    "typedoc": "^0.26.10",
+    "typescript": "^5.4.4"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "name": "temporal-polyfill",
+  "version": "0.2.5",
+  "title": "Temporal Polyfill",
+  "description": "A lightweight polyfill for Temporal, successor to the JavaScript Date object",
+  "author": {
+    "name": "Adam Shaw",
+    "email": "arshaw@users.noreply.github.com",
+    "url": "http://arshaw.com/"
+  },
+  "contributors": [
+    {
+      "name": "Ishaan Bharal",
+      "email": "ishbharal@gmail.com"
+    }
+  ],
+  "license": "MIT",
+  "copyright": "2024 Adam Shaw",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fullcalendar/temporal-polyfill.git"
+  },
+  "type": "module",
+  "dependencies": {
+    "temporal-spec": "^0.2.4"
+  },
+  "main": "./index.cjs",
+  "types": "./index.d.ts",
+  "module": "./index.js",
+  "exports": {
+    ".": {
+      "require": "./index.cjs",
+      "import": "./index.js"
+    },
+    "./impl": {
+      "require": "./impl.cjs",
+      "import": "./impl.js"
+    },
+    "./global": {
+      "require": "./global.cjs",
+      "import": {
+        "types": "./global.d.ts",
+        "default": "./global.esm.js"
+      }
+    }
+  },
+  "jsdelivr": "./global.min.js",
+  "unpkg": "./global.min.js",
+  "sideEffects": [
+    "./global.cjs",
+    "./global.esm.js",
+    "./global.js",
+    "./global.min.js"
+  ]
+}

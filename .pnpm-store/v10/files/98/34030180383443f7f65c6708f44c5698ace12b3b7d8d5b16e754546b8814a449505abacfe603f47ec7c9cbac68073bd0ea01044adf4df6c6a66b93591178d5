@@ -1,0 +1,8 @@
+export { type BodyAddALanguageToTheResourceV1DubbingResourceDubbingIdLanguagePost } from "./BodyAddALanguageToTheResourceV1DubbingResourceDubbingIdLanguagePost";
+export { type SegmentUpdatePayload } from "./SegmentUpdatePayload";
+export { type BodyTranscribesSegmentsV1DubbingResourceDubbingIdTranscribePost } from "./BodyTranscribesSegmentsV1DubbingResourceDubbingIdTranscribePost";
+export { type BodyTranslatesAllOrSomeSegmentsAndLanguagesV1DubbingResourceDubbingIdTranslatePost } from "./BodyTranslatesAllOrSomeSegmentsAndLanguagesV1DubbingResourceDubbingIdTranslatePost";
+export { type BodyDubsAllOrSomeSegmentsAndLanguagesV1DubbingResourceDubbingIdDubPost } from "./BodyDubsAllOrSomeSegmentsAndLanguagesV1DubbingResourceDubbingIdDubPost";
+export { type BodyRenderAudioOrVideoForTheGivenLanguageV1DubbingResourceDubbingIdRenderLanguagePost } from "./BodyRenderAudioOrVideoForTheGivenLanguageV1DubbingResourceDubbingIdRenderLanguagePost";
+export { type BodyDubAVideoOrAnAudioFileV1DubbingPost } from "./BodyDubAVideoOrAnAudioFileV1DubbingPost";
+export { type DubbingGetTranscriptForDubRequest } from "./DubbingGetTranscriptForDubRequest";

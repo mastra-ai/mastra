@@ -1,0 +1,49 @@
+{
+  "name": "heap-js",
+  "version": "2.7.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662922624,
+      "integrity": "sha512-IxY5d7HdZ8jsY/lUua0cs7HLMpyXzS7JMZryIj3G4BSF7GzEmIE5RdIf685TfzFC1FqFjt351yPjd3vSxR2OnA==",
+      "mode": 420,
+      "size": 1512
+    },
+    "dist/heap-js.es5.js": {
+      "checkedAt": 1764662922626,
+      "integrity": "sha512-Ly43jz826t7pAaDrJJ4qIhqC3vrkcqCLiveGXNEbEeVNQgJ9HeO9InQlA8MqwEZ+5f+1g6i/Y4kkouNH/SaMiw==",
+      "mode": 420,
+      "size": 84494
+    },
+    "dist/heap-js.umd.js": {
+      "checkedAt": 1764662922627,
+      "integrity": "sha512-NBDSanYCKxPL6oTGUc7GKHHj5QC5ttqUub3Pfb5KRgZUTR9raJ53VPv95z6wRiFGX1gfq1S7pt2D43rEEUS3PA==",
+      "mode": 420,
+      "size": 94144
+    },
+    "package.json": {
+      "checkedAt": 1764662922629,
+      "integrity": "sha512-Yv44b5uH++8I4iC0H3PppZLNwsQjLBDTZRtwOSJ3IEuu42KwW2BzlstPlCs6Wg+hs9DFF/StSjKpYHeqRimOVg==",
+      "mode": 420,
+      "size": 2854
+    },
+    "README.md": {
+      "checkedAt": 1764662922630,
+      "integrity": "sha512-FUEwVR5c+5iD4P1zivhayB9sB+ZKfrCrC3vRyefExVTgQUV84GdPwhSyunMU4MyyZuPvSCM88Lm7JqaXmvFCZw==",
+      "mode": 420,
+      "size": 11790
+    },
+    "dist/types/Heap.d.ts": {
+      "checkedAt": 1764662922632,
+      "integrity": "sha512-IRCY11RlP9kOmgtyMvub5Irfet7Uy6ER4GDnxiO0C9dV4zfKUJJNDtvM6ZRpKA/TF4djK/+w3lKBP4x78et8kg==",
+      "mode": 420,
+      "size": 14990
+    },
+    "dist/types/HeapAsync.d.ts": {
+      "checkedAt": 1764662922633,
+      "integrity": "sha512-NJFGIfwgP+Gw71vKGDUZYsTzIp8BFWZCZDVnBs7SsRfElCCTpN0/LCn1lrtywfmuA/zd39jMQlFfTmlD5JVaYA==",
+      "mode": 420,
+      "size": 13414
+    }
+  }
+}

@@ -1,0 +1,72 @@
+import type { JwtPayload, PendingSessionOptions } from '@clerk/types';
+import type { TokenVerificationErrorReason } from '../errors';
+import type { AuthenticateContext } from './authenticateContext';
+import type { SignedInAuthObject, SignedOutAuthObject } from './authObjects';
+export declare const AuthStatus: {
+    readonly SignedIn: "signed-in";
+    readonly SignedOut: "signed-out";
+    readonly Handshake: "handshake";
+};
+export type AuthStatus = (typeof AuthStatus)[keyof typeof AuthStatus];
+export type SignedInState = {
+    status: typeof AuthStatus.SignedIn;
+    reason: null;
+    message: null;
+    proxyUrl?: string;
+    publishableKey: string;
+    isSatellite: boolean;
+    domain: string;
+    signInUrl: string;
+    signUpUrl: string;
+    afterSignInUrl: string;
+    afterSignUpUrl: string;
+    isSignedIn: true;
+    toAuth: (opts?: PendingSessionOptions) => SignedInAuthObject | SignedOutAuthObject;
+    headers: Headers;
+    token: string;
+};
+export type SignedOutState = {
+    status: typeof AuthStatus.SignedOut;
+    message: string;
+    reason: AuthReason;
+    proxyUrl?: string;
+    publishableKey: string;
+    isSatellite: boolean;
+    domain: string;
+    signInUrl: string;
+    signUpUrl: string;
+    afterSignInUrl: string;
+    afterSignUpUrl: string;
+    isSignedIn: false;
+    toAuth: () => SignedOutAuthObject;
+    headers: Headers;
+    token: null;
+};
+export type HandshakeState = Omit<SignedOutState, 'status' | 'toAuth'> & {
+    status: typeof AuthStatus.Handshake;
+    headers: Headers;
+    toAuth: () => null;
+};
+export declare const AuthErrorReason: {
+    readonly ClientUATWithoutSessionToken: "client-uat-but-no-session-token";
+    readonly DevBrowserMissing: "dev-browser-missing";
+    readonly DevBrowserSync: "dev-browser-sync";
+    readonly PrimaryRespondsToSyncing: "primary-responds-to-syncing";
+    readonly SatelliteCookieNeedsSyncing: "satellite-needs-syncing";
+    readonly SessionTokenAndUATMissing: "session-token-and-uat-missing";
+    readonly SessionTokenMissing: "session-token-missing";
+    readonly SessionTokenExpired: "session-token-expired";
+    readonly SessionTokenIATBeforeClientUAT: "session-token-iat-before-client-uat";
+    readonly SessionTokenNBF: "session-token-nbf";
+    readonly SessionTokenIatInTheFuture: "session-token-iat-in-the-future";
+    readonly SessionTokenWithoutClientUAT: "session-token-but-no-client-uat";
+    readonly ActiveOrganizationMismatch: "active-organization-mismatch";
+    readonly UnexpectedError: "unexpected-error";
+};
+export type AuthErrorReason = (typeof AuthErrorReason)[keyof typeof AuthErrorReason];
+export type AuthReason = AuthErrorReason | TokenVerificationErrorReason;
+export type RequestState = SignedInState | SignedOutState | HandshakeState;
+export declare function signedIn(authenticateContext: AuthenticateContext, sessionClaims: JwtPayload, headers: Headers | undefined, token: string): SignedInState;
+export declare function signedOut(authenticateContext: AuthenticateContext, reason: AuthReason, message?: string, headers?: Headers): SignedOutState;
+export declare function handshake(authenticateContext: AuthenticateContext, reason: AuthReason, message: string | undefined, headers: Headers): HandshakeState;
+//# sourceMappingURL=authStatus.d.ts.map

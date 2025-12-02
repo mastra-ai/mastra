@@ -1,0 +1,69 @@
+{
+  "name": "@assistant-ui/react-syntax-highlighter",
+  "version": "0.10.10",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./full": {
+      "types": "./dist/full.d.ts",
+      "default": "./dist/full.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "@assistant-ui/react": "^0.10.42",
+    "@assistant-ui/react-markdown": "^0.10.9",
+    "@types/react": "*",
+    "@types/react-syntax-highlighter": "*",
+    "react": "^18 || ^19 || ^19.0.0-rc",
+    "react-syntax-highlighter": "^15.5.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
+    "@types/react-syntax-highlighter": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.6",
+    "react": "19.1.1",
+    "react-syntax-highlighter": "^15.6.1",
+    "tsx": "^4.20.4",
+    "@assistant-ui/x-buildutils": "0.0.1",
+    "@assistant-ui/react": "0.10.42",
+    "@assistant-ui/react-markdown": "0.10.9"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "homepage": "https://www.assistant-ui.com/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/assistant-ui/assistant-ui/tree/main/packages/react-syntax-highlighter"
+  },
+  "bugs": {
+    "url": "https://github.com/assistant-ui/assistant-ui/issues"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.mts",
+    "lint": "eslint ."
+  }
+}

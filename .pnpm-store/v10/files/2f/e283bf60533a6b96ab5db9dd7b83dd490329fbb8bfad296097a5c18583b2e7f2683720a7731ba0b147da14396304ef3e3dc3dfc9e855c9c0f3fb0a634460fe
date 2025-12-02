@@ -1,0 +1,1 @@
+{"version":3,"file":"ProxyCheckApi.d.ts","sourceRoot":"","sources":["../../../src/api/endpoints/ProxyCheckApi.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,UAAU,EAAE,MAAM,cAAc,CAAC;AAC/C,OAAO,EAAE,WAAW,EAAE,MAAM,eAAe,CAAC;AAI5C,KAAK,YAAY,GAAG;IAClB,QAAQ,EAAE,MAAM,CAAC;IACjB,QAAQ,EAAE,MAAM,CAAC;CAClB,CAAC;AAEF,qBAAa,aAAc,SAAQ,WAAW;IAC/B,MAAM,CAAC,MAAM,EAAE,YAAY;CAOzC"}

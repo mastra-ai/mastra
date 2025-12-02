@@ -1,0 +1,79 @@
+import z from 'zod';
+import type { Agent } from '../../agent/index.js';
+import { RequestContext } from '../../di/index.js';
+import type { Mastra } from '../../mastra/index.js';
+import { Tool } from '../../tools/index.js';
+import type { ToolExecutionContext } from '../../tools/types.js';
+import { Workflow, Run } from '../../workflows/index.js';
+import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine.js';
+import type { ExecuteFunction, Step } from '../../workflows/step.js';
+import type { SerializedStepFlowEntry, WorkflowConfig, WorkflowResult, StepWithComponent, WorkflowStreamEvent, WorkflowEngineType } from '../../workflows/types.js';
+export type EventedEngineType = {};
+export declare function cloneWorkflow<TWorkflowId extends string = string, TState extends z.ZodObject<any> = z.ZodObject<any>, TInput extends z.ZodType<any> = z.ZodType<any>, TOutput extends z.ZodType<any> = z.ZodType<any>, TSteps extends Step<string, any, any, any, any, any, EventedEngineType>[] = Step<string, any, any, any, any, any, EventedEngineType>[], TPrevSchema extends z.ZodType<any> = TInput>(workflow: Workflow<EventedEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>, opts: {
+    id: TWorkflowId;
+}): Workflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
+export declare function cloneStep<TStepId extends string>(step: Step<string, any, any, any, any, any, EventedEngineType>, opts: {
+    id: TStepId;
+}): Step<TStepId, any, any, any, any, any, EventedEngineType>;
+export declare function createStep<TStepId extends string, TState extends z.ZodObject<any>, TStepInput extends z.ZodType<any>, TStepOutput extends z.ZodType<any>, TResumeSchema extends z.ZodType<any>, TSuspendSchema extends z.ZodType<any>>(params: {
+    id: TStepId;
+    description?: string;
+    inputSchema: TStepInput;
+    outputSchema: TStepOutput;
+    resumeSchema?: TResumeSchema;
+    suspendSchema?: TSuspendSchema;
+    execute: ExecuteFunction<z.infer<TState>, z.infer<TStepInput>, z.infer<TStepOutput>, z.infer<TResumeSchema>, z.infer<TSuspendSchema>, EventedEngineType>;
+}): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
+export declare function createStep<TStepId extends string, TState extends z.ZodObject<any>, TStepInput extends z.ZodObject<{
+    prompt: z.ZodString;
+}>, TStepOutput extends z.ZodObject<{
+    text: z.ZodString;
+}>, TResumeSchema extends z.ZodType<any>, TSuspendSchema extends z.ZodType<any>>(agent: Agent<TStepId, any>): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
+export declare function createStep<TSchemaIn extends z.ZodType<any>, TSuspendSchema extends z.ZodType<any>, TResumeSchema extends z.ZodType<any>, TSchemaOut extends z.ZodType<any>, TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>>(tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
+    inputSchema: TSchemaIn;
+    outputSchema: TSchemaOut;
+    execute: (input: z.infer<TSchemaIn>, context?: TContext) => Promise<any>;
+}): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, EventedEngineType>;
+export declare function createWorkflow<TWorkflowId extends string = string, TState extends z.ZodObject<any> = z.ZodObject<any>, TInput extends z.ZodType<any> = z.ZodType<any>, TOutput extends z.ZodType<any> = z.ZodType<any>, TSteps extends Step<string, any, any, any, any, any, EventedEngineType>[] = Step<string, any, any, any, any, any, EventedEngineType>[]>(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>): EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>;
+export declare class EventedWorkflow<TEngineType = EventedEngineType, TSteps extends Step<string, any, any>[] = Step<string, any, any>[], TWorkflowId extends string = string, TState extends z.ZodObject<any> = z.ZodObject<any>, TInput extends z.ZodType<any> = z.ZodType<any>, TOutput extends z.ZodType<any> = z.ZodType<any>, TPrevSchema extends z.ZodType<any> = TInput> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+    constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
+    __registerMastra(mastra: Mastra): void;
+    createRun(options?: {
+        runId?: string;
+    }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>>;
+}
+export declare class EventedRun<TEngineType = EventedEngineType, TSteps extends Step<string, any, any>[] = Step<string, any, any>[], TState extends z.ZodObject<any> = z.ZodObject<any>, TInput extends z.ZodType<any> = z.ZodType<any>, TOutput extends z.ZodType<any> = z.ZodType<any>> extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
+    constructor(params: {
+        workflowId: string;
+        runId: string;
+        executionEngine: ExecutionEngine;
+        executionGraph: ExecutionGraph;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        mastra?: Mastra;
+        retryConfig?: {
+            attempts?: number;
+            delay?: number;
+        };
+        cleanup?: () => void;
+        workflowSteps: Record<string, StepWithComponent>;
+        validateInputs?: boolean;
+        workflowEngineType: WorkflowEngineType;
+    });
+    start({ inputData, initialState, requestContext, }: {
+        inputData?: z.infer<TInput>;
+        requestContext?: RequestContext;
+        initialState?: z.infer<TState>;
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    resume<TResumeSchema extends z.ZodType<any>>(params: {
+        resumeData?: z.infer<TResumeSchema>;
+        step: Step<string, any, any, TResumeSchema, any, any, TEngineType> | [
+            ...Step<string, any, any, any, any, any, TEngineType>[],
+            Step<string, any, any, TResumeSchema, any, any, TEngineType>
+        ] | string | string[];
+        requestContext?: RequestContext;
+    }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    watch(cb: (event: WorkflowStreamEvent) => void): () => void;
+    watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void>;
+    cancel(): Promise<void>;
+}
+//# sourceMappingURL=workflow.d.ts.map

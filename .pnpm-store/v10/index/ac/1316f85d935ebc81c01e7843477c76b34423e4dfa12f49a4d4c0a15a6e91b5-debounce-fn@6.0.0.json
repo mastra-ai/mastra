@@ -1,0 +1,37 @@
+{
+  "name": "debounce-fn",
+  "version": "6.0.0",
+  "requiresBuild": false,
+  "files": {
+    "license": {
+      "checkedAt": 1764662918577,
+      "integrity": "sha512-0fM2/ycrxrltyaBKfQ748Ck23VlPUUBgNAR47ldf4B1V/HoXTfWBSk+vcshGKwEpmOynu4mOP5o+hyBfuRNa8g==",
+      "mode": 420,
+      "size": 1117
+    },
+    "index.js": {
+      "checkedAt": 1764662918578,
+      "integrity": "sha512-yFGwLncow8TBPC/KazC5Wmb+KJAgUuD6Wg3yeZMK2ouyIrgO14GAuL58DUCs1kY4J2aa5Q52ssZohAC/2Mn1WQ==",
+      "mode": 420,
+      "size": 1840
+    },
+    "package.json": {
+      "checkedAt": 1764662918578,
+      "integrity": "sha512-xGK4gCSlFUM4a+YDPAiDATuTi7F3iysZl9ZFFsWLEf2O+oMgC74py2bfEtz5nuLLeN2L3eQXq3yUhW95GKUP5Q==",
+      "mode": 420,
+      "size": 835
+    },
+    "readme.md": {
+      "checkedAt": 1764662918579,
+      "integrity": "sha512-V/R/3cK5gmZ2UB4UmlG2J6d7xGtR/0VkVjNSC3uzvIsLX0lD+vy+oHbvjNCuseAjaCSmIBG70/nGFD9wbKCgFQ==",
+      "mode": 420,
+      "size": 1584
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662918579,
+      "integrity": "sha512-rHhW7G//UuG5pKKWnFWbTqH/ZF9XINKQcUk24ao1U7PESUIva2QsJKxRuI2UV+4JtrKFNAIImwGAYDiAPVHZkQ==",
+      "mode": 420,
+      "size": 2313
+    }
+  }
+}

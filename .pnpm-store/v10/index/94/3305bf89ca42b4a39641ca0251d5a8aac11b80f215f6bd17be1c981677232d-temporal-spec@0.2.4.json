@@ -1,0 +1,67 @@
+{
+  "name": "temporal-spec",
+  "version": "0.2.4",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662922956,
+      "integrity": "sha512-WeieWxy0OMEGnlHTUHIwVWPlocOF3wk8x3T8Z6rdkiGTl/vAS01TyLtU/WPA3dNK4W7bze1qx34UAkcqq8rcqw==",
+      "mode": 420,
+      "size": 750
+    },
+    "global.cjs": {
+      "checkedAt": 1764662922957,
+      "integrity": "sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==",
+      "mode": 420,
+      "size": 0
+    },
+    "index.cjs": {
+      "checkedAt": 1764662922957,
+      "integrity": "sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==",
+      "mode": 420,
+      "size": 0
+    },
+    "global.d.cts": {
+      "checkedAt": 1764662922957,
+      "integrity": "sha512-na19s+eUjs73t9ToZJhl3UK4PDgvEpCSA1hXNX/WnBshlxxvCnDuQq9qT0u+E6YXfQRQmhQ95uenVbYY3BFPzQ==",
+      "mode": 420,
+      "size": 67711
+    },
+    "index.d.cts": {
+      "checkedAt": 1764662922958,
+      "integrity": "sha512-ljj7nr4xqYW9XJXvriI2fNuTR4fHvzqkP41YRBVJxVOqolpbLsvekGzGi1d2M3qQGSfwoJbBQKnhe1O3lPYSag==",
+      "mode": 420,
+      "size": 65438
+    },
+    "global.js": {
+      "checkedAt": 1764662922958,
+      "integrity": "sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==",
+      "mode": 420,
+      "size": 0
+    },
+    "index.js": {
+      "checkedAt": 1764662922959,
+      "integrity": "sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==",
+      "mode": 420,
+      "size": 0
+    },
+    "global.d.ts": {
+      "checkedAt": 1764662922957,
+      "integrity": "sha512-na19s+eUjs73t9ToZJhl3UK4PDgvEpCSA1hXNX/WnBshlxxvCnDuQq9qT0u+E6YXfQRQmhQ95uenVbYY3BFPzQ==",
+      "mode": 420,
+      "size": 67711
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662922958,
+      "integrity": "sha512-ljj7nr4xqYW9XJXvriI2fNuTR4fHvzqkP41YRBVJxVOqolpbLsvekGzGi1d2M3qQGSfwoJbBQKnhe1O3lPYSag==",
+      "mode": 420,
+      "size": 65438
+    },
+    "package.json": {
+      "checkedAt": 1764662922963,
+      "integrity": "sha512-TnhamtvRHhA+aM9pZaQqviF85b4xeYXeJ246twD0soODECrYNSdrejQ88q6iavLGL2Y/Libw961VhQxIIFyhKQ==",
+      "mode": 420,
+      "size": 675
+    }
+  }
+}

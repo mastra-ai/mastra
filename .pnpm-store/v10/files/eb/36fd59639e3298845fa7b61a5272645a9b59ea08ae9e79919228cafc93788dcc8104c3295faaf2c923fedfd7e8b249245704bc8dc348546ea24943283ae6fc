@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<testsuite name="HeadlessChrome 85.0.4183 (Linux 0.0.0)" package="" timestamp="2020-10-10T04:49:55" id="0" hostname="fv-az195" tests="12" errors="0" failures="0" time="0.002">
+  <properties>
+    <property name="browser.fullName" value="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/85.0.4183.121 Safari/537.36"/>
+  </properties>
+  <testcase name=" string conversion" time="0" classname=""/>
+  <testcase name=" compare" time="0" classname=""/>
+  <testcase name=" double view" time="0" classname=""/>
+  <testcase name=" typed array" time="0" classname=""/>
+  <testcase name=" from array buffer" time="0" classname=""/>
+  <testcase name=" to array buffer" time="0" classname=""/>
+  <testcase name=" Uint8Array" time="0" classname=""/>
+  <testcase name=" native" time="0" classname=""/>
+  <testcase name=" slice" time="0" classname=""/>
+  <testcase name=" slice memcopy" time="0" classname=""/>
+  <testcase name=" concat" time="0" classname=""/>
+  <testcase name=" random above max entropy" time="0.002" classname=""/>
+  <system-out>
+    <![CDATA[
+]]>
+  </system-out>
+  <system-err/>
+</testsuite>

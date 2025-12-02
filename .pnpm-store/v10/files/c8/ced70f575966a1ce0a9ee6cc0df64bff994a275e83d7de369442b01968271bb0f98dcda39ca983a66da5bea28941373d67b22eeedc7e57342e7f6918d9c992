@@ -1,0 +1,42 @@
+{
+  "name": "inngest-cli",
+  "version": "1.12.1",
+  "description": "The leading workflow orchestration platform. Run stateful step functions and AI workflows on serverless, servers, or the edge.",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "scripts": {
+    "prepublishOnly": "touch bin/inngest && cp ../README.md .",
+    "postinstall": "node postinstall.js",
+    "build": "tsc"
+  },
+  "bin": {
+    "inngest-cli": "./bin/inngest",
+    "inngest": "./bin/inngest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/inngest/inngest.git"
+  },
+  "homepage": "https://github.com/inngest/inngest",
+  "files": [
+    "bin",
+    "LICENSE.md",
+    "postinstall.js"
+  ],
+  "volta": {
+    "node": "^20.1.0"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "debug": "^4.3.4",
+    "node-fetch": "^2.6.7",
+    "tar": "^6.2.1"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.0",
+    "@types/debug": "^4.1.8",
+    "@types/node-fetch": "^2.6.2",
+    "@types/request": "^2.48.8",
+    "@types/tar": "^6.1.1",
+    "typescript": "^4.7.4"
+  }
+}

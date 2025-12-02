@@ -1,0 +1,14 @@
+// src/index.ts
+import {
+  makeLightSyntaxHighlighter,
+  makeLightAsyncSyntaxHighlighter,
+  makePrismLightSyntaxHighlighter,
+  makePrismAsyncLightSyntaxHighlighter
+} from "./react-syntax-highlighter-light.js";
+export {
+  makeLightAsyncSyntaxHighlighter,
+  makeLightSyntaxHighlighter,
+  makePrismAsyncLightSyntaxHighlighter,
+  makePrismLightSyntaxHighlighter
+};
+//# sourceMappingURL=index.js.map

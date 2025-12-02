@@ -1,0 +1,46 @@
+{
+  "name": "langfuse-core",
+  "version": "3.38.6",
+  "engines": {
+    "node": ">=18"
+  },
+  "author": {
+    "name": "Langfuse",
+    "email": "hi@langfuse.com",
+    "url": "https://langfuse.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/langfuse/langfuse-js.git",
+    "directory": "langfuse-core"
+  },
+  "license": "MIT",
+  "main": "lib/index.cjs.js",
+  "module": "lib/index.mjs",
+  "types": "lib/index.d.ts",
+  "exports": {
+    "require": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.cjs.js"
+    },
+    "import": {
+      "types": "./lib/index.d.mts",
+      "default": "./lib/index.mjs"
+    }
+  },
+  "scripts": {
+    "test": "jest -c jest.config.js",
+    "prepublishOnly": "cd .. && yarn build"
+  },
+  "files": [
+    "lib",
+    "Readme.md"
+  ],
+  "dependencies": {
+    "mustache": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/mustache": "^4.2.5"
+  },
+  "gitHead": "abe44f55bacfbbf814eccc4fbf81113cfa55d39e"
+}

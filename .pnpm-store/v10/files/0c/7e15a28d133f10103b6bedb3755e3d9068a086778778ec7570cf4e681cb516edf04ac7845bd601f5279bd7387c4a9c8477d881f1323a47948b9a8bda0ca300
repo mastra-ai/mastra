@@ -1,0 +1,8 @@
+import { MockLanguageModelV1 } from '../../ai-sdk.types.d.ts';
+import { MockLanguageModelV2 } from 'ai-v5/test';
+export declare function getOpenAIModel(version: 'v1' | 'v2'): import("ai").LanguageModelV1 | import("@ai-sdk/provider-v5").LanguageModelV2;
+export declare function getSingleDummyResponseModel(version: 'v1' | 'v2'): MockLanguageModelV1 | MockLanguageModelV2;
+export declare function getDummyResponseModel(version: 'v1' | 'v2'): MockLanguageModelV1 | MockLanguageModelV2;
+export declare function getEmptyResponseModel(version: 'v1' | 'v2'): MockLanguageModelV1 | MockLanguageModelV2;
+export declare function getErrorResponseModel(version: 'v1' | 'v2'): MockLanguageModelV1 | MockLanguageModelV2;
+//# sourceMappingURL=mock-model.d.ts.map

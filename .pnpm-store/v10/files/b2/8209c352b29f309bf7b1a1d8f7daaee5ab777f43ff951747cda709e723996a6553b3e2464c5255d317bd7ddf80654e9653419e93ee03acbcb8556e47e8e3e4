@@ -1,0 +1,20 @@
+# Copyright(c) 2019 spdlog authors
+# Distributed under the MIT License (http://opensource.org/licenses/MIT)
+
+@PACKAGE_INIT@
+
+find_package(Threads REQUIRED)
+
+set(SPDLOG_FMT_EXTERNAL @SPDLOG_FMT_EXTERNAL@)
+set(SPDLOG_FMT_EXTERNAL_HO @SPDLOG_FMT_EXTERNAL_HO@)
+set(config_targets_file @config_targets_file@)
+
+if(SPDLOG_FMT_EXTERNAL OR SPDLOG_FMT_EXTERNAL_HO)
+    include(CMakeFindDependencyMacro)
+    find_dependency(fmt CONFIG)
+endif()
+
+
+include("${CMAKE_CURRENT_LIST_DIR}/${config_targets_file}")
+
+check_required_components(spdlog)

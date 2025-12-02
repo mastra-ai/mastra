@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../src/api/subscribable/SKIP_UPDATE.ts"],"sourcesContent":["export const SKIP_UPDATE = Symbol(\"skip-update\");\nexport type SKIP_UPDATE = typeof SKIP_UPDATE;\n"],"mappings":";AAAO,IAAM,cAAc,OAAO,aAAa;","names":[]}

@@ -1,0 +1,277 @@
+{
+  "name": "@opentelemetry/resource-detector-azure",
+  "version": "0.6.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662915209,
+      "integrity": "sha512-FIqo2/22zwB36wmOBwa/ArDlk3gAAzsKAp2MVtHweKB54KNl/Xh1J2pZzvGFbfv9DtSvt0F8toz7p0AVZfVsvg==",
+      "mode": 420,
+      "size": 10995
+    },
+    "build/esm/detectors/AzureAppServiceDetector.js": {
+      "checkedAt": 1764662915210,
+      "integrity": "sha512-xcS82GvmVcD+uMVIPqEtn0h8zJM+tcPmCWDyA9qIvrv36ZQOLzthj7jbTqFppuZe+OBzuD3/0fncZGLX9B1pJQ==",
+      "mode": 420,
+      "size": 3851
+    },
+    "build/src/detectors/AzureAppServiceDetector.js": {
+      "checkedAt": 1764662915214,
+      "integrity": "sha512-lKwNoKybQMTV29JY++Ta8u994BvaWhGw/5h9sapLmFzD9UrXTGR3LkdVgnqa41dIVZJ6eMQEJvTG4gH0AX/7Lg==",
+      "mode": 420,
+      "size": 3122
+    },
+    "build/esm/detectors/AzureFunctionsDetector.js": {
+      "checkedAt": 1764662915216,
+      "integrity": "sha512-XnlIbkdwFzSYYAAu2YSSIw/PPdkflqbjbdoXQVydEN73A4iF3eTK5bfT84oUXLgK94hHVVAKH/UboaGWcHWhJQ==",
+      "mode": 420,
+      "size": 4572
+    },
+    "build/src/detectors/AzureFunctionsDetector.js": {
+      "checkedAt": 1764662915218,
+      "integrity": "sha512-KW68Ls3sUzAaQCs4XDmfo6ASPd0cLvl6KcozniuG6NNNUb8QhG6iqQPlUh1zdFa3yawF6kBIMugbOci3ekm0xQ==",
+      "mode": 420,
+      "size": 3989
+    },
+    "build/esm/detectors/AzureVmDetector.js": {
+      "checkedAt": 1764662915218,
+      "integrity": "sha512-SA2XZM/YCUQhPbVp0wgGj0IH/f2ghO4sdSTdMV6owkVSiDD45W0K+OIJEw3OkrvUDJrH1qfyENyZfdwl2bEZYg==",
+      "mode": 420,
+      "size": 8151
+    },
+    "build/src/detectors/AzureVmDetector.js": {
+      "checkedAt": 1764662915220,
+      "integrity": "sha512-v4600BPNST0OZxYCVDk23I3EHEdtteVDBZPqP1gcOUkPEnZYbx1JZAgaCfVNJAb0sO2jTtAKvC1NgPAUFsHZsQ==",
+      "mode": 420,
+      "size": 4022
+    },
+    "build/esm/detectors/index.js": {
+      "checkedAt": 1764662915223,
+      "integrity": "sha512-YrbNjqZHj+DnxdqF1jBmbfMldc/P+fvmg2FQd4uttV5EDWRr0GX7X2SUFhBlc64T6f7mbgj7Yhm68OLqEnAbag==",
+      "mode": 420,
+      "size": 828
+    },
+    "build/esm/index.js": {
+      "checkedAt": 1764662915224,
+      "integrity": "sha512-20aN6DwjuLGJWG4GyalmTNMWt1to0rROxBEJyJ1rxLDNFbbt+Rty/K/1SZ5N3bE8gOXrKJKITM3+DiW3D5bndw==",
+      "mode": 420,
+      "size": 736
+    },
+    "build/src/detectors/index.js": {
+      "checkedAt": 1764662915226,
+      "integrity": "sha512-7uSPx31yFQE83DHj0Am6QxTM2CAJE9PGawKbxOX4FR6BgHCmxCE9Zs//qIbRy4sOCtUc56/tNkPv4QHA5ftt9Q==",
+      "mode": 420,
+      "size": 1465
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662915229,
+      "integrity": "sha512-KWdlzgDMGvf7uutvWXXgGvtfAjqHUgJxxAjQ4sN3bdlvNHrwT/XkSEpU1dLHobb3pI5tJAdk6B0otbheMALe5w==",
+      "mode": 420,
+      "size": 1282
+    },
+    "build/esm/types.js": {
+      "checkedAt": 1764662915230,
+      "integrity": "sha512-Xss2uTzjMOPtYFSKSjV6AkgKJVv5/oYunmPmljtDdBBS3MZOh8r1CQFFTOBSMbqMlhgFy6RzqJZCHslufwxS8w==",
+      "mode": 420,
+      "size": 1664
+    },
+    "build/src/types.js": {
+      "checkedAt": 1764662915247,
+      "integrity": "sha512-TM4RDjOq95YCfzi9k3d4wuzndQE2+yrqowg81eFVMOZKuosYk1zV1uF9LnZFWoNB3mxiHok5Vx2UUbaFF1ALmQ==",
+      "mode": 420,
+      "size": 2251
+    },
+    "build/esm/utils.js": {
+      "checkedAt": 1764662915250,
+      "integrity": "sha512-38UGNizBh1SxriWoBU2BnH+5vN1Xzl2JKJTqBHJAJrVLnneo4IQOPK+X8IRXQNfVkcQ1rUVvcn8omwcEXMWYJg==",
+      "mode": 420,
+      "size": 1469
+    },
+    "build/src/utils.js": {
+      "checkedAt": 1764662915251,
+      "integrity": "sha512-Nga+6H3mtcNPegyV+R5rRSfOGRbNO4eT0OeApjpLoiaHkYuOoYsRqynhFE7vz2yyyOMLq8fg9O+Qs4TyGLBvqg==",
+      "mode": 420,
+      "size": 1649
+    },
+    "package.json": {
+      "checkedAt": 1764662915253,
+      "integrity": "sha512-HP3ZdKp7IXB19dzuGiOjtLg/FFdG+9bxoxe4z3lGLmxYiJtSd5QwhhnAMDNbgiIolzA4NnuL62qbW0jb2XMGOA==",
+      "mode": 420,
+      "size": 1917
+    },
+    "build/esm/detectors/AzureAppServiceDetector.js.map": {
+      "checkedAt": 1764662915255,
+      "integrity": "sha512-Q8R3H+Ikxq7NyCyQDxBdqcbLXkNflykyKBgqywhCDATOmFFAvh0fpPOotFJ8kvX7tx2WhP54Lu/X9iT7dF9EZA==",
+      "mode": 420,
+      "size": 4827
+    },
+    "build/src/detectors/AzureAppServiceDetector.js.map": {
+      "checkedAt": 1764662915257,
+      "integrity": "sha512-Im9w52c4tx+E2iL4L+xDOdoX0A2guQAVePmSsC4fPf5m80ZF/TcyW/OLc8YdC4OahFhHWimdrLBt4+ZE8ndZaQ==",
+      "mode": 420,
+      "size": 4488
+    },
+    "build/esm/detectors/AzureFunctionsDetector.js.map": {
+      "checkedAt": 1764662915258,
+      "integrity": "sha512-Ul13ZDbi7KEBNvuCFQE7ADRyHudAQkjaDfEqY8fWhXVuVykUMU7gUmVP8nbRf6uxYk7MWQoo/0yFiujJXIh+1A==",
+      "mode": 420,
+      "size": 5739
+    },
+    "build/src/detectors/AzureFunctionsDetector.js.map": {
+      "checkedAt": 1764662915260,
+      "integrity": "sha512-gLGrGVSJ3Ut3bbp67oQCf1m1u/vfV2NC+L81XyJ6FvU18QeSKxmcGZexNg9TEYNxHlvcCsbyGIyQG5zzDLNgdA==",
+      "mode": 420,
+      "size": 5453
+    },
+    "build/esm/detectors/AzureVmDetector.js.map": {
+      "checkedAt": 1764662915261,
+      "integrity": "sha512-tNReHtEPNPPZT6stSMDqLZ08gY8Ptr3hGLovkLYdb7i8h9bEEMVMpXt8vuwFSnXYgTvTujDZA9njFoo3Tiyeig==",
+      "mode": 420,
+      "size": 6554
+    },
+    "build/src/detectors/AzureVmDetector.js.map": {
+      "checkedAt": 1764662915262,
+      "integrity": "sha512-6d2oedHodHe5Jc+glH6wNNnhZILSxrJ2FCdXF8G4fYWh0aZQ4QzOb6duMam+QHe7B3GwmQpFZB7t0eY5W5Vvlg==",
+      "mode": 420,
+      "size": 6187
+    },
+    "build/esm/detectors/index.js.map": {
+      "checkedAt": 1764662915263,
+      "integrity": "sha512-vQLm2Gvb2maVQ/8gkYtU5RbqgwA6B9DET5j0cye4f2NX53AjDJEsdEquik+Yy/svvvLz7IAdHjg7iJc7ENPfvw==",
+      "mode": 420,
+      "size": 1113
+    },
+    "build/esm/index.js.map": {
+      "checkedAt": 1764662915264,
+      "integrity": "sha512-Z3YSlngUiZO/UdnncD5XDpQdVPsU8FfOhkELlPu8gJ+j5/GeXM6cvFUUcUjFI3dqLmSugXUeY2oNGVfT1u3mxg==",
+      "mode": 420,
+      "size": 951
+    },
+    "build/src/detectors/index.js.map": {
+      "checkedAt": 1764662915266,
+      "integrity": "sha512-7jKuhVyDgwyyrC4tP3rYtUV/jPFPej5hidS298k28GRzgDz3uccYoJLkd0C4SnoorLA222vcD1TosYYykcjqvw==",
+      "mode": 420,
+      "size": 1092
+    },
+    "build/src/index.js.map": {
+      "checkedAt": 1764662915266,
+      "integrity": "sha512-tqhhKAGpl8DhRyRCn53azH1cRfV/TuQ5WHqcL+xfMND4paBWCHcQ0t0W4t4T2XsYRr3boDzUj322N/OM1oTbfQ==",
+      "mode": 420,
+      "size": 969
+    },
+    "build/esm/types.js.map": {
+      "checkedAt": 1764662915270,
+      "integrity": "sha512-NCMY5lj9S8sBGU8eKai2Ijbed0iUrGS4P+sRq60AlLBX91tynyx9ibjHWEXY79WxDe75rs+7jNq2TlqSHHVnvg==",
+      "mode": 420,
+      "size": 5765
+    },
+    "build/src/types.js.map": {
+      "checkedAt": 1764662915270,
+      "integrity": "sha512-C83QLmezI0mbPtqum8RPo0jzA301HhaSpTmwI0KngZIBiMdWb/t9K9mut4fj9PKw/q77v2oew2D3woF7NAVL4w==",
+      "mode": 420,
+      "size": 5597
+    },
+    "build/esm/utils.js.map": {
+      "checkedAt": 1764662915271,
+      "integrity": "sha512-i9mew2dHycn8XffCqURvCxVHCtIvizHrvl82ab0MXdJaDDwgbp+gm5tyCBgudq2ZkpocPTNkLl+ZWHKODl8r+w==",
+      "mode": 420,
+      "size": 2360
+    },
+    "build/src/utils.js.map": {
+      "checkedAt": 1764662915273,
+      "integrity": "sha512-38YNVXRTTFUv16KGyDhFx8zji5EMk7zkJV9XX3mTyA27d9OViWw7BSv1ipOOzlxBXKYFexgSteOQjKDnhi1Wlg==",
+      "mode": 420,
+      "size": 2317
+    },
+    "README.md": {
+      "checkedAt": 1764662915273,
+      "integrity": "sha512-TZ+2bSxLnb7cjAoYe3Z6S7T+USEEW7FkFHGZrJuHe66LhXMBRa94+CYZBUFkRgEUWFsuBe2narAkyCd+ljZ+ww==",
+      "mode": 420,
+      "size": 9176
+    },
+    "build/esm/detectors/AzureAppServiceDetector.d.ts": {
+      "checkedAt": 1764662915275,
+      "integrity": "sha512-eSg16mPiXodh/5i+Iig8mSjzVs8ljAgKNKBGsc/7ODzQ1Wr9lyMFkZF4B8arerN8pMUHcF0PlSbmyOuzZLmquQ==",
+      "mode": 420,
+      "size": 517
+    },
+    "build/src/detectors/AzureAppServiceDetector.d.ts": {
+      "checkedAt": 1764662915275,
+      "integrity": "sha512-eSg16mPiXodh/5i+Iig8mSjzVs8ljAgKNKBGsc/7ODzQ1Wr9lyMFkZF4B8arerN8pMUHcF0PlSbmyOuzZLmquQ==",
+      "mode": 420,
+      "size": 517
+    },
+    "build/esm/detectors/AzureFunctionsDetector.d.ts": {
+      "checkedAt": 1764662915276,
+      "integrity": "sha512-GaeWB/W4FBTTnJ3nbYHMMoReojkMivF8CPiEUVDkYJ3zIMrssdiExwiOjkjtYmajEm1xpEjEOD/ZuXKaxh0Bjw==",
+      "mode": 420,
+      "size": 507
+    },
+    "build/src/detectors/AzureFunctionsDetector.d.ts": {
+      "checkedAt": 1764662915276,
+      "integrity": "sha512-GaeWB/W4FBTTnJ3nbYHMMoReojkMivF8CPiEUVDkYJ3zIMrssdiExwiOjkjtYmajEm1xpEjEOD/ZuXKaxh0Bjw==",
+      "mode": 420,
+      "size": 507
+    },
+    "build/esm/detectors/AzureVmDetector.d.ts": {
+      "checkedAt": 1764662915277,
+      "integrity": "sha512-oo0c360uEPE3e/8yCaHAMOVYmg6MiLFlw/B3YZ9UlDHDHqXqaxjFGLKm+hEYiMbAIXLcdkw+WN+vyNQpzV8tLQ==",
+      "mode": 420,
+      "size": 560
+    },
+    "build/src/detectors/AzureVmDetector.d.ts": {
+      "checkedAt": 1764662915277,
+      "integrity": "sha512-oo0c360uEPE3e/8yCaHAMOVYmg6MiLFlw/B3YZ9UlDHDHqXqaxjFGLKm+hEYiMbAIXLcdkw+WN+vyNQpzV8tLQ==",
+      "mode": 420,
+      "size": 560
+    },
+    "build/esm/detectors/index.d.ts": {
+      "checkedAt": 1764662915280,
+      "integrity": "sha512-b5ltswYUmJbl1YhxYfppMe+spnfBg3uOsSzCJ6/Z/i43o4U/FbIOo1oi3C/dar+sHFsnevQ4WmBkuPZXXm7dcQ==",
+      "mode": 420,
+      "size": 224
+    },
+    "build/esm/index.d.ts": {
+      "checkedAt": 1764662915296,
+      "integrity": "sha512-U0cSxXB4p2cKchBzl7T/XbMDdDJengVuj4hKsGD2jj0CG/ZRz58D4ikRx3tJ2VhGowKqkXVW6cPuxCYlhol95A==",
+      "mode": 420,
+      "size": 132
+    },
+    "build/src/detectors/index.d.ts": {
+      "checkedAt": 1764662915280,
+      "integrity": "sha512-b5ltswYUmJbl1YhxYfppMe+spnfBg3uOsSzCJ6/Z/i43o4U/FbIOo1oi3C/dar+sHFsnevQ4WmBkuPZXXm7dcQ==",
+      "mode": 420,
+      "size": 224
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662915296,
+      "integrity": "sha512-U0cSxXB4p2cKchBzl7T/XbMDdDJengVuj4hKsGD2jj0CG/ZRz58D4ikRx3tJ2VhGowKqkXVW6cPuxCYlhol95A==",
+      "mode": 420,
+      "size": 132
+    },
+    "build/esm/types.d.ts": {
+      "checkedAt": 1764662915301,
+      "integrity": "sha512-O3kI9kU+tQaNnLmuDBlXHqb0RwjrsXKqLOgJtxr6nWfOeQ7oQ92wrBkUzCwHIvT2eGzVklcbvOESaPafKaLJew==",
+      "mode": 420,
+      "size": 4946
+    },
+    "build/src/types.d.ts": {
+      "checkedAt": 1764662915301,
+      "integrity": "sha512-O3kI9kU+tQaNnLmuDBlXHqb0RwjrsXKqLOgJtxr6nWfOeQ7oQ92wrBkUzCwHIvT2eGzVklcbvOESaPafKaLJew==",
+      "mode": 420,
+      "size": 4946
+    },
+    "build/esm/utils.d.ts": {
+      "checkedAt": 1764662915303,
+      "integrity": "sha512-GaTZyquCkHrHyB1cfGiBvAIGLvejHdonBlaPE7FnmDMsGaCDZCb1Ucfs1tPPCKaqPv7pAQBAnK+aDXHav6fOHQ==",
+      "mode": 420,
+      "size": 177
+    },
+    "build/src/utils.d.ts": {
+      "checkedAt": 1764662915303,
+      "integrity": "sha512-GaTZyquCkHrHyB1cfGiBvAIGLvejHdonBlaPE7FnmDMsGaCDZCb1Ucfs1tPPCKaqPv7pAQBAnK+aDXHav6fOHQ==",
+      "mode": 420,
+      "size": 177
+    }
+  }
+}

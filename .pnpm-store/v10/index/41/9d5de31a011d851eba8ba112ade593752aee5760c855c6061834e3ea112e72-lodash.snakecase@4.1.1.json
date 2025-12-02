@@ -1,0 +1,31 @@
+{
+  "name": "lodash.snakecase",
+  "version": "4.1.1",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662922653,
+      "integrity": "sha512-WlbmtDx9GoxcJYjrKcdnjH9m4WzSfAhhaN1Sc6B0k1ky+/O/ZjLAli1hUs4iE3F2gukUlm3lckw7IfKWa6VsGA==",
+      "mode": 420,
+      "size": 752
+    },
+    "README.md": {
+      "checkedAt": 1764662922654,
+      "integrity": "sha512-UrOZPWnM+qgiMMu639N3TmYDDFCq6jp+6wXvy/7nwboFbEV3Y8HzKd9vFomhrBzIjMxmbk5J04lrvCNEJF3jzg==",
+      "mode": 420,
+      "size": 474
+    },
+    "LICENSE": {
+      "checkedAt": 1764662922655,
+      "integrity": "sha512-t/YCqTo2Om0BuHE/C+C/HnDEMbbFc+Iw7HdZ5m3+Ixv6eAFUYHuaWfDgMyL3zt9X0qvXoIPA8u8qq8i8IVvbMg==",
+      "mode": 420,
+      "size": 1951
+    },
+    "index.js": {
+      "checkedAt": 1764662922655,
+      "integrity": "sha512-bgcDksqcmyiwqNowy2TcxccIM70UGA94EL18pTuFAWan2vvsk+7Mv7FpKM++MOX2YBINfwZc3fHyHAmyvgm9lQ==",
+      "mode": 420,
+      "size": 14548
+    }
+  }
+}

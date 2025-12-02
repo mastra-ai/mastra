@@ -1,0 +1,65 @@
+{
+	"name": "update-notifier",
+	"version": "7.0.0",
+	"description": "Update notifications for your CLI app",
+	"license": "BSD-2-Clause",
+	"repository": "yeoman/update-notifier",
+	"funding": "https://github.com/yeoman/update-notifier?sponsor=1",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": "./index.js",
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"test": "xo && NODE_OPTIONS='--loader=esmock --no-warnings' ava"
+	},
+	"files": [
+		"index.js",
+		"update-notifier.js",
+		"check.js"
+	],
+	"keywords": [
+		"npm",
+		"update",
+		"updater",
+		"notify",
+		"notifier",
+		"check",
+		"checker",
+		"cli",
+		"module",
+		"package",
+		"version"
+	],
+	"dependencies": {
+		"boxen": "^7.1.1",
+		"chalk": "^5.3.0",
+		"configstore": "^6.0.0",
+		"import-lazy": "^4.0.0",
+		"is-in-ci": "^0.1.0",
+		"is-installed-globally": "^0.4.0",
+		"is-npm": "^6.0.0",
+		"latest-version": "^7.0.0",
+		"pupa": "^3.1.0",
+		"semver": "^7.5.4",
+		"semver-diff": "^4.0.0",
+		"xdg-basedir": "^5.1.0"
+	},
+	"devDependencies": {
+		"ava": "^5.3.1",
+		"clear-module": "^4.1.2",
+		"esmock": "^2.5.8",
+		"fixture-stdout": "^0.2.1",
+		"strip-ansi": "^7.1.0",
+		"xo": "^0.56.0"
+	},
+	"ava": {
+		"timeout": "20s",
+		"serial": true
+	}
+}

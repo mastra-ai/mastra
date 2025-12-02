@@ -1,0 +1,1 @@
+{"version":3,"file":"spawn-local.d.ts","sourceRoot":"","sources":["../../src/process/spawn-local.ts"],"names":[],"mappings":"AAEA,wBAAsB,UAAU,CAC9B,UAAU,EAAE,MAAM,EAClB,IAAI,EAAE,MAAM,EAAE,EACd,OAAO,EAAE;IACP,GAAG,EAAE,MAAM,CAAC,UAAU,CAAA;IACtB,KAAK,EAAE,SAAS,GAAG,QAAQ,CAAA;IAC3B,GAAG,EAAE,MAAM,CAAA;CACZ,GACA,OAAO,CAAC,IAAI,CAAC,CAoBf"}

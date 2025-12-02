@@ -1,0 +1,14 @@
+import { ContextManager, TextMapPropagator } from '@opentelemetry/api';
+import { ResourceDetector } from '@opentelemetry/resources';
+import { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+export declare function getResourceDetectorsFromEnv(): Array<ResourceDetector>;
+export declare function filterBlanksAndNulls(list: string[]): string[];
+export declare function getOtlpProtocolFromEnv(): string;
+export declare function getSpanProcessorsFromEnv(): SpanProcessor[];
+/**
+ * Get a propagator as defined by environment variables
+ */
+export declare function getPropagatorFromEnv(): TextMapPropagator | null | undefined;
+export declare function setupContextManager(contextManager: ContextManager | null | undefined): void;
+export declare function setupPropagator(propagator: TextMapPropagator | null | undefined): void;
+//# sourceMappingURL=utils.d.ts.map

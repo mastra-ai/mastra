@@ -1,0 +1,9 @@
+{
+  "name": "typescript-paths",
+  "version": "1.2.5",
+  "description": "Resolving tsconfig paths in runtime",
+  "license": "MIT",
+  "type": "module",
+  "main": "./index.js",
+  "types": "../../types/index.d.ts"
+}

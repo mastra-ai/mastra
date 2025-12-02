@@ -1,0 +1,21 @@
+"use client";
+
+// src/react-syntax-highlighter-light.tsx
+import {
+  PrismAsyncLight,
+  PrismLight,
+  Light,
+  LightAsync
+} from "react-syntax-highlighter";
+import { makeMakeSyntaxHighlighter } from "./make-syntax-highlighter.js";
+var makePrismAsyncLightSyntaxHighlighter = makeMakeSyntaxHighlighter(PrismAsyncLight);
+var makePrismLightSyntaxHighlighter = makeMakeSyntaxHighlighter(PrismLight);
+var makeLightSyntaxHighlighter = makeMakeSyntaxHighlighter(Light);
+var makeLightAsyncSyntaxHighlighter = makeMakeSyntaxHighlighter(LightAsync);
+export {
+  makeLightAsyncSyntaxHighlighter,
+  makeLightSyntaxHighlighter,
+  makePrismAsyncLightSyntaxHighlighter,
+  makePrismLightSyntaxHighlighter
+};
+//# sourceMappingURL=react-syntax-highlighter-light.js.map

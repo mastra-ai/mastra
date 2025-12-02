@@ -1,0 +1,29 @@
+.aui-modal-content {
+  @apply bg-aui-popover text-aui-popover-foreground z-50 h-[500px] w-[400px] overflow-clip rounded-xl border p-0 shadow-md outline-none;
+  @apply [&>.aui-thread-root]:bg-inherit;
+
+  @apply data-[state=closed]:animate-out data-[state=open]:animate-in;
+  @apply data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0;
+  @apply data-[state=closed]:zoom-out data-[state=open]:zoom-in;
+  @apply data-[state=open]:slide-in-from-bottom-1/2 data-[state=open]:slide-in-from-right-1/2 data-[state=closed]:slide-out-to-bottom-1/2 data-[state=closed]:slide-out-to-right-1/2;
+}
+
+.aui-modal-anchor {
+  @apply fixed bottom-4 right-4 size-11;
+}
+
+.aui-modal-button {
+  @apply size-full rounded-full shadow transition-transform hover:scale-110 active:scale-90;
+}
+
+.aui-modal-button-closed-icon {
+  @apply absolute size-6 transition-all;
+  @apply data-[state=closed]:rotate-0 data-[state=open]:rotate-90;
+  @apply data-[state=closed]:scale-100 data-[state=open]:scale-0;
+}
+
+.aui-modal-button-open-icon {
+  @apply absolute size-6 transition-all;
+  @apply data-[state=closed]:-rotate-90 data-[state=open]:rotate-0;
+  @apply data-[state=closed]:scale-0 data-[state=open]:scale-100;
+}

@@ -1,0 +1,58 @@
+import type { ToolSet } from 'ai-v5';
+import type { OutputSchema } from '../../../stream/base/schema.js';
+import type { OuterLLMRun } from '../../types.js';
+export declare function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({ tools, messageList, options, writer, controller, runId, streamState, modelSpanTracker, _internal, }: OuterLLMRun<Tools, OUTPUT>): import("../../../workflows").Step<"toolCallStep", import("zod").ZodObject<any, import("zod").UnknownKeysParam, import("zod").ZodTypeAny, {
+    [x: string]: any;
+}, {
+    [x: string]: any;
+}>, import("zod").ZodObject<{
+    toolCallId: import("zod").ZodString;
+    toolName: import("zod").ZodString;
+    args: import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>;
+    providerMetadata: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+    providerExecuted: import("zod").ZodOptional<import("zod").ZodBoolean>;
+    output: import("zod").ZodOptional<import("zod").ZodAny>;
+}, "strip", import("zod").ZodTypeAny, {
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    providerMetadata?: Record<string, any> | undefined;
+    providerExecuted?: boolean | undefined;
+    output?: any;
+}, {
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    providerMetadata?: Record<string, any> | undefined;
+    providerExecuted?: boolean | undefined;
+    output?: any;
+}>, import("zod").ZodObject<{
+    toolCallId: import("zod").ZodString;
+    toolName: import("zod").ZodString;
+    args: import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>;
+    providerMetadata: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodAny>>;
+    providerExecuted: import("zod").ZodOptional<import("zod").ZodBoolean>;
+    output: import("zod").ZodOptional<import("zod").ZodAny>;
+} & {
+    result: import("zod").ZodAny;
+    error: import("zod").ZodOptional<import("zod").ZodAny>;
+}, "strip", import("zod").ZodTypeAny, {
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    error?: any;
+    providerMetadata?: Record<string, any> | undefined;
+    providerExecuted?: boolean | undefined;
+    output?: any;
+    result?: any;
+}, {
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    error?: any;
+    providerMetadata?: Record<string, any> | undefined;
+    providerExecuted?: boolean | undefined;
+    output?: any;
+    result?: any;
+}>, import("zod").ZodType<any, import("zod").ZodTypeDef, any>, import("zod").ZodType<any, import("zod").ZodTypeDef, any>, import("../../../workflows").DefaultEngineType>;
+//# sourceMappingURL=tool-call-step.d.ts.map

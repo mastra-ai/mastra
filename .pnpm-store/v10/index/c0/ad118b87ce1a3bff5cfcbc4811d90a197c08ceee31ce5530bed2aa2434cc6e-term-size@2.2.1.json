@@ -1,0 +1,61 @@
+{
+  "name": "term-size",
+  "version": "2.2.1",
+  "requiresBuild": false,
+  "files": {
+    "vendor/.DS_Store": {
+      "checkedAt": 1764662904240,
+      "integrity": "sha512-BMIHpfHQcirUV2TDdjEwUN7QGI9mC7d60noCs9IyMj3TFdgcA5tUAkrXh8KPwk0Zvj9RPKFAr0BLz9Vb88gewA==",
+      "mode": 420,
+      "size": 8196
+    },
+    "vendor/macos/.DS_Store": {
+      "checkedAt": 1764662904240,
+      "integrity": "sha512-WJQSFKgzQzHlIRSquFH8PY1dpd0UmD+TPahzXCSw3crBNOjxNpJVMZnE2aFKSzGItih4owudaW7doSBGZrYINw==",
+      "mode": 420,
+      "size": 6148
+    },
+    "license": {
+      "checkedAt": 1764662904241,
+      "integrity": "sha512-0fM2/ycrxrltyaBKfQ748Ck23VlPUUBgNAR47ldf4B1V/HoXTfWBSk+vcshGKwEpmOynu4mOP5o+hyBfuRNa8g==",
+      "mode": 420,
+      "size": 1117
+    },
+    "vendor/macos/term-size": {
+      "checkedAt": 1764662904241,
+      "integrity": "sha512-SO+WDjXBgmcqSJKYgPexoDjJkYEq8F1GPsqQAM8DeiZNYcULidVZHNwMBy+TivnXQhYV9henD2dGaLoDqXiKdA==",
+      "mode": 493,
+      "size": 27264
+    },
+    "vendor/windows/term-size.exe": {
+      "checkedAt": 1764662904241,
+      "integrity": "sha512-ztoTGW82C1EYuzwC7U0aZ0h2b9QnQabYggMYItrSdeysBSpULVN1Wa+Hh/EetNKCjY6TmJ6OmxsQqHIgftseMA==",
+      "mode": 420,
+      "size": 17408
+    },
+    "index.js": {
+      "checkedAt": 1764662904242,
+      "integrity": "sha512-sQQU0Lny2YBdwSn638g0JYvyJqjARgcp7z+0/G6mZ5Pv0gGdBHntiZ3HBOgeph1OL2rotSv+OnDReisLiBX+8w==",
+      "mode": 420,
+      "size": 1820
+    },
+    "package.json": {
+      "checkedAt": 1764662904243,
+      "integrity": "sha512-2pJv7BSazhD2CHnAQQB5Kh4s9GpEeQYLoBH3adnd8TU7M6YU0bPI29cOtzgZ1b4ykRkrvAVHqeVqsG9UJh9tBQ==",
+      "mode": 420,
+      "size": 744
+    },
+    "readme.md": {
+      "checkedAt": 1764662904243,
+      "integrity": "sha512-NO6X9y5g6XKLFRj4F6qC0BH1x5SnPOMVM0urn5FmltV4eK07nGuWaMGBZYCDPE2CwAPW04rj6P43HQLyAVYPOQ==",
+      "mode": 420,
+      "size": 1372
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662904244,
+      "integrity": "sha512-mUTHqiPclZlsHNjBbkmHzGY8C58wExetMG2r19udfBISjjBsZa/2HRZdvi9a91qUroqaFGIDjE+iTzt5Od7fBA==",
+      "mode": 420,
+      "size": 323
+    }
+  }
+}

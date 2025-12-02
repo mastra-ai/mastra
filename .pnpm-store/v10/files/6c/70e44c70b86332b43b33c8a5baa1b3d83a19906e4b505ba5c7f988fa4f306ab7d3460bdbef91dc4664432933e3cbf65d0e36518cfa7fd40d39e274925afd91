@@ -1,0 +1,12 @@
+[
+    {
+        "idp_id": "108872335",
+        "type": "OAuth",
+        "provider": "GithubOAuth"
+    },
+    {
+        "idp_id": "111966195055680542408",
+        "type": "OAuth",
+        "provider": "GoogleOAuth"
+    }
+]

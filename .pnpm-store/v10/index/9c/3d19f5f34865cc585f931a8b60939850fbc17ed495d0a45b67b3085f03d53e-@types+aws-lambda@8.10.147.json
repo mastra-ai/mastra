@@ -1,0 +1,385 @@
+{
+  "name": "@types/aws-lambda",
+  "version": "8.10.147",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662914478,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662914479,
+      "integrity": "sha512-OT8PlpLpq8I4a7Z0Mq42BL9+txi+1+dj+Sbx4WYRk41PTJSOLf8E/0iHcPOBd6PCpm9SkCqgyFltLeW2q6pdEg==",
+      "mode": 420,
+      "size": 2413
+    },
+    "handler.d.ts": {
+      "checkedAt": 1764662914499,
+      "integrity": "sha512-cW54kGa2LZscBe5EfV4MHyn2iKwbA1HvNsTAKAnr//Uf/SfuEE8YNOVch6Tof2v9d7Mx0++Xol6wUYdyvutlBA==",
+      "mode": 420,
+      "size": 6750
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662914500,
+      "integrity": "sha512-K5ENBfYO7t/cbrOkttQgPHB2twCEybrMDD/iv2NXdr2id8c5FdqtJusiF8+IMfxYUX20i9bWH5ar7XPGyEIzIg==",
+      "mode": 420,
+      "size": 2397
+    },
+    "package.json": {
+      "checkedAt": 1764662914500,
+      "integrity": "sha512-RzjhNJ4XmdVXrK7bGIR3Ow7gpruixmfkfPOCQOoYZb2e28lcwZSZXpkD/dA8PPl5FBZ2uI08rU4p/hWg7X4Cog==",
+      "mode": 420,
+      "size": 6962
+    },
+    "common/api-gateway.d.ts": {
+      "checkedAt": 1764662914501,
+      "integrity": "sha512-u4Y+r/w0ZZ2gsk5hcJu92EGjBKLHXuJ6obwj+Ak9UW2SA2GQ6BspvQCcxUR6mukzZCnsNi7m0zYubKeckfcDJA==",
+      "mode": 420,
+      "size": 3039
+    },
+    "common/cloudfront.d.ts": {
+      "checkedAt": 1764662914503,
+      "integrity": "sha512-p+JWwno8yBiLLHrOFHa89a+eMsVl9RpYUGdIYxx77dsL7PSsmGW8DqCmI0w39fUs3VHAXl/0aiV/3q0nix1FwQ==",
+      "mode": 420,
+      "size": 10095
+    },
+    "trigger/alb.d.ts": {
+      "checkedAt": 1764662914503,
+      "integrity": "sha512-TnixWvSqGi60CPFRGIjJf1wI+6MSlx6Z433Hp8n8Juw5AIo+YRQFgWAnFXg9xrWzzVk0jGJS9pJRmZEMSkOrSQ==",
+      "mode": 420,
+      "size": 1514
+    },
+    "trigger/amplify-resolver.d.ts": {
+      "checkedAt": 1764662914506,
+      "integrity": "sha512-AzWBsvU7UL5i5NoA3w7UtmIwIVck9IGJH7uwvCDILvQBzbnM3Y98PFFudZCU8vZUTxJ6fJ1L1s19JgbUKyrnUw==",
+      "mode": 420,
+      "size": 1664
+    },
+    "trigger/api-gateway-authorizer.d.ts": {
+      "checkedAt": 1764662914508,
+      "integrity": "sha512-YvWO42hhmcE3a1LtZkVqOmP5wRpv7sYMO58TOylXna8XCwwVAS7rRXyu41QTfY6s0QDsZy7a4/M0QkOJhtv1gg==",
+      "mode": 420,
+      "size": 9970
+    },
+    "trigger/api-gateway-proxy.d.ts": {
+      "checkedAt": 1764662914508,
+      "integrity": "sha512-9DQjPVSCLeJ8sW8Yl47vvQEaCfJe8FrvKHiogjhVWKqwV6N085GE3ijBsRZIJWIxs4FkVig8uK9WjkMz9nsWug==",
+      "mode": 420,
+      "size": 11998
+    },
+    "trigger/appsync-resolver.d.ts": {
+      "checkedAt": 1764662914511,
+      "integrity": "sha512-/wazsmO0+nI0LZTV6cLeqcS1u626l/j6astzE2GzzJqLT6tkZsvm4sObUUTrVhXE4T/h41qFdpPAT35Yk0gbjw==",
+      "mode": 420,
+      "size": 3536
+    },
+    "trigger/autoscaling.d.ts": {
+      "checkedAt": 1764662914513,
+      "integrity": "sha512-1l3Y7Y+O2H6Pfw4uCWCm8Zb27+xp5fgdNrkDRBTOV7ddXm1GqiXEB1ZMgq6glwT6xnASzQangitLFruNhx/Buw==",
+      "mode": 420,
+      "size": 1421
+    },
+    "trigger/cdk-custom-resource.d.ts": {
+      "checkedAt": 1764662914520,
+      "integrity": "sha512-rvrEHfF17v1xoefBsZGfSZT/pkrghJ/OmsRwW/+uYkSTBOaia2JI4Fboiur50MjLqHssqF5KdLJvucCxecFyPw==",
+      "mode": 420,
+      "size": 9503
+    },
+    "trigger/cloudformation-custom-resource.d.ts": {
+      "checkedAt": 1764662914520,
+      "integrity": "sha512-3HnKKC+QvpNiU0/9Jmb9TPM3ZjMXxAe2mU0J8nqEJF62eSE8jaewxgvTNs45jvEvmlXf16Cc4Eow3/Sg+kM3HA==",
+      "mode": 420,
+      "size": 12612
+    },
+    "trigger/cloudfront-request.d.ts": {
+      "checkedAt": 1764662914521,
+      "integrity": "sha512-ghbAz1GD6Cs67jt6rIwIjACSKsWvA1gK/9zfUCDdeg3XUFJAg23fpf2axpoXs3xKoNDKvQ3YiV0rDtp6u3agnw==",
+      "mode": 420,
+      "size": 841
+    },
+    "trigger/cloudfront-response.d.ts": {
+      "checkedAt": 1764662914522,
+      "integrity": "sha512-w8ao/wNnPyMpEH/KTZQxP2ekfe+w6LIz+yZehcGhw46wkMup7IprWTTYenmZNinF0D1CFrwjLeuQX/N4BAAP0Q==",
+      "mode": 420,
+      "size": 885
+    },
+    "trigger/cloudwatch-alarm.d.ts": {
+      "checkedAt": 1764662914523,
+      "integrity": "sha512-wiZ93390Un/2URYI70n9PXX8KVAVTFmV9+s584L4Me53trrcmDEcb31xtzJs0o4j/09zCr6IQDKWRc1xUgjU/A==",
+      "mode": 420,
+      "size": 1682
+    },
+    "trigger/cloudwatch-events.d.ts": {
+      "checkedAt": 1764662914526,
+      "integrity": "sha512-b073c+wxa3ttLNpJ9hSWKqIzsdI6Fuk/3DwXDWbylW8aHwHwLN0uRstclDp15ZzDjJDktA5Zti9Z9in/jJFLPA==",
+      "mode": 420,
+      "size": 367
+    },
+    "trigger/cloudwatch-logs.d.ts": {
+      "checkedAt": 1764662914527,
+      "integrity": "sha512-n2GJkVY8I+BuRixuAYb3MkIYE2ygkZe7tU9bJIYlnXv6RVAl4tQ7+ohFbKOjtAkoMvpujbfMB21TTEwMLN+QsA==",
+      "mode": 420,
+      "size": 970
+    },
+    "trigger/codebuild-cloudwatch-state.d.ts": {
+      "checkedAt": 1764662914528,
+      "integrity": "sha512-Y1E4JRm8I6WFR7P2YQcRLp2mcf0/RNTDKXEuDy9FDo58XB/sfUSSS4KfWZHs0XNVYB81Za3Uq8+f2/lewHCHlA==",
+      "mode": 420,
+      "size": 3512
+    },
+    "trigger/codecommit.d.ts": {
+      "checkedAt": 1764662914529,
+      "integrity": "sha512-pTNSlS0AMGnCob0L8/njjlvxaSMSO0Q6/m3lkb2XlwG/QsWDPjc3oa9owK3zFGR+fpMks3WYxYEK1BKKuilwfQ==",
+      "mode": 420,
+      "size": 851
+    },
+    "trigger/codepipeline-cloudwatch-action.d.ts": {
+      "checkedAt": 1764662914532,
+      "integrity": "sha512-KrzClviYoy/yjNMzJIikvpKrRGOEGf1ZOKwktyn8eUHcrGtEUqKFKISV8XgI26psillbuHEjkkG0WQydGUU7cw==",
+      "mode": 420,
+      "size": 985
+    },
+    "trigger/codepipeline-cloudwatch-pipeline.d.ts": {
+      "checkedAt": 1764662914533,
+      "integrity": "sha512-g8JMtYU4NR+SwkDvCM65P92GLMvmWSIWywLkQm3AWgVxBp1Toa+6EAOZZ0VGd+ASNJmjydbz0Syh8Pe9UEdgug==",
+      "mode": 420,
+      "size": 1068
+    },
+    "trigger/codepipeline-cloudwatch-stage.d.ts": {
+      "checkedAt": 1764662914548,
+      "integrity": "sha512-WtmsMOC9vSYUW3N0IT2KOz3eCzaPKBlPUWtB7gFEGlHKuiq85DUrOvFgScXelRu8iirpjZvULRxsvLekR9UDBg==",
+      "mode": 420,
+      "size": 674
+    },
+    "trigger/codepipeline-cloudwatch.d.ts": {
+      "checkedAt": 1764662914552,
+      "integrity": "sha512-JQppw1p3tNrbdtVYgxvwzwawI+fEULGGV6RqHuQRpHQzHUjYsIf+vZRBQM+S/4AFN3X0/S/Qjwx8Vqoj+7BpfA==",
+      "mode": 420,
+      "size": 552
+    },
+    "trigger/codepipeline.d.ts": {
+      "checkedAt": 1764662914554,
+      "integrity": "sha512-30qsK04v9qza4J/TiAXnLMNO6Nuys8n9FpXA+iRrE4FK8IgF1vypIIzGVtLfusLc85f0p3giRoEF9SiPNpV45A==",
+      "mode": 420,
+      "size": 1357
+    },
+    "trigger/connect-contact-flow.d.ts": {
+      "checkedAt": 1764662914558,
+      "integrity": "sha512-25YSBnqqXKue4aBOGBfQr9Ibug0K+2GTj4CNXVEkaPngkczjy2I0ZfEqxN26nFDcaMamS2jxM05BS8jfyXGRgg==",
+      "mode": 420,
+      "size": 2053
+    },
+    "trigger/dynamodb-stream.d.ts": {
+      "checkedAt": 1764662914558,
+      "integrity": "sha512-17Ms/5nlXGtLSZIOInBB8hLj5cEVlO5OB502Z0GSFkgNssKLscaO6/sOotyMz//bSQxHLQyasefLdamckZHH5w==",
+      "mode": 420,
+      "size": 2078
+    },
+    "trigger/eventbridge.d.ts": {
+      "checkedAt": 1764662914559,
+      "integrity": "sha512-BdXmX5ouSsssqFR/YwpGeVZs+DWFePlRt+KYmIQ3iMU/sMuJRbci3CJhupiEkrhqwiJuyqsW4Z5Bki9GvBe33w==",
+      "mode": 420,
+      "size": 484
+    },
+    "trigger/guard-duty-event-notification.d.ts": {
+      "checkedAt": 1764662914560,
+      "integrity": "sha512-TDchF34OSqWZ7yQc+9RrqL3Vcga1yhoYnu26onxEfBXIfVnC+TyFz5xwFs9NxfTIOg8s5TST8OF6N0UbrfdDKg==",
+      "mode": 420,
+      "size": 1072
+    },
+    "trigger/iot-authorizer.d.ts": {
+      "checkedAt": 1764662914561,
+      "integrity": "sha512-JyuZj/UaSFQuNKW1UgPG2kSN3LqJmV5hI9bu+bSwbDEjMvil1rUWyGxy0WYHv1x0+PyLQJFh32rxkxCIPfmrwA==",
+      "mode": 420,
+      "size": 1757
+    },
+    "trigger/iot.d.ts": {
+      "checkedAt": 1764662914562,
+      "integrity": "sha512-/HTQ7rDfhGvO3NnKw1VoSe/GMt4vb0YfkqjQM8FoXUWyBWj624vdT0eMN7KpW6GnLOGTMWHU7TqR5cPhkARLDQ==",
+      "mode": 420,
+      "size": 1088
+    },
+    "trigger/kinesis-firehose-transformation.d.ts": {
+      "checkedAt": 1764662914565,
+      "integrity": "sha512-YVwyO/FKbkl+R1YdqSlUEHIJ8pLWKPCarILRhUi+qB3I8483sIdgFvxvMcfOWD+x82yUA7vDe5LNieh5ymUzSg==",
+      "mode": 420,
+      "size": 1744
+    },
+    "trigger/kinesis-stream.d.ts": {
+      "checkedAt": 1764662914569,
+      "integrity": "sha512-bZXwaKAdChLGQyrYXi4Hh+amvFW0BZX12bDdwKah1cZVVR24B8wwESaVfNaikVdPFiCBcqFW52RqGF7PQiUQbQ==",
+      "mode": 420,
+      "size": 1809
+    },
+    "trigger/lambda-function-url.d.ts": {
+      "checkedAt": 1764662914569,
+      "integrity": "sha512-UPmpgnZ/WevZ7S+5T2ZxV4F+05Y5W4UxDbFCZ/KSvCve7eUkkMvl4RPWQYHd59429nlG8jD1IEdloG3UskgYiA==",
+      "mode": 420,
+      "size": 1939
+    },
+    "trigger/lex-v2.d.ts": {
+      "checkedAt": 1764662914570,
+      "integrity": "sha512-Y3PY7VWhT5BnG7GQ7Uo5jpvej3Nn3DI+cUTtBwgVPLMdOBXo3buNYV680Ta33GwFNRDT7gjg0AJn+SAbQkfK+Q==",
+      "mode": 420,
+      "size": 4186
+    },
+    "trigger/lex.d.ts": {
+      "checkedAt": 1764662914572,
+      "integrity": "sha512-qBtneJUnpIm8CiPo6NanE+BNo5K3WuGg5aC9A9iUizVgn6ZiK6Ma3ubp7+kfeZ8QHMrSgRZnSa8Bva4apEcPUQ==",
+      "mode": 420,
+      "size": 3194
+    },
+    "trigger/msk.d.ts": {
+      "checkedAt": 1764662914573,
+      "integrity": "sha512-tBq1So2A7bdL4ZzB7YW6WfyhpRXPd5HodTzLb4EU5abMdwH2OfaPjfepo7WRc50xh35/5T3H3xxU19MouH7RRg==",
+      "mode": 420,
+      "size": 642
+    },
+    "trigger/s3-batch.d.ts": {
+      "checkedAt": 1764662914574,
+      "integrity": "sha512-pdagRJnqthDckDpKqXysjLrdnaQHgUqzoKKpTZd90PMZ5kHfFtsPUKslpL7Pp5vpj4++eNRKdcVCfQUl+YEwOA==",
+      "mode": 420,
+      "size": 1039
+    },
+    "trigger/s3-event-notification.d.ts": {
+      "checkedAt": 1764662914575,
+      "integrity": "sha512-vUrDMtAp3yk63O85lKr339/rQ4AFXezPvE6qsOZkMfZVBWUTFYxFZwPAefNSpqwBSisvI8EiDLZKLCGpkVWEiw==",
+      "mode": 420,
+      "size": 7724
+    },
+    "trigger/s3.d.ts": {
+      "checkedAt": 1764662914577,
+      "integrity": "sha512-aWvcCNsMMrgSFjbzvYDYe2iBacK1uwVXz5cAPnGIlqvL/Z4l/Ds5gUq0k4yYO8nlqZj/0hRYTzDqA6Iy7ywsnw==",
+      "mode": 420,
+      "size": 1433
+    },
+    "trigger/secretsmanager.d.ts": {
+      "checkedAt": 1764662914580,
+      "integrity": "sha512-DJCPG0Z9rn9L4HQb6Xd1RU71BkC+SzZ+XsvD2cvFR0mTk2foTqVRrA6cxvC1u8ElhFqyO2bAZSHqnLFc+/liQw==",
+      "mode": 420,
+      "size": 535
+    },
+    "trigger/self-managed-kafka.d.ts": {
+      "checkedAt": 1764662914585,
+      "integrity": "sha512-qkud6Qmjt1vwtV0fZU0AkMmrAIyjFitATWFvPiGvHa/BMrGmVfZexJJGydEEydSp5CB9xLbU8CtMLOKxxQHjsA==",
+      "mode": 420,
+      "size": 714
+    },
+    "trigger/ses.d.ts": {
+      "checkedAt": 1764662914586,
+      "integrity": "sha512-95XISayey/gJP/1QGwB9cE1IWiIPTW7S4KEW1PMmUz4RvAnF6yXGWjmcjZUoKl6VQO23OLGIbPnE5k8nnr7p1w==",
+      "mode": 420,
+      "size": 2454
+    },
+    "trigger/sns.d.ts": {
+      "checkedAt": 1764662914587,
+      "integrity": "sha512-lUjRWQDT6ZAYrcgmGXLcFm9Xlr0m+REdvNxH3ugNzMxq4zdIjTVvdeSgTJcsN94Vaa2r9aRy4/wfsKBXAdVLEg==",
+      "mode": 420,
+      "size": 808
+    },
+    "trigger/sqs.d.ts": {
+      "checkedAt": 1764662914587,
+      "integrity": "sha512-ZtbdjaDbtjwDzBgWqc8eOLsx7sAgHfjntdt2H4Pq4uphW7YKszxDEQnHR0cvO+s6Rq+NQEXhPC3YU3mJhKDd4w==",
+      "mode": 420,
+      "size": 1909
+    },
+    "trigger/transfer-family-authorizer.d.ts": {
+      "checkedAt": 1764662914588,
+      "integrity": "sha512-7zaJ/W7ZSfLL+nR4nzdPHEfIOx+HUeP+toWOj+Qa8EAPtnXPUku9JuNAcnXEYGhwBs+84NPbEFuAkdRRTqv13A==",
+      "mode": 420,
+      "size": 5092
+    },
+    "trigger/cognito-user-pool-trigger/_common.d.ts": {
+      "checkedAt": 1764662914606,
+      "integrity": "sha512-pREAnJzER5L4JKFw3TNGKYutKs4FK1AwS5L1Y8QuPUBwdimosMUHUcc9yOkUsSexQ+LUPBTokca8BXxfk/TZCg==",
+      "mode": 420,
+      "size": 1072
+    },
+    "trigger/cognito-user-pool-trigger/create-auth-challenge.d.ts": {
+      "checkedAt": 1764662914607,
+      "integrity": "sha512-PuKdJfcfuOTJj4mHMeYOtlUEHfLJeHJ3xFeJlPbdV3I86TfxGMZbP5VOUYbYvMoBZKRyf2RczgAS2jAkJwfsMA==",
+      "mode": 420,
+      "size": 860
+    },
+    "trigger/cognito-user-pool-trigger/custom-email-sender.d.ts": {
+      "checkedAt": 1764662914608,
+      "integrity": "sha512-T/OSiPOB0yEL0CflVHHzPMDKzCBr+ofS3GqigwQ/fmbEoHWWW+puzbXA1VBh4rH0L38+2UAm35Yl6vHn51F39Q==",
+      "mode": 420,
+      "size": 2756
+    },
+    "trigger/cognito-user-pool-trigger/custom-message.d.ts": {
+      "checkedAt": 1764662914609,
+      "integrity": "sha512-nVWbMX9fEgm1eIlgPXac5zwToXSEHCM5F9kwgVUfEE+zAaQlucvyc+TGF5uaHpUQCUAZ9omQBOtmzLPYntRBkw==",
+      "mode": 420,
+      "size": 2028
+    },
+    "trigger/cognito-user-pool-trigger/custom-sms-sender.d.ts": {
+      "checkedAt": 1764662914609,
+      "integrity": "sha512-30GI7v1ZfVFi7A5MgEHrQ5ZvT290PM/carvYufyoLVhcVBZAwaY09rSE9D+ZPmlNK6J90lssFAyMQPf6uNbxWQ==",
+      "mode": 420,
+      "size": 1919
+    },
+    "trigger/cognito-user-pool-trigger/define-auth-challenge.d.ts": {
+      "checkedAt": 1764662914610,
+      "integrity": "sha512-JfA/l6FAXbkcfunZpYXaE+tiPup2DeSGWscCqEoH6WWCv1e8CGK573gmj25dWYSCTZfaFFWKruzZElAHx+1EvA==",
+      "mode": 420,
+      "size": 812
+    },
+    "trigger/cognito-user-pool-trigger/index.d.ts": {
+      "checkedAt": 1764662914612,
+      "integrity": "sha512-fT+v9JCxV4ZEmVgBg3Ts5afXkt7UPyu4H//K1Y2bjeqO4cs+jCvCDIO/RnzAznHI2E6MSOr7qme59OQcljaVIg==",
+      "mode": 420,
+      "size": 4976
+    },
+    "trigger/cognito-user-pool-trigger/post-authentication.d.ts": {
+      "checkedAt": 1764662914612,
+      "integrity": "sha512-11c9TAjRKijtAD2Lx/81KMeIMXrMyvbVsb0MeR+8u8MjdnBEeJiid5jq+NB9grjjDkNRDCcNPAcMxITIIvmQNg==",
+      "mode": 420,
+      "size": 555
+    },
+    "trigger/cognito-user-pool-trigger/post-confirmation.d.ts": {
+      "checkedAt": 1764662914614,
+      "integrity": "sha512-fMg+x0rJf7yPCEClyqZIcJzVfrG0a6NG8HbnthIpsg+idarYkSMozmibGFEXu4yI5esFM5dUenbCGlDLTGRS9A==",
+      "mode": 420,
+      "size": 906
+    },
+    "trigger/cognito-user-pool-trigger/pre-authentication.d.ts": {
+      "checkedAt": 1764662914615,
+      "integrity": "sha512-GIwviskIVz18nkkGJdUPDJtCwlLNe0CC5MzWy+x33xJNCh86g+z9wSypjFQSBph5v2B2DPaW4OlYNMsbsptCyg==",
+      "mode": 420,
+      "size": 610
+    },
+    "trigger/cognito-user-pool-trigger/pre-signup.d.ts": {
+      "checkedAt": 1764662914616,
+      "integrity": "sha512-g7v5dvOvu49hB4YQm+islOehuVlItfJAAi+qde05W8liOxkDU+scBgDBSnQkSxaS6m5gWTeXtTJMXYgDmCuwcg==",
+      "mode": 420,
+      "size": 1114
+    },
+    "trigger/cognito-user-pool-trigger/pre-token-generation-v2.d.ts": {
+      "checkedAt": 1764662914616,
+      "integrity": "sha512-WES7Sg92qJRuzvtf4kwcmFPDo80H/wIduPJ3E5kL+d5HYPNsVV2KFlDk2hNfy/o41vJ4cLloSscH0C7G7nWuPg==",
+      "mode": 420,
+      "size": 2681
+    },
+    "trigger/cognito-user-pool-trigger/pre-token-generation.d.ts": {
+      "checkedAt": 1764662914618,
+      "integrity": "sha512-KbtVuBo0m58I/W3FC4gz7urh+UQw3GdmhU25op+a25oVdBT6oIAhYFjAuxTeSoFf8QfDVk9Hte8dqNRry9/Z+w==",
+      "mode": 420,
+      "size": 1976
+    },
+    "trigger/cognito-user-pool-trigger/user-migration.d.ts": {
+      "checkedAt": 1764662914624,
+      "integrity": "sha512-RMqcal2GI2zppRczzRbCN6zGIxifud7VJRPn4SIVq+MdMsD7LZrael/xnIWogDX7UqydcyQMhNkp3xQSajSUiQ==",
+      "mode": 420,
+      "size": 1386
+    },
+    "trigger/cognito-user-pool-trigger/verify-auth-challenge-response.d.ts": {
+      "checkedAt": 1764662914625,
+      "integrity": "sha512-uGQrqhNcy00pbUfbjNVN4Ebqk7YAYiIBpWHdkMhA45rzvjDTnVQgJz6z0gFutRwUPY1P0uZeSE0oy2J4lHJs9g==",
+      "mode": 420,
+      "size": 753
+    }
+  }
+}

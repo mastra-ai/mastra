@@ -1,0 +1,60 @@
+import { MastraBase } from './chunk-S6URFGCZ.js';
+import TTLCache from '@isaacs/ttlcache';
+
+// src/cache/base.ts
+var MastraServerCache = class extends MastraBase {
+  constructor({ name }) {
+    super({
+      component: "SERVER_CACHE",
+      name
+    });
+  }
+};
+var InMemoryServerCache = class extends MastraServerCache {
+  cache = new TTLCache({
+    max: 1e3,
+    ttl: 1e3 * 60 * 5
+  });
+  constructor() {
+    super({ name: "InMemoryServerCache" });
+  }
+  async get(key) {
+    return this.cache.get(key);
+  }
+  async set(key, value) {
+    this.cache.set(key, value);
+  }
+  async listLength(key) {
+    const list = this.cache.get(key);
+    if (!Array.isArray(list)) {
+      throw new Error(`${key} is not an array`);
+    }
+    return list.length;
+  }
+  async listPush(key, value) {
+    const list = this.cache.get(key);
+    if (Array.isArray(list)) {
+      list.push(value);
+    } else {
+      this.cache.set(key, [value]);
+    }
+  }
+  async listFromTo(key, from, to = -1) {
+    const list = this.cache.get(key);
+    if (Array.isArray(list)) {
+      const endIndex = to === -1 ? void 0 : to + 1;
+      return list.slice(from, endIndex);
+    }
+    return [];
+  }
+  async delete(key) {
+    this.cache.delete(key);
+  }
+  async clear() {
+    this.cache.clear();
+  }
+};
+
+export { InMemoryServerCache, MastraServerCache };
+//# sourceMappingURL=chunk-OJNJA5ZI.js.map
+//# sourceMappingURL=chunk-OJNJA5ZI.js.map

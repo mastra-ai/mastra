@@ -1,0 +1,4 @@
+# When a dependency is added with add_subdirectory, but searched with find_package
+
+# Redirect to the directory added with add_subdirectory
+add_subdirectory("@PROJECT_SOURCE_DIR@" "@PROJECT_BINARY_DIR@")

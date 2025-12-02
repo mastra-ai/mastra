@@ -1,0 +1,1 @@
+{"version":3,"file":"CLIENT_PAUSE.d.ts","sourceRoot":"","sources":["../../../lib/commands/CLIENT_PAUSE.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,iBAAiB,EAAW,MAAM,eAAe,CAAC;;;;IAKzD;;;;;OAKG;gDACkB,aAAa,WAAW,MAAM,SAAS,OAAO,GAAG,KAAK;mCAM7B,kBAAkB,IAAI,CAAC;;AAfvE,wBAgB6B"}

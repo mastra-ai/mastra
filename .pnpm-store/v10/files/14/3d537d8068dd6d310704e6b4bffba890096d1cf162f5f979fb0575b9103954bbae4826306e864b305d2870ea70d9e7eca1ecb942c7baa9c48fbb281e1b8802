@@ -1,0 +1,173 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.cloud.speech.v1p1beta1;
+
+import "google/api/resource.proto";
+
+option cc_enable_arenas = true;
+option go_package = "cloud.google.com/go/speech/apiv1p1beta1/speechpb;speechpb";
+option java_multiple_files = true;
+option java_outer_classname = "SpeechResourceProto";
+option java_package = "com.google.cloud.speech.v1p1beta1";
+option objc_class_prefix = "GCS";
+
+// A set of words or phrases that represents a common concept likely to appear
+// in your audio, for example a list of passenger ship names. CustomClass items
+// can be substituted into placeholders that you set in PhraseSet phrases.
+message CustomClass {
+  option (google.api.resource) = {
+    type: "speech.googleapis.com/CustomClass"
+    pattern: "projects/{project}/locations/{location}/customClasses/{custom_class}"
+  };
+
+  // An item of the class.
+  message ClassItem {
+    // The class item's value.
+    string value = 1;
+  }
+
+  // The resource name of the custom class.
+  string name = 1;
+
+  // If this custom class is a resource, the custom_class_id is the resource id
+  // of the CustomClass. Case sensitive.
+  string custom_class_id = 2;
+
+  // A collection of class items.
+  repeated ClassItem items = 3;
+}
+
+// Provides "hints" to the speech recognizer to favor specific words and phrases
+// in the results.
+message PhraseSet {
+  option (google.api.resource) = {
+    type: "speech.googleapis.com/PhraseSet"
+    pattern: "projects/{project}/locations/{location}/phraseSets/{phrase_set}"
+  };
+
+  // A phrases containing words and phrase "hints" so that
+  // the speech recognition is more likely to recognize them. This can be used
+  // to improve the accuracy for specific words and phrases, for example, if
+  // specific commands are typically spoken by the user. This can also be used
+  // to add additional words to the vocabulary of the recognizer. See
+  // [usage limits](https://cloud.google.com/speech-to-text/quotas#content).
+  //
+  // List items can also include pre-built or custom classes containing groups
+  // of words that represent common concepts that occur in natural language. For
+  // example, rather than providing a phrase hint for every month of the
+  // year (e.g. "i was born in january", "i was born in febuary", ...), use the
+  // pre-built `$MONTH` class improves the likelihood of correctly transcribing
+  // audio that includes months (e.g. "i was born in $month").
+  // To refer to pre-built classes, use the class' symbol prepended with `$`
+  // e.g. `$MONTH`. To refer to custom classes that were defined inline in the
+  // request, set the class's `custom_class_id` to a string unique to all class
+  // resources and inline classes. Then use the class' id wrapped in $`{...}`
+  // e.g. "${my-months}". To refer to custom classes resources, use the class'
+  // id wrapped in `${}` (e.g. `${my-months}`).
+  //
+  // Speech-to-Text supports three locations: `global`, `us` (US North America),
+  // and `eu` (Europe). If you are calling the `speech.googleapis.com`
+  // endpoint, use the `global` location. To specify a region, use a
+  // [regional endpoint](https://cloud.google.com/speech-to-text/docs/endpoints)
+  // with matching `us` or `eu` location value.
+  message Phrase {
+    // The phrase itself.
+    string value = 1;
+
+    // Hint Boost. Overrides the boost set at the phrase set level.
+    // Positive value will increase the probability that a specific phrase will
+    // be recognized over other similar sounding phrases. The higher the boost,
+    // the higher the chance of false positive recognition as well. Negative
+    // boost will simply be ignored. Though `boost` can accept a wide range of
+    // positive values, most use cases are best served
+    // with values between 0 and 20. We recommend using a binary search approach
+    // to finding the optimal value for your use case as well as adding
+    // phrases both with and without boost to your requests.
+    float boost = 2;
+  }
+
+  // The resource name of the phrase set.
+  string name = 1;
+
+  // A list of word and phrases.
+  repeated Phrase phrases = 2;
+
+  // Hint Boost. Positive value will increase the probability that a specific
+  // phrase will be recognized over other similar sounding phrases. The higher
+  // the boost, the higher the chance of false positive recognition as well.
+  // Negative boost values would correspond to anti-biasing. Anti-biasing is not
+  // enabled, so negative boost will simply be ignored. Though `boost` can
+  // accept a wide range of positive values, most use cases are best served with
+  // values between 0 (exclusive) and 20. We recommend using a binary search
+  // approach to finding the optimal value for your use case as well as adding
+  // phrases both with and without boost to your requests.
+  float boost = 4;
+}
+
+// Speech adaptation configuration.
+message SpeechAdaptation {
+  message ABNFGrammar {
+    // All declarations and rules of an ABNF grammar broken up into multiple
+    // strings that will end up concatenated.
+    repeated string abnf_strings = 1;
+  }
+
+  // A collection of phrase sets. To specify the hints inline, leave the
+  // phrase set's `name` blank and fill in the rest of its fields. Any
+  // phrase set can use any custom class.
+  repeated PhraseSet phrase_sets = 1;
+
+  // A collection of phrase set resource names to use.
+  repeated string phrase_set_references = 2 [(google.api.resource_reference) = {
+    type: "speech.googleapis.com/PhraseSet"
+  }];
+
+  // A collection of custom classes. To specify the classes inline, leave the
+  // class' `name` blank and fill in the rest of its fields, giving it a unique
+  // `custom_class_id`. Refer to the inline defined class in phrase hints by its
+  // `custom_class_id`.
+  repeated CustomClass custom_classes = 3;
+
+  // Augmented Backus-Naur form (ABNF) is a standardized grammar notation
+  // comprised by a set of derivation rules.
+  // See specifications: https://www.w3.org/TR/speech-grammar
+  ABNFGrammar abnf_grammar = 4;
+}
+
+// Transcription normalization configuration. Use transcription normalization
+// to automatically replace parts of the transcript with phrases of your
+// choosing. For StreamingRecognize, this normalization only applies to stable
+// partial transcripts (stability > 0.8) and final transcripts.
+message TranscriptNormalization {
+  // A single replacement configuration.
+  message Entry {
+    // What to replace. Max length is 100 characters.
+    string search = 1;
+
+    // What to replace with. Max length is 100 characters.
+    string replace = 2;
+
+    // Whether the search is case sensitive.
+    bool case_sensitive = 3;
+  }
+
+  // A list of replacement entries. We will perform replacement with one entry
+  // at a time. For example, the second entry in ["cat" => "dog", "mountain cat"
+  // => "mountain dog"] will never be applied because we will always process the
+  // first entry before it. At most 100 entries.
+  repeated Entry entries = 1;
+}

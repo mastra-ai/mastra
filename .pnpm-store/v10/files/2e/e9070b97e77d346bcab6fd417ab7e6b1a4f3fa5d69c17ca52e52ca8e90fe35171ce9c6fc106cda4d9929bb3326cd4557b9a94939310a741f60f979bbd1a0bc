@@ -1,0 +1,334 @@
+@dialects { indented }
+
+@precedence {
+  attribute @left,
+  structure @left,
+  valueCompareOp,
+  namespaceDot @left,
+  valueOp @left,
+  layerName
+}
+
+@skip { whitespace | Comment | LineComment | blankLine }
+
+@top StyleSheet { (item | Declaration semi)* }
+
+@top Styles { blockContent }
+
+item {
+  RuleSet |
+  ImportStatement |
+  IncludeStatement |
+  MixinStatement |
+  UseStatement |
+  ExtendStatement |
+  RootStatement |
+  ForwardStatement |
+  MediaStatement |
+  CharsetStatement |
+  NamespaceStatement |
+  KeyframesStatement |
+  SupportsStatement |
+  IfStatement |
+  ForStatement |
+  EachStatement |
+  WhileStatement |
+  OutputStatement |
+  AtRule
+}
+
+RuleSet {
+  selector ("," selector)* Block
+}
+
+ImportStatement {
+  @specialize[@name=import]<AtKeyword, "@import">
+  value
+  Layer { @specialize[@name=layer]<queryIdentifier, "layer"> (!layerName "(" LayerName ("." LayerName)* ")")? }?
+  commaSep<query> semi
+}
+
+LayerName { identifier }
+
+IncludeStatement {
+  (@specialize[@name=include]<AtKeyword, "@include"> | IndentedInclude) value (ckw<"using"> callArgList)? (Block | semi)
+}
+
+UseStatement {
+  @specialize[@name=use]<AtKeyword, "@use"> value (ckw<"as"> (ValueName | Star))? (ckw<"with"> callArgList)? semi
+}
+
+ExtendStatement {
+  @specialize[@name=extend]<AtKeyword, "@extend"> selector semi
+}
+
+RootStatement {
+  @specialize[@name="at-root"]<AtKeyword, "@at-root"> selector? ("(" ckw<"with" | "without"> ":" query ")")? Block
+}
+
+ForwardStatement {
+  @specialize[@name=forward]<AtKeyword, "@forward"> value
+  (ckw<"as"> ValueName Star)?
+  (ckw<"hide" | "show"> commaSep<value>)*
+  semi
+}
+
+MixinStatement {
+  (@specialize[@name=mixin]<AtKeyword, "@mixin" | "@function"> | IndentedMixin) value Block
+}
+
+MediaStatement {
+  @specialize[@name=media]<AtKeyword, "@media"> commaSep<query> Block
+}
+
+CharsetStatement {
+  @specialize[@name=charset]<AtKeyword, "@charset"> value semi
+}
+
+NamespaceStatement {
+  @specialize[@name=namespace]<AtKeyword, "@namespace">
+  NamespaceName { identifier }?
+  (StringLiteral | CallLiteral) semi
+}
+
+KeyframesStatement {
+  @specialize[@name=keyframes]<AtKeyword, "@keyframes">
+  KeyframeName { identifier | StringLiteral }
+  KeyframeList
+}
+
+KeyframeSelector {
+  KeyframeRangeName { identifier } NumberLiteral? |
+  NumberLiteral
+}
+
+KeyframeList {
+  "{" (KeyframeSelector ("," KeyframeSelector)* Block)* "}"
+}
+
+SupportsStatement {
+  @specialize[@name=supports]<AtKeyword, "@supports"> query Block
+}
+
+IfStatement {
+  ctrlKw<"@if"> value Block (ctrlKw<"@else"> ckw<"if"> value Block)* (ctrlKw<"@else"> Block)?
+}
+
+ForStatement {
+  ctrlKw<"@for"> SassVariableName ckw<"from"> value (ckw<"to"> | ckw<"through">) value Block
+}
+
+EachStatement {
+  ctrlKw<"@each"> commaSep<SassVariableName> ckw<"in"> value Block
+}
+
+WhileStatement {
+  ctrlKw<"@while"> value Block
+}
+
+OutputStatement {
+  ctrlKw<"@debug" | "@warn" | "@error" | "@return"> value semi
+}
+
+AtRule { AtKeyword commaSep<query> (semi | Block) }
+
+Block { "{" blockContent "}" | newline indent blockContent dedent }
+
+blockContent { ~item item* (Declaration (nonEofSemi ~item item* Declaration?)*)? }
+
+selector {
+  UniversalSelector { "*" } |
+  TagSelector { ~item TagName { identifier ~item } } |
+  NestingSelector |
+  SuffixedSelector { NestingSelector Suffix { identifier } } |
+  Interpolation ~item |
+  ClassSelector { selector? !attribute "." ClassName { identifier } } |
+  PseudoClassSelector {
+    selector? !attribute (":" | "::") (
+      PseudoClassName { identifier } |
+      pseudoClassWithArg ArgList<value+> |
+      PseudoClassName { callee } ArgList<selector>)
+  } |
+  IdSelector { selector? !attribute "#" IdName { identifier } } |
+  AttributeSelector { selector? !attribute "[" AttributeName { identifier } (MatchOp value)? "]" } |
+  ChildSelector { selector !structure ChildOp selector } |
+  DescendantSelector { selector !structure descendantOp selector } |
+  SiblingSelector { selector !structure SiblingOp selector } |
+  PlaceholderSelector { "%" ClassName { identifier } }
+}
+
+pseudoClassWithArg {
+  @specialize[@name=PseudoClassName]<callee, "lang" | "nth-child" | "nth-last-child" | "nth-of-type" | "nth-last-of-type" | "nth-of-type" | "dir" | "host-context">
+}
+
+NumberLiteral {
+  numberLiteralInner Unit?
+}
+
+callArgList { ArgList<SassVariableName ":" value+ | value+ "..."?> }
+
+ArgList<content> { "(" commaSep<content> ")" }
+
+PropertyName { identifier ~item }
+
+Declaration {
+  (PropertyName | Interpolation ~item | VariableName | SassVariableName)
+  ":" (Block | Map | value (","? value)* (Important | Global | Default)?)
+}
+
+Map {
+  "(" (StringLiteral ":" (value | Map)","?)* ")"
+}
+
+query {
+  KeywordQuery { queryIdentifier } |
+  SassVariableName |
+  Interpolation |
+  FeatureQuery { "(" FeatureName ":" value+ ")" } |
+  BinaryQuery { query !valueOp LogicOp query } |
+  ComparisonQuery {
+    "("
+    (queryValue | FeatureName) !valueCompareOp CompareOp (queryValue | FeatureName)
+    (!valueCompareOp CompareOp (queryValue | FeatureName))?
+    ")"
+  } |
+  UnaryQuery { @specialize[@name=LogicOp]<queryIdentifier, "not" | "only"> query } |
+  ParenthesizedQuery { "(" query ")" } |
+  SelectorQuery { @specialize[@name=selector]<queryIdentifier, "selector"> "(" selector ")" }
+}
+
+FeatureName { queryIdentifier }
+
+value {
+  VariableName |
+  SassVariableName |
+  NestingSelector |
+  Interpolation |
+  ValueName |
+  ParenthesizedValue { "(" value ")" } |
+  ColorLiteral |
+  NumberLiteral |
+  StringLiteral |
+  BinaryExpression { value !valueOp (BinOp | LogicOp) value } |
+  UnaryExpression { @specialize[@name=LogicOp]<identifier, "not"> value } |
+  NamespacedValue { value !namespaceDot "." value } |
+  CallExpression |
+  CallLiteral |
+  LineNames { "[" LineName { identifier }* "]" }
+}
+
+queryValue {
+  VariableName |
+  ColorLiteral |
+  NumberLiteral |
+  StringLiteral |
+  CallExpression |
+  CallLiteral
+}
+
+ValueName { identifier }
+
+CallLiteral {
+  @specialize[@name=CallTag]<callee, "url" | "url-prefix" | "domain" | "regexp">
+  "(" (ParenthesizedContent | StringLiteral)? ")"
+}
+
+CallExpression {
+  Callee { callee } callArgList
+}
+
+commaSep<value> { "" | value ("," value?)* }
+
+ckw<term> { @extend[@name=Keyword]<identifier, term> }
+
+ctrlKw<term> { @specialize[@name=ControlKeyword]<AtKeyword, term> }
+
+Interpolation { InterpolationStart value (InterpolationContinue value)* InterpolationEnd }
+
+semi { ";" | newline | eof }
+
+nonEofSemi { ";" | newline }
+
+@skip {} {
+  blankLine {
+    blankLineStart (whitespace | Comment | LineComment)* newline
+  }
+}
+
+@context trackIndent from "./tokens.js"
+
+@external tokens indentation from "./tokens" { indent, dedent }
+
+@external tokens descendant from "./tokens" {
+  descendantOp
+}
+
+@external tokens interpolationEnd from "./tokens" { InterpolationEnd[openedBy=InterpolationStart], InterpolationContinue }
+
+@external tokens unitToken from "./tokens" {
+  Unit
+}
+
+@external tokens identifiers from "./tokens" {
+  callee,
+  identifier,
+  VariableName,
+  queryIdentifier,
+  InterpolationStart[openedBy=InterpolationEnd]
+}
+
+@external tokens spaces from "./tokens" { newline, blankLineStart, eof, whitespace }
+
+@external tokens comments from "./tokens" { LineComment[isolate], Comment[isolate] }
+
+@external tokens indentedMixins from "./tokens" { IndentedMixin, IndentedInclude }
+
+Star { "*" }
+
+@tokens {
+  NestingSelector { "&" }
+
+  SassVariableName { "$" (@asciiLetter | @digit | "-" | "_")+ }
+
+  AtKeyword { "@" "-"? @asciiLetter (@asciiLetter | @digit | "-")* }
+
+  MatchOp { $[~^|*$]? "=" }
+
+  ChildOp { ">" ">"? }
+
+  CompareOp { $[<>] "="? | "=" }
+
+  SiblingOp { "~" | "+" }
+
+  LogicOp { "and" | "or" }
+
+  BinOp { $[+\-*/<>%] | $[=<>!] "="}
+
+  Important { "!important" }
+  Global { "!global" }
+  Default { "!default" }
+
+  hexDigit { @digit | $[a-fA-F] }
+
+  ParenthesizedContent { !['")] ![)]+ }
+
+  ColorLiteral {
+    "#" hexDigit hexDigit hexDigit (hexDigit (hexDigit hexDigit (hexDigit hexDigit)?)?)?
+  }
+
+  numberLiteralInner { ("+" | "-")? (@digit+ ("." @digit*)? | "." @digit+) (("e" | "E") ("+" | "-")? @digit+)? }
+
+  @precedence { numberLiteralInner, ".", BinOp, SiblingOp }
+
+  StringLiteral[isolate] { "\"" (!["\n\\] | "\\" _)* "\"" | "'" (!['\n\\] | "\\" _)* "'" }
+
+  "#" "#{" "..."
+
+  ":" "::" ";" "," "."
+
+  "(" ")" "[" "]" "{" "}"
+}
+
+@external propSource cssHighlighting from "./highlight"
+
+@detectDelim

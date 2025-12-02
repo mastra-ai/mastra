@@ -1,0 +1,31 @@
+{
+  "name": "webidl-conversions",
+  "version": "4.0.2",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662906030,
+      "integrity": "sha512-xMqr+fdJElxJWqRy5BRB7c4rDcC2vAUznH/qOKknDQrhg2I/9voV0qngaPxTqjPJCXREU1KZrg4wYpUl4/G5Jw==",
+      "mode": 438,
+      "size": 621
+    },
+    "README.md": {
+      "checkedAt": 1764662906032,
+      "integrity": "sha512-6pkCNgWHliMf832LdaAqq3NOrO2DylByiIpCCVNn93UCb+3kbcfmus9iYGaeUGn/uEDhURm4IoVjVQZEOB3znw==",
+      "mode": 438,
+      "size": 8123
+    },
+    "LICENSE.md": {
+      "checkedAt": 1764662906033,
+      "integrity": "sha512-R3XGbBvkxowiKUU8s67JCtBhg3ZSPfpQMhKhAgMkUmG/08vmBta5eHjNS1cULTLa3OZSRK67/go2wogP52rOnA==",
+      "mode": 438,
+      "size": 1323
+    },
+    "lib/index.js": {
+      "checkedAt": 1764662906034,
+      "integrity": "sha512-/38y+udcVYIAcwcT2uCEthuAG98ianbSekZwkUXggnvKndyn1nJ21pnT1e19U0HDFIRude4pugC/oBHb9tLTIQ==",
+      "mode": 438,
+      "size": 9194
+    }
+  }
+}

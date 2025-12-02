@@ -1,0 +1,223 @@
+# Int literals
+
+const (
+  i1 = 42
+  i2 = 4_2
+  i3 = 0600
+  i4 = 0_600
+  i5 = 0o600
+  i6 = 0O600
+  i7 = 0xBadFace
+  i8 = 0xBad_Face
+  i9 = 0x_67_7a_2f_cc_40_c6
+  i10 = 170141183460469231731687303715884105727
+  i11 = 170_141183_460469_231731_687303_715884_105727
+)
+
+==>
+
+SourceFile(ConstDecl(const,SpecList(
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number))))
+
+# Float literals
+
+const (
+  f1 = 0.
+  f2 = 72.40
+  f3 = 072.40
+  f4 = 2.71828
+  f5 = 1.e+0
+  f6 = 6.67428e-11
+  f7 = 1E6
+  f8 = .25
+  f9 = .12345E+5
+  f10 = 1_5.
+  f11 = 0.15e+0_2
+  f12 = 0x1p-2
+  f13 = 0x2.p10
+  f14 = 0x1.Fp+0
+  f15 = 0X.8p-0
+  f16 = 0X_1FFFP-16
+)
+
+==>
+
+SourceFile(ConstDecl(const,SpecList(
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number))))
+
+# Rune literals
+
+const (
+  a = '0'
+  b = '\''
+  c = '\\'
+  c = '\n'
+  c = '\u0000'
+  c = '\U01234567'
+)
+
+==>
+
+SourceFile(ConstDecl(const,SpecList(
+  ConstSpec(DefName,Rune),
+  ConstSpec(DefName,Rune),
+  ConstSpec(DefName,Rune),
+  ConstSpec(DefName,Rune),
+  ConstSpec(DefName,Rune),
+  ConstSpec(DefName,Rune))))
+
+# Imaginary literals
+
+const (
+  a = 0i
+  b = 0123i
+  c = 0o123i
+  d = 0xabci
+  e = 0.i
+  f = 2.71828i
+  g = 1.e+0i
+  h = 6.67428e-11i
+  i = 1E6i
+  j = .25i
+  k = .12345E+5i
+  l = 0x1p-2i
+)
+
+==>
+
+SourceFile(ConstDecl(const,SpecList(
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number),
+  ConstSpec(DefName,Number))))
+
+# String literals
+
+const (
+  a = "0"
+  b = "`\"`"
+  c = "\x0c"
+  d = "errorstring
+  "
+)
+
+==>
+
+SourceFile(ConstDecl(const,SpecList(
+  ConstSpec(DefName,String),
+  ConstSpec(DefName,String),
+  ConstSpec(DefName,String),
+  ConstSpec(DefName,String),
+  ⚠(String))))
+
+# Slice literals
+
+const s1 = []string{}
+
+const s2 = []string{"hi"}
+
+const s3 = []string{
+  "hi",
+  "hello",
+}
+
+==>
+
+SourceFile(
+  ConstDecl(const,ConstSpec(DefName,TypedLiteral(SliceType(TypeName),LiteralValue))),
+  ConstDecl(const,ConstSpec(DefName,TypedLiteral(SliceType(TypeName),LiteralValue(Element(String))))),
+  ConstDecl(const,ConstSpec(DefName,TypedLiteral(SliceType(TypeName),LiteralValue(Element(String),Element(String))))))
+
+# Array literals with implicit length
+
+const a1 = [...]int{1, 2, 3}
+
+==>
+
+SourceFile(ConstDecl(const,ConstSpec(DefName,TypedLiteral(
+  SliceType(TypeName),LiteralValue(Element(Number),Element(Number),Element(Number))))))
+
+# Map literals
+
+const s = map[string]string{
+  "hi": "hello",
+  "bye": "goodbye",
+}
+
+==>
+
+SourceFile(ConstDecl(const,ConstSpec(DefName,TypedLiteral(
+  MapType(map,TypeName,TypeName),
+  LiteralValue(Element(Key(String),String),Element(Key(String),String))))))
+
+# Struct literals
+
+const s1 = Person{
+  name: "Frank",
+  Age: "5 months",
+}
+
+const s2 = struct{i int;}{i: 5}
+
+const s3 = time.Time{}
+
+const g1 = Foo[float64, Bar[int]] { }
+
+==>
+
+SourceFile(
+  ConstDecl(const,ConstSpec(DefName,TypedLiteral(
+    TypeName,
+    LiteralValue(Element(Key(VariableName),String),Element(Key(VariableName),String))))),
+  ConstDecl(const,ConstSpec(DefName,TypedLiteral(
+    StructType(struct,StructBody(FieldDecl(FieldName,TypeName))),
+    LiteralValue(Element(Key(VariableName),Number))))),
+  ConstDecl(const,ConstSpec(DefName,TypedLiteral(QualifiedType(VariableName,TypeName),LiteralValue))),
+  ConstDecl(const,ConstSpec(DefName,TypedLiteral(
+    ParameterizedType(TypeName,TypeArgs(TypeName,ParameterizedType(TypeName,TypeArgs(TypeName)))),
+    LiteralValue))))
+
+# Function literals
+
+const s1 = func(s string) (int, int) {
+  return 1, 2
+}
+
+==>
+
+SourceFile(ConstDecl(const,ConstSpec(DefName,FunctionLiteral(
+  func,Parameters(Parameter(DefName,TypeName)),Parameters(Parameter(TypeName),Parameter(TypeName)),
+  Block(ReturnStatement(return,Number,Number))))))

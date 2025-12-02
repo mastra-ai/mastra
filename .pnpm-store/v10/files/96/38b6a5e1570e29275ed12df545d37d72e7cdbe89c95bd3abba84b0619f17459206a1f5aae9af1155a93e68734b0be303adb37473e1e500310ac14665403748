@@ -1,0 +1,96 @@
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/user-message.tsx
+var user_message_exports = {};
+__export(user_message_exports, {
+  default: () => user_message_default
+});
+module.exports = __toCommonJS(user_message_exports);
+var import_react = require("react");
+var import_react2 = require("@assistant-ui/react");
+var import_branch_picker = __toESM(require("./branch-picker.js"));
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_user_action_bar = __toESM(require("./user-action-bar.js"));
+var import_content_part = __toESM(require("./content-part.js"));
+var import_attachment_ui = __toESM(require("./attachment-ui.js"));
+var import_jsx_runtime = require("react/jsx-runtime");
+var UserMessage = () => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(UserMessageRoot, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UserMessageAttachments, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_react2.MessagePrimitive.If, { hasContent: true, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_user_action_bar.default, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UserMessageContent, {})
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_branch_picker.default, {})
+  ] });
+};
+UserMessage.displayName = "UserMessage";
+var UserMessageRoot = (0, import_withDefaults.withDefaults)(import_react2.MessagePrimitive.Root, {
+  className: "aui-user-message-root"
+});
+UserMessageRoot.displayName = "UserMessageRoot";
+var UserMessageContentWrapper = (0, import_withDefaults.withDefaults)("div", {
+  className: "aui-user-message-content"
+});
+var UserMessageContent = (0, import_react.forwardRef)(({ components, ...props }, ref) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UserMessageContentWrapper, { ...props, ref, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    import_react2.MessagePrimitive.Content,
+    {
+      components: {
+        ...components,
+        Text: components?.Text ?? import_content_part.default.Text
+      }
+    }
+  ) });
+});
+UserMessageContent.displayName = "UserMessageContent";
+var UserMessageAttachmentsContainer = (0, import_withDefaults.withDefaults)("div", {
+  className: "aui-user-message-attachments"
+});
+var UserMessageAttachments = ({
+  components
+}) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.MessagePrimitive.If, { hasAttachments: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UserMessageAttachmentsContainer, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    import_react2.MessagePrimitive.Attachments,
+    {
+      components: {
+        ...components,
+        Attachment: components?.Attachment ?? import_attachment_ui.default
+      }
+    }
+  ) }) });
+};
+var exports2 = {
+  Root: UserMessageRoot,
+  Content: UserMessageContent,
+  Attachments: UserMessageAttachments
+};
+var user_message_default = Object.assign(UserMessage, exports2);
+//# sourceMappingURL=user-message.js.map

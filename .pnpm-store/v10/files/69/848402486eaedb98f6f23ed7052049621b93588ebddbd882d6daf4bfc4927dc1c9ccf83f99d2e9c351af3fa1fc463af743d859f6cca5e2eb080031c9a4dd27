@@ -1,0 +1,83 @@
+export { BaseFilterTranslator } from '../chunk-BWYU7D33.js';
+export { embed as embedV1 } from '../chunk-QM5SRDJX.js';
+import { MastraError } from '../chunk-JJ5O45LH.js';
+import { MastraBase } from '../chunk-S6URFGCZ.js';
+export { embed as embedV2 } from 'ai-v5';
+
+// src/vector/vector.ts
+var MastraVector = class extends MastraBase {
+  id;
+  constructor({ id }) {
+    if (!id || typeof id !== "string" || id.trim() === "") {
+      throw new MastraError({
+        id: "VECTOR_INVALID_ID",
+        text: "Vector id must be provided and cannot be empty",
+        domain: "MASTRA_VECTOR" /* MASTRA_VECTOR */,
+        category: "USER" /* USER */
+      });
+    }
+    super({ name: "MastraVector", component: "VECTOR" });
+    this.id = id;
+  }
+  get indexSeparator() {
+    return "_";
+  }
+  async validateExistingIndex(indexName, dimension, metric) {
+    let info;
+    try {
+      info = await this.describeIndex({ indexName });
+    } catch (infoError) {
+      const mastraError = new MastraError(
+        {
+          id: "VECTOR_VALIDATE_INDEX_FETCH_FAILED",
+          text: `Index "${indexName}" already exists, but failed to fetch index info for dimension check.`,
+          domain: "MASTRA_VECTOR" /* MASTRA_VECTOR */,
+          category: "SYSTEM" /* SYSTEM */,
+          details: { indexName }
+        },
+        infoError
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      throw mastraError;
+    }
+    const existingDim = info?.dimension;
+    const existingMetric = info?.metric;
+    if (existingDim === dimension) {
+      this.logger?.info(
+        `Index "${indexName}" already exists with ${existingDim} dimensions and metric ${existingMetric}, skipping creation.`
+      );
+      if (existingMetric !== metric) {
+        this.logger?.warn(
+          `Attempted to create index with metric "${metric}", but index already exists with metric "${existingMetric}". To use a different metric, delete and recreate the index.`
+        );
+      }
+    } else if (info) {
+      const mastraError = new MastraError({
+        id: "VECTOR_VALIDATE_INDEX_DIMENSION_MISMATCH",
+        text: `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
+        domain: "MASTRA_VECTOR" /* MASTRA_VECTOR */,
+        category: "USER" /* USER */,
+        details: { indexName, existingDim, requestedDim: dimension }
+      });
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      throw mastraError;
+    } else {
+      const mastraError = new MastraError({
+        id: "VECTOR_VALIDATE_INDEX_NO_DIMENSION",
+        text: `Index "${indexName}" already exists, but could not retrieve its dimensions for validation.`,
+        domain: "MASTRA_VECTOR" /* MASTRA_VECTOR */,
+        category: "SYSTEM" /* SYSTEM */,
+        details: { indexName }
+      });
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      throw mastraError;
+    }
+  }
+};
+
+export { MastraVector };
+//# sourceMappingURL=index.js.map
+//# sourceMappingURL=index.js.map

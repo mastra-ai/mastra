@@ -1,0 +1,21 @@
+{
+  "name": "@changesets/get-version-range-type",
+  "version": "0.4.0",
+  "description": "Common get-version-range-type shared between changeset packages",
+  "main": "dist/changesets-get-version-range-type.cjs.js",
+  "module": "dist/changesets-get-version-range-type.esm.js",
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/changesets-get-version-range-type.cjs.mjs",
+        "default": "./dist/changesets-get-version-range-type.cjs.js"
+      },
+      "module": "./dist/changesets-get-version-range-type.esm.js",
+      "import": "./dist/changesets-get-version-range-type.cjs.mjs",
+      "default": "./dist/changesets-get-version-range-type.cjs.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/changesets/changesets/tree/main/packages/get-version-range-type"
+}

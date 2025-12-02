@@ -1,0 +1,667 @@
+import { createStep, createWorkflow, Agent, tryGenerateWithJsonFallback, Workflow } from './chunk-XBO6W7LZ.js';
+import { resolveModelConfig } from './chunk-D7CJ4HIQ.js';
+import { MastraError } from './chunk-JJ5O45LH.js';
+import { randomUUID } from 'crypto';
+import { z } from 'zod';
+
+var MastraScorer = class _MastraScorer {
+  constructor(config, steps = [], originalPromptObjects = /* @__PURE__ */ new Map()) {
+    this.config = config;
+    this.steps = steps;
+    this.originalPromptObjects = originalPromptObjects;
+    if (!this.config.id) {
+      throw new MastraError({
+        id: "MASTR_SCORER_FAILED_TO_CREATE_MISSING_ID",
+        domain: "SCORER" /* SCORER */,
+        category: "USER" /* USER */,
+        text: `Scorers must have an ID field. Please provide an ID in the scorer config.`
+      });
+    }
+  }
+  get type() {
+    return this.config.type;
+  }
+  get id() {
+    return this.config.id;
+  }
+  get name() {
+    return this.config.name ?? this.config.id;
+  }
+  get description() {
+    return this.config.description;
+  }
+  get judge() {
+    return this.config.judge;
+  }
+  preprocess(stepDef) {
+    const isPromptObj = this.isPromptObject(stepDef);
+    if (isPromptObj) {
+      const promptObj = stepDef;
+      this.originalPromptObjects.set("preprocess", promptObj);
+    }
+    return new _MastraScorer(
+      this.config,
+      [
+        ...this.steps,
+        {
+          name: "preprocess",
+          definition: stepDef,
+          isPromptObject: isPromptObj
+        }
+      ],
+      new Map(this.originalPromptObjects)
+    );
+  }
+  analyze(stepDef) {
+    const isPromptObj = this.isPromptObject(stepDef);
+    if (isPromptObj) {
+      const promptObj = stepDef;
+      this.originalPromptObjects.set("analyze", promptObj);
+    }
+    return new _MastraScorer(
+      this.config,
+      [
+        ...this.steps,
+        {
+          name: "analyze",
+          definition: isPromptObj ? void 0 : stepDef,
+          isPromptObject: isPromptObj
+        }
+      ],
+      new Map(this.originalPromptObjects)
+    );
+  }
+  generateScore(stepDef) {
+    const isPromptObj = this.isPromptObject(stepDef);
+    if (isPromptObj) {
+      const promptObj = stepDef;
+      this.originalPromptObjects.set("generateScore", promptObj);
+    }
+    return new _MastraScorer(
+      this.config,
+      [
+        ...this.steps,
+        {
+          name: "generateScore",
+          definition: isPromptObj ? void 0 : stepDef,
+          isPromptObject: isPromptObj
+        }
+      ],
+      new Map(this.originalPromptObjects)
+    );
+  }
+  generateReason(stepDef) {
+    const isPromptObj = this.isPromptObject(stepDef);
+    if (isPromptObj) {
+      const promptObj = stepDef;
+      this.originalPromptObjects.set("generateReason", promptObj);
+    }
+    return new _MastraScorer(
+      this.config,
+      [
+        ...this.steps,
+        {
+          name: "generateReason",
+          definition: isPromptObj ? void 0 : stepDef,
+          isPromptObject: isPromptObj
+        }
+      ],
+      new Map(this.originalPromptObjects)
+    );
+  }
+  get hasGenerateScore() {
+    return this.steps.some((step) => step.name === "generateScore");
+  }
+  async run(input) {
+    if (!this.hasGenerateScore) {
+      throw new MastraError({
+        id: "MASTR_SCORER_FAILED_TO_RUN_MISSING_GENERATE_SCORE",
+        domain: "SCORER" /* SCORER */,
+        category: "USER" /* USER */,
+        text: `Cannot execute pipeline without generateScore() step`,
+        details: {
+          scorerId: this.config.id ?? this.config.name,
+          steps: this.steps.map((s) => s.name).join(", ")
+        }
+      });
+    }
+    const { tracingContext } = input;
+    let runId = input.runId;
+    if (!runId) {
+      runId = randomUUID();
+    }
+    const run = { ...input, runId };
+    const workflow = this.toMastraWorkflow();
+    const workflowRun = await workflow.createRun();
+    const workflowResult = await workflowRun.start({
+      inputData: {
+        run
+      },
+      tracingContext
+    });
+    if (workflowResult.status === "failed") {
+      throw new MastraError({
+        id: "MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED",
+        domain: "SCORER" /* SCORER */,
+        category: "USER" /* USER */,
+        text: `Scorer Run Failed: ${workflowResult.error}`,
+        details: {
+          scorerId: this.config.id ?? this.config.name,
+          steps: this.steps.map((s) => s.name).join(", ")
+        }
+      });
+    }
+    return this.transformToScorerResult({ workflowResult, originalInput: run });
+  }
+  isPromptObject(stepDef) {
+    if (typeof stepDef === "object" && "description" in stepDef && "createPrompt" in stepDef && !("outputSchema" in stepDef)) {
+      return true;
+    }
+    const isOtherPromptObject = typeof stepDef === "object" && "description" in stepDef && "outputSchema" in stepDef && "createPrompt" in stepDef;
+    return isOtherPromptObject;
+  }
+  getSteps() {
+    return this.steps.map((step) => ({
+      name: step.name,
+      type: step.isPromptObject ? "prompt" : "function",
+      description: step.definition.description
+    }));
+  }
+  toMastraWorkflow() {
+    const workflowSteps = this.steps.map((scorerStep) => {
+      return createStep({
+        id: scorerStep.name,
+        description: `Scorer step: ${scorerStep.name}`,
+        inputSchema: z.any(),
+        outputSchema: z.any(),
+        execute: async ({ inputData, getInitData, tracingContext }) => {
+          const { accumulatedResults = {}, generatedPrompts = {} } = inputData;
+          const { run } = getInitData();
+          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
+          let stepResult;
+          let newGeneratedPrompts = generatedPrompts;
+          if (scorerStep.isPromptObject) {
+            const { result, prompt } = await this.executePromptStep(scorerStep, tracingContext, context);
+            stepResult = result;
+            newGeneratedPrompts = {
+              ...generatedPrompts,
+              [`${scorerStep.name}Prompt`]: prompt
+            };
+          } else {
+            stepResult = await this.executeFunctionStep(scorerStep, context);
+          }
+          const newAccumulatedResults = {
+            ...accumulatedResults,
+            [`${scorerStep.name}StepResult`]: stepResult
+          };
+          return {
+            stepResult,
+            accumulatedResults: newAccumulatedResults,
+            generatedPrompts: newGeneratedPrompts
+          };
+        }
+      });
+    });
+    const workflow = createWorkflow({
+      id: `scorer-${this.config.id ?? this.config.name}`,
+      description: this.config.description,
+      inputSchema: z.object({
+        run: z.any()
+        // ScorerRun
+      }),
+      outputSchema: z.object({
+        run: z.any(),
+        score: z.number(),
+        reason: z.string().optional(),
+        preprocessResult: z.any().optional(),
+        analyzeResult: z.any().optional(),
+        preprocessPrompt: z.string().optional(),
+        analyzePrompt: z.string().optional(),
+        generateScorePrompt: z.string().optional(),
+        generateReasonPrompt: z.string().optional()
+      }),
+      options: {
+        // mark all spans generated as part of the scorer workflow internal
+        tracingPolicy: {
+          internal: 15 /* ALL */
+        },
+        validateInputs: false
+      }
+    });
+    let chainedWorkflow = workflow;
+    for (const step of workflowSteps) {
+      chainedWorkflow = chainedWorkflow.then(step);
+    }
+    return chainedWorkflow.commit();
+  }
+  createScorerContext(stepName, run, accumulatedResults) {
+    if (stepName === "generateReason") {
+      const score = accumulatedResults.generateScoreStepResult;
+      return { run, results: accumulatedResults, score };
+    }
+    return { run, results: accumulatedResults };
+  }
+  async executeFunctionStep(scorerStep, context) {
+    return await scorerStep.definition(context);
+  }
+  async executePromptStep(scorerStep, tracingContext, context) {
+    const originalStep = this.originalPromptObjects.get(scorerStep.name);
+    if (!originalStep) {
+      throw new Error(`Step "${scorerStep.name}" is not a prompt object`);
+    }
+    const prompt = await originalStep.createPrompt(context);
+    const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
+    const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
+    if (!modelConfig || !instructions) {
+      throw new MastraError({
+        id: "MASTR_SCORER_FAILED_TO_RUN_MISSING_MODEL_OR_INSTRUCTIONS",
+        domain: "SCORER" /* SCORER */,
+        category: "USER" /* USER */,
+        text: `Step "${scorerStep.name}" requires a model and instructions`,
+        details: {
+          scorerId: this.config.id ?? this.config.name,
+          step: scorerStep.name
+        }
+      });
+    }
+    const resolvedModel = await resolveModelConfig(modelConfig);
+    const judge = new Agent({
+      id: "judge",
+      name: "judge",
+      model: resolvedModel,
+      instructions,
+      options: { tracingPolicy: { internal: 15 /* ALL */ } }
+    });
+    if (scorerStep.name === "generateScore") {
+      const schema = z.object({ score: z.number() });
+      let result;
+      if (resolvedModel.specificationVersion === "v2") {
+        result = await tryGenerateWithJsonFallback(judge, prompt, {
+          structuredOutput: {
+            schema
+          },
+          tracingContext
+        });
+      } else {
+        result = await judge.generateLegacy(prompt, {
+          output: schema,
+          tracingContext
+        });
+      }
+      return { result: result.object.score, prompt };
+    } else if (scorerStep.name === "generateReason") {
+      let result;
+      if (resolvedModel.specificationVersion === "v2") {
+        result = await judge.generate(prompt, { tracingContext });
+      } else {
+        result = await judge.generateLegacy(prompt, { tracingContext });
+      }
+      return { result: result.text, prompt };
+    } else {
+      const promptStep = originalStep;
+      let result;
+      if (resolvedModel.specificationVersion === "v2") {
+        result = await tryGenerateWithJsonFallback(judge, prompt, {
+          structuredOutput: {
+            schema: promptStep.outputSchema
+          },
+          tracingContext
+        });
+      } else {
+        result = await judge.generateLegacy(prompt, {
+          output: promptStep.outputSchema,
+          tracingContext
+        });
+      }
+      return { result: result.object, prompt };
+    }
+  }
+  transformToScorerResult({
+    workflowResult,
+    originalInput
+  }) {
+    const finalStepResult = workflowResult.result;
+    const accumulatedResults = finalStepResult?.accumulatedResults || {};
+    const generatedPrompts = finalStepResult?.generatedPrompts || {};
+    return {
+      ...originalInput,
+      score: accumulatedResults.generateScoreStepResult,
+      generateScorePrompt: generatedPrompts.generateScorePrompt,
+      reason: accumulatedResults.generateReasonStepResult,
+      generateReasonPrompt: generatedPrompts.generateReasonPrompt,
+      preprocessStepResult: accumulatedResults.preprocessStepResult,
+      preprocessPrompt: generatedPrompts.preprocessPrompt,
+      analyzeStepResult: accumulatedResults.analyzeStepResult,
+      analyzePrompt: generatedPrompts.analyzePrompt
+    };
+  }
+};
+function createScorer(config) {
+  return new MastraScorer({
+    id: config.id,
+    name: config.name ?? config.id,
+    description: config.description,
+    judge: config.judge,
+    type: config.type
+  });
+}
+
+// src/evals/run/scorerAccumulator.ts
+var ScoreAccumulator = class {
+  flatScores = {};
+  workflowScores = {};
+  stepScores = {};
+  addScores(scorerResults) {
+    const isTargetWorkflowAndHasStepScores = "steps" in scorerResults;
+    if (isTargetWorkflowAndHasStepScores) {
+      this.addNestedScores(scorerResults);
+    } else {
+      this.addFlatScores(scorerResults);
+    }
+  }
+  addFlatScores(scorerResults) {
+    for (const [scorerName, result] of Object.entries(scorerResults)) {
+      if (!this.flatScores[scorerName]) {
+        this.flatScores[scorerName] = [];
+      }
+      this.flatScores[scorerName].push(result.score);
+    }
+  }
+  addNestedScores(scorerResults) {
+    if ("workflow" in scorerResults && scorerResults.workflow) {
+      for (const [scorerName, result] of Object.entries(scorerResults.workflow)) {
+        if (!this.workflowScores[scorerName]) {
+          this.workflowScores[scorerName] = [];
+        }
+        this.workflowScores[scorerName].push(result.score);
+      }
+    }
+    if ("steps" in scorerResults && scorerResults.steps) {
+      for (const [stepId, stepResults] of Object.entries(scorerResults.steps)) {
+        if (!this.stepScores[stepId]) {
+          this.stepScores[stepId] = {};
+        }
+        for (const [scorerName, result] of Object.entries(stepResults)) {
+          if (!this.stepScores[stepId][scorerName]) {
+            this.stepScores[stepId][scorerName] = [];
+          }
+          this.stepScores[stepId][scorerName].push(result.score);
+        }
+      }
+    }
+  }
+  addStepScores(stepScorerResults) {
+    for (const [stepId, stepResults] of Object.entries(stepScorerResults)) {
+      if (!this.stepScores[stepId]) {
+        this.stepScores[stepId] = {};
+      }
+      for (const [scorerName, result] of Object.entries(stepResults)) {
+        if (!this.stepScores[stepId][scorerName]) {
+          this.stepScores[stepId][scorerName] = [];
+        }
+        this.stepScores[stepId][scorerName].push(result.score);
+      }
+    }
+  }
+  getAverageScores() {
+    const result = {};
+    for (const [scorerName, scoreArray] of Object.entries(this.flatScores)) {
+      result[scorerName] = this.getAverageScore(scoreArray);
+    }
+    if (Object.keys(this.workflowScores).length > 0) {
+      result.workflow = {};
+      for (const [scorerName, scoreArray] of Object.entries(this.workflowScores)) {
+        result.workflow[scorerName] = this.getAverageScore(scoreArray);
+      }
+    }
+    if (Object.keys(this.stepScores).length > 0) {
+      result.steps = {};
+      for (const [stepId, stepScorers] of Object.entries(this.stepScores)) {
+        result.steps[stepId] = {};
+        for (const [scorerName, scoreArray] of Object.entries(stepScorers)) {
+          result.steps[stepId][scorerName] = this.getAverageScore(scoreArray);
+        }
+      }
+    }
+    return result;
+  }
+  getAverageScore(scoreArray) {
+    if (scoreArray.length > 0) {
+      return scoreArray.reduce((a, b) => a + b, 0) / scoreArray.length;
+    } else {
+      return 0;
+    }
+  }
+};
+
+// src/evals/run/index.ts
+async function runEvals(config) {
+  const { data, scorers, target, onItemComplete, concurrency = 1 } = config;
+  validateEvalsInputs(data, scorers, target);
+  let totalItems = 0;
+  const scoreAccumulator = new ScoreAccumulator();
+  const pMap = (await import('p-map')).default;
+  await pMap(
+    data,
+    async (item) => {
+      const targetResult = await executeTarget(target, item);
+      const scorerResults = await runScorers(scorers, targetResult, item);
+      scoreAccumulator.addScores(scorerResults);
+      if (onItemComplete) {
+        await onItemComplete({
+          item,
+          targetResult,
+          scorerResults
+        });
+      }
+      totalItems++;
+    },
+    { concurrency }
+  );
+  return {
+    scores: scoreAccumulator.getAverageScores(),
+    summary: {
+      totalItems
+    }
+  };
+}
+function isWorkflow(target) {
+  return target instanceof Workflow;
+}
+function isWorkflowScorerConfig(scorers) {
+  return typeof scorers === "object" && !Array.isArray(scorers) && ("workflow" in scorers || "steps" in scorers);
+}
+function validateEvalsInputs(data, scorers, target) {
+  if (data.length === 0) {
+    throw new MastraError({
+      domain: "SCORER",
+      id: "RUN_EXPERIMENT_FAILED_NO_DATA_PROVIDED",
+      category: "USER",
+      text: "Failed to run experiment: Data array is empty"
+    });
+  }
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i];
+    if (!item || typeof item !== "object" || !("input" in item)) {
+      throw new MastraError({
+        domain: "SCORER",
+        id: "INVALID_DATA_ITEM",
+        category: "USER",
+        text: `Invalid data item at index ${i}: must have 'input' properties`
+      });
+    }
+  }
+  if (Array.isArray(scorers)) {
+    if (scorers.length === 0) {
+      throw new MastraError({
+        domain: "SCORER",
+        id: "NO_SCORERS_PROVIDED",
+        category: "USER",
+        text: "At least one scorer must be provided"
+      });
+    }
+  } else if (isWorkflow(target) && isWorkflowScorerConfig(scorers)) {
+    const hasScorers = scorers.workflow && scorers.workflow.length > 0 || scorers.steps && Object.keys(scorers.steps).length > 0;
+    if (!hasScorers) {
+      throw new MastraError({
+        domain: "SCORER",
+        id: "NO_SCORERS_PROVIDED",
+        category: "USER",
+        text: "At least one workflow or step scorer must be provided"
+      });
+    }
+  } else if (!isWorkflow(target) && !Array.isArray(scorers)) {
+    throw new MastraError({
+      domain: "SCORER",
+      id: "INVALID_AGENT_SCORERS",
+      category: "USER",
+      text: "Agent scorers must be an array of scorers"
+    });
+  }
+}
+async function executeTarget(target, item) {
+  try {
+    if (isWorkflow(target)) {
+      return await executeWorkflow(target, item);
+    } else {
+      return await executeAgent(target, item);
+    }
+  } catch (error) {
+    throw new MastraError(
+      {
+        domain: "SCORER",
+        id: "RUN_EXPERIMENT_TARGET_FAILED_TO_GENERATE_RESULT",
+        category: "USER",
+        text: "Failed to run experiment: Error generating result from target",
+        details: {
+          item: JSON.stringify(item)
+        }
+      },
+      error
+    );
+  }
+}
+async function executeWorkflow(target, item) {
+  const run = await target.createRun({ disableScorers: true });
+  const workflowResult = await run.start({
+    inputData: item.input,
+    requestContext: item.requestContext
+  });
+  return {
+    scoringData: {
+      input: item.input,
+      output: workflowResult.status === "success" ? workflowResult.result : void 0,
+      stepResults: workflowResult.steps
+    }
+  };
+}
+async function executeAgent(agent, item) {
+  const model = await agent.getModel();
+  if (model.specificationVersion === "v2") {
+    return await agent.generate(item.input, {
+      scorers: {},
+      returnScorerData: true,
+      requestContext: item.requestContext
+    });
+  } else {
+    return await agent.generateLegacy(item.input, {
+      scorers: {},
+      returnScorerData: true,
+      requestContext: item.requestContext
+    });
+  }
+}
+async function runScorers(scorers, targetResult, item) {
+  const scorerResults = {};
+  if (Array.isArray(scorers)) {
+    for (const scorer of scorers) {
+      try {
+        const score = await scorer.run({
+          input: targetResult.scoringData?.input,
+          output: targetResult.scoringData?.output,
+          groundTruth: item.groundTruth,
+          requestContext: item.requestContext,
+          tracingContext: item.tracingContext
+        });
+        scorerResults[scorer.id] = score;
+      } catch (error) {
+        throw new MastraError(
+          {
+            domain: "SCORER",
+            id: "RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_RESULT",
+            category: "USER",
+            text: `Failed to run experiment: Error running scorer ${scorer.id}`,
+            details: {
+              scorerId: scorer.id,
+              item: JSON.stringify(item)
+            }
+          },
+          error
+        );
+      }
+    }
+  } else {
+    if (scorers.workflow) {
+      const workflowScorerResults = {};
+      for (const scorer of scorers.workflow) {
+        const score = await scorer.run({
+          input: targetResult.scoringData.input,
+          output: targetResult.scoringData.output,
+          groundTruth: item.groundTruth,
+          requestContext: item.requestContext,
+          tracingContext: item.tracingContext
+        });
+        workflowScorerResults[scorer.id] = score;
+      }
+      if (Object.keys(workflowScorerResults).length > 0) {
+        scorerResults.workflow = workflowScorerResults;
+      }
+    }
+    if (scorers.steps) {
+      const stepScorerResults = {};
+      for (const [stepId, stepScorers] of Object.entries(scorers.steps)) {
+        const stepResult = targetResult.scoringData.stepResults?.[stepId];
+        if (stepResult?.status === "success" && stepResult.payload && stepResult.output) {
+          const stepResults = {};
+          for (const scorer of stepScorers) {
+            try {
+              const score = await scorer.run({
+                input: stepResult.payload,
+                output: stepResult.output,
+                groundTruth: item.groundTruth,
+                requestContext: item.requestContext,
+                tracingContext: item.tracingContext
+              });
+              stepResults[scorer.id] = score;
+            } catch (error) {
+              throw new MastraError(
+                {
+                  domain: "SCORER",
+                  id: "RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_STEP_RESULT",
+                  category: "USER",
+                  text: `Failed to run experiment: Error running scorer ${scorer.id} on step ${stepId}`,
+                  details: {
+                    scorerId: scorer.id,
+                    stepId
+                  }
+                },
+                error
+              );
+            }
+          }
+          if (Object.keys(stepResults).length > 0) {
+            stepScorerResults[stepId] = stepResults;
+          }
+        }
+      }
+      if (Object.keys(stepScorerResults).length > 0) {
+        scorerResults.steps = stepScorerResults;
+      }
+    }
+  }
+  return scorerResults;
+}
+
+export { MastraScorer, createScorer, runEvals };
+//# sourceMappingURL=chunk-KJIQGPQR.js.map
+//# sourceMappingURL=chunk-KJIQGPQR.js.map

@@ -1,0 +1,43 @@
+{
+  "name": "fsevents",
+  "version": "2.3.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662911144,
+      "integrity": "sha512-pVvrJ/gVmBWVfRByvf2pjt6vKOJskMObIC23y+82Q5729WY5ft+raK+uiCNp07hh8C1NdUj49CT+fPidTXoA0g==",
+      "mode": 420,
+      "size": 1133
+    },
+    "fsevents.js": {
+      "checkedAt": 1764662911148,
+      "integrity": "sha512-UeqnPZvsZldKKopOfWSPGkdg1hQiDFd4CHPl4+l+j2hCYp15g5VUUhmT1+n2j5tNmj2OepctCKZ/jCuFC2BoEA==",
+      "mode": 420,
+      "size": 2424
+    },
+    "package.json": {
+      "checkedAt": 1764662911149,
+      "integrity": "sha512-oghMJVpqufhR7gbOCmp3Y7XYLFBxD8xkm4GcLAejp1PHa8bMLbcB+TEzzs3xHvIGa9uI7yfq8FSZ0HAjgn2MvQ==",
+      "mode": 420,
+      "size": 1348
+    },
+    "README.md": {
+      "checkedAt": 1764662911149,
+      "integrity": "sha512-61nESMARIeGxV7WwkSzE7GAizZFIb6PFfseYIk+Cqb6q69HNkcaEfIjmh7m9lXYiW+EyQK125YYySi11+H2IdA==",
+      "mode": 420,
+      "size": 2958
+    },
+    "fsevents.node": {
+      "checkedAt": 1764662911156,
+      "integrity": "sha512-PjAh6LNEzsRt4f4FtwoGyteSZPcabzUtZ8YaAWD5tCZHndEvbailolsy34qL6q5333E9NxmNuLTXyNk/ycX/ng==",
+      "mode": 493,
+      "size": 147128
+    },
+    "fsevents.d.ts": {
+      "checkedAt": 1764662911157,
+      "integrity": "sha512-x5NO2/1DrKAOTnHyqdBOAk4q94uPB47ES3EBsVRe/FZU66gMZpmKqNtKapT7AjuDFl0XAcCS0D1wMUe45ZSxJQ==",
+      "mode": 420,
+      "size": 1431
+    }
+  }
+}

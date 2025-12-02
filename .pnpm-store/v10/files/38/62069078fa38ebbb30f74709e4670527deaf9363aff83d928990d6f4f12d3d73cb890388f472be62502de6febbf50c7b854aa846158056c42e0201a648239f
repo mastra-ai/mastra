@@ -1,0 +1,5 @@
+{
+  "main": "../dist/cjs/react-clerk/index.js",
+  "module": "../dist/esm/react-clerk/index.js",
+  "types": "../dist/cjs-types/react-clerk/index.d.ts"
+}

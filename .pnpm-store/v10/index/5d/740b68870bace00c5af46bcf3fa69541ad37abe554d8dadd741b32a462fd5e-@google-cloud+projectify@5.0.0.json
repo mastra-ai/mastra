@@ -1,0 +1,43 @@
+{
+  "name": "@google-cloud/projectify",
+  "version": "5.0.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662922552,
+      "integrity": "sha512-mPa3m3ePewoVQVvXUMOooJfWUFEctOyBFRiOEVxHBT/nAPV4iVwJcFHJvD37YZfCsToV3iAyc+GjIYiE+G6Q6A==",
+      "mode": 436,
+      "size": 11358
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662922554,
+      "integrity": "sha512-kTYyWAS20ZUR+/7pBpiv6w8cupM1du6VMT18KpUi6REWHnBvYIQ8sO95tJp8CuX8395FPQggANx6UgJVyT5XOA==",
+      "mode": 420,
+      "size": 2498
+    },
+    "package.json": {
+      "checkedAt": 1764662922554,
+      "integrity": "sha512-nbRSyloPjL4VfYRJyF6C2IOrqwBbbofkK/FKuUqjwRL9cvWa14Evqd/E/OLC76jN4+/onAkG3fKca0OEsY5pvw==",
+      "mode": 436,
+      "size": 1331
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662922556,
+      "integrity": "sha512-MHsNbeCZYLOxK3W4fi/DXfQt5J0IQcuADB+pQkWsqUJDFv5pzV7Zty2oTavz9R2LRLkFxKuhFk+WSzP4fgwIfg==",
+      "mode": 436,
+      "size": 11496
+    },
+    "README.md": {
+      "checkedAt": 1764662922557,
+      "integrity": "sha512-fWk7dwOvknmCVcQoIBBscIHf/xjK0Zi+gc4LR18lPesbmFsI+7jvqJInjD+QW/xF9F8H6MvOZavUBW8vIsPFdw==",
+      "mode": 436,
+      "size": 5177
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662922557,
+      "integrity": "sha512-5j6VettHgpgx5oKlKWone1xy7oCn0qpmH0CXb2hesl01CEKi8WA0dopFuXaZFopvpbSD/qlGUib8cnGF9DM4UQ==",
+      "mode": 420,
+      "size": 587
+    }
+  }
+}

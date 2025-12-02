@@ -1,0 +1,316 @@
+.root {
+  --rdp-cell-size: 40px; /* Size of the day cells. */
+  --rdp-caption-font-size: 18px; /* Font size for the caption labels. */
+  --rdp-accent-color: #0000ff; /* Accent color for the background of selected days. */
+  --rdp-background-color: #e7edff; /* Background color for the hovered/focused elements. */
+  --rdp-accent-color-dark: #3003e1; /* Accent color for the background of selected days (to use in dark-mode). */
+  --rdp-background-color-dark: #180270; /* Background color for the hovered/focused elements (to use in dark-mode). */
+  --rdp-outline: 2px solid var(--rdp-accent-color); /* Outline border for focused elements */
+  --rdp-outline-selected: 3px solid var(--rdp-accent-color); /* Outline border for focused _and_ selected elements */
+  --rdp-selected-color: #fff; /* Color of selected day text */
+
+  margin: 1em;
+}
+
+/* Hide elements for devices that are not screen readers */
+.vhidden {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  -moz-appearance: none;
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute !important;
+  top: 0;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(1px, 1px, 1px, 1px) !important;
+  border: 0 !important;
+}
+
+/* Buttons */
+.button_reset {
+  appearance: none;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  cursor: default;
+  color: inherit;
+  background: none;
+  font: inherit;
+
+  -moz-appearance: none;
+  -webkit-appearance: none;
+}
+
+.button_reset:focus-visible {
+  /* Make sure to reset outline only when :focus-visible is supported */
+  outline: none;
+}
+
+.button {
+  border: 2px solid transparent;
+}
+
+.button[disabled]:not(.day_selected) {
+  opacity: 0.25;
+}
+
+.button:not([disabled]) {
+  cursor: pointer;
+}
+
+.button:focus-visible:not([disabled]) {
+  color: inherit;
+  background-color: var(--rdp-background-color);
+  border: var(--rdp-outline);
+}
+
+.button:hover:not([disabled]):not(.day_selected) {
+  background-color: var(--rdp-background-color);
+}
+
+.months {
+  display: flex;
+}
+
+.month {
+  margin: 0 1em;
+}
+
+.month:first-child {
+  margin-left: 0;
+}
+
+.month:last-child {
+  margin-right: 0;
+}
+
+.table {
+  margin: 0;
+  max-width: calc(var(--rdp-cell-size) * 7);
+  border-collapse: collapse;
+}
+
+.with_weeknumber .table {
+  max-width: calc(var(--rdp-cell-size) * 8);
+  border-collapse: collapse;
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  text-align: left;
+}
+
+.multiple_months .caption {
+  position: relative;
+  display: block;
+  text-align: center;
+}
+
+.caption_dropdowns {
+  position: relative;
+  display: inline-flex;
+}
+
+.caption_label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 0.25em;
+  white-space: nowrap;
+  color: currentColor;
+  border: 0;
+  border: 2px solid transparent;
+  font-family: inherit;
+  font-size: var(--rdp-caption-font-size);
+  font-weight: bold;
+}
+
+.nav {
+  white-space: nowrap;
+}
+
+.multiple_months .caption_start .nav {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+.multiple_months .caption_end .nav {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.nav_button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--rdp-cell-size);
+  height: var(--rdp-cell-size);
+  padding: 0.25em;
+  border-radius: 100%;
+}
+
+/* ---------- */
+/* Dropdowns  */
+/* ---------- */
+
+.dropdown_year,
+.dropdown_month {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.dropdown {
+  appearance: none;
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  cursor: inherit;
+  opacity: 0;
+  border: none;
+  background-color: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.dropdown[disabled] {
+  opacity: unset;
+  color: unset;
+}
+
+.dropdown:focus-visible:not([disabled]) + .caption_label {
+  background-color: var(--rdp-background-color);
+  border: var(--rdp-outline);
+  border-radius: 6px;
+}
+
+.dropdown_icon {
+  margin: 0 0 0 5px;
+}
+
+.head {
+  border: 0;
+}
+
+.head_row,
+.row {
+  height: 100%;
+}
+
+.head_cell {
+  vertical-align: middle;
+  font-size: 0.75em;
+  font-weight: 700;
+  text-align: center;
+  height: 100%;
+  height: var(--rdp-cell-size);
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.tbody {
+  border: 0;
+}
+
+.tfoot {
+  margin: 0.5em;
+}
+
+.cell {
+  width: var(--rdp-cell-size);
+  height: 100%;
+  height: var(--rdp-cell-size);
+  padding: 0;
+  text-align: center;
+}
+
+.weeknumber {
+  font-size: 0.75em;
+}
+
+.weeknumber,
+.day {
+  display: flex;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--rdp-cell-size);
+  max-width: var(--rdp-cell-size);
+  height: var(--rdp-cell-size);
+  margin: 0;
+  border: 2px solid transparent;
+  border-radius: 100%;
+}
+
+.day_today:not(.day_outside) {
+  font-weight: bold;
+}
+
+.day_selected,
+.day_selected:focus-visible,
+.day_selected:hover {
+  color: var(--rdp-selected-color);
+  opacity: 1;
+  background-color: var(--rdp-accent-color);
+}
+
+.day_outside {
+  opacity: 0.5;
+}
+
+.day_selected:focus-visible {
+  /* Since the background is the same use again the outline */
+  outline: var(--rdp-outline);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+.root:not([dir='rtl']) .day_range_start:not(.day_range_end) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.root:not([dir='rtl']) .day_range_end:not(.day_range_start) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.root[dir='rtl'] .day_range_start:not(.day_range_end) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.root[dir='rtl'] .day_range_end:not(.day_range_start) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.day_range_end.day_range_start {
+  border-radius: 100%;
+}
+
+.day_range_middle {
+  border-radius: 0;
+}

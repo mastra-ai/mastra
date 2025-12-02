@@ -1,0 +1,36 @@
+name: build
+
+on: [push, pull_request]
+
+env:
+  NODE_EXTRA_CA_CERTS: test/fixtures/certs_unit_test.pem
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        node-version: [14.x, 16.x, 18.x]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+
+    - name: Install
+      run: |
+        npm install
+
+    - name: Test / 1
+      run: |
+        npm run test-ci
+
+    - name: Test / 2
+      run: |
+        ./test/hang-socket/runner.sh

@@ -1,0 +1,20 @@
+import type { IndexStatsDescription, PineconeRecord, RecordSparseValues, RecordMetadata } from '../index';
+import { Index } from '../index';
+export declare const INDEX_NAME = "ts-integration";
+export declare const randomString: (length: any) => string;
+export declare const generateRecords: ({ dimension, quantity, prefix, withSparseValues, withMetadata, }: {
+    dimension?: number | undefined;
+    quantity?: number | undefined;
+    prefix?: string | null | undefined;
+    withSparseValues?: boolean | undefined;
+    withMetadata?: boolean | undefined;
+}) => PineconeRecord[];
+export declare const generateSparseValues: (dimension: number) => RecordSparseValues;
+export declare const generateMetadata: () => RecordMetadata;
+export declare const randomIndexName: (testName: string) => string;
+export declare const sleep: (ms: any) => Promise<unknown>;
+export declare const waitUntilReady: (indexName: string) => Promise<void>;
+export declare const waitUntilRecordsReady: (index: Index, namespace: string, recordIds: string[]) => Promise<IndexStatsDescription>;
+type Assertions = (result: any) => void;
+export declare const assertWithRetries: (asyncFn: () => Promise<any>, assertionsFn: Assertions, maxRetries?: number, delay?: number) => Promise<void>;
+export {};

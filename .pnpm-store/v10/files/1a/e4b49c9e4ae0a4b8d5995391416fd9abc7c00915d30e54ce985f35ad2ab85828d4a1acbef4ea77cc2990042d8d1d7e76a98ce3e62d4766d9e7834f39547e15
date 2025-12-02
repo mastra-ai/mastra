@@ -1,0 +1,23 @@
+{
+  "name": "@unrs/resolver-binding-darwin-arm64",
+  "version": "1.11.1",
+  "cpu": [
+    "arm64"
+  ],
+  "main": "resolver.darwin-arm64.node",
+  "files": [
+    "resolver.darwin-arm64.node"
+  ],
+  "description": "UnRS Resolver Node API with PNP support",
+  "author": "JounQin <admin@1stg.me> (https://www.1stG.me)",
+  "homepage": "https://github.com/unrs/unrs-resolver#readme",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "repository": "git+https://github.com/unrs/unrs-resolver.git",
+  "os": [
+    "darwin"
+  ]
+}

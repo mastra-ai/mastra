@@ -1,0 +1,75 @@
+{
+  "name": "@openrouter/ai-sdk-provider",
+  "version": "0.4.6",
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal/index.d.ts",
+      "import": "./dist/internal/index.mjs",
+      "module": "./dist/internal/index.mjs",
+      "require": "./dist/internal/index.js"
+    }
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "1.0.9",
+    "@ai-sdk/provider-utils": "2.1.10"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "4.4.1",
+    "@edge-runtime/vm": "5.0.0",
+    "@types/jest": "29.5.14",
+    "@types/node": "22.13.5",
+    "ai": "4.1.46",
+    "tsup": "8.4.0",
+    "prettier": "3.5.2",
+    "typescript": "5.7.3",
+    "vitest": "3.0.7",
+    "zod": "3.24.2"
+  },
+  "peerDependencies": {
+    "zod": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/OpenRouterTeam/ai-sdk-provider",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenRouterTeam/ai-sdk-provider.git"
+  },
+  "bugs": {
+    "url": "https://github.com/OpenRouterTeam/ai-sdk-provider/issues"
+  },
+  "keywords": [
+    "ai"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist && rm -rf internal/dist",
+    "dev": "tsup --watch",
+    "lint": "eslint \"./**/*.ts*\"",
+    "typecheck": "tsc --noEmit",
+    "stylecheck": "prettier --check \"**/*.{ts,mts,tsx,md,mdx,mjs}\"",
+    "format": "prettier --write \"**/*.{ts,mts,tsx,md,mdx,mjs}\"",
+    "prepublish": "pnpm run build",
+    "test": "pnpm test:node && pnpm test:edge",
+    "test:edge": "vitest --config vitest.edge.config.ts --run",
+    "test:node": "vitest --config vitest.node.config.ts --run"
+  }
+}

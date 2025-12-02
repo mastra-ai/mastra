@@ -1,0 +1,31 @@
+{
+  "name": "@types/memcached",
+  "version": "2.2.10",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662914906,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662914921,
+      "integrity": "sha512-DB0165zCnsf95e37fbiA/ioPOzSjXIAJPnW0Hp2ywCUNWCEtBbB/wv7tnic13DrAk3MXs4Z9vt1NbpiqVXHu2A==",
+      "mode": 420,
+      "size": 530
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662914926,
+      "integrity": "sha512-baCtNHaX4Wz66BJymmTYGVkOwImCo7tVpa0mZd/QzKHQDRwp4dWxLabn1hsyUOsEukBXo2P2thtzUDqxNi+Wng==",
+      "mode": 420,
+      "size": 9746
+    },
+    "package.json": {
+      "checkedAt": 1764662914928,
+      "integrity": "sha512-r/YtglRCtSbiIYjTn8l1LCsO3vGr5iQjTUIobCaA8Ge76YZ3ZZCA3ARMH4Pso8nqJwk3MHjMohfBEPvvzx8G5w==",
+      "mode": 420,
+      "size": 841
+    }
+  }
+}

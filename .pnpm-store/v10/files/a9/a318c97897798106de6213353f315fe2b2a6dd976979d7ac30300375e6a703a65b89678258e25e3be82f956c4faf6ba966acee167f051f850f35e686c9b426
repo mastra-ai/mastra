@@ -1,0 +1,4 @@
+/* duplicates from default.css for properties outside what is included in shadcn-ui themes */
+:root {
+  --aui-thread-max-width: 42rem;
+}

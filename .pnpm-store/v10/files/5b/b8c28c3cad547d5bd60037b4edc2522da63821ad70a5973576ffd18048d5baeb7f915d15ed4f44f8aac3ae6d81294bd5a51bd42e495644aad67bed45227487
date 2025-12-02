@@ -1,0 +1,40 @@
+Source: couchbase-cxx-client
+Section: libs
+Priority: optional
+Maintainer: Couchbase SDK Team <support@couchbase.com>
+Build-Depends: debhelper (>= 9), cmake, pkg-config
+Standards-Version: 4.5.0
+Vcs-Browser: https://github.com/couchbase/couchbase-cxx-client
+Vcs-Git: https://github.com/couchbase/couchbase-cxx-client.git
+
+Package: couchbase-cxx-client
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Couchbase C++ SDK.
+ This is the client and protocol library for Couchbase project.
+
+Package: couchbase-cxx-client-tools
+Architecture: any
+Multi-Arch: same
+Section: utils
+Depends: couchbase-cxx-client (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: Couchbase C++ SDK, command line tools.
+ This is the command line tools for the client and protocol library for
+ Couchbase project.
+
+Package: couchbase-cxx-client-dev
+Architecture: any
+Multi-Arch: same
+Depends: couchbase-cxx-client (= ${binary:Version}), ${misc:Depends}
+Description: Couchbase C++ SDK, development files.
+ This is the development files for the client and protocol library for
+ Couchbase project.
+
+Package: couchbase-cxx-client-dbg
+Architecture: any
+Multi-Arch: same
+Depends: couchbase-cxx-client (= ${binary:Version}), ${misc:Depends}
+Description: Couchbase C++ SDK, debug symbols.
+ This is the debug symbols for the client and protocol library for Couchbase
+ project.

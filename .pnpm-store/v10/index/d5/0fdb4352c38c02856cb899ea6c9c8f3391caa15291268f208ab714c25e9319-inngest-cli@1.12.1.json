@@ -1,0 +1,37 @@
+{
+  "name": "inngest-cli",
+  "version": "1.12.1",
+  "requiresBuild": true,
+  "files": {
+    "bin/.gitkeep": {
+      "checkedAt": 1764662928592,
+      "integrity": "sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==",
+      "mode": 420,
+      "size": 0
+    },
+    "bin/inngest": {
+      "checkedAt": 1764662928592,
+      "integrity": "sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==",
+      "mode": 420,
+      "size": 0
+    },
+    "postinstall.js": {
+      "checkedAt": 1764662928592,
+      "integrity": "sha512-Qw72LewyQiYOA+Y2/irxn5+9n69H3GpFJukUgsuV1/I+Z0tjyr0ojf81+4ZQ1HNt+g6v3fhnHtXGfDB4UcYeAQ==",
+      "mode": 420,
+      "size": 5509
+    },
+    "package.json": {
+      "checkedAt": 1764662928593,
+      "integrity": "sha512-yM7XD1dZZqHOCp7mzA32S/+ZSideg9feNpRCsBloJxuw+Y3No5ypg6Ztpb6iiUE3PWeyLu7cflc0Ln9pGNnJkg==",
+      "mode": 420,
+      "size": 1061
+    },
+    "README.md": {
+      "checkedAt": 1764662928594,
+      "integrity": "sha512-NPN8LMstfSM2qb7DZV9bYWJqjdsHkRvt9mttuQQVBhGH03VN3QkCo3h01wKBDHfZMC/dapsKYh08OJ4UYRjLXQ==",
+      "mode": 420,
+      "size": 8687
+    }
+  }
+}

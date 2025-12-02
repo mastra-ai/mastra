@@ -1,0 +1,325 @@
+{
+  "name": "assistant-cloud",
+  "version": "0.1.4",
+  "requiresBuild": false,
+  "files": {
+    "dist/AssistantCloud.js": {
+      "checkedAt": 1764662908868,
+      "integrity": "sha512-D2gaL7DaMB1YUuYpDGTehqrtmlKjRmOk69oT92+8dWHVNCjnoWgGfrUw/xLzy9eW87SmIjM91D9vu+gBiZA+4g==",
+      "mode": 420,
+      "size": 784
+    },
+    "dist/AssistantCloudAPI.js": {
+      "checkedAt": 1764662908870,
+      "integrity": "sha512-gOd4Prr3yJjEhEG+RsxYrmyKOrtI8K620xsxhTVKUZRyvz/vH+SW5MaGDBog0iNAPOY6SWnD9kk2CuwHe4G95g==",
+      "mode": 420,
+      "size": 2627
+    },
+    "dist/AssistantCloudAuthStrategy.js": {
+      "checkedAt": 1764662908871,
+      "integrity": "sha512-kH/8C6OKV47mmxKLrHSS6ODTuLXaInxB/4bz4dr6wlccSKLqTDIerwJ0k6D3Ew+rb8yHlMoombEH2aMpoNGvBw==",
+      "mode": 420,
+      "size": 4419
+    },
+    "dist/AssistantCloudAuthTokens.js": {
+      "checkedAt": 1764662908873,
+      "integrity": "sha512-XEmzPWH/xBY2EGh7FMwbFHrqsKDQ73EopocfJEZQkoCAVpiIkc/2aj037NNR6YChfWD4QuDaisALYcUF2U56qQ==",
+      "mode": 420,
+      "size": 314
+    },
+    "dist/AssistantCloudFiles.js": {
+      "checkedAt": 1764662908874,
+      "integrity": "sha512-BdS/BmDC+tvWLXwE9mcDvDIqSUWDWnG/H0dYcD1ISlg21lYMR9PeLzMnogFpb119LAroZ1cctZoh4QLI2MDC1Q==",
+      "mode": 420,
+      "size": 533
+    },
+    "dist/AssistantCloudRuns.js": {
+      "checkedAt": 1764662908874,
+      "integrity": "sha512-i1RmHD/DKJidKoSf9P27ZpyPssUPkE+e0nACwaa1wXJWLAHjKSUEt9mUw9tOUa+/T8btmksflqeHfDH3T2Ea9g==",
+      "mode": 420,
+      "size": 1051
+    },
+    "dist/AssistantCloudThreadMessages.js": {
+      "checkedAt": 1764662908875,
+      "integrity": "sha512-bofGm8nrXJvUMGnjyTvXofqUnTy5XWH1LvZ/5lZU2V6ZTQVRxETogsKWxogAEWR3rlIa6KFjbB8sxqi7ORrnuw==",
+      "mode": 420,
+      "size": 558
+    },
+    "dist/AssistantCloudThreads.js": {
+      "checkedAt": 1764662908877,
+      "integrity": "sha512-ekIsDoaNMVUBdCbKvf5Bh3SHq6Luqz9Qwq6rzVNl0gADCVKLGnOStMvhKTm8mlJpbKmnaOsVCBurvzxBO7BX3w==",
+      "mode": 420,
+      "size": 846
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662908893,
+      "integrity": "sha512-Ni8i80UdvX1cRr1xVLnvtFnkbk+Sdz6/nORwFxw0mPFBYNdlNz0d6BThUZXThjQHXJSD0KlOv1p0mzrj+WrEbg==",
+      "mode": 420,
+      "size": 132
+    },
+    "dist/tests/setup.js": {
+      "checkedAt": 1764662908898,
+      "integrity": "sha512-UZd8zGpSkhBRfjC14TdQe4lDXJX3di2p91RXcQL4Q/2t2cl5Ajn8AF2uUMSnSOOZk9+YQGEWUsmDrgBIxnHjhg==",
+      "mode": 420,
+      "size": 99345
+    },
+    "package.json": {
+      "checkedAt": 1764662908901,
+      "integrity": "sha512-spd+qoWVyzpSYXOeP9rdt+7QikKnu2FVACpSB68aDRmpC+4ZzGtQUkB6670Wz/OrZ7mWiH3Z5MzMC11bDT5nbA==",
+      "mode": 420,
+      "size": 1243
+    },
+    "dist/AssistantCloud.d.ts.map": {
+      "checkedAt": 1764662908901,
+      "integrity": "sha512-59PNAPwdCejpAkdBOU7iB93BUFQ5U7zWuXW2lf4LYAL7LzVMJ9srJB/vP03JoSEZ8K+t7MN/u3fMS66YuR80Dw==",
+      "mode": 420,
+      "size": 485
+    },
+    "dist/AssistantCloud.js.map": {
+      "checkedAt": 1764662908903,
+      "integrity": "sha512-qROAtHwTeDKAPCEj+9FHlfI9W1pNV6RBFelt6Tyi+J1qciY8FmxhJZr16DzGQWCuigElQ19VwYhNgqhCw6keGA==",
+      "mode": 420,
+      "size": 1296
+    },
+    "dist/AssistantCloudAPI.d.ts.map": {
+      "checkedAt": 1764662908904,
+      "integrity": "sha512-agCWZ+3b3gg/1zqkuxW7jvlMNpZLQp03LzFzuoSnzDU1H+l083jU+qyHYcMo84E4dtjMVGbctcKYIDx2mqELbg==",
+      "mode": 420,
+      "size": 940
+    },
+    "dist/AssistantCloudAPI.js.map": {
+      "checkedAt": 1764662908906,
+      "integrity": "sha512-MZs4548wbnkMjLv/UX6O8C/h+ZWQt6d+TH8A9bLWaui7CE1YLR0T8fhRFnqV+rW4biE6azZTms4IdXn+GgnIBQ==",
+      "mode": 420,
+      "size": 5159
+    },
+    "dist/AssistantCloudAuthStrategy.d.ts.map": {
+      "checkedAt": 1764662908906,
+      "integrity": "sha512-2AoO7DrAGxQV4S0Cer2UkS/n2e2BRM45SFHayPb0E323N/myW0ka2GEdK2k7YDrh6sftESvCkaeAvSoIsTt9aQ==",
+      "mode": 420,
+      "size": 1068
+    },
+    "dist/AssistantCloudAuthStrategy.js.map": {
+      "checkedAt": 1764662908907,
+      "integrity": "sha512-rC6bsXt83k3dUQH+FmEjvtc07klDrLIgcmGbUohLJsDZ5gku1hbNWJtdgWpls+de7mpeHT9eBApXG4d//jprow==",
+      "mode": 420,
+      "size": 8648
+    },
+    "dist/AssistantCloudAuthTokens.d.ts.map": {
+      "checkedAt": 1764662908908,
+      "integrity": "sha512-JS6Vi65MmF+311JyPXxwYaoG+HUBHTwUar7YUrf+eXJRXf5lHeVNpZL90uK280KBUVTwft26xcIiQ/IIWIBexQ==",
+      "mode": 420,
+      "size": 351
+    },
+    "dist/AssistantCloudAuthTokens.js.map": {
+      "checkedAt": 1764662908910,
+      "integrity": "sha512-vYoIxeOEcW2ctX61s4sMJF4MNumJVvdNN/V1Y7SjjbwG7BwsumizvAf9tonLaOXsHY0rABdBf/pyPSRlU7pfPQ==",
+      "mode": 420,
+      "size": 654
+    },
+    "dist/AssistantCloudFiles.d.ts.map": {
+      "checkedAt": 1764662908911,
+      "integrity": "sha512-p9vQz9QlcCMw7QmLX3fQQ02KoCI/qS+UEQIO4lHDEpSwvXiys0yTMoJOkDf5SHWUb5owDqYBqjJ7c5tJBAAJCQ==",
+      "mode": 420,
+      "size": 797
+    },
+    "dist/AssistantCloudFiles.js.map": {
+      "checkedAt": 1764662908912,
+      "integrity": "sha512-GpKA2dB/RbK0uSUDMloorkT7ZyRL5FA2k3BfyjzouzxYK0PfbecDYzKwC+F5aWn6peBhXpAia13e7aE1CaSjpw==",
+      "mode": 420,
+      "size": 1516
+    },
+    "dist/AssistantCloudRuns.d.ts.map": {
+      "checkedAt": 1764662908912,
+      "integrity": "sha512-pAmCRyBq8vQLhIcjb02+J82nwRpdsXxpT4K9ADO3ZT3GXV75xY3UPIPV1lgfP+fxfCCtLViJjlzHrXWXdYn3rw==",
+      "mode": 420,
+      "size": 514
+    },
+    "dist/AssistantCloudRuns.js.map": {
+      "checkedAt": 1764662908913,
+      "integrity": "sha512-EGZFWPQx6jzumLHygfuyUMra/3wRLpdUpaxfCOMWRNhplODLf44P09otBqB+wTvNpAaCrnHIhY9awbMRW3d2Hw==",
+      "mode": 420,
+      "size": 2033
+    },
+    "dist/AssistantCloudThreadMessages.d.ts.map": {
+      "checkedAt": 1764662908914,
+      "integrity": "sha512-Ss/NJzYLlF5GDZEkxxYxso4FSrlOIW1bjuD25oMV7a041wBv/RwHsmwbzHK2fPvzeEk9ekFHqJ+ha7WWjoJxhg==",
+      "mode": 420,
+      "size": 1036
+    },
+    "dist/AssistantCloudThreadMessages.js.map": {
+      "checkedAt": 1764662908916,
+      "integrity": "sha512-mq26eRugnjqAMuK11bgnNcsIRk9NDupQ06zT8MhJUvc9Aec3Mp01YBi+OB9i/d76CjSte1FxbUNxigThuQLUEw==",
+      "mode": 420,
+      "size": 1836
+    },
+    "dist/AssistantCloudThreads.d.ts.map": {
+      "checkedAt": 1764662908918,
+      "integrity": "sha512-7PqfzFqp1Qu00hi7f3mEJmN9BbAzKjKtLFBbaldf53LFPzgrmvbbrOf0WyKQ0cU/cQ840JrIFkt2bUdNPrOeag==",
+      "mode": 420,
+      "size": 1519
+    },
+    "dist/AssistantCloudThreads.js.map": {
+      "checkedAt": 1764662908920,
+      "integrity": "sha512-/edU+lqigW250lJwThjFK1/oersNvxbmPQ+n0ahYT8GoGM4gmEIuerZsfqNB/Sd9+UcG74aE784G8ITDcc6u8g==",
+      "mode": 420,
+      "size": 2738
+    },
+    "dist/index.d.ts.map": {
+      "checkedAt": 1764662908920,
+      "integrity": "sha512-cMW6bpH1lKQoP9W4MuH3A9tx+pFiz301Yw1ojId+0UKfTz+m9MWmP5a6MlGhAwJOzsjqz5SDaW9YTtTKRPOA+g==",
+      "mode": 420,
+      "size": 188
+    },
+    "dist/index.js.map": {
+      "checkedAt": 1764662908923,
+      "integrity": "sha512-DReTXqB79lt1r5ae2tASjaxSEFqv7nGZyfPH/YDuZhfLLTBHpDk0+s8mBcspQy6D/0v7mSdXfvLMNMjwChT9xQ==",
+      "mode": 420,
+      "size": 233
+    },
+    "dist/tests/setup.d.ts.map": {
+      "checkedAt": 1764662908924,
+      "integrity": "sha512-KugPRSeRJD9WL+Y3rie3wvYw9NNBvnlShIv6Rmr5FCk4cCy4VkI4AAz61n3cDWXwkwEScUL7MGQ/McJ35cxKgQ==",
+      "mode": 420,
+      "size": 113
+    },
+    "dist/tests/setup.js.map": {
+      "checkedAt": 1764662908925,
+      "integrity": "sha512-ivQRl8y6buVm+NuUeioL4VFZeMbe1XvX4quNpdg4nJ2hO/bOcIstshHl6Jl1huiswo9g3dBq5bc5QmjCDZSQlA==",
+      "mode": 420,
+      "size": 214617
+    },
+    "dist/AssistantCloud.d.ts": {
+      "checkedAt": 1764662908926,
+      "integrity": "sha512-YKyjrYy31hZOPOQuxAVoeRAyOdcbG/6/urfq1ISQgcdPb89tt18yPNijPe3lX3ODs1RCchf5OSZKXrsKIQk3iQ==",
+      "mode": 420,
+      "size": 642
+    },
+    "dist/AssistantCloudAPI.d.ts": {
+      "checkedAt": 1764662908927,
+      "integrity": "sha512-HWgDxypZIdpQqgxGHtb6k4DVf9qsdRPciMjfJYJvpq42pF7glbZ4wTi7QDxskVpFtDgSzY8Y2eLFxSIAM37KgA==",
+      "mode": 420,
+      "size": 946
+    },
+    "dist/AssistantCloudAuthStrategy.d.ts": {
+      "checkedAt": 1764662908928,
+      "integrity": "sha512-S3C59pWGOYFNFfnoB0T7gQ8XFkxK1KyqlBaOIIuV9AJmpe3tEDX0t0wXpN46b4OOmB9xww0oqUdSVebB4/c/Gw==",
+      "mode": 420,
+      "size": 1241
+    },
+    "dist/AssistantCloudAuthTokens.d.ts": {
+      "checkedAt": 1764662908928,
+      "integrity": "sha512-dWlAs+kjBi2XTZ59c/ikbBm3z58cD7ITCg2qKZmJFJLVI6aBikR7t1O3X7Fs5800ZPnX/jCpnlLqDXTKG+GGBA==",
+      "mode": 420,
+      "size": 367
+    },
+    "dist/AssistantCloudFiles.d.ts": {
+      "checkedAt": 1764662908929,
+      "integrity": "sha512-7qACeuuO2Wt4Ey9OWnlL1EM6qWwMuTqQy7pQeiyVnI0GLJ550EA6mHPbE1oCM5ZHHw7fVLzidAUceT+vwkjjWQ==",
+      "mode": 420,
+      "size": 834
+    },
+    "src/tests/AssistantCloudFiles.test.ts": {
+      "checkedAt": 1764662908929,
+      "integrity": "sha512-NxaXlHR53RfZigwl7sb8noW35+gN8Fhs+hxiDVh+gKacYn7fXNdoxrSD33ZT9w0UHC0TN5akn9NljLoihB8frg==",
+      "mode": 420,
+      "size": 20940
+    },
+    "dist/AssistantCloudRuns.d.ts": {
+      "checkedAt": 1764662908930,
+      "integrity": "sha512-XL/HiSM2vg6CFgYvalwR0z+G8cZmrDYtD24/H2Ggq1CRyjs9CcxwcNDqm4dUuxt0/25OXzRHnddhBEoWF35G+g==",
+      "mode": 420,
+      "size": 776
+    },
+    "dist/AssistantCloudThreadMessages.d.ts": {
+      "checkedAt": 1764662908931,
+      "integrity": "sha512-09zO/g+sb2JEW8rxyjfXh3PDhvamjJ0FGohIbbHFk/UPJB+lYcf+QzKYKn6kQbHIg+8fvqAtbfU+Za1aJqTpCQ==",
+      "mode": 420,
+      "size": 1122
+    },
+    "dist/AssistantCloudThreads.d.ts": {
+      "checkedAt": 1764662908948,
+      "integrity": "sha512-5BnByrPtaWoeJnbNQIoTCMiLRolREsllQIQtO4pMdFqNTYW4L0h6UJvKSiRMRwjnGR1lTNGD+01EOCTYBxsySg==",
+      "mode": 420,
+      "size": 1564
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662908949,
+      "integrity": "sha512-v/3Wm7k7OTw3I7f0i5MIwhYMgUnSb4PY2Fw8C1VC6W7YJFyvhlku11UjG9W/QTQC/5LG684jvgpwqmTJChqVzA==",
+      "mode": 420,
+      "size": 154
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662908950,
+      "integrity": "sha512-ONZ9+4oJyyaFLp0qo/Tmpz1KSnJyvCT3ZzaURUHzUJeFqn6E1lCSw7yQVVq/RMVJJRZaDi426XATqFuLqioydw==",
+      "mode": 420,
+      "size": 119
+    },
+    "dist/tests/setup.d.ts": {
+      "checkedAt": 1764662908953,
+      "integrity": "sha512-xTt0PUOMRCwITep0E3mgxIsE283Xd6lo0Hqkx+s/KNEytq7bUiEgzTWDgm6F73v0ZX1/djeXnSw6PtExfO269w==",
+      "mode": 420,
+      "size": 46
+    },
+    "src/tests/setup.ts": {
+      "checkedAt": 1764662908955,
+      "integrity": "sha512-12jBA3Cj93WFsP2UY8LCSYDexyjhIywGThSkOvvzEFAAhGutkEbXsxr2pSia9s4KBJA6uBzZA4rk3bkceFeVgw==",
+      "mode": 420,
+      "size": 382
+    },
+    "src/AssistantCloud.tsx": {
+      "checkedAt": 1764662908955,
+      "integrity": "sha512-jfpR93HiH8AxCleRS/IPjfdMWeoIEE/ocHLQ3Ar8g/lrslekcBYdHU25FlybQFGFlP0azsHgZvKMovVjp61QYw==",
+      "mode": 420,
+      "size": 783
+    },
+    "src/AssistantCloudAPI.tsx": {
+      "checkedAt": 1764662908959,
+      "integrity": "sha512-YqJe3joDOPzj3G0yHWcMLCGygTEWCsyKY82IG+Yib2hUgqDXUE5s13P7kUH5h2ttQ21ysFw3qldyuOai0jyaMg==",
+      "mode": 420,
+      "size": 3206
+    },
+    "src/AssistantCloudAuthStrategy.tsx": {
+      "checkedAt": 1764662908961,
+      "integrity": "sha512-Q1Aghg+s6DmIhCjnwpt5U1AFDpsrzRhLNcyMhIxh5F9KTuV6B6LFoYd3m6sL9MRk/SZucpikknhgPCPvNGIJNw==",
+      "mode": 420,
+      "size": 5505
+    },
+    "src/AssistantCloudAuthTokens.tsx": {
+      "checkedAt": 1764662908963,
+      "integrity": "sha512-PmRaufw7qGHA5HlPRq8+VXTOx0UeUtYYaIBfLO3pQ8oFtVxheDdWSBJdl1+nBJua+WShHGhs4u1s2l8igNRacQ==",
+      "mode": 420,
+      "size": 371
+    },
+    "src/AssistantCloudFiles.tsx": {
+      "checkedAt": 1764662908963,
+      "integrity": "sha512-S7TTYcHkw4dieYNcjKA7cj+RAecxpxFdJkP+jWl9aOJTzo1d+z1O7Qxt9S8gtinPOULqTIlxiovD1sxshjWTyw==",
+      "mode": 420,
+      "size": 1049
+    },
+    "src/AssistantCloudRuns.tsx": {
+      "checkedAt": 1764662908964,
+      "integrity": "sha512-hlznSqT+tTkQ8pNrbr0Jpy0MAYl3LIo342F8kv6hypISiX3P2nuYlUiB1NyQIr51m8rEygAYBC97pdPBhbBAsQ==",
+      "mode": 420,
+      "size": 1241
+    },
+    "src/AssistantCloudThreadMessages.tsx": {
+      "checkedAt": 1764662908969,
+      "integrity": "sha512-9PkFlUJj5in1feJRPoX3D25dDGHhqMiDMQjdO6F20ZQA+pbTQZPqB4bhDwYXc03ua6ouFEHMeBW/AnAMHKGgow==",
+      "mode": 420,
+      "size": 1325
+    },
+    "src/AssistantCloudThreads.tsx": {
+      "checkedAt": 1764662908969,
+      "integrity": "sha512-hwMkp/ahBm55E/J9SDI+gmszXjUYQjjWkgv0K9c68Ice6jv2JXd8QrCedfNkS3kFLiKRLtG9ECHUD5DSj4Cvmg==",
+      "mode": 420,
+      "size": 1977
+    },
+    "LICENSE": {
+      "checkedAt": 1764662908971,
+      "integrity": "sha512-H4z9nxbSqZN8p5zLduOSmT+C0zX1XjyAY1J/qOsGhvL17Z4YVbuzFPDYsJzghRSplsC9z4Gj0C5FTE8wbZy3Tg==",
+      "mode": 420,
+      "size": 1073
+    }
+  }
+}

@@ -1,0 +1,12 @@
+'use strict';
+
+var chunkQGWNF2QJ_cjs = require('./chunk-QGWNF2QJ.cjs');
+
+
+
+Object.defineProperty(exports, "ModelsDevGateway", {
+  enumerable: true,
+  get: function () { return chunkQGWNF2QJ_cjs.ModelsDevGateway; }
+});
+//# sourceMappingURL=models-dev-XIVR5EJV.cjs.map
+//# sourceMappingURL=models-dev-XIVR5EJV.cjs.map

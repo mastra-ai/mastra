@@ -1,0 +1,93 @@
+{
+  "name": "fetch-h2",
+  "version": "3.0.2",
+  "description": "HTTP/1+2 Fetch API client for Node.js",
+  "author": "Gustaf Räntilä",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/grantila/fetch-h2/issues"
+  },
+  "homepage": "https://github.com/grantila/fetch-h2#readme",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "directories": {},
+  "engines": {
+    "node": ">=12"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build:ts": "./node_modules/.bin/rimraf dist && ./node_modules/.bin/tsc -p .",
+    "build:cert": "scripts/make-certs.sh",
+    "build": "concurrently 'yarn build:ts' 'yarn build:cert'",
+    "lint": "node_modules/.bin/tslint --project .",
+    "jest:core": "node_modules/.bin/jest --detectOpenHandles --coverage",
+    "jest:fast": "yarn jest:core --config jest.config.unit.js $@",
+    "jest:exported": "node_modules/.bin/jest --config jest.config.exported.js $@",
+    "jest:integration": "node_modules/.bin/compd -f test/docker-compose.yaml yarn jest:core",
+    "jest:debug": "node --inspect-brk node_modules/.bin/jest",
+    "test": "yarn lint && yarn jest:integration",
+    "test:exported": "./node_modules/.bin/ts-node scripts/create-exported-tests.ts && yarn jest:exported",
+    "buildtest": "npm run build && npm run jest",
+    "buildtestcov": "npm run build && npm run test",
+    "coveralls": "cat coverage/lcov.info | node_modules/.bin/coveralls",
+    "version": "./node_modules/.bin/ts-node scripts/version-update.ts && npm run build && npm run test && scripts/version-git-add.sh",
+    "clean:pack": "node_modules/.bin/rimraf dist/test* && find dist/ -name '*.map' -delete",
+    "prepack": "npm run build && npm run test && npm run clean:pack && npm run test:exported",
+    "makecerts": "openssl req -x509 -nodes -days 7300 -newkey rsa:2048 -keyout certs/key.pem -out certs/cert.pem",
+    "cz": "git-cz"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grantila/fetch-h2"
+  },
+  "keywords": [
+    "fetch",
+    "h2",
+    "http2",
+    "client",
+    "request",
+    "api",
+    "typesafe",
+    "typescript"
+  ],
+  "devDependencies": {
+    "@types/execa": "^2.0.0",
+    "@types/from2": "^2.3.1",
+    "@types/jest": "^27.0.2",
+    "@types/node": "^16.10.2",
+    "@types/recursive-readdir": "^2.2.0",
+    "@types/rimraf": "^3.0.2",
+    "@types/through2": "^2.0.36",
+    "commitizen": "^4.2.4",
+    "compd": "^3.0.0",
+    "concurrently": "^6.3.0",
+    "cz-conventional-changelog": "^3.3.0",
+    "execa": "^5.1.1",
+    "from2": "^2.3.0",
+    "jest": "^27.2.4",
+    "list-open-files": "^1.1.0",
+    "mkcert": "^1.4.0",
+    "recursive-readdir": "^2.2.2",
+    "rimraf": "^3.0.2",
+    "ts-jest": "^27.0.5",
+    "ts-node": "^10.2.1",
+    "tslint": "^6.1.3",
+    "typescript": "^4.4.3"
+  },
+  "dependencies": {
+    "@types/tough-cookie": "^4.0.0",
+    "already": "^2.2.1",
+    "callguard": "^2.0.0",
+    "get-stream": "^6.0.1",
+    "through2": "^4.0.2",
+    "to-arraybuffer": "^1.0.1",
+    "tough-cookie": "^4.0.0"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  }
+}

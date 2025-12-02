@@ -1,0 +1,4 @@
+{
+    "message": "stripe_customer_id is not enabled for this environment",
+    "error": "Unprocessable Entity"
+}

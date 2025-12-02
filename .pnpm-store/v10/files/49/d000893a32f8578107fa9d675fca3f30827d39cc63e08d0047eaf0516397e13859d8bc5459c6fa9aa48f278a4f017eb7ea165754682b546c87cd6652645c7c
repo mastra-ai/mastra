@@ -1,0 +1,57 @@
+{
+  "name": "react-code-block",
+  "version": "1.1.3",
+  "description": "Set of unstyled UI components to build powerful code blocks in React.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "author": "Akash Hamirwasia",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist/"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./shiki": {
+      "types": "./dist/shiki/index.d.ts",
+      "default": "./dist/shiki/index.js"
+    }
+  },
+  "keywords": [
+    "code-blocks",
+    "snippets",
+    "syntax-highlighting",
+    "unstyled",
+    "prism",
+    "react",
+    "mdx"
+  ],
+  "homepage": "https://react-code-block.netlify.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blenderskool/react-code-block.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blenderskool/react-code-block/issues"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "cp ../../README.md ./README.md && cp ../../LICENSE ./LICENSE",
+    "postpack": "rm ./README.md ./LICENSE"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "prism-react-renderer": "^2.0.6",
+    "shiki": "^1.23.1",
+    "typescript": "^5.6.3"
+  },
+  "peerDependencies": {
+    "prism-react-renderer": "^2",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  }
+}

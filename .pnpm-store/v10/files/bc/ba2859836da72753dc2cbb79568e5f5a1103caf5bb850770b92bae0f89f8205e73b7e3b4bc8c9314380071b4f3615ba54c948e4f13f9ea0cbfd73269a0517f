@@ -1,0 +1,2232 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.cloud.speech.v2;
+
+import "google/api/annotations.proto";
+import "google/api/client.proto";
+import "google/api/field_behavior.proto";
+import "google/api/field_info.proto";
+import "google/api/resource.proto";
+import "google/longrunning/operations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+
+option go_package = "cloud.google.com/go/speech/apiv2/speechpb;speechpb";
+option java_multiple_files = true;
+option java_outer_classname = "CloudSpeechProto";
+option java_package = "com.google.cloud.speech.v2";
+option (google.api.resource_definition) = {
+  type: "cloudkms.googleapis.com/CryptoKey"
+  pattern: "projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}"
+};
+option (google.api.resource_definition) = {
+  type: "cloudkms.googleapis.com/CryptoKeyVersion"
+  pattern: "projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}/cryptoKeyVersions/{crypto_key_version}"
+};
+
+// Enables speech transcription and resource management.
+service Speech {
+  option (google.api.default_host) = "speech.googleapis.com";
+  option (google.api.oauth_scopes) =
+      "https://www.googleapis.com/auth/cloud-platform";
+
+  // Creates a [Recognizer][google.cloud.speech.v2.Recognizer].
+  rpc CreateRecognizer(CreateRecognizerRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v2/{parent=projects/*/locations/*}/recognizers"
+      body: "recognizer"
+    };
+    option (google.api.method_signature) = "parent,recognizer,recognizer_id";
+    option (google.longrunning.operation_info) = {
+      response_type: "Recognizer"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Lists Recognizers.
+  rpc ListRecognizers(ListRecognizersRequest)
+      returns (ListRecognizersResponse) {
+    option (google.api.http) = {
+      get: "/v2/{parent=projects/*/locations/*}/recognizers"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Returns the requested
+  // [Recognizer][google.cloud.speech.v2.Recognizer]. Fails with
+  // [NOT_FOUND][google.rpc.Code.NOT_FOUND] if the requested Recognizer doesn't
+  // exist.
+  rpc GetRecognizer(GetRecognizerRequest) returns (Recognizer) {
+    option (google.api.http) = {
+      get: "/v2/{name=projects/*/locations/*/recognizers/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Updates the [Recognizer][google.cloud.speech.v2.Recognizer].
+  rpc UpdateRecognizer(UpdateRecognizerRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      patch: "/v2/{recognizer.name=projects/*/locations/*/recognizers/*}"
+      body: "recognizer"
+    };
+    option (google.api.method_signature) = "recognizer,update_mask";
+    option (google.longrunning.operation_info) = {
+      response_type: "Recognizer"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Deletes the [Recognizer][google.cloud.speech.v2.Recognizer].
+  rpc DeleteRecognizer(DeleteRecognizerRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      delete: "/v2/{name=projects/*/locations/*/recognizers/*}"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "Recognizer"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Undeletes the [Recognizer][google.cloud.speech.v2.Recognizer].
+  rpc UndeleteRecognizer(UndeleteRecognizerRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v2/{name=projects/*/locations/*/recognizers/*}:undelete"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "Recognizer"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Performs synchronous Speech recognition: receive results after all audio
+  // has been sent and processed.
+  rpc Recognize(RecognizeRequest) returns (RecognizeResponse) {
+    option (google.api.http) = {
+      post: "/v2/{recognizer=projects/*/locations/*/recognizers/*}:recognize"
+      body: "*"
+    };
+    option (google.api.method_signature) =
+        "recognizer,config,config_mask,content";
+    option (google.api.method_signature) = "recognizer,config,config_mask,uri";
+  }
+
+  // Performs bidirectional streaming speech recognition: receive results while
+  // sending audio. This method is only available via the gRPC API (not REST).
+  rpc StreamingRecognize(stream StreamingRecognizeRequest)
+      returns (stream StreamingRecognizeResponse) {}
+
+  // Performs batch asynchronous speech recognition: send a request with N
+  // audio files and receive a long running operation that can be polled to see
+  // when the transcriptions are finished.
+  rpc BatchRecognize(BatchRecognizeRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v2/{recognizer=projects/*/locations/*/recognizers/*}:batchRecognize"
+      body: "*"
+    };
+    option (google.api.method_signature) =
+        "recognizer,config,config_mask,files";
+    option (google.longrunning.operation_info) = {
+      response_type: "BatchRecognizeResponse"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Returns the requested [Config][google.cloud.speech.v2.Config].
+  rpc GetConfig(GetConfigRequest) returns (Config) {
+    option (google.api.http) = {
+      get: "/v2/{name=projects/*/locations/*/config}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Updates the [Config][google.cloud.speech.v2.Config].
+  rpc UpdateConfig(UpdateConfigRequest) returns (Config) {
+    option (google.api.http) = {
+      patch: "/v2/{config.name=projects/*/locations/*/config}"
+      body: "config"
+    };
+    option (google.api.method_signature) = "config,update_mask";
+  }
+
+  // Creates a [CustomClass][google.cloud.speech.v2.CustomClass].
+  rpc CreateCustomClass(CreateCustomClassRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v2/{parent=projects/*/locations/*}/customClasses"
+      body: "custom_class"
+    };
+    option (google.api.method_signature) =
+        "parent,custom_class,custom_class_id";
+    option (google.longrunning.operation_info) = {
+      response_type: "CustomClass"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Lists CustomClasses.
+  rpc ListCustomClasses(ListCustomClassesRequest)
+      returns (ListCustomClassesResponse) {
+    option (google.api.http) = {
+      get: "/v2/{parent=projects/*/locations/*}/customClasses"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Returns the requested
+  // [CustomClass][google.cloud.speech.v2.CustomClass].
+  rpc GetCustomClass(GetCustomClassRequest) returns (CustomClass) {
+    option (google.api.http) = {
+      get: "/v2/{name=projects/*/locations/*/customClasses/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Updates the [CustomClass][google.cloud.speech.v2.CustomClass].
+  rpc UpdateCustomClass(UpdateCustomClassRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      patch: "/v2/{custom_class.name=projects/*/locations/*/customClasses/*}"
+      body: "custom_class"
+    };
+    option (google.api.method_signature) = "custom_class,update_mask";
+    option (google.longrunning.operation_info) = {
+      response_type: "CustomClass"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Deletes the [CustomClass][google.cloud.speech.v2.CustomClass].
+  rpc DeleteCustomClass(DeleteCustomClassRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      delete: "/v2/{name=projects/*/locations/*/customClasses/*}"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "CustomClass"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Undeletes the [CustomClass][google.cloud.speech.v2.CustomClass].
+  rpc UndeleteCustomClass(UndeleteCustomClassRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v2/{name=projects/*/locations/*/customClasses/*}:undelete"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "CustomClass"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Creates a [PhraseSet][google.cloud.speech.v2.PhraseSet].
+  rpc CreatePhraseSet(CreatePhraseSetRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v2/{parent=projects/*/locations/*}/phraseSets"
+      body: "phrase_set"
+    };
+    option (google.api.method_signature) = "parent,phrase_set,phrase_set_id";
+    option (google.longrunning.operation_info) = {
+      response_type: "PhraseSet"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Lists PhraseSets.
+  rpc ListPhraseSets(ListPhraseSetsRequest) returns (ListPhraseSetsResponse) {
+    option (google.api.http) = {
+      get: "/v2/{parent=projects/*/locations/*}/phraseSets"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  // Returns the requested
+  // [PhraseSet][google.cloud.speech.v2.PhraseSet].
+  rpc GetPhraseSet(GetPhraseSetRequest) returns (PhraseSet) {
+    option (google.api.http) = {
+      get: "/v2/{name=projects/*/locations/*/phraseSets/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // Updates the [PhraseSet][google.cloud.speech.v2.PhraseSet].
+  rpc UpdatePhraseSet(UpdatePhraseSetRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      patch: "/v2/{phrase_set.name=projects/*/locations/*/phraseSets/*}"
+      body: "phrase_set"
+    };
+    option (google.api.method_signature) = "phrase_set,update_mask";
+    option (google.longrunning.operation_info) = {
+      response_type: "PhraseSet"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Deletes the [PhraseSet][google.cloud.speech.v2.PhraseSet].
+  rpc DeletePhraseSet(DeletePhraseSetRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      delete: "/v2/{name=projects/*/locations/*/phraseSets/*}"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "PhraseSet"
+      metadata_type: "OperationMetadata"
+    };
+  }
+
+  // Undeletes the [PhraseSet][google.cloud.speech.v2.PhraseSet].
+  rpc UndeletePhraseSet(UndeletePhraseSetRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v2/{name=projects/*/locations/*/phraseSets/*}:undelete"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name";
+    option (google.longrunning.operation_info) = {
+      response_type: "PhraseSet"
+      metadata_type: "OperationMetadata"
+    };
+  }
+}
+
+// Request message for the
+// [CreateRecognizer][google.cloud.speech.v2.Speech.CreateRecognizer] method.
+message CreateRecognizerRequest {
+  // Required. The Recognizer to create.
+  Recognizer recognizer = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // If set, validate the request and preview the Recognizer, but do not
+  // actually create it.
+  bool validate_only = 2;
+
+  // The ID to use for the Recognizer, which will become the final component of
+  // the Recognizer's resource name.
+  //
+  // This value should be 4-63 characters, and valid characters
+  // are /[a-z][0-9]-/.
+  string recognizer_id = 3;
+
+  // Required. The project and location where this Recognizer will be created.
+  // The expected format is `projects/{project}/locations/{location}`.
+  string parent = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "speech.googleapis.com/Recognizer"
+    }
+  ];
+}
+
+// Represents the metadata of a long-running operation.
+message OperationMetadata {
+  // The time the operation was created.
+  google.protobuf.Timestamp create_time = 1;
+
+  // The time the operation was last updated.
+  google.protobuf.Timestamp update_time = 2;
+
+  // The resource path for the target of the operation.
+  string resource = 3;
+
+  // The method that triggered the operation.
+  string method = 4;
+
+  // The [KMS key
+  // name](https://cloud.google.com/kms/docs/resource-hierarchy#keys) with which
+  // the content of the Operation is encrypted. The expected format is
+  // `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}`.
+  string kms_key_name = 6 [(google.api.resource_reference) = {
+    type: "cloudkms.googleapis.com/CryptoKey"
+  }];
+
+  // The [KMS key version
+  // name](https://cloud.google.com/kms/docs/resource-hierarchy#key_versions)
+  // with which content of the Operation is encrypted. The expected format is
+  // `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}/cryptoKeyVersions/{crypto_key_version}`.
+  string kms_key_version_name = 7 [(google.api.resource_reference) = {
+    type: "cloudkms.googleapis.com/CryptoKeyVersion"
+  }];
+
+  // The request that spawned the Operation.
+  oneof request {
+    // The BatchRecognizeRequest that spawned the Operation.
+    BatchRecognizeRequest batch_recognize_request = 8;
+
+    // The CreateRecognizerRequest that spawned the Operation.
+    CreateRecognizerRequest create_recognizer_request = 9;
+
+    // The UpdateRecognizerRequest that spawned the Operation.
+    UpdateRecognizerRequest update_recognizer_request = 10;
+
+    // The DeleteRecognizerRequest that spawned the Operation.
+    DeleteRecognizerRequest delete_recognizer_request = 11;
+
+    // The UndeleteRecognizerRequest that spawned the Operation.
+    UndeleteRecognizerRequest undelete_recognizer_request = 12;
+
+    // The CreateCustomClassRequest that spawned the Operation.
+    CreateCustomClassRequest create_custom_class_request = 13;
+
+    // The UpdateCustomClassRequest that spawned the Operation.
+    UpdateCustomClassRequest update_custom_class_request = 14;
+
+    // The DeleteCustomClassRequest that spawned the Operation.
+    DeleteCustomClassRequest delete_custom_class_request = 15;
+
+    // The UndeleteCustomClassRequest that spawned the Operation.
+    UndeleteCustomClassRequest undelete_custom_class_request = 16;
+
+    // The CreatePhraseSetRequest that spawned the Operation.
+    CreatePhraseSetRequest create_phrase_set_request = 17;
+
+    // The UpdatePhraseSetRequest that spawned the Operation.
+    UpdatePhraseSetRequest update_phrase_set_request = 18;
+
+    // The DeletePhraseSetRequest that spawned the Operation.
+    DeletePhraseSetRequest delete_phrase_set_request = 19;
+
+    // The UndeletePhraseSetRequest that spawned the Operation.
+    UndeletePhraseSetRequest undelete_phrase_set_request = 20;
+
+    // The UpdateConfigRequest that spawned the Operation.
+    UpdateConfigRequest update_config_request = 21 [deprecated = true];
+  }
+
+  // The percent progress of the Operation. Values can range from 0-100. If the
+  // value is 100, then the operation is finished.
+  int32 progress_percent = 22;
+
+  // Specific metadata per RPC.
+  oneof metadata {
+    // Metadata specific to the BatchRecognize method.
+    BatchRecognizeMetadata batch_recognize_metadata = 23;
+  }
+}
+
+// Request message for the
+// [ListRecognizers][google.cloud.speech.v2.Speech.ListRecognizers] method.
+message ListRecognizersRequest {
+  // Required. The project and location of Recognizers to list. The expected
+  // format is `projects/{project}/locations/{location}`.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "locations.googleapis.com/Location"
+    }
+  ];
+
+  // The maximum number of Recognizers to return. The service may return fewer
+  // than this value. If unspecified, at most 5 Recognizers will be returned.
+  // The maximum value is 100; values above 100 will be coerced to 100.
+  int32 page_size = 2;
+
+  // A page token, received from a previous
+  // [ListRecognizers][google.cloud.speech.v2.Speech.ListRecognizers] call.
+  // Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to
+  // [ListRecognizers][google.cloud.speech.v2.Speech.ListRecognizers] must match
+  // the call that provided the page token.
+  string page_token = 3;
+
+  // Whether, or not, to show resources that have been deleted.
+  bool show_deleted = 4;
+}
+
+// Response message for the
+// [ListRecognizers][google.cloud.speech.v2.Speech.ListRecognizers] method.
+message ListRecognizersResponse {
+  // The list of requested Recognizers.
+  repeated Recognizer recognizers = 1;
+
+  // A token, which can be sent as
+  // [page_token][google.cloud.speech.v2.ListRecognizersRequest.page_token] to
+  // retrieve the next page. If this field is omitted, there are no subsequent
+  // pages. This token expires after 72 hours.
+  string next_page_token = 2;
+}
+
+// Request message for the
+// [GetRecognizer][google.cloud.speech.v2.Speech.GetRecognizer] method.
+message GetRecognizerRequest {
+  // Required. The name of the Recognizer to retrieve. The expected format is
+  // `projects/{project}/locations/{location}/recognizers/{recognizer}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/Recognizer"
+    }
+  ];
+}
+
+// Request message for the
+// [UpdateRecognizer][google.cloud.speech.v2.Speech.UpdateRecognizer] method.
+message UpdateRecognizerRequest {
+  // Required. The Recognizer to update.
+  //
+  // The Recognizer's `name` field is used to identify the Recognizer to update.
+  // Format: `projects/{project}/locations/{location}/recognizers/{recognizer}`.
+  Recognizer recognizer = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to update. If empty, all non-default valued fields are
+  // considered for update. Use `*` to update the entire Recognizer resource.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // If set, validate the request and preview the updated Recognizer, but do not
+  // actually update it.
+  bool validate_only = 4;
+}
+
+// Request message for the
+// [DeleteRecognizer][google.cloud.speech.v2.Speech.DeleteRecognizer] method.
+message DeleteRecognizerRequest {
+  // Required. The name of the Recognizer to delete.
+  // Format: `projects/{project}/locations/{location}/recognizers/{recognizer}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/Recognizer"
+    }
+  ];
+
+  // If set, validate the request and preview the deleted Recognizer, but do not
+  // actually delete it.
+  bool validate_only = 2;
+
+  // If set to true, and the Recognizer is not found, the request will succeed
+  // and  be a no-op (no Operation is recorded in this case).
+  bool allow_missing = 4;
+
+  // This checksum is computed by the server based on the value of other
+  // fields. This may be sent on update, undelete, and delete requests to ensure
+  // the client has an up-to-date value before proceeding.
+  string etag = 3;
+}
+
+// Request message for the
+// [UndeleteRecognizer][google.cloud.speech.v2.Speech.UndeleteRecognizer]
+// method.
+message UndeleteRecognizerRequest {
+  // Required. The name of the Recognizer to undelete.
+  // Format: `projects/{project}/locations/{location}/recognizers/{recognizer}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/Recognizer"
+    }
+  ];
+
+  // If set, validate the request and preview the undeleted Recognizer, but do
+  // not actually undelete it.
+  bool validate_only = 3;
+
+  // This checksum is computed by the server based on the value of other
+  // fields. This may be sent on update, undelete, and delete requests to ensure
+  // the client has an up-to-date value before proceeding.
+  string etag = 4;
+}
+
+// A Recognizer message. Stores recognition configuration and metadata.
+message Recognizer {
+  option (google.api.resource) = {
+    type: "speech.googleapis.com/Recognizer"
+    pattern: "projects/{project}/locations/{location}/recognizers/{recognizer}"
+    style: DECLARATIVE_FRIENDLY
+  };
+
+  // Set of states that define the lifecycle of a Recognizer.
+  enum State {
+    // The default value. This value is used if the state is omitted.
+    STATE_UNSPECIFIED = 0;
+
+    // The Recognizer is active and ready for use.
+    ACTIVE = 2;
+
+    // This Recognizer has been deleted.
+    DELETED = 4;
+  }
+
+  // Output only. Identifier. The resource name of the Recognizer.
+  // Format: `projects/{project}/locations/{location}/recognizers/{recognizer}`.
+  string name = 1 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.field_behavior) = IDENTIFIER
+  ];
+
+  // Output only. System-assigned unique identifier for the Recognizer.
+  string uid = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // User-settable, human-readable name for the Recognizer. Must be 63
+  // characters or less.
+  string display_name = 3;
+
+  // Optional. This field is now deprecated. Prefer the
+  // [`model`][google.cloud.speech.v2.RecognitionConfig.model] field in the
+  // [`RecognitionConfig`][google.cloud.speech.v2.RecognitionConfig] message.
+  //
+  // Which model to use for recognition requests. Select the model best suited
+  // to your domain to get best results.
+  //
+  // Guidance for choosing which model to use can be found in the [Transcription
+  // Models
+  // Documentation](https://cloud.google.com/speech-to-text/v2/docs/transcription-model)
+  // and the models supported in each region can be found in the [Table Of
+  // Supported
+  // Models](https://cloud.google.com/speech-to-text/v2/docs/speech-to-text-supported-languages).
+  string model = 4 [deprecated = true, (google.api.field_behavior) = OPTIONAL];
+
+  // Optional. This field is now deprecated. Prefer the
+  // [`language_codes`][google.cloud.speech.v2.RecognitionConfig.language_codes]
+  // field in the
+  // [`RecognitionConfig`][google.cloud.speech.v2.RecognitionConfig] message.
+  //
+  // The language of the supplied audio as a
+  // [BCP-47](https://www.rfc-editor.org/rfc/bcp/bcp47.txt) language tag.
+  //
+  // Supported languages for each model are listed in the [Table of Supported
+  // Models](https://cloud.google.com/speech-to-text/v2/docs/speech-to-text-supported-languages).
+  //
+  // If additional languages are provided, recognition result will contain
+  // recognition in the most likely language detected. The recognition result
+  // will include the language tag of the language detected in the audio.
+  // When you create or update a Recognizer, these values are
+  // stored in normalized BCP-47 form. For example, "en-us" is stored as
+  // "en-US".
+  repeated string language_codes = 17
+      [deprecated = true, (google.api.field_behavior) = OPTIONAL];
+
+  // Default configuration to use for requests with this Recognizer.
+  // This can be overwritten by inline configuration in the
+  // [RecognizeRequest.config][google.cloud.speech.v2.RecognizeRequest.config]
+  // field.
+  RecognitionConfig default_recognition_config = 6;
+
+  // Allows users to store small amounts of arbitrary data.
+  // Both the key and the value must be 63 characters or less each.
+  // At most 100 annotations.
+  map<string, string> annotations = 7;
+
+  // Output only. The Recognizer lifecycle state.
+  State state = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. Creation time.
+  google.protobuf.Timestamp create_time = 9
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The most recent time this Recognizer was modified.
+  google.protobuf.Timestamp update_time = 10
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The time at which this Recognizer was requested for deletion.
+  google.protobuf.Timestamp delete_time = 11
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The time at which this Recognizer will be purged.
+  google.protobuf.Timestamp expire_time = 14
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. This checksum is computed by the server based on the value of
+  // other fields. This may be sent on update, undelete, and delete requests to
+  // ensure the client has an up-to-date value before proceeding.
+  string etag = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. Whether or not this Recognizer is in the process of being
+  // updated.
+  bool reconciling = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The [KMS key
+  // name](https://cloud.google.com/kms/docs/resource-hierarchy#keys) with which
+  // the Recognizer is encrypted. The expected format is
+  // `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}`.
+  string kms_key_name = 15 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.resource_reference) = {
+      type: "cloudkms.googleapis.com/CryptoKey"
+    }
+  ];
+
+  // Output only. The [KMS key version
+  // name](https://cloud.google.com/kms/docs/resource-hierarchy#key_versions)
+  // with which the Recognizer is encrypted. The expected format is
+  // `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}/cryptoKeyVersions/{crypto_key_version}`.
+  string kms_key_version_name = 16 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.resource_reference) = {
+      type: "cloudkms.googleapis.com/CryptoKeyVersion"
+    }
+  ];
+}
+
+// Automatically detected decoding parameters.
+// Supported for the following encodings:
+//
+// * WAV_LINEAR16: 16-bit signed little-endian PCM samples in a WAV container.
+//
+// * WAV_MULAW: 8-bit companded mulaw samples in a WAV container.
+//
+// * WAV_ALAW: 8-bit companded alaw samples in a WAV container.
+//
+// * RFC4867_5_AMR: AMR frames with an rfc4867.5 header.
+//
+// * RFC4867_5_AMRWB: AMR-WB frames with an rfc4867.5 header.
+//
+// * FLAC: FLAC frames in the "native FLAC" container format.
+//
+// * MP3: MPEG audio frames with optional (ignored) ID3 metadata.
+//
+// * OGG_OPUS: Opus audio frames in an Ogg container.
+//
+// * WEBM_OPUS: Opus audio frames in a WebM container.
+//
+// * MP4_AAC: AAC audio frames in an MP4 container.
+//
+// * M4A_AAC: AAC audio frames in an M4A container.
+//
+// * MOV_AAC: AAC audio frames in an MOV container.
+message AutoDetectDecodingConfig {}
+
+// Explicitly specified decoding parameters.
+message ExplicitDecodingConfig {
+  // Supported audio data encodings.
+  enum AudioEncoding {
+    // Default value. This value is unused.
+    AUDIO_ENCODING_UNSPECIFIED = 0;
+
+    // Headerless 16-bit signed little-endian PCM samples.
+    LINEAR16 = 1;
+
+    // Headerless 8-bit companded mulaw samples.
+    MULAW = 2;
+
+    // Headerless 8-bit companded alaw samples.
+    ALAW = 3;
+
+    // AMR frames with an rfc4867.5 header.
+    AMR = 4;
+
+    // AMR-WB frames with an rfc4867.5 header.
+    AMR_WB = 5;
+
+    // FLAC frames in the "native FLAC" container format.
+    FLAC = 6;
+
+    // MPEG audio frames with optional (ignored) ID3 metadata.
+    MP3 = 7;
+
+    // Opus audio frames in an Ogg container.
+    OGG_OPUS = 8;
+
+    // Opus audio frames in a WebM container.
+    WEBM_OPUS = 9;
+
+    // AAC audio frames in an MP4 container.
+    MP4_AAC = 10;
+
+    // AAC audio frames in an M4A container.
+    M4A_AAC = 11;
+
+    // AAC audio frames in an MOV container.
+    MOV_AAC = 12;
+  }
+
+  // Required. Encoding of the audio data sent for recognition.
+  AudioEncoding encoding = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // Optional. Sample rate in Hertz of the audio data sent for recognition.
+  // Valid values are: 8000-48000. 16000 is optimal. For best results, set the
+  // sampling rate of the audio source to 16000 Hz. If that's not possible, use
+  // the native sample rate of the audio source (instead of re-sampling).
+  // Note that this field is marked as OPTIONAL for backward compatibility
+  // reasons. It is (and has always been) effectively REQUIRED.
+  int32 sample_rate_hertz = 2 [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. Number of channels present in the audio data sent for
+  // recognition. Note that this field is marked as OPTIONAL for backward
+  // compatibility reasons. It is (and has always been) effectively REQUIRED.
+  //
+  // The maximum allowed value is 8.
+  int32 audio_channel_count = 3 [(google.api.field_behavior) = OPTIONAL];
+}
+
+// Configuration to enable speaker diarization.
+message SpeakerDiarizationConfig {
+  // Required. Minimum number of speakers in the conversation. This range gives
+  // you more flexibility by allowing the system to automatically determine the
+  // correct number of speakers.
+  //
+  // To fix the number of speakers detected in the audio, set
+  // `min_speaker_count` = `max_speaker_count`.
+  int32 min_speaker_count = 2 [(google.api.field_behavior) = REQUIRED];
+
+  // Required. Maximum number of speakers in the conversation. Valid values are:
+  // 1-6. Must be >= `min_speaker_count`. This range gives you more flexibility
+  // by allowing the system to automatically determine the correct number of
+  // speakers.
+  int32 max_speaker_count = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Available recognition features.
+message RecognitionFeatures {
+  // Options for how to recognize multi-channel audio.
+  enum MultiChannelMode {
+    // Default value for the multi-channel mode. If the audio contains
+    // multiple channels, only the first channel will be transcribed; other
+    // channels will be ignored.
+    MULTI_CHANNEL_MODE_UNSPECIFIED = 0;
+
+    // If selected, each channel in the provided audio is transcribed
+    // independently. This cannot be selected if the selected
+    // [model][google.cloud.speech.v2.Recognizer.model] is `latest_short`.
+    SEPARATE_RECOGNITION_PER_CHANNEL = 1;
+  }
+
+  // If set to `true`, the server will attempt to filter out profanities,
+  // replacing all but the initial character in each filtered word with
+  // asterisks, for instance, "f***". If set to `false` or omitted, profanities
+  // won't be filtered out.
+  bool profanity_filter = 1;
+
+  // If `true`, the top result includes a list of words and the start and end
+  // time offsets (timestamps) for those words. If `false`, no word-level time
+  // offset information is returned. The default is `false`.
+  bool enable_word_time_offsets = 2;
+
+  // If `true`, the top result includes a list of words and the confidence for
+  // those words. If `false`, no word-level confidence information is returned.
+  // The default is `false`.
+  bool enable_word_confidence = 3;
+
+  // If `true`, adds punctuation to recognition result hypotheses. This feature
+  // is only available in select languages. The default `false` value does not
+  // add punctuation to result hypotheses.
+  bool enable_automatic_punctuation = 4;
+
+  // The spoken punctuation behavior for the call. If `true`, replaces spoken
+  // punctuation with the corresponding symbols in the request. For example,
+  // "how are you question mark" becomes "how are you?". See
+  // https://cloud.google.com/speech-to-text/docs/spoken-punctuation for
+  // support. If `false`, spoken punctuation is not replaced.
+  bool enable_spoken_punctuation = 14;
+
+  // The spoken emoji behavior for the call. If `true`, adds spoken emoji
+  // formatting for the request. This will replace spoken emojis with the
+  // corresponding Unicode symbols in the final transcript. If `false`, spoken
+  // emojis are not replaced.
+  bool enable_spoken_emojis = 15;
+
+  // Mode for recognizing multi-channel audio.
+  MultiChannelMode multi_channel_mode = 17;
+
+  // Configuration to enable speaker diarization and set additional
+  // parameters to make diarization better suited for your application.
+  // When this is enabled, we send all the words from the beginning of the
+  // audio for the top alternative in every consecutive STREAMING responses.
+  // This is done in order to improve our speaker tags as our models learn to
+  // identify the speakers in the conversation over time.
+  // For non-streaming requests, the diarization results will be provided only
+  // in the top alternative of the FINAL SpeechRecognitionResult.
+  SpeakerDiarizationConfig diarization_config = 9;
+
+  // Maximum number of recognition hypotheses to be returned.
+  // The server may return fewer than `max_alternatives`.
+  // Valid values are `0`-`30`. A value of `0` or `1` will return a maximum of
+  // one. If omitted, will return a maximum of one.
+  int32 max_alternatives = 16;
+}
+
+// Transcription normalization configuration. Use transcription normalization
+// to automatically replace parts of the transcript with phrases of your
+// choosing. For StreamingRecognize, this normalization only applies to stable
+// partial transcripts (stability > 0.8) and final transcripts.
+message TranscriptNormalization {
+  // A single replacement configuration.
+  message Entry {
+    // What to replace. Max length is 100 characters.
+    string search = 1;
+
+    // What to replace with. Max length is 100 characters.
+    string replace = 2;
+
+    // Whether the search is case sensitive.
+    bool case_sensitive = 3;
+  }
+
+  // A list of replacement entries. We will perform replacement with one entry
+  // at a time. For example, the second entry in ["cat" => "dog", "mountain cat"
+  // => "mountain dog"] will never be applied because we will always process the
+  // first entry before it. At most 100 entries.
+  repeated Entry entries = 1;
+}
+
+// Translation configuration. Use to translate the given audio into text for the
+// desired language.
+message TranslationConfig {
+  // Required. The language code to translate to.
+  string target_language = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Provides "hints" to the speech recognizer to favor specific words and phrases
+// in the results. PhraseSets can be specified as an inline resource, or a
+// reference to an existing PhraseSet resource.
+message SpeechAdaptation {
+  // A biasing PhraseSet, which can be either a string referencing the name of
+  // an existing PhraseSets resource, or an inline definition of a PhraseSet.
+  message AdaptationPhraseSet {
+    oneof value {
+      // The name of an existing PhraseSet resource. The user must have read
+      // access to the resource and it must not be deleted.
+      string phrase_set = 1 [(google.api.resource_reference) = {
+        type: "speech.googleapis.com/PhraseSet"
+      }];
+
+      // An inline defined PhraseSet.
+      PhraseSet inline_phrase_set = 2;
+    }
+  }
+
+  // A list of inline or referenced PhraseSets.
+  repeated AdaptationPhraseSet phrase_sets = 1;
+
+  // A list of inline CustomClasses. Existing CustomClass resources can be
+  // referenced directly in a PhraseSet.
+  repeated CustomClass custom_classes = 2;
+}
+
+// Provides information to the Recognizer that specifies how to process the
+// recognition request.
+message RecognitionConfig {
+  // Decoding parameters for audio being sent for recognition.
+  oneof decoding_config {
+    // Automatically detect decoding parameters.
+    // Preferred for supported formats.
+    AutoDetectDecodingConfig auto_decoding_config = 7;
+
+    // Explicitly specified decoding parameters.
+    // Required if using headerless PCM audio (linear16, mulaw, alaw).
+    ExplicitDecodingConfig explicit_decoding_config = 8;
+  }
+
+  // Optional. Which model to use for recognition requests. Select the model
+  // best suited to your domain to get best results.
+  //
+  // Guidance for choosing which model to use can be found in the [Transcription
+  // Models
+  // Documentation](https://cloud.google.com/speech-to-text/v2/docs/transcription-model)
+  // and the models supported in each region can be found in the [Table Of
+  // Supported
+  // Models](https://cloud.google.com/speech-to-text/v2/docs/speech-to-text-supported-languages).
+  string model = 9 [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. The language of the supplied audio as a
+  // [BCP-47](https://www.rfc-editor.org/rfc/bcp/bcp47.txt) language tag.
+  // Language tags are normalized to BCP-47 before they are used eg "en-us"
+  // becomes "en-US".
+  //
+  // Supported languages for each model are listed in the [Table of Supported
+  // Models](https://cloud.google.com/speech-to-text/v2/docs/speech-to-text-supported-languages).
+  //
+  // If additional languages are provided, recognition result will contain
+  // recognition in the most likely language detected. The recognition result
+  // will include the language tag of the language detected in the audio.
+  repeated string language_codes = 10 [(google.api.field_behavior) = OPTIONAL];
+
+  // Speech recognition features to enable.
+  RecognitionFeatures features = 2;
+
+  // Speech adaptation context that weights recognizer predictions for specific
+  // words and phrases.
+  SpeechAdaptation adaptation = 6;
+
+  // Optional. Use transcription normalization to automatically replace parts of
+  // the transcript with phrases of your choosing. For StreamingRecognize, this
+  // normalization only applies to stable partial transcripts (stability > 0.8)
+  // and final transcripts.
+  TranscriptNormalization transcript_normalization = 11
+      [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. Optional configuration used to automatically run translation on
+  // the given audio to the desired language for supported models.
+  TranslationConfig translation_config = 15
+      [(google.api.field_behavior) = OPTIONAL];
+}
+
+// Request message for the
+// [Recognize][google.cloud.speech.v2.Speech.Recognize] method. Either
+// `content` or `uri` must be supplied. Supplying both or neither returns
+// [INVALID_ARGUMENT][google.rpc.Code.INVALID_ARGUMENT]. See [content
+// limits](https://cloud.google.com/speech-to-text/quotas#content).
+message RecognizeRequest {
+  // Required. The name of the Recognizer to use during recognition. The
+  // expected format is
+  // `projects/{project}/locations/{location}/recognizers/{recognizer}`. The
+  // {recognizer} segment may be set to `_` to use an empty implicit Recognizer.
+  string recognizer = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/Recognizer"
+    }
+  ];
+
+  // Features and audio metadata to use for the Automatic Speech Recognition.
+  // This field in combination with the
+  // [config_mask][google.cloud.speech.v2.RecognizeRequest.config_mask] field
+  // can be used to override parts of the
+  // [default_recognition_config][google.cloud.speech.v2.Recognizer.default_recognition_config]
+  // of the Recognizer resource.
+  RecognitionConfig config = 1;
+
+  // The list of fields in
+  // [config][google.cloud.speech.v2.RecognizeRequest.config] that override the
+  // values in the
+  // [default_recognition_config][google.cloud.speech.v2.Recognizer.default_recognition_config]
+  // of the recognizer during this recognition request. If no mask is provided,
+  // all non-default valued fields in
+  // [config][google.cloud.speech.v2.RecognizeRequest.config] override the
+  // values in the recognizer for this recognition request. If a mask is
+  // provided, only the fields listed in the mask override the config in the
+  // recognizer for this recognition request. If a wildcard (`*`) is provided,
+  // [config][google.cloud.speech.v2.RecognizeRequest.config] completely
+  // overrides and replaces the config in the recognizer for this recognition
+  // request.
+  google.protobuf.FieldMask config_mask = 8;
+
+  // The audio source, which is either inline content or a Google Cloud
+  // Storage URI.
+  oneof audio_source {
+    // The audio data bytes encoded as specified in
+    // [RecognitionConfig][google.cloud.speech.v2.RecognitionConfig]. As
+    // with all bytes fields, proto buffers use a pure binary representation,
+    // whereas JSON representations use base64.
+    bytes content = 5;
+
+    // URI that points to a file that contains audio data bytes as specified in
+    // [RecognitionConfig][google.cloud.speech.v2.RecognitionConfig]. The file
+    // must not be compressed (for example, gzip). Currently, only Google Cloud
+    // Storage URIs are supported, which must be specified in the following
+    // format: `gs://bucket_name/object_name` (other URI formats return
+    // [INVALID_ARGUMENT][google.rpc.Code.INVALID_ARGUMENT]). For more
+    // information, see [Request
+    // URIs](https://cloud.google.com/storage/docs/reference-uris).
+    string uri = 6;
+  }
+}
+
+// Metadata about the recognition request and response.
+message RecognitionResponseMetadata {
+  // Global request identifier auto-generated by the API.
+  string request_id = 9 [(google.api.field_info).format = UUID4];
+
+  // When available, billed audio seconds for the corresponding request.
+  google.protobuf.Duration total_billed_duration = 6;
+}
+
+// Alternative hypotheses (a.k.a. n-best list).
+message SpeechRecognitionAlternative {
+  // Transcript text representing the words that the user spoke.
+  string transcript = 1;
+
+  // The confidence estimate between 0.0 and 1.0. A higher number
+  // indicates an estimated greater likelihood that the recognized words are
+  // correct. This field is set only for the top alternative of a non-streaming
+  // result or, of a streaming result where
+  // [is_final][google.cloud.speech.v2.StreamingRecognitionResult.is_final] is
+  // set to `true`. This field is not guaranteed to be accurate and users should
+  // not rely on it to be always provided. The default of 0.0 is a sentinel
+  // value indicating `confidence` was not set.
+  float confidence = 2;
+
+  // A list of word-specific information for each recognized word.
+  // When the
+  // [SpeakerDiarizationConfig][google.cloud.speech.v2.SpeakerDiarizationConfig]
+  // is set, you will see all the words from the beginning of the audio.
+  repeated WordInfo words = 3;
+}
+
+// Word-specific information for recognized words.
+message WordInfo {
+  // Time offset relative to the beginning of the audio,
+  // and corresponding to the start of the spoken word.
+  // This field is only set if
+  // [enable_word_time_offsets][google.cloud.speech.v2.RecognitionFeatures.enable_word_time_offsets]
+  // is `true` and only in the top hypothesis. This is an experimental feature
+  // and the accuracy of the time offset can vary.
+  google.protobuf.Duration start_offset = 1;
+
+  // Time offset relative to the beginning of the audio,
+  // and corresponding to the end of the spoken word.
+  // This field is only set if
+  // [enable_word_time_offsets][google.cloud.speech.v2.RecognitionFeatures.enable_word_time_offsets]
+  // is `true` and only in the top hypothesis. This is an experimental feature
+  // and the accuracy of the time offset can vary.
+  google.protobuf.Duration end_offset = 2;
+
+  // The word corresponding to this set of information.
+  string word = 3;
+
+  // The confidence estimate between 0.0 and 1.0. A higher number
+  // indicates an estimated greater likelihood that the recognized words are
+  // correct. This field is set only for the top alternative of a non-streaming
+  // result or, of a streaming result where
+  // [is_final][google.cloud.speech.v2.StreamingRecognitionResult.is_final] is
+  // set to `true`. This field is not guaranteed to be accurate and users should
+  // not rely on it to be always provided. The default of 0.0 is a sentinel
+  // value indicating `confidence` was not set.
+  float confidence = 4;
+
+  // A distinct label is assigned for every speaker within the audio. This field
+  // specifies which one of those speakers was detected to have spoken this
+  // word. `speaker_label` is set if
+  // [SpeakerDiarizationConfig][google.cloud.speech.v2.SpeakerDiarizationConfig]
+  // is given and only in the top alternative.
+  string speaker_label = 6;
+}
+
+// A speech recognition result corresponding to a portion of the audio.
+message SpeechRecognitionResult {
+  // May contain one or more recognition hypotheses. These alternatives are
+  // ordered in terms of accuracy, with the top (first) alternative being the
+  // most probable, as ranked by the recognizer.
+  repeated SpeechRecognitionAlternative alternatives = 1;
+
+  // For multi-channel audio, this is the channel number corresponding to the
+  // recognized result for the audio from that channel.
+  // For `audio_channel_count` = `N`, its output values can range from `1` to
+  // `N`.
+  int32 channel_tag = 2;
+
+  // Time offset of the end of this result relative to the beginning of the
+  // audio.
+  google.protobuf.Duration result_end_offset = 4;
+
+  // Output only. The [BCP-47](https://www.rfc-editor.org/rfc/bcp/bcp47.txt)
+  // language tag of the language in this result. This language code was
+  // detected to have the most likelihood of being spoken in the audio.
+  string language_code = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// Response message for the
+// [Recognize][google.cloud.speech.v2.Speech.Recognize] method.
+message RecognizeResponse {
+  // Sequential list of transcription results corresponding to sequential
+  // portions of audio.
+  repeated SpeechRecognitionResult results = 3;
+
+  // Metadata about the recognition.
+  RecognitionResponseMetadata metadata = 2;
+}
+
+// Available recognition features specific to streaming recognition requests.
+message StreamingRecognitionFeatures {
+  // Events that a timeout can be set on for voice activity.
+  message VoiceActivityTimeout {
+    // Duration to timeout the stream if no speech begins. If this is set and
+    // no speech is detected in this duration at the start of the stream, the
+    // server will close the stream.
+    google.protobuf.Duration speech_start_timeout = 1;
+
+    // Duration to timeout the stream after speech ends. If this is set and no
+    // speech is detected in this duration after speech was detected, the server
+    // will close the stream.
+    google.protobuf.Duration speech_end_timeout = 2;
+  }
+
+  // If `true`, responses with voice activity speech events will be returned as
+  // they are detected.
+  bool enable_voice_activity_events = 1;
+
+  // Whether or not to stream interim results to the client. If set to true,
+  // interim results will be streamed to the client. Otherwise, only the final
+  // response will be streamed back.
+  bool interim_results = 2;
+
+  // If set, the server will automatically close the stream after the specified
+  // duration has elapsed after the last VOICE_ACTIVITY speech event has been
+  // sent. The field `voice_activity_events` must also be set to true.
+  VoiceActivityTimeout voice_activity_timeout = 3;
+}
+
+// Provides configuration information for the StreamingRecognize request.
+message StreamingRecognitionConfig {
+  // Required. Features and audio metadata to use for the Automatic Speech
+  // Recognition. This field in combination with the
+  // [config_mask][google.cloud.speech.v2.StreamingRecognitionConfig.config_mask]
+  // field can be used to override parts of the
+  // [default_recognition_config][google.cloud.speech.v2.Recognizer.default_recognition_config]
+  // of the Recognizer resource.
+  RecognitionConfig config = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields in
+  // [config][google.cloud.speech.v2.StreamingRecognitionConfig.config] that
+  // override the values in the
+  // [default_recognition_config][google.cloud.speech.v2.Recognizer.default_recognition_config]
+  // of the recognizer during this recognition request. If no mask is provided,
+  // all non-default valued fields in
+  // [config][google.cloud.speech.v2.StreamingRecognitionConfig.config] override
+  // the values in the Recognizer for this recognition request. If a mask is
+  // provided, only the fields listed in the mask override the config in the
+  // Recognizer for this recognition request. If a wildcard (`*`) is provided,
+  // [config][google.cloud.speech.v2.StreamingRecognitionConfig.config]
+  // completely overrides and replaces the config in the recognizer for this
+  // recognition request.
+  google.protobuf.FieldMask config_mask = 3;
+
+  // Speech recognition features to enable specific to streaming audio
+  // recognition requests.
+  StreamingRecognitionFeatures streaming_features = 2;
+}
+
+// Request message for the
+// [StreamingRecognize][google.cloud.speech.v2.Speech.StreamingRecognize]
+// method. Multiple
+// [StreamingRecognizeRequest][google.cloud.speech.v2.StreamingRecognizeRequest]
+// messages are sent in one call.
+//
+// If the [Recognizer][google.cloud.speech.v2.Recognizer] referenced by
+// [recognizer][google.cloud.speech.v2.StreamingRecognizeRequest.recognizer]
+// contains a fully specified request configuration then the stream may only
+// contain messages with only
+// [audio][google.cloud.speech.v2.StreamingRecognizeRequest.audio] set.
+//
+// Otherwise the first message must contain a
+// [recognizer][google.cloud.speech.v2.StreamingRecognizeRequest.recognizer] and
+// a
+// [streaming_config][google.cloud.speech.v2.StreamingRecognizeRequest.streaming_config]
+// message that together fully specify the request configuration and must not
+// contain [audio][google.cloud.speech.v2.StreamingRecognizeRequest.audio]. All
+// subsequent messages must only have
+// [audio][google.cloud.speech.v2.StreamingRecognizeRequest.audio] set.
+message StreamingRecognizeRequest {
+  // Required. The name of the Recognizer to use during recognition. The
+  // expected format is
+  // `projects/{project}/locations/{location}/recognizers/{recognizer}`. The
+  // {recognizer} segment may be set to `_` to use an empty implicit Recognizer.
+  string recognizer = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/Recognizer"
+    }
+  ];
+
+  oneof streaming_request {
+    // StreamingRecognitionConfig to be used in this recognition attempt.
+    // If provided, it will override the default RecognitionConfig stored in the
+    // Recognizer.
+    StreamingRecognitionConfig streaming_config = 6;
+
+    // Inline audio bytes to be Recognized.
+    // Maximum size for this field is 15 KB per request.
+    bytes audio = 5;
+  }
+}
+
+// Request message for the
+// [BatchRecognize][google.cloud.speech.v2.Speech.BatchRecognize]
+// method.
+message BatchRecognizeRequest {
+  // Possible processing strategies for batch requests.
+  enum ProcessingStrategy {
+    // Default value for the processing strategy. The request is processed as
+    // soon as its received.
+    PROCESSING_STRATEGY_UNSPECIFIED = 0;
+
+    // If selected, processes the request during lower utilization periods for a
+    // price discount. The request is fulfilled within 24 hours.
+    DYNAMIC_BATCHING = 1;
+  }
+
+  // Required. The name of the Recognizer to use during recognition. The
+  // expected format is
+  // `projects/{project}/locations/{location}/recognizers/{recognizer}`. The
+  // {recognizer} segment may be set to `_` to use an empty implicit Recognizer.
+  string recognizer = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/Recognizer"
+    }
+  ];
+
+  // Features and audio metadata to use for the Automatic Speech Recognition.
+  // This field in combination with the
+  // [config_mask][google.cloud.speech.v2.BatchRecognizeRequest.config_mask]
+  // field can be used to override parts of the
+  // [default_recognition_config][google.cloud.speech.v2.Recognizer.default_recognition_config]
+  // of the Recognizer resource.
+  RecognitionConfig config = 4;
+
+  // The list of fields in
+  // [config][google.cloud.speech.v2.BatchRecognizeRequest.config] that override
+  // the values in the
+  // [default_recognition_config][google.cloud.speech.v2.Recognizer.default_recognition_config]
+  // of the recognizer during this recognition request. If no mask is provided,
+  // all given fields in
+  // [config][google.cloud.speech.v2.BatchRecognizeRequest.config] override the
+  // values in the recognizer for this recognition request. If a mask is
+  // provided, only the fields listed in the mask override the config in the
+  // recognizer for this recognition request. If a wildcard (`*`) is provided,
+  // [config][google.cloud.speech.v2.BatchRecognizeRequest.config] completely
+  // overrides and replaces the config in the recognizer for this recognition
+  // request.
+  google.protobuf.FieldMask config_mask = 5;
+
+  // Audio files with file metadata for ASR.
+  // The maximum number of files allowed to be specified is 15.
+  repeated BatchRecognizeFileMetadata files = 3;
+
+  // Configuration options for where to output the transcripts of each file.
+  RecognitionOutputConfig recognition_output_config = 6;
+
+  // Processing strategy to use for this request.
+  ProcessingStrategy processing_strategy = 7;
+}
+
+// Output configurations for Cloud Storage.
+message GcsOutputConfig {
+  // The Cloud Storage URI prefix with which recognition results will be
+  // written.
+  string uri = 1;
+}
+
+// Output configurations for inline response.
+message InlineOutputConfig {}
+
+// Output configurations for serialized `BatchRecognizeResults` protos.
+message NativeOutputFileFormatConfig {}
+
+// Output configurations for [WebVTT](https://www.w3.org/TR/webvtt1/) formatted
+// subtitle file.
+message VttOutputFileFormatConfig {}
+
+// Output configurations [SubRip
+// Text](https://www.matroska.org/technical/subtitles.html#srt-subtitles)
+// formatted subtitle file.
+message SrtOutputFileFormatConfig {}
+
+// Configuration for the format of the results stored to `output`.
+message OutputFormatConfig {
+  // Configuration for the native output format. If this field is set or if no
+  // other output format field is set, then transcripts will be written to the
+  // sink in the native format.
+  NativeOutputFileFormatConfig native = 1;
+
+  // Configuration for the VTT output format. If this field is set, then
+  // transcripts will be written to the sink in the VTT format.
+  VttOutputFileFormatConfig vtt = 2;
+
+  // Configuration for the SRT output format. If this field is set, then
+  // transcripts will be written to the sink in the SRT format.
+  SrtOutputFileFormatConfig srt = 3;
+}
+
+// Configuration options for the output(s) of recognition.
+message RecognitionOutputConfig {
+  oneof output {
+    // If this message is populated, recognition results are written to the
+    // provided Google Cloud Storage URI.
+    GcsOutputConfig gcs_output_config = 1;
+
+    // If this message is populated, recognition results are provided in the
+    // [BatchRecognizeResponse][google.cloud.speech.v2.BatchRecognizeResponse]
+    // message of the Operation when completed. This is only supported when
+    // calling [BatchRecognize][google.cloud.speech.v2.Speech.BatchRecognize]
+    // with just one audio file.
+    InlineOutputConfig inline_response_config = 2;
+  }
+
+  // Optional. Configuration for the format of the results stored to `output`.
+  // If unspecified transcripts will be written in the `NATIVE` format only.
+  OutputFormatConfig output_format_config = 3
+      [(google.api.field_behavior) = OPTIONAL];
+}
+
+// Response message for
+// [BatchRecognize][google.cloud.speech.v2.Speech.BatchRecognize] that is
+// packaged into a longrunning [Operation][google.longrunning.Operation].
+message BatchRecognizeResponse {
+  // Map from filename to the final result for that file.
+  map<string, BatchRecognizeFileResult> results = 1;
+
+  // When available, billed audio seconds for the corresponding request.
+  google.protobuf.Duration total_billed_duration = 2;
+}
+
+// Output type for Cloud Storage of BatchRecognize transcripts. Though this
+// proto isn't returned in this API anywhere, the Cloud Storage transcripts will
+// be this proto serialized and should be parsed as such.
+message BatchRecognizeResults {
+  // Sequential list of transcription results corresponding to sequential
+  // portions of audio.
+  repeated SpeechRecognitionResult results = 1;
+
+  // Metadata about the recognition.
+  RecognitionResponseMetadata metadata = 2;
+}
+
+// Final results written to Cloud Storage.
+message CloudStorageResult {
+  // The Cloud Storage URI to which recognition results were written.
+  string uri = 1;
+
+  // The Cloud Storage URI to which recognition results were written as VTT
+  // formatted captions. This is populated only when `VTT` output is requested.
+  string vtt_format_uri = 2;
+
+  // The Cloud Storage URI to which recognition results were written as SRT
+  // formatted captions. This is populated only when `SRT` output is requested.
+  string srt_format_uri = 3;
+}
+
+// Final results returned inline in the recognition response.
+message InlineResult {
+  // The transcript for the audio file.
+  BatchRecognizeResults transcript = 1;
+
+  // The transcript for the audio file as VTT formatted captions. This is
+  // populated only when `VTT` output is requested.
+  string vtt_captions = 2;
+
+  // The transcript for the audio file as SRT formatted captions. This is
+  // populated only when `SRT` output is requested.
+  string srt_captions = 3;
+}
+
+// Final results for a single file.
+message BatchRecognizeFileResult {
+  // Error if one was encountered.
+  google.rpc.Status error = 2;
+
+  RecognitionResponseMetadata metadata = 3;
+
+  oneof result {
+    // Recognition results written to Cloud Storage. This is
+    // populated only when
+    // [GcsOutputConfig][google.cloud.speech.v2.GcsOutputConfig] is set in
+    // the
+    // [RecognitionOutputConfig][[google.cloud.speech.v2.RecognitionOutputConfig].
+    CloudStorageResult cloud_storage_result = 5;
+
+    // Recognition results. This is populated only when
+    // [InlineOutputConfig][google.cloud.speech.v2.InlineOutputConfig] is set in
+    // the
+    // [RecognitionOutputConfig][[google.cloud.speech.v2.RecognitionOutputConfig].
+    InlineResult inline_result = 6;
+  }
+
+  // Deprecated. Use `cloud_storage_result.native_format_uri` instead.
+  string uri = 1 [deprecated = true];
+
+  // Deprecated. Use `inline_result.transcript` instead.
+  BatchRecognizeResults transcript = 4 [deprecated = true];
+}
+
+// Metadata about transcription for a single file (for example, progress
+// percent).
+message BatchRecognizeTranscriptionMetadata {
+  // How much of the file has been transcribed so far.
+  int32 progress_percent = 1;
+
+  // Error if one was encountered.
+  google.rpc.Status error = 2;
+
+  // The Cloud Storage URI to which recognition results will be written.
+  string uri = 3;
+}
+
+// Operation metadata for
+// [BatchRecognize][google.cloud.speech.v2.Speech.BatchRecognize].
+message BatchRecognizeMetadata {
+  // Map from provided filename to the transcription metadata for that file.
+  map<string, BatchRecognizeTranscriptionMetadata> transcription_metadata = 1;
+}
+
+// Metadata about a single file in a batch for BatchRecognize.
+message BatchRecognizeFileMetadata {
+  // The audio source, which is a Google Cloud Storage URI.
+  oneof audio_source {
+    // Cloud Storage URI for the audio file.
+    string uri = 1;
+  }
+
+  // Features and audio metadata to use for the Automatic Speech Recognition.
+  // This field in combination with the
+  // [config_mask][google.cloud.speech.v2.BatchRecognizeFileMetadata.config_mask]
+  // field can be used to override parts of the
+  // [default_recognition_config][google.cloud.speech.v2.Recognizer.default_recognition_config]
+  // of the Recognizer resource as well as the
+  // [config][google.cloud.speech.v2.BatchRecognizeRequest.config] at the
+  // request level.
+  RecognitionConfig config = 4;
+
+  // The list of fields in
+  // [config][google.cloud.speech.v2.BatchRecognizeFileMetadata.config] that
+  // override the values in the
+  // [default_recognition_config][google.cloud.speech.v2.Recognizer.default_recognition_config]
+  // of the recognizer during this recognition request. If no mask is provided,
+  // all non-default valued fields in
+  // [config][google.cloud.speech.v2.BatchRecognizeFileMetadata.config] override
+  // the values in the recognizer for this recognition request. If a mask is
+  // provided, only the fields listed in the mask override the config in the
+  // recognizer for this recognition request. If a wildcard (`*`) is provided,
+  // [config][google.cloud.speech.v2.BatchRecognizeFileMetadata.config]
+  // completely overrides and replaces the config in the recognizer for this
+  // recognition request.
+  google.protobuf.FieldMask config_mask = 5;
+}
+
+// A streaming speech recognition result corresponding to a portion of the audio
+// that is currently being processed.
+message StreamingRecognitionResult {
+  // May contain one or more recognition hypotheses. These alternatives are
+  // ordered in terms of accuracy, with the top (first) alternative being the
+  // most probable, as ranked by the recognizer.
+  repeated SpeechRecognitionAlternative alternatives = 1;
+
+  // If `false`, this
+  // [StreamingRecognitionResult][google.cloud.speech.v2.StreamingRecognitionResult]
+  // represents an interim result that may change. If `true`, this is the final
+  // time the speech service will return this particular
+  // [StreamingRecognitionResult][google.cloud.speech.v2.StreamingRecognitionResult],
+  // the recognizer will not return any further hypotheses for this portion of
+  // the transcript and corresponding audio.
+  bool is_final = 2;
+
+  // An estimate of the likelihood that the recognizer will not change its guess
+  // about this interim result. Values range from 0.0 (completely unstable)
+  // to 1.0 (completely stable). This field is only provided for interim results
+  // ([is_final][google.cloud.speech.v2.StreamingRecognitionResult.is_final]=`false`).
+  // The default of 0.0 is a sentinel value indicating `stability` was not set.
+  float stability = 3;
+
+  // Time offset of the end of this result relative to the beginning of the
+  // audio.
+  google.protobuf.Duration result_end_offset = 4;
+
+  // For multi-channel audio, this is the channel number corresponding to the
+  // recognized result for the audio from that channel.
+  // For
+  // `audio_channel_count` = `N`, its output values can range from `1` to `N`.
+  int32 channel_tag = 5;
+
+  // Output only. The [BCP-47](https://www.rfc-editor.org/rfc/bcp/bcp47.txt)
+  // language tag of the language in this result. This language code was
+  // detected to have the most likelihood of being spoken in the audio.
+  string language_code = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// `StreamingRecognizeResponse` is the only message returned to the client by
+// `StreamingRecognize`. A series of zero or more `StreamingRecognizeResponse`
+// messages are streamed back to the client. If there is no recognizable
+// audio then no messages are streamed back to the client.
+//
+// Here are some examples of `StreamingRecognizeResponse`s that might
+// be returned while processing audio:
+//
+// 1. results { alternatives { transcript: "tube" } stability: 0.01 }
+//
+// 2. results { alternatives { transcript: "to be a" } stability: 0.01 }
+//
+// 3. results { alternatives { transcript: "to be" } stability: 0.9 }
+//    results { alternatives { transcript: " or not to be" } stability: 0.01 }
+//
+// 4. results { alternatives { transcript: "to be or not to be"
+//                             confidence: 0.92 }
+//              alternatives { transcript: "to bee or not to bee" }
+//              is_final: true }
+//
+// 5. results { alternatives { transcript: " that's" } stability: 0.01 }
+//
+// 6. results { alternatives { transcript: " that is" } stability: 0.9 }
+//    results { alternatives { transcript: " the question" } stability: 0.01 }
+//
+// 7. results { alternatives { transcript: " that is the question"
+//                             confidence: 0.98 }
+//              alternatives { transcript: " that was the question" }
+//              is_final: true }
+//
+// Notes:
+//
+// - Only two of the above responses #4 and #7 contain final results; they are
+//   indicated by `is_final: true`. Concatenating these together generates the
+//   full transcript: "to be or not to be that is the question".
+//
+// - The others contain interim `results`. #3 and #6 contain two interim
+//   `results`: the first portion has a high stability and is less likely to
+//   change; the second portion has a low stability and is very likely to
+//   change. A UI designer might choose to show only high stability `results`.
+//
+// - The specific `stability` and `confidence` values shown above are only for
+//   illustrative purposes. Actual values may vary.
+//
+// - In each response, only one of these fields will be set:
+//     `error`,
+//     `speech_event_type`, or
+//     one or more (repeated) `results`.
+message StreamingRecognizeResponse {
+  // Indicates the type of speech event.
+  enum SpeechEventType {
+    // No speech event specified.
+    SPEECH_EVENT_TYPE_UNSPECIFIED = 0;
+
+    // This event indicates that the server has detected the end of the user's
+    // speech utterance and expects no additional speech. Therefore, the server
+    // will not process additional audio and will close the gRPC bidirectional
+    // stream. This event is only sent if there was a force cutoff due to
+    // silence being detected early. This event is only available through the
+    // `latest_short` [model][google.cloud.speech.v2.Recognizer.model].
+    END_OF_SINGLE_UTTERANCE = 1;
+
+    // This event indicates that the server has detected the beginning of human
+    // voice activity in the stream. This event can be returned multiple times
+    // if speech starts and stops repeatedly throughout the stream. This event
+    // is only sent if `voice_activity_events` is set to true.
+    SPEECH_ACTIVITY_BEGIN = 2;
+
+    // This event indicates that the server has detected the end of human voice
+    // activity in the stream. This event can be returned multiple times if
+    // speech starts and stops repeatedly throughout the stream. This event is
+    // only sent if `voice_activity_events` is set to true.
+    SPEECH_ACTIVITY_END = 3;
+  }
+
+  // This repeated list contains zero or more results that
+  // correspond to consecutive portions of the audio currently being processed.
+  // It contains zero or one
+  // [is_final][google.cloud.speech.v2.StreamingRecognitionResult.is_final]=`true`
+  // result (the newly settled portion), followed by zero or more
+  // [is_final][google.cloud.speech.v2.StreamingRecognitionResult.is_final]=`false`
+  // results (the interim results).
+  repeated StreamingRecognitionResult results = 6;
+
+  // Indicates the type of speech event.
+  SpeechEventType speech_event_type = 3;
+
+  // Time offset between the beginning of the audio and event emission.
+  google.protobuf.Duration speech_event_offset = 7;
+
+  // Metadata about the recognition.
+  RecognitionResponseMetadata metadata = 5;
+}
+
+// Message representing the config for the Speech-to-Text API. This includes an
+// optional [KMS key](https://cloud.google.com/kms/docs/resource-hierarchy#keys)
+// with which incoming data will be encrypted.
+message Config {
+  option (google.api.resource) = {
+    type: "speech.googleapis.com/Config"
+    pattern: "projects/{project}/locations/{location}/config"
+  };
+
+  // Output only. Identifier. The name of the config resource. There is exactly
+  // one config resource per project per location. The expected format is
+  // `projects/{project}/locations/{location}/config`.
+  string name = 1 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.field_behavior) = IDENTIFIER
+  ];
+
+  // Optional. An optional [KMS key
+  // name](https://cloud.google.com/kms/docs/resource-hierarchy#keys) that if
+  // present, will be used to encrypt Speech-to-Text resources at-rest. Updating
+  // this key will not encrypt existing resources using this key; only new
+  // resources will be encrypted using this key. The expected format is
+  // `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}`.
+  string kms_key_name = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (google.api.resource_reference) = {
+      type: "cloudkms.googleapis.com/CryptoKey"
+    }
+  ];
+
+  // Output only. The most recent time this resource was modified.
+  google.protobuf.Timestamp update_time = 3
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// Request message for the
+// [GetConfig][google.cloud.speech.v2.Speech.GetConfig] method.
+message GetConfigRequest {
+  // Required. The name of the config to retrieve. There is exactly one config
+  // resource per project per location. The expected format is
+  // `projects/{project}/locations/{location}/config`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = { type: "speech.googleapis.com/Config" }
+  ];
+}
+
+// Request message for the
+// [UpdateConfig][google.cloud.speech.v2.Speech.UpdateConfig] method.
+message UpdateConfigRequest {
+  // Required. The config to update.
+  //
+  // The config's `name` field is used to identify the config to be updated.
+  // The expected format is `projects/{project}/locations/{location}/config`.
+  Config config = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// CustomClass for biasing in speech recognition. Used to define a set of words
+// or phrases that represents a common concept or theme likely to appear in your
+// audio, for example a list of passenger ship names.
+message CustomClass {
+  option (google.api.resource) = {
+    type: "speech.googleapis.com/CustomClass"
+    pattern: "projects/{project}/locations/{location}/customClasses/{custom_class}"
+    style: DECLARATIVE_FRIENDLY
+  };
+
+  // An item of the class.
+  message ClassItem {
+    // The class item's value.
+    string value = 1;
+  }
+
+  // Set of states that define the lifecycle of a CustomClass.
+  enum State {
+    // Unspecified state.  This is only used/useful for distinguishing
+    // unset values.
+    STATE_UNSPECIFIED = 0;
+
+    // The normal and active state.
+    ACTIVE = 2;
+
+    // This CustomClass has been deleted.
+    DELETED = 4;
+  }
+
+  // Output only. Identifier. The resource name of the CustomClass.
+  // Format:
+  // `projects/{project}/locations/{location}/customClasses/{custom_class}`.
+  string name = 1 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.field_behavior) = IDENTIFIER
+  ];
+
+  // Output only. System-assigned unique identifier for the CustomClass.
+  string uid = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Optional. User-settable, human-readable name for the CustomClass. Must be
+  // 63 characters or less.
+  string display_name = 4 [(google.api.field_behavior) = OPTIONAL];
+
+  // A collection of class items.
+  repeated ClassItem items = 5;
+
+  // Output only. The CustomClass lifecycle state.
+  State state = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. Creation time.
+  google.protobuf.Timestamp create_time = 6
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The most recent time this resource was modified.
+  google.protobuf.Timestamp update_time = 7
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The time at which this resource was requested for deletion.
+  google.protobuf.Timestamp delete_time = 8
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The time at which this resource will be purged.
+  google.protobuf.Timestamp expire_time = 9
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Optional. Allows users to store small amounts of arbitrary data.
+  // Both the key and the value must be 63 characters or less each.
+  // At most 100 annotations.
+  map<string, string> annotations = 10 [(google.api.field_behavior) = OPTIONAL];
+
+  // Output only. This checksum is computed by the server based on the value of
+  // other fields. This may be sent on update, undelete, and delete requests to
+  // ensure the client has an up-to-date value before proceeding.
+  string etag = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. Whether or not this CustomClass is in the process of being
+  // updated.
+  bool reconciling = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The [KMS key
+  // name](https://cloud.google.com/kms/docs/resource-hierarchy#keys) with which
+  // the CustomClass is encrypted. The expected format is
+  // `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}`.
+  string kms_key_name = 13 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.resource_reference) = {
+      type: "cloudkms.googleapis.com/CryptoKey"
+    }
+  ];
+
+  // Output only. The [KMS key version
+  // name](https://cloud.google.com/kms/docs/resource-hierarchy#key_versions)
+  // with which the CustomClass is encrypted. The expected format is
+  // `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}/cryptoKeyVersions/{crypto_key_version}`.
+  string kms_key_version_name = 14 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.resource_reference) = {
+      type: "cloudkms.googleapis.com/CryptoKeyVersion"
+    }
+  ];
+}
+
+// PhraseSet for biasing in speech recognition. A PhraseSet is used to provide
+// "hints" to the speech recognizer to favor specific words and phrases in the
+// results.
+message PhraseSet {
+  option (google.api.resource) = {
+    type: "speech.googleapis.com/PhraseSet"
+    pattern: "projects/{project}/locations/{location}/phraseSets/{phrase_set}"
+    style: DECLARATIVE_FRIENDLY
+  };
+
+  // A Phrase contains words and phrase "hints" so that the speech recognition
+  // is more likely to recognize them. This can be used to improve the accuracy
+  // for specific words and phrases, for example, if specific commands are
+  // typically spoken by the user. This can also be used to add additional words
+  // to the vocabulary of the recognizer.
+  //
+  // List items can also include CustomClass references containing groups of
+  // words that represent common concepts that occur in natural language.
+  message Phrase {
+    // The phrase itself.
+    string value = 1;
+
+    // Hint Boost. Overrides the boost set at the phrase set level.
+    // Positive value will increase the probability that a specific phrase will
+    // be recognized over other similar sounding phrases. The higher the boost,
+    // the higher the chance of false positive recognition as well. Negative
+    // boost values would correspond to anti-biasing. Anti-biasing is not
+    // enabled, so negative boost values will return an error. Boost values must
+    // be between 0 and 20. Any values outside that range will return an error.
+    // We recommend using a binary search approach to finding the optimal value
+    // for your use case as well as adding phrases both with and without boost
+    // to your requests.
+    float boost = 2;
+  }
+
+  // Set of states that define the lifecycle of a PhraseSet.
+  enum State {
+    // Unspecified state.  This is only used/useful for distinguishing
+    // unset values.
+    STATE_UNSPECIFIED = 0;
+
+    // The normal and active state.
+    ACTIVE = 2;
+
+    // This PhraseSet has been deleted.
+    DELETED = 4;
+  }
+
+  // Output only. Identifier. The resource name of the PhraseSet.
+  // Format: `projects/{project}/locations/{location}/phraseSets/{phrase_set}`.
+  string name = 1 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.field_behavior) = IDENTIFIER
+  ];
+
+  // Output only. System-assigned unique identifier for the PhraseSet.
+  string uid = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // A list of word and phrases.
+  repeated Phrase phrases = 3;
+
+  // Hint Boost. Positive value will increase the probability that a specific
+  // phrase will be recognized over other similar sounding phrases. The higher
+  // the boost, the higher the chance of false positive recognition as well.
+  // Valid `boost` values are between 0 (exclusive) and 20. We recommend using a
+  // binary search approach to finding the optimal value for your use case as
+  // well as adding phrases both with and without boost to your requests.
+  float boost = 4;
+
+  // User-settable, human-readable name for the PhraseSet. Must be 63
+  // characters or less.
+  string display_name = 5;
+
+  // Output only. The PhraseSet lifecycle state.
+  State state = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. Creation time.
+  google.protobuf.Timestamp create_time = 6
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The most recent time this resource was modified.
+  google.protobuf.Timestamp update_time = 7
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The time at which this resource was requested for deletion.
+  google.protobuf.Timestamp delete_time = 8
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The time at which this resource will be purged.
+  google.protobuf.Timestamp expire_time = 9
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Allows users to store small amounts of arbitrary data.
+  // Both the key and the value must be 63 characters or less each.
+  // At most 100 annotations.
+  map<string, string> annotations = 10;
+
+  // Output only. This checksum is computed by the server based on the value of
+  // other fields. This may be sent on update, undelete, and delete requests to
+  // ensure the client has an up-to-date value before proceeding.
+  string etag = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. Whether or not this PhraseSet is in the process of being
+  // updated.
+  bool reconciling = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The [KMS key
+  // name](https://cloud.google.com/kms/docs/resource-hierarchy#keys) with which
+  // the PhraseSet is encrypted. The expected format is
+  // `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}`.
+  string kms_key_name = 13 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.resource_reference) = {
+      type: "cloudkms.googleapis.com/CryptoKey"
+    }
+  ];
+
+  // Output only. The [KMS key version
+  // name](https://cloud.google.com/kms/docs/resource-hierarchy#key_versions)
+  // with which the PhraseSet is encrypted. The expected format is
+  // `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}/cryptoKeyVersions/{crypto_key_version}`.
+  string kms_key_version_name = 14 [
+    (google.api.field_behavior) = OUTPUT_ONLY,
+    (google.api.resource_reference) = {
+      type: "cloudkms.googleapis.com/CryptoKeyVersion"
+    }
+  ];
+}
+
+// Request message for the
+// [CreateCustomClass][google.cloud.speech.v2.Speech.CreateCustomClass] method.
+message CreateCustomClassRequest {
+  // Required. The CustomClass to create.
+  CustomClass custom_class = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // If set, validate the request and preview the CustomClass, but do not
+  // actually create it.
+  bool validate_only = 2;
+
+  // The ID to use for the CustomClass, which will become the final component of
+  // the CustomClass's resource name.
+  //
+  // This value should be 4-63 characters, and valid characters
+  // are /[a-z][0-9]-/.
+  string custom_class_id = 3;
+
+  // Required. The project and location where this CustomClass will be created.
+  // The expected format is `projects/{project}/locations/{location}`.
+  string parent = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "speech.googleapis.com/CustomClass"
+    }
+  ];
+}
+
+// Request message for the
+// [ListCustomClasses][google.cloud.speech.v2.Speech.ListCustomClasses] method.
+message ListCustomClassesRequest {
+  // Required. The project and location of CustomClass resources to list. The
+  // expected format is `projects/{project}/locations/{location}`.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "locations.googleapis.com/Location"
+    }
+  ];
+
+  // Number of results per requests. A valid page_size ranges from 0 to 100
+  // inclusive. If the page_size is zero or unspecified, a page size of 5 will
+  // be chosen. If the page size exceeds 100, it will be coerced down to 100.
+  // Note that a call might return fewer results than the requested page size.
+  int32 page_size = 2;
+
+  // A page token, received from a previous
+  // [ListCustomClasses][google.cloud.speech.v2.Speech.ListCustomClasses] call.
+  // Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to
+  // [ListCustomClasses][google.cloud.speech.v2.Speech.ListCustomClasses] must
+  // match the call that provided the page token.
+  string page_token = 3;
+
+  // Whether, or not, to show resources that have been deleted.
+  bool show_deleted = 4;
+}
+
+// Response message for the
+// [ListCustomClasses][google.cloud.speech.v2.Speech.ListCustomClasses] method.
+message ListCustomClassesResponse {
+  // The list of requested CustomClasses.
+  repeated CustomClass custom_classes = 1;
+
+  // A token, which can be sent as
+  // [page_token][google.cloud.speech.v2.ListCustomClassesRequest.page_token] to
+  // retrieve the next page. If this field is omitted, there are no subsequent
+  // pages. This token expires after 72 hours.
+  string next_page_token = 2;
+}
+
+// Request message for the
+// [GetCustomClass][google.cloud.speech.v2.Speech.GetCustomClass] method.
+message GetCustomClassRequest {
+  // Required. The name of the CustomClass to retrieve. The expected format is
+  // `projects/{project}/locations/{location}/customClasses/{custom_class}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/CustomClass"
+    }
+  ];
+}
+
+// Request message for the
+// [UpdateCustomClass][google.cloud.speech.v2.Speech.UpdateCustomClass] method.
+message UpdateCustomClassRequest {
+  // Required. The CustomClass to update.
+  //
+  // The CustomClass's `name` field is used to identify the CustomClass to
+  // update. Format:
+  // `projects/{project}/locations/{location}/customClasses/{custom_class}`.
+  CustomClass custom_class = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to be updated. If empty, all fields are considered for
+  // update.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // If set, validate the request and preview the updated CustomClass, but do
+  // not actually update it.
+  bool validate_only = 4;
+}
+
+// Request message for the
+// [DeleteCustomClass][google.cloud.speech.v2.Speech.DeleteCustomClass] method.
+message DeleteCustomClassRequest {
+  // Required. The name of the CustomClass to delete.
+  // Format:
+  // `projects/{project}/locations/{location}/customClasses/{custom_class}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/CustomClass"
+    }
+  ];
+
+  // If set, validate the request and preview the deleted CustomClass, but do
+  // not actually delete it.
+  bool validate_only = 2;
+
+  // If set to true, and the CustomClass is not found, the request will succeed
+  // and  be a no-op (no Operation is recorded in this case).
+  bool allow_missing = 4;
+
+  // This checksum is computed by the server based on the value of other
+  // fields. This may be sent on update, undelete, and delete requests to ensure
+  // the client has an up-to-date value before proceeding.
+  string etag = 3;
+}
+
+// Request message for the
+// [UndeleteCustomClass][google.cloud.speech.v2.Speech.UndeleteCustomClass]
+// method.
+message UndeleteCustomClassRequest {
+  // Required. The name of the CustomClass to undelete.
+  // Format:
+  // `projects/{project}/locations/{location}/customClasses/{custom_class}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/CustomClass"
+    }
+  ];
+
+  // If set, validate the request and preview the undeleted CustomClass, but do
+  // not actually undelete it.
+  bool validate_only = 3;
+
+  // This checksum is computed by the server based on the value of other
+  // fields. This may be sent on update, undelete, and delete requests to ensure
+  // the client has an up-to-date value before proceeding.
+  string etag = 4;
+}
+
+// Request message for the
+// [CreatePhraseSet][google.cloud.speech.v2.Speech.CreatePhraseSet] method.
+message CreatePhraseSetRequest {
+  // Required. The PhraseSet to create.
+  PhraseSet phrase_set = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // If set, validate the request and preview the PhraseSet, but do not
+  // actually create it.
+  bool validate_only = 2;
+
+  // The ID to use for the PhraseSet, which will become the final component of
+  // the PhraseSet's resource name.
+  //
+  // This value should be 4-63 characters, and valid characters
+  // are /[a-z][0-9]-/.
+  string phrase_set_id = 3;
+
+  // Required. The project and location where this PhraseSet will be created.
+  // The expected format is `projects/{project}/locations/{location}`.
+  string parent = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      child_type: "speech.googleapis.com/PhraseSet"
+    }
+  ];
+}
+
+// Request message for the
+// [ListPhraseSets][google.cloud.speech.v2.Speech.ListPhraseSets] method.
+message ListPhraseSetsRequest {
+  // Required. The project and location of PhraseSet resources to list. The
+  // expected format is `projects/{project}/locations/{location}`.
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "locations.googleapis.com/Location"
+    }
+  ];
+
+  // The maximum number of PhraseSets to return. The service may return fewer
+  // than this value. If unspecified, at most 5 PhraseSets will be returned.
+  // The maximum value is 100; values above 100 will be coerced to 100.
+  int32 page_size = 2;
+
+  // A page token, received from a previous
+  // [ListPhraseSets][google.cloud.speech.v2.Speech.ListPhraseSets] call.
+  // Provide this to retrieve the subsequent page.
+  //
+  // When paginating, all other parameters provided to
+  // [ListPhraseSets][google.cloud.speech.v2.Speech.ListPhraseSets] must match
+  // the call that provided the page token.
+  string page_token = 3;
+
+  // Whether, or not, to show resources that have been deleted.
+  bool show_deleted = 4;
+}
+
+// Response message for the
+// [ListPhraseSets][google.cloud.speech.v2.Speech.ListPhraseSets] method.
+message ListPhraseSetsResponse {
+  // The list of requested PhraseSets.
+  repeated PhraseSet phrase_sets = 1;
+
+  // A token, which can be sent as
+  // [page_token][google.cloud.speech.v2.ListPhraseSetsRequest.page_token] to
+  // retrieve the next page. If this field is omitted, there are no subsequent
+  // pages. This token expires after 72 hours.
+  string next_page_token = 2;
+}
+
+// Request message for the
+// [GetPhraseSet][google.cloud.speech.v2.Speech.GetPhraseSet] method.
+message GetPhraseSetRequest {
+  // Required. The name of the PhraseSet to retrieve. The expected format is
+  // `projects/{project}/locations/{location}/phraseSets/{phrase_set}`.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/PhraseSet"
+    }
+  ];
+}
+
+// Request message for the
+// [UpdatePhraseSet][google.cloud.speech.v2.Speech.UpdatePhraseSet] method.
+message UpdatePhraseSetRequest {
+  // Required. The PhraseSet to update.
+  //
+  // The PhraseSet's `name` field is used to identify the PhraseSet to update.
+  // Format: `projects/{project}/locations/{location}/phraseSets/{phrase_set}`.
+  PhraseSet phrase_set = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The list of fields to update. If empty, all non-default valued fields are
+  // considered for update. Use `*` to update the entire PhraseSet resource.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // If set, validate the request and preview the updated PhraseSet, but do not
+  // actually update it.
+  bool validate_only = 4;
+}
+
+// Request message for the
+// [DeletePhraseSet][google.cloud.speech.v2.Speech.DeletePhraseSet] method.
+message DeletePhraseSetRequest {
+  // Required. The name of the PhraseSet to delete.
+  // Format: `projects/{project}/locations/{location}/phraseSets/{phrase_set}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/PhraseSet"
+    }
+  ];
+
+  // If set, validate the request and preview the deleted PhraseSet, but do not
+  // actually delete it.
+  bool validate_only = 2;
+
+  // If set to true, and the PhraseSet is not found, the request will succeed
+  // and  be a no-op (no Operation is recorded in this case).
+  bool allow_missing = 4;
+
+  // This checksum is computed by the server based on the value of other
+  // fields. This may be sent on update, undelete, and delete requests to ensure
+  // the client has an up-to-date value before proceeding.
+  string etag = 3;
+}
+
+// Request message for the
+// [UndeletePhraseSet][google.cloud.speech.v2.Speech.UndeletePhraseSet]
+// method.
+message UndeletePhraseSetRequest {
+  // Required. The name of the PhraseSet to undelete.
+  // Format: `projects/{project}/locations/{location}/phraseSets/{phrase_set}`
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {
+      type: "speech.googleapis.com/PhraseSet"
+    }
+  ];
+
+  // If set, validate the request and preview the undeleted PhraseSet, but do
+  // not actually undelete it.
+  bool validate_only = 3;
+
+  // This checksum is computed by the server based on the value of other
+  // fields. This may be sent on update, undelete, and delete requests to ensure
+  // the client has an up-to-date value before proceeding.
+  string etag = 4;
+}

@@ -1,0 +1,59 @@
+{
+  "name": "@epic-web/invariant",
+  "version": "1.0.0",
+  "description": "Type safe utilities for throwing errors (and responses) if things aren't quite right. Inspired by npm.im/invariant",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/epicweb-dev/invariant"
+  },
+  "bugs": {
+    "url": "https://github.com/epicweb-dev/invariant/issues"
+  },
+  "homepage": "https://github.com/epicweb-dev/invariant#readme",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "format": "prettier --write .",
+    "test": "tsx --test --test-reporter spec --experimental-test-coverage test/*.test.ts",
+    "test:watch": "tsx --test --test-reporter spec --watch test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.4",
+    "prettier": "^3.1.1",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3"
+  },
+  "prettier": {
+    "semi": false,
+    "useTabs": true,
+    "singleQuote": true,
+    "proseWrap": "always",
+    "overrides": [
+      {
+        "files": [
+          "**/*.json"
+        ],
+        "options": {
+          "useTabs": false
+        }
+      }
+    ]
+  },
+  "keywords": [],
+  "author": "Kent C. Dodds <me@kentcdodds.com> (https://kentcdodds.com/)",
+  "license": "MIT"
+}

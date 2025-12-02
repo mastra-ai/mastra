@@ -1,0 +1,76 @@
+{
+  "name": "@octokit/rest",
+  "version": "22.0.1",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "type": "module",
+  "description": "GitHub REST API client for Node.js",
+  "keywords": [
+    "octokit",
+    "github",
+    "rest",
+    "api-client"
+  ],
+  "author": "Gregor Martynus (https://github.com/gr2m)",
+  "contributors": [
+    {
+      "name": "Mike de Boer",
+      "email": "info@mikedeboer.nl"
+    },
+    {
+      "name": "Fabian Jakobs",
+      "email": "fabian@c9.io"
+    },
+    {
+      "name": "Joe Gallo",
+      "email": "joe@brassafrax.com"
+    },
+    {
+      "name": "Gregor Martynus",
+      "url": "https://github.com/gr2m"
+    }
+  ],
+  "repository": "github:octokit/rest.js",
+  "dependencies": {
+    "@octokit/core": "^7.0.6",
+    "@octokit/plugin-paginate-rest": "^14.0.0",
+    "@octokit/plugin-request-log": "^6.0.0",
+    "@octokit/plugin-rest-endpoint-methods": "^17.0.0"
+  },
+  "devDependencies": {
+    "@octokit/auth-action": "^6.0.2",
+    "@octokit/auth-app": "^8.1.2",
+    "@octokit/fixtures-server": "^8.1.0",
+    "@octokit/request": "^10.0.6",
+    "@octokit/tsconfig": "^4.0.0",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "fetch-mock": "^12.0.0",
+    "glob": "^11.0.0",
+    "nock": "^14.0.0-beta.8",
+    "prettier": "^3.2.4",
+    "semantic-release-plugin-update-version-in-files": "^2.0.0",
+    "typescript": "^5.3.3",
+    "undici": "^7.0.0",
+    "vitest": "^4.0.0"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">= 20"
+  },
+  "files": [
+    "dist-*/**"
+  ],
+  "types": "dist-types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist-types/index.d.ts",
+      "import": "./dist-src/index.js",
+      "default": "./dist-src/index.js"
+    }
+  },
+  "sideEffects": false
+}

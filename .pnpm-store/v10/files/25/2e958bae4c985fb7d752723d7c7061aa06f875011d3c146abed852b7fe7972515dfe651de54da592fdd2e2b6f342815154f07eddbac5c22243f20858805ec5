@@ -1,0 +1,1 @@
+{"version":3,"file":"AssistantCloudAuthTokens.d.ts","sourceRoot":"","sources":["../src/AssistantCloudAuthTokens.tsx"],"names":[],"mappings":"AAAA,OAAO,EAAE,iBAAiB,EAAE,MAAM,qBAAqB,CAAC;AAExD,KAAK,sCAAsC,GAAG;IAC5C,KAAK,EAAE,MAAM,CAAC;CACf,CAAC;AAEF,qBAAa,wBAAwB;IACvB,OAAO,CAAC,KAAK;gBAAL,KAAK,EAAE,iBAAiB;IAE/B,MAAM,IAAI,OAAO,CAAC,sCAAsC,CAAC;CAGvE"}

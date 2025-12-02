@@ -1,0 +1,159 @@
+"use client";
+
+// src/ui/attachment-ui.tsx
+import {
+  forwardRef,
+  useEffect,
+  useState
+} from "react";
+import { CircleXIcon, FileIcon } from "lucide-react";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import { useThreadConfig } from "./thread-config.mjs";
+import { TooltipIconButton } from "./base/tooltip-icon-button.mjs";
+import { AttachmentPrimitive, useAttachment } from "@assistant-ui/react";
+import {
+  AvatarImage,
+  AvatarRoot,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from "./base/index.mjs";
+import { Dialog, DialogTrigger, DialogContent } from "./base/dialog.mjs";
+import { AvatarFallback } from "@radix-ui/react-avatar";
+import { useShallow } from "zustand/shallow";
+import { DialogTitle } from "@radix-ui/react-dialog";
+import { jsx, jsxs } from "react/jsx-runtime";
+var AttachmentRoot = withDefaults(AttachmentPrimitive.Root, {
+  className: "aui-attachment-root"
+});
+var AttachmentContent = withDefaults("div", {
+  className: "aui-attachment-content"
+});
+AttachmentRoot.displayName = "AttachmentRoot";
+var useFileSrc = (file) => {
+  const [src, setSrc] = useState(void 0);
+  useEffect(() => {
+    if (!file) {
+      setSrc(void 0);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setSrc(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [file]);
+  return src;
+};
+var useAttachmentSrc = () => {
+  const { file, src } = useAttachment(
+    useShallow((a) => {
+      if (a.type !== "image") return {};
+      if (a.file) return { file: a.file };
+      const src2 = a.content?.filter((c) => c.type === "image")[0]?.image;
+      if (!src2) return {};
+      return { src: src2 };
+    })
+  );
+  return useFileSrc(file) ?? src;
+};
+var AttachmentPreview = ({ src }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    /* @__PURE__ */ jsx(
+      "img",
+      {
+        src,
+        style: {
+          width: "auto",
+          height: "auto",
+          maxWidth: "75dvh",
+          maxHeight: "75dvh",
+          display: isLoaded ? "block" : "none",
+          overflow: "clip"
+        },
+        onLoad: () => setIsLoaded(true),
+        alt: "Preview"
+      }
+    )
+  );
+};
+var AttachmentPreviewDialog = ({ children }) => {
+  const src = useAttachmentSrc();
+  if (!src) return children;
+  return /* @__PURE__ */ jsxs(Dialog, { children: [
+    /* @__PURE__ */ jsx(DialogTrigger, { className: "aui-attachment-preview-trigger", asChild: true, children }),
+    /* @__PURE__ */ jsxs(DialogContent, { children: [
+      /* @__PURE__ */ jsx(DialogTitle, { className: "aui-sr-only", children: "Image Attachment Preview" }),
+      /* @__PURE__ */ jsx(AttachmentPreview, { src })
+    ] })
+  ] });
+};
+var AttachmentThumb = () => {
+  const isImage = useAttachment((a) => a.type === "image");
+  const src = useAttachmentSrc();
+  return /* @__PURE__ */ jsxs(AvatarRoot, { className: "aui-attachment-thumb", children: [
+    /* @__PURE__ */ jsx(AvatarFallback, { delayMs: isImage ? 200 : 0, children: /* @__PURE__ */ jsx(FileIcon, {}) }),
+    /* @__PURE__ */ jsx(AvatarImage, { src })
+  ] });
+};
+var AttachmentUI = () => {
+  const canRemove = useAttachment((a) => a.source !== "message");
+  const typeLabel = useAttachment((a) => {
+    const type = a.type;
+    switch (type) {
+      case "image":
+        return "Image";
+      case "document":
+        return "Document";
+      case "file":
+        return "File";
+      default:
+        const _exhaustiveCheck = type;
+        throw new Error(`Unknown attachment type: ${_exhaustiveCheck}`);
+    }
+  });
+  return /* @__PURE__ */ jsxs(Tooltip, { children: [
+    /* @__PURE__ */ jsxs(AttachmentRoot, { children: [
+      /* @__PURE__ */ jsx(AttachmentPreviewDialog, { children: /* @__PURE__ */ jsx(TooltipTrigger, { asChild: true, children: /* @__PURE__ */ jsxs(AttachmentContent, { children: [
+        /* @__PURE__ */ jsx(AttachmentThumb, {}),
+        /* @__PURE__ */ jsxs("div", { className: "aui-attachment-text", children: [
+          /* @__PURE__ */ jsx("p", { className: "aui-attachment-name", children: /* @__PURE__ */ jsx(AttachmentPrimitive.Name, {}) }),
+          /* @__PURE__ */ jsx("p", { className: "aui-attachment-type", children: typeLabel })
+        ] })
+      ] }) }) }),
+      canRemove && /* @__PURE__ */ jsx(AttachmentRemove, {})
+    ] }),
+    /* @__PURE__ */ jsx(TooltipContent, { side: "top", children: /* @__PURE__ */ jsx(AttachmentPrimitive.Name, {}) })
+  ] });
+};
+AttachmentUI.displayName = "Attachment";
+var AttachmentRemove = forwardRef((props, ref) => {
+  const {
+    strings: {
+      composer: { removeAttachment: { tooltip = "Remove file" } = {} } = {}
+    } = {}
+  } = useThreadConfig();
+  return /* @__PURE__ */ jsx(AttachmentPrimitive.Remove, { asChild: true, children: /* @__PURE__ */ jsx(
+    TooltipIconButton,
+    {
+      tooltip,
+      className: "aui-attachment-remove",
+      side: "top",
+      ...props,
+      ref,
+      children: props.children ?? /* @__PURE__ */ jsx(CircleXIcon, {})
+    }
+  ) });
+});
+AttachmentRemove.displayName = "AttachmentRemove";
+var exports = {
+  Root: AttachmentRoot,
+  Remove: AttachmentRemove
+};
+var attachment_ui_default = Object.assign(AttachmentUI, exports);
+export {
+  attachment_ui_default as default
+};
+//# sourceMappingURL=attachment-ui.mjs.map

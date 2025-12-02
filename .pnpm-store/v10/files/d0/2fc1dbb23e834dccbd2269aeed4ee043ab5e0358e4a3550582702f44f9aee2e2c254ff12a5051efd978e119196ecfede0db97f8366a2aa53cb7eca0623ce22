@@ -1,0 +1,68 @@
+{
+  "name": "@aws-sdk/lib-dynamodb",
+  "version": "3.913.0",
+  "description": "The document client simplifies working with items in Amazon DynamoDB by abstracting away the notion of attribute values.",
+  "main": "./dist-cjs/index.js",
+  "module": "./dist-es/index.js",
+  "types": "./dist-types/index.d.ts",
+  "scripts": {
+    "build": "concurrently 'yarn:build:cjs' 'yarn:build:es' 'yarn:build:types'",
+    "build:cjs": "node ../../scripts/compilation/inline lib-dynamodb",
+    "build:es": "tsc -p tsconfig.es.json",
+    "build:include:deps": "lerna run --scope $npm_package_name --include-dependencies build",
+    "build:types": "tsc -p tsconfig.types.json",
+    "build:types:downlevel": "downlevel-dts dist-types dist-types/ts3.4",
+    "clean": "rimraf ./dist-* && rimraf *.tsbuildinfo",
+    "extract:docs": "api-extractor run --local",
+    "test": "yarn g:vitest run",
+    "test:watch": "yarn g:vitest watch",
+    "test:e2e": "yarn g:vitest run -c vitest.config.e2e.mts --mode development",
+    "test:e2e:watch": "yarn g:vitest watch -c vitest.config.e2e.mts",
+    "test:integration": "yarn g:vitest run -c vitest.config.integ.mts --mode development",
+    "test:integration:watch": "yarn g:vitest watch -c vitest.config.integ.mts"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": {
+    "name": "AWS SDK for JavaScript Team",
+    "url": "https://aws.amazon.com/javascript/"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@aws-sdk/core": "3.911.0",
+    "@aws-sdk/util-dynamodb": "3.913.0",
+    "@smithy/core": "^3.16.1",
+    "@smithy/smithy-client": "^4.8.1",
+    "@smithy/types": "^4.7.1",
+    "tslib": "^2.6.2"
+  },
+  "peerDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.913.0"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-dynamodb": "3.913.0",
+    "@tsconfig/recommended": "1.0.1",
+    "@types/node": "^18.19.69",
+    "concurrently": "7.0.0",
+    "downlevel-dts": "0.10.1",
+    "rimraf": "3.0.2",
+    "typescript": "~5.8.3"
+  },
+  "typesVersions": {
+    "<4.0": {
+      "dist-types/*": [
+        "dist-types/ts3.4/*"
+      ]
+    }
+  },
+  "files": [
+    "dist-*/**"
+  ],
+  "homepage": "https://github.com/aws/aws-sdk-js-v3/tree/main/lib/lib-dynamodb",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aws/aws-sdk-js-v3.git",
+    "directory": "lib/lib-dynamodb"
+  }
+}

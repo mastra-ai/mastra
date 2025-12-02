@@ -1,0 +1,67 @@
+{
+  "name": "@ai-sdk/groq",
+  "version": "1.2.9",
+  "requiresBuild": false,
+  "files": {
+    "dist/index.js": {
+      "checkedAt": 1764662916579,
+      "integrity": "sha512-/mDsZ2bAydlyuiNmH6/gJqE/pmYXQ7PhnjSRwDBaf2g28rzgazV/+AFxz3P0kDo86MumwX7RFRAptYN4lySxUw==",
+      "mode": 420,
+      "size": 28047
+    },
+    "package.json": {
+      "checkedAt": 1764662916579,
+      "integrity": "sha512-LJY5nt6Lem3sILKIwv6Y3QO74r6oBY+FukdWEi8r8jaaxvfIjLLavre/jWgOY3Bv5zb12Ac6pD7ThvdFGgl2og==",
+      "mode": 420,
+      "size": 1525
+    },
+    "dist/index.js.map": {
+      "checkedAt": 1764662916580,
+      "integrity": "sha512-e6m6J2057HBsS+woLJUumZyPW6dN8c9zrDJwlwVuqVF/1KzkLpdL8wmGSdEuCIl/tOA+8g1zq42joFzhiDLJqg==",
+      "mode": 420,
+      "size": 49194
+    },
+    "dist/index.mjs.map": {
+      "checkedAt": 1764662916581,
+      "integrity": "sha512-uq93EhFrJ1EHFCLil1i9ERU0nLXYYAVW2ETqUZNObHgOD51mY9aOCCHl8kWGRmBPbgaioO/qEKYEeDXtt0D+PA==",
+      "mode": 420,
+      "size": 49280
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662916582,
+      "integrity": "sha512-dNzWygA4Z4ACG1BrYcfY8KwXLAucQ0GhWBqt4UXQu/Q9fh5Uw/eDdbFNY9uOQfNLR7yc8BwnXqgQxfxNDGZAeg==",
+      "mode": 420,
+      "size": 6449
+    },
+    "README.md": {
+      "checkedAt": 1764662916582,
+      "integrity": "sha512-wECRSytmK1yLNVxwT9aSPSLWtVP6AVJjXmLn8DLLooBCWIK3AcqxX4+WpuDj522JZbyccMIf0IWc0RgMzBn8fw==",
+      "mode": 420,
+      "size": 921
+    },
+    "dist/index.mjs": {
+      "checkedAt": 1764662916584,
+      "integrity": "sha512-YOb/SNTWpLJERYYWs5Exow55VRypJBdtC6JAjAIBkuxzn7tSOw2XRv8R1AL3WfMLgMmlAqZ+qs3iTtkyAp/nyg==",
+      "mode": 420,
+      "size": 25866
+    },
+    "dist/index.d.mts": {
+      "checkedAt": 1764662916584,
+      "integrity": "sha512-+uDPT4KO3i0JNsWc2of5ARhSwI0Izw6/BypwuOmbdvtHU5tNHd+w2o2Je7U6W/fU7GDRJ+yzGvCk5ff+0N+0+A==",
+      "mode": 420,
+      "size": 2431
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662916584,
+      "integrity": "sha512-+uDPT4KO3i0JNsWc2of5ARhSwI0Izw6/BypwuOmbdvtHU5tNHd+w2o2Je7U6W/fU7GDRJ+yzGvCk5ff+0N+0+A==",
+      "mode": 420,
+      "size": 2431
+    },
+    "LICENSE": {
+      "checkedAt": 1764662916586,
+      "integrity": "sha512-Hy/GyQA/R7TOAufwk+QAO9zWXfXfc4CKfq9YYSLiryc+CIjF6Vg6bBNIPzluRVfS8debb0WWE4isWP/PAFn+Vw==",
+      "mode": 420,
+      "size": 552
+    }
+  }
+}

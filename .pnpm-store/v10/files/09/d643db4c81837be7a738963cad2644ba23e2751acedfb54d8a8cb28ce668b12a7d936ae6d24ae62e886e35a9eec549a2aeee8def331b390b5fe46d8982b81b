@@ -1,0 +1,198 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    create:
+      path: /v1/audio-native
+      method: POST
+      auth: false
+      docs: >-
+        Creates Audio Native enabled project, optionally starts conversion and
+        returns project ID and embeddable HTML snippet.
+      source:
+        openapi: openapi.json
+      display-name: Create audio native project
+      request:
+        name: Body_Creates_Audio_Native_enabled_project__v1_audio_native_post
+        body:
+          properties:
+            name:
+              type: string
+              docs: Project name.
+            image:
+              type: optional<string>
+              docs: >-
+                (Deprecated) Image URL used in the player. If not provided,
+                default image set in the Player settings is used.
+              availability: deprecated
+            author:
+              type: optional<string>
+              docs: >-
+                Author used in the player and inserted at the start of the
+                uploaded article. If not provided, the default author set in the
+                Player settings is used.
+            title:
+              type: optional<string>
+              docs: >-
+                Title used in the player and inserted at the top of the uploaded
+                article. If not provided, the default title set in the Player
+                settings is used.
+            small:
+              type: optional<boolean>
+              docs: >-
+                (Deprecated) Whether to use small player or not. If not
+                provided, default value set in the Player settings is used.
+              default: false
+              availability: deprecated
+            text_color:
+              type: optional<string>
+              docs: >-
+                Text color used in the player. If not provided, default text
+                color set in the Player settings is used.
+            background_color:
+              type: optional<string>
+              docs: >-
+                Background color used in the player. If not provided, default
+                background color set in the Player settings is used.
+            sessionization:
+              type: optional<integer>
+              docs: >-
+                (Deprecated) Specifies for how many minutes to persist the
+                session across page reloads. If not provided, default
+                sessionization set in the Player settings is used.
+              default: 0
+              availability: deprecated
+            voice_id:
+              type: optional<string>
+              docs: >-
+                Voice ID used to voice the content. If not provided, default
+                voice ID set in the Player settings is used.
+            model_id:
+              type: optional<string>
+              docs: >-
+                TTS Model ID used in the player. If not provided, default model
+                ID set in the Player settings is used.
+            file:
+              type: optional<file>
+              docs: >-
+                Either txt or HTML input file containing the article content.
+                HTML should be formatted as follows
+                '&lt;html&gt;&lt;body&gt;&lt;div&gt;&lt;p&gt;Your
+                content&lt;/p&gt;&lt;h3&gt;More of your
+                content&lt;/h3&gt;&lt;p&gt;Some more of your
+                content&lt;/p&gt;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;'
+            auto_convert:
+              type: optional<boolean>
+              docs: Whether to auto convert the project to audio or not.
+              default: false
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.AudioNativeCreateProjectResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            name: name
+          response:
+            body:
+              project_id: JBFqnCBsd6RMkjVDRZzb
+              converting: false
+              html_snippet: <div id='audio-native-player'></div>
+    get_settings:
+      path: /v1/audio-native/{project_id}/settings
+      method: GET
+      auth: false
+      docs: Get player settings for the specific project.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: The ID of the Studio project.
+      display-name: Get Audio Native Project Settings
+      response:
+        docs: Successful Response
+        type: root.GetAudioNativeProjectSettingsResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              enabled: true
+              snapshot_id: JBFqnCBsd6RMkjVDRZzb
+              settings:
+                title: My Project
+                image: https://example.com/image.jpg
+                author: John Doe
+                small: false
+                text_color: '#000000'
+                background_color: '#FFFFFF'
+                sessionization: 1
+                audio_path: audio/my_project.mp3
+                audio_url: https://example.com/audio/my_project.mp3
+                status: ready
+    update_content:
+      path: /v1/audio-native/{project_id}/content
+      method: POST
+      auth: false
+      docs: Updates content for the specific AudioNative Project.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        project_id:
+          type: string
+          docs: >-
+            The ID of the project to be used. You can use the [List
+            projects](/docs/api-reference/studio/get-projects) endpoint to list
+            all the available projects.
+      display-name: Update audio native project
+      request:
+        name: >-
+          Body_Update_audio_native_Project_content_v1_audio_native__project_id__content_post
+        body:
+          properties:
+            file:
+              type: optional<file>
+              docs: >-
+                Either txt or HTML input file containing the article content.
+                HTML should be formatted as follows
+                '&lt;html&gt;&lt;body&gt;&lt;div&gt;&lt;p&gt;Your
+                content&lt;/p&gt;&lt;h5&gt;More of your
+                content&lt;/h5&gt;&lt;p&gt;Some more of your
+                content&lt;/p&gt;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;'
+            auto_convert:
+              type: optional<boolean>
+              docs: Whether to auto convert the project to audio or not.
+              default: false
+            auto_publish:
+              type: optional<boolean>
+              docs: >-
+                Whether to auto publish the new project snapshot after it's
+                converted.
+              default: false
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.AudioNativeEditContentResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            project_id: 21m00Tcm4TlvDq8ikWAM
+          request: {}
+          response:
+            body:
+              project_id: JBFqnCBsd6RMkjVDRZzb
+              converting: false
+              publishing: false
+              html_snippet: <div id='audio-native-player'></div>
+  source:
+    openapi: openapi.json

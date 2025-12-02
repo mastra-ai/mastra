@@ -1,0 +1,16 @@
+import { MastraBase } from '../chunk-S6URFGCZ.js';
+
+// src/tts/index.ts
+var MastraTTS = class extends MastraBase {
+  model;
+  constructor({ model }) {
+    super({
+      component: "TTS"
+    });
+    this.model = model;
+  }
+};
+
+export { MastraTTS };
+//# sourceMappingURL=index.js.map
+//# sourceMappingURL=index.js.map

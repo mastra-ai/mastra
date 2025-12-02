@@ -1,0 +1,85 @@
+import type { SpanOutputProcessor, AnySpan } from '@mastra/core/observability';
+export type RedactionStyle = 'full' | 'partial';
+/**
+ * Options for configuring the SensitiveDataFilter.
+ */
+export interface SensitiveDataFilterOptions {
+    /**
+     * List of sensitive field names to redact.
+     * Matching is case-insensitive and normalizes separators (`api-key`, `api_key`, `Api Key` → `apikey`).
+     *
+     * Defaults include: password, token, secret, key, apikey, auth, authorization,
+     * bearer, bearertoken, jwt, credential, clientsecret, privatekey, refresh, ssn.
+     */
+    sensitiveFields?: string[];
+    /**
+     * The token used for full redaction.
+     * Default: "[REDACTED]"
+     */
+    redactionToken?: string;
+    /**
+     * Style of redaction to use:
+     * - "full": always replace with redactionToken.
+     * - "partial": show 3 characters from the start and end, redact the middle.
+     *
+     * Default: "full"
+     */
+    redactionStyle?: RedactionStyle;
+}
+/**
+ * SensitiveDataFilter
+ *
+ * An SpanOutputProcessor that redacts sensitive information from span fields.
+ *
+ * - Sensitive keys are matched case-insensitively, normalized to remove separators.
+ * - Sensitive values are redacted using either full or partial redaction.
+ * - Partial redaction always keeps 3 chars at the start and end.
+ * - If filtering a field fails, the field is replaced with:
+ *   `{ error: { processor: "sensitive-data-filter" } }`
+ */
+export declare class SensitiveDataFilter implements SpanOutputProcessor {
+    name: string;
+    private sensitiveFields;
+    private redactionToken;
+    private redactionStyle;
+    constructor(options?: SensitiveDataFilterOptions);
+    /**
+     * Process a span by filtering sensitive data across its key fields.
+     * Fields processed: attributes, metadata, input, output, errorInfo.
+     *
+     * @param span - The input span to filter
+     * @returns A new span with sensitive values redacted
+     */
+    process(span: AnySpan): AnySpan;
+    /**
+     * Recursively filter objects/arrays for sensitive keys.
+     * Handles circular references by replacing with a marker.
+     */
+    private deepFilter;
+    private tryFilter;
+    /**
+     * Normalize keys by lowercasing and stripping non-alphanumeric characters.
+     * Ensures consistent matching for variants like "api-key", "api_key", "Api Key".
+     */
+    private normalizeKey;
+    /**
+     * Check whether a normalized key exactly matches any sensitive field.
+     * Both key and sensitive fields are normalized by removing all non-alphanumeric
+     * characters and converting to lowercase before comparison.
+     *
+     * Examples:
+     * - "api_key", "api-key", "ApiKey" all normalize to "apikey" → MATCHES "apikey"
+     * - "promptTokens", "prompt_tokens" normalize to "prompttokens" → DOES NOT MATCH "token"
+     */
+    private isSensitive;
+    /**
+     * Redact a sensitive value.
+     * - Full style: replaces with a fixed token.
+     * - Partial style: shows 3 chars at start and end, hides the middle.
+     *
+     * Non-string values are converted to strings before partial redaction.
+     */
+    private redactValue;
+    shutdown(): Promise<void>;
+}
+//# sourceMappingURL=sensitive-data-filter.d.ts.map

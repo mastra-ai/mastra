@@ -1,0 +1,31 @@
+{
+  "name": "@tailwindcss/oxide-darwin-arm64",
+  "version": "4.1.17",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662909758,
+      "integrity": "sha512-SjpmYFxWIMKaXERNUNiM9csvNG/dCw4mh8xQSCyUti4cPNDuZW0GFMjuzhoNoLX7SzpKFacxxfGvairk0SlCnw==",
+      "mode": 420,
+      "size": 524
+    },
+    "README.md": {
+      "checkedAt": 1764662909758,
+      "integrity": "sha512-6U/ZSeir8CWJSYxT9O9z3Lz7i4GJNEB+d7o8GTbOla9Yh5vIy5bD8J8inUEgec6S6chyftF3dr15gjvu1aOgSQ==",
+      "mode": 420,
+      "size": 106
+    },
+    "tailwindcss-oxide.darwin-arm64.node": {
+      "checkedAt": 1764662909764,
+      "integrity": "sha512-9ls1Y2/9W6ahFiRs6MaTBW9wFTARJfZG47VUolw6u+4AE+9PKMGAqVUk4630Cw52NdzEEs3M7ta7CYv4RMGuew==",
+      "mode": 420,
+      "size": 2902656
+    },
+    "LICENSE": {
+      "checkedAt": 1764662909764,
+      "integrity": "sha512-9X+sI7UOelzzysUtes9vKamnAYfathdWUsIyS1QlQ5lSXr/i62gEli2uj9/sd5mFKW+aAmOdaTEAhqFEG5CWIA==",
+      "mode": 420,
+      "size": 1071
+    }
+  }
+}

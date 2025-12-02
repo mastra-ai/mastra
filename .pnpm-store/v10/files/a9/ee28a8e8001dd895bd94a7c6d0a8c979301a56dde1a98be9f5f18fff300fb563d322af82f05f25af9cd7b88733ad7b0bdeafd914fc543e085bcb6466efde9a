@@ -1,0 +1,149 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.fromColumnar = exports.parseServerTiming = exports.parseFloatMetric = exports.parseIntMetric = exports.make_request_timing = exports.delay = exports.statusCodeShouldRetry = exports.buildUrl = exports.TurbopufferError = exports.isRuntimeFullyNodeCompatible = void 0;
+function detectRuntime() {
+    var _a, _b;
+    // @ts-expect-error can be ignored
+    if (typeof globalThis.Bun !== "undefined")
+        return "bun";
+    // @ts-expect-error can be ignored
+    if (typeof globalThis.Deno !== "undefined")
+        return "deno";
+    const userAgent = (_a = globalThis.navigator) === null || _a === void 0 ? void 0 : _a.userAgent;
+    // Try navigator.userAgent:
+    // https://developers.cloudflare.com/workers/runtime-apis/web-standards/#navigatoruseragent.
+    // Fallback: look for presence of non-standard globals specific to the cloudflare runtime:
+    // https://community.cloudflare.com/t/how-to-detect-the-cloudflare-worker-runtime/293715/2.
+    if (userAgent
+        ? userAgent === "Cloudflare-Workers"
+        : // @ts-expect-error can be ignored
+            typeof WebSocketPair !== "undefined")
+        return "cloudflare-workers";
+    if (typeof window !== "undefined")
+        return "browser";
+    if (userAgent
+        ? userAgent.startsWith("Node.js")
+        : ((_b = process.release) === null || _b === void 0 ? void 0 : _b.name) === "node")
+        return "node";
+}
+const detectedRuntime = detectRuntime();
+exports.isRuntimeFullyNodeCompatible = detectedRuntime === "node" || detectedRuntime === "deno";
+/** An error class for errors returned by the turbopuffer API. */
+class TurbopufferError extends Error {
+    constructor(error, { status, cause }) {
+        super(error, { cause: cause });
+        this.error = error;
+        this.status = status;
+    }
+}
+exports.TurbopufferError = TurbopufferError;
+function buildUrl(baseUrl, path, query) {
+    // https://developer.mozilla.org/en-US/docs/Web/API/URL_API/Resolving_relative_references
+    // if baseUrl doesn't end in /, add one to make it behave
+    // like a directory so the next path part is appended.
+    // if there are multiple / appended, ensure all but one get removed.
+    const updatedBaseUrl = baseUrl.replace(/\/*$/, "/");
+    // strip leading slashes from `path` so it's appended rather
+    // than treated as absolute
+    const relativePath = path.replace(/^\/+/, "");
+    const url = new URL(relativePath, updatedBaseUrl);
+    if (query) {
+        for (const [key, value] of Object.entries(query)) {
+            if (value)
+                url.searchParams.set(key, value);
+        }
+    }
+    return url;
+}
+exports.buildUrl = buildUrl;
+/** A helper function to determine if a status code should be retried. */
+function statusCodeShouldRetry(statusCode) {
+    return (!statusCode || statusCode === 408 || statusCode === 429 || statusCode >= 500);
+}
+exports.statusCodeShouldRetry = statusCodeShouldRetry;
+/** A helper function to delay for a given number of milliseconds. */
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+exports.delay = delay;
+function make_request_timing({ request_start, response_start, body_read_end, decompress_end, deserialize_end, requestCompressionDuration, }) {
+    const deserialize_start = decompress_end !== null && decompress_end !== void 0 ? decompress_end : body_read_end;
+    return {
+        response_time: response_start - request_start,
+        // `!= null` checks for both null and undefined
+        body_read_time: body_read_end != null ? body_read_end - response_start : null,
+        compress_time: requestCompressionDuration !== null && requestCompressionDuration !== void 0 ? requestCompressionDuration : null,
+        decompress_time: decompress_end != null && body_read_end != null
+            ? decompress_end - body_read_end
+            : null,
+        deserialize_time: deserialize_end != null && deserialize_start != null
+            ? deserialize_end - deserialize_start
+            : null,
+    };
+}
+exports.make_request_timing = make_request_timing;
+function parseIntMetric(value) {
+    return value ? parseInt(value) : 0;
+}
+exports.parseIntMetric = parseIntMetric;
+function parseFloatMetric(value) {
+    return value ? parseFloat(value) : 0;
+}
+exports.parseFloatMetric = parseFloatMetric;
+function parseServerTiming(value) {
+    const output = {};
+    const sections = value.split(", ");
+    for (const section of sections) {
+        const tokens = section.split(";");
+        const base_key = tokens.shift();
+        for (const token of tokens) {
+            const components = token.split("=");
+            const key = base_key + "." + components[0];
+            const value = components[1];
+            output[key] = value;
+        }
+    }
+    return output;
+}
+exports.parseServerTiming = parseServerTiming;
+// Unused atm.
+// function toColumnar(vectors: Vector[]): ColumnarVectors {
+//   if (vectors.length == 0) {
+//     return {
+//       ids: [],
+//       vectors: [],
+//       attributes: {},
+//     };
+//   }
+//   const attributes: ColumnarAttributes = {};
+//   vectors.forEach((vec, i) => {
+//     for (const [key, val] of Object.entries(vec.attributes ?? {})) {
+//       if (!attributes[key]) {
+//         attributes[key] = new Array<AttributeType>(vectors.length).fill(null);
+//       }
+//       attributes[key][i] = val;
+//     }
+//   });
+//   return {
+//     ids: vectors.map((v) => v.id),
+//     vectors: vectors.map((v) => v.vector!),
+//     attributes: attributes,
+//   };
+// }
+function fromColumnar(cv) {
+    var _a, _b, _c;
+    const res = new Array((_a = cv.ids) === null || _a === void 0 ? void 0 : _a.length);
+    const attributeEntries = Object.entries((_b = cv.attributes) !== null && _b !== void 0 ? _b : {});
+    for (let i = 0; i < ((_c = cv.ids) === null || _c === void 0 ? void 0 : _c.length); i++) {
+        res[i] = {
+            id: cv.ids[i],
+            vector: cv.vectors[i],
+            attributes: cv.attributes
+                ? Object.fromEntries(attributeEntries.map(([key, values]) => [key, values[i]]))
+                : undefined,
+        };
+    }
+    return res;
+}
+exports.fromColumnar = fromColumnar;
+//# sourceMappingURL=helpers.js.map

@@ -1,0 +1,37 @@
+{
+  "name": "@babel/plugin-transform-react-jsx-source",
+  "version": "7.27.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662909753,
+      "integrity": "sha512-KYRMN3MVTuiy5XkFDHd5PnQmHaQnt3z16nsBDePxZ9YNmq7IFlslpBBlR3UI+zvlbEemzowOYeKil9a0ZkOYxQ==",
+      "mode": 420,
+      "size": 1106
+    },
+    "README.md": {
+      "checkedAt": 1764662909758,
+      "integrity": "sha512-ftA3P2SXNB7lshNdCYCAjNQKwodkfj5mN8X7ig3YqnYpqv8x5HAwjzIDZWApwuOmcgXRGi2tQd8MMSQ9PwOfMw==",
+      "mode": 420,
+      "size": 415
+    },
+    "lib/index.js": {
+      "checkedAt": 1764662909764,
+      "integrity": "sha512-xAzZFdwB0rq1ugzbuJxZuItguFj6tcttDhqwAvpxWKWLp0AdNIezKP5UF0vGPoFSC5PfE4CGsxgHJT2Yub3/Wg==",
+      "mode": 420,
+      "size": 1838
+    },
+    "lib/index.js.map": {
+      "checkedAt": 1764662909765,
+      "integrity": "sha512-+ZT2uPJ/5H3P2QafhuupiNXa+8P3lZ7/JvZ54fSeHYPKfAme3s/tw/welc0brrbJqNrLry85LNlXVdKenFI0aQ==",
+      "mode": 420,
+      "size": 4906
+    },
+    "package.json": {
+      "checkedAt": 1764662909765,
+      "integrity": "sha512-S//0rfxhYwQlUfGhY5EvGmuEXJwvAkxyZi36YF43U8G714dtOBKuxxCgU5Z3gktQY5Dx7k927h0mc2NUfSahig==",
+      "mode": 420,
+      "size": 921
+    }
+  }
+}

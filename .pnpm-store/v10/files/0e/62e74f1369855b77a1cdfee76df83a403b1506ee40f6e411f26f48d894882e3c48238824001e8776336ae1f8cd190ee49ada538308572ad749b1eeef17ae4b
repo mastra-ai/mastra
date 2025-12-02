@@ -1,0 +1,45 @@
+import type { RequestContext } from '../../di/index.js';
+import type { Mastra } from '../../mastra/index.js';
+import { ExecutionEngine } from '../../workflows/execution-engine.js';
+import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine.js';
+import type { Emitter, SerializedStepFlowEntry, StepResult, RestartExecutionParams, TimeTravelExecutionParams } from '../types.js';
+import type { WorkflowEventProcessor } from './workflow-event-processor/index.js';
+export declare class EventedExecutionEngine extends ExecutionEngine {
+    protected eventProcessor: WorkflowEventProcessor;
+    constructor({ mastra, eventProcessor, options, }: {
+        mastra?: Mastra;
+        eventProcessor: WorkflowEventProcessor;
+        options: ExecutionEngineOptions;
+    });
+    __registerMastra(mastra: Mastra): void;
+    /**
+     * Executes a workflow run with the provided execution graph and input
+     * @param graph The execution graph to execute
+     * @param input The input data for the workflow
+     * @returns A promise that resolves to the workflow output
+     */
+    execute<TInput, TOutput>(params: {
+        workflowId: string;
+        runId: string;
+        graph: ExecutionGraph;
+        serializedStepGraph: SerializedStepFlowEntry[];
+        input?: TInput;
+        restart?: RestartExecutionParams;
+        timeTravel?: TimeTravelExecutionParams;
+        resume?: {
+            steps: string[];
+            stepResults: Record<string, StepResult<any, any, any, any>>;
+            resumePayload: any;
+            resumePath: number[];
+        };
+        emitter: Emitter;
+        requestContext: RequestContext;
+        retryConfig?: {
+            attempts?: number;
+            delay?: number;
+        };
+        abortController: AbortController;
+        format?: 'legacy' | 'vnext' | undefined;
+    }): Promise<TOutput>;
+}
+//# sourceMappingURL=execution-engine.d.ts.map

@@ -1,0 +1,13 @@
+import { ValueNode } from '../operation-node/value-node.js';
+import { ExpressionOrFactory } from './expression-parser.js';
+import { OperationNode } from '../operation-node/operation-node.js';
+import { Expression } from '../expression/expression.js';
+import { SelectQueryBuilderExpression } from '../query-builder/select-query-builder-expression.js';
+export type ValueExpression<DB, TB extends keyof DB, V> = V | ExpressionOrFactory<DB, TB, V>;
+export type ValueExpressionOrList<DB, TB extends keyof DB, V> = ValueExpression<DB, TB, V> | ReadonlyArray<ValueExpression<DB, TB, V>>;
+export type ExtractTypeFromValueExpressionOrList<VE> = VE extends ReadonlyArray<infer AV> ? ExtractTypeFromValueExpression<AV> : ExtractTypeFromValueExpression<VE>;
+export type ExtractTypeFromValueExpression<VE> = VE extends SelectQueryBuilderExpression<Record<string, infer SV>> ? SV : VE extends Expression<infer V> ? V : VE;
+export declare function parseValueExpressionOrList(arg: ValueExpressionOrList<any, any, unknown>): OperationNode;
+export declare function parseValueExpression(exp: ValueExpression<any, any, unknown>): OperationNode;
+export declare function isSafeImmediateValue(value: unknown): value is number | boolean | null;
+export declare function parseSafeImmediateValue(value: number | boolean | null): ValueNode;

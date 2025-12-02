@@ -1,0 +1,116 @@
+{
+	"name": "ky",
+	"version": "1.12.0",
+	"description": "Tiny and elegant HTTP client based on the Fetch API",
+	"license": "MIT",
+	"repository": "sindresorhus/ky",
+	"funding": "https://github.com/sindresorhus/ky?sponsor=1",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		"types": "./distribution/index.d.ts",
+		"default": "./distribution/index.js"
+	},
+	"main": "./distribution/index.js",
+	"types": "./distribution/index.d.ts",
+	"sideEffects": false,
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"test": "xo && npm run build && ava",
+		"debug": "PWDEBUG=1 ava --timeout=2m",
+		"release": "np",
+		"build": "del-cli distribution && tsc --project tsconfig.dist.json",
+		"prepare": "npm run build"
+	},
+	"files": [
+		"distribution"
+	],
+	"keywords": [
+		"fetch",
+		"request",
+		"requests",
+		"http",
+		"https",
+		"fetching",
+		"get",
+		"url",
+		"curl",
+		"wget",
+		"net",
+		"network",
+		"ajax",
+		"api",
+		"rest",
+		"xhr",
+		"browser",
+		"got",
+		"axios",
+		"node-fetch"
+	],
+	"devDependencies": {
+		"@sindresorhus/tsconfig": "^6.0.0",
+		"@type-challenges/utils": "^0.1.1",
+		"@types/body-parser": "^1.19.2",
+		"@types/busboy": "^1.5.0",
+		"@types/express": "^5.0.3",
+		"@types/node": "^24.7.1",
+		"ava": "^5.3.1",
+		"body-parser": "^2.2.0",
+		"busboy": "^1.6.0",
+		"del-cli": "^7.0.0",
+		"delay": "^6.0.0",
+		"expect-type": "^1.2.2",
+		"express": "^5.1.0",
+		"jest-leak-detector": "^30.2.0",
+		"pify": "^6.1.0",
+		"playwright": "^1.56.0",
+		"raw-body": "^3.0.1",
+		"tsx": "^4.20.6",
+		"typescript": "^5.9.3",
+		"xo": "^0.58.0"
+	},
+	"xo": {
+		"envs": [
+			"browser"
+		],
+		"rules": {
+			"unicorn/filename-case": "off",
+			"@typescript-eslint/ban-ts-comment": "off",
+			"@typescript-eslint/no-unsafe-argument": "off",
+			"@typescript-eslint/no-unsafe-assignment": "off",
+			"@typescript-eslint/no-unsafe-return": "off",
+			"@typescript-eslint/no-unsafe-call": "off",
+			"@typescript-eslint/naming-convention": "off",
+			"@typescript-eslint/no-unnecessary-type-assertion": "off",
+			"n/no-unsupported-features/node-builtins": "off"
+		}
+	},
+	"ava": {
+		"extensions": {
+			"ts": "module"
+		},
+		"nodeArguments": [
+			"--import=tsx/esm"
+		],
+		"workerThreads": false
+	},
+	"nyc": {
+		"reporter": [
+			"text",
+			"html",
+			"lcov"
+		],
+		"extension": [
+			".ts"
+		],
+		"exclude": [
+			"**/test/**"
+		]
+	}
+}

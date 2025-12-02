@@ -1,0 +1,67 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.OperatorKind = exports.SelectModifierKind = exports.ExpressionKind = exports.TypeKind = exports.Cardinality = void 0;
+var Cardinality;
+(function (Cardinality) {
+    Cardinality["AtMostOne"] = "AtMostOne";
+    Cardinality["One"] = "One";
+    Cardinality["Many"] = "Many";
+    Cardinality["AtLeastOne"] = "AtLeastOne";
+    Cardinality["Empty"] = "Empty";
+})(Cardinality || (exports.Cardinality = Cardinality = {}));
+var TypeKind;
+(function (TypeKind) {
+    TypeKind["scalar"] = "scalar";
+    TypeKind["enum"] = "enum";
+    TypeKind["object"] = "object";
+    TypeKind["namedtuple"] = "namedtuple";
+    TypeKind["tuple"] = "tuple";
+    TypeKind["array"] = "array";
+    TypeKind["range"] = "range";
+    TypeKind["multirange"] = "multirange";
+})(TypeKind || (exports.TypeKind = TypeKind = {}));
+var ExpressionKind;
+(function (ExpressionKind) {
+    ExpressionKind["Set"] = "Set";
+    ExpressionKind["Array"] = "Array";
+    ExpressionKind["Tuple"] = "Tuple";
+    ExpressionKind["NamedTuple"] = "NamedTuple";
+    ExpressionKind["TuplePath"] = "TuplePath";
+    ExpressionKind["PathNode"] = "PathNode";
+    ExpressionKind["PathLeaf"] = "PathLeaf";
+    ExpressionKind["Literal"] = "Literal";
+    ExpressionKind["Cast"] = "Cast";
+    ExpressionKind["Select"] = "Select";
+    ExpressionKind["Update"] = "Update";
+    ExpressionKind["Delete"] = "Delete";
+    ExpressionKind["Insert"] = "Insert";
+    ExpressionKind["InsertUnlessConflict"] = "InsertUnlessConflict";
+    ExpressionKind["Function"] = "Function";
+    ExpressionKind["Operator"] = "Operator";
+    ExpressionKind["For"] = "For";
+    ExpressionKind["ForVar"] = "ForVar";
+    ExpressionKind["TypeIntersection"] = "TypeIntersection";
+    ExpressionKind["Alias"] = "Alias";
+    ExpressionKind["With"] = "With";
+    ExpressionKind["WithParams"] = "WithParams";
+    ExpressionKind["Param"] = "Param";
+    ExpressionKind["OptionalParam"] = "OptionalParam";
+    ExpressionKind["Detached"] = "Detached";
+    ExpressionKind["Global"] = "Global";
+    ExpressionKind["PolyShapeElement"] = "PolyShapeElement";
+    ExpressionKind["Group"] = "Group";
+})(ExpressionKind || (exports.ExpressionKind = ExpressionKind = {}));
+var SelectModifierKind;
+(function (SelectModifierKind) {
+    SelectModifierKind["filter"] = "filter";
+    SelectModifierKind["order_by"] = "order_by";
+    SelectModifierKind["offset"] = "offset";
+    SelectModifierKind["limit"] = "limit";
+})(SelectModifierKind || (exports.SelectModifierKind = SelectModifierKind = {}));
+var OperatorKind;
+(function (OperatorKind) {
+    OperatorKind["Infix"] = "Infix";
+    OperatorKind["Postfix"] = "Postfix";
+    OperatorKind["Prefix"] = "Prefix";
+    OperatorKind["Ternary"] = "Ternary";
+})(OperatorKind || (exports.OperatorKind = OperatorKind = {}));

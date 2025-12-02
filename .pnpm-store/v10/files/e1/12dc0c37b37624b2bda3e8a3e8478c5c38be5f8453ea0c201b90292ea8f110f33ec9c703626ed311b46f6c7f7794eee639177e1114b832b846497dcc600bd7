@@ -1,0 +1,1 @@
+{"version":3,"sources":["builder/decimal.ts"],"names":[],"mappings":"AAiBA,OAAO,EAAE,OAAO,EAAE,MAAM,YAAY,CAAC;AACrC,OAAO,EAAE,iBAAiB,EAAE,MAAM,eAAe,CAAC;AAGlD,cAAc;AACd,qBAAa,cAAc,CAAC,KAAK,GAAG,GAAG,CAAE,SAAQ,iBAAiB,CAAC,OAAO,EAAE,KAAK,CAAC;CAAI","file":"decimal.d.ts","sourceRoot":"../src"}

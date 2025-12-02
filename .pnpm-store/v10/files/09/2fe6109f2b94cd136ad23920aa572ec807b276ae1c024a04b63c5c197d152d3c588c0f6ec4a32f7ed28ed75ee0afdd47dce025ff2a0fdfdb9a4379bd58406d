@@ -1,0 +1,7 @@
+{
+	"$ref": "/inference/schemas/text-to-audio/output.json",
+	"$id": "/inference/schemas/text-to-speech/output.json",
+	"$schema": "http://json-schema.org/draft-06/schema#",
+	"title": "TextToSpeechOutput",
+	"description": "Outputs for Text to Speech inference"
+}

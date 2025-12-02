@@ -1,0 +1,14 @@
+{
+    "object": "user",
+    "id": "user_01H5JQDV7R7ATEYZDEG0W5PRYS",
+    "email": "test01@example.com",
+    "first_name": "Test 01",
+    "last_name": "User",
+    "created_at": "2023-07-18T02:07:19.911Z",
+    "updated_at": "2023-07-18T02:07:19.911Z",
+    "email_verified": true,
+    "profile_picture_url": "https://example.com/profile_picture.jpg",
+    "last_sign_in_at": "2023-07-18T02:07:19.911Z",
+    "locale": "en-US",
+    "metadata": { "key": "value" }
+}

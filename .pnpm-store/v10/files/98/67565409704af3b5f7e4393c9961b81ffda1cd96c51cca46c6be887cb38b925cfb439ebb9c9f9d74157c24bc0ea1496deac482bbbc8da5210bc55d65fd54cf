@@ -1,0 +1,42 @@
+import { SpanType } from './chunk-KIZIOFZC.js';
+import { z } from 'zod';
+
+var scoringExtractStepResultSchema = z.record(z.string(), z.any()).optional();
+var scoringValueSchema = z.number();
+var scoreResultSchema = z.object({
+  result: z.record(z.string(), z.any()).optional(),
+  score: scoringValueSchema,
+  prompt: z.string().optional()
+});
+var saveScorePayloadSchema = z.object({
+  runId: z.string(),
+  scorerId: z.string(),
+  entityId: z.string(),
+  score: z.number(),
+  input: z.any().optional(),
+  output: z.any(),
+  source: z.enum(["LIVE", "TEST"]),
+  entityType: z.enum(["AGENT", "WORKFLOW", ...Object.values(SpanType)]).optional(),
+  scorer: z.record(z.string(), z.any()),
+  traceId: z.string().optional(),
+  spanId: z.string().optional(),
+  preprocessStepResult: z.record(z.string(), z.any()).optional(),
+  extractStepResult: z.record(z.string(), z.any()).optional(),
+  analyzeStepResult: z.record(z.string(), z.any()).optional(),
+  reason: z.string().optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
+  preprocessPrompt: z.string().optional(),
+  extractPrompt: z.string().optional(),
+  generateScorePrompt: z.string().optional(),
+  generateReasonPrompt: z.string().optional(),
+  analyzePrompt: z.string().optional(),
+  additionalContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  entity: z.record(z.string(), z.any()).optional(),
+  resourceId: z.string().optional(),
+  threadId: z.string().optional()
+});
+
+export { saveScorePayloadSchema, scoreResultSchema, scoringExtractStepResultSchema, scoringValueSchema };
+//# sourceMappingURL=chunk-76K3IYWM.js.map
+//# sourceMappingURL=chunk-76K3IYWM.js.map

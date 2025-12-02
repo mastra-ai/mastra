@@ -1,0 +1,60 @@
+import type z from 'zod';
+import type { IMastraLogger } from '../logger/index.js';
+import type { ExecutionGraph } from './execution-engine.js';
+import type { Step } from './step.js';
+import type { StepFlowEntry, TimeTravelContext, TimeTravelExecutionParams, WorkflowRunState } from './types.js';
+export declare function getZodErrors(error: z.ZodError): z.ZodIssue[];
+export declare function validateStepInput({ prevOutput, step, validateInputs, }: {
+    prevOutput: any;
+    step: Step<string, any, any>;
+    validateInputs: boolean;
+}): Promise<{
+    inputData: any;
+    validationError: Error | undefined;
+}>;
+export declare function validateStepResumeData({ resumeData, step }: {
+    resumeData?: any;
+    step: Step<string, any, any>;
+}): Promise<{
+    resumeData: any;
+    validationError: Error | undefined;
+}>;
+export declare function validateStepSuspendData({ suspendData, step, }: {
+    suspendData?: any;
+    step: Step<string, any, any>;
+}): Promise<{
+    suspendData: any;
+    validationError: Error | undefined;
+}>;
+export declare function getResumeLabelsByStepId(resumeLabels: Record<string, {
+    stepId: string;
+    foreachIndex?: number;
+}>, stepId: string): Record<string, {
+    stepId: string;
+    foreachIndex?: number;
+}>;
+export declare const runCountDeprecationMessage = "Warning: 'runCount' is deprecated and will be removed on November 4th, 2025. Please use 'retryCount' instead.";
+/**
+ * Creates a Proxy that wraps execute function parameters to show deprecation warnings
+ * when accessing deprecated properties.
+ *
+ * Currently handles:
+ * - `runCount`: Deprecated in favor of `retryCount`, will be removed on November 4th, 2025
+ */
+export declare function createDeprecationProxy<T extends Record<string, any>>(params: T, { paramName, deprecationMessage, logger, }: {
+    paramName: string;
+    deprecationMessage: string;
+    logger: IMastraLogger;
+}): T;
+export declare const getStepIds: (entry: StepFlowEntry) => string[];
+export declare const createTimeTravelExecutionParams: (params: {
+    steps: string[];
+    inputData?: any;
+    resumeData?: any;
+    context?: TimeTravelContext<any, any, any, any>;
+    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+    snapshot: WorkflowRunState;
+    initialState?: any;
+    graph: ExecutionGraph;
+}) => TimeTravelExecutionParams;
+//# sourceMappingURL=utils.d.ts.map

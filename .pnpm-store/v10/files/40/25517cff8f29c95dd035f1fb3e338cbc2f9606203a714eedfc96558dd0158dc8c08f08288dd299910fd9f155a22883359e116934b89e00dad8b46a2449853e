@@ -1,0 +1,7 @@
+language: node_js
+node_js:
+  - 16
+install:
+  - npm install --legacy-peer-deps
+before_script:
+  - export NODE_OPTIONS=–max_old_space_size=8192

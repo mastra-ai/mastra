@@ -1,0 +1,104 @@
+# Package clauses
+
+package main
+
+==>
+
+SourceFile(PackageClause(package,DefName))
+
+# Single import declarations
+
+import "net/http"
+import . "some/dsl"
+import _ "os"
+import alias "some/package"
+
+==>
+
+SourceFile(
+  ImportDecl(import,ImportSpec(String)),
+  ImportDecl(import,ImportSpec(".",String)),
+  ImportDecl(import,ImportSpec(DefName,String)),
+  ImportDecl(import,ImportSpec(DefName,String)))
+
+# Grouped import declarations
+
+import()
+import ("fmt")
+import (
+  "net/http"
+  . "some/dsl"
+  _ "os"
+  alias "some/package"
+)
+
+==>
+
+SourceFile(
+  ImportDecl(import,SpecList),
+  ImportDecl(import,SpecList(ImportSpec(String))),
+  ImportDecl(import,SpecList(
+    ImportSpec(String),
+    ImportSpec(".",String),
+    ImportSpec(DefName,String),
+    ImportSpec(DefName,String))))
+
+# Block comments
+/*
+ * This is a great package
+ */
+
+==>
+
+SourceFile(BlockComment)
+
+# Comments with asterisks
+
+/* a */
+const a
+
+/* b **/
+const b
+
+/* c ***/
+const c
+
+/* d
+
+***/
+const d
+
+==>
+
+SourceFile(
+  BlockComment,
+  ConstDecl(const,ConstSpec(DefName)),
+  BlockComment,
+  ConstDecl(const,ConstSpec(DefName)),
+  BlockComment,
+  ConstDecl(const,ConstSpec(DefName)),
+  BlockComment,
+  ConstDecl(const,ConstSpec(DefName)))
+
+# Non-ascii variable names
+
+const (
+  α
+  Α
+  µs  // micro sign (not mu)
+  δ1
+  ΔΔΔ
+  ω_omega
+  Ω_OMEGA
+)
+
+==>
+
+SourceFile(ConstDecl(const,SpecList(
+  ConstSpec(DefName),
+  ConstSpec(DefName),
+  ConstSpec(DefName),LineComment,
+  ConstSpec(DefName),
+  ConstSpec(DefName),
+  ConstSpec(DefName),
+  ConstSpec(DefName))))

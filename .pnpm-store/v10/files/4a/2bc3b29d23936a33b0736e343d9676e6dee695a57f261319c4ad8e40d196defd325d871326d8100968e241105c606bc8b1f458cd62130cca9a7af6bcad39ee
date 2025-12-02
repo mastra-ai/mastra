@@ -1,0 +1,2618 @@
+'use strict';
+
+var chunkKP42JLXE_cjs = require('./chunk-KP42JLXE.cjs');
+var chunkABJOUEVA_cjs = require('./chunk-ABJOUEVA.cjs');
+var chunkTWH4PTDG_cjs = require('./chunk-TWH4PTDG.cjs');
+var chunkV537VSV4_cjs = require('./chunk-V537VSV4.cjs');
+var chunkJ7O6WENZ_cjs = require('./chunk-J7O6WENZ.cjs');
+var chunkKEXGB7FK_cjs = require('./chunk-KEXGB7FK.cjs');
+var chunkDSNPWVIG_cjs = require('./chunk-DSNPWVIG.cjs');
+var EventEmitter = require('events');
+var crypto = require('crypto');
+var z = require('zod');
+
+function _interopDefault (e) { return e && e.__esModule ? e : { default: e }; }
+
+var EventEmitter__default = /*#__PURE__*/_interopDefault(EventEmitter);
+var z__default = /*#__PURE__*/_interopDefault(z);
+
+var StepExecutor = class extends chunkKEXGB7FK_cjs.MastraBase {
+  mastra;
+  constructor({ mastra }) {
+    super({ name: "StepExecutor", component: chunkDSNPWVIG_cjs.RegisteredLogger.WORKFLOW });
+    this.mastra = mastra;
+  }
+  __registerMastra(mastra) {
+    this.mastra = mastra;
+  }
+  async execute(params) {
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const abortController = new AbortController();
+    let suspended;
+    let bailed;
+    const startedAt = Date.now();
+    const { inputData, validationError } = await chunkKP42JLXE_cjs.validateStepInput({
+      prevOutput: typeof params.foreachIdx === "number" ? params.input?.[params.foreachIdx] : params.input,
+      step,
+      validateInputs: params.validateInputs ?? true
+    });
+    let stepInfo = {
+      ...stepResults[step.id],
+      startedAt,
+      payload: (typeof params.foreachIdx === "number" ? params.input : inputData) ?? {}
+    };
+    if (params.resumeData) {
+      delete stepInfo.suspendPayload?.["__workflow_meta"];
+      stepInfo.resumePayload = params.resumeData;
+      stepInfo.resumedAt = Date.now();
+    }
+    try {
+      if (validationError) {
+        throw validationError;
+      }
+      const stepResult = await step.execute(
+        chunkKP42JLXE_cjs.createDeprecationProxy(
+          {
+            workflowId: params.workflowId,
+            runId,
+            mastra: this.mastra,
+            requestContext,
+            inputData,
+            state: params.state,
+            setState: (state) => {
+              params.state = state;
+            },
+            retryCount,
+            resumeData: params.resumeData,
+            getInitData: () => stepResults?.input,
+            getStepResult: chunkKP42JLXE_cjs.getStepResult.bind(this, stepResults),
+            suspend: async (suspendPayload) => {
+              const { suspendData, validationError: validationError2 } = await chunkKP42JLXE_cjs.validateStepSuspendData({
+                suspendData: suspendPayload,
+                step
+              });
+              if (validationError2) {
+                throw validationError2;
+              }
+              suspended = { payload: { ...suspendData, __workflow_meta: { runId, path: [step.id] } } };
+            },
+            bail: (result) => {
+              bailed = { payload: result };
+            },
+            // TODO
+            writer: void 0,
+            abort: () => {
+              abortController?.abort();
+            },
+            [chunkABJOUEVA_cjs.EMITTER_SYMBOL]: params.emitter,
+            // TODO: refactor this to use our PubSub actually
+            [chunkABJOUEVA_cjs.STREAM_FORMAT_SYMBOL]: void 0,
+            // TODO
+            engine: {},
+            abortSignal: abortController?.signal,
+            // TODO
+            tracingContext: {}
+          },
+          {
+            paramName: "runCount",
+            deprecationMessage: chunkKP42JLXE_cjs.runCountDeprecationMessage,
+            logger: this.logger
+          }
+        )
+      );
+      const endedAt = Date.now();
+      let finalResult;
+      if (suspended) {
+        finalResult = {
+          ...stepInfo,
+          status: "suspended",
+          suspendedAt: endedAt,
+          ...stepResult ? { suspendOutput: stepResult } : {}
+        };
+        if (suspended.payload) {
+          finalResult.suspendPayload = suspended.payload;
+        }
+      } else if (bailed) {
+        finalResult = {
+          ...stepInfo,
+          // @ts-ignore
+          status: "bailed",
+          endedAt,
+          output: bailed.payload
+        };
+      } else {
+        finalResult = {
+          ...stepInfo,
+          status: "success",
+          endedAt,
+          output: stepResult
+        };
+      }
+      return finalResult;
+    } catch (error) {
+      const endedAt = Date.now();
+      const errorInstance = chunkTWH4PTDG_cjs.getErrorFromUnknown(error, {
+        includeStack: false,
+        fallbackMessage: "Unknown step execution error"
+      });
+      return {
+        ...stepInfo,
+        status: "failed",
+        endedAt,
+        error: `Error: ${errorInstance.message}`
+      };
+    }
+  }
+  async evaluateConditions(params) {
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const abortController = new AbortController();
+    const ee = new EventEmitter__default.default();
+    const results = await Promise.all(
+      step.conditions.map((condition) => {
+        try {
+          return this.evaluateCondition({
+            workflowId: params.workflowId,
+            condition,
+            runId,
+            requestContext,
+            inputData: params.input,
+            state: params.state,
+            retryCount,
+            resumeData: params.resumeData,
+            abortController,
+            stepResults,
+            emitter: ee,
+            iterationCount: 0
+          });
+        } catch (e) {
+          console.error("error evaluating condition", e);
+          return false;
+        }
+      })
+    );
+    const idxs = results.reduce((acc, result, idx) => {
+      if (result) {
+        acc.push(idx);
+      }
+      return acc;
+    }, []);
+    return idxs;
+  }
+  async evaluateCondition({
+    workflowId,
+    condition,
+    runId,
+    inputData,
+    resumeData,
+    stepResults,
+    state,
+    requestContext,
+    emitter,
+    abortController,
+    retryCount = 0,
+    iterationCount
+  }) {
+    return condition(
+      chunkKP42JLXE_cjs.createDeprecationProxy(
+        {
+          workflowId,
+          runId,
+          mastra: this.mastra,
+          requestContext,
+          inputData,
+          state,
+          setState: (_state) => {
+          },
+          retryCount,
+          resumeData,
+          getInitData: () => stepResults?.input,
+          getStepResult: chunkKP42JLXE_cjs.getStepResult.bind(this, stepResults),
+          suspend: async (_suspendPayload) => {
+            throw new Error("Not implemented");
+          },
+          bail: (_result) => {
+            throw new Error("Not implemented");
+          },
+          // TODO
+          writer: void 0,
+          abort: () => {
+            abortController?.abort();
+          },
+          [chunkABJOUEVA_cjs.EMITTER_SYMBOL]: emitter,
+          // TODO: refactor this to use our PubSub actually
+          [chunkABJOUEVA_cjs.STREAM_FORMAT_SYMBOL]: void 0,
+          // TODO
+          engine: {},
+          abortSignal: abortController?.signal,
+          // TODO
+          tracingContext: {},
+          iterationCount
+        },
+        {
+          paramName: "runCount",
+          deprecationMessage: chunkKP42JLXE_cjs.runCountDeprecationMessage,
+          logger: this.logger
+        }
+      )
+    );
+  }
+  async resolveSleep(params) {
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const abortController = new AbortController();
+    const ee = new EventEmitter__default.default();
+    if (step.duration) {
+      return step.duration;
+    }
+    if (!step.fn) {
+      return 0;
+    }
+    try {
+      return await step.fn(
+        chunkKP42JLXE_cjs.createDeprecationProxy(
+          {
+            workflowId: params.workflowId,
+            runId,
+            mastra: this.mastra,
+            requestContext,
+            inputData: params.input,
+            // TODO: implement state
+            state: {},
+            setState: (_state) => {
+            },
+            retryCount,
+            resumeData: params.resumeData,
+            getInitData: () => stepResults?.input,
+            getStepResult: chunkKP42JLXE_cjs.getStepResult.bind(this, stepResults),
+            suspend: async (_suspendPayload) => {
+              throw new Error("Not implemented");
+            },
+            bail: (_result) => {
+              throw new Error("Not implemented");
+            },
+            abort: () => {
+              abortController?.abort();
+            },
+            // TODO
+            writer: void 0,
+            [chunkABJOUEVA_cjs.EMITTER_SYMBOL]: ee,
+            // TODO: refactor this to use our PubSub actually
+            [chunkABJOUEVA_cjs.STREAM_FORMAT_SYMBOL]: void 0,
+            // TODO
+            engine: {},
+            abortSignal: abortController?.signal,
+            // TODO
+            tracingContext: {}
+          },
+          {
+            paramName: "runCount",
+            deprecationMessage: chunkKP42JLXE_cjs.runCountDeprecationMessage,
+            logger: this.logger
+          }
+        )
+      );
+    } catch (e) {
+      console.error("error evaluating condition", e);
+      return 0;
+    }
+  }
+  async resolveSleepUntil(params) {
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const abortController = new AbortController();
+    const ee = new EventEmitter__default.default();
+    if (step.date) {
+      return step.date.getTime() - Date.now();
+    }
+    if (!step.fn) {
+      return 0;
+    }
+    try {
+      const result = await step.fn(
+        chunkKP42JLXE_cjs.createDeprecationProxy(
+          {
+            workflowId: params.workflowId,
+            runId,
+            mastra: this.mastra,
+            requestContext,
+            inputData: params.input,
+            // TODO: implement state
+            state: {},
+            setState: (_state) => {
+            },
+            retryCount,
+            resumeData: params.resumeData,
+            getInitData: () => stepResults?.input,
+            getStepResult: chunkKP42JLXE_cjs.getStepResult.bind(this, stepResults),
+            suspend: async (_suspendPayload) => {
+              throw new Error("Not implemented");
+            },
+            bail: (_result) => {
+              throw new Error("Not implemented");
+            },
+            abort: () => {
+              abortController?.abort();
+            },
+            // TODO
+            writer: void 0,
+            [chunkABJOUEVA_cjs.EMITTER_SYMBOL]: ee,
+            // TODO: refactor this to use our PubSub actually
+            [chunkABJOUEVA_cjs.STREAM_FORMAT_SYMBOL]: void 0,
+            // TODO
+            engine: {},
+            abortSignal: abortController?.signal,
+            // TODO
+            tracingContext: {}
+          },
+          {
+            paramName: "runCount",
+            deprecationMessage: chunkKP42JLXE_cjs.runCountDeprecationMessage,
+            logger: this.logger
+          }
+        )
+      );
+      return result.getTime() - Date.now();
+    } catch (e) {
+      console.error("error evaluating condition", e);
+      return 0;
+    }
+  }
+};
+
+// src/events/processor.ts
+var EventProcessor = class {
+  mastra;
+  __registerMastra(mastra) {
+    this.mastra = mastra;
+  }
+  constructor({ mastra }) {
+    this.mastra = mastra;
+  }
+};
+async function processWorkflowLoop({
+  workflowId,
+  prevResult,
+  runId,
+  executionPath,
+  stepResults,
+  activeSteps,
+  resumeSteps,
+  resumeData,
+  parentWorkflow,
+  requestContext,
+  retryCount = 0
+}, {
+  pubsub,
+  stepExecutor,
+  step,
+  stepResult
+}) {
+  const loopCondition = await stepExecutor.evaluateCondition({
+    workflowId,
+    condition: step.condition,
+    runId,
+    stepResults,
+    // TODO: implement state
+    state: {},
+    emitter: new EventEmitter__default.default(),
+    // TODO
+    requestContext: new chunkJ7O6WENZ_cjs.RequestContext(),
+    // TODO
+    inputData: prevResult?.status === "success" ? prevResult.output : void 0,
+    resumeData,
+    abortController: new AbortController(),
+    retryCount,
+    iterationCount: 0
+    //TODO: implement
+  });
+  if (step.loopType === "dountil") {
+    if (loopCondition) {
+      await pubsub.publish("workflows", {
+        type: "workflow.step.end",
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          prevResult: stepResult,
+          resumeData,
+          activeSteps,
+          requestContext
+        }
+      });
+    } else {
+      await pubsub.publish("workflows", {
+        type: "workflow.step.run",
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          prevResult: stepResult,
+          resumeData,
+          activeSteps,
+          requestContext,
+          retryCount
+        }
+      });
+    }
+  } else {
+    if (loopCondition) {
+      await pubsub.publish("workflows", {
+        type: "workflow.step.run",
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          prevResult: stepResult,
+          resumeData,
+          activeSteps,
+          requestContext,
+          retryCount
+        }
+      });
+    } else {
+      await pubsub.publish("workflows", {
+        type: "workflow.step.end",
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          prevResult: stepResult,
+          resumeData,
+          activeSteps,
+          requestContext
+        }
+      });
+    }
+  }
+}
+async function processWorkflowForEach({
+  workflowId,
+  prevResult,
+  runId,
+  executionPath,
+  stepResults,
+  activeSteps,
+  resumeSteps,
+  timeTravel,
+  resumeData,
+  parentWorkflow,
+  requestContext
+}, {
+  pubsub,
+  mastra,
+  step
+}) {
+  const currentResult = stepResults[step.step.id];
+  const idx = currentResult?.output?.length ?? 0;
+  const targetLen = prevResult?.output?.length ?? 0;
+  if (idx >= targetLen && currentResult.output.filter((r) => r !== null).length >= targetLen) {
+    await pubsub.publish("workflows", {
+      type: "workflow.step.run",
+      runId,
+      data: {
+        parentWorkflow,
+        workflowId,
+        runId,
+        executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1] + 1]),
+        resumeSteps,
+        stepResults,
+        timeTravel,
+        prevResult: currentResult,
+        resumeData,
+        activeSteps,
+        requestContext
+      }
+    });
+    return;
+  } else if (idx >= targetLen) {
+    return;
+  }
+  if (executionPath.length === 1 && idx === 0) {
+    const concurrency = Math.min(step.opts.concurrency ?? 1, targetLen);
+    const dummyResult = Array.from({ length: concurrency }, () => null);
+    await mastra.getStorage()?.updateWorkflowResults({
+      workflowName: workflowId,
+      runId,
+      stepId: step.step.id,
+      result: {
+        status: "succcess",
+        output: dummyResult,
+        startedAt: Date.now(),
+        payload: prevResult?.output
+      },
+      requestContext
+    });
+    for (let i = 0; i < concurrency; i++) {
+      await pubsub.publish("workflows", {
+        type: "workflow.step.run",
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath: [executionPath[0], i],
+          resumeSteps,
+          stepResults,
+          timeTravel,
+          prevResult,
+          resumeData,
+          activeSteps,
+          requestContext
+        }
+      });
+    }
+    return;
+  }
+  currentResult.output.push(null);
+  await mastra.getStorage()?.updateWorkflowResults({
+    workflowName: workflowId,
+    runId,
+    stepId: step.step.id,
+    result: {
+      status: "succcess",
+      output: currentResult.output,
+      startedAt: Date.now(),
+      payload: prevResult?.output
+    },
+    requestContext
+  });
+  await pubsub.publish("workflows", {
+    type: "workflow.step.run",
+    runId,
+    data: {
+      parentWorkflow,
+      workflowId,
+      runId,
+      executionPath: [executionPath[0], idx],
+      resumeSteps,
+      timeTravel,
+      stepResults,
+      prevResult,
+      resumeData,
+      activeSteps,
+      requestContext
+    }
+  });
+}
+async function processWorkflowParallel({
+  workflowId,
+  runId,
+  executionPath,
+  stepResults,
+  activeSteps,
+  resumeSteps,
+  timeTravel,
+  prevResult,
+  resumeData,
+  parentWorkflow,
+  requestContext
+}, {
+  pubsub,
+  step
+}) {
+  for (let i = 0; i < step.steps.length; i++) {
+    const nestedStep = step.steps[i];
+    if (nestedStep?.type === "step") {
+      activeSteps[nestedStep.step.id] = true;
+    }
+  }
+  await Promise.all(
+    step.steps.map(async (_step, idx) => {
+      return pubsub.publish("workflows", {
+        type: "workflow.step.run",
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.concat([idx]),
+          resumeSteps,
+          stepResults,
+          prevResult,
+          resumeData,
+          timeTravel,
+          parentWorkflow,
+          activeSteps,
+          requestContext
+        }
+      });
+    })
+  );
+}
+async function processWorkflowConditional({
+  workflowId,
+  runId,
+  executionPath,
+  stepResults,
+  activeSteps,
+  resumeSteps,
+  timeTravel,
+  prevResult,
+  resumeData,
+  parentWorkflow,
+  requestContext
+}, {
+  pubsub,
+  stepExecutor,
+  step
+}) {
+  const idxs = await stepExecutor.evaluateConditions({
+    workflowId,
+    step,
+    runId,
+    stepResults,
+    // TODO: implement state
+    state: {},
+    emitter: new EventEmitter__default.default(),
+    // TODO
+    requestContext: new chunkJ7O6WENZ_cjs.RequestContext(),
+    // TODO
+    input: prevResult?.status === "success" ? prevResult.output : void 0,
+    resumeData
+  });
+  const truthyIdxs = {};
+  for (let i = 0; i < idxs.length; i++) {
+    truthyIdxs[idxs[i]] = true;
+  }
+  await Promise.all(
+    step.steps.map(async (step2, idx) => {
+      if (truthyIdxs[idx]) {
+        if (step2?.type === "step") {
+          activeSteps[step2.step.id] = true;
+        }
+        return pubsub.publish("workflows", {
+          type: "workflow.step.run",
+          runId,
+          data: {
+            workflowId,
+            runId,
+            executionPath: executionPath.concat([idx]),
+            resumeSteps,
+            stepResults,
+            timeTravel,
+            prevResult,
+            resumeData,
+            parentWorkflow,
+            activeSteps,
+            requestContext
+          }
+        });
+      } else {
+        return pubsub.publish("workflows", {
+          type: "workflow.step.end",
+          runId,
+          data: {
+            workflowId,
+            runId,
+            executionPath: executionPath.concat([idx]),
+            resumeSteps,
+            stepResults,
+            prevResult: { status: "skipped" },
+            resumeData,
+            parentWorkflow,
+            activeSteps,
+            requestContext
+          }
+        });
+      }
+    })
+  );
+}
+async function processWorkflowWaitForEvent(workflowData, {
+  pubsub,
+  eventName,
+  currentState
+}) {
+  const executionPath = currentState?.waitingPaths[eventName];
+  if (!executionPath) {
+    return;
+  }
+  const currentStep = getStep(workflowData.workflow, executionPath);
+  const prevResult = {
+    status: "success",
+    output: currentState?.context[currentStep?.id ?? "input"]?.payload
+  };
+  await pubsub.publish("workflows", {
+    type: "workflow.step.run",
+    runId: workflowData.runId,
+    data: {
+      workflowId: workflowData.workflowId,
+      runId: workflowData.runId,
+      executionPath,
+      resumeSteps: [],
+      resumeData: workflowData.resumeData,
+      parentWorkflow: workflowData.parentWorkflow,
+      stepResults: currentState?.context,
+      prevResult,
+      activeSteps: [],
+      requestContext: currentState?.requestContext
+    }
+  });
+}
+async function processWorkflowSleep({
+  workflowId,
+  runId,
+  executionPath,
+  stepResults,
+  activeSteps,
+  resumeSteps,
+  timeTravel,
+  prevResult,
+  resumeData,
+  parentWorkflow,
+  requestContext
+}, {
+  pubsub,
+  stepExecutor,
+  step
+}) {
+  const startedAt = Date.now();
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: "watch",
+    runId,
+    data: {
+      type: "workflow-step-waiting",
+      payload: {
+        id: step.id,
+        status: "waiting",
+        payload: prevResult.status === "success" ? prevResult.output : void 0,
+        startedAt
+      }
+    }
+  });
+  const duration = await stepExecutor.resolveSleep({
+    workflowId,
+    step,
+    runId,
+    stepResults,
+    emitter: new EventEmitter__default.default(),
+    // TODO
+    requestContext: new chunkJ7O6WENZ_cjs.RequestContext(),
+    // TODO
+    input: prevResult?.status === "success" ? prevResult.output : void 0,
+    resumeData
+  });
+  setTimeout(
+    async () => {
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: "watch",
+        runId,
+        data: {
+          type: "workflow-step-result",
+          payload: {
+            id: step.id,
+            status: "success",
+            payload: prevResult.status === "success" ? prevResult.output : void 0,
+            output: prevResult.status === "success" ? prevResult.output : void 0,
+            startedAt,
+            endedAt: Date.now()
+          }
+        }
+      });
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: "watch",
+        runId,
+        data: {
+          type: "workflow-step-finish",
+          payload: {
+            id: step.id,
+            metadata: {}
+          }
+        }
+      });
+      await pubsub.publish("workflows", {
+        type: "workflow.step.run",
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1] + 1]),
+          resumeSteps,
+          timeTravel,
+          stepResults,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          activeSteps,
+          requestContext
+        }
+      });
+    },
+    duration < 0 ? 0 : duration
+  );
+}
+async function processWorkflowSleepUntil({
+  workflowId,
+  runId,
+  executionPath,
+  stepResults,
+  activeSteps,
+  resumeSteps,
+  timeTravel,
+  prevResult,
+  resumeData,
+  parentWorkflow,
+  requestContext
+}, {
+  pubsub,
+  stepExecutor,
+  step
+}) {
+  const startedAt = Date.now();
+  const duration = await stepExecutor.resolveSleepUntil({
+    workflowId,
+    step,
+    runId,
+    stepResults,
+    emitter: new EventEmitter__default.default(),
+    // TODO
+    requestContext: new chunkJ7O6WENZ_cjs.RequestContext(),
+    // TODO
+    input: prevResult?.status === "success" ? prevResult.output : void 0,
+    resumeData
+  });
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: "watch",
+    runId,
+    data: {
+      type: "workflow-step-waiting",
+      payload: {
+        id: step.id,
+        status: "waiting",
+        payload: prevResult.status === "success" ? prevResult.output : void 0,
+        startedAt
+      }
+    }
+  });
+  setTimeout(
+    async () => {
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: "watch",
+        runId,
+        data: {
+          type: "workflow-step-result",
+          payload: {
+            id: step.id,
+            status: "success",
+            payload: prevResult.status === "success" ? prevResult.output : void 0,
+            output: prevResult.status === "success" ? prevResult.output : void 0,
+            startedAt,
+            endedAt: Date.now()
+          }
+        }
+      });
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: "watch",
+        runId,
+        data: {
+          type: "workflow-step-finish",
+          payload: {
+            id: step.id,
+            metadata: {}
+          }
+        }
+      });
+      await pubsub.publish("workflows", {
+        type: "workflow.step.run",
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1] + 1]),
+          resumeSteps,
+          timeTravel,
+          stepResults,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          activeSteps,
+          requestContext
+        }
+      });
+    },
+    duration < 0 ? 0 : duration
+  );
+}
+
+// src/workflows/evented/workflow-event-processor/index.ts
+var WorkflowEventProcessor = class extends EventProcessor {
+  stepExecutor;
+  constructor({ mastra }) {
+    super({ mastra });
+    this.stepExecutor = new StepExecutor({ mastra });
+  }
+  __registerMastra(mastra) {
+    super.__registerMastra(mastra);
+    this.stepExecutor.__registerMastra(mastra);
+  }
+  async errorWorkflow({
+    parentWorkflow,
+    workflowId,
+    runId,
+    resumeSteps,
+    stepResults,
+    resumeData,
+    requestContext
+  }, e) {
+    await this.mastra.pubsub.publish("workflows", {
+      type: "workflow.fail",
+      runId,
+      data: {
+        workflowId,
+        runId,
+        executionPath: [],
+        resumeSteps,
+        stepResults,
+        prevResult: { status: "failed", error: e.stack ?? e.message },
+        requestContext,
+        resumeData,
+        activeSteps: {},
+        parentWorkflow
+      }
+    });
+  }
+  async processWorkflowCancel({ workflowId, runId }) {
+    const currentState = await this.mastra.getStorage()?.updateWorkflowState({
+      workflowName: workflowId,
+      runId,
+      opts: {
+        status: "canceled"
+      }
+    });
+    await this.endWorkflow({
+      workflow: void 0,
+      workflowId,
+      runId,
+      stepResults: currentState?.context,
+      prevResult: { status: "canceled" },
+      requestContext: currentState?.requestContext,
+      executionPath: [],
+      activeSteps: {},
+      resumeSteps: [],
+      resumeData: void 0,
+      parentWorkflow: void 0
+    });
+  }
+  async processWorkflowStart({
+    workflow,
+    parentWorkflow,
+    workflowId,
+    runId,
+    resumeSteps,
+    prevResult,
+    resumeData,
+    timeTravel,
+    executionPath,
+    stepResults,
+    requestContext
+  }) {
+    await this.mastra.getStorage()?.persistWorkflowSnapshot({
+      workflowName: workflow.id,
+      runId,
+      snapshot: {
+        activePaths: [],
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        activeStepsPath: {},
+        serializedStepGraph: workflow.serializedStepGraph,
+        timestamp: Date.now(),
+        runId,
+        context: stepResults ?? {
+          input: prevResult?.status === "success" ? prevResult.output : void 0
+        },
+        status: "running",
+        value: {}
+      }
+    });
+    await this.mastra.pubsub.publish("workflows", {
+      type: "workflow.step.run",
+      runId,
+      data: {
+        parentWorkflow,
+        workflowId,
+        runId,
+        executionPath: executionPath ?? [0],
+        resumeSteps,
+        stepResults: stepResults ?? {
+          input: prevResult?.status === "success" ? prevResult.output : void 0
+        },
+        prevResult,
+        timeTravel,
+        requestContext,
+        resumeData,
+        activeSteps: {}
+      }
+    });
+  }
+  async endWorkflow(args) {
+    const { workflowId, runId, prevResult } = args;
+    await this.mastra.getStorage()?.updateWorkflowState({
+      workflowName: workflowId,
+      runId,
+      opts: {
+        status: "success",
+        result: prevResult
+      }
+    });
+    await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: "watch",
+      runId,
+      data: {
+        type: "workflow-finish",
+        payload: {
+          runId
+        }
+      }
+    });
+    await this.mastra.pubsub.publish("workflows", {
+      type: "workflow.end",
+      runId,
+      data: { ...args, workflow: void 0 }
+    });
+  }
+  async processWorkflowEnd(args) {
+    const { resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, requestContext, runId, timeTravel } = args;
+    if (parentWorkflow) {
+      await this.mastra.pubsub.publish("workflows", {
+        type: "workflow.step.end",
+        runId,
+        data: {
+          workflowId: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+          executionPath: parentWorkflow.executionPath,
+          resumeSteps,
+          stepResults: parentWorkflow.stepResults,
+          prevResult,
+          resumeData,
+          activeSteps,
+          parentWorkflow: parentWorkflow.parentWorkflow,
+          parentContext: parentWorkflow,
+          requestContext,
+          timeTravel
+        }
+      });
+    }
+    await this.mastra.pubsub.publish("workflows-finish", {
+      type: "workflow.end",
+      runId,
+      data: { ...args, workflow: void 0 }
+    });
+  }
+  async processWorkflowSuspend(args) {
+    const { resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, runId, requestContext, timeTravel } = args;
+    if (parentWorkflow) {
+      await this.mastra.pubsub.publish("workflows", {
+        type: "workflow.step.end",
+        runId,
+        data: {
+          workflowId: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+          executionPath: parentWorkflow.executionPath,
+          resumeSteps,
+          stepResults: parentWorkflow.stepResults,
+          prevResult: {
+            ...prevResult,
+            suspendPayload: {
+              ...prevResult.suspendPayload,
+              __workflow_meta: {
+                runId,
+                path: parentWorkflow?.stepId ? [parentWorkflow.stepId].concat(prevResult.suspendPayload?.__workflow_meta?.path ?? []) : prevResult.suspendPayload?.__workflow_meta?.path ?? []
+              }
+            }
+          },
+          timeTravel,
+          resumeData,
+          activeSteps,
+          requestContext,
+          parentWorkflow: parentWorkflow.parentWorkflow,
+          parentContext: parentWorkflow
+        }
+      });
+    }
+    await this.mastra.pubsub.publish("workflows-finish", {
+      type: "workflow.suspend",
+      runId,
+      data: { ...args, workflow: void 0 }
+    });
+  }
+  async processWorkflowFail(args) {
+    const {
+      workflowId,
+      runId,
+      resumeSteps,
+      prevResult,
+      resumeData,
+      parentWorkflow,
+      activeSteps,
+      requestContext,
+      timeTravel
+    } = args;
+    await this.mastra.getStorage()?.updateWorkflowState({
+      workflowName: workflowId,
+      runId,
+      opts: {
+        status: "failed",
+        error: prevResult.error
+      }
+    });
+    if (parentWorkflow) {
+      await this.mastra.pubsub.publish("workflows", {
+        type: "workflow.step.end",
+        runId,
+        data: {
+          workflowId: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+          executionPath: parentWorkflow.executionPath,
+          resumeSteps,
+          stepResults: parentWorkflow.stepResults,
+          prevResult,
+          timeTravel,
+          resumeData,
+          activeSteps,
+          requestContext,
+          parentWorkflow: parentWorkflow.parentWorkflow,
+          parentContext: parentWorkflow
+        }
+      });
+    }
+    await this.mastra.pubsub.publish("workflows-finish", {
+      type: "workflow.fail",
+      runId,
+      data: { ...args, workflow: void 0 }
+    });
+  }
+  async processWorkflowStepRun({
+    workflow,
+    workflowId,
+    runId,
+    executionPath,
+    stepResults,
+    activeSteps,
+    resumeSteps,
+    timeTravel,
+    prevResult,
+    resumeData,
+    parentWorkflow,
+    requestContext,
+    retryCount = 0
+  }) {
+    let stepGraph = workflow.stepGraph;
+    if (!executionPath?.length) {
+      return this.errorWorkflow(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          requestContext
+        },
+        new chunkTWH4PTDG_cjs.MastraError({
+          id: "MASTRA_WORKFLOW",
+          text: `Execution path is empty: ${JSON.stringify(executionPath)}`,
+          domain: "MASTRA_WORKFLOW" /* MASTRA_WORKFLOW */,
+          category: "SYSTEM" /* SYSTEM */
+        })
+      );
+    }
+    let step = stepGraph[executionPath[0]];
+    if (!step) {
+      return this.errorWorkflow(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          requestContext
+        },
+        new chunkTWH4PTDG_cjs.MastraError({
+          id: "MASTRA_WORKFLOW",
+          text: `Step not found in step graph: ${JSON.stringify(executionPath)}`,
+          domain: "MASTRA_WORKFLOW" /* MASTRA_WORKFLOW */,
+          category: "SYSTEM" /* SYSTEM */
+        })
+      );
+    }
+    if ((step.type === "parallel" || step.type === "conditional") && executionPath.length > 1) {
+      step = step.steps[executionPath[1]];
+    } else if (step.type === "parallel") {
+      return processWorkflowParallel(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          timeTravel,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          requestContext
+        },
+        {
+          pubsub: this.mastra.pubsub,
+          step
+        }
+      );
+    } else if (step?.type === "conditional") {
+      return processWorkflowConditional(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          timeTravel,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          requestContext
+        },
+        {
+          pubsub: this.mastra.pubsub,
+          stepExecutor: this.stepExecutor,
+          step
+        }
+      );
+    } else if (step?.type === "sleep") {
+      return processWorkflowSleep(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          timeTravel,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          requestContext
+        },
+        {
+          pubsub: this.mastra.pubsub,
+          stepExecutor: this.stepExecutor,
+          step
+        }
+      );
+    } else if (step?.type === "sleepUntil") {
+      return processWorkflowSleepUntil(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          timeTravel,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          requestContext
+        },
+        {
+          pubsub: this.mastra.pubsub,
+          stepExecutor: this.stepExecutor,
+          step
+        }
+      );
+    } else if (step?.type === "foreach" && executionPath.length === 1) {
+      return processWorkflowForEach(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          timeTravel,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          requestContext
+        },
+        {
+          pubsub: this.mastra.pubsub,
+          mastra: this.mastra,
+          step
+        }
+      );
+    }
+    if (!isExecutableStep(step)) {
+      return this.errorWorkflow(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          requestContext
+        },
+        new chunkTWH4PTDG_cjs.MastraError({
+          id: "MASTRA_WORKFLOW",
+          text: `Step is not executable: ${step?.type} -- ${JSON.stringify(executionPath)}`,
+          domain: "MASTRA_WORKFLOW" /* MASTRA_WORKFLOW */,
+          category: "SYSTEM" /* SYSTEM */
+        })
+      );
+    }
+    activeSteps[step.step.id] = true;
+    if (step.step instanceof EventedWorkflow) {
+      if (resumeSteps?.length > 1) {
+        const stepData = stepResults[step.step.id];
+        const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
+        if (!nestedRunId) {
+          return this.errorWorkflow(
+            {
+              workflowId,
+              runId,
+              executionPath,
+              stepResults,
+              activeSteps,
+              resumeSteps,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+              requestContext
+            },
+            new chunkTWH4PTDG_cjs.MastraError({
+              id: "MASTRA_WORKFLOW",
+              text: `Nested workflow run id not found: ${JSON.stringify(stepResults)}`,
+              domain: "MASTRA_WORKFLOW" /* MASTRA_WORKFLOW */,
+              category: "SYSTEM" /* SYSTEM */
+            })
+          );
+        }
+        const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+          workflowName: step.step.id,
+          runId: nestedRunId
+        });
+        const nestedStepResults = snapshot?.context;
+        const nestedSteps = resumeSteps.slice(1);
+        await this.mastra.pubsub.publish("workflows", {
+          type: "workflow.resume",
+          runId,
+          data: {
+            workflowId: step.step.id,
+            parentWorkflow: {
+              stepId: step.step.id,
+              workflowId,
+              runId,
+              executionPath,
+              resumeSteps,
+              stepResults,
+              input: prevResult,
+              parentWorkflow
+            },
+            executionPath: snapshot?.suspendedPaths?.[nestedSteps[0]],
+            runId: nestedRunId,
+            resumeSteps: nestedSteps,
+            stepResults: nestedStepResults,
+            prevResult,
+            resumeData,
+            activeSteps,
+            requestContext
+          }
+        });
+      } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.step.id) {
+        const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+          workflowName: step.step.id,
+          runId
+        }) ?? { context: {} };
+        const timeTravelParams = chunkKP42JLXE_cjs.createTimeTravelExecutionParams({
+          steps: timeTravel.steps.slice(1),
+          inputData: timeTravel.inputData,
+          resumeData: timeTravel.resumeData,
+          context: timeTravel.nestedStepResults?.[step.step.id] ?? {},
+          nestedStepsContext: timeTravel.nestedStepResults ?? {},
+          snapshot,
+          graph: step.step.buildExecutionGraph()
+        });
+        const nestedPrevStep = getStep(step.step, timeTravelParams.executionPath);
+        const nestedPrevResult = timeTravelParams.stepResults[nestedPrevStep?.id ?? "input"];
+        await this.mastra.pubsub.publish("workflows", {
+          type: "workflow.start",
+          runId,
+          data: {
+            workflowId: step.step.id,
+            parentWorkflow: {
+              stepId: step.step.id,
+              workflowId,
+              runId,
+              executionPath,
+              resumeSteps,
+              stepResults,
+              timeTravel,
+              input: prevResult,
+              parentWorkflow
+            },
+            executionPath: timeTravelParams.executionPath,
+            runId: crypto.randomUUID(),
+            stepResults: timeTravelParams.stepResults,
+            prevResult: { status: "success", output: nestedPrevResult?.payload },
+            timeTravel: timeTravelParams,
+            activeSteps,
+            requestContext
+          }
+        });
+      } else {
+        await this.mastra.pubsub.publish("workflows", {
+          type: "workflow.start",
+          runId,
+          data: {
+            workflowId: step.step.id,
+            parentWorkflow: {
+              stepId: step.step.id,
+              workflowId,
+              runId,
+              executionPath,
+              resumeSteps,
+              stepResults,
+              input: prevResult,
+              parentWorkflow
+            },
+            executionPath: [0],
+            runId: crypto.randomUUID(),
+            resumeSteps,
+            prevResult,
+            resumeData,
+            activeSteps,
+            requestContext
+          }
+        });
+      }
+      return;
+    }
+    if (step.type === "step") {
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: "watch",
+        runId,
+        data: {
+          type: "workflow-step-start",
+          payload: {
+            id: step.step.id,
+            startedAt: Date.now(),
+            payload: prevResult.status === "success" ? prevResult.output : void 0,
+            status: "running"
+          }
+        }
+      });
+    }
+    const ee = new EventEmitter__default.default();
+    ee.on("watch", async (event) => {
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: "watch",
+        runId,
+        data: event
+      });
+    });
+    const rc = new chunkJ7O6WENZ_cjs.RequestContext();
+    for (const [key, value] of Object.entries(requestContext)) {
+      rc.set(key, value);
+    }
+    const { resumeData: timeTravelResumeData, validationError: timeTravelResumeValidationError } = await chunkKP42JLXE_cjs.validateStepResumeData({
+      resumeData: timeTravel?.stepResults[step.step.id]?.status === "suspended" ? timeTravel?.resumeData : void 0,
+      step: step.step
+    });
+    let resumeDataToUse;
+    if (timeTravelResumeData && !timeTravelResumeValidationError) {
+      resumeDataToUse = timeTravelResumeData;
+    } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+      this.mastra.getLogger()?.warn("Time travel resume data validation failed", {
+        stepId: step.step.id,
+        error: timeTravelResumeValidationError.message
+      });
+    } else if (resumeSteps?.length > 0 && resumeSteps?.[0] === step.step.id) {
+      resumeDataToUse = resumeData;
+    }
+    const stepResult = await this.stepExecutor.execute({
+      workflowId,
+      step: step.step,
+      runId,
+      stepResults,
+      // TODO: implement state
+      state: {},
+      emitter: ee,
+      requestContext: rc,
+      input: prevResult?.output,
+      resumeData: resumeDataToUse,
+      retryCount,
+      foreachIdx: step.type === "foreach" ? executionPath[1] : void 0,
+      validateInputs: workflow.options.validateInputs
+    });
+    requestContext = Object.fromEntries(rc.entries());
+    if (stepResult.status === "bailed") {
+      stepResult.status = "success";
+      await this.endWorkflow({
+        workflow,
+        resumeData,
+        parentWorkflow,
+        workflowId,
+        runId,
+        executionPath,
+        resumeSteps,
+        stepResults: {
+          ...stepResults,
+          [step.step.id]: stepResult
+        },
+        prevResult: stepResult,
+        activeSteps,
+        requestContext
+      });
+      return;
+    }
+    if (stepResult.status === "failed") {
+      if (retryCount >= (workflow.retryConfig.attempts ?? 0)) {
+        await this.mastra.pubsub.publish("workflows", {
+          type: "workflow.step.end",
+          runId,
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath,
+            resumeSteps,
+            stepResults,
+            prevResult: stepResult,
+            activeSteps,
+            requestContext
+          }
+        });
+      } else {
+        return this.mastra.pubsub.publish("workflows", {
+          type: "workflow.step.run",
+          runId,
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath,
+            resumeSteps,
+            stepResults,
+            timeTravel,
+            prevResult,
+            activeSteps,
+            requestContext,
+            retryCount: retryCount + 1
+          }
+        });
+      }
+    }
+    if (step.type === "loop") {
+      await processWorkflowLoop(
+        {
+          workflowId,
+          prevResult: stepResult,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          resumeData,
+          parentWorkflow,
+          requestContext,
+          retryCount: retryCount + 1
+        },
+        {
+          pubsub: this.mastra.pubsub,
+          stepExecutor: this.stepExecutor,
+          step,
+          stepResult
+        }
+      );
+    } else {
+      await this.mastra.pubsub.publish("workflows", {
+        type: "workflow.step.end",
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          timeTravel,
+          //timeTravel is passed in as workflow.step.end ends the step, not the workflow, the timeTravel info is passed to the next step to run.
+          stepResults,
+          prevResult: stepResult,
+          activeSteps,
+          requestContext
+        }
+      });
+    }
+  }
+  async processWorkflowStepEnd({
+    workflow,
+    workflowId,
+    runId,
+    executionPath,
+    resumeSteps,
+    timeTravel,
+    prevResult,
+    parentWorkflow,
+    stepResults,
+    activeSteps,
+    parentContext,
+    requestContext
+  }) {
+    let step = workflow.stepGraph[executionPath[0]];
+    if ((step?.type === "parallel" || step?.type === "conditional") && executionPath.length > 1) {
+      step = step.steps[executionPath[1]];
+    }
+    if (!step) {
+      return this.errorWorkflow(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          prevResult,
+          stepResults,
+          activeSteps,
+          requestContext
+        },
+        new chunkTWH4PTDG_cjs.MastraError({
+          id: "MASTRA_WORKFLOW",
+          text: `Step not found: ${JSON.stringify(executionPath)}`,
+          domain: "MASTRA_WORKFLOW" /* MASTRA_WORKFLOW */,
+          category: "SYSTEM" /* SYSTEM */
+        })
+      );
+    }
+    if (step.type === "foreach") {
+      const snapshot = await this.mastra.getStorage()?.loadWorkflowSnapshot({
+        workflowName: workflowId,
+        runId
+      });
+      const currentIdx = executionPath[1];
+      const currentResult = snapshot?.context?.[step.step.id]?.output;
+      let newResult = prevResult;
+      if (currentIdx !== void 0) {
+        if (currentResult) {
+          currentResult[currentIdx] = prevResult.output;
+          newResult = { ...prevResult, output: currentResult };
+        } else {
+          newResult = { ...prevResult, output: [prevResult.output] };
+        }
+      }
+      const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
+        workflowName: workflow.id,
+        runId,
+        stepId: step.step.id,
+        result: newResult,
+        requestContext
+      });
+      if (!newStepResults) {
+        return;
+      }
+      stepResults = newStepResults;
+    } else if (isExecutableStep(step)) {
+      delete activeSteps[step.step.id];
+      if (parentContext) {
+        prevResult = stepResults[step.step.id] = {
+          ...prevResult,
+          payload: parentContext.input?.output ?? {}
+        };
+      }
+      const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
+        workflowName: workflow.id,
+        runId,
+        stepId: step.step.id,
+        result: prevResult,
+        requestContext
+      });
+      if (!newStepResults) {
+        return;
+      }
+      stepResults = newStepResults;
+    }
+    if (!prevResult?.status || prevResult.status === "failed") {
+      await this.mastra.pubsub.publish("workflows", {
+        type: "workflow.fail",
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          parentWorkflow,
+          stepResults,
+          timeTravel,
+          prevResult,
+          activeSteps,
+          requestContext
+        }
+      });
+      return;
+    } else if (prevResult.status === "suspended") {
+      const suspendedPaths = {};
+      const suspendedStep = getStep(workflow, executionPath);
+      if (suspendedStep) {
+        suspendedPaths[suspendedStep.id] = executionPath;
+      }
+      await this.mastra.getStorage()?.updateWorkflowState({
+        workflowName: workflowId,
+        runId,
+        opts: {
+          status: "suspended",
+          result: prevResult,
+          suspendedPaths
+        }
+      });
+      await this.mastra.pubsub.publish("workflows", {
+        type: "workflow.suspend",
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          parentWorkflow,
+          stepResults,
+          prevResult,
+          activeSteps,
+          requestContext,
+          timeTravel
+        }
+      });
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: "watch",
+        runId,
+        data: {
+          type: "workflow-step-suspended",
+          payload: {
+            id: step?.step?.id,
+            ...prevResult,
+            suspendedAt: Date.now(),
+            suspendPayload: prevResult.suspendPayload
+          }
+        }
+      });
+      return;
+    }
+    if (step?.type === "step") {
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: "watch",
+        runId,
+        data: {
+          type: "workflow-step-result",
+          payload: {
+            id: step.step.id,
+            ...prevResult
+          }
+        }
+      });
+      if (prevResult.status === "success") {
+        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: "watch",
+          runId,
+          data: {
+            type: "workflow-step-finish",
+            payload: {
+              id: step.step.id,
+              metadata: {}
+            }
+          }
+        });
+      }
+    }
+    step = workflow.stepGraph[executionPath[0]];
+    if ((step?.type === "parallel" || step?.type === "conditional") && executionPath.length > 1) {
+      let skippedCount = 0;
+      const allResults = step.steps.reduce(
+        (acc, step2) => {
+          if (isExecutableStep(step2)) {
+            const res = stepResults?.[step2.step.id];
+            if (res && res.status === "success") {
+              acc[step2.step.id] = res?.output;
+            } else if (res?.status === "skipped") {
+              skippedCount++;
+            }
+          }
+          return acc;
+        },
+        {}
+      );
+      const keys = Object.keys(allResults);
+      if (keys.length + skippedCount < step.steps.length) {
+        return;
+      }
+      await this.mastra.pubsub.publish("workflows", {
+        type: "workflow.step.end",
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1),
+          resumeSteps,
+          stepResults,
+          prevResult: { status: "success", output: allResults },
+          activeSteps,
+          requestContext,
+          timeTravel
+        }
+      });
+    } else if (step?.type === "foreach") {
+      await this.mastra.pubsub.publish("workflows", {
+        type: "workflow.step.run",
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1),
+          resumeSteps,
+          parentWorkflow,
+          stepResults,
+          prevResult: { ...prevResult, output: prevResult?.payload },
+          activeSteps,
+          requestContext,
+          timeTravel
+        }
+      });
+    } else if (executionPath[0] >= workflow.stepGraph.length - 1) {
+      await this.endWorkflow({
+        workflow,
+        parentWorkflow,
+        workflowId,
+        runId,
+        executionPath,
+        resumeSteps,
+        stepResults,
+        prevResult,
+        activeSteps,
+        requestContext
+      });
+    } else {
+      await this.mastra.pubsub.publish("workflows", {
+        type: "workflow.step.run",
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1] + 1]),
+          resumeSteps,
+          parentWorkflow,
+          stepResults,
+          prevResult,
+          activeSteps,
+          requestContext,
+          timeTravel
+        }
+      });
+    }
+  }
+  async loadData({
+    workflowId,
+    runId
+  }) {
+    const snapshot = await this.mastra.getStorage()?.loadWorkflowSnapshot({
+      workflowName: workflowId,
+      runId
+    });
+    return snapshot;
+  }
+  async process(event, ack) {
+    const { type, data } = event;
+    const workflowData = data;
+    const currentState = await this.loadData({
+      workflowId: workflowData.workflowId,
+      runId: workflowData.runId
+    });
+    if (currentState?.status === "canceled" && type !== "workflow.end") {
+      return;
+    }
+    if (type.startsWith("workflow.user-event.")) {
+      await processWorkflowWaitForEvent(
+        {
+          ...workflowData,
+          workflow: this.mastra.getWorkflow(workflowData.workflowId)
+        },
+        {
+          pubsub: this.mastra.pubsub,
+          eventName: type.split(".").slice(2).join("."),
+          currentState
+        }
+      );
+      return;
+    }
+    let workflow;
+    if (this.mastra.__hasInternalWorkflow(workflowData.workflowId)) {
+      workflow = this.mastra.__getInternalWorkflow(workflowData.workflowId);
+    } else if (workflowData.parentWorkflow) {
+      workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
+    } else {
+      workflow = this.mastra.getWorkflow(workflowData.workflowId);
+    }
+    if (!workflow) {
+      return this.errorWorkflow(
+        workflowData,
+        new chunkTWH4PTDG_cjs.MastraError({
+          id: "MASTRA_WORKFLOW",
+          text: `Workflow not found: ${workflowData.workflowId}`,
+          domain: "MASTRA_WORKFLOW" /* MASTRA_WORKFLOW */,
+          category: "SYSTEM" /* SYSTEM */
+        })
+      );
+    }
+    if (type === "workflow.start" || type === "workflow.resume") {
+      const { runId } = workflowData;
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: "watch",
+        runId,
+        data: {
+          type: "workflow-start",
+          payload: {
+            runId
+          }
+        }
+      });
+    }
+    switch (type) {
+      case "workflow.cancel":
+        await this.processWorkflowCancel({
+          workflow,
+          ...workflowData
+        });
+        break;
+      case "workflow.start":
+        await this.processWorkflowStart({
+          workflow,
+          ...workflowData
+        });
+        break;
+      case "workflow.resume":
+        await this.processWorkflowStart({
+          workflow,
+          ...workflowData
+        });
+        break;
+      case "workflow.end":
+        await this.processWorkflowEnd({
+          workflow,
+          ...workflowData
+        });
+        break;
+      case "workflow.step.end":
+        await this.processWorkflowStepEnd({
+          workflow,
+          ...workflowData
+        });
+        break;
+      case "workflow.step.run":
+        await this.processWorkflowStepRun({
+          workflow,
+          ...workflowData
+        });
+        break;
+      case "workflow.suspend":
+        await this.processWorkflowSuspend({
+          workflow,
+          ...workflowData
+        });
+        break;
+      case "workflow.fail":
+        await this.processWorkflowFail({
+          workflow,
+          ...workflowData
+        });
+        break;
+    }
+    try {
+      await ack?.();
+    } catch (e) {
+      console.error("Error acking event", e);
+    }
+  }
+};
+
+// src/workflows/evented/workflow.ts
+function cloneWorkflow(workflow, opts) {
+  const wf = new chunkKP42JLXE_cjs.Workflow({
+    id: opts.id,
+    inputSchema: workflow.inputSchema,
+    outputSchema: workflow.outputSchema,
+    steps: workflow.stepDefs,
+    mastra: workflow.mastra,
+    options: workflow.options
+  });
+  wf.setStepFlow(workflow.stepGraph);
+  wf.commit();
+  return wf;
+}
+function cloneStep(step, opts) {
+  return {
+    id: opts.id,
+    description: step.description,
+    inputSchema: step.inputSchema,
+    outputSchema: step.outputSchema,
+    suspendSchema: step.suspendSchema,
+    resumeSchema: step.resumeSchema,
+    stateSchema: step.stateSchema,
+    execute: step.execute,
+    retries: step.retries,
+    scorers: step.scorers,
+    component: step.component
+  };
+}
+function isAgent(params) {
+  return params?.component === "AGENT";
+}
+function isTool(params) {
+  return params instanceof chunkV537VSV4_cjs.Tool;
+}
+function createStep(params) {
+  if (isAgent(params)) {
+    return {
+      id: params.id,
+      description: params.getDescription(),
+      // @ts-ignore
+      inputSchema: z__default.default.object({
+        prompt: z__default.default.string()
+        // resourceId: z.string().optional(),
+        // threadId: z.string().optional(),
+      }),
+      // @ts-ignore
+      outputSchema: z__default.default.object({
+        text: z__default.default.string()
+      }),
+      execute: async ({ inputData, [chunkABJOUEVA_cjs.EMITTER_SYMBOL]: emitter, requestContext, abortSignal, abort }) => {
+        let streamPromise = {};
+        streamPromise.promise = new Promise((resolve, reject) => {
+          streamPromise.resolve = resolve;
+          streamPromise.reject = reject;
+        });
+        const { fullStream } = await params.streamLegacy(inputData.prompt, {
+          // resourceId: inputData.resourceId,
+          // threadId: inputData.threadId,
+          requestContext,
+          onFinish: (result) => {
+            streamPromise.resolve(result.text);
+          },
+          abortSignal
+        });
+        if (abortSignal.aborted) {
+          return abort();
+        }
+        const toolData = {
+          name: params.name,
+          args: inputData
+        };
+        await emitter.emit("watch", {
+          type: "tool-call-streaming-start",
+          ...toolData ?? {}
+        });
+        for await (const chunk of fullStream) {
+          if (chunk.type === "text-delta") {
+            await emitter.emit("watch", {
+              type: "tool-call-delta",
+              ...toolData ?? {},
+              argsTextDelta: chunk.textDelta
+            });
+          }
+        }
+        await emitter.emit("watch", {
+          type: "tool-call-streaming-finish",
+          ...toolData ?? {}
+        });
+        return {
+          text: await streamPromise.promise
+        };
+      },
+      component: params.component
+    };
+  }
+  if (isTool(params)) {
+    if (!params.inputSchema || !params.outputSchema) {
+      throw new Error("Tool must have input and output schemas defined");
+    }
+    return {
+      id: params.id,
+      description: params.description,
+      inputSchema: params.inputSchema,
+      outputSchema: params.outputSchema,
+      suspendSchema: params.suspendSchema,
+      resumeSchema: params.resumeSchema,
+      execute: async ({
+        inputData,
+        mastra,
+        requestContext,
+        suspend,
+        resumeData,
+        runId,
+        workflowId,
+        state,
+        setState
+      }) => {
+        if (!params.execute) {
+          throw new Error(`Tool ${params.id} does not have an execute function`);
+        }
+        const context = {
+          mastra,
+          requestContext,
+          tracingContext: { currentSpan: void 0 },
+          // TODO: Pass proper tracing context when evented workflows support tracing
+          workflow: {
+            runId,
+            workflowId,
+            state,
+            setState,
+            suspend,
+            resumeData
+          }
+        };
+        return params.execute(inputData, context);
+      },
+      component: "TOOL"
+    };
+  }
+  return {
+    id: params.id,
+    description: params.description,
+    inputSchema: params.inputSchema,
+    outputSchema: params.outputSchema,
+    resumeSchema: params.resumeSchema,
+    suspendSchema: params.suspendSchema,
+    execute: params.execute
+  };
+}
+function createWorkflow(params) {
+  const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra });
+  const executionEngine = new EventedExecutionEngine({
+    mastra: params.mastra,
+    eventProcessor,
+    options: {
+      validateInputs: params.options?.validateInputs ?? true,
+      shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
+      tracingPolicy: params.options?.tracingPolicy
+    }
+  });
+  return new EventedWorkflow({
+    ...params,
+    executionEngine
+  });
+}
+var EventedWorkflow = class extends chunkKP42JLXE_cjs.Workflow {
+  constructor(params) {
+    super(params);
+    this.engineType = "evented";
+  }
+  __registerMastra(mastra) {
+    super.__registerMastra(mastra);
+    this.executionEngine.__registerMastra(mastra);
+  }
+  async createRun(options) {
+    const runIdToUse = options?.runId || crypto.randomUUID();
+    const run = this.runs.get(runIdToUse) ?? new EventedRun({
+      workflowId: this.id,
+      runId: runIdToUse,
+      executionEngine: this.executionEngine,
+      executionGraph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
+      mastra: this.mastra,
+      retryConfig: this.retryConfig,
+      cleanup: () => this.runs.delete(runIdToUse),
+      workflowSteps: this.steps,
+      validateInputs: this.options?.validateInputs,
+      workflowEngineType: this.engineType
+    });
+    this.runs.set(runIdToUse, run);
+    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({
+      workflowStatus: run.workflowRunStatus,
+      stepResults: {}
+    });
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
+      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+        workflowName: this.id,
+        runId: runIdToUse,
+        snapshot: {
+          runId: runIdToUse,
+          status: "pending",
+          value: {},
+          context: {},
+          activePaths: [],
+          serializedStepGraph: this.serializedStepGraph,
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          result: void 0,
+          error: void 0,
+          // @ts-ignore
+          timestamp: Date.now()
+        }
+      });
+    }
+    return run;
+  }
+};
+var EventedRun = class extends chunkKP42JLXE_cjs.Run {
+  constructor(params) {
+    super(params);
+    this.serializedStepGraph = params.serializedStepGraph;
+  }
+  async start({
+    inputData,
+    initialState,
+    requestContext
+  }) {
+    if (this.serializedStepGraph.length === 0) {
+      throw new Error(
+        "Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc."
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error("Uncommitted step flow changes detected. Call .commit() to register the steps.");
+    }
+    requestContext = requestContext ?? new chunkJ7O6WENZ_cjs.RequestContext();
+    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      snapshot: {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: "running",
+        value: {},
+        context: {},
+        requestContext: Object.fromEntries(requestContext.entries()),
+        activePaths: [],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now()
+      }
+    });
+    const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+    const result = await this.executionEngine.execute({
+      workflowId: this.workflowId,
+      runId: this.runId,
+      graph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
+      input: inputDataToUse,
+      initialState: initialStateToUse,
+      emitter: {
+        emit: async (event, data) => {
+          this.emitter.emit(event, data);
+        },
+        on: (event, callback) => {
+          this.emitter.on(event, callback);
+        },
+        off: (event, callback) => {
+          this.emitter.off(event, callback);
+        },
+        once: (event, callback) => {
+          this.emitter.once(event, callback);
+        }
+      },
+      retryConfig: this.retryConfig,
+      requestContext,
+      abortController: this.abortController
+    });
+    if (result.status !== "suspended") {
+      this.cleanup?.();
+    }
+    return result;
+  }
+  // TODO: stream
+  async resume(params) {
+    let steps = [];
+    if (typeof params.step === "string") {
+      steps = params.step.split(".");
+    } else {
+      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(
+        (step) => typeof step === "string" ? step : step?.id
+      );
+    }
+    if (steps.length === 0) {
+      throw new Error("No steps provided to resume");
+    }
+    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId
+    });
+    const resumePath = snapshot?.suspendedPaths?.[steps[0]];
+    if (!resumePath) {
+      throw new Error(
+        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot?.suspendedPaths)}`
+      );
+    }
+    console.dir(
+      { resume: { requestContextObj: snapshot?.requestContext, requestContext: params.requestContext } },
+      { depth: null }
+    );
+    const requestContextObj = snapshot?.requestContext ?? {};
+    const requestContext = new chunkJ7O6WENZ_cjs.RequestContext();
+    for (const [key, value] of Object.entries(requestContextObj)) {
+      requestContext.set(key, value);
+    }
+    if (params.requestContext) {
+      for (const [key, value] of params.requestContext.entries()) {
+        requestContext.set(key, value);
+      }
+    }
+    const suspendedStep = this.workflowSteps[steps?.[0] ?? ""];
+    const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
+    const executionResultPromise = this.executionEngine.execute({
+      workflowId: this.workflowId,
+      runId: this.runId,
+      graph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
+      input: resumeDataToUse,
+      resume: {
+        steps,
+        stepResults: snapshot?.context,
+        resumePayload: resumeDataToUse,
+        resumePath
+      },
+      emitter: {
+        emit: (event, data) => {
+          this.emitter.emit(event, data);
+          return Promise.resolve();
+        },
+        on: (event, callback) => {
+          this.emitter.on(event, callback);
+        },
+        off: (event, callback) => {
+          this.emitter.off(event, callback);
+        },
+        once: (event, callback) => {
+          this.emitter.once(event, callback);
+        }
+      },
+      requestContext,
+      abortController: this.abortController
+    }).then((result) => {
+      if (result.status !== "suspended") {
+        this.closeStreamAction?.().catch(() => {
+        });
+      }
+      return result;
+    });
+    this.executionResults = executionResultPromise;
+    return executionResultPromise;
+  }
+  watch(cb) {
+    const watchCb = async (event, ack) => {
+      if (event.runId !== this.runId) {
+        return;
+      }
+      cb(event.data);
+      await ack?.();
+    };
+    this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {
+    });
+    return () => {
+      this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {
+      });
+    };
+  }
+  async watchAsync(cb) {
+    const watchCb = async (event, ack) => {
+      if (event.runId !== this.runId) {
+        return;
+      }
+      cb(event.data);
+      await ack?.();
+    };
+    await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {
+    });
+    return async () => {
+      await this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {
+      });
+    };
+  }
+  async cancel() {
+    await this.mastra?.pubsub.publish("workflows", {
+      type: "workflow.cancel",
+      runId: this.runId,
+      data: {
+        workflowId: this.workflowId,
+        runId: this.runId
+      }
+    });
+  }
+};
+
+// src/workflows/evented/workflow-event-processor/utils.ts
+function getNestedWorkflow(mastra, { workflowId, executionPath, parentWorkflow }) {
+  let workflow = null;
+  if (parentWorkflow) {
+    const nestedWorkflow = getNestedWorkflow(mastra, parentWorkflow);
+    if (!nestedWorkflow) {
+      return null;
+    }
+    workflow = nestedWorkflow;
+  }
+  workflow = workflow ?? mastra.getWorkflow(workflowId);
+  const stepGraph = workflow.stepGraph;
+  let parentStep = stepGraph[executionPath[0]];
+  if (parentStep?.type === "parallel" || parentStep?.type === "conditional") {
+    parentStep = parentStep.steps[executionPath[1]];
+  }
+  if (parentStep?.type === "step" || parentStep?.type === "loop") {
+    return parentStep.step;
+  }
+  return null;
+}
+function getStep(workflow, executionPath) {
+  let idx = 0;
+  const stepGraph = workflow.stepGraph;
+  let parentStep = stepGraph[executionPath[0]];
+  if (parentStep?.type === "parallel" || parentStep?.type === "conditional") {
+    parentStep = parentStep.steps[executionPath[1]];
+    idx++;
+  } else if (parentStep?.type === "foreach") {
+    return parentStep.step;
+  }
+  if (!(parentStep?.type === "step" || parentStep?.type === "loop")) {
+    return null;
+  }
+  if (parentStep instanceof EventedWorkflow) {
+    return getStep(parentStep, executionPath.slice(idx + 1));
+  }
+  return parentStep.step;
+}
+function isExecutableStep(step) {
+  return step.type === "step" || step.type === "loop" || step.type === "foreach";
+}
+
+// src/workflows/evented/execution-engine.ts
+var EventedExecutionEngine = class extends chunkKP42JLXE_cjs.ExecutionEngine {
+  eventProcessor;
+  constructor({
+    mastra,
+    eventProcessor,
+    options
+  }) {
+    super({ mastra, options });
+    this.eventProcessor = eventProcessor;
+  }
+  __registerMastra(mastra) {
+    this.mastra = mastra;
+    this.eventProcessor.__registerMastra(mastra);
+  }
+  /**
+   * Executes a workflow run with the provided execution graph and input
+   * @param graph The execution graph to execute
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  async execute(params) {
+    const pubsub = this.mastra?.pubsub;
+    if (!pubsub) {
+      throw new Error("No Pubsub adapter configured on the Mastra instance");
+    }
+    if (params.resume) {
+      const prevStep = getStep(this.mastra.getWorkflow(params.workflowId), params.resume.resumePath);
+      const prevResult = params.resume.stepResults[prevStep?.id ?? "input"];
+      await pubsub.publish("workflows", {
+        type: "workflow.resume",
+        runId: params.runId,
+        data: {
+          workflowId: params.workflowId,
+          runId: params.runId,
+          executionPath: params.resume.resumePath,
+          stepResults: params.resume.stepResults,
+          resumeSteps: params.resume.steps,
+          prevResult: { status: "success", output: prevResult?.payload },
+          resumeData: params.resume.resumePayload,
+          requestContext: Object.fromEntries(params.requestContext.entries()),
+          format: params.format
+        }
+      });
+    } else if (params.timeTravel) {
+      const prevStep = getStep(this.mastra.getWorkflow(params.workflowId), params.timeTravel.executionPath);
+      const prevResult = params.timeTravel.stepResults[prevStep?.id ?? "input"];
+      await pubsub.publish("workflows", {
+        type: "workflow.start",
+        runId: params.runId,
+        data: {
+          workflowId: params.workflowId,
+          runId: params.runId,
+          executionPath: params.timeTravel.executionPath,
+          stepResults: params.timeTravel.stepResults,
+          timeTravel: params.timeTravel,
+          prevResult: { status: "success", output: prevResult?.payload },
+          requestContext: Object.fromEntries(params.requestContext.entries()),
+          format: params.format
+        }
+      });
+    } else {
+      await pubsub.publish("workflows", {
+        type: "workflow.start",
+        runId: params.runId,
+        data: {
+          workflowId: params.workflowId,
+          runId: params.runId,
+          prevResult: { status: "success", output: params.input },
+          requestContext: Object.fromEntries(params.requestContext.entries()),
+          format: params.format
+        }
+      });
+    }
+    const resultData = await new Promise((resolve) => {
+      const finishCb = async (event, ack) => {
+        if (event.runId !== params.runId) {
+          await ack?.();
+          return;
+        }
+        if (["workflow.end", "workflow.fail", "workflow.suspend"].includes(event.type)) {
+          await ack?.();
+          await pubsub.unsubscribe("workflows-finish", finishCb);
+          resolve(event.data);
+          return;
+        }
+        await ack?.();
+      };
+      pubsub.subscribe("workflows-finish", finishCb).catch(() => {
+      });
+    });
+    if (resultData.prevResult.status === "failed") {
+      return {
+        status: "failed",
+        error: resultData.prevResult.error,
+        steps: resultData.stepResults
+      };
+    } else if (resultData.prevResult.status === "suspended") {
+      const suspendedSteps = Object.entries(resultData.stepResults).map(([_stepId, stepResult]) => {
+        if (stepResult.status === "suspended") {
+          return stepResult.suspendPayload?.__workflow_meta?.path ?? [];
+        }
+        return null;
+      }).filter(Boolean);
+      return {
+        status: "suspended",
+        steps: resultData.stepResults,
+        suspended: suspendedSteps
+      };
+    }
+    return {
+      status: resultData.prevResult.status,
+      result: resultData.prevResult?.output,
+      steps: resultData.stepResults
+    };
+  }
+};
+
+exports.EventedExecutionEngine = EventedExecutionEngine;
+exports.EventedRun = EventedRun;
+exports.EventedWorkflow = EventedWorkflow;
+exports.StepExecutor = StepExecutor;
+exports.WorkflowEventProcessor = WorkflowEventProcessor;
+exports.cloneStep = cloneStep;
+exports.cloneWorkflow = cloneWorkflow;
+exports.createStep = createStep;
+exports.createWorkflow = createWorkflow;
+//# sourceMappingURL=chunk-556MJ7CL.cjs.map
+//# sourceMappingURL=chunk-556MJ7CL.cjs.map

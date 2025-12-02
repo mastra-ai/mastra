@@ -1,0 +1,95 @@
+{
+  "name": "@peculiar/json-schema",
+  "version": "1.1.12",
+  "description": "This package uses ES2015 decorators to simplify JSON schema creation and use",
+  "main": "build/index.js",
+  "module": "build/index.es.js",
+  "types": "build/types/index.d.ts",
+  "scripts": {
+    "test": "mocha",
+    "prepare": "npm run build",
+    "lint": "tslint -p .",
+    "lint:fix": "tslint --fix -p .",
+    "build": "npm run build:module && npm run build:types",
+    "build:module": "rollup -c",
+    "build:types": "tsc -p tsconfig.types.json",
+    "clear": "rimraf build/*",
+    "rebuild": "npm run clear && npm run build",
+    "prepub": "npm run lint && npm run build",
+    "pub": "npm version patch && npm publish",
+    "postpub": "git push && git push --tags origin master",
+    "prepub:next": "npm run lint && npm run build",
+    "pub:next": "npm version prerelease --preid=next && npm publish --tag next",
+    "postpub:next": "git push",
+    "coverage": "nyc npm test",
+    "coveralls": "nyc report --reporter=text-lcov | coveralls"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PeculiarVentures/json-schema.git"
+  },
+  "keywords": [
+    "json",
+    "stringify",
+    "serialize",
+    "parse",
+    "convert",
+    "decorator"
+  ],
+  "author": "PeculiarVentures, Inc",
+  "contributors": [
+    {
+      "email": "rmh@unmitigatedrisk.com",
+      "name": "Ryan Hurst"
+    },
+    {
+      "email": "microshine@mail.ru",
+      "name": "Miroshin Stepan"
+    }
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/PeculiarVentures/json-schema/issues"
+  },
+  "homepage": "https://github.com/PeculiarVentures/json-schema#readme",
+  "engines": {
+    "node": ">=8.0.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^8.0.0",
+    "@types/node": "^12.12.51",
+    "mocha": "^8.0.1",
+    "rimraf": "^3.0.2",
+    "rollup": "^2.22.2",
+    "rollup-plugin-typescript2": "^0.27.1",
+    "ts-node": "^8.10.2",
+    "tslint": "^6.1.2",
+    "typescript": "^3.9.7"
+  },
+  "dependencies": {
+    "tslib": "^2.0.0"
+  },
+  "nyc": {
+    "extension": [
+      ".ts",
+      ".tsx"
+    ],
+    "include": [
+      "src/**/*.ts"
+    ],
+    "exclude": [
+      "**/*.d.ts"
+    ],
+    "reporter": [
+      "text-summary",
+      "html"
+    ]
+  },
+  "mocha": {
+    "require": "ts-node/register",
+    "extension": [
+      "ts"
+    ],
+    "watch-files": "test/**/*.ts"
+  }
+}

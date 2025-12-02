@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../src/cli/lib/deployApi/paths.ts"],
+  "sourcesContent": ["import { z } from \"zod\";\nimport { looseObject } from \"./utils.js\";\n\n// TODO share some of these types, to distinguish between encodedComponentDefinitionPaths etc.\nexport const componentDefinitionPath = z.string();\nexport type ComponentDefinitionPath = z.infer<typeof componentDefinitionPath>;\n\nexport const componentPath = z.string();\nexport type ComponentPath = z.infer<typeof componentPath>;\n\nexport const canonicalizedModulePath = z.string();\nexport type CanonicalizedModulePath = z.infer<typeof canonicalizedModulePath>;\n\nexport const componentFunctionPath = looseObject({\n  component: z.string(),\n  udfPath: z.string(),\n});\nexport type ComponentFunctionPath = z.infer<typeof componentFunctionPath>;\n"],
+  "mappings": ";AAAA,SAAS,SAAS;AAClB,SAAS,mBAAmB;AAGrB,aAAM,0BAA0B,EAAE,OAAO;AAGzC,aAAM,gBAAgB,EAAE,OAAO;AAG/B,aAAM,0BAA0B,EAAE,OAAO;AAGzC,aAAM,wBAAwB,YAAY;AAAA,EAC/C,WAAW,EAAE,OAAO;AAAA,EACpB,SAAS,EAAE,OAAO;AACpB,CAAC;",
+  "names": []
+}

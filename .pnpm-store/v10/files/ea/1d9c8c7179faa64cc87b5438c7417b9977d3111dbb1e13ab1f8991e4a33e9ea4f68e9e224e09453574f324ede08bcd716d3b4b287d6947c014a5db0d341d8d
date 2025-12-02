@@ -1,0 +1,54 @@
+{
+  "name": "@huggingface/tasks",
+  "packageManager": "pnpm@8.10.5",
+  "version": "0.12.30",
+  "description": "List of ML tasks for huggingface.co/tasks",
+  "repository": "https://github.com/huggingface/huggingface.js.git",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js"
+    }
+  },
+  "source": "src/index.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "src",
+    "tsconfig.json"
+  ],
+  "keywords": [
+    "huggingface",
+    "hub",
+    "languages"
+  ],
+  "author": "Hugging Face",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "quicktype-core": "https://github.com/huggingface/quicktype/raw/pack-18.0.17/packages/quicktype-core/quicktype-core-18.0.17.tgz",
+    "type-fest": "^3.13.1"
+  },
+  "scripts": {
+    "lint": "eslint --quiet --fix --ext .cjs,.ts .",
+    "lint:check": "eslint --ext .cjs,.ts .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build": "tsup src/index.ts --format cjs,esm --clean && tsc --emitDeclarationOnly --declaration",
+    "watch:export": "tsup src/index.ts --format cjs,esm --watch",
+    "watch:types": "tsc --emitDeclarationOnly --declaration --watch",
+    "watch": "npm-run-all --parallel watch:export watch:types",
+    "check": "tsc",
+    "test": "vitest run",
+    "inference-codegen": "tsx scripts/inference-codegen.ts && prettier --write src/tasks/*/inference.ts",
+    "inference-tgi-import": "tsx scripts/inference-tgi-import.ts && prettier --write src/tasks/text-generation/spec/*.json && prettier --write src/tasks/chat-completion/spec/*.json",
+    "inference-tei-import": "tsx scripts/inference-tei-import.ts && prettier --write src/tasks/feature-extraction/spec/*.json"
+  }
+}

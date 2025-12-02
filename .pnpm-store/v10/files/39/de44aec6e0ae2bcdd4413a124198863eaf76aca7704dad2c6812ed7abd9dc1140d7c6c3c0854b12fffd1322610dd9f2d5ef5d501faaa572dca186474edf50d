@@ -1,0 +1,50 @@
+{
+  "name": "@supabase/auth-js",
+  "version": "2.76.1",
+  "private": false,
+  "description": "Official SDK for Supabase Auth",
+  "keywords": [
+    "auth",
+    "supabase",
+    "auth",
+    "authentication"
+  ],
+  "homepage": "https://github.com/supabase/supabase-js/tree/master/packages/core/auth-js",
+  "bugs": "https://github.com/supabase/supabase-js/issues",
+  "license": "MIT",
+  "author": "Supabase",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "main": "dist/main/index.js",
+  "module": "dist/module/index.js",
+  "types": "dist/module/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supabase/supabase-js.git",
+    "directory": "packages/core/auth-js"
+  },
+  "scripts": {
+    "clean": "rimraf dist docs",
+    "coverage": "echo \"run npm test\"",
+    "build:node18": "npm run clean && npm run build:main && npm run build:module",
+    "build": "npm run clean && npm run build:main && npm run build:module",
+    "build:main": "tsc -p tsconfig.json",
+    "build:module": "tsc -p tsconfig.module.json",
+    "test:auth": "npm run test:clean && npm run test:infra && npm run test:suite && npm run test:clean",
+    "test:suite": "npm --prefix ./test run test",
+    "test:infra": "cd infra && docker compose down && docker compose pull && docker compose up -d && sleep 30",
+    "test:clean": "cd infra && docker compose down",
+    "docs": "typedoc src/index.ts --out docs/v2 --excludePrivate --excludeProtected",
+    "docs:json": "typedoc --json docs/v2/spec.json --excludeExternals --excludePrivate --excludeProtected src/index.ts"
+  },
+  "dependencies": {
+    "@supabase/node-fetch": "2.6.15",
+    "tslib": "2.8.1"
+  },
+  "devDependencies": {
+    "jest": "^28.1.3",
+    "ts-jest": "^28.0.7"
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "name": "posthog-node",
+  "version": "4.18.0",
+  "description": "PostHog Node.js integration",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PostHog/posthog-js-lite.git",
+    "directory": "posthog-node"
+  },
+  "scripts": {
+    "prepublishOnly": "cd .. && yarn build"
+  },
+  "engines": {
+    "node": ">=15.0.0"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "PostHog",
+    "email": "hey@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "main": "lib/node/index.cjs",
+  "module": "lib/node/index.mjs",
+  "types": "lib/index.d.ts",
+  "dependencies": {
+    "axios": "^1.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "commander": "^9.3.0",
+    "mitata": "^1.0.21"
+  },
+  "keywords": [
+    "posthog",
+    "stats",
+    "analysis",
+    "funnels"
+  ],
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "edge": {
+        "import": "./lib/edge/index.mjs",
+        "require": "./lib/edge/index.cjs",
+        "default": "./lib/edge/index.mjs"
+      },
+      "node": {
+        "import": "./lib/node/index.mjs",
+        "require": "./lib/node/index.cjs",
+        "default": "./lib/node/index.mjs"
+      },
+      "edge-light": {
+        "import": "./lib/edge/index.mjs",
+        "require": "./lib/edge/index.cjs",
+        "default": "./lib/edge/index.mjs"
+      },
+      "workerd": {
+        "import": "./lib/edge/index.mjs",
+        "require": "./lib/edge/index.cjs",
+        "default": "./lib/edge/index.mjs"
+      },
+      "import": "./lib/node/index.mjs",
+      "require": "./lib/node/index.cjs"
+    }
+  }
+}

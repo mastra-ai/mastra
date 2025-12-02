@@ -1,0 +1,16 @@
+@PACKAGE_INIT@
+
+add_library(couchbase_cxx_client::couchbase_cxx_client_static STATIC IMPORTED GLOBAL)
+
+set_target_properties(couchbase_cxx_client::couchbase_cxx_client_static PROPERTIES
+  IMPORTED_LOCATION "@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_LIBDIR@/libcouchbase_cxx_client_static.a"
+)
+
+set(COUCHBASE_CXX_CLIENT_STATIC_INCLUDE_DIR "@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_INCLUDEDIR@")
+target_include_directories(couchbase_cxx_client::couchbase_cxx_client_static INTERFACE ${COUCHBASE_CXX_CLIENT_INCLUDE_DIR})
+
+set(COUCHBASE_CXX_CLIENT_STATIC_INCLUDE_DIRS ${COUCHBASE_CXX_CLIENT_INCLUDE_DIR} CACHE STRING "Include directories for couchbase_cxx_client_static")
+
+set(COUCHBASE_CXX_CLIENT_STATIC_FOUND TRUE)
+
+set(COUCHBASE_CXX_CLIENT_VERSION "@couchbase_cxx_client_VERSION@")

@@ -1,0 +1,67 @@
+{
+  "name": "css-box-model",
+  "version": "1.2.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662930121,
+      "integrity": "sha512-zP+BKlklQg1OZiFmrs8h7gzpZPXj6zG7+X2FsSfnOjRpOY6OOwhxzIirD9qeO03Tli6Yb3HjOx6LTxncgVNwHg==",
+      "mode": 420,
+      "size": 1069
+    },
+    "dist/css-box-model.cjs.js.flow": {
+      "checkedAt": 1764662930123,
+      "integrity": "sha512-VoiVGuiY8xEUBEvcvasAo3KoBXpcM3Ki2wSk9Magg7YWmi6PQvEi4mItltEUU4x0CC7pSRw4U1Q0E7JkEY9tzQ==",
+      "mode": 420,
+      "size": 34
+    },
+    "dist/css-box-model.cjs.js": {
+      "checkedAt": 1764662930124,
+      "integrity": "sha512-LRfC9LtyMPfXR8h/XcQoB6NHARCtCam7O0hP2kg71Y/ydjV5PRqFcMw3Y1b+WaqM39ljzWfBnIrlyM1lxcDopA==",
+      "mode": 420,
+      "size": 4294
+    },
+    "dist/css-box-model.esm.js": {
+      "checkedAt": 1764662930125,
+      "integrity": "sha512-AtNYJLC7dA/OTg0NuO3Z5GhIz1VOs2xIw19qMSA7c0TXIBQBpfCA5B7H9pC6k0zolxy5N8YOweUhUILw1lHavQ==",
+      "mode": 420,
+      "size": 3940
+    },
+    "dist/css-box-model.js": {
+      "checkedAt": 1764662930125,
+      "integrity": "sha512-k/7AxATOSs55nB34sBpENR2Xudw4P21ZVf+gfeE3Tx/w3ZWppDDGq7x++fNLVo8aXySmYMvdgiD/SKwSaE/bKg==",
+      "mode": 420,
+      "size": 4842
+    },
+    "dist/css-box-model.min.js": {
+      "checkedAt": 1764662930126,
+      "integrity": "sha512-7U7T7glN6qVHA/8K3n78N5fxGaalYa3QslyYcS2eJu4EZb1r46C2GLs4DLURd9DxXT7SQm2ZBIzy3YbtDLrBbQ==",
+      "mode": 420,
+      "size": 1925
+    },
+    "src/index.js": {
+      "checkedAt": 1764662930127,
+      "integrity": "sha512-Wc+bYWcSltKWdc0UVqQua30V9Nnp8603DYCxhNGFKgi38ZQUEUXldQaBxTS0XK2g2QWWjAxlFSqYSxYX5hhWYA==",
+      "mode": 420,
+      "size": 6238
+    },
+    "package.json": {
+      "checkedAt": 1764662930127,
+      "integrity": "sha512-UlOpSPRAdP5tAzaYIU55YsSFLX/rU42t5R027ohAml/HGlDSjZ+ihMxbmTY+aqVzkQ4JjAi3xUt8FgGS7Qjffg==",
+      "mode": 420,
+      "size": 1705
+    },
+    "README.md": {
+      "checkedAt": 1764662930129,
+      "integrity": "sha512-68/alj3zxLHrmO2blOipvkXHDaY9p9EgLo9wmLWRWiFzJC55u5pfuf1au6Ljmfqd2rYx2bTBA2cjt18xXxkbpA==",
+      "mode": 420,
+      "size": 6190
+    },
+    "src/index.d.ts": {
+      "checkedAt": 1764662930130,
+      "integrity": "sha512-iiG3y51tG/s0u0IRIolsckjfGz5eqMkjvHYo5GLriGL1ReMBcmTw1PT281USqFaMH9ymbub3ON1BDY0WgI/hrg==",
+      "mode": 420,
+      "size": 1373
+    }
+  }
+}

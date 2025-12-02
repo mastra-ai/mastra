@@ -1,0 +1,48 @@
+imports:
+  root: ../../../../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get:
+      path: >-
+        /v1/voices/pvc/{voice_id}/samples/{sample_id}/speakers/{speaker_id}/audio
+      method: GET
+      auth: false
+      docs: Retrieve the separated audio for a specific speaker.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+        sample_id:
+          type: string
+          docs: Sample ID to be used
+        speaker_id:
+          type: string
+          docs: >-
+            Speaker ID to be used, you can use GET
+            https://api.elevenlabs.io/v1/voices/{voice_id}/samples/{sample_id}/speakers
+            to list all the available speakers for a sample.
+      display-name: Retrieve Separated Speaker Audio
+      response:
+        docs: Successful Response
+        type: root.SpeakerAudioResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+            sample_id: VW7YKqPnjY4h39yTbx2L
+            speaker_id: VW7YKqPnjY4h39yTbx2L
+          response:
+            body:
+              audio_base_64: audio_base_64
+              media_type: audio/mpeg
+              duration_secs: 5
+  source:
+    openapi: openapi.json

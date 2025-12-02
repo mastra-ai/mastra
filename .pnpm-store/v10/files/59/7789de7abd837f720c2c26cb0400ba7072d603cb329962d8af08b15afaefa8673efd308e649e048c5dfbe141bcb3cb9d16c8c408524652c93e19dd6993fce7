@@ -1,0 +1,27 @@
+{
+  "name": "bytesish",
+  "version": "0.4.4",
+  "main": "node.js",
+  "browser": "browser.js",
+  "scripts": {
+    "test": "hundreds aegir test -t node browser",
+    "pretest": "aegir lint"
+  },
+  "keywords": [],
+  "author": "Mikeal Rogers <mikeal.rogers@gmail.com> (https://www.mikealrogers.com/)",
+  "license": "(Apache-2.0 AND MIT)",
+  "devDependencies": {
+    "aegir": "^20.4.1",
+    "hundreds": "0.0.2",
+    "tsame": "^2.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikeal/bytesish.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mikeal/bytesish/issues"
+  },
+  "homepage": "https://github.com/mikeal/bytesish#readme",
+  "description": "Cross-Platform Binary API"
+}

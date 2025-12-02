@@ -1,0 +1,25 @@
+{
+  "name": "@firebase/app-check-interop-types",
+  "version": "0.3.3",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662906836,
+      "integrity": "sha512-lwkxI2PV18r8QQudnKksocTBjoXTrZhM7eyTS00OlMPB3XIQuv7yG81iapu8jRSr88N8sQYB2d/FbhQNCqVe4g==",
+      "mode": 420,
+      "size": 668
+    },
+    "README.md": {
+      "checkedAt": 1764662906837,
+      "integrity": "sha512-62rXsUn25LqtVEFjZpSzPajIe8VbrhFHWVIkTKrHDGvGE/SuS0fYG+mBGHYjMQzKYo8nAT6u44VNNe79tUqOow==",
+      "mode": 420,
+      "size": 201
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662906844,
+      "integrity": "sha512-UwmdVLN4M7zK4BKJXDl+t5v2BvBsgf9+v4b24NRqEmKf7Zn5bfyDx/LiY2IMKu5K2QlW6b2Olc4aarMTFA+uhw==",
+      "mode": 420,
+      "size": 2033
+    }
+  }
+}

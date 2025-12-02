@@ -1,0 +1,54 @@
+# Contributor: Couchbase SDK Team <support@couchbase.com>
+# Maintainer: Couchbase SDK Team <support@couchbase.com>
+
+pkgname=couchbase-cxx-client
+pkgver=@COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@
+pkgrel=1
+_number_of_commits=@COUCHBASE_CXX_CLIENT_NUMBER_OF_COMMITS@
+if [ "${_number_of_commits}" -gt 0 ]; then
+	pkgver="${pkgver}_p${_number_of_commits}"
+fi
+source="${pkgname}-${pkgver}.tar.gz"
+pkgdesc="Couchbase C++ SDK"
+url="https://docs.couchbase.com/cxx-sdk/current/hello-world/overview.html"
+arch="all"
+license="Apache-2.0"
+depends=""
+makedepends="
+	linux-headers
+	cmake
+	ninja
+"
+subpackages="${pkgname}-dev ${pkgname}-tools"
+options="!check"
+
+unpack() {
+	(cd "${srcdir}"; tar -xzf "${source}" --strip-components=1)
+}
+
+build() {
+	cmake -B apk-build -S "${srcdir}" -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_BUILD_TYPE=MinSizeRel \
+		-DBUILD_SHARED_LIBS=OFF \
+		-DCOUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION="${pkgver}" \
+		-DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
+		-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
+	cmake --build apk-build
+}
+
+tools() {
+	pkgdesc="${pkgdesc} (tools)"
+	depends="${pkgname}=${pkgver}-r${pkgrel}"
+
+	amove usr/bin
+}
+
+package() {
+	DESTDIR="${pkgdir}" cmake --install apk-build
+}

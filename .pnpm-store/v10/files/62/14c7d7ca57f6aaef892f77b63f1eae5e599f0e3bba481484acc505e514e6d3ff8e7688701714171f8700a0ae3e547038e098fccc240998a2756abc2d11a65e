@@ -1,0 +1,26 @@
+# NOTE: This file MUST be in sync with cmake/ThirdPartyDependencies.cmake
+components:
+  boringssl:
+    bd-id: 1e303b15-b82b-4a4d-8cd6-a2048fb2c73d
+    versions: [ 20200921 ]
+  spdlog:
+    bd-id: 7785114c-5b78-4aad-8771-72a739a1f06e
+    versions: [ v1.15.0 ]
+  gsl:
+    bd-id: 9e753ffd-aa29-46e6-a7fc-d4b972710c0b
+    versions: [ 4.0.0 ]
+  hdr_histogram:
+    bd-id: 43a908e1-df66-4cd1-b18f-63c94e41965e
+    versions: [ 0.11.8 ]
+  llhttp:
+    bd-id: 0bcb0de9-f810-47e1-826b-4c3696a0c276
+    versions: [ v9.3.0 ]
+  snappy:
+    bd-id: fd5e5c60-2c67-4d20-8be9-b7648156cef3
+    versions: [ 1.2.2 ]
+  asio:
+    bd-id: 3739d5e9-9ad8-4845-8077-1770167a69c2
+    versions: [ 1.31.0 ]
+  json:
+    bd-id: cae0f7d2-4279-473a-9f71-eabdd121d2e3
+    versions: [ 1.0.0-beta.14 ]

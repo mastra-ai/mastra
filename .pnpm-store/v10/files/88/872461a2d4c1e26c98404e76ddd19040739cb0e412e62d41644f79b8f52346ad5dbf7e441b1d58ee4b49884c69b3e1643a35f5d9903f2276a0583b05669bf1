@@ -1,0 +1,1 @@
+{"version":3,"file":"eventToGenerator.d.ts","sourceRoot":"","sources":["../../../src/utils/eventToGenerator.ts"],"names":[],"mappings":"AAAA,wBAAuB,gBAAgB,CAAC,SAAS,EAAE,UAAU,EAC5D,EAAE,EAAE,CACH,aAAa,EAAE,CAAC,CAAC,EAAE,SAAS,KAAK,IAAI,EACrC,cAAc,EAAE,CAAC,CAAC,EAAE,UAAU,KAAK,IAAI,EACvC,aAAa,EAAE,CAAC,MAAM,EAAE,OAAO,KAAK,IAAI,KACpC,OAAO,GACV,cAAc,CAAC,SAAS,EAAE,UAAU,CAAC,CAyDvC"}

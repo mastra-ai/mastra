@@ -1,0 +1,1 @@
+{"version":3,"file":"GEODIST.d.ts","sourceRoot":"","sources":["../../../lib/commands/GEODIST.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,aAAa,EAAE,eAAe,EAAE,SAAS,EAAW,MAAM,eAAe,CAAC;AACnF,OAAO,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;;;;IAKrC;;;;;;;OAOG;gDACkB,aAAa,OAC3B,aAAa,WACT,aAAa,WACb,aAAa,SACf,QAAQ;iDAUK,eAAe,GAAG,SAAS;;AAzBnD,wBA4B6B"}

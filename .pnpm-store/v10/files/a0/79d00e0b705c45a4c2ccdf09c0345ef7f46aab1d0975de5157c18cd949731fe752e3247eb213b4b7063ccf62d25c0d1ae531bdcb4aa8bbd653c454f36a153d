@@ -1,0 +1,14 @@
+'use strict';
+
+var chunkY63IFHEZ_cjs = require('../chunk-Y63IFHEZ.cjs');
+
+// src/deployer/index.ts
+var MastraDeployer = class extends chunkY63IFHEZ_cjs.MastraBundler {
+  constructor({ name }) {
+    super({ component: "DEPLOYER", name });
+  }
+};
+
+exports.MastraDeployer = MastraDeployer;
+//# sourceMappingURL=index.cjs.map
+//# sourceMappingURL=index.cjs.map

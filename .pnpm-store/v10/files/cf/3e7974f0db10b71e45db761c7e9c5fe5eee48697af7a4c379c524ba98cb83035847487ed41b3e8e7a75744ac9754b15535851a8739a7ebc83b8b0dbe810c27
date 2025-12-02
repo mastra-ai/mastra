@@ -1,0 +1,209 @@
+# Scoped function definitions
+
+int T::foo() { return 1; }
+int T::foo() const { return 0; }
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(
+      ScopedIdentifier(NamespaceIdentifier, Identifier),
+      ParameterList),
+    CompoundStatement(ReturnStatement(return, Number))),
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(
+      ScopedIdentifier(NamespaceIdentifier, Identifier),
+      ParameterList,
+      const),
+    CompoundStatement(ReturnStatement(return, Number))))
+
+# Vararg definition
+
+int emit(int... s) {
+}
+
+==>
+
+Program(
+  FunctionDefinition(PrimitiveType,FunctionDeclarator(
+    Identifier,
+    ParameterList(VariadicParameterDeclaration(PrimitiveType,VariadicDeclarator(Identifier)))),
+    CompoundStatement))
+
+# Constructor definitions
+
+T::T() {}
+
+T::T() : f1(0), f2(1, 2) {
+  puts("HI");
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    FunctionDeclarator(
+      ScopedIdentifier(NamespaceIdentifier, Identifier),
+      ParameterList),
+    CompoundStatement),
+  FunctionDefinition(
+    FunctionDeclarator(
+      ScopedIdentifier(NamespaceIdentifier, Identifier),
+      ParameterList),
+    FieldInitializerList(
+      FieldInitializer(FieldIdentifier, ArgumentList(Number)),
+      FieldInitializer(FieldIdentifier, ArgumentList(Number, Number))),
+    CompoundStatement(
+      ExpressionStatement(CallExpression(Identifier, ArgumentList(String))))))
+
+
+# Explicit constructor definitions
+
+class C {
+  explicit C(int f) : f_(f) {}
+
+ private:
+  int f_;
+};
+
+==>
+
+Program(
+  ClassSpecifier(class,
+    TypeIdentifier,
+    FieldDeclarationList(
+      FunctionDefinition(
+        ExplicitFunctionSpecifier(explicit),
+        FunctionDeclarator(
+          Identifier,
+          ParameterList(ParameterDeclaration(PrimitiveType, Identifier))),
+        FieldInitializerList(
+          FieldInitializer(FieldIdentifier, ArgumentList(Identifier))),
+        CompoundStatement),
+      AccessSpecifier(Access),
+        FieldDeclaration(PrimitiveType, FieldIdentifier))))
+
+
+# Explicit constructor declaration
+
+class C {
+  explicit C(int f);
+  explicit(true) C(long f);
+};
+
+==>
+
+Program(
+  ClassSpecifier(class,
+    TypeIdentifier,
+    FieldDeclarationList(
+      Declaration(
+        ExplicitFunctionSpecifier(explicit),
+        FunctionDeclarator(Identifier, ParameterList(ParameterDeclaration(PrimitiveType, Identifier)))),
+      Declaration(
+        ExplicitFunctionSpecifier(explicit, True),
+        FunctionDeclarator(Identifier, ParameterList(ParameterDeclaration(SizedTypeSpecifier(TypeSize), Identifier)))))))
+
+# Destructor in class
+
+class C {
+  C(int i) {}
+  ~C() {}
+};
+
+==>
+
+Program(ClassSpecifier(class,TypeIdentifier,FieldDeclarationList(
+  FunctionDefinition(FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(PrimitiveType,Identifier))),
+    CompoundStatement),
+  FunctionDefinition(FunctionDeclarator(DestructorName,ParameterList),CompoundStatement))))
+
+
+# Default and deleted methods
+
+class A : public B {
+  A() = default;
+  A(A &&) = delete;
+  void f() = delete;
+  A& operator=(const A&) = default;
+  A& operator=(A&&) = delete;
+};
+
+==>
+
+Program(
+  ClassSpecifier(class,
+    TypeIdentifier,
+    BaseClassClause(Access, TypeIdentifier),
+    FieldDeclarationList(
+      FunctionDefinition(
+        FunctionDeclarator(Identifier, ParameterList),
+        DefaultMethodClause(default)),
+      FunctionDefinition(
+        FunctionDeclarator(
+          Identifier,
+          ParameterList(ParameterDeclaration(TypeIdentifier, AbstractReferenceDeclarator))),
+        DeleteMethodClause(delete)),
+      FunctionDefinition(
+        PrimitiveType,
+        FunctionDeclarator(FieldIdentifier, ParameterList), DeleteMethodClause(delete)),
+      FunctionDefinition(
+        TypeIdentifier,
+        ReferenceDeclarator(
+          FunctionDeclarator(
+            OperatorName(operator),
+            ParameterList(ParameterDeclaration(const, TypeIdentifier, AbstractReferenceDeclarator)))),
+        DefaultMethodClause(default)),
+      FunctionDefinition(
+        TypeIdentifier,
+        ReferenceDeclarator(
+          FunctionDeclarator(
+            OperatorName(operator),
+            ParameterList(ParameterDeclaration(TypeIdentifier, AbstractReferenceDeclarator)))),
+        DeleteMethodClause(delete)))))
+
+
+# Destructor definitions
+
+~T() {}
+T::~T() {}
+
+==>
+
+Program(
+  FunctionDefinition(
+    FunctionDeclarator(DestructorName, ParameterList),
+    CompoundStatement),
+  FunctionDefinition(
+    FunctionDeclarator(
+      ScopedIdentifier(NamespaceIdentifier, DestructorName), ParameterList),
+    CompoundStatement))
+
+# Inline template function
+
+template <typename X>
+inline void Foo(X* x) {
+  for (typename X::iterator it = x->begin();
+    it != x->end(); ++it)
+    Bar(&(*it));
+}
+
+==>
+
+Program(TemplateDeclaration(
+  template,TemplateParameterList(TypeParameterDeclaration(typename,TypeIdentifier)),
+  FunctionDefinition(inline,PrimitiveType,
+    FunctionDeclarator(Identifier,ParameterList(ParameterDeclaration(TypeIdentifier,PointerDeclarator(Identifier)))),
+    CompoundStatement(
+      ForStatement(
+        for,
+        Declaration(
+          DependentType(typename,ScopedTypeIdentifier(NamespaceIdentifier,TypeIdentifier)),
+          InitDeclarator(Identifier,CallExpression(FieldExpression(Identifier,FieldIdentifier),ArgumentList))),
+        BinaryExpression(Identifier,CompareOp,CallExpression(FieldExpression(Identifier,FieldIdentifier),ArgumentList)),
+        UpdateExpression(UpdateOp, Identifier),
+        ExpressionStatement(CallExpression(Identifier,ArgumentList(
+          PointerExpression(ParenthesizedExpression(PointerExpression(Identifier)))))))))))

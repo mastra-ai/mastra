@@ -1,0 +1,67 @@
+import type { TiktokenBPE } from 'js-tiktoken/lite';
+import type { MastraDBMessage } from '../../agent/message-list/index.js';
+import type { ChunkType } from '../../stream/index.js';
+import type { Processor } from '../index.js';
+/**
+ * Configuration options for TokenLimiter output processor
+ */
+export interface TokenLimiterOptions {
+    /** Maximum number of tokens to allow in the response */
+    limit: number;
+    /** Optional encoding to use (defaults to o200k_base which is used by gpt-4o) */
+    encoding?: TiktokenBPE;
+    /**
+     * Strategy when token limit is reached:
+     * - 'truncate': Stop emitting chunks (default)
+     * - 'abort': Call abort() to stop the stream
+     */
+    strategy?: 'truncate' | 'abort';
+    /**
+     * Whether to count tokens from the beginning of the stream or just the current part
+     * - 'cumulative': Count all tokens from the start (default)
+     * - 'part': Only count tokens in the current part
+     */
+    countMode?: 'cumulative' | 'part';
+}
+/**
+ * Output processor that limits the number of tokens in generated responses.
+ * Implements both processOutputStream for streaming and processOutputResult for non-streaming.
+ */
+export declare class TokenLimiterProcessor implements Processor<'token-limiter'> {
+    readonly id = "token-limiter";
+    readonly name = "Token Limiter";
+    private encoder;
+    private maxTokens;
+    private currentTokens;
+    private strategy;
+    private countMode;
+    constructor(options: number | TokenLimiterOptions);
+    processOutputStream(args: {
+        part: ChunkType;
+        streamParts: ChunkType[];
+        state: Record<string, any>;
+        abort: (reason?: string) => never;
+    }): Promise<ChunkType | null>;
+    private countTokensInChunk;
+    /**
+     * Process the final result (non-streaming)
+     * Truncates the text content if it exceeds the token limit
+     */
+    processOutputResult(args: {
+        messages: MastraDBMessage[];
+        abort: (reason?: string) => never;
+    }): Promise<MastraDBMessage[]>;
+    /**
+     * Reset the token counter (useful for testing or reusing the processor)
+     */
+    reset(): void;
+    /**
+     * Get the current token count
+     */
+    getCurrentTokens(): number;
+    /**
+     * Get the maximum token limit
+     */
+    getMaxTokens(): number;
+}
+//# sourceMappingURL=token-limiter.d.ts.map

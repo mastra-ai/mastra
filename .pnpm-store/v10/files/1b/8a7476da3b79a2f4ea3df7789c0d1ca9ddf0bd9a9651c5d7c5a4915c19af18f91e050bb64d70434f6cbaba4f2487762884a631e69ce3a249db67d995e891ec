@@ -1,0 +1,1860 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get_signed_url:
+      path: /v1/convai/conversation/get-signed-url
+      method: GET
+      auth: false
+      docs: >-
+        Get a signed url to start a conversation with an agent with an agent
+        that requires authorization
+      source:
+        openapi: openapi.json
+      display-name: Get Signed Url
+      request:
+        name: ConversationalAiGetSignedUrlRequest
+        query-parameters:
+          agent_id:
+            type: string
+            docs: The id of the agent you're taking the action on.
+      response:
+        docs: Successful Response
+        type: root.ConversationSignedUrlResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - query-parameters:
+            agent_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              signed_url: signed_url
+      audiences:
+        - convai
+    twilio_outbound_call:
+      path: /v1/convai/twilio/outbound-call
+      method: POST
+      auth: false
+      docs: Handle an outbound call via Twilio
+      source:
+        openapi: openapi.json
+      display-name: Handle An Outbound Call Via Twilio
+      request:
+        name: BodyHandleAnOutboundCallViaTwilioV1ConvaiTwilioOutboundCallPost
+        body:
+          properties:
+            agent_id: string
+            agent_phone_number_id: string
+            to_number: string
+            conversation_initiation_client_data:
+              type: optional<root.ConversationInitiationClientDataRequestInput>
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.TwilioOutboundCallResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            agent_id: agent_id
+            agent_phone_number_id: agent_phone_number_id
+            to_number: to_number
+          response:
+            body:
+              success: true
+              message: message
+              callSid: callSid
+      audiences:
+        - convai
+    create_agent:
+      path: /v1/convai/agents/create
+      method: POST
+      auth: false
+      docs: Create an agent from a config object
+      source:
+        openapi: openapi.json
+      display-name: Create agent
+      request:
+        name: BodyCreateAgentV1ConvaiAgentsCreatePost
+        body:
+          properties:
+            conversation_config:
+              type: root.ConversationalConfig
+              docs: Conversation configuration for an agent
+            platform_settings:
+              type: optional<root.AgentPlatformSettingsRequestModel>
+              docs: >-
+                Platform settings for the agent are all settings that aren't
+                related to the conversation orchestration and content.
+            name:
+              type: optional<string>
+              docs: A name to make the agent easier to find
+            tags:
+              type: optional<list<string>>
+              docs: Tags to help classify and filter the agent
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.CreateAgentResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            conversation_config: {}
+          response:
+            body:
+              agent_id: J3Pbu5gP6NNKBscdCdwB
+      audiences:
+        - convai
+    get_agent:
+      path: /v1/convai/agents/{agent_id}
+      method: GET
+      auth: false
+      docs: Retrieve config for an agent
+      source:
+        openapi: openapi.json
+      path-parameters:
+        agent_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Get agent
+      response:
+        docs: Successful Response
+        type: root.GetAgentResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            agent_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              agent_id: J3Pbu5gP6NNKBscdCdwB
+              name: My Agent
+              conversation_config:
+                asr:
+                  quality: high
+                  provider: elevenlabs
+                  user_input_audio_format: pcm_16000
+                  keywords:
+                    - hello
+                    - world
+                turn:
+                  turn_timeout: 7
+                  silence_end_call_timeout: -1
+                  mode: turn
+                tts:
+                  model_id: eleven_turbo_v2
+                  voice_id: cjVigY5qzO86Huf0OWal
+                  agent_output_audio_format: pcm_16000
+                  optimize_streaming_latency: 3
+                  stability: 0.5
+                  speed: 1
+                  similarity_boost: 0.8
+                  pronunciation_dictionary_locators:
+                    - pronunciation_dictionary_id: pronunciation_dictionary_id
+                conversation:
+                  max_duration_seconds: 600
+                  client_events:
+                    - audio
+                    - interruption
+                language_presets:
+                  key:
+                    overrides: {}
+                agent:
+                  first_message: Hello, how can I help you today?
+                  language: en
+                  dynamic_variables:
+                    dynamic_variable_placeholders:
+                      user_name: John Doe
+                  prompt:
+                    prompt: >-
+                      You are a helpful assistant that can answer questions
+                      about the topic of the conversation.
+                    llm: gemini-2.0-flash-001
+                    temperature: 0
+                    max_tokens: -1
+                    tools:
+                      - name: name
+                        description: description
+                        expects_response: false
+                        dynamic_variables:
+                          dynamic_variable_placeholders:
+                            user_name: John Doe
+                        type: client
+                    tool_ids:
+                      - tool_ids
+                    knowledge_base:
+                      - type: file
+                        name: My Knowledge Base
+                        id: '123'
+                        usage_mode: auto
+              metadata:
+                created_at_unix_secs: 1
+              platform_settings:
+                auth:
+                  enable_auth: true
+                  allowlist:
+                    - hostname: https://example.com
+                  shareable_token: '1234567890'
+                evaluation:
+                  criteria:
+                    - id: '1234567890'
+                      name: name
+                      conversation_goal_prompt: >-
+                        You are a helpful assistant that can answer questions
+                        about the topic of the conversation.
+                      use_knowledge_base: false
+                widget:
+                  variant: compact
+                  expandable: never
+                  avatar:
+                    color_1: '#2792dc'
+                    color_2: '#9ce6e6'
+                    type: orb
+                  feedback_mode: none
+                  bg_color: bg_color
+                  text_color: text_color
+                  btn_color: btn_color
+                  btn_text_color: btn_text_color
+                  border_color: border_color
+                  focus_color: focus_color
+                  border_radius: 1
+                  btn_radius: 1
+                  action_text: action_text
+                  start_call_text: start_call_text
+                  end_call_text: end_call_text
+                  expand_text: expand_text
+                  listening_text: listening_text
+                  speaking_text: speaking_text
+                  shareable_page_text: shareable_page_text
+                  shareable_page_show_terms: true
+                  terms_text: terms_text
+                  terms_html: terms_html
+                  terms_key: terms_key
+                  show_avatar_when_collapsed: true
+                  disable_banner: true
+                  mic_muting_enabled: true
+                  language_selector: false
+                  custom_avatar_path: https://example.com/avatar.png
+                data_collection:
+                  key:
+                    type: boolean
+                    description: My property
+                    dynamic_variable: Dynamic variable
+                    constant_value: Constant value
+                overrides:
+                  conversation_config_override:
+                    agent:
+                      prompt:
+                        prompt: false
+                      first_message: false
+                      language: false
+                    tts:
+                      voice_id: false
+                  custom_llm_extra_body: true
+                  enable_conversation_initiation_client_data_from_webhook: true
+                call_limits:
+                  agent_concurrency_limit: -1
+                  daily_limit: 100000
+                privacy:
+                  record_voice: true
+                  retention_days: -1
+                  delete_transcript_and_pii: false
+                  delete_audio: false
+                  apply_to_existing_conversations: false
+                  zero_retention_mode: false
+                workspace_overrides:
+                  conversation_initiation_client_data_webhook:
+                    url: https://example.com/webhook
+                    request_headers:
+                      Content-Type: application/json
+                safety:
+                  is_blocked_ivc: true
+                  is_blocked_non_ivc: true
+                  ignore_safety_evaluation: true
+              phone_numbers:
+                - phone_number: phone_number
+                  label: label
+                  phone_number_id: X3Pbu5gP6NNKBscdCdwB
+                  assigned_agent:
+                    agent_id: F3Pbu5gP6NNKBscdCdwB
+                    agent_name: My Agent
+                  provider_config:
+                    address: address
+                    transport: auto
+                    media_encryption: disabled
+                    has_auth_credentials: true
+                  provider: sip_trunk
+              access_info:
+                is_creator: true
+                creator_name: John Doe
+                creator_email: john.doe@example.com
+                role: admin
+              tags:
+                - tags
+      audiences:
+        - convai
+    delete_agent:
+      path: /v1/convai/agents/{agent_id}
+      method: DELETE
+      auth: false
+      docs: Delete an agent
+      source:
+        openapi: openapi.json
+      path-parameters:
+        agent_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Delete agent
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            agent_id: 21m00Tcm4TlvDq8ikWAM
+      audiences:
+        - convai
+    update_agent:
+      path: /v1/convai/agents/{agent_id}
+      method: PATCH
+      auth: false
+      docs: Patches an Agent settings
+      source:
+        openapi: openapi.json
+      path-parameters:
+        agent_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Update agent
+      request:
+        name: UpdateAgentRequest
+        body:
+          properties:
+            conversation_config:
+              type: optional<unknown>
+            platform_settings:
+              type: optional<unknown>
+            name:
+              type: optional<string>
+              docs: A name to make the agent easier to find
+            tags:
+              type: optional<list<string>>
+              docs: Tags to help classify and filter the agent
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.GetAgentResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            agent_id: 21m00Tcm4TlvDq8ikWAM
+          request: {}
+          response:
+            body:
+              agent_id: J3Pbu5gP6NNKBscdCdwB
+              name: My Agent
+              conversation_config:
+                asr:
+                  quality: high
+                  provider: elevenlabs
+                  user_input_audio_format: pcm_16000
+                  keywords:
+                    - hello
+                    - world
+                turn:
+                  turn_timeout: 7
+                  silence_end_call_timeout: -1
+                  mode: turn
+                tts:
+                  model_id: eleven_turbo_v2
+                  voice_id: cjVigY5qzO86Huf0OWal
+                  agent_output_audio_format: pcm_16000
+                  optimize_streaming_latency: 3
+                  stability: 0.5
+                  speed: 1
+                  similarity_boost: 0.8
+                  pronunciation_dictionary_locators:
+                    - pronunciation_dictionary_id: pronunciation_dictionary_id
+                conversation:
+                  max_duration_seconds: 600
+                  client_events:
+                    - audio
+                    - interruption
+                language_presets:
+                  key:
+                    overrides: {}
+                agent:
+                  first_message: Hello, how can I help you today?
+                  language: en
+                  dynamic_variables:
+                    dynamic_variable_placeholders:
+                      user_name: John Doe
+                  prompt:
+                    prompt: >-
+                      You are a helpful assistant that can answer questions
+                      about the topic of the conversation.
+                    llm: gemini-2.0-flash-001
+                    temperature: 0
+                    max_tokens: -1
+                    tools:
+                      - name: name
+                        description: description
+                        expects_response: false
+                        dynamic_variables:
+                          dynamic_variable_placeholders:
+                            user_name: John Doe
+                        type: client
+                    tool_ids:
+                      - tool_ids
+                    knowledge_base:
+                      - type: file
+                        name: My Knowledge Base
+                        id: '123'
+                        usage_mode: auto
+              metadata:
+                created_at_unix_secs: 1
+              platform_settings:
+                auth:
+                  enable_auth: true
+                  allowlist:
+                    - hostname: https://example.com
+                  shareable_token: '1234567890'
+                evaluation:
+                  criteria:
+                    - id: '1234567890'
+                      name: name
+                      conversation_goal_prompt: >-
+                        You are a helpful assistant that can answer questions
+                        about the topic of the conversation.
+                      use_knowledge_base: false
+                widget:
+                  variant: compact
+                  expandable: never
+                  avatar:
+                    color_1: '#2792dc'
+                    color_2: '#9ce6e6'
+                    type: orb
+                  feedback_mode: none
+                  bg_color: bg_color
+                  text_color: text_color
+                  btn_color: btn_color
+                  btn_text_color: btn_text_color
+                  border_color: border_color
+                  focus_color: focus_color
+                  border_radius: 1
+                  btn_radius: 1
+                  action_text: action_text
+                  start_call_text: start_call_text
+                  end_call_text: end_call_text
+                  expand_text: expand_text
+                  listening_text: listening_text
+                  speaking_text: speaking_text
+                  shareable_page_text: shareable_page_text
+                  shareable_page_show_terms: true
+                  terms_text: terms_text
+                  terms_html: terms_html
+                  terms_key: terms_key
+                  show_avatar_when_collapsed: true
+                  disable_banner: true
+                  mic_muting_enabled: true
+                  language_selector: false
+                  custom_avatar_path: https://example.com/avatar.png
+                data_collection:
+                  key:
+                    type: boolean
+                    description: My property
+                    dynamic_variable: Dynamic variable
+                    constant_value: Constant value
+                overrides:
+                  conversation_config_override:
+                    agent:
+                      prompt:
+                        prompt: false
+                      first_message: false
+                      language: false
+                    tts:
+                      voice_id: false
+                  custom_llm_extra_body: true
+                  enable_conversation_initiation_client_data_from_webhook: true
+                call_limits:
+                  agent_concurrency_limit: -1
+                  daily_limit: 100000
+                privacy:
+                  record_voice: true
+                  retention_days: -1
+                  delete_transcript_and_pii: false
+                  delete_audio: false
+                  apply_to_existing_conversations: false
+                  zero_retention_mode: false
+                workspace_overrides:
+                  conversation_initiation_client_data_webhook:
+                    url: https://example.com/webhook
+                    request_headers:
+                      Content-Type: application/json
+                safety:
+                  is_blocked_ivc: true
+                  is_blocked_non_ivc: true
+                  ignore_safety_evaluation: true
+              phone_numbers:
+                - phone_number: phone_number
+                  label: label
+                  phone_number_id: X3Pbu5gP6NNKBscdCdwB
+                  assigned_agent:
+                    agent_id: F3Pbu5gP6NNKBscdCdwB
+                    agent_name: My Agent
+                  provider_config:
+                    address: address
+                    transport: auto
+                    media_encryption: disabled
+                    has_auth_credentials: true
+                  provider: sip_trunk
+              access_info:
+                is_creator: true
+                creator_name: John Doe
+                creator_email: john.doe@example.com
+                role: admin
+              tags:
+                - tags
+      audiences:
+        - convai
+    get_agent_widget:
+      path: /v1/convai/agents/{agent_id}/widget
+      method: GET
+      auth: false
+      docs: Retrieve the widget configuration for an agent
+      source:
+        openapi: openapi.json
+      path-parameters:
+        agent_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Get Agent Widget Config
+      request:
+        name: ConversationalAiGetAgentWidgetRequest
+        query-parameters:
+          conversation_signature:
+            type: optional<string>
+            docs: >-
+              An expiring token that enables a websocket conversation to start.
+              These can be generated for an agent using the
+              /v1/convai/conversation/get-signed-url endpoint
+      response:
+        docs: Successful Response
+        type: root.GetAgentEmbedResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            agent_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              agent_id: agent_id
+              widget_config:
+                variant: full
+                expandable: never
+                avatar:
+                  color_1: '#2792dc'
+                  color_2: '#9ce6e6'
+                  type: orb
+                feedback_mode: none
+                bg_color: '#ffffff'
+                text_color: '#000000'
+                btn_color: '#000000'
+                btn_text_color: '#ffffff'
+                border_color: '#e1e1e1'
+                focus_color: '#000000'
+                border_radius: 10
+                btn_radius: 10
+                action_text: Call
+                start_call_text: Start Call
+                end_call_text: End Call
+                expand_text: Expand
+                listening_text: Listening...
+                speaking_text: Speaking...
+                shareable_page_text: Share
+                shareable_page_show_terms: true
+                terms_text: Terms and Conditions
+                terms_html: <p>Terms and Conditions</p>
+                terms_key: terms
+                show_avatar_when_collapsed: true
+                disable_banner: false
+                mic_muting_enabled: false
+                language: language
+                supported_language_overrides:
+                  - supported_language_overrides
+      audiences:
+        - convai
+    get_agent_link:
+      path: /v1/convai/agents/{agent_id}/link
+      method: GET
+      auth: false
+      docs: Get the current link used to share the agent with others
+      source:
+        openapi: openapi.json
+      path-parameters:
+        agent_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Get Shareable Agent Link
+      response:
+        docs: Successful Response
+        type: root.GetAgentLinkResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            agent_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              agent_id: J3Pbu5gP6NNKBscdCdwB
+              token:
+                agent_id: J3Pbu5gP6NNKBscdCdwB
+                conversation_token: '1234567890'
+                expiration_time_unix_secs: 1716153600
+                purpose: signed_url
+      audiences:
+        - convai
+    post_agent_avatar:
+      path: /v1/convai/agents/{agent_id}/avatar
+      method: POST
+      auth: false
+      docs: Sets the avatar for an agent displayed in the widget
+      source:
+        openapi: openapi.json
+      path-parameters:
+        agent_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Post Agent Avatar
+      request:
+        name: Body_Post_Agent_avatar_v1_convai_agents__agent_id__avatar_post
+        body:
+          properties:
+            avatar_file:
+              type: file
+              docs: An image file to be used as the agent's avatar.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.PostAgentAvatarResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            agent_id: 21m00Tcm4TlvDq8ikWAM
+          request: {}
+          response:
+            body:
+              agent_id: agent_id
+              avatar_url: avatar_url
+      audiences:
+        - convai
+    get_agents:
+      path: /v1/convai/agents
+      method: GET
+      auth: false
+      docs: Returns a list of your agents and their metadata.
+      source:
+        openapi: openapi.json
+      display-name: List Agents
+      request:
+        name: ConversationalAiGetAgentsRequest
+        query-parameters:
+          cursor:
+            type: optional<string>
+            docs: Used for fetching next page. Cursor is returned in the response.
+          page_size:
+            type: optional<integer>
+            default: 30
+            docs: >-
+              How many Agents to return at maximum. Can not exceed 100, defaults
+              to 30.
+            validation:
+              min: 1
+              max: 100
+          search:
+            type: optional<string>
+            docs: Search by agents name.
+      response:
+        docs: Successful Response
+        type: root.GetAgentsPageResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              agents:
+                - agent_id: J3Pbu5gP6NNKBscdCdwB
+                  name: My Agent
+                  tags:
+                    - Customer Support
+                    - Technical Help
+                    - Eleven
+                  created_at_unix_secs: 1716153600
+                  access_info:
+                    is_creator: true
+                    creator_name: John Doe
+                    creator_email: john.doe@example.com
+                    role: admin
+              next_cursor: '123'
+              has_more: false
+      audiences:
+        - convai
+    get_conversations:
+      path: /v1/convai/conversations
+      method: GET
+      auth: false
+      docs: >-
+        Get all conversations of agents that user owns. With option to restrict
+        to a specific agent.
+      source:
+        openapi: openapi.json
+      display-name: List conversations
+      request:
+        name: ConversationalAiGetConversationsRequest
+        query-parameters:
+          cursor:
+            type: optional<string>
+            docs: Used for fetching next page. Cursor is returned in the response.
+          agent_id:
+            type: optional<string>
+            docs: The id of the agent you're taking the action on.
+          call_successful:
+            type: optional<root.EvaluationSuccessResult>
+            docs: The result of the success evaluation
+          call_start_before_unix:
+            type: optional<integer>
+            docs: >-
+              Unix timestamp (in seconds) to filter conversations up to this
+              start date.
+          call_start_after_unix:
+            type: optional<integer>
+            docs: >-
+              Unix timestamp (in seconds) to filter conversations after to this
+              start date.
+          page_size:
+            type: optional<integer>
+            default: 30
+            docs: >-
+              How many conversations to return at maximum. Can not exceed 100,
+              defaults to 30.
+            validation:
+              min: 1
+              max: 100
+      response:
+        docs: Successful Response
+        type: root.GetConversationsPageResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              conversations:
+                - agent_id: agent_id
+                  agent_name: agent_name
+                  conversation_id: conversation_id
+                  start_time_unix_secs: 1
+                  call_duration_secs: 1
+                  message_count: 1
+                  status: in-progress
+                  call_successful: success
+              next_cursor: next_cursor
+              has_more: true
+      audiences:
+        - convai
+    get_conversation:
+      path: /v1/convai/conversations/{conversation_id}
+      method: GET
+      auth: false
+      docs: Get the details of a particular conversation
+      source:
+        openapi: openapi.json
+      path-parameters:
+        conversation_id:
+          type: string
+          docs: The id of the conversation you're taking the action on.
+      display-name: Get Conversation Details
+      response:
+        docs: Successful Response
+        type: root.GetConversationResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            conversation_id: '123'
+          response:
+            body:
+              agent_id: '123'
+              conversation_id: '123'
+              status: processing
+              transcript:
+                - role: user
+                  message: Hello, how are you?
+                  time_in_call_secs: 10
+              metadata:
+                start_time_unix_secs: 1714423232
+                call_duration_secs: 10
+              has_audio: true
+              has_user_audio: true
+              has_response_audio: true
+      audiences:
+        - convai
+    delete_conversation:
+      path: /v1/convai/conversations/{conversation_id}
+      method: DELETE
+      auth: false
+      docs: Delete a particular conversation
+      source:
+        openapi: openapi.json
+      path-parameters:
+        conversation_id:
+          type: string
+          docs: The id of the conversation you're taking the action on.
+      display-name: Delete Conversation
+      response:
+        docs: Successful Response
+        type: unknown
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            conversation_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              key: value
+      audiences:
+        - convai
+    get_conversation_audio:
+      path: /v1/convai/conversations/{conversation_id}/audio
+      method: GET
+      auth: false
+      docs: Get the audio recording of a particular conversation
+      source:
+        openapi: openapi.json
+      path-parameters:
+        conversation_id:
+          type: string
+          docs: The id of the conversation you're taking the action on.
+      display-name: Get Conversation Audio
+      response:
+        docs: Successful Response
+        type: file
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      audiences:
+        - convai
+    post_conversation_feedback:
+      path: /v1/convai/conversations/{conversation_id}/feedback
+      method: POST
+      auth: false
+      docs: Send the feedback for the given conversation
+      source:
+        openapi: openapi.json
+      path-parameters:
+        conversation_id:
+          type: string
+          docs: The id of the conversation you're taking the action on.
+      display-name: Send Conversation Feedback
+      request:
+        name: >-
+          BodySendConversationFeedbackV1ConvaiConversationsConversationIdFeedbackPost
+        body:
+          properties:
+            feedback:
+              type: root.UserFeedbackScore
+              docs: >-
+                Either 'like' or 'dislike' to indicate the feedback for the
+                conversation.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: unknown
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            conversation_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            feedback: like
+          response:
+            body:
+              key: value
+      audiences:
+        - convai
+    create_phone_number:
+      path: /v1/convai/phone-numbers/create
+      method: POST
+      auth: false
+      docs: Import Phone Number from provider configuration (Twilio or SIP trunk)
+      source:
+        openapi: openapi.json
+      display-name: Import Phone Number
+      request:
+        body:
+          display-name: Phone Request
+          type: ConversationalAiCreatePhoneNumberRequestBody
+          docs: Create Phone Request Information
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.CreatePhoneNumberResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            phone_number: phone_number
+            label: label
+            sid: sid
+            token: token
+            provider: twilio
+          response:
+            body:
+              phone_number_id: phone_number_id
+      audiences:
+        - convai
+    get_phone_number:
+      path: /v1/convai/phone-numbers/{phone_number_id}
+      method: GET
+      auth: false
+      docs: Retrieve Phone Number details by ID
+      source:
+        openapi: openapi.json
+      path-parameters:
+        phone_number_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Get Phone Number
+      response:
+        docs: Successful Response
+        type: ConversationalAiGetPhoneNumberResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            phone_number_id: TeaqRRdTcIfIu2i7BYfT
+          response:
+            body:
+              phone_number: phone_number
+              label: label
+              phone_number_id: X3Pbu5gP6NNKBscdCdwB
+              assigned_agent:
+                agent_id: F3Pbu5gP6NNKBscdCdwB
+                agent_name: My Agent
+              provider: twilio
+      audiences:
+        - convai
+    delete_phone_number:
+      path: /v1/convai/phone-numbers/{phone_number_id}
+      method: DELETE
+      auth: false
+      docs: Delete Phone Number by ID
+      source:
+        openapi: openapi.json
+      path-parameters:
+        phone_number_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Delete Phone Number
+      response:
+        docs: Successful Response
+        type: unknown
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            phone_number_id: TeaqRRdTcIfIu2i7BYfT
+          response:
+            body:
+              key: value
+      audiences:
+        - convai
+    update_phone_number:
+      path: /v1/convai/phone-numbers/{phone_number_id}
+      method: PATCH
+      auth: false
+      docs: Update Phone Number details by ID
+      source:
+        openapi: openapi.json
+      path-parameters:
+        phone_number_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Update Phone Number
+      request:
+        name: UpdatePhoneNumberRequest
+        body:
+          properties:
+            agent_id:
+              type: optional<string>
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: ConversationalAiUpdatePhoneNumberResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            phone_number_id: TeaqRRdTcIfIu2i7BYfT
+          request: {}
+          response:
+            body:
+              phone_number: phone_number
+              label: label
+              phone_number_id: X3Pbu5gP6NNKBscdCdwB
+              assigned_agent:
+                agent_id: F3Pbu5gP6NNKBscdCdwB
+                agent_name: My Agent
+              provider: twilio
+      audiences:
+        - convai
+    get_phone_numbers:
+      path: /v1/convai/phone-numbers/
+      method: GET
+      auth: false
+      docs: Retrieve all Phone Numbers
+      source:
+        openapi: openapi.json
+      display-name: List Phone Numbers
+      response:
+        docs: Successful Response
+        type: list<ConversationalAiGetPhoneNumbersResponseItem>
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              - phone_number: phone_number
+                label: label
+                phone_number_id: X3Pbu5gP6NNKBscdCdwB
+                assigned_agent:
+                  agent_id: F3Pbu5gP6NNKBscdCdwB
+                  agent_name: My Agent
+                provider: twilio
+      audiences:
+        - convai
+    get_knowledge_base_list:
+      path: /v1/convai/knowledge-base
+      method: GET
+      auth: false
+      docs: Get a list of available knowledge base documents
+      source:
+        openapi: openapi.json
+      display-name: Get Knowledge Base List
+      request:
+        name: ConversationalAiGetKnowledgeBaseListRequest
+        query-parameters:
+          cursor:
+            type: optional<string>
+            docs: Used for fetching next page. Cursor is returned in the response.
+          page_size:
+            type: optional<integer>
+            default: 30
+            docs: >-
+              How many documents to return at maximum. Can not exceed 100,
+              defaults to 30.
+            validation:
+              min: 1
+              max: 100
+          search:
+            type: optional<string>
+            docs: >-
+              If specified, the endpoint returns only such knowledge base
+              documents whose names start with this string.
+          show_only_owned_documents:
+            type: optional<boolean>
+            default: false
+            docs: >-
+              If set to true, the endpoint will return only documents owned by
+              you (and not shared from somebody else).
+          types:
+            type: optional<root.KnowledgeBaseDocumentType>
+            allow-multiple: true
+            docs: >-
+              If present, the endpoint will return only documents of the given
+              types.
+          use_typesense:
+            type: optional<boolean>
+            default: false
+            docs: >-
+              If set to true, the endpoint will use typesense DB to search for
+              the documents).
+      response:
+        docs: Successful Response
+        type: root.GetKnowledgeBaseListResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              documents:
+                - id: id
+                  name: name
+                  metadata:
+                    created_at_unix_secs: 1
+                    last_updated_at_unix_secs: 1
+                    size_bytes: 1
+                  prompt_injectable: true
+                  access_info:
+                    is_creator: true
+                    creator_name: John Doe
+                    creator_email: john.doe@example.com
+                    role: admin
+                  dependent_agents:
+                    - id: id
+                      name: name
+                      created_at_unix_secs: 1
+                      access_level: admin
+                      type: available
+                  type: file
+              next_cursor: next_cursor
+              has_more: true
+      audiences:
+        - convai
+    add_to_knowledge_base:
+      path: /v1/convai/knowledge-base
+      method: POST
+      auth: false
+      docs: >-
+        Upload a file or webpage URL to create a knowledge base document. <br>
+        <Note> After creating the document, update the agent's knowledge base by
+        calling [Update
+        agent](/docs/conversational-ai/api-reference/agents/update-agent).
+        </Note>
+      source:
+        openapi: openapi.json
+      display-name: Add To Knowledge Base
+      request:
+        name: Body_Add_to_knowledge_base_v1_convai_knowledge_base_post
+        body:
+          properties:
+            name:
+              type: optional<string>
+              docs: A custom, human-readable name for the document.
+              validation:
+                minLength: 1
+            url:
+              type: optional<string>
+              docs: >-
+                URL to a page of documentation that the agent will have access
+                to in order to interact with users.
+            file:
+              type: optional<file>
+              docs: >-
+                Documentation that the agent will have access to in order to
+                interact with users.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.AddKnowledgeBaseResponseModel
+        status-code: 200
+      availability: deprecated
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request: {}
+          response:
+            body:
+              id: id
+              name: name
+              prompt_injectable: true
+    create_knowledge_base_url_document:
+      path: /v1/convai/knowledge-base/url
+      method: POST
+      auth: false
+      docs: >-
+        Create a knowledge base document generated by scraping the given
+        webpage.
+      source:
+        openapi: openapi.json
+      display-name: Create Url Document
+      request:
+        name: BodyCreateUrlDocumentV1ConvaiKnowledgeBaseUrlPost
+        body:
+          properties:
+            url:
+              type: string
+              docs: >-
+                URL to a page of documentation that the agent will have access
+                to in order to interact with users.
+            name:
+              type: optional<string>
+              docs: A custom, human-readable name for the document.
+              validation:
+                minLength: 1
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddKnowledgeBaseResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            url: url
+          response:
+            body:
+              id: id
+              name: name
+              prompt_injectable: true
+      audiences:
+        - convai
+    create_knowledge_base_file_document:
+      path: /v1/convai/knowledge-base/file
+      method: POST
+      auth: false
+      docs: Create a knowledge base document generated form the uploaded file.
+      source:
+        openapi: openapi.json
+      display-name: Create File Document
+      request:
+        name: Body_Create_file_document_v1_convai_knowledge_base_file_post
+        body:
+          properties:
+            file:
+              type: file
+              docs: >-
+                Documentation that the agent will have access to in order to
+                interact with users.
+            name:
+              type: optional<string>
+              docs: A custom, human-readable name for the document.
+              validation:
+                minLength: 1
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.AddKnowledgeBaseResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request: {}
+          response:
+            body:
+              id: id
+              name: name
+              prompt_injectable: true
+      audiences:
+        - convai
+    create_knowledge_base_text_document:
+      path: /v1/convai/knowledge-base/text
+      method: POST
+      auth: false
+      docs: Create a knowledge base document containing the provided text.
+      source:
+        openapi: openapi.json
+      display-name: Create Text Document
+      request:
+        name: BodyCreateTextDocumentV1ConvaiKnowledgeBaseTextPost
+        body:
+          properties:
+            text:
+              type: string
+              docs: Text content to be added to the knowledge base.
+            name:
+              type: optional<string>
+              docs: A custom, human-readable name for the document.
+              validation:
+                minLength: 1
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddKnowledgeBaseResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            text: text
+          response:
+            body:
+              id: id
+              name: name
+              prompt_injectable: true
+      audiences:
+        - convai
+    get_knowledge_base_document_by_id:
+      path: /v1/convai/knowledge-base/{documentation_id}
+      method: GET
+      auth: false
+      docs: >-
+        Get details about a specific documentation making up the agent's
+        knowledge base
+      source:
+        openapi: openapi.json
+      path-parameters:
+        documentation_id:
+          type: string
+          docs: >-
+            The id of a document from the knowledge base. This is returned on
+            document addition.
+      display-name: Get Documentation From Knowledge Base
+      response:
+        docs: Successful Response
+        type: ConversationalAiGetKnowledgeBaseDocumentByIdResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            documentation_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              id: id
+              name: name
+              metadata:
+                created_at_unix_secs: 1
+                last_updated_at_unix_secs: 1
+                size_bytes: 1
+              prompt_injectable: true
+              access_info:
+                is_creator: true
+                creator_name: John Doe
+                creator_email: john.doe@example.com
+                role: admin
+              extracted_inner_html: extracted_inner_html
+              url: url
+              type: url
+      audiences:
+        - convai
+    delete_knowledge_base_document:
+      path: /v1/convai/knowledge-base/{documentation_id}
+      method: DELETE
+      auth: false
+      docs: Delete a document from the knowledge base
+      source:
+        openapi: openapi.json
+      path-parameters:
+        documentation_id:
+          type: string
+          docs: >-
+            The id of a document from the knowledge base. This is returned on
+            document addition.
+      display-name: Delete Knowledge Base Document
+      response:
+        docs: Successful Response
+        type: unknown
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            documentation_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              key: value
+      audiences:
+        - convai
+    update_knowledge_base_document:
+      path: /v1/convai/knowledge-base/{documentation_id}
+      method: PATCH
+      auth: false
+      docs: Update the name of a document
+      source:
+        openapi: openapi.json
+      path-parameters:
+        documentation_id:
+          type: string
+          docs: >-
+            The id of a document from the knowledge base. This is returned on
+            document addition.
+      display-name: Update Document
+      request:
+        name: BodyUpdateDocumentV1ConvaiKnowledgeBaseDocumentationIdPatch
+        body:
+          properties:
+            name:
+              type: string
+              docs: A custom, human-readable name for the document.
+              validation:
+                minLength: 1
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: ConversationalAiUpdateKnowledgeBaseDocumentResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            documentation_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            name: name
+          response:
+            body:
+              id: id
+              name: name
+              metadata:
+                created_at_unix_secs: 1
+                last_updated_at_unix_secs: 1
+                size_bytes: 1
+              prompt_injectable: true
+              access_info:
+                is_creator: true
+                creator_name: John Doe
+                creator_email: john.doe@example.com
+                role: admin
+              extracted_inner_html: extracted_inner_html
+              url: url
+              type: url
+      audiences:
+        - convai
+    get_dependent_agents:
+      path: /v1/convai/knowledge-base/{documentation_id}/dependent-agents
+      method: GET
+      auth: false
+      docs: Get a list of agents depending on this knowledge base document
+      source:
+        openapi: openapi.json
+      path-parameters:
+        documentation_id:
+          type: string
+          docs: >-
+            The id of a document from the knowledge base. This is returned on
+            document addition.
+      display-name: Get Dependent Agents List
+      request:
+        name: ConversationalAiGetDependentAgentsRequest
+        query-parameters:
+          cursor:
+            type: optional<string>
+            docs: Used for fetching next page. Cursor is returned in the response.
+          page_size:
+            type: optional<integer>
+            default: 30
+            docs: >-
+              How many documents to return at maximum. Can not exceed 100,
+              defaults to 30.
+            validation:
+              min: 1
+              max: 100
+      response:
+        docs: Successful Response
+        type: root.GetKnowledgeBaseDependentAgentsResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            documentation_id: 21m00Tcm4TlvDq8ikWAM
+          response:
+            body:
+              agents:
+                - id: id
+                  name: name
+                  created_at_unix_secs: 1
+                  access_level: admin
+                  type: available
+              next_cursor: next_cursor
+              has_more: true
+      audiences:
+        - convai
+    get_knowledge_base_document_content:
+      path: /v1/convai/knowledge-base/{documentation_id}/content
+      method: GET
+      auth: false
+      docs: Get the entire content of a document from the knowledge base
+      source:
+        openapi: openapi.json
+      path-parameters:
+        documentation_id:
+          type: string
+          docs: >-
+            The id of a document from the knowledge base. This is returned on
+            document addition.
+      display-name: Get Document Content
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            documentation_id: 21m00Tcm4TlvDq8ikWAM
+      audiences:
+        - convai
+    get_knowledge_base_document_part_by_id:
+      path: /v1/convai/knowledge-base/{documentation_id}/chunk/{chunk_id}
+      method: GET
+      auth: false
+      docs: Get details about a specific documentation part used by RAG.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        documentation_id:
+          type: string
+          docs: >-
+            The id of a document from the knowledge base. This is returned on
+            document addition.
+        chunk_id:
+          type: string
+          docs: The id of a document RAG chunk from the knowledge base.
+      display-name: Get Documentation Chunk From Knowledge Base
+      response:
+        docs: Successful Response
+        type: root.KnowledgeBaseDocumentChunkResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            documentation_id: 21m00Tcm4TlvDq8ikWAM
+            chunk_id: chunk_id
+          response:
+            body:
+              id: id
+              name: name
+              content: content
+      audiences:
+        - convai
+    get_settings:
+      path: /v1/convai/settings
+      method: GET
+      auth: false
+      docs: Retrieve Convai settings for the workspace
+      source:
+        openapi: openapi.json
+      display-name: Get Convai Settings
+      response:
+        docs: Successful Response
+        type: root.GetConvAiSettingsResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              conversation_initiation_client_data_webhook:
+                url: https://example.com/webhook
+                request_headers:
+                  Content-Type: application/json
+              webhooks:
+                post_call_webhook_id: post_call_webhook_id
+              rag_retention_period_days: 1
+      audiences:
+        - convai
+    update_settings:
+      path: /v1/convai/settings
+      method: PATCH
+      auth: false
+      docs: Update Convai settings for the workspace
+      source:
+        openapi: openapi.json
+      display-name: Update Convai Settings
+      request:
+        name: PatchConvAiSettingsRequest
+        body:
+          properties:
+            conversation_initiation_client_data_webhook:
+              type: optional<root.ConversationInitiationClientDataWebhook>
+            webhooks:
+              type: optional<root.ConvAiWebhooks>
+            rag_retention_period_days:
+              type: optional<integer>
+              default: 10
+              validation:
+                max: 30
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.GetConvAiSettingsResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request: {}
+          response:
+            body:
+              conversation_initiation_client_data_webhook:
+                url: https://example.com/webhook
+                request_headers:
+                  Content-Type: application/json
+              webhooks:
+                post_call_webhook_id: post_call_webhook_id
+              rag_retention_period_days: 1
+      audiences:
+        - convai
+    get_dashboard_settings:
+      path: /v1/convai/settings/dashboard
+      method: GET
+      auth: false
+      docs: Retrieve Convai dashboard settings for the workspace
+      source:
+        openapi: openapi.json
+      display-name: Get Convai Dashboard Settings
+      response:
+        docs: Successful Response
+        type: root.GetConvAiDashboardSettingsResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              charts:
+                - name: name
+                  type: call_success
+      audiences:
+        - convai
+    update_dashboard_settings:
+      path: /v1/convai/settings/dashboard
+      method: PATCH
+      auth: false
+      docs: Update Convai dashboard settings for the workspace
+      source:
+        openapi: openapi.json
+      display-name: Update Convai Dashboard Settings
+      request:
+        name: PatchConvAiDashboardSettingsRequest
+        body:
+          properties:
+            charts:
+              type: optional<list<PatchConvAiDashboardSettingsRequestChartsItem>>
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.GetConvAiDashboardSettingsResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request: {}
+          response:
+            body:
+              charts:
+                - name: name
+                  type: call_success
+      audiences:
+        - convai
+    get_secrets:
+      path: /v1/convai/secrets
+      method: GET
+      auth: false
+      docs: Get all workspace secrets for the user
+      source:
+        openapi: openapi.json
+      display-name: Get Convai Workspace Secrets
+      response:
+        docs: Successful Response
+        type: root.GetWorkspaceSecretsResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              secrets:
+                - type: stored
+                  secret_id: secret_id
+                  name: name
+                  used_by:
+                    tools:
+                      - id: id
+                        name: name
+                        created_at_unix_secs: 1
+                        access_level: admin
+                        type: available
+                    agent_tools:
+                      - agent_id: agent_id
+                        agent_name: agent_name
+                        used_by:
+                          - used_by
+                        created_at_unix_secs: 1
+                        access_level: admin
+                        type: available
+                    others:
+                      - conversation_initiation_webhook
+      audiences:
+        - convai
+    create_secret:
+      path: /v1/convai/secrets
+      method: POST
+      auth: false
+      docs: Create a new secret for the workspace
+      source:
+        openapi: openapi.json
+      display-name: Create Convai Workspace Secret
+      request:
+        name: PostWorkspaceSecretRequest
+        body:
+          properties:
+            type:
+              type: literal<"new">
+            name: string
+            value: string
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.PostWorkspaceSecretResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            type: new
+            name: name
+            value: value
+          response:
+            body:
+              type: stored
+              secret_id: secret_id
+              name: name
+      audiences:
+        - convai
+    delete_secret:
+      path: /v1/convai/secrets/{secret_id}
+      method: DELETE
+      auth: false
+      docs: Delete a workspace secret if it's not in use
+      source:
+        openapi: openapi.json
+      path-parameters:
+        secret_id: string
+      display-name: Delete Convai Workspace Secret
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            secret_id: secret_id
+      audiences:
+        - convai
+    get_batch_call:
+      path: /v1/convai/batch-calling/{batch_id}
+      method: GET
+      auth: false
+      docs: Get detailed information about a batch call including all recipients.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        batch_id: string
+      display-name: Get A Batch Call By Id.
+      response:
+        docs: Successful Response
+        type: root.BatchCallDetailedResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            batch_id: batch_id
+          response:
+            body:
+              id: id
+              phone_number_id: phone_number_id
+              name: name
+              agent_id: agent_id
+              created_at_unix: 1
+              scheduled_time_unix: 1
+              total_calls_dispatched: 1
+              total_calls_scheduled: 1
+              last_updated_at_unix: 1
+              status: pending
+              agent_name: agent_name
+              recipients:
+                - id: id
+                  phone_number: phone_number
+                  status: pending
+                  created_at_unix: 1
+                  updated_at_unix: 1
+                  conversation_id: conversation_id
+      audiences:
+        - convai
+  source:
+    openapi: openapi.json
+types:
+  ConversationalAiCreatePhoneNumberRequestBody:
+    discriminant: provider
+    base-properties: {}
+    docs: Create Phone Request Information
+    union:
+      twilio:
+        type: root.CreateTwilioPhoneNumberRequest
+      sip_trunk:
+        type: root.CreateSipTrunkPhoneNumberRequest
+    source:
+      openapi: openapi.json
+  ConversationalAiGetPhoneNumberResponse:
+    discriminant: provider
+    base-properties: {}
+    union:
+      twilio:
+        type: root.GetPhoneNumberTwilioResponseModel
+      sip_trunk:
+        type: root.GetPhoneNumberSipTrunkResponseModel
+    source:
+      openapi: openapi.json
+  ConversationalAiUpdatePhoneNumberResponse:
+    discriminant: provider
+    base-properties: {}
+    union:
+      twilio:
+        type: root.GetPhoneNumberTwilioResponseModel
+      sip_trunk:
+        type: root.GetPhoneNumberSipTrunkResponseModel
+    source:
+      openapi: openapi.json
+  ConversationalAiGetPhoneNumbersResponseItem:
+    discriminant: provider
+    base-properties: {}
+    union:
+      twilio:
+        type: root.GetPhoneNumberTwilioResponseModel
+      sip_trunk:
+        type: root.GetPhoneNumberSipTrunkResponseModel
+    source:
+      openapi: openapi.json
+  ConversationalAiGetKnowledgeBaseDocumentByIdResponse:
+    discriminant: type
+    base-properties: {}
+    union:
+      url:
+        type: root.GetKnowledgeBaseUrlResponseModel
+      file:
+        type: root.GetKnowledgeBaseFileResponseModel
+      text:
+        type: root.GetKnowledgeBaseTextResponseModel
+    source:
+      openapi: openapi.json
+  ConversationalAiUpdateKnowledgeBaseDocumentResponse:
+    discriminant: type
+    base-properties: {}
+    union:
+      url:
+        type: root.GetKnowledgeBaseUrlResponseModel
+      file:
+        type: root.GetKnowledgeBaseFileResponseModel
+      text:
+        type: root.GetKnowledgeBaseTextResponseModel
+    source:
+      openapi: openapi.json
+  PatchConvAiDashboardSettingsRequestChartsItem:
+    discriminant: type
+    base-properties: {}
+    union:
+      call_success:
+        type: root.DashboardCallSuccessChartModel
+      criteria:
+        type: root.DashboardCriteriaChartModel
+      data_collection:
+        type: root.DashboardDataCollectionChartModel
+    source:
+      openapi: openapi.json

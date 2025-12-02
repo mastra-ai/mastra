@@ -1,0 +1,16 @@
+{
+  "name": "@manypkg/find-root",
+  "version": "1.1.0",
+  "main": "dist/find-root.cjs.js",
+  "module": "dist/find-root.esm.js",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/runtime": "^7.5.5",
+    "@types/node": "^12.7.1",
+    "find-up": "^4.1.0",
+    "fs-extra": "^8.1.0"
+  },
+  "devDependencies": {
+    "fixturez": "^1.1.0"
+  }
+}

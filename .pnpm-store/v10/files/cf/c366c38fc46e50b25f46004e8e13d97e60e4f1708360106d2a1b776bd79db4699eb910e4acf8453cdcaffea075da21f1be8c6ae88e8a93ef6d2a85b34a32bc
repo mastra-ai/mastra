@@ -1,0 +1,113 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/index.ts
+var index_exports = {};
+__export(index_exports, {
+  getDefaultValues: () => getDefaultValues,
+  getLabel: () => getLabel,
+  parseSchema: () => parseSchema,
+  removeEmptyValues: () => removeEmptyValues,
+  sortFieldsByOrder: () => sortFieldsByOrder,
+  validateSchema: () => validateSchema
+});
+module.exports = __toCommonJS(index_exports);
+
+// src/label.ts
+function getLabel(field) {
+  return field.fieldConfig?.label || field.description || beautifyLabel(field.key);
+}
+function beautifyLabel(label) {
+  if (!label) {
+    return "";
+  }
+  let output = label.replace(/([A-Z])/g, " $1");
+  output = output.charAt(0).toUpperCase() + output.slice(1);
+  if (!isNaN(Number(output))) {
+    return "";
+  }
+  if (output === "*") {
+    return "";
+  }
+  return output;
+}
+
+// src/logic.ts
+function parseSchema(schemaProvider) {
+  const schema = schemaProvider.parseSchema();
+  return {
+    ...schema,
+    fields: sortFieldsByOrder(schema.fields)
+  };
+}
+function validateSchema(schemaProvider, values) {
+  return schemaProvider.validateSchema(values);
+}
+function getDefaultValues(schemaProvider) {
+  return schemaProvider.getDefaultValues();
+}
+function removeEmptyValues(values) {
+  const result = {};
+  for (const key in values) {
+    const value = values[key];
+    if ([null, void 0, "", [], {}].includes(value)) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      const newArray = value.map((item) => {
+        if (typeof item === "object") {
+          return removeEmptyValues(item);
+        }
+        return item;
+      });
+      result[key] = newArray.filter((item) => item !== null);
+    } else if (typeof value === "object") {
+      result[key] = removeEmptyValues(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+function sortFieldsByOrder(fields) {
+  if (!fields) return [];
+  const sortedFields = fields.map((field) => {
+    if (field.schema) {
+      return {
+        ...field,
+        schema: sortFieldsByOrder(field.schema)
+      };
+    }
+    return field;
+  }).sort((a, b) => {
+    const fieldA = a.fieldConfig?.order ?? 0;
+    const fieldB = b.fieldConfig?.order ?? 0;
+    return fieldA - fieldB;
+  });
+  return sortedFields;
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  getDefaultValues,
+  getLabel,
+  parseSchema,
+  removeEmptyValues,
+  sortFieldsByOrder,
+  validateSchema
+});

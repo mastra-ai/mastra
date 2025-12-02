@@ -1,0 +1,55 @@
+{
+  "name": "table-layout",
+  "author": "Lloyd Brookes <75pound@gmail.com>",
+  "version": "4.1.1",
+  "description": "Stylable text tables, handling ansi colour. Useful for console output.",
+  "repository": "https://github.com/75lb/table-layout",
+  "license": "MIT",
+  "keywords": [
+    "wrap",
+    "columns",
+    "format",
+    "json",
+    "command line",
+    "table",
+    "view"
+  ],
+  "type": "module",
+  "exports": {
+    "import": "./index.js",
+    "require": "./dist/index.cjs"
+  },
+  "engines": {
+    "node": ">=12.17"
+  },
+  "scripts": {
+    "test": "npm run dist && npm run test:ci",
+    "test:ci": "test-runner 'test/**/*.js' 'test/**/*.cjs'",
+    "docs": "jsdoc2md index.js -p list --member-index-format list > docs/API.md",
+    "dist": "rollup -c"
+  },
+  "dependencies": {
+    "array-back": "^6.2.2",
+    "wordwrapjs": "^5.1.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^26.0.1",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "ansi-escape-sequences": "^6.2.2",
+    "jsdoc-to-markdown": "^8.0.3",
+    "rollup": "^4.19.1",
+    "test-runner": "^0.11.0"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "dist"
+  ],
+  "standard": {
+    "ignore": [
+      "tmp",
+      "dist"
+    ],
+    "envs": []
+  }
+}

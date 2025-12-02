@@ -1,0 +1,154 @@
+import { z } from 'zod';
+import type { SystemMessage } from '../../../llm/index.js';
+import type { MastraMemory } from '../../../memory/memory.js';
+import type { MemoryConfig, StorageThreadType } from '../../../memory/types.js';
+import type { Span, SpanType } from '../../../observability/index.js';
+import type { RequestContext } from '../../../request-context/index.js';
+import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream/index.js';
+import type { OutputSchema } from '../../../stream/base/schema.js';
+import type { InnerAgentExecutionOptions } from '../../agent.types.js';
+import type { SaveQueueManager } from '../../save-queue/index.js';
+import type { AgentMethodType } from '../../types.js';
+import type { AgentCapabilities } from './schema.js';
+interface CreatePrepareStreamWorkflowOptions<OUTPUT extends OutputSchema | undefined = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined> {
+    capabilities: AgentCapabilities;
+    options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+    threadFromArgs?: (Partial<StorageThreadType> & {
+        id: string;
+    }) | undefined;
+    resourceId?: string;
+    runId: string;
+    requestContext: RequestContext;
+    agentSpan: Span<SpanType.AGENT_RUN>;
+    methodType: AgentMethodType;
+    instructions: SystemMessage;
+    memoryConfig?: MemoryConfig;
+    memory?: MastraMemory;
+    saveQueueManager: SaveQueueManager;
+    returnScorerData?: boolean;
+    requireToolApproval?: boolean;
+    resumeContext?: {
+        resumeData: any;
+        snapshot: any;
+    };
+    agentId: string;
+    toolCallId?: string;
+}
+export declare function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefined = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined>({ capabilities, options, threadFromArgs, resourceId, runId, requestContext, agentSpan, methodType, instructions, memoryConfig, memory, saveQueueManager, returnScorerData, requireToolApproval, resumeContext, agentId, toolCallId, }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>): import("../../../workflows").Workflow<import("../../../workflows").DefaultEngineType, (import("../../../workflows").Step<"prepare-tools-step", z.ZodObject<any, z.UnknownKeysParam, z.ZodTypeAny, {
+    [x: string]: any;
+}, {
+    [x: string]: any;
+}>, z.ZodObject<{}, "strip", z.ZodTypeAny, {}, {}>, z.ZodObject<{
+    convertedTools: z.ZodRecord<z.ZodString, z.ZodObject<{
+        id: z.ZodOptional<z.ZodString>;
+        description: z.ZodOptional<z.ZodString>;
+        parameters: z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodAny]>;
+        outputSchema: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodAny]>>;
+        execute: z.ZodOptional<z.ZodFunction<z.ZodTuple<[z.ZodAny, z.ZodAny], null>, z.ZodPromise<z.ZodAny>>>;
+        type: z.ZodOptional<z.ZodUnion<[z.ZodLiteral<"function">, z.ZodLiteral<"provider-defined">, z.ZodUndefined]>>;
+        args: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "strip", z.ZodTypeAny, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }>>;
+}, "strip", z.ZodTypeAny, {
+    convertedTools: Record<string, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }>;
+}, {
+    convertedTools: Record<string, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }>;
+}>, z.ZodType<any, z.ZodTypeDef, any>, z.ZodType<any, z.ZodTypeDef, any>, import("../../../workflows").DefaultEngineType> | import("../../../workflows").Step<"prepare-memory-step", z.ZodObject<any, z.UnknownKeysParam, z.ZodTypeAny, {
+    [x: string]: any;
+}, {
+    [x: string]: any;
+}>, z.ZodObject<{}, "strip", z.ZodTypeAny, {}, {}>, z.ZodObject<{
+    threadExists: z.ZodBoolean;
+    thread: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+        title: z.ZodOptional<z.ZodString>;
+        resourceId: z.ZodString;
+        createdAt: z.ZodDate;
+        updatedAt: z.ZodDate;
+        metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "strip", z.ZodTypeAny, {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    }, {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    }>>;
+    messageList: z.ZodType<import("../..").MessageList, z.ZodTypeDef, import("../..").MessageList>;
+    tripwire: z.ZodOptional<z.ZodBoolean>;
+    tripwireReason: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    threadExists: boolean;
+    messageList: import("../..").MessageList;
+    tripwire?: boolean | undefined;
+    thread?: {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    } | undefined;
+    tripwireReason?: string | undefined;
+}, {
+    threadExists: boolean;
+    messageList: import("../..").MessageList;
+    tripwire?: boolean | undefined;
+    thread?: {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    } | undefined;
+    tripwireReason?: string | undefined;
+}>, z.ZodType<any, z.ZodTypeDef, any>, z.ZodType<any, z.ZodTypeDef, any>, import("../../../workflows").DefaultEngineType> | import("../../../workflows").Step<"stream-text-step", z.ZodObject<any, z.UnknownKeysParam, z.ZodTypeAny, {
+    [x: string]: any;
+}, {
+    [x: string]: any;
+}>, z.ZodAny, z.ZodUnion<[z.ZodType<MastraModelOutput<undefined>, z.ZodTypeDef, MastraModelOutput<undefined>>, z.ZodType<AISDKV5OutputStream<undefined>, z.ZodTypeDef, AISDKV5OutputStream<undefined>>]>, z.ZodType<any, z.ZodTypeDef, any>, z.ZodType<any, z.ZodTypeDef, any>, import("../../../workflows").DefaultEngineType>)[], "execution-workflow", z.ZodObject<any, z.UnknownKeysParam, z.ZodTypeAny, {
+    [x: string]: any;
+}, {
+    [x: string]: any;
+}>, z.ZodObject<{}, "strip", z.ZodTypeAny, {}, {}>, z.ZodUnion<[z.ZodType<MastraModelOutput<OUTPUT | undefined>, z.ZodTypeDef, MastraModelOutput<OUTPUT | undefined>>, z.ZodType<AISDKV5OutputStream<OUTPUT | undefined>, z.ZodTypeDef, AISDKV5OutputStream<OUTPUT | undefined>>]>, z.ZodUnion<[z.ZodType<MastraModelOutput<OUTPUT | undefined>, z.ZodTypeDef, MastraModelOutput<OUTPUT | undefined>>, z.ZodType<AISDKV5OutputStream<OUTPUT | undefined>, z.ZodTypeDef, AISDKV5OutputStream<OUTPUT | undefined>>]>>;
+export {};
+//# sourceMappingURL=index.d.ts.map

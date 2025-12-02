@@ -1,0 +1,43 @@
+{
+  "name": "@peculiar/webcrypto",
+  "version": "1.5.0",
+  "requiresBuild": false,
+  "files": {
+    "build/webcrypto.es.js": {
+      "checkedAt": 1764662907729,
+      "integrity": "sha512-3P8T6aBePUA4KSZ0V6Zj9gLLmFLbyCNthW8tziNKofmtvfJj2kps5o8cMU+P8fUp5w5fPFFefuRhiYtBPLzEtg==",
+      "mode": 420,
+      "size": 97815
+    },
+    "build/webcrypto.js": {
+      "checkedAt": 1764662907731,
+      "integrity": "sha512-8iTAub3Iu4nxv3MNLBLemC50r89P9W8Nh7jJ1byw2G2JivGE2csFQwHFazS/3aIO42tz2PbHrohkHh5HdqhGxg==",
+      "mode": 420,
+      "size": 101674
+    },
+    "package.json": {
+      "checkedAt": 1764662907733,
+      "integrity": "sha512-a9Xw3Zv24bXHbjligWxfE5V9KBrwj96Jrv+WNc4xq/vYDS5m+zp8on55cZ2wwy0U8XRYpjNSjQOKenG+BeRjpg==",
+      "mode": 420,
+      "size": 2305
+    },
+    "LICENSE.md": {
+      "checkedAt": 1764662907734,
+      "integrity": "sha512-g/v/ljmWJ8/dDFJ8YIWedBvxGrUCiu8FEwmAoJ5AmkdiUjfzprxlbu0Bn6/1B9zWZ5gHegEss7KKjylOoFuNdA==",
+      "mode": 420,
+      "size": 1079
+    },
+    "README.md": {
+      "checkedAt": 1764662907736,
+      "integrity": "sha512-nQvRZkqvvpTnydhJ0IFncLTfhVCYKX1lACrw9lfvGrSoAEu3Z2890XyBLCtdikCtQcF4BFZ5WJcfdYGNZEkp/g==",
+      "mode": 420,
+      "size": 6327
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662907737,
+      "integrity": "sha512-bCLgN5A1j5wprXfNGX3SSUYIdZfGSuYGuYhMZGhfXYbBMpaqdWyuk6VJ1E/QxkI4tqftyLCktGclkf1RE/Tp/Q==",
+      "mode": 420,
+      "size": 420
+    }
+  }
+}

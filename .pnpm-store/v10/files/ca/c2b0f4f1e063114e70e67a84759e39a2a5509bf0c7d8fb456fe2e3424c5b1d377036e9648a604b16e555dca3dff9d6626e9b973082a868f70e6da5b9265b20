@@ -1,0 +1,282 @@
+import { z, ZodOptional, ZodObject, ZodArray, ZodUnion, ZodString, ZodNumber, ZodDate, ZodDefault, ZodNull, ZodNullable } from 'zod/v4';
+import type { ZodAny, ZodType } from 'zod/v4';
+import type { Targets } from 'zod-to-json-schema';
+import type { JSONSchema7 } from './json-schema.js';
+import type { SchemaCompatLayer as ParentSchemaCompatLayer } from './schema-compatibility.js';
+import type { Schema, ModelInformation } from './types.js';
+/**
+ * All supported string validation check types that can be processed or converted to descriptions.
+ * @constant
+ */
+export declare const ALL_STRING_CHECKS: readonly ["regex", "emoji", "email", "url", "uuid", "cuid", "min_length", "max_length", "string_format"];
+/**
+ * All supported number validation check types that can be processed or converted to descriptions.
+ * @constant
+ */
+export declare const ALL_NUMBER_CHECKS: readonly ["greater_than", "less_than", "multiple_of"];
+/**
+ * All supported array validation check types that can be processed or converted to descriptions.
+ * @constant
+ */
+export declare const ALL_ARRAY_CHECKS: readonly ["min", "max", "length"];
+/**
+ * Zod types that are not supported by most AI model providers and should be avoided.
+ * @constant
+ */
+export declare const UNSUPPORTED_ZOD_TYPES: readonly ["ZodIntersection", "ZodNever", "ZodNull", "ZodTuple", "ZodUndefined"];
+/**
+ * Zod types that are generally supported by AI model providers.
+ * @constant
+ */
+export declare const SUPPORTED_ZOD_TYPES: readonly ["ZodObject", "ZodArray", "ZodUnion", "ZodString", "ZodNumber", "ZodDate", "ZodAny", "ZodDefault", "ZodNullable"];
+/**
+ * All Zod types (both supported and unsupported).
+ * @constant
+ */
+export declare const ALL_ZOD_TYPES: readonly ["ZodObject", "ZodArray", "ZodUnion", "ZodString", "ZodNumber", "ZodDate", "ZodAny", "ZodDefault", "ZodNullable", "ZodIntersection", "ZodNever", "ZodNull", "ZodTuple", "ZodUndefined"];
+/**
+ * Type representing string validation checks.
+ */
+export type StringCheckType = (typeof ALL_STRING_CHECKS)[number];
+/**
+ * Type representing number validation checks.
+ */
+export type NumberCheckType = (typeof ALL_NUMBER_CHECKS)[number];
+/**
+ * Type representing array validation checks.
+ */
+export type ArrayCheckType = (typeof ALL_ARRAY_CHECKS)[number];
+/**
+ * Type representing unsupported Zod schema types.
+ */
+export type UnsupportedZodType = (typeof UNSUPPORTED_ZOD_TYPES)[number];
+/**
+ * Type representing supported Zod schema types.
+ */
+export type SupportedZodType = (typeof SUPPORTED_ZOD_TYPES)[number];
+/**
+ * Type representing all Zod schema types (supported and unsupported).
+ */
+export type AllZodType = (typeof ALL_ZOD_TYPES)[number];
+/**
+ * Utility type to extract the shape of a Zod object schema.
+ */
+export type ZodShape<T extends z.ZodObject<any, any>> = T['shape'];
+/**
+ * Utility type to extract the keys from a Zod object shape.
+ */
+export type ShapeKey<T extends z.ZodObject<any, any>> = keyof ZodShape<T>;
+/**
+ * Utility type to extract the value types from a Zod object shape.
+ */
+export type ShapeValue<T extends z.ZodObject<any, any>> = ZodShape<T>[ShapeKey<T>];
+type ConstraintHelperText = string[];
+/**
+ * Abstract base class for creating schema compatibility layers for different AI model providers.
+ *
+ * This class provides a framework for transforming Zod schemas to work with specific AI model
+ * provider requirements and limitations. Each provider may have different support levels for
+ * JSON Schema features, validation constraints, and data types.
+ *
+ *
+ * @example
+ * ```typescript
+ * import { SchemaCompatLayer } from '@mastra/schema-compat';
+ * import type { LanguageModelV1 } from 'ai';
+ *
+ * class CustomProviderCompat extends SchemaCompatLayer {
+ *   constructor(model: LanguageModelV1) {
+ *     super(model);
+ *   }
+ *
+ *   shouldApply(): boolean {
+ *     return this.getModel().provider === 'custom-provider';
+ *   }
+ *
+ *   getSchemaTarget() {
+ *     return 'jsonSchema7';
+ *   }
+ *
+ *   processZodType<T extends z.AnyZodObject>(value: z.ZodAny): ShapeValue<T> {
+ *     // Custom processing logic for this provider
+ *     switch (value._def.typeName) {
+ *       case 'ZodString':
+ *         return this.defaultZodStringHandler(value, ['email', 'url']);
+ *       default:
+ *         return this.defaultUnsupportedZodTypeHandler(value);
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export declare class SchemaCompatLayer {
+    private model;
+    private parent;
+    /**
+     * Creates a new schema compatibility instance.
+     *
+     * @param model - The language model this compatibility layer applies to
+     */
+    constructor(model: ModelInformation, parent: ParentSchemaCompatLayer);
+    /**
+     * Gets the language model associated with this compatibility layer.
+     *
+     * @returns The language model instance
+     */
+    getModel(): ModelInformation;
+    getUnsupportedZodTypes(): readonly string[];
+    /**
+     * Type guard for optional Zod types
+     */
+    isOptional(v: ZodAny | ZodOptional<any>): v is ZodOptional<any>;
+    /**
+     * Type guard for object Zod types
+     */
+    isObj(v: ZodAny | ZodObject<any, any>): v is ZodObject<any, any>;
+    /**
+     * Type guard for null Zod types
+     */
+    isNull(v: ZodAny | ZodNull): v is ZodNull;
+    /**
+     * Type guard for nullable Zod types
+     */
+    isNullable(v: ZodAny | ZodNullable<any>): v is ZodNullable<any>;
+    /**
+     * Type guard for array Zod types
+     */
+    isArr(v: ZodAny | ZodArray<any>): v is ZodArray<any>;
+    /**
+     * Type guard for union Zod types
+     */
+    isUnion(v: ZodAny | ZodUnion<[ZodAny, ...ZodAny[]]>): v is ZodUnion<[ZodAny, ...ZodAny[]]>;
+    /**
+     * Type guard for string Zod types
+     */
+    isString(v: ZodAny | ZodString): v is ZodString;
+    /**
+     * Type guard for number Zod types
+     */
+    isNumber(v: ZodAny | ZodNumber): v is ZodNumber;
+    /**
+     * Type guard for date Zod types
+     */
+    isDate(v: ZodAny | ZodDate): v is ZodDate;
+    /**
+     * Type guard for default Zod types
+     */
+    isDefault(v: ZodAny | ZodDefault<any>): v is ZodDefault<any>;
+    /**
+     * Determines whether this compatibility layer should be applied for the current model.
+     *
+     * @returns True if this compatibility layer should be used, false otherwise
+     * @abstract
+     */
+    shouldApply(): boolean;
+    /**
+     * Returns the JSON Schema target format for this provider.
+     *
+     * @returns The schema target format, or undefined to use the default 'jsonSchema7'
+     * @abstract
+     */
+    getSchemaTarget(): Targets | undefined;
+    /**
+     * Processes a specific Zod type according to the provider's requirements.
+     *
+     * @param value - The Zod type to process
+     * @returns The processed Zod type
+     * @abstract
+     */
+    processZodType(value: ZodType): ZodType;
+    /**
+     * Default handler for Zod object types. Recursively processes all properties in the object.
+     *
+     * @param value - The Zod object to process
+     * @returns The processed Zod object
+     */
+    defaultZodObjectHandler(value: ZodObject<any, any>, options?: {
+        passthrough?: boolean;
+    }): ZodObject<any, any>;
+    /**
+     * Merges validation constraints into a parameter description.
+     *
+     * This helper method converts validation constraints that may not be supported
+     * by a provider into human-readable descriptions.
+     *
+     * @param description - The existing parameter description
+     * @param constraints - The validation constraints to merge
+     * @returns The updated description with constraints, or undefined if no constraints
+     */
+    mergeParameterDescription(description: string | undefined, constraints: ConstraintHelperText): string | undefined;
+    /**
+     * Default handler for unsupported Zod types. Throws an error for specified unsupported types.
+     *
+     * @param value - The Zod type to check
+     * @param throwOnTypes - Array of type names to throw errors for
+     * @returns The original value if not in the throw list
+     * @throws Error if the type is in the unsupported list
+     */
+    defaultUnsupportedZodTypeHandler<T extends z.ZodObject<any, any>>(value: z.ZodAny, throwOnTypes?: readonly UnsupportedZodType[]): ShapeValue<T>;
+    /**
+     * Default handler for Zod array types. Processes array constraints according to provider support.
+     *
+     * @param value - The Zod array to process
+     * @param handleChecks - Array constraints to convert to descriptions vs keep as validation
+     * @returns The processed Zod array
+     */
+    defaultZodArrayHandler(value: ZodArray<any>, handleChecks?: readonly ArrayCheckType[]): ZodArray<any>;
+    /**
+     * Default handler for Zod union types. Processes all union options.
+     *
+     * @param value - The Zod union to process
+     * @returns The processed Zod union
+     * @throws Error if union has fewer than 2 options
+     */
+    defaultZodUnionHandler(value: ZodUnion<[ZodAny, ...ZodAny[]]>): ZodAny;
+    /**
+     * Default handler for Zod string types. Processes string validation constraints.
+     *
+     * @param value - The Zod string to process
+     * @param handleChecks - String constraints to convert to descriptions vs keep as validation
+     * @returns The processed Zod string
+     */
+    defaultZodStringHandler(value: ZodString, handleChecks?: readonly StringCheckType[]): ZodString;
+    /**
+     * Default handler for Zod number types. Processes number validation constraints.
+     *
+     * @param value - The Zod number to process
+     * @param handleChecks - Number constraints to convert to descriptions vs keep as validation
+     * @returns The processed Zod number
+     */
+    defaultZodNumberHandler(value: ZodNumber, handleChecks?: readonly NumberCheckType[]): ZodNumber;
+    /**
+     * Default handler for Zod date types. Converts dates to ISO strings with constraint descriptions.
+     *
+     * @param value - The Zod date to process
+     * @returns A Zod string schema representing the date in ISO format
+     */
+    defaultZodDateHandler(value: ZodDate): ZodString;
+    /**
+     * Default handler for Zod optional types. Processes the inner type and maintains optionality.
+     *
+     * @param value - The Zod optional to process
+     * @param handleTypes - Types that should be processed vs passed through
+     * @returns The processed Zod optional
+     */
+    defaultZodOptionalHandler(value: ZodOptional<any>, handleTypes?: readonly AllZodType[]): ZodType;
+    /**
+     * Processes a Zod object schema and converts it to an AI SDK Schema.
+     *
+     * @param zodSchema - The Zod object schema to process
+     * @returns An AI SDK Schema with provider-specific compatibility applied
+     */
+    processToAISDKSchema(zodSchema: ZodType): Schema;
+    /**
+     * Processes a Zod object schema and converts it to a JSON Schema.
+     *
+     * @param zodSchema - The Zod object schema to process
+     * @returns A JSONSchema7 object with provider-specific compatibility applied
+     */
+    processToJSONSchema(zodSchema: ZodType): JSONSchema7;
+}
+export {};
+//# sourceMappingURL=schema-compatibility-v4.d.ts.map

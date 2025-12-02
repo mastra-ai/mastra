@@ -1,0 +1,46 @@
+{
+    "name": "@types/cookies",
+    "version": "0.9.1",
+    "description": "TypeScript definitions for cookies",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/cookies",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Wang Zishi",
+            "githubUsername": "WangZishi",
+            "url": "https://github.com/WangZishi"
+        },
+        {
+            "name": "jKey Lu",
+            "githubUsername": "jkeylu",
+            "url": "https://github.com/jkeylu"
+        },
+        {
+            "name": "BendingBender",
+            "githubUsername": "BendingBender",
+            "url": "https://github.com/BendingBender"
+        },
+        {
+            "name": "Sebastian Beltran",
+            "githubUsername": "bjohansebas",
+            "url": "https://github.com/bjohansebas"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/cookies"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/connect": "*",
+        "@types/express": "*",
+        "@types/keygrip": "*",
+        "@types/node": "*"
+    },
+    "peerDependencies": {},
+    "typesPublisherContentHash": "85092bc8e5ebb0107d0af49e6b6a36ab582597aa93b45ebf99cef398243e9169",
+    "typeScriptVersion": "5.1"
+}

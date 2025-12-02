@@ -1,0 +1,49 @@
+{
+  "name": "chai",
+  "version": "6.2.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662904360,
+      "integrity": "sha512-5lSlr2thqyYoEfpWtOp6oDmYXHJLzdFUaX6VLoGUgDCODNrRnz5oUiUNHhkSwMtbvu0D+dh5FAonQXl07Ixbxw==",
+      "mode": 420,
+      "size": 1082
+    },
+    "index.js": {
+      "checkedAt": 1764662904361,
+      "integrity": "sha512-WGz/ivzbdF4KPTt1XcL3EdD7K9UtPz20rQs4NmBfpduhvk9n3HCwHYAg4AIVgUa3EcFvJNSX6ghxLMfKi2v65g==",
+      "mode": 420,
+      "size": 144048
+    },
+    "register-assert.js": {
+      "checkedAt": 1764662904361,
+      "integrity": "sha512-3CCrXUHZHOoQVP1IiQJnJuuA7PtyUxMFdFXkVWZLnjHx2rXG/dJRhQWNbImu5k91axxBoodow/PezuIhkiHtuQ==",
+      "mode": 420,
+      "size": 64
+    },
+    "register-expect.js": {
+      "checkedAt": 1764662904362,
+      "integrity": "sha512-0Si4uoxbNRfl0abDauihiRdBVOqcdDm1E+GK3SwT/v4kHEpDptJAg/poo9mdyiXzXLZhtXQlVaxiIf8Qs8KvlQ==",
+      "mode": 420,
+      "size": 64
+    },
+    "register-should.js": {
+      "checkedAt": 1764662904363,
+      "integrity": "sha512-Q6MdpyGI8ZqOP7JNbBVhZiLDHu/WFgOavmIxH1TANTBXDIIRAP46QdY73cirkeqHR+aJrWyl0axrZNVOFcmv3w==",
+      "mode": 420,
+      "size": 66
+    },
+    "package.json": {
+      "checkedAt": 1764662904365,
+      "integrity": "sha512-PjERV3HIJT2zUZ52vrPKKXHMyKejto+0sIggxVzRHZ4jr7yrnQwbPTqeYZ14NjE1CvkhwGaaI7HFdmn/+/jQMg==",
+      "mode": 420,
+      "size": 2062
+    },
+    "README.md": {
+      "checkedAt": 1764662904367,
+      "integrity": "sha512-6/WwmEsxT7aMWNq1P2pOF0iwPSpRGcTEQOf1MVqSVdn2kUsUnliO9szWkSWvjB0sSGWVlgJ011ET6mBsSZJleA==",
+      "mode": 420,
+      "size": 6222
+    }
+  }
+}

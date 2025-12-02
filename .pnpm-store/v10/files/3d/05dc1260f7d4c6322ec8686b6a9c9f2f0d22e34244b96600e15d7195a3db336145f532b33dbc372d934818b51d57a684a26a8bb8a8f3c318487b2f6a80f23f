@@ -1,0 +1,59 @@
+import type { MastraMessageContentV2 } from '../../../agent/index.js';
+import { MastraBase } from '../../../base.js';
+import type { MastraDBMessage, StorageThreadType } from '../../../memory/types.js';
+import type { StorageResourceType, ThreadOrderBy, ThreadSortDirection, StorageListMessagesInput, StorageListMessagesOutput, StorageListThreadsByResourceIdInput, StorageListThreadsByResourceIdOutput, StorageOrderBy } from '../../types.js';
+export declare abstract class MemoryStorage extends MastraBase {
+    constructor();
+    abstract getThreadById({ threadId }: {
+        threadId: string;
+    }): Promise<StorageThreadType | null>;
+    abstract saveThread({ thread }: {
+        thread: StorageThreadType;
+    }): Promise<StorageThreadType>;
+    abstract updateThread({ id, title, metadata, }: {
+        id: string;
+        title: string;
+        metadata: Record<string, unknown>;
+    }): Promise<StorageThreadType>;
+    abstract deleteThread({ threadId }: {
+        threadId: string;
+    }): Promise<void>;
+    abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+    abstract listMessagesById({ messageIds }: {
+        messageIds: string[];
+    }): Promise<{
+        messages: MastraDBMessage[];
+    }>;
+    abstract saveMessages(args: {
+        messages: MastraDBMessage[];
+    }): Promise<{
+        messages: MastraDBMessage[];
+    }>;
+    abstract updateMessages(args: {
+        messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+            id: string;
+            content?: {
+                metadata?: MastraMessageContentV2['metadata'];
+                content?: MastraMessageContentV2['content'];
+            };
+        })[];
+    }): Promise<MastraDBMessage[]>;
+    deleteMessages(_messageIds: string[]): Promise<void>;
+    abstract listThreadsByResourceId(args: StorageListThreadsByResourceIdInput): Promise<StorageListThreadsByResourceIdOutput>;
+    getResourceById(_: {
+        resourceId: string;
+    }): Promise<StorageResourceType | null>;
+    saveResource(_: {
+        resource: StorageResourceType;
+    }): Promise<StorageResourceType>;
+    updateResource(_: {
+        resourceId: string;
+        workingMemory?: string;
+        metadata?: Record<string, unknown>;
+    }): Promise<StorageResourceType>;
+    protected parseOrderBy(orderBy?: StorageOrderBy, defaultDirection?: ThreadSortDirection): {
+        field: ThreadOrderBy;
+        direction: ThreadSortDirection;
+    };
+}
+//# sourceMappingURL=base.d.ts.map

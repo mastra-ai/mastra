@@ -1,0 +1,53 @@
+{
+  "name": "command-line-usage",
+  "author": "Lloyd Brookes <75pound@gmail.com>",
+  "version": "7.0.3",
+  "description": "Generates command-line usage information",
+  "repository": "https://github.com/75lb/command-line-usage",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "import": "./index.js",
+    "require": "./dist/index.cjs"
+  },
+  "files": [
+    "lib",
+    "index.js",
+    "dist"
+  ],
+  "keywords": [
+    "terminal",
+    "command line",
+    "usage",
+    "generator"
+  ],
+  "engines": {
+    "node": ">=12.20.0"
+  },
+  "scripts": {
+    "docs": "jsdoc2md --no-gfm index.js lib/**/*.js > doc/api.md; echo",
+    "test": "npm run dist && npm run test:ci",
+    "test:ci": "test-runner test/*.js test/*.cjs",
+    "examples": "for FILE in example/*.js; do printf \"\n\n======== $FILE ========\n\n\"; node $FILE; done",
+    "dist": "rollup -c"
+  },
+  "dependencies": {
+    "array-back": "^6.2.2",
+    "chalk-template": "^0.4.0",
+    "table-layout": "^4.1.0",
+    "typical": "^7.1.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^26.0.1",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "jsdoc-to-markdown": "^8.0.1",
+    "rollup": "^4.18.1",
+    "test-runner": "^0.10.1"
+  },
+  "standard": {
+    "ignore": [
+      "example",
+      "dist"
+    ]
+  }
+}

@@ -1,0 +1,62 @@
+imports:
+  root: ../../../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get:
+      path: /v1/voices/pvc/{voice_id}/captcha
+      method: GET
+      auth: false
+      docs: Get captcha for PVC voice verification.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+      display-name: Get Pvc Voice Captcha
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+    verify:
+      path: /v1/voices/pvc/{voice_id}/captcha
+      method: POST
+      auth: false
+      docs: Submit captcha verification for PVC voice.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+      display-name: Verify Pvc Voice Captcha
+      request:
+        name: Body_Verify_PVC_voice_captcha_v1_voices_pvc__voice_id__captcha_post
+        body:
+          properties:
+            recording:
+              type: file
+              docs: Audio recording of the user
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.VerifyPvcVoiceCaptchaResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          request: {}
+          response:
+            body:
+              status: ok
+  source:
+    openapi: openapi.json

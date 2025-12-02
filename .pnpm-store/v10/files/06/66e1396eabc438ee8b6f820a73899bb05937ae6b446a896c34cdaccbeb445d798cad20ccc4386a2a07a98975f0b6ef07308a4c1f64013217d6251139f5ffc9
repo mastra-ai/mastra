@@ -1,0 +1,129 @@
+{
+  "name": "microsoft-cognitiveservices-speech-sdk",
+  "author": "Microsoft Corporation",
+  "homepage": "https://docs.microsoft.com/azure/cognitive-services/speech-service/",
+  "version": "1.46.0",
+  "license": "MIT",
+  "description": "Microsoft Cognitive Services Speech SDK for JavaScript",
+  "keywords": [
+    "microsoft",
+    "cognitiveservices",
+    "speech",
+    "sdk",
+    "javascript",
+    "typescript",
+    "ts",
+    "js",
+    "browser",
+    "websocket",
+    "speechtotext",
+    "texttospeech"
+  ],
+  "bugs": {
+    "url": "https://github.com/Microsoft/cognitive-services-speech-sdk-js/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Microsoft/cognitive-services-speech-sdk-js"
+  },
+  "browser": {
+    "asn1.js-rfc2560": false,
+    "asn1.js-rfc5280": false,
+    "https-proxy-agent": false,
+    "simple-lru-cache": false,
+    "ws": false,
+    "fs": false,
+    "agent-base": false,
+    "tls": false,
+    "net": false
+  },
+  "main": "distrib/lib/microsoft.cognitiveservices.speech.sdk.js",
+  "module": "distrib/lib/microsoft.cognitiveservices.speech.sdk.js",
+  "types": "distrib/lib/microsoft.cognitiveservices.speech.sdk.d.ts",
+  "files": [
+    "distrib/lib/**/*",
+    "distrib/browser/**/*",
+    "LICENSE",
+    "REDIST.txt"
+  ],
+  "devDependencies": {
+    "@azure/identity": "^4.9.1",
+    "@types/bent": "^7.3.2",
+    "@types/jest": "^27.0.0",
+    "@types/node": "^12.12.30",
+    "@types/node-fetch": "^2.6.12",
+    "@types/prettier": "<2.6.0",
+    "@types/request": "^2.48.3",
+    "@types/rimraf": "^3.0.0",
+    "@types/uuid": "^9.0.0",
+    "@types/ws": "^7.4.0",
+    "@typescript-eslint/eslint-plugin": "^5.26.0",
+    "@typescript-eslint/eslint-plugin-tslint": "^5.27.0",
+    "@typescript-eslint/parser": "^5.27.0",
+    "asn1.js": "^5.2.0",
+    "dts-bundle-webpack": "^1.0.2",
+    "eslint": "^8.16.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-jsdoc": "^39.3.2",
+    "eslint-plugin-prefer-arrow": "^1.2.3",
+    "gulp": "^5.0.0",
+    "gulp-eslint": "^6.0.0",
+    "gulp-rename": "^2.0.0",
+    "gulp-sourcemaps": "^2.6.5",
+    "gulp-terser": "^2.1.0",
+    "gulp-typescript": "^5.0.1",
+    "jest": "^27.0.0",
+    "jest-junit": "^12.0.0",
+    "node-fetch": "^2.6.1",
+    "rimraf": "^3.0.2",
+    "semver": "^6.3.0",
+    "source-map-loader": "^3.0.1",
+    "ts-jest": "^27.0.0",
+    "tslint": "^5.20.1",
+    "typescript": "4.5",
+    "webpack": "^5.72.1",
+    "webpack-stream": "^7.0.0"
+  },
+  "scripts": {
+    "build": "gulp compress --gulpfile gulpfile.cjs && gulp build --gulpfile gulpfile.cjs",
+    "test": "npm run lint && npm run jest --coverage",
+    "test:connection": "node -e \"process.platform === 'win32' ? require('child_process').execSync('powershell -File ./scripts/run-connection-tests.ps1', {stdio: 'inherit'}) : require('child_process').execSync('./scripts/run-connection-tests.sh', {stdio: 'inherit'})\"",
+    "test:non-connection": "node -e \"process.platform === 'win32' ? require('child_process').execSync('powershell -File ./scripts/run-non-connection-tests.ps1', {stdio: 'inherit'}) : require('child_process').execSync('./scripts/run-non-connection-tests.sh', {stdio: 'inherit'})\"",
+    "jest": "jest",
+    "lint": "eslint -c .eslintrc.cjs --ext .ts src",
+    "linttest": "eslint -c .eslintrc.cjs --ext .ts tests",
+    "setversion": "chmod +x ./ci/set-version.sh && ./ci/set-version.sh",
+    "prepare": "npm run build",
+    "setup": "npm install --package-lock-only --ignore-scripts --no-audit"
+  },
+  "jest-junit": {
+    "suiteName": "jest tests",
+    "outputName": "./test-javascript-junit.xml",
+    "classNameTemplate": "{filename}-{title}",
+    "titleTemplate": "{filename}-{title}",
+    "ancestorSeparator": " � ",
+    "suiteNameTemplate": "{filepath}",
+    "includeConsoleOutput": true
+  },
+  "dependencies": {
+    "@types/webrtc": "^0.0.37",
+    "agent-base": "^6.0.1",
+    "bent": "^7.3.12",
+    "https-proxy-agent": "^4.0.0",
+    "uuid": "^9.0.0",
+    "ws": "^8.18.2"
+  },
+  "overrides": {
+    "extend": "3.0.2",
+    "set-value": "4.0.1",
+    "minimist": "1.2.6",
+    "source-map": "~0.8.0-beta.0",
+    "chokidar": {
+      "glob-parent": "6.0.2"
+    },
+    "glob-stream": {
+      "glob-parent": "6.0.2"
+    }
+  },
+  "sideEffects": false
+}

@@ -1,0 +1,75 @@
+{
+  "name": "@fastify/error",
+  "version": "4.2.0",
+  "description": "A small utility, used by Fastify itself, for generating consistent error objects across your codebase and plugins.",
+  "main": "index.js",
+  "type": "commonjs",
+  "types": "types/index.d.ts",
+  "scripts": {
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "test": "npm run test:unit && npm run test:typescript",
+    "test:unit": "c8 --100 node --test",
+    "test:typescript": "tsd"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fastify/fastify-error.git"
+  },
+  "keywords": [
+    "fastify",
+    "error",
+    "utility",
+    "plugin"
+  ],
+  "author": "Tomas Della Vedova",
+  "contributors": [
+    {
+      "name": "Matteo Collina",
+      "email": "hello@matteocollina.com"
+    },
+    {
+      "name": "James Sumners",
+      "url": "https://james.sumners.info"
+    },
+    {
+      "name": "Aras Abbasi",
+      "email": "aras.abbasi@gmail.com"
+    },
+    {
+      "name": "Frazer Smith",
+      "email": "frazer.dev@icloud.com",
+      "url": "https://github.com/fdawgs"
+    }
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/fastify/fastify-error/issues"
+  },
+  "homepage": "https://github.com/fastify/fastify-error#readme",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/fastify"
+    },
+    {
+      "type": "opencollective",
+      "url": "https://opencollective.com/fastify"
+    }
+  ],
+  "devDependencies": {
+    "benchmark": "^2.1.4",
+    "c8": "^10.1.2",
+    "eslint": "^9.17.0",
+    "neostandard": "^0.12.0",
+    "tsd": "^0.32.0"
+  },
+  "tsd": {
+    "compilerOptions": {
+      "esModuleInterop": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

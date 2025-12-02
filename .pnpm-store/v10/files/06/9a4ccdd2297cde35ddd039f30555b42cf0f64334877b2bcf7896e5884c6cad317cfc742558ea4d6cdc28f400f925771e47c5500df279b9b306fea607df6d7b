@@ -1,0 +1,1261 @@
+/* src/styles/base.css */
+:where(.aui-root) *,
+:where(.aui-root) ::before,
+:where(.aui-root) ::after {
+  --aui-border-spacing-x: 0;
+  --aui-border-spacing-y: 0;
+  --aui-translate-x: 0;
+  --aui-translate-y: 0;
+  --aui-rotate: 0;
+  --aui-skew-x: 0;
+  --aui-skew-y: 0;
+  --aui-scale-x: 1;
+  --aui-scale-y: 1;
+  --aui-ring-inset: ;
+  --aui-ring-offset-width: 0px;
+  --aui-ring-offset-color: #fff;
+  --aui-ring-color: rgb(59 130 246 / 0.5);
+  --aui-ring-offset-shadow: 0 0 #0000;
+  --aui-ring-shadow: 0 0 #0000;
+  --aui-shadow: 0 0 #0000;
+  --aui-shadow-colored: 0 0 #0000;
+  --aui-blur: ;
+  --aui-brightness: ;
+  --aui-contrast: ;
+  --aui-grayscale: ;
+  --aui-hue-rotate: ;
+  --aui-invert: ;
+  --aui-saturate: ;
+  --aui-sepia: ;
+  --aui-drop-shadow: ;
+  --aui-backdrop-blur: ;
+  --aui-backdrop-brightness: ;
+  --aui-backdrop-contrast: ;
+  --aui-backdrop-grayscale: ;
+  --aui-backdrop-hue-rotate: ;
+  --aui-backdrop-invert: ;
+  --aui-backdrop-opacity: ;
+  --aui-backdrop-saturate: ;
+  --aui-backdrop-sepia: ;
+  --aui-contain-size: ;
+  --aui-contain-layout: ;
+  --aui-contain-paint: ;
+  --aui-contain-style: ;
+}
+:where(.aui-root) ::backdrop {
+  --aui-border-spacing-x: 0;
+  --aui-border-spacing-y: 0;
+  --aui-translate-x: 0;
+  --aui-translate-y: 0;
+  --aui-rotate: 0;
+  --aui-skew-x: 0;
+  --aui-skew-y: 0;
+  --aui-scale-x: 1;
+  --aui-scale-y: 1;
+  --aui-ring-inset: ;
+  --aui-ring-offset-width: 0px;
+  --aui-ring-offset-color: #fff;
+  --aui-ring-color: rgb(59 130 246 / 0.5);
+  --aui-ring-offset-shadow: 0 0 #0000;
+  --aui-ring-shadow: 0 0 #0000;
+  --aui-shadow: 0 0 #0000;
+  --aui-shadow-colored: 0 0 #0000;
+  --aui-blur: ;
+  --aui-brightness: ;
+  --aui-contrast: ;
+  --aui-grayscale: ;
+  --aui-hue-rotate: ;
+  --aui-invert: ;
+  --aui-saturate: ;
+  --aui-sepia: ;
+  --aui-drop-shadow: ;
+  --aui-backdrop-blur: ;
+  --aui-backdrop-brightness: ;
+  --aui-backdrop-contrast: ;
+  --aui-backdrop-grayscale: ;
+  --aui-backdrop-hue-rotate: ;
+  --aui-backdrop-invert: ;
+  --aui-backdrop-opacity: ;
+  --aui-backdrop-saturate: ;
+  --aui-backdrop-sepia: ;
+  --aui-contain-size: ;
+  --aui-contain-layout: ;
+  --aui-contain-paint: ;
+  --aui-contain-style: ;
+}
+:where(.aui-root) *,
+:where(.aui-root) ::before,
+:where(.aui-root) ::after {
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: solid;
+  border-color: #e5e7eb;
+}
+:where(.aui-root) ::before,
+:where(.aui-root) ::after {
+  --aui-content: "";
+}
+:where(.aui-root) html,
+:where(.aui-root) :host {
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    sans-serif,
+    "Apple Color Emoji",
+    "Segoe UI Emoji",
+    "Segoe UI Symbol",
+    "Noto Color Emoji";
+  font-feature-settings: normal;
+  font-variation-settings: normal;
+  -webkit-tap-highlight-color: transparent;
+}
+:where(.aui-root) body {
+  margin: 0;
+  line-height: inherit;
+}
+:where(.aui-root) hr {
+  height: 0;
+  color: inherit;
+  border-top-width: 1px;
+}
+:where(.aui-root) abbr:where([title]) {
+  -webkit-text-decoration: underline dotted;
+  text-decoration: underline dotted;
+}
+:where(.aui-root) h1,
+:where(.aui-root) h2,
+:where(.aui-root) h3,
+:where(.aui-root) h4,
+:where(.aui-root) h5,
+:where(.aui-root) h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+:where(.aui-root) a {
+  color: inherit;
+  text-decoration: inherit;
+}
+:where(.aui-root) b,
+:where(.aui-root) strong {
+  font-weight: bolder;
+}
+:where(.aui-root) code,
+:where(.aui-root) kbd,
+:where(.aui-root) samp,
+:where(.aui-root) pre {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
+  font-feature-settings: normal;
+  font-variation-settings: normal;
+  font-size: 1em;
+}
+:where(.aui-root) small {
+  font-size: 80%;
+}
+:where(.aui-root) sub,
+:where(.aui-root) sup {
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+:where(.aui-root) sub {
+  bottom: -0.25em;
+}
+:where(.aui-root) sup {
+  top: -0.5em;
+}
+:where(.aui-root) table {
+  text-indent: 0;
+  border-color: inherit;
+  border-collapse: collapse;
+}
+:where(.aui-root) button,
+:where(.aui-root) input,
+:where(.aui-root) optgroup,
+:where(.aui-root) select,
+:where(.aui-root) textarea {
+  font-family: inherit;
+  font-feature-settings: inherit;
+  font-variation-settings: inherit;
+  font-size: 100%;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  margin: 0;
+  padding: 0;
+}
+:where(.aui-root) button,
+:where(.aui-root) select {
+  text-transform: none;
+}
+:where(.aui-root) button,
+:where(.aui-root) input:where([type=button]),
+:where(.aui-root) input:where([type=reset]),
+:where(.aui-root) input:where([type=submit]) {
+  -webkit-appearance: button;
+  background-color: transparent;
+  background-image: none;
+}
+:where(.aui-root) :-moz-focusring {
+  outline: auto;
+}
+:where(.aui-root) :-moz-ui-invalid {
+  box-shadow: none;
+}
+:where(.aui-root) progress {
+  vertical-align: baseline;
+}
+:where(.aui-root) ::-webkit-inner-spin-button,
+:where(.aui-root) ::-webkit-outer-spin-button {
+  height: auto;
+}
+:where(.aui-root) [type=search] {
+  -webkit-appearance: textfield;
+  outline-offset: -2px;
+}
+:where(.aui-root) ::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+:where(.aui-root) ::-webkit-file-upload-button {
+  -webkit-appearance: button;
+  font: inherit;
+}
+:where(.aui-root) summary {
+  display: list-item;
+}
+:where(.aui-root) blockquote,
+:where(.aui-root) dl,
+:where(.aui-root) dd,
+:where(.aui-root) h1,
+:where(.aui-root) h2,
+:where(.aui-root) h3,
+:where(.aui-root) h4,
+:where(.aui-root) h5,
+:where(.aui-root) h6,
+:where(.aui-root) hr,
+:where(.aui-root) figure,
+:where(.aui-root) p,
+:where(.aui-root) pre {
+  margin: 0;
+}
+:where(.aui-root) fieldset {
+  margin: 0;
+  padding: 0;
+}
+:where(.aui-root) legend {
+  padding: 0;
+}
+:where(.aui-root) ol,
+:where(.aui-root) ul,
+:where(.aui-root) menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+:where(.aui-root) dialog {
+  padding: 0;
+}
+:where(.aui-root) textarea {
+  resize: vertical;
+}
+:where(.aui-root) input::-moz-placeholder,
+:where(.aui-root) textarea::-moz-placeholder {
+  opacity: 1;
+  color: #9ca3af;
+}
+:where(.aui-root) input::placeholder,
+:where(.aui-root) textarea::placeholder {
+  opacity: 1;
+  color: #9ca3af;
+}
+:where(.aui-root) button,
+:where(.aui-root) [role=button] {
+  cursor: pointer;
+}
+:where(.aui-root) :disabled {
+  cursor: default;
+}
+:where(.aui-root) img,
+:where(.aui-root) svg,
+:where(.aui-root) video,
+:where(.aui-root) canvas,
+:where(.aui-root) audio,
+:where(.aui-root) iframe,
+:where(.aui-root) embed,
+:where(.aui-root) object {
+  display: block;
+  vertical-align: middle;
+}
+:where(.aui-root) img,
+:where(.aui-root) video {
+  max-width: 100%;
+  height: auto;
+}
+:where(.aui-root) [hidden]:where(:not([hidden=until-found])) {
+  display: none;
+}
+@keyframes aui-enter {
+  from {
+    opacity: var(--aui-enter-opacity, 1);
+    transform: translate3d(var(--aui-enter-translate-x, 0), var(--aui-enter-translate-y, 0), 0) scale3d(var(--aui-enter-scale, 1), var(--aui-enter-scale, 1), var(--aui-enter-scale, 1)) rotate(var(--aui-enter-rotate, 0));
+  }
+}
+@keyframes aui-exit {
+  to {
+    opacity: var(--aui-exit-opacity, 1);
+    transform: translate3d(var(--aui-exit-translate-x, 0), var(--aui-exit-translate-y, 0), 0) scale3d(var(--aui-exit-scale, 1), var(--aui-exit-scale, 1), var(--aui-exit-scale, 1)) rotate(var(--aui-exit-rotate, 0));
+  }
+}
+
+/* src/styles/tailwindcss/base-components.css */
+.aui-root {
+  color: hsl(var(--aui-foreground));
+}
+.aui-root * {
+  border-color: hsl(var(--aui-border));
+}
+.aui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  border-radius: calc(var(--aui-radius) - 2px);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  transition-property:
+    color,
+    background-color,
+    border-color,
+    text-decoration-color,
+    fill,
+    stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.aui-button:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  --aui-ring-offset-shadow: var(--aui-ring-inset) 0 0 0 var(--aui-ring-offset-width) var(--aui-ring-offset-color);
+  --aui-ring-shadow: var(--aui-ring-inset) 0 0 0 calc(1px + var(--aui-ring-offset-width)) var(--aui-ring-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow),
+    var(--aui-ring-shadow),
+    var(--aui-shadow, 0 0 #0000);
+  --aui-ring-color: hsl(var(--aui-ring)) ;
+}
+.aui-button:disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+.aui-button svg {
+  pointer-events: none;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+.aui-button-primary {
+  background-color: hsl(var(--aui-primary));
+  color: hsl(var(--aui-primary-foreground));
+  --aui-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --aui-shadow-colored: 0 1px 3px 0 var(--aui-shadow-color), 0 1px 2px -1px var(--aui-shadow-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow, 0 0 #0000),
+    var(--aui-ring-shadow, 0 0 #0000),
+    var(--aui-shadow);
+}
+.aui-button-primary:hover {
+  background-color: hsl(var(--aui-primary) / 0.9);
+}
+.aui-button-outline {
+  border-width: 1px;
+  border-color: hsl(var(--aui-input));
+  background-color: hsl(var(--aui-background));
+  --aui-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --aui-shadow-colored: 0 1px 2px 0 var(--aui-shadow-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow, 0 0 #0000),
+    var(--aui-ring-shadow, 0 0 #0000),
+    var(--aui-shadow);
+}
+.aui-button-outline:hover {
+  background-color: hsl(var(--aui-accent));
+  color: hsl(var(--aui-accent-foreground));
+}
+.aui-button-ghost:hover {
+  background-color: hsl(var(--aui-accent));
+  color: hsl(var(--aui-accent-foreground));
+}
+.aui-button-medium {
+  height: 2.25rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.aui-button-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0.25rem;
+}
+.aui-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+.aui-avatar-root {
+  position: relative;
+  display: flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 9999px;
+}
+.aui-avatar-image {
+  aspect-ratio: 1 / 1;
+  height: 100%;
+  width: 100%;
+  -o-object-fit: cover;
+  object-fit: cover;
+}
+.aui-avatar-fallback {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background-color: hsl(var(--aui-muted));
+}
+.aui-tooltip-content {
+  z-index: 50;
+  overflow: hidden;
+  border-radius: calc(var(--aui-radius) - 2px);
+  background-color: hsl(var(--aui-primary));
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: hsl(var(--aui-primary-foreground));
+  animation-name: aui-enter;
+  animation-duration: 150ms;
+  --aui-enter-opacity: initial;
+  --aui-enter-scale: initial;
+  --aui-enter-rotate: initial;
+  --aui-enter-translate-x: initial;
+  --aui-enter-translate-y: initial;
+  --aui-enter-opacity: 0;
+  --aui-enter-scale: .95 ;
+}
+.aui-tooltip-content[data-state=closed] {
+  animation-name: aui-exit;
+  animation-duration: 150ms;
+  --aui-exit-opacity: initial;
+  --aui-exit-scale: initial;
+  --aui-exit-rotate: initial;
+  --aui-exit-translate-x: initial;
+  --aui-exit-translate-y: initial;
+  --aui-exit-opacity: 0;
+  --aui-exit-scale: .95 ;
+}
+.aui-tooltip-content[data-side=bottom] {
+  --aui-enter-translate-y: -0.5rem ;
+}
+.aui-tooltip-content[data-side=left] {
+  --aui-enter-translate-x: 0.5rem ;
+}
+.aui-tooltip-content[data-side=right] {
+  --aui-enter-translate-x: -0.5rem ;
+}
+.aui-tooltip-content[data-side=top] {
+  --aui-enter-translate-y: 0.5rem ;
+}
+.aui-dialog-overlay {
+  position: fixed;
+  inset: 0px;
+  z-index: 50;
+  background-color: rgb(0 0 0 / 0.8);
+}
+.aui-dialog-overlay[data-state=open] {
+  animation-name: aui-enter;
+  animation-duration: 150ms;
+  --aui-enter-opacity: initial;
+  --aui-enter-scale: initial;
+  --aui-enter-rotate: initial;
+  --aui-enter-translate-x: initial;
+  --aui-enter-translate-y: initial ;
+}
+.aui-dialog-overlay[data-state=closed] {
+  animation-name: aui-exit;
+  animation-duration: 150ms;
+  --aui-exit-opacity: initial;
+  --aui-exit-scale: initial;
+  --aui-exit-rotate: initial;
+  --aui-exit-translate-x: initial;
+  --aui-exit-translate-y: initial;
+  --aui-exit-opacity: 0 ;
+}
+.aui-dialog-overlay[data-state=open] {
+  --aui-enter-opacity: 0 ;
+}
+.aui-dialog-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 50;
+}
+.aui-dialog-content[data-state=open] {
+  animation-name: aui-enter;
+  animation-duration: 150ms;
+  --aui-enter-opacity: initial;
+  --aui-enter-scale: initial;
+  --aui-enter-rotate: initial;
+  --aui-enter-translate-x: initial;
+  --aui-enter-translate-y: initial ;
+}
+.aui-dialog-content[data-state=closed] {
+  animation-name: aui-exit;
+  animation-duration: 150ms;
+  --aui-exit-opacity: initial;
+  --aui-exit-scale: initial;
+  --aui-exit-rotate: initial;
+  --aui-exit-translate-x: initial;
+  --aui-exit-translate-y: initial;
+  --aui-exit-opacity: 0 ;
+}
+.aui-dialog-content[data-state=open] {
+  --aui-enter-opacity: 0 ;
+}
+.aui-dialog-content[data-state=closed] {
+  --aui-exit-scale: .95 ;
+}
+.aui-dialog-content[data-state=open] {
+  --aui-enter-scale: .95 ;
+}
+.aui-dialog-content[data-state=closed] {
+  --aui-exit-translate-x: -50%;
+  --aui-exit-translate-y: -48% ;
+}
+.aui-dialog-content[data-state=open] {
+  --aui-enter-translate-x: -50%;
+  --aui-enter-translate-y: -48% ;
+}
+.aui-dialog-content {
+  display: grid;
+  --aui-translate-x: -50%;
+  --aui-translate-y: -50%;
+  transform: translate(var(--aui-translate-x), var(--aui-translate-y)) rotate(var(--aui-rotate)) skewX(var(--aui-skew-x)) skewY(var(--aui-skew-y)) scaleX(var(--aui-scale-x)) scaleY(var(--aui-scale-y));
+  --aui-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --aui-shadow-colored: 0 10px 15px -3px var(--aui-shadow-color), 0 4px 6px -4px var(--aui-shadow-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow, 0 0 #0000),
+    var(--aui-ring-shadow, 0 0 #0000),
+    var(--aui-shadow);
+  transition-duration: 200ms;
+  animation-duration: 200ms;
+}
+
+/* src/styles/tailwindcss/thread.css */
+.aui-thread-root {
+  box-sizing: border-box;
+  height: 100%;
+  background-color: hsl(var(--aui-background));
+}
+.aui-thread-viewport {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: scroll;
+  scroll-behavior: smooth;
+  background-color: inherit;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-top: 2rem;
+}
+.aui-thread-viewport-footer {
+  position: sticky;
+  bottom: 0px;
+  margin-top: 0.75rem;
+  display: flex;
+  width: 100%;
+  max-width: var(--aui-thread-max-width);
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  border-top-left-radius: var(--aui-radius);
+  border-top-right-radius: var(--aui-radius);
+  background-color: inherit;
+  padding-bottom: 1rem;
+}
+.aui-thread-scroll-to-bottom {
+  position: absolute;
+  top: -2rem;
+  border-radius: 9999px;
+}
+.aui-thread-scroll-to-bottom:disabled {
+  visibility: hidden;
+}
+.aui-thread-followup-suggestions {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.aui-thread-followup-suggestion {
+  border-radius: 9999px;
+  border-width: 1px;
+  background-color: hsl(var(--aui-background));
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  transition-property:
+    color,
+    background-color,
+    border-color,
+    text-decoration-color,
+    fill,
+    stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+.aui-thread-followup-suggestion:hover {
+  background-color: hsl(var(--aui-muted) / 0.8);
+}
+.aui-thread-welcome-root {
+  display: flex;
+  width: 100%;
+  max-width: var(--aui-thread-max-width);
+  flex-grow: 1;
+  flex-direction: column;
+}
+.aui-thread-welcome-center {
+  display: flex;
+  width: 100%;
+  flex-grow: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.aui-thread-welcome-message {
+  margin-top: 1rem;
+  font-weight: 500;
+}
+.aui-thread-welcome-suggestions {
+  margin-top: 0.75rem;
+  display: flex;
+  width: 100%;
+  align-items: stretch;
+  justify-content: center;
+  gap: 1rem;
+}
+.aui-thread-welcome-suggestion {
+  display: flex;
+  max-width: 24rem;
+  flex-grow: 1;
+  flex-basis: 0px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--aui-radius);
+  border-width: 1px;
+  padding: 0.75rem;
+  transition-property:
+    color,
+    background-color,
+    border-color,
+    text-decoration-color,
+    fill,
+    stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+.aui-thread-welcome-suggestion:hover {
+  background-color: hsl(var(--aui-muted) / 0.8);
+}
+.aui-thread-welcome-suggestion-text {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+}
+.aui-composer-root {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  border-radius: var(--aui-radius);
+  border-width: 1px;
+  background-color: inherit;
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+  --aui-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --aui-shadow-colored: 0 1px 2px 0 var(--aui-shadow-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow, 0 0 #0000),
+    var(--aui-ring-shadow, 0 0 #0000),
+    var(--aui-shadow);
+  transition-property:
+    color,
+    background-color,
+    border-color,
+    text-decoration-color,
+    fill,
+    stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+.aui-composer-root:focus-within {
+  border-color: hsl(var(--aui-ring) / 0.2);
+}
+.aui-composer-input {
+  max-height: 10rem;
+  flex-grow: 1;
+  resize: none;
+  border-style: none;
+  background-color: transparent;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+.aui-composer-input::-moz-placeholder {
+  color: hsl(var(--aui-muted-foreground));
+}
+.aui-composer-input::placeholder {
+  color: hsl(var(--aui-muted-foreground));
+}
+.aui-composer-input:focus {
+  --aui-ring-offset-shadow: var(--aui-ring-inset) 0 0 0 var(--aui-ring-offset-width) var(--aui-ring-offset-color);
+  --aui-ring-shadow: var(--aui-ring-inset) 0 0 0 calc(0px + var(--aui-ring-offset-width)) var(--aui-ring-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow),
+    var(--aui-ring-shadow),
+    var(--aui-shadow, 0 0 #0000);
+}
+.aui-composer-input:disabled {
+  cursor: not-allowed;
+}
+.aui-composer-send {
+  margin-top: 0.625rem;
+  margin-bottom: 0.625rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0.5rem;
+  transition-property: opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+.aui-composer-cancel {
+  margin-top: 0.625rem;
+  margin-bottom: 0.625rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0.5rem;
+  transition-property: opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+.aui-composer-attach {
+  margin-top: 0.625rem;
+  margin-bottom: 0.625rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0.5rem;
+  transition-property: opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+.aui-composer-attachments {
+  display: flex;
+  width: 100%;
+  flex-direction: row;
+  gap: 0.75rem;
+  padding-left: 2.5rem;
+  padding-right: 2.5rem;
+}
+.aui-attachment-root {
+  position: relative;
+  margin-top: 0.75rem;
+}
+.aui-attachment-content {
+  display: flex;
+  height: 3rem;
+  width: 10rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--aui-radius);
+  border-width: 1px;
+  padding: 0.25rem;
+}
+.aui-attachment-preview-trigger {
+  cursor: pointer;
+  transition-property:
+    color,
+    background-color,
+    border-color,
+    text-decoration-color,
+    fill,
+    stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.aui-attachment-preview-trigger:hover {
+  background-color: hsl(var(--aui-accent) / 0.5);
+}
+.aui-attachment-thumb {
+  display: flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  border-width: 1px;
+  background-color: hsl(var(--aui-muted));
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+.aui-attachment-text {
+  flex-grow: 1;
+  flex-basis: 0px;
+}
+.aui-attachment-name {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  text-overflow: ellipsis;
+  word-break: break-all;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 700;
+  color: hsl(var(--aui-muted-foreground));
+}
+.aui-attachment-type {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: hsl(var(--aui-muted-foreground));
+}
+.aui-attachment-remove {
+  position: absolute;
+  right: -0.75rem;
+  top: -0.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  color: hsl(var(--aui-muted-foreground));
+}
+.aui-attachment-remove > svg {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  background-color: hsl(var(--aui-background));
+}
+.aui-user-message-root {
+  display: grid;
+  grid-auto-rows: auto;
+  grid-template-columns: minmax(72px, 1fr) auto;
+  row-gap: 0.5rem;
+}
+.aui-user-message-root:where(> *) {
+  grid-column-start: 2;
+}
+.aui-user-message-root {
+  width: 100%;
+  max-width: var(--aui-thread-max-width);
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+:where(.aui-user-message-root) > .aui-branch-picker-root {
+  grid-column: 1 / -1;
+  grid-column-start: 1;
+  grid-row-start: 3;
+  margin-right: -0.25rem;
+  justify-content: flex-end;
+}
+.aui-user-branch-picker {
+  grid-column: 1 / -1;
+  grid-column-start: 1;
+  grid-row-start: 3;
+  margin-right: -0.25rem;
+  justify-content: flex-end;
+}
+.aui-user-message-content {
+  max-width: calc(var(--aui-thread-max-width) * 0.8);
+  overflow-wrap: break-word;
+  border-radius: 1.5rem;
+  background-color: hsl(var(--aui-muted));
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  color: hsl(var(--aui-foreground));
+  grid-column-start: 2;
+  grid-row-start: 2;
+}
+.aui-user-message-attachments {
+  display: flex;
+  width: 100%;
+  flex-direction: row;
+  gap: 0.75rem;
+  grid-column: 1 / -1;
+  grid-column-start: 1;
+  grid-row-start: 1;
+  justify-content: flex-end;
+}
+.aui-user-action-bar-root {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  grid-column-start: 1;
+  grid-row-start: 2;
+  margin-right: 0.75rem;
+  margin-top: 0.625rem;
+}
+.aui-edit-composer-root {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  width: 100%;
+  max-width: var(--aui-thread-max-width);
+  flex-direction: column;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  background-color: hsl(var(--aui-muted));
+}
+.aui-edit-composer-input {
+  display: flex;
+  height: 2rem;
+  width: 100%;
+  resize: none;
+  background-color: transparent;
+  padding: 1rem;
+  padding-bottom: 0px;
+  color: hsl(var(--aui-foreground));
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+.aui-edit-composer-footer {
+  margin-left: 0.75rem;
+  margin-right: 0.75rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  align-self: flex-end;
+}
+.aui-assistant-message-root {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  grid-template-rows: auto 1fr;
+  position: relative;
+  width: 100%;
+  max-width: var(--aui-thread-max-width);
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+:where(.aui-assistant-message-root) > .aui-avatar-root {
+  grid-column-start: 1;
+  grid-row: 1 / -1;
+  grid-row-start: 1;
+  margin-right: 1rem;
+}
+.aui-assistant-avatar {
+  grid-column-start: 1;
+  grid-row: 1 / -1;
+  grid-row-start: 1;
+  margin-right: 1rem;
+}
+:where(.aui-assistant-message-root) > .aui-branch-picker-root {
+  grid-column-start: 2;
+  grid-row-start: 2;
+  margin-left: -0.5rem;
+  margin-right: 0.5rem;
+}
+.aui-assistant-branch-picker {
+  grid-column-start: 2;
+  grid-row-start: 2;
+  margin-left: -0.5rem;
+  margin-right: 0.5rem;
+}
+.aui-assistant-message-content {
+  max-width: calc(var(--aui-thread-max-width) * 0.8);
+  overflow-wrap: break-word;
+  line-height: 1.75rem;
+  color: hsl(var(--aui-foreground));
+  grid-column: span 2 / span 2;
+  grid-column-start: 2;
+  grid-row-start: 1;
+  margin-top: 0.375rem;
+  margin-bottom: 0.375rem;
+}
+.aui-assistant-action-bar-root {
+  display: flex;
+  gap: 0.25rem;
+  color: hsl(var(--aui-muted-foreground));
+  grid-column-start: 3;
+  grid-row-start: 2;
+  margin-left: -0.25rem;
+}
+.aui-assistant-action-bar-root[data-floating] {
+  position: absolute;
+  border-radius: calc(var(--aui-radius) - 2px);
+  border-width: 1px;
+  background-color: hsl(var(--aui-background));
+  padding: 0.25rem;
+  --aui-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --aui-shadow-colored: 0 1px 2px 0 var(--aui-shadow-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow, 0 0 #0000),
+    var(--aui-ring-shadow, 0 0 #0000),
+    var(--aui-shadow);
+}
+.aui-assistant-action-bar-feedback-positive[data-submitted] {
+  --aui-text-opacity: 1;
+  color: rgb(22 163 74 / var(--aui-text-opacity, 1));
+}
+.aui-assistant-action-bar-feedback-positive:hover[data-submitted] {
+  --aui-text-opacity: 1;
+  color: rgb(21 128 61 / var(--aui-text-opacity, 1));
+}
+@media (prefers-color-scheme: dark) {
+  .aui-assistant-action-bar-feedback-positive[data-submitted] {
+    --aui-text-opacity: 1;
+    color: rgb(34 197 94 / var(--aui-text-opacity, 1));
+  }
+  .aui-assistant-action-bar-feedback-positive:hover[data-submitted] {
+    --aui-text-opacity: 1;
+    color: rgb(74 222 128 / var(--aui-text-opacity, 1));
+  }
+}
+.aui-assistant-action-bar-feedback-negative[data-submitted] {
+  --aui-text-opacity: 1;
+  color: rgb(220 38 38 / var(--aui-text-opacity, 1));
+}
+.aui-assistant-action-bar-feedback-negative:hover[data-submitted] {
+  --aui-text-opacity: 1;
+  color: rgb(185 28 28 / var(--aui-text-opacity, 1));
+}
+@media (prefers-color-scheme: dark) {
+  .aui-assistant-action-bar-feedback-negative[data-submitted] {
+    --aui-text-opacity: 1;
+    color: rgb(239 68 68 / var(--aui-text-opacity, 1));
+  }
+  .aui-assistant-action-bar-feedback-negative:hover[data-submitted] {
+    --aui-text-opacity: 1;
+    color: rgb(248 113 113 / var(--aui-text-opacity, 1));
+  }
+}
+.aui-branch-picker-root {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: hsl(var(--aui-muted-foreground));
+}
+.aui-branch-picker-state {
+  font-weight: 500;
+}
+.aui-text {
+  white-space: pre-line;
+}
+@keyframes aui-pulse {
+  50% {
+    opacity: .5;
+  }
+}
+.aui-text-running::after {
+  animation: aui-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    sans-serif,
+    "Apple Color Emoji",
+    "Segoe UI Emoji",
+    "Segoe UI Symbol",
+    "Noto Color Emoji";
+  --aui-content: "\25cf";
+  content: var(--aui-content);
+}
+.aui-text-running:where([dir=ltr], [dir=ltr] *)::after {
+  margin-left: 0.25rem;
+}
+.aui-text-running:where([dir=rtl], [dir=rtl] *)::after {
+  margin-right: 0.25rem;
+}
+.aui-thread-list-root {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.375rem;
+}
+.aui-thread-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--aui-radius);
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.aui-thread-list-item:hover {
+  background-color: hsl(var(--aui-muted));
+}
+.aui-thread-list-item:focus-visible {
+  background-color: hsl(var(--aui-muted));
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  --aui-ring-offset-shadow: var(--aui-ring-inset) 0 0 0 var(--aui-ring-offset-width) var(--aui-ring-offset-color);
+  --aui-ring-shadow: var(--aui-ring-inset) 0 0 0 calc(2px + var(--aui-ring-offset-width)) var(--aui-ring-color);
+  box-shadow:
+    var(--aui-ring-offset-shadow),
+    var(--aui-ring-shadow),
+    var(--aui-shadow, 0 0 #0000);
+  --aui-ring-color: hsl(var(--aui-ring)) ;
+}
+.aui-thread-list-item[data-active] {
+  background-color: hsl(var(--aui-muted));
+}
+.aui-thread-list-new {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  border-radius: var(--aui-radius);
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  text-align: start;
+}
+.aui-thread-list-new:hover {
+  background-color: hsl(var(--aui-muted));
+}
+.aui-thread-list-new[data-active] {
+  background-color: hsl(var(--aui-muted));
+}
+.aui-thread-list-new > .lucide-plus {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.aui-thread-list-item-trigger {
+  flex-grow: 1;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  text-align: start;
+}
+.aui-thread-list-item-title {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+.aui-thread-list-item-archive {
+  margin-left: auto;
+  margin-right: 0.75rem;
+  width: 1rem;
+  height: 1rem;
+  padding: 0px;
+  color: hsl(var(--aui-foreground));
+}
+.aui-thread-list-item-archive:hover {
+  color: hsl(var(--aui-primary));
+}
+
+/* src/styles/themes/default.css */
+:root {
+  --aui-background: 0 0% 100%;
+  --aui-foreground: 240 10% 3.9%;
+  --aui-card: 0 0% 100%;
+  --aui-card-foreground: 240 10% 3.9%;
+  --aui-popover: 0 0% 100%;
+  --aui-popover-foreground: 240 10% 3.9%;
+  --aui-primary: 240 5.9% 10%;
+  --aui-primary-foreground: 0 0% 98%;
+  --aui-secondary: 240 4.8% 95.9%;
+  --aui-secondary-foreground: 240 5.9% 10%;
+  --aui-muted: 240 4.8% 95.9%;
+  --aui-muted-foreground: 240 3.8% 46.1%;
+  --aui-accent: 240 4.8% 95.9%;
+  --aui-accent-foreground: 240 5.9% 10%;
+  --aui-destructive: 0 84.2% 60.2%;
+  --aui-destructive-foreground: 0 0% 98%;
+  --aui-border: 240 5.9% 90%;
+  --aui-input: 240 5.9% 90%;
+  --aui-ring: 240 10% 3.9%;
+  --aui-radius: 0.5rem;
+  --aui-thread-max-width: 42rem;
+}
+.dark {
+  --aui-background: 0 0% 7%;
+  --aui-foreground: 0 0% 98%;
+  --aui-card: 240 10% 3.9%;
+  --aui-card-foreground: 0 0% 98%;
+  --aui-popover: 240 10% 3.9%;
+  --aui-popover-foreground: 0 0% 98%;
+  --aui-primary: 0 0% 98%;
+  --aui-primary-foreground: 240 5.9% 10%;
+  --aui-secondary: 240 3.7% 15.9%;
+  --aui-secondary-foreground: 0 0% 98%;
+  --aui-muted: 240 3.7% 15.9%;
+  --aui-muted-foreground: 240 5% 64.9%;
+  --aui-accent: 240 3.7% 15.9%;
+  --aui-accent-foreground: 0 0% 98%;
+  --aui-destructive: 0 62.8% 30.6%;
+  --aui-destructive-foreground: 0 0% 98%;
+  --aui-border: 240 3.7% 15.9%;
+  --aui-input: 240 3.7% 15.9%;
+  --aui-ring: 240 4.9% 83.9%;
+}
+
+/* src/styles/index.css */
+/*# sourceMappingURL=index.css.map */

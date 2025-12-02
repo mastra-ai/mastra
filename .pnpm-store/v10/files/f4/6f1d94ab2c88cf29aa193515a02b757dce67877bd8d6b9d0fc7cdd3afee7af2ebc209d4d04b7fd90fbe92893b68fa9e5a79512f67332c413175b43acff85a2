@@ -1,0 +1,81 @@
+{
+  "name": "@noble/ciphers",
+  "version": "2.0.1",
+  "description": "Audited & minimal JS implementation of Salsa20, ChaCha and AES",
+  "files": [
+    "src",
+    "*.js",
+    "*.js.map",
+    "*.d.ts",
+    "*.d.ts.map"
+  ],
+  "devDependencies": {
+    "@paulmillr/jsbt": "0.4.4",
+    "@scure/base": "2.0.0",
+    "@types/node": "24.2.1",
+    "fast-check": "4.2.0",
+    "prettier": "3.6.2",
+    "typescript": "5.9.2"
+  },
+  "scripts": {
+    "bench": "node test/benchmark/noble.ts",
+    "bench:compare": "cd test/benchmark; npm install; node compare.ts",
+    "build": "tsc",
+    "build:release": "npx --no @paulmillr/jsbt esbuild test/build",
+    "build:clean": "rm *.{js,js.map,d.ts,d.ts.map} 2> /dev/null",
+    "format": "prettier --write 'src/**/*.{js,ts}' 'test/**/*.{js,ts,mjs}'",
+    "test": "node --experimental-strip-types --no-warnings test/index.ts",
+    "test:bun": "bun test/index.ts",
+    "test:deno": "deno --allow-env --allow-read test/index.ts",
+    "test:node20": "cd test; npx tsc; node compiled/test/index.js",
+    "test:big": "node test/crosstest.test.ts slow"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./_arx.js": "./_arx.js",
+    "./_poly1305.js": "./_poly1305.js",
+    "./_polyval.js": "./_polyval.js",
+    "./aes.js": "./aes.js",
+    "./chacha.js": "./chacha.js",
+    "./ff1.js": "./ff1.js",
+    "./salsa.js": "./salsa.js",
+    "./utils.js": "./utils.js",
+    "./webcrypto.js": "./webcrypto.js"
+  },
+  "engines": {
+    "node": ">= 20.19.0"
+  },
+  "keywords": [
+    "salsa20",
+    "chacha",
+    "aes",
+    "cryptography",
+    "crypto",
+    "noble",
+    "cipher",
+    "ciphers",
+    "xsalsa20",
+    "xchacha20",
+    "poly1305",
+    "xsalsa20poly1305",
+    "chacha20poly1305",
+    "xchacha20poly1305",
+    "secretbox",
+    "rijndael",
+    "siv",
+    "ff1"
+  ],
+  "homepage": "https://paulmillr.com/noble/",
+  "funding": "https://paulmillr.com/funding/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paulmillr/noble-ciphers.git"
+  },
+  "type": "module",
+  "main": "index.js",
+  "module": "index.js",
+  "types": "index.d.ts",
+  "sideEffects": false,
+  "author": "Paul Miller (https://paulmillr.com)",
+  "license": "MIT"
+}

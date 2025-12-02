@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/cli/lib/apiTypes.ts"],
+  "sourcesContent": ["// The generated type is not specific enough:\n// some clients receive strings, but the CLI\n// receives structured log lines.\nimport type {\n  FunctionExecutionJson,\n  LogLineJson,\n} from \"./generatedFunctionLogsApi.js\";\nexport type FunctionExecution =\n  | (Omit<\n      Extract<FunctionExecutionJson, { kind: \"Completion\" }>,\n      \"logLines\"\n    > & {\n      kind: \"Completion\";\n      logLines: LogLineJson[];\n    })\n  | (Omit<Extract<FunctionExecutionJson, { kind: \"Progress\" }>, \"logLines\"> & {\n      kind: \"Progress\";\n      logLines: LogLineJson[];\n    });\n"],
+  "mappings": ";;;;;;;;;;;;;;AAAA;AAAA;",
+  "names": []
+}

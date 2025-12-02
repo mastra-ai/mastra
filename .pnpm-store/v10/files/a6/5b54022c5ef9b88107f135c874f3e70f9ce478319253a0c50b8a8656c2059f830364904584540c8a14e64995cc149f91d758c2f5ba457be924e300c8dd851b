@@ -1,0 +1,1 @@
+{"version":3,"file":"COMMAND.d.ts","sourceRoot":"","sources":["../../../lib/commands/COMMAND.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,UAAU,EAAW,WAAW,EAAE,MAAM,eAAe,CAAC;AACjE,OAAO,EAAE,eAAe,EAAE,YAAY,EAAyB,MAAM,wBAAwB,CAAC;;;;IAK5F;;;OAGG;gDACkB,aAAa;iDAIZ,YAAY,WAAW,eAAe,CAAC,CAAC,KAAG,MAAM,YAAY,CAAC;;AAXtF,wBAc6B"}

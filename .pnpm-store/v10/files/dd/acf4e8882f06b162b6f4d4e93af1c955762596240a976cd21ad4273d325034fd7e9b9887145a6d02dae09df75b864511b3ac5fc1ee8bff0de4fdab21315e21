@@ -1,0 +1,1 @@
+{"version":3,"file":"storage_impl.d.ts","sourceRoot":"","sources":["../../../../src/server/impl/storage_impl.ts"],"names":[],"mappings":"AAAA,OAAO,EAEL,mBAAmB,EAEnB,aAAa,EACb,aAAa,EACd,MAAM,eAAe,CAAC;AAKvB,wBAAgB,kBAAkB,CAAC,SAAS,EAAE,MAAM,GAAG,aAAa,CAkBnE;AAED,wBAAgB,kBAAkB,CAAC,SAAS,EAAE,MAAM,GAAG,aAAa,CAmBnE;AAED,wBAAgB,wBAAwB,CACtC,SAAS,EAAE,MAAM,GAChB,mBAAmB,CAoBrB"}

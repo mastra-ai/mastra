@@ -1,0 +1,1096 @@
+# Namespace definitions
+
+namespace std {
+
+int x;
+
+}  // namespace std
+
+==>
+
+Program(
+  NamespaceDefinition(namespace,
+    Identifier,
+    CompoundStatement(
+      Declaration(
+        PrimitiveType,
+        Identifier))),
+  LineComment)
+
+
+# Using declarations
+
+using a;
+using ::b;
+using c::d;
+using ::e::f::g;
+using h = i::j;
+using namespace std;
+
+template <typename T>
+using a = typename b<T>::c;
+
+==>
+
+Program(
+  UsingDeclaration(using, Identifier),
+  UsingDeclaration(using, ScopedIdentifier(Identifier)),
+  UsingDeclaration(using, ScopedIdentifier(NamespaceIdentifier, Identifier)),
+  UsingDeclaration(using,
+    ScopedIdentifier(
+      ScopedNamespaceIdentifier(
+        ScopedNamespaceIdentifier(NamespaceIdentifier),
+        NamespaceIdentifier),
+      Identifier)),
+  AliasDeclaration(using,
+    TypeIdentifier,
+    TypeDescriptor(ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier))),
+  UsingDeclaration(using, namespace, Identifier),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TypeParameterDeclaration(typename, TypeIdentifier)),
+    AliasDeclaration(using,
+      TypeIdentifier,
+      TypeDescriptor(
+        DependentType(
+          typename,
+          ScopedTypeIdentifier(
+            TemplateType(TypeIdentifier, TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+            TypeIdentifier))))))
+
+
+# Reference declarations
+
+int main() {
+  T &x = y<T &>();
+}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList),
+    CompoundStatement(
+      Declaration(
+        TypeIdentifier,
+        InitDeclarator(
+          ReferenceDeclarator(Identifier),
+          CallExpression(
+            TemplateFunction(
+              Identifier,
+              TemplateArgumentList(
+                TypeDescriptor(TypeIdentifier, AbstractReferenceDeclarator))),
+            ArgumentList))))))
+
+
+# R-value reference declarations
+
+int main(T &&);
+
+int main(T &&t) {
+  const U &&u = v;
+}
+
+==>
+
+Program(
+  Declaration(
+    PrimitiveType,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList(ParameterDeclaration(TypeIdentifier, AbstractReferenceDeclarator)))),
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList(ParameterDeclaration(TypeIdentifier, ReferenceDeclarator(Identifier)))),
+    CompoundStatement(
+      Declaration(
+        const,
+        TypeIdentifier,
+        InitDeclarator(ReferenceDeclarator(Identifier), Identifier)))))
+
+
+# Inline method definitions
+
+struct S {
+  int f;
+
+  S() : f(0) {}
+
+ private:
+  int getF() const { return f; }
+};
+
+==>
+
+Program(
+  StructSpecifier(struct, TypeIdentifier, FieldDeclarationList(
+    FieldDeclaration(PrimitiveType, FieldIdentifier),
+    FunctionDefinition(
+      FunctionDeclarator(Identifier, ParameterList),
+      FieldInitializerList(FieldInitializer(FieldIdentifier, ArgumentList(Number))),
+      CompoundStatement),
+    AccessSpecifier(Access),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(FieldIdentifier, ParameterList, const),
+      CompoundStatement(ReturnStatement(return, Identifier))))))
+
+
+# Inline method definitions with overrides
+
+struct B : A {
+  int foo() override { return 2; }
+  int pho() final { return 3; }
+  int bar() const override { return 4; }
+  int baz() const final { return 5; }
+  int bag() const final override { return 6; }
+  int bah() const override final { return 7; }
+};
+
+==>
+
+Program(
+  StructSpecifier(struct, TypeIdentifier, BaseClassClause(TypeIdentifier), FieldDeclarationList(
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(FieldIdentifier, ParameterList, VirtualSpecifier),
+      CompoundStatement(ReturnStatement(return, Number))),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(FieldIdentifier, ParameterList, VirtualSpecifier),
+      CompoundStatement(ReturnStatement(return, Number))),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(FieldIdentifier, ParameterList, const, VirtualSpecifier),
+      CompoundStatement(ReturnStatement(return, Number))),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(FieldIdentifier, ParameterList, const, VirtualSpecifier),
+      CompoundStatement(ReturnStatement(return, Number))),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(FieldIdentifier, ParameterList, const, VirtualSpecifier, VirtualSpecifier),
+      CompoundStatement(ReturnStatement(return, Number))),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(FieldIdentifier, ParameterList, const, VirtualSpecifier, VirtualSpecifier),
+      CompoundStatement(ReturnStatement(return, Number))))))
+
+
+# Virtual method declarations
+
+class A {
+  virtual ~Point();
+  void b();
+  virtual void foo() {}
+  virtual void bar();
+};
+
+==>
+
+Program(
+  ClassSpecifier(class,
+    TypeIdentifier,
+    FieldDeclarationList(
+      Declaration(
+        virtual,
+        FunctionDeclarator(DestructorName, ParameterList)),
+      FieldDeclaration(
+        PrimitiveType,
+        FunctionDeclarator(FieldIdentifier, ParameterList)),
+      FunctionDefinition(
+        virtual,
+        PrimitiveType,
+        FunctionDeclarator(
+          FieldIdentifier,
+          ParameterList),
+        CompoundStatement),
+      FieldDeclaration(
+        virtual,
+        PrimitiveType,
+        FunctionDeclarator(
+          FieldIdentifier,
+          ParameterList)))))
+
+
+# Constructor and destructor declarations
+
+class C {
+  void *data_;
+
+ public:
+  C();
+  C(int, float);
+  ~C();
+};
+
+==>
+
+Program(
+  ClassSpecifier(class, TypeIdentifier, FieldDeclarationList(
+    FieldDeclaration(PrimitiveType, PointerDeclarator(FieldIdentifier)),
+    AccessSpecifier(Access),
+    Declaration(FunctionDeclarator(Identifier, ParameterList)),
+    Declaration(FunctionDeclarator(Identifier, ParameterList(
+      ParameterDeclaration(PrimitiveType),
+      ParameterDeclaration(PrimitiveType)))),
+    Declaration(FunctionDeclarator(DestructorName, ParameterList)))))
+
+# Forward class declaration
+
+class Foo;
+
+==>
+
+Program(ClassSpecifier(class,TypeIdentifier))
+
+# Forward function declarations
+
+void foo(Bar& x, Bar& y) noexcept;
+
+void Foo(const unsigned char* in_bytes, char* out);
+
+foo::bar();
+
+void foo(::y data, void* arg, void (*r)(void*));
+
+==>
+
+Program(
+  Declaration(PrimitiveType,FunctionDeclarator(Identifier,ParameterList(
+    ParameterDeclaration(TypeIdentifier,ReferenceDeclarator(Identifier)),
+    ParameterDeclaration(TypeIdentifier,ReferenceDeclarator(Identifier))), Noexcept(noexcept))),
+  Declaration(PrimitiveType,FunctionDeclarator(Identifier,ParameterList(
+    ParameterDeclaration(const,SizedTypeSpecifier(TypeSize,PrimitiveType),PointerDeclarator(Identifier)),
+    ParameterDeclaration(PrimitiveType,PointerDeclarator(Identifier))))),
+  ExpressionStatement(CallExpression(ScopedIdentifier(NamespaceIdentifier,Identifier),ArgumentList))
+  Declaration(PrimitiveType,FunctionDeclarator(Identifier,ParameterList(
+    ParameterDeclaration(ScopedTypeIdentifier(TypeIdentifier),Identifier),
+    ParameterDeclaration(PrimitiveType,PointerDeclarator(Identifier)),
+    ParameterDeclaration(PrimitiveType,FunctionDeclarator(ParenthesizedDeclarator(
+      PointerDeclarator(Identifier)),ParameterList(ParameterDeclaration(PrimitiveType,AbstractPointerDeclarator))))))))
+
+# Classes with inheritance
+
+class A : public B {
+};
+
+class C : C::D, public E {
+};
+
+==>
+
+Program(
+  ClassSpecifier(class,
+    TypeIdentifier,
+    BaseClassClause(Access, TypeIdentifier),
+    FieldDeclarationList),
+  ClassSpecifier(class,
+    TypeIdentifier,
+    BaseClassClause(
+      ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+      Access, TypeIdentifier),
+    FieldDeclarationList))
+
+
+# Classes with final virt specifier
+
+class A final : public B {
+};
+
+class C final {};
+
+struct D final {};
+
+==>
+
+Program(
+  ClassSpecifier(class,
+    TypeIdentifier,
+    VirtualSpecifier,
+    BaseClassClause(Access, TypeIdentifier),
+    FieldDeclarationList),
+  ClassSpecifier(class,
+    TypeIdentifier,
+    VirtualSpecifier,
+    FieldDeclarationList),
+  StructSpecifier(struct,
+    TypeIdentifier,
+    VirtualSpecifier,
+    FieldDeclarationList))
+
+
+# Nested classes
+
+class A {
+ private:
+  class B : private C, public D {
+  };
+
+  B e, f;
+};
+
+==>
+
+Program(
+  ClassSpecifier(class, TypeIdentifier, FieldDeclarationList(
+    AccessSpecifier(Access),
+    FieldDeclaration(
+      ClassSpecifier(class, TypeIdentifier, BaseClassClause(Access, TypeIdentifier, Access, TypeIdentifier), FieldDeclarationList)),
+    FieldDeclaration(
+      TypeIdentifier, FieldIdentifier, FieldIdentifier))))
+
+# Macro noise
+
+class Z {
+  int num_to_block_ GUARDED_BY("foo" ++ lock_);
+
+  MOCK_METHOD3(DoFoo, bool(const ns::Something&,
+                           const std::vector<int>&, const string));
+};
+SOME_OTHER_MACRO(2.44e3);
+int z MACRO() = 0;
+
+==>
+
+Program(
+  ClassSpecifier(class,TypeIdentifier,FieldDeclarationList(
+    FieldDeclaration(PrimitiveType,FieldIdentifier(Macro(MacroName,ArgumentList(BinaryExpression(String,UpdateOp,Identifier))))),
+    Declaration(FunctionDeclarator(Identifier,ParameterList(
+      ParameterDeclaration(TypeIdentifier),
+      ParameterDeclaration(PrimitiveType,AbstractFunctionDeclarator(ParameterList(
+        ParameterDeclaration(const,ScopedTypeIdentifier(NamespaceIdentifier,TypeIdentifier),AbstractReferenceDeclarator),
+        ParameterDeclaration(const,TemplateType(
+          ScopedTypeIdentifier(NamespaceIdentifier,TypeIdentifier),
+          TemplateArgumentList(TypeDescriptor(PrimitiveType))),AbstractReferenceDeclarator),
+        ParameterDeclaration(const,TypeIdentifier))))))))),
+  ExpressionStatement(CallExpression(Identifier,ArgumentList(Number))),
+  Declaration(PrimitiveType,InitDeclarator(Identifier(Macro(MacroName,ArgumentList)),Number)))
+
+# Friend declarations
+
+struct C {
+  friend class D;
+  friend D;
+  friend int f(C &);
+};
+
+==>
+
+Program(
+  StructSpecifier(struct, TypeIdentifier, FieldDeclarationList(
+    FriendDeclaration(friend, class, TypeIdentifier),
+    FriendDeclaration(friend, TypeIdentifier),
+    FriendDeclaration(friend, Declaration(PrimitiveType, FunctionDeclarator(
+      Identifier,
+      ParameterList(ParameterDeclaration(TypeIdentifier, AbstractReferenceDeclarator))))))))
+
+
+# Default member initializers
+
+struct A {
+  bool a = 1;
+  vector<int> b = {c, d, e};
+  F g {h};
+};
+
+==>
+
+Program(
+  StructSpecifier(struct, TypeIdentifier, FieldDeclarationList(
+    FieldDeclaration(
+      PrimitiveType,
+      FieldIdentifier,
+      Number),
+    FieldDeclaration(
+      TemplateType(TypeIdentifier, TemplateArgumentList(TypeDescriptor(PrimitiveType))),
+      FieldIdentifier,
+      InitializerList(Identifier, Identifier, Identifier)),
+    FieldDeclaration(
+      TypeIdentifier,
+      FieldIdentifier,
+      InitializerList(Identifier)))))
+
+
+# Function parameters with default values
+
+int foo(bool x = 5) {}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList(
+        OptionalParameterDeclaration(PrimitiveType, Identifier, Number))),
+    CompoundStatement))
+
+
+# Declarations with attributes
+
+int f([[a::b(c), d]] int x) {}
+
+[[gnu::always_inline]] [[gnu::hot]] [[gnu::const]] [[nodiscard]]
+inline int g();
+
+[[ foo::target(gpu, [cpu]) ]]
+class Foo;
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList(
+        ParameterDeclaration(
+          Attribute(AttributeName(Identifier,Identifier),AttributeArgs(Identifier),AttributeName(Identifier))
+          PrimitiveType,
+          Identifier))),
+    CompoundStatement),
+  Declaration(
+    Attribute(AttributeName(Identifier,Identifier))
+    Attribute(AttributeName(Identifier,Identifier))
+    Attribute(AttributeName(Identifier,Identifier))
+    Attribute(AttributeName(Identifier))
+    inline,
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList)),
+  Attribute(AttributeName(Identifier,Identifier),AttributeArgs(Identifier,Identifier)),
+  ClassSpecifier(class,TypeIdentifier))
+
+# Operator overload declarations
+
+ostream &operator<<(ostream &, const A &a);
+
+bool A::operator!=(const A &other) const;
+
+==>
+
+Program(
+  Declaration(
+    TypeIdentifier,
+    ReferenceDeclarator(
+      FunctionDeclarator(
+        OperatorName(operator, BitOp),
+        ParameterList(
+          ParameterDeclaration(TypeIdentifier, AbstractReferenceDeclarator),
+          ParameterDeclaration(const, TypeIdentifier, ReferenceDeclarator(Identifier)))))),
+  Declaration(
+    PrimitiveType,
+    FunctionDeclarator(
+      ScopedIdentifier(NamespaceIdentifier, OperatorName(operator, CompareOp)),
+      ParameterList(
+        ParameterDeclaration(const, TypeIdentifier, ReferenceDeclarator(Identifier))),
+      const)))
+
+
+# Template declarations
+
+template <typename T>
+void foo(T &t);
+
+template <typename T, int u>
+int bar(T &t) { return u; }
+
+template <typename T>
+class Foo {};
+
+template <typename T>
+Foo<T>::Foo(int mem) : mem_(mem) {}
+
+template <typename T>
+template <typename U>
+void A<T>::foo(U&) {}
+
+==>
+
+Program(
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TypeParameterDeclaration(typename, TypeIdentifier)),
+    Declaration(
+      PrimitiveType,
+      FunctionDeclarator(
+        Identifier,
+        ParameterList(
+          ParameterDeclaration(TypeIdentifier, ReferenceDeclarator(Identifier)))))),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TypeParameterDeclaration(typename, TypeIdentifier),
+      ParameterDeclaration(PrimitiveType, Identifier)),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(
+        Identifier,
+        ParameterList(ParameterDeclaration(TypeIdentifier, ReferenceDeclarator(Identifier)))),
+      CompoundStatement(ReturnStatement(return, Identifier)))),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TypeParameterDeclaration(typename, TypeIdentifier)),
+    ClassSpecifier(class, TypeIdentifier, FieldDeclarationList)),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TypeParameterDeclaration(typename, TypeIdentifier)),
+    FunctionDefinition(
+      FunctionDeclarator(
+        ScopedIdentifier(
+          TemplateType(
+            TypeIdentifier,
+            TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+          Identifier),
+        ParameterList(
+          ParameterDeclaration(PrimitiveType, Identifier))),
+      FieldInitializerList(
+        FieldInitializer(
+          FieldIdentifier,
+          ArgumentList(Identifier))),
+      CompoundStatement)),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TypeParameterDeclaration(typename, TypeIdentifier)),
+    TemplateDeclaration(template,
+      TemplateParameterList(
+        TypeParameterDeclaration(typename, TypeIdentifier)),
+      FunctionDefinition(
+        PrimitiveType,
+        FunctionDeclarator(
+          ScopedIdentifier(
+            TemplateType(
+              TypeIdentifier,
+              TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+            Identifier),
+          ParameterList(
+            ParameterDeclaration(
+              TypeIdentifier,
+              AbstractReferenceDeclarator))),
+        CompoundStatement))))
+
+
+# Template template declarations
+
+template <template <typename> typename T>
+void foo() {}
+
+template <template <typename...> class>
+void bar() {}
+
+template <template <typename> typename...>
+void baz() {}
+
+==>
+
+Program(
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TemplateTemplateParameterDeclaration(
+        template
+        TemplateParameterList(TypeParameterDeclaration(typename)),
+        TypeParameterDeclaration(typename, TypeIdentifier))),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(
+        Identifier,
+        ParameterList),
+      CompoundStatement)),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TemplateTemplateParameterDeclaration(
+        template,
+        TemplateParameterList(VariadicTypeParameterDeclaration(typename)),
+        TypeParameterDeclaration(class))),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(
+        Identifier,
+        ParameterList),
+      CompoundStatement)),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TemplateTemplateParameterDeclaration(
+        template,
+        TemplateParameterList(TypeParameterDeclaration(typename)),
+        VariadicTypeParameterDeclaration(typename))),
+    FunctionDefinition(
+      PrimitiveType,
+      FunctionDeclarator(
+        Identifier,
+        ParameterList),
+      CompoundStatement)))
+
+
+# Template specializations
+
+template <>
+void foo<T>(T &t);
+
+template <>
+struct foo::bar<T> {};
+
+==>
+
+Program(
+  TemplateDeclaration(template,
+    TemplateParameterList,
+    Declaration(
+      PrimitiveType,
+      FunctionDeclarator(
+        TemplateFunction(
+          Identifier,
+          TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+        ParameterList(
+          ParameterDeclaration(TypeIdentifier, ReferenceDeclarator(Identifier)))))),
+  TemplateDeclaration(template,
+    TemplateParameterList,
+    StructSpecifier(struct,
+      TemplateType(
+        ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier),
+        TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+      FieldDeclarationList)))
+
+
+# Template methods
+
+class Person {
+  Person() {
+    this->speak<int>();
+  }
+
+  template <typename T>
+  void speak() {}
+
+  template <>
+  void speak<bool>() {}
+};
+
+==>
+
+Program(
+  ClassSpecifier(class, TypeIdentifier, FieldDeclarationList(
+    FunctionDefinition(
+      FunctionDeclarator(Identifier, ParameterList),
+      CompoundStatement(
+        ExpressionStatement(CallExpression(
+          FieldExpression(
+            this,
+            TemplateMethod(
+              FieldIdentifier,
+              TemplateArgumentList(TypeDescriptor(PrimitiveType)))),
+          ArgumentList)))),
+    TemplateDeclaration(template,
+      TemplateParameterList(TypeParameterDeclaration(typename, TypeIdentifier)),
+      FunctionDefinition(
+        PrimitiveType,
+        FunctionDeclarator(
+          Identifier,
+          ParameterList),
+        CompoundStatement)),
+    TemplateDeclaration(template,
+      TemplateParameterList,
+      FunctionDefinition(
+        PrimitiveType,
+        FunctionDeclarator(
+          TemplateFunction(Identifier, TemplateArgumentList(TypeDescriptor(PrimitiveType))),
+          ParameterList),
+        CompoundStatement)))))
+
+
+# Templates with optional type parameters
+
+template <typename T = U::V<void>>
+class X
+{
+};
+
+template <typename = void>
+class Y
+{
+};
+
+==>
+
+Program(
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      OptionalTypeParameterDeclaration(typename,
+        TypeIdentifier,
+        TemplateType(
+          ScopedTypeIdentifier(
+            NamespaceIdentifier,
+            TypeIdentifier),
+          TemplateArgumentList(
+            TypeDescriptor(PrimitiveType))))),
+    ClassSpecifier(class,
+      TypeIdentifier,
+      FieldDeclarationList)),
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      OptionalTypeParameterDeclaration(typename,
+        PrimitiveType)),
+    ClassSpecifier(class,
+      TypeIdentifier,
+      FieldDeclarationList)))
+
+
+# Templates with optional anonymous parameters
+
+template <class T, typename a::b<!c<T>{} && (d<T>{} || e<T>{})>::type = 0>
+class X
+{
+};
+
+==>
+
+Program(
+  TemplateDeclaration(template,
+    TemplateParameterList(
+      TypeParameterDeclaration(class, TypeIdentifier),
+      OptionalParameterDeclaration(
+        DependentType(typename, ScopedTypeIdentifier(
+          TemplateType(
+            ScopedTypeIdentifier(
+              NamespaceIdentifier,
+              TypeIdentifier),
+            TemplateArgumentList(
+              BinaryExpression(
+                UnaryExpression(
+                  LogicOp,
+                  CompoundLiteralExpression(
+                    TemplateType(
+                      TypeIdentifier,
+                      TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+                    InitializerList)),
+                LogicOp,
+                ParenthesizedExpression(
+                  BinaryExpression(
+                    CompoundLiteralExpression(
+                      TemplateType(
+                        TypeIdentifier,
+                        TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+                      InitializerList),
+                    LogicOp,
+                    CompoundLiteralExpression(
+                      TemplateType(
+                        TypeIdentifier,
+                        TemplateArgumentList(TypeDescriptor(TypeIdentifier))),
+                      InitializerList)))))),
+          TypeIdentifier)),
+      Number)),
+    ClassSpecifier(class,
+      TypeIdentifier,
+      FieldDeclarationList)))
+
+
+# Declarations with braced initializer lists
+
+A foo{1, 2};
+
+==>
+
+Program(
+  Declaration(
+    TypeIdentifier,
+    InitDeclarator(Identifier, InitializerList(Number, Number))))
+
+
+# Empty function bodies
+
+int main() {}
+
+==>
+
+Program(
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(Identifier, ParameterList),
+    CompoundStatement))
+
+
+# Explicit template instantiations
+
+template A<int, bool>::A(char *, size_t);
+
+==>
+
+Program(
+  TemplateInstantiation(template,
+    FunctionDeclarator(
+      ScopedIdentifier(
+        TemplateType(
+          TypeIdentifier,
+          TemplateArgumentList(
+            TypeDescriptor(PrimitiveType),
+            TypeDescriptor(PrimitiveType))),
+        Identifier),
+      ParameterList(
+        ParameterDeclaration(PrimitiveType, AbstractPointerDeclarator),
+        ParameterDeclaration(PrimitiveType)))))
+
+
+# Structured binding declarations
+
+auto [a] = B{};
+
+int main() {
+  auto &&[b, c] = std::make_tuple(c);
+  const auto [x, y] {1, 2};
+
+  for (const auto &[a, b] : c) {}
+}
+
+==>
+
+Program(
+  Declaration(
+    auto,
+    InitDeclarator(
+      StructuredBindingDeclarator(Identifier),
+      CompoundLiteralExpression(
+        TypeIdentifier,
+        InitializerList))),
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList),
+    CompoundStatement(
+      Declaration(
+        auto,
+        InitDeclarator(
+          ReferenceDeclarator(
+            StructuredBindingDeclarator(Identifier, Identifier)),
+          CallExpression(
+            ScopedIdentifier(
+              NamespaceIdentifier,
+              Identifier),
+            ArgumentList(Identifier)))),
+      Declaration(
+        const,
+        auto,
+        InitDeclarator(
+          StructuredBindingDeclarator(Identifier, Identifier),
+          InitializerList(Number, Number))),
+      ForRangeLoop(for,
+        const,
+        auto,
+        ReferenceDeclarator(StructuredBindingDeclarator(
+          Identifier,
+          Identifier)),
+        Identifier,
+        CompoundStatement))))
+
+
+# Constexpr declarations
+
+constexpr double pi = 3.14159;
+
+==>
+
+Program(
+  Declaration(
+    constexpr,
+    PrimitiveType,
+    InitDeclarator(
+      Identifier,
+      Number)))
+
+
+# Variadic templates
+
+template <class T>
+class TT {
+  template <typename... Ts>
+  void func1(Ts ... args) {
+    func3(nullptr);
+  }
+
+  void func2(Ts &&... args) {}
+
+  template <typename...>
+  void func3() {}
+
+  template <std::size_t...>
+  void func4() {}
+};
+
+==>
+
+Program(
+  TemplateDeclaration(template,
+    TemplateParameterList(TypeParameterDeclaration(class, TypeIdentifier)),
+    ClassSpecifier(class, TypeIdentifier, FieldDeclarationList(
+      TemplateDeclaration(template,
+        TemplateParameterList(VariadicTypeParameterDeclaration(typename, TypeIdentifier)),
+        FunctionDefinition(
+          PrimitiveType,
+          FunctionDeclarator(
+            Identifier,
+            ParameterList(
+              VariadicParameterDeclaration(
+                TypeIdentifier,
+                VariadicDeclarator(Identifier)))),
+          CompoundStatement(
+            ExpressionStatement(CallExpression(Identifier, ArgumentList(nullptr)))))),
+        FunctionDefinition(
+          PrimitiveType,
+          FunctionDeclarator(
+            FieldIdentifier,
+            ParameterList(
+              VariadicParameterDeclaration(
+                TypeIdentifier,
+                ReferenceDeclarator(VariadicDeclarator(Identifier))))),
+          CompoundStatement),
+        TemplateDeclaration(template,
+          TemplateParameterList(VariadicTypeParameterDeclaration(typename)),
+          FunctionDefinition(
+            PrimitiveType,
+            FunctionDeclarator(
+              Identifier,
+              ParameterList),
+            CompoundStatement)),
+        TemplateDeclaration(template,
+          TemplateParameterList(
+            VariadicParameterDeclaration(
+              ScopedTypeIdentifier(
+                NamespaceIdentifier,
+                TypeIdentifier),
+              VariadicDeclarator)),
+          FunctionDefinition(
+            PrimitiveType,
+            FunctionDeclarator(
+              Identifier,
+              ParameterList),
+            CompoundStatement))))))
+
+
+# Enums
+
+enum Foo : char { };
+enum Foo : Bar { };
+enum Foo : unsigned int { };
+enum {a, b};
+enum Foo : Bar::Rab { };
+enum Foo::Oof : Bar::Rab { };
+enum class Foo;
+enum struct Foo : char { };
+
+==>
+
+Program(
+  EnumSpecifier(enum, TypeIdentifier, PrimitiveType, EnumeratorList),
+  EnumSpecifier(enum, TypeIdentifier, TypeIdentifier, EnumeratorList),
+  EnumSpecifier(enum, TypeIdentifier, SizedTypeSpecifier(TypeSize, PrimitiveType), EnumeratorList),
+  EnumSpecifier(enum, EnumeratorList(Enumerator(Identifier), Enumerator(Identifier))),
+  EnumSpecifier(enum, TypeIdentifier, ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier), EnumeratorList),
+  EnumSpecifier(enum, ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier), ScopedTypeIdentifier(NamespaceIdentifier, TypeIdentifier), EnumeratorList),
+  EnumSpecifier(enum, class, TypeIdentifier),
+  EnumSpecifier(enum, struct, TypeIdentifier, PrimitiveType, EnumeratorList))
+
+
+# static_assert declarations
+
+class A { static_assert(true, "message"); };
+void f() { static_assert(false); }
+static_assert(std::is_constructible<A>::value);
+static_assert(true, "string1" "string2");
+static_assert(true, R"FOO(string)FOO");
+
+==>
+
+Program(
+  ClassSpecifier(class,
+    TypeIdentifier,
+    FieldDeclarationList(
+    StaticAssertDeclaration(static_assert,
+      True,
+      String))),
+  FunctionDefinition(
+    PrimitiveType,
+    FunctionDeclarator(
+      Identifier,
+      ParameterList),
+    CompoundStatement(
+      StaticAssertDeclaration(static_assert,
+        False))),
+  StaticAssertDeclaration(static_assert,
+    ScopedIdentifier(
+    TemplateType(
+      ScopedTypeIdentifier(
+      NamespaceIdentifier,
+      TypeIdentifier),
+      TemplateArgumentList(
+      TypeDescriptor(
+        TypeIdentifier))),
+    Identifier)),
+  StaticAssertDeclaration(static_assert,
+    True,
+    ConcatenatedString(String, String)),
+  StaticAssertDeclaration(static_assert,
+    True,
+    RawString))
+
+
+# Cast operator overload declarations
+
+operator int() const;
+explicit operator int*() const;
+operator arr_t*();
+operator B&();
+operator auto() const;
+virtual operator A() = 0;
+A::B::operator C();
+
+==>
+
+Program(
+  Declaration(
+    OperatorCast(operator,
+      PrimitiveType,
+      AbstractFunctionDeclarator(ParameterList, const))),
+  Declaration(
+    ExplicitFunctionSpecifier(explicit),
+    OperatorCast(operator,
+      PrimitiveType,
+      AbstractPointerDeclarator(AbstractFunctionDeclarator(ParameterList, const)))),
+  Declaration(
+    OperatorCast(operator,
+      TypeIdentifier,
+      AbstractPointerDeclarator(AbstractFunctionDeclarator(ParameterList)))),
+  Declaration(OperatorCast(operator,
+    TypeIdentifier,
+    AbstractReferenceDeclarator(AbstractFunctionDeclarator(ParameterList)))),
+  Declaration(
+    OperatorCast(operator,
+      auto,
+      AbstractFunctionDeclarator(ParameterList, const))),
+  Declaration(
+    virtual,
+    OperatorCast(operator, TypeIdentifier, AbstractFunctionDeclarator(ParameterList)), Number),
+  Declaration(
+    OperatorCast(
+      ScopedNamespaceIdentifier(NamespaceIdentifier, NamespaceIdentifier),
+      operator,
+      TypeIdentifier, AbstractFunctionDeclarator(ParameterList))))
+
+# Restrict
+
+int* restrict baz;
+
+==>
+
+Program(Declaration(PrimitiveType,PointerDeclarator(restrict,Identifier)))
+
+# Ignored args
+
+void def(const char* msg, ...);
+
+==>
+
+Program(Declaration(PrimitiveType,FunctionDeclarator(Identifier,ParameterList(
+  ParameterDeclaration(const,PrimitiveType,PointerDeclarator(Identifier))))))

@@ -1,0 +1,66 @@
+{
+  "name": "unplugin-utils",
+  "version": "0.2.5",
+  "description": "A set of utility functions commonly used by unplugins.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/sxzz/unplugin-utils#readme",
+  "bugs": {
+    "url": "https://github.com/sxzz/unplugin-utils/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sxzz/unplugin-utils.git"
+  },
+  "author": "三咲智子 Kevin Deng <sxzz@sxzz.moe>",
+  "funding": "https://github.com/sponsors/sxzz",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "pathe": "^2.0.3",
+    "picomatch": "^4.0.3"
+  },
+  "devDependencies": {
+    "@sxzz/eslint-config": "^7.1.2",
+    "@sxzz/prettier-config": "^2.2.3",
+    "@types/node": "^24.2.0",
+    "@types/picomatch": "^4.0.2",
+    "@vitest/coverage-v8": "3.2.4",
+    "bumpp": "^10.2.2",
+    "eslint": "^9.32.0",
+    "oxc-transform": "^0.80.0",
+    "prettier": "^3.6.2",
+    "tsdown": "^0.13.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=18.12.0"
+  },
+  "prettier": "@sxzz/prettier-config",
+  "scripts": {
+    "lint": "eslint --cache .",
+    "lint:fix": "pnpm run lint --fix",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --cache --write .",
+    "release": "bumpp"
+  }
+}

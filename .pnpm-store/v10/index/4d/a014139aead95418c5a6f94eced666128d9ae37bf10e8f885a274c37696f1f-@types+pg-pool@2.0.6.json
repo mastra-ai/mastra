@@ -1,0 +1,31 @@
+{
+  "name": "@types/pg-pool",
+  "version": "2.0.6",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662915036,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662915038,
+      "integrity": "sha512-6WV3HRE+sBr+clmanUKxGIxeA/LDdfbt9lQVM3/s9T8HAaaLjXJDOT44eMDqfWvCaFnL8HCaGNqXtOl0tfIn8g==",
+      "mode": 420,
+      "size": 1492
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662915040,
+      "integrity": "sha512-gxtHqK1PvapsjTWSfXBhYgdbSvov4TXqnDPtmlmX50apO3J60KkezQg/L8gHidG3PTW5bev6GxV13MhWauA7pA==",
+      "mode": 420,
+      "size": 809
+    },
+    "package.json": {
+      "checkedAt": 1764662915058,
+      "integrity": "sha512-UkETLR6t19qtQxHfhII2UCYXT3PnQuZjN3gIeQHXfJhtMYkIObSI4C6rRWqf0HHrMkciC5MaMWn1JH0aZBK2cw==",
+      "mode": 420,
+      "size": 961
+    }
+  }
+}

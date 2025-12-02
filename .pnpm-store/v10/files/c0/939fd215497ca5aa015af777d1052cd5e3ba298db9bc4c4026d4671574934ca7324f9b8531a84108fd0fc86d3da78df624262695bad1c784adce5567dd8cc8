@@ -1,0 +1,30 @@
+{
+    "name": "@types/command-line-usage",
+    "version": "5.0.4",
+    "description": "TypeScript definitions for command-line-usage",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/command-line-usage",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "matrumz",
+            "githubUsername": "matrumz",
+            "url": "https://github.com/matrumz"
+        },
+        {
+            "name": "Andrija Dvorski",
+            "githubUsername": "Dvorsky",
+            "url": "https://github.com/Dvorsky"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/command-line-usage"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "d68c6af32d59d01d3e4c131bb72f3a12071cc447414a3fc30149f4fc64cf09a0",
+    "typeScriptVersion": "4.5"
+}

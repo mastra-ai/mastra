@@ -1,0 +1,12 @@
+// src/full.ts
+import {
+  makeSyntaxHighlighter,
+  makePrismSyntaxHighlighter,
+  makePrismAsyncSyntaxHighlighter
+} from "./react-syntax-highlighter-full.js";
+export {
+  makePrismAsyncSyntaxHighlighter,
+  makePrismSyntaxHighlighter,
+  makeSyntaxHighlighter
+};
+//# sourceMappingURL=full.js.map

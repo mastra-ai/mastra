@@ -1,0 +1,70 @@
+{
+  "name": "@rollup/plugin-esm-shim",
+  "version": "0.1.8",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Generate minified bundle",
+  "license": "MIT",
+  "repository": {
+    "url": "rollup/plugins",
+    "directory": "packages/esm-shim"
+  },
+  "author": "Peter Placzek <peter.placzek1996@gmail.com>",
+  "homepage": "https://github.com/rollup/plugins/tree/master/packages/esm-shim#readme",
+  "bugs": "https://github.com/rollup/plugins/issues",
+  "main": "dist/cjs/index.js",
+  "module": "dist/es/index.js",
+  "exports": {
+    "types": "./types/index.d.ts",
+    "import": "./dist/es/index.js",
+    "default": "./dist/cjs/index.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "src",
+    "types",
+    "README.md"
+  ],
+  "keywords": [
+    "rollup",
+    "plugin",
+    "esm-shim",
+    "npm",
+    "modules"
+  ],
+  "peerDependencies": {
+    "rollup": "^2.0.0||^3.0.0||^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "rollup": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "magic-string": "^0.30.3",
+    "mlly": "^1.7.4"
+  },
+  "devDependencies": {
+    "rollup": "^4.0.0-24",
+    "typescript": "^4.8.3"
+  },
+  "types": "./types/index.d.ts",
+  "scripts": {
+    "build": "rollup -c",
+    "ci:coverage": "nyc pnpm test && nyc report --reporter=text-lcov > coverage.lcov",
+    "ci:lint": "pnpm build && pnpm lint",
+    "ci:lint:commits": "commitlint --from=${CIRCLE_BRANCH} --to=${CIRCLE_SHA1}",
+    "ci:test": "pnpm test -- --verbose && pnpm test:ts",
+    "prebuild": "del-cli dist",
+    "prerelease": "pnpm build",
+    "pretest": "pnpm build",
+    "release": "pnpm --workspace-root package:release $(pwd)",
+    "test": "ava",
+    "test:ts": "tsc types/index.d.ts test/types.ts --noEmit"
+  }
+}

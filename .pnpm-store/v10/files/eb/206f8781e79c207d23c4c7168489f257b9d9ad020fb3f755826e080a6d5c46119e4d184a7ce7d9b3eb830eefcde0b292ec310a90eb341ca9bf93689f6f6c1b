@@ -1,0 +1,113 @@
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/markdown/markdown-text.tsx
+var markdown_text_exports = {};
+__export(markdown_text_exports, {
+  makeMarkdownText: () => makeMarkdownText
+});
+module.exports = __toCommonJS(markdown_text_exports);
+var import_react = require("react");
+var import_code_header = require("./code-header.js");
+var import_classnames = __toESM(require("classnames"));
+var import_react_markdown = require("@assistant-ui/react-markdown");
+var import_react2 = require("@assistant-ui/react");
+var import_jsx_runtime = require("react/jsx-runtime");
+var { withSmoothContextProvider, useSmoothStatus } = import_react2.INTERNAL;
+var defaultComponents = (0, import_react_markdown.unstable_memoizeMarkdownComponents)({
+  h1: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { className: (0, import_classnames.default)("aui-md-h1", className), ...props }),
+  h2: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { className: (0, import_classnames.default)("aui-md-h2", className), ...props }),
+  h3: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { className: (0, import_classnames.default)("aui-md-h3", className), ...props }),
+  h4: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { className: (0, import_classnames.default)("aui-md-h4", className), ...props }),
+  h5: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h5", { className: (0, import_classnames.default)("aui-md-h5", className), ...props }),
+  h6: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h6", { className: (0, import_classnames.default)("aui-md-h6", className), ...props }),
+  p: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: (0, import_classnames.default)("aui-md-p", className), ...props }),
+  a: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { className: (0, import_classnames.default)("aui-md-a", className), ...props }),
+  blockquote: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    "blockquote",
+    {
+      className: (0, import_classnames.default)("aui-md-blockquote", className),
+      ...props
+    }
+  ),
+  ul: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: (0, import_classnames.default)("aui-md-ul", className), ...props }),
+  ol: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", { className: (0, import_classnames.default)("aui-md-ol", className), ...props }),
+  hr: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("hr", { className: (0, import_classnames.default)("aui-md-hr", className), ...props }),
+  table: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("table", { className: (0, import_classnames.default)("aui-md-table", className), ...props }),
+  th: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { className: (0, import_classnames.default)("aui-md-th", className), ...props }),
+  td: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { className: (0, import_classnames.default)("aui-md-td", className), ...props }),
+  tr: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { className: (0, import_classnames.default)("aui-md-tr", className), ...props }),
+  sup: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("sup", { className: (0, import_classnames.default)("aui-md-sup", className), ...props }),
+  pre: ({ className, ...props }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { className: (0, import_classnames.default)("aui-md-pre", className), ...props }),
+  code: ({ className, ...props }) => {
+    const isCodeBlock = (0, import_react_markdown.useIsMarkdownCodeBlock)();
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "code",
+      {
+        className: (0, import_classnames.default)(!isCodeBlock && "aui-md-inline-code", className),
+        ...props
+      }
+    );
+  },
+  CodeHeader: import_code_header.CodeHeader
+});
+var makeMarkdownText = ({
+  className,
+  components: userComponents,
+  ...rest
+} = {}) => {
+  const components = {
+    ...defaultComponents,
+    ...Object.fromEntries(
+      // ignore undefined values, so undefined values do not override default components
+      Object.entries(userComponents ?? {}).filter(([_, v]) => v !== void 0)
+    )
+  };
+  const MarkdownTextImpl = () => {
+    const status = useSmoothStatus();
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      import_react_markdown.MarkdownTextPrimitive,
+      {
+        components,
+        ...rest,
+        className: (0, import_classnames.default)(
+          status.type === "running" && "aui-md-running",
+          className
+        )
+      }
+    );
+  };
+  MarkdownTextImpl.displayName = "MarkdownText";
+  return (0, import_react.memo)(withSmoothContextProvider(MarkdownTextImpl), () => true);
+};
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  makeMarkdownText
+});
+//# sourceMappingURL=markdown-text.js.map

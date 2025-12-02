@@ -1,0 +1,68 @@
+{
+  "name": "@opentelemetry/resource-detector-aws",
+  "version": "1.12.0",
+  "description": "OpenTelemetry SDK resource detector for AWS",
+  "main": "build/src/index.js",
+  "module": "build/esm/index.js",
+  "types": "build/src/index.d.ts",
+  "repository": "open-telemetry/opentelemetry-js-contrib",
+  "scripts": {
+    "clean": "tsc --build --clean tsconfig.json tsconfig.esm.json",
+    "compile": "tsc --build tsconfig.json tsconfig.esm.json",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "prewatch": "npm run precompile",
+    "prepublishOnly": "npm run compile",
+    "test": "nyc mocha 'test/**/*.test.ts'",
+    "tdd": "npm run test -- --watch-extensions ts --watch",
+    "watch": "tsc --build --watch tsconfig.json tsconfig.esm.json"
+  },
+  "keywords": [
+    "opentelemetry",
+    "nodejs",
+    "resources",
+    "stats",
+    "profiling"
+  ],
+  "author": "OpenTelemetry Authors",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=14"
+  },
+  "files": [
+    "build/src/**/*.js",
+    "build/src/**/*.js.map",
+    "build/src/**/*.d.ts",
+    "build/esm/**/*.js",
+    "build/esm/**/*.js.map",
+    "build/esm/**/*.d.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.0.0",
+    "@opentelemetry/contrib-test-utils": "^0.45.1",
+    "@opentelemetry/instrumentation-fs": "^0.19.1",
+    "@opentelemetry/instrumentation-http": "^0.57.1",
+    "@types/mocha": "8.2.3",
+    "@types/node": "18.18.14",
+    "@types/sinon": "10.0.20",
+    "nock": "13.3.3",
+    "nyc": "15.1.0",
+    "rimraf": "5.0.10",
+    "sinon": "15.2.0",
+    "typescript": "4.4.4"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.0.0"
+  },
+  "dependencies": {
+    "@opentelemetry/core": "^1.0.0",
+    "@opentelemetry/resources": "^1.10.0",
+    "@opentelemetry/semantic-conventions": "^1.27.0"
+  },
+  "homepage": "https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/detectors/node/opentelemetry-resource-detector-aws#readme",
+  "sideEffects": false,
+  "gitHead": "1eb77007669bae87fe5664d68ba6533b95275d52"
+}

@@ -1,0 +1,25 @@
+{
+    "name": "@types/sentiment",
+    "version": "5.0.4",
+    "description": "TypeScript definitions for sentiment",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/sentiment",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Isaac Ong",
+            "githubUsername": "iojw",
+            "url": "https://github.com/iojw"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/sentiment"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "e146ce20a891e1d5b76138be25fc82fac69c24a15c23f5d5c05640631f11dfc0",
+    "typeScriptVersion": "4.5"
+}

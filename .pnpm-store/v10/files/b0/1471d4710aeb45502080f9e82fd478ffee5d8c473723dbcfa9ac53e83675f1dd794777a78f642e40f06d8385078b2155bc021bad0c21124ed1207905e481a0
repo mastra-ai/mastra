@@ -1,0 +1,68 @@
+{
+  "name": "@arizeai/openinference-genai",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "types": "dist/esm/index.d.ts",
+  "description": "OpenInference utilities for converting OpenTelemetry GenAI span attributes to OpenInference span attributes",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js"
+    },
+    "./attributes": {
+      "import": "./dist/esm/attributes.js"
+    },
+    "./utils": {
+      "import": "./dist/esm/utils.js"
+    },
+    "./types": {
+      "types": "./dist/esm/types.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "keywords": [
+    "openinference",
+    "llm",
+    "opentelemetry",
+    "genai",
+    "agent"
+  ],
+  "author": "oss-devs@arize.com",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/arize-ai/openinference/tree/main/js/packages/openinference-genai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Arize-ai/openinference.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Arize-ai/openinference/issues"
+  },
+  "dependencies": {
+    "@arizeai/openinference-semantic-conventions": "2.1.2"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/core": "^2.1.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.206.0",
+    "@opentelemetry/resources": "^2.1.0",
+    "@opentelemetry/sdk-trace-base": "^2.1.0",
+    "@opentelemetry/sdk-trace-node": "^2.1.0",
+    "@opentelemetry/semantic-conventions": "^1.37.0",
+    "@types/node": "^20.14.11",
+    "vitest": "^3.1.3"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": ">=1.9.0",
+    "@opentelemetry/semantic-conventions": ">=1.37.0"
+  },
+  "scripts": {
+    "prebuild": "rimraf dist",
+    "build": "tsc --build tsconfig.esm.json && tsc-alias -p tsconfig.esm.json",
+    "postbuild": "echo '{\"type\": \"module\"}' > ./dist/esm/package.json && rimraf dist/test dist/examples",
+    "type:check": "tsc --noEmit",
+    "test": "vitest"
+  }
+}

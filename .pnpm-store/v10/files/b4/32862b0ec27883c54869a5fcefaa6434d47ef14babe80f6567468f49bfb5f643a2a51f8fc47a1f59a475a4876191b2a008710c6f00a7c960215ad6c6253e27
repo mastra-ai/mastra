@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/values/index.ts"],
+  "sourcesContent": ["/**\n * Utilities for working with values stored in Convex.\n *\n * You can see the full set of supported types at\n * [Types](https://docs.convex.dev/using/types).\n * @module\n */\n\nexport { convexToJson, jsonToConvex } from \"./value.js\";\nexport type {\n  Id as GenericId,\n  JSONValue,\n  Value,\n  NumericValue,\n} from \"./value.js\";\nexport { v, asObjectValidator } from \"./validator.js\";\nexport type {\n  AsObjectValidator,\n  GenericValidator,\n  ObjectType,\n  PropertyValidators,\n} from \"./validator.js\";\nexport type {\n  ValidatorJSON,\n  RecordKeyValidatorJSON,\n  RecordValueValidatorJSON,\n  ObjectFieldType,\n  Validator,\n  OptionalProperty,\n  VId,\n  VFloat64,\n  VInt64,\n  VBoolean,\n  VBytes,\n  VString,\n  VNull,\n  VAny,\n  VObject,\n  VLiteral,\n  VArray,\n  VRecord,\n  VUnion,\n  VOptional,\n} from \"./validators.js\";\nimport * as Base64 from \"./base64.js\";\nexport { Base64 };\nexport type { Infer } from \"./validator.js\";\nexport * from \"./errors.js\";\nexport { compareValues } from \"./compare.js\";\n"],
+  "mappings": ";AAQA,SAAS,cAAc,oBAAoB;AAO3C,SAAS,GAAG,yBAAyB;AA6BrC,YAAY,YAAY;AACxB,SAAS;AAET,cAAc;AACd,SAAS,qBAAqB;",
+  "names": []
+}

@@ -1,0 +1,63 @@
+{
+	"$id": "/inference/schemas/text-to-image/input.json",
+	"$schema": "http://json-schema.org/draft-06/schema#",
+	"description": "Inputs for Text To Image inference",
+	"title": "TextToImageInput",
+	"type": "object",
+	"properties": {
+		"inputs": {
+			"description": "The input text data (sometimes called \"prompt\")",
+			"type": "string"
+		},
+		"parameters": {
+			"description": "Additional inference parameters",
+			"$ref": "#/$defs/TextToImageParameters"
+		}
+	},
+	"$defs": {
+		"TextToImageParameters": {
+			"title": "TextToImageParameters",
+			"description": "Additional inference parameters for Text To Image",
+			"type": "object",
+			"properties": {
+				"guidance_scale": {
+					"type": "number",
+					"description": "A higher guidance scale value encourages the model to generate images closely linked to the text prompt, but values too high may cause saturation and other artifacts."
+				},
+				"negative_prompt": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "One or several prompt to guide what NOT to include in image generation."
+				},
+				"num_inference_steps": {
+					"type": "integer",
+					"description": "The number of denoising steps. More denoising steps usually lead to a higher quality image at the expense of slower inference."
+				},
+				"target_size": {
+					"type": "object",
+					"description": "The size in pixel of the output image",
+					"properties": {
+						"width": {
+							"type": "integer"
+						},
+						"height": {
+							"type": "integer"
+						}
+					},
+					"required": ["width", "height"]
+				},
+				"scheduler": {
+					"type": "string",
+					"description": "Override the scheduler with a compatible one."
+				},
+				"seed": {
+					"type": "integer",
+					"description": "Seed for the random number generator."
+				}
+			}
+		}
+	},
+	"required": ["inputs"]
+}

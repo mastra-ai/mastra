@@ -1,0 +1,169 @@
+{
+  "name": "@cloudflare/workers-types",
+  "version": "4.20251121.0",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662923731,
+      "integrity": "sha512-EVENqLjR0I5hm1ZPCKbsX3dhJ6jxb2mWlQF5nikCnzbNRM4AdNwRfVsEuZfS8mRB78wPi8TlmFgbUku5f0co/w==",
+      "mode": 420,
+      "size": 373
+    },
+    "README.md": {
+      "checkedAt": 1764662923731,
+      "integrity": "sha512-dKdNt2rttz5Zwl3cferzBngIshWvofzDoqEEu4+3lOfrw96/EEkmgjIpfEtT4rUR0l8OlzvYguY28tzbYEgB4Q==",
+      "mode": 420,
+      "size": 4695
+    },
+    "entrypoints.svg": {
+      "checkedAt": 1764662923732,
+      "integrity": "sha512-FjcDFATz9HhhdjKd70Wh1rBqQbURGEO/r0p3x9Lr0lMnfUZPC8J90gZMrUlqenHizcf7ZgWRiFu6k5mdyatM4g==",
+      "mode": 420,
+      "size": 5567
+    },
+    "2021-11-03/index.d.ts": {
+      "checkedAt": 1764662923733,
+      "integrity": "sha512-JgUNgI2qBgSzGZ4+NlImk/SCHB2SnWS0ZjsHxjSjj7y7Qec6siLnn8n+s4anMJy5GU6O6+4X1i+BQrrJLENlTQ==",
+      "mode": 493,
+      "size": 338127
+    },
+    "2022-01-31/index.d.ts": {
+      "checkedAt": 1764662923735,
+      "integrity": "sha512-ujoUZh3azp/Y2Y2DDVJ/XAH3taQWmfAxkvd9vKQCPM/S1IOsracyJ635M9t+BUKgBm6c3hWnGjk5yTsY4M/qug==",
+      "mode": 493,
+      "size": 340686
+    },
+    "2022-03-21/index.d.ts": {
+      "checkedAt": 1764662923736,
+      "integrity": "sha512-hrvxGKpU+aDz8SDtxrSQ0kyNik1yNR5jd9AkPb8xcddD+h2OuwjJ+Hc+BawbMjU0xxwpS1AWR1KRFwo64MVAIA==",
+      "mode": 493,
+      "size": 340937
+    },
+    "2022-08-04/index.d.ts": {
+      "checkedAt": 1764662923738,
+      "integrity": "sha512-O2y+XcOaSv6SfIOFtb7za2zVf3VU+K5sSC2w6cKym+xrE+V13Spw0/PsAC+heEmpe4NLo319JQyYWnsZPgQXHg==",
+      "mode": 493,
+      "size": 340988
+    },
+    "2022-10-31/index.d.ts": {
+      "checkedAt": 1764662923739,
+      "integrity": "sha512-woGD21pGFrdMKJnobO3H/aNKLsknTdgEFjnNi4duFSx0f+LO4I/+omochHqCQfIThKwBbOtarJ7Y/n3vThrEMQ==",
+      "mode": 493,
+      "size": 342339
+    },
+    "2022-11-30/index.d.ts": {
+      "checkedAt": 1764662923741,
+      "integrity": "sha512-2N1OEwnVeWswHESvPoiMegdEL8nAPi9flnAhoOgEII1O6so2kkCdinqG6X9SXUb3V5QKzFh23ogUFgwaOErt2A==",
+      "mode": 493,
+      "size": 342763
+    },
+    "2023-03-01/index.d.ts": {
+      "checkedAt": 1764662923743,
+      "integrity": "sha512-5v0+SvzFMlEAlkiDJCS1rXF6+TSTGxTvViGY3YZpXp4YOCrwk9mvzp1/9WUhi9e8M4eTjSjvk4XmEQA16xDYlw==",
+      "mode": 493,
+      "size": 343049
+    },
+    "2023-07-01/index.d.ts": {
+      "checkedAt": 1764662923751,
+      "integrity": "sha512-4wz2NG9Mk3Y9fe0MT6OI8x9eTcn+hZqMr8tktxBdJwe1T3aGGNtY3PCXWJuC03pjFnuwx7LkRnhZ/NVJXss5ng==",
+      "mode": 493,
+      "size": 343081
+    },
+    "experimental/index.d.ts": {
+      "checkedAt": 1764662923758,
+      "integrity": "sha512-aGncnsYu8JCdolgezx1Z7kijLOP8I6ZYH4xHfb43pV8uuzyCd/X9udDTjGQR4pEGKvksRzTYWQeY71cwfa6Wsg==",
+      "mode": 493,
+      "size": 370800
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662923763,
+      "integrity": "sha512-fYbslSGqnqX7c8k5tHzA+IEDkLeyWON58AI0i/DbeabDkpDCS/WKs0l8UDn0Sdh9qzJ0qNQ+2SiZq7i2GB+GeQ==",
+      "mode": 493,
+      "size": 338088
+    },
+    "latest/index.d.ts": {
+      "checkedAt": 1764662923766,
+      "integrity": "sha512-SmpnxCq9/N89dZrDqA7TkjOx5jRIH9p0ecKYfxEr4wsI7+VjI6W5BmQGDIi4Jb4nQweUNcpWRlAQYBuqAMlVdg==",
+      "mode": 493,
+      "size": 344574
+    },
+    "oldest/index.d.ts": {
+      "checkedAt": 1764662923763,
+      "integrity": "sha512-fYbslSGqnqX7c8k5tHzA+IEDkLeyWON58AI0i/DbeabDkpDCS/WKs0l8UDn0Sdh9qzJ0qNQ+2SiZq7i2GB+GeQ==",
+      "mode": 493,
+      "size": 338088
+    },
+    "2021-11-03/index.ts": {
+      "checkedAt": 1764662923768,
+      "integrity": "sha512-CPTxFrLj4/fBtCSKD3l7BJSGlVAWyKNulOTzqLYeu5lpUx72x6bcnqqWuownGmAHR2Gu4R4r/i3rDOcXmwL86w==",
+      "mode": 493,
+      "size": 339613
+    },
+    "2022-01-31/index.ts": {
+      "checkedAt": 1764662923769,
+      "integrity": "sha512-lx8OkTqpf6E8MnQ09ox8AbqE820fL4oDcOoCHdeoUTya972bN5EYartSXzyQYaDOk9QDTNDpT+EbPbENWyoDZg==",
+      "mode": 493,
+      "size": 342172
+    },
+    "2022-03-21/index.ts": {
+      "checkedAt": 1764662923771,
+      "integrity": "sha512-QYrLGYf5fRV57Smdum0VwQ8UD070p/TCCi97K9VGdkyeQvkjSD9jrDQl37Ost8PjCPqFO2o8Zar+AEgl9X6cFQ==",
+      "mode": 493,
+      "size": 342437
+    },
+    "2022-08-04/index.ts": {
+      "checkedAt": 1764662923774,
+      "integrity": "sha512-2i+uM7iO/j9YvYaKUSDojnStajwfyDEshN2ingANiCY2ZyyIoiB6kK9YmGplhGoz/IpPTxezcY5ANVJd7qUunw==",
+      "mode": 493,
+      "size": 342488
+    },
+    "2022-10-31/index.ts": {
+      "checkedAt": 1764662923780,
+      "integrity": "sha512-twh2A9eE0GTQhfO+6YAAikVHMmHXShC+E3Glu+8J6rmTzdjFR7scbwXoua54Va8DJsatkb3c6QReiS9/qsR5/Q==",
+      "mode": 493,
+      "size": 343839
+    },
+    "2022-11-30/index.ts": {
+      "checkedAt": 1764662923781,
+      "integrity": "sha512-fBnTPw8AG4s9kKO9Ox2MPqtkBPchq8c8t90cvt3EdyZFRaEt5lZicLuH+JZ6mqHyj6Oo6KBfRGyhBMpNF4THuQ==",
+      "mode": 493,
+      "size": 344263
+    },
+    "2023-03-01/index.ts": {
+      "checkedAt": 1764662923788,
+      "integrity": "sha512-8PH6+X6aWk4ZTmcBWjd93LOYUMDgHZJZopgwIkThq3wuMQftud0XI/MnnwNvssQzgRNKdqODJc4HKlqeBoG7Mg==",
+      "mode": 493,
+      "size": 344549
+    },
+    "2023-07-01/index.ts": {
+      "checkedAt": 1764662923795,
+      "integrity": "sha512-79LNOQR03zF8B8vcszIqhjGNx6/Yy7jD9kyPkQR8ACWtvq7lljRp58DoTqiAqcv+CniGilEfh7kwn8chBUIcJA==",
+      "mode": 493,
+      "size": 344581
+    },
+    "experimental/index.ts": {
+      "checkedAt": 1764662923797,
+      "integrity": "sha512-/F2t/vrpn2eArizN8S4/Cve6+FqnAmzRIsua4UvA3Xu2tDb3efC8SU3Cm3M9CIL1/Q8c8HY2JIk91FRkkjXTAw==",
+      "mode": 493,
+      "size": 372549
+    },
+    "index.ts": {
+      "checkedAt": 1764662923799,
+      "integrity": "sha512-1p/uydac3foBPqkJYBitTk3fKewDaAs8dkZ84Zaou42j6+DhiFR3cvRMP35BQD0624iOi6YV782pZ6N5S+FLAA==",
+      "mode": 493,
+      "size": 339574
+    },
+    "latest/index.ts": {
+      "checkedAt": 1764662923801,
+      "integrity": "sha512-pIXJHraqiJN0mBpkOM4xesRML14Nx15Nh2xw5ESGvvvfUZhxfY+J7WsiXWImPbCIBTYsir14RwFdZQkHS5PVpQ==",
+      "mode": 493,
+      "size": 346074
+    },
+    "oldest/index.ts": {
+      "checkedAt": 1764662923799,
+      "integrity": "sha512-1p/uydac3foBPqkJYBitTk3fKewDaAs8dkZ84Zaou42j6+DhiFR3cvRMP35BQD0624iOi6YV782pZ6N5S+FLAA==",
+      "mode": 493,
+      "size": 339574
+    }
+  }
+}

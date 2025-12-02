@@ -1,0 +1,1 @@
+{"version":3,"file":"thread-list-item.d.ts","sourceRoot":"","sources":["../../src/ui/thread-list-item.tsx"],"names":[],"mappings":"AAEA,OAAO,EAAwC,KAAK,EAAE,EAAE,MAAM,OAAO,CAAC;AAItE,OAAO,EAAE,iBAAiB,EAAE,MAAM,4BAA4B,CAAC;AAK/D,QAAA,MAAM,cAAc,EAAE,EASrB,CAAC;AA+DF,QAAA,MAAM,OAAO;;;;;;CAIZ,CAAC;wBAEuD,OAAO,cAAc,GAC5E,OAAO,OAAO;AADhB,wBACiB"}

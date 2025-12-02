@@ -1,0 +1,12 @@
+'use strict';
+
+var chunkKWWD3U7G_cjs = require('../chunk-KWWD3U7G.cjs');
+
+
+
+Object.defineProperty(exports, "Mastra", {
+  enumerable: true,
+  get: function () { return chunkKWWD3U7G_cjs.Mastra; }
+});
+//# sourceMappingURL=index.cjs.map
+//# sourceMappingURL=index.cjs.map

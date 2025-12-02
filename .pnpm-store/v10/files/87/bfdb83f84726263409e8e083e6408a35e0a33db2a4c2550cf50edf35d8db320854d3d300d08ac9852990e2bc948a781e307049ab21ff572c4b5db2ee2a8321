@@ -1,0 +1,78 @@
+{
+  "name": "farmhash-modern",
+  "version": "1.1.0",
+  "description": "FarmHash functions compiled using Rust and WebAssembly to make them easy to use in node.js and the browser",
+  "keywords": [
+    "bigquery",
+    "farm_fingerprint",
+    "farmhash",
+    "fingerprint",
+    "hash",
+    "rust",
+    "wasm",
+    "webassembly"
+  ],
+  "main": "lib/index.cjs",
+  "module": "lib/index.mjs",
+  "types": "lib/index.d.ts",
+  "exports": {
+    "browser": "./lib/browser.js",
+    "import": "./lib/index.mjs",
+    "default": "./lib/index.cjs"
+  },
+  "files": [
+    "lib",
+    "bin"
+  ],
+  "repository": "git@github.com:ForbesLindesay/npm-package-template.git",
+  "author": "Forbes Lindesay <forbes@lindesay.co.uk>",
+  "license": "MIT",
+  "scripts": {
+    "build": "yarn build:rust && yarn build:tsc",
+    "build:rust": "yarn build:rust:bundler && yarn build:rust:nodejs",
+    "build:rust:web": "wasm-pack build rust-src --target web --out-dir ../bin/web",
+    "build:rust:bundler": "wasm-pack build rust-src --target bundler --out-dir ../bin/bundler",
+    "build:rust:nodejs": "wasm-pack build rust-src --target nodejs --out-dir ../bin/nodejs",
+    "build:tsc": "tsc",
+    "postbuild": "rimraf lib/**/__tests__ && node post-build-script && rimraf web-app/node_modules/farmhash-modern && rimraf tests/node_modules/farmhash-modern && npm pack",
+    "lint": "eslint --config .eslintrc-ts.js --no-eslintrc --ext .ts,.tsx src",
+    "lint:fix": "eslint --fix --config .eslintrc-ts.js --no-eslintrc --ext .ts,.tsx src",
+    "prettier:write": "prettier --ignore-path .gitignore --write './**/*.{md,json,yaml,js,jsx,ts,tsx}'",
+    "prettier:check": "prettier --ignore-path .gitignore --list-different './**/*.{md,json,yaml,js,jsx,ts,tsx}'",
+    "pretest": "rimraf tests/package-lock.json && cd tests && npm install",
+    "test": "yarn test:cjs && yarn test:mjs && yarn test:typescript && yarn test:attw",
+    "test:cjs": "node tests/src/test.cjs",
+    "test:mjs": "node tests/src/test.mjs",
+    "test:typescript": "cd tests && tsc",
+    "test:attw": "yarn attw farmhash-modern-0.0.0.tgz"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.4.2",
+    "@forbeslindesay/tsconfig": "^2.1.0",
+    "@types/node": "^20.3.2",
+    "@typescript-eslint/eslint-plugin": "^5.60.1",
+    "@typescript-eslint/parser": "^5.60.1",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint": "^8.43.0",
+    "husky": "^4.2.5",
+    "lint-staged": "^10.1.3",
+    "prettier": "^2.8.8",
+    "rimraf": "^3.0.2",
+    "typescript": "^5.1.6"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.{md,json,yaml,js,jsx,ts,tsx}": [
+      "prettier --write",
+      "git add"
+    ]
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

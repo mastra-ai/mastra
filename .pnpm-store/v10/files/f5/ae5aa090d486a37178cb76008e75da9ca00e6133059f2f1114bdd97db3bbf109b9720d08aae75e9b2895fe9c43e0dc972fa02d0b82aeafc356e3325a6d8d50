@@ -1,0 +1,241 @@
+import { RequestContext } from './chunk-GRBGQ2GE.js';
+
+// src/tools/validation.ts
+function truncateForLogging(data, maxLength = 200) {
+  try {
+    const stringified = JSON.stringify(data, null, 2);
+    if (stringified.length <= maxLength) {
+      return stringified;
+    }
+    return stringified.slice(0, maxLength) + "... (truncated)";
+  } catch {
+    return "[Unable to serialize data]";
+  }
+}
+function validateToolSuspendData(schema, suspendData, toolId) {
+  if (!schema || !("safeParse" in schema)) {
+    return { data: suspendData };
+  }
+  const validation = schema.safeParse(suspendData);
+  if (validation.success) {
+    return { data: validation.data };
+  }
+  const errorMessages = validation.error.issues.map((e) => `- ${e.path?.join(".") || "root"}: ${e.message}`).join("\n");
+  const error = {
+    error: true,
+    message: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ""}. Please fix the following errors and try again:
+${errorMessages}
+
+Provided arguments: ${truncateForLogging(suspendData)}`,
+    validationErrors: validation.error.format()
+  };
+  return { data: suspendData, error };
+}
+function validateToolInput(schema, input, toolId) {
+  if (!schema || !("safeParse" in schema)) {
+    return { data: input };
+  }
+  const validation = schema.safeParse(input);
+  if (validation.success) {
+    return { data: validation.data };
+  }
+  const errorMessages = validation.error.issues.map((e) => `- ${e.path?.join(".") || "root"}: ${e.message}`).join("\n");
+  const error = {
+    error: true,
+    message: `Tool validation failed${toolId ? ` for ${toolId}` : ""}. Please fix the following errors and try again:
+${errorMessages}
+
+Provided arguments: ${truncateForLogging(input)}`,
+    validationErrors: validation.error.format()
+  };
+  return { data: input, error };
+}
+function validateToolOutput(schema, output, toolId, suspendCalled) {
+  if (!schema || !("safeParse" in schema) || suspendCalled) {
+    return { data: output };
+  }
+  const validation = schema.safeParse(output);
+  if (validation.success) {
+    return { data: validation.data };
+  }
+  const errorMessages = validation.error.issues.map((e) => `- ${e.path?.join(".") || "root"}: ${e.message}`).join("\n");
+  const error = {
+    error: true,
+    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ""}. The tool returned invalid output:
+${errorMessages}
+
+Returned output: ${truncateForLogging(output)}`,
+    validationErrors: validation.error.format()
+  };
+  return { data: output, error };
+}
+
+// src/tools/tool.ts
+var Tool = class {
+  /** Unique identifier for the tool */
+  id;
+  /** Description of what the tool does */
+  description;
+  /** Schema for validating input parameters */
+  inputSchema;
+  /** Schema for validating output structure */
+  outputSchema;
+  /** Schema for suspend operation data */
+  suspendSchema;
+  /** Schema for resume operation data */
+  resumeSchema;
+  /**
+   * Tool execution function
+   * @param inputData - The raw, validated input data
+   * @param context - Optional execution context with metadata
+   * @returns Promise resolving to tool output or a ValidationError if input validation fails
+   */
+  execute;
+  /** Parent Mastra instance for accessing shared resources */
+  mastra;
+  /**
+   * Whether the tool requires explicit user approval before execution
+   * @example
+   * ```typescript
+   * // For destructive operations
+   * requireApproval: true
+   * ```
+   */
+  requireApproval;
+  /**
+   * Creates a new Tool instance with input validation wrapper.
+   *
+   * @param opts - Tool configuration and execute function
+   * @example
+   * ```typescript
+   * const tool = new Tool({
+   *   id: 'my-tool',
+   *   description: 'Does something useful',
+   *   inputSchema: z.object({ name: z.string() }),
+   *   execute: async (inputData) => ({ greeting: `Hello ${inputData.name}` })
+   * });
+   * ```
+   */
+  constructor(opts) {
+    this.id = opts.id;
+    this.description = opts.description;
+    this.inputSchema = opts.inputSchema;
+    this.outputSchema = opts.outputSchema;
+    this.suspendSchema = opts.suspendSchema;
+    this.resumeSchema = opts.resumeSchema;
+    this.mastra = opts.mastra;
+    this.requireApproval = opts.requireApproval || false;
+    if (opts.execute) {
+      const originalExecute = opts.execute;
+      this.execute = async (inputData, context) => {
+        const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
+        if (error) {
+          return error;
+        }
+        let suspendData = null;
+        const baseContext = context ? {
+          ...context,
+          ...context.suspend ? {
+            suspend: (args) => {
+              suspendData = args;
+              return context.suspend?.(args);
+            }
+          } : {}
+        } : {};
+        let organizedContext = baseContext;
+        if (!context) {
+          organizedContext = {
+            requestContext: new RequestContext(),
+            mastra: void 0
+          };
+        } else {
+          const isAgentExecution = baseContext.toolCallId && baseContext.messages;
+          const isWorkflowExecution = !isAgentExecution && (baseContext.workflow || baseContext.workflowId);
+          if (isAgentExecution && !baseContext.agent) {
+            const { toolCallId, messages, suspend, resumeData: resumeData2, threadId, resourceId, writableStream, ...rest } = baseContext;
+            organizedContext = {
+              ...rest,
+              agent: {
+                toolCallId,
+                messages,
+                suspend,
+                resumeData: resumeData2,
+                threadId,
+                resourceId,
+                writableStream
+              },
+              // Ensure requestContext is always present
+              requestContext: rest.requestContext || new RequestContext()
+            };
+          } else if (isWorkflowExecution && !baseContext.workflow) {
+            const { workflowId, runId, state, setState, suspend, resumeData: resumeData2, ...rest } = baseContext;
+            organizedContext = {
+              ...rest,
+              workflow: {
+                workflowId,
+                runId,
+                state,
+                setState,
+                suspend,
+                resumeData: resumeData2
+              },
+              // Ensure requestContext is always present
+              requestContext: rest.requestContext || new RequestContext()
+            };
+          } else {
+            organizedContext = {
+              ...baseContext,
+              agent: baseContext.agent ? {
+                ...baseContext.agent,
+                suspend: (args) => {
+                  suspendData = args;
+                  return baseContext.agent?.suspend?.(args);
+                }
+              } : baseContext.agent,
+              workflow: baseContext.workflow ? {
+                ...baseContext.workflow,
+                suspend: (args) => {
+                  suspendData = args;
+                  return baseContext.workflow?.suspend?.(args);
+                }
+              } : baseContext.workflow,
+              requestContext: baseContext.requestContext || new RequestContext()
+            };
+          }
+        }
+        const resumeData = organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
+        if (resumeData) {
+          const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);
+          if (resumeValidation.error) {
+            return resumeValidation.error;
+          }
+        }
+        const output = await originalExecute(data, organizedContext);
+        if (suspendData) {
+          const suspendValidation = validateToolSuspendData(this.suspendSchema, suspendData, this.id);
+          if (suspendValidation.error) {
+            return suspendValidation.error;
+          }
+        }
+        const skiptOutputValidation = !!(typeof output === "undefined" && suspendData);
+        const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
+        if (outputValidation.error) {
+          return outputValidation.error;
+        }
+        return outputValidation.data;
+      };
+    }
+  }
+};
+function createTool(opts) {
+  return new Tool(opts);
+}
+
+// src/tools/toolchecks.ts
+function isVercelTool(tool) {
+  return !!(tool && !(tool instanceof Tool) && "parameters" in tool);
+}
+
+export { Tool, createTool, isVercelTool, validateToolInput, validateToolOutput, validateToolSuspendData };
+//# sourceMappingURL=chunk-XIDKHXNR.js.map
+//# sourceMappingURL=chunk-XIDKHXNR.js.map

@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../../src/runtimes/adapters/speech/index.ts"],"sourcesContent":["export type { SpeechSynthesisAdapter } from \"./SpeechAdapterTypes\";\nexport { WebSpeechSynthesisAdapter } from \"./WebSpeechSynthesisAdapter\";\n"],"mappings":";AACA,SAAS,iCAAiC;","names":[]}

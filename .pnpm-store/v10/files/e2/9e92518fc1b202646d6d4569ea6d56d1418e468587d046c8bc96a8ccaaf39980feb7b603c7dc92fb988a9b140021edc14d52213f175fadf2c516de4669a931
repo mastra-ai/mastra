@@ -1,0 +1,28 @@
+{
+  "name": "leb",
+  "version": "1.0.0",
+  "description": "LEB128 utilities for Node",
+  "keywords": [
+    "leb", "leb128", "uleb128", "int", "uint", "encoding", "decoding", "encode",
+    "decode"
+  ],
+  "homepage": "https://github.com/danfuzz/leb",
+  "repository": {
+    "url": "git+https://github.com/danfuzz/leb"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Dan Bornstein",
+    "email": "hello-dan@murtbo.com",
+    "url": "http://www.milk.com/"
+  },
+
+  "main": "lib/leb.js",
+  "engine": {
+    "node": ">=0.6.0"
+  },
+
+  "scripts": {
+    "test": "node test/test.js"
+  }
+}

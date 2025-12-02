@@ -1,0 +1,16 @@
+export { VitestModuleEvaluator } from './module-evaluator.js';
+export { a as VITEST_VM_CONTEXT_SYMBOL, V as VitestModuleRunner, s as startVitestModuleRunner } from './chunks/startModuleRunner.BEYtrq5Y.js';
+export { g as getWorkerState } from './chunks/utils.DvEY5TfP.js';
+import 'node:module';
+import 'node:url';
+import 'node:vm';
+import 'pathe';
+import 'vite/module-runner';
+import './chunks/traces.U4xDYhzZ.js';
+import 'node:fs';
+import '@vitest/utils/helpers';
+import './path.js';
+import 'node:path';
+import '@vitest/utils/serialize';
+import '@vitest/mocker';
+import '@vitest/utils/timers';

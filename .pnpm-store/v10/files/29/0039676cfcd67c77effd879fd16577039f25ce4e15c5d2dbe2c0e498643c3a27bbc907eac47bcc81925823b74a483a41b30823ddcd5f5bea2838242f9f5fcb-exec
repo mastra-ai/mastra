@@ -1,0 +1,35 @@
+{
+  "name": "when-exit",
+  "repository": "github:fabiospampinato/when-exit",
+  "description": "Execute a function right before the process, or the browser's tab, is about to exit.",
+  "license": "MIT",
+  "version": "2.1.4",
+  "type": "module",
+  "main": "dist/node/index.js",
+  "types": "./dist/node/index.d.ts",
+  "exports": {
+    "node": "./dist/node/index.js",
+    "default": "./dist/browser/index.js"
+  },
+  "scripts": {
+    "clean": "tsex clean",
+    "compile": "tsex compile",
+    "compile:watch": "tsex compile --watch",
+    "test": "node test/index.js",
+    "prepublishOnly": "npm run clean && npm run compile && npm run test"
+  },
+  "keywords": [
+    "exit",
+    "catch",
+    "event",
+    "handle",
+    "hook",
+    "intercept",
+    "signal"
+  ],
+  "devDependencies": {
+    "@types/node": "^18.19.70",
+    "tsex": "^4.0.2",
+    "typescript": "^5.7.3"
+  }
+}

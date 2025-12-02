@@ -1,0 +1,293 @@
+{
+  "name": "convex",
+  "description": "Client for the Convex Cloud",
+  "version": "1.29.3",
+  "author": "Convex, Inc. <no-reply@convex.dev>",
+  "homepage": "https://convex.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/get-convex/convex-js.git"
+  },
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/cjs-types/index.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./dist/cjs-types/index.d.ts",
+        "require": "./dist/cjs/index.js"
+      },
+      "import": {
+        "types": "./dist/esm-types/index.d.ts",
+        "import": "./dist/esm/index.js"
+      }
+    },
+    "./server": {
+      "require": {
+        "types": "./dist/cjs-types/server/index.d.ts",
+        "require": "./dist/cjs/server/index.js"
+      },
+      "import": {
+        "types": "./dist/esm-types/server/index.d.ts",
+        "import": "./dist/esm/server/index.js"
+      }
+    },
+    "./react": {
+      "require": {
+        "types": "./dist/cjs-types/react/index.d.ts",
+        "require": "./dist/cjs/react/index.js"
+      },
+      "import": {
+        "types": "./dist/esm-types/react/index.d.ts",
+        "import": "./dist/esm/react/index.js"
+      }
+    },
+    "./react-auth0": {
+      "require": {
+        "types": "./dist/cjs-types/react-auth0/index.d.ts",
+        "require": "./dist/cjs/react-auth0/index.js"
+      },
+      "import": {
+        "types": "./dist/esm-types/react-auth0/index.d.ts",
+        "import": "./dist/esm/react-auth0/index.js"
+      }
+    },
+    "./react-clerk": {
+      "require": {
+        "types": "./dist/cjs-types/react-clerk/index.d.ts",
+        "require": "./dist/cjs/react-clerk/index.js"
+      },
+      "import": {
+        "types": "./dist/esm-types/react-clerk/index.d.ts",
+        "import": "./dist/esm/react-clerk/index.js"
+      }
+    },
+    "./nextjs": {
+      "require": {
+        "types": "./dist/cjs-types/nextjs/index.d.ts",
+        "require": "./dist/cjs/nextjs/index.js"
+      },
+      "import": {
+        "types": "./dist/esm-types/nextjs/index.d.ts",
+        "import": "./dist/esm/nextjs/index.js"
+      }
+    },
+    "./browser": {
+      "require": {
+        "types": "./dist/cjs-types/browser/index.d.ts",
+        "node": "./dist/cjs/browser/index-node.js",
+        "require": "./dist/cjs/browser/index.js"
+      },
+      "import": {
+        "types": "./dist/esm-types/browser/index.d.ts",
+        "node": "./dist/esm/browser/index-node.js",
+        "import": "./dist/esm/browser/index.js"
+      }
+    },
+    "./values": {
+      "require": {
+        "types": "./dist/cjs-types/values/index.d.ts",
+        "require": "./dist/cjs/values/index.js"
+      },
+      "import": {
+        "types": "./dist/esm-types/values/index.d.ts",
+        "import": "./dist/esm/values/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "@comment typesVersions": [
+    "Thi types field in exports is only supported with moduleResolution",
+    "set to node16 or nodenext so typesVersions is still useful."
+  ],
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/cjs-types/index.d.ts"
+      ],
+      "server": [
+        "./dist/cjs-types/server/index.d.ts"
+      ],
+      "react": [
+        "./dist/cjs-types/react/index.d.ts"
+      ],
+      "react-auth0": [
+        "./dist/cjs-types/react-auth0/index.d.ts"
+      ],
+      "react-clerk": [
+        "./dist/cjs-types/react-clerk/index.d.ts"
+      ],
+      "nextjs": [
+        "./dist/cjs-types/nextjs/index.d.ts"
+      ],
+      "browser": [
+        "./dist/cjs-types/browser/index.d.ts"
+      ],
+      "values": [
+        "./dist/cjs-types/values/index.d.ts"
+      ]
+    }
+  },
+  "bin": {
+    "convex": "bin/main.js"
+  },
+  "files": [
+    "bin",
+    "browser",
+    "config",
+    "dist",
+    "nextjs",
+    "react",
+    "react-auth0",
+    "react-clerk",
+    "schemas",
+    "server",
+    "src",
+    "values",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "browser-bundle.js",
+    "package.json",
+    "tsconfig.json",
+    "!*.test.*",
+    "!test",
+    "!test_fixtures",
+    "!client_node_test_helpers.*",
+    "!src/bundler/.eslintrc.cjs"
+  ],
+  "keywords": [
+    "convex",
+    "database",
+    "react",
+    "state",
+    "serverless"
+  ],
+  "license": "Apache-2.0",
+  "@comment dependencies": [
+    "Most CLI tool dependencies go in devDependencies instead because the CLI is distributed bundled."
+  ],
+  "dependencies": {
+    "esbuild": "0.25.4",
+    "prettier": "^3.0.0"
+  },
+  "peerDependencies": {
+    "@auth0/auth0-react": "^2.0.1",
+    "@clerk/clerk-react": "^4.12.8 || ^5.0.0",
+    "react": "^18.0.0 || ^19.0.0-0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "@auth0/auth0-react": {
+      "optional": true
+    },
+    "@clerk/clerk-react": {
+      "optional": true
+    }
+  },
+  "@comment devDependencies": [
+    "The dependencies of the CLI are also in devDependencies, built into",
+    "a bundle."
+  ],
+  "devDependencies": {
+    "@auth0/auth0-react": "2.4.0",
+    "@babel/parser": "^7.27.1",
+    "@babel/types": "^7.27.1",
+    "@clerk/clerk-react": "^5.20.0",
+    "@commander-js/extra-typings": "^11.1.0",
+    "@eslint/compat": "~1.3.0",
+    "@eslint/eslintrc": "~3.3.0",
+    "@eslint/js": "~9.34.0",
+    "@modelcontextprotocol/sdk": "^1.2.0",
+    "@octokit/openapi-types": "~25.0.0",
+    "@sentry/node": "^7.23.0",
+    "@sentry/tracing": "^7.23.0",
+    "@swc/core": "1.10.4",
+    "@testing-library/react": "~16.3.0",
+    "@types/adm-zip": "^0.5.7",
+    "@types/deep-equal": "1.0.4",
+    "@types/inquirer": "^9.0.0",
+    "@types/node": "^18.17.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@types/semver": "^7.3.13",
+    "@types/serve-handler": "~6.1.4",
+    "@types/ws": "^8.5.13",
+    "@vitest/eslint-plugin": "~1.3.0",
+    "adm-zip": "^0.5.10",
+    "bufferutil": "^4.0.7",
+    "chalk": "5",
+    "chokidar": "3.6.0",
+    "commander": "^11.1.0",
+    "deep-equal": "2.2.3",
+    "depcheck": "~1.4.7",
+    "detect-port": "^2.1.0",
+    "dotenv": "^16.4.7",
+    "esbuild": "0.25.4",
+    "esbuild-plugin-external-global": "~1.0.1",
+    "eslint": "^9.37.0",
+    "eslint-config-prettier": "^10.0.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-require-extensions": "~0.1.3",
+    "fetch-retry": "~6.0.0",
+    "find-up": "^7.0.0",
+    "globals": "~16.3.0",
+    "happy-dom": "~20.0.7",
+    "inquirer": "^9.1.4",
+    "inquirer-search-list": "~1.2.6",
+    "jsdom": "~26.1.0",
+    "json5": "~2.2.3",
+    "knip": "~5.63.0",
+    "napi-wasm": "1.1.3",
+    "open": "^8.3.0",
+    "openapi-fetch": "~0.14.0",
+    "openapi-typescript": "~7.8.0",
+    "openapi-typescript-helpers": "~0.0.15",
+    "openid-client": "^5.3.1",
+    "ora": "^8.1.1",
+    "prettier": "3.6.2",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "semver": "^7.6.0",
+    "serve-handler": "~6.1.6",
+    "shx": "~0.3.4",
+    "skott": "~0.35.4",
+    "tar": "^7.4.3",
+    "tsx": "^4.19.4",
+    "typedoc": "^0.24.6",
+    "typescript": "~5.0.3",
+    "typescript-eslint": "~8.38.0",
+    "vitest": "^3.2.4",
+    "undici": "7.15.0",
+    "wait-for-expect": "~4.0.0",
+    "ws": "8.18.0",
+    "zod": "^3.24.0",
+    "zod-to-json-schema": "^3.24.0"
+  },
+  "engines": {
+    "npm": ">=7.0.0",
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "python3 scripts/build.py 2>&1",
+    "bundle-server": "node scripts/bundle-server.mjs",
+    "clean": "shx rm -rf dist tmpDist*",
+    "lint": "eslint .",
+    "format": "prettier -w . && eslint --fix .",
+    "format-check": "prettier -c . && eslint .",
+    "test": "vitest --silent",
+    "test-not-silent": "vitest",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
+    "test-esm": "node ./scripts/test-esm.mjs && ./scripts/checkdeps.mjs && ./scripts/checkimports.mjs",
+    "compare-codegen": "node scripts/compare-codegen.mjs",
+    "generateManagementApiSpec": "openapi-typescript ./management-openapi.json --output ./src/cli/generatedApi.ts --root-types --root-types-no-schema-prefix",
+    "checkManagementApiSpec": "openapi-typescript ./management-openapi.json --output ./src/cli/generatedApi.ts --root-types --root-types-no-schema-prefix --check",
+    "generateFunctionLogsApiSpec": "openapi-typescript ./function-logs-openapi.json --output ./src/cli/lib/generatedFunctionLogsApi.ts --root-types --root-types-no-schema-prefix",
+    "checkFunctionLogsApiSpec": "openapi-typescript ./function-logs-openapi.json --output ./src/cli/lib/generatedFunctionLogsApi.ts --root-types --root-types-no-schema-prefix --check"
+  }
+}

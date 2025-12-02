@@ -1,0 +1,1 @@
+{"version":3,"file":"TestingTokenApi.d.ts","sourceRoot":"","sources":["../../../src/api/endpoints/TestingTokenApi.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,YAAY,EAAE,MAAM,2BAA2B,CAAC;AAC9D,OAAO,EAAE,WAAW,EAAE,MAAM,eAAe,CAAC;AAI5C,qBAAa,eAAgB,SAAQ,WAAW;IACjC,kBAAkB;CAMhC"}

@@ -1,0 +1,28 @@
+export declare const RegisteredLogger: {
+    readonly AGENT: "AGENT";
+    readonly OBSERVABILITY: "OBSERVABILITY";
+    readonly AUTH: "AUTH";
+    readonly NETWORK: "NETWORK";
+    readonly WORKFLOW: "WORKFLOW";
+    readonly LLM: "LLM";
+    readonly TTS: "TTS";
+    readonly VOICE: "VOICE";
+    readonly VECTOR: "VECTOR";
+    readonly BUNDLER: "BUNDLER";
+    readonly DEPLOYER: "DEPLOYER";
+    readonly MEMORY: "MEMORY";
+    readonly STORAGE: "STORAGE";
+    readonly EMBEDDINGS: "EMBEDDINGS";
+    readonly MCP_SERVER: "MCP_SERVER";
+    readonly SERVER_CACHE: "SERVER_CACHE";
+};
+export type RegisteredLogger = (typeof RegisteredLogger)[keyof typeof RegisteredLogger];
+export declare const LogLevel: {
+    readonly DEBUG: "debug";
+    readonly INFO: "info";
+    readonly WARN: "warn";
+    readonly ERROR: "error";
+    readonly NONE: "silent";
+};
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
+//# sourceMappingURL=constants.d.ts.map

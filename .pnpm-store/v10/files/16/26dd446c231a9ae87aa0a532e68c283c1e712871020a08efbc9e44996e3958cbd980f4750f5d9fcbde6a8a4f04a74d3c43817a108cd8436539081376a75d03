@@ -1,0 +1,5 @@
+#error-cause {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  --pre-bg-color: transparent;
+}

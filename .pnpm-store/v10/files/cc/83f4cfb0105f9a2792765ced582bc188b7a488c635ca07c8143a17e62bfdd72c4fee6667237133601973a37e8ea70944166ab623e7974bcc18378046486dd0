@@ -1,0 +1,1986 @@
+# Example 2.1 Sequence of Scalars (ball players)
+
+- Mark McGwire
+- Sammy Sosa
+- Ken Griffey
+
+==>
+
+Stream(Document(BlockSequence(Item(Literal),Item(Literal),Item(Literal))))
+
+# Example 2.2 Mapping Scalars to Scalars (player statistics)
+
+hr:  65    # Home runs
+avg: 0.278 # Batting average
+rbi: 147   # Runs Batted In
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Literal),Comment,
+  Pair(Key(Literal),Literal),Comment,
+  Pair(Key(Literal),Literal))),Comment)
+
+# Example 2.3 Mapping Scalars to Sequences (ball clubs in each league)
+
+american:
+- Boston Red Sox
+- Detroit Tigers
+- New York Yankees
+national:
+- New York Mets
+- Chicago Cubs
+- Atlanta Braves
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),BlockSequence(
+    Item(Literal),
+    Item(Literal),
+    Item(Literal))),
+  Pair(Key(Literal),BlockSequence(
+    Item(Literal),
+    Item(Literal),
+    Item(Literal))))))
+
+# Example 2.4 Sequence of Mappings (players’ statistics)
+
+-
+  name: Mark McGwire
+  hr:   65
+  avg:  0.278
+-
+  name: Sammy Sosa
+  hr:   63
+  avg:  0.288
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(BlockMapping(
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal))),
+  Item(BlockMapping(
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal))))))
+
+# Example 2.5 Sequence of Sequences
+
+- [name        , hr, avg  ]
+- [Mark McGwire, 65, 0.278]
+- [Sammy Sosa  , 63, 0.288]
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(FlowSequence(Item(Literal),Item(Literal),Item(Literal))),
+  Item(FlowSequence(Item(Literal),Item(Literal),Item(Literal))),
+  Item(FlowSequence(Item(Literal),Item(Literal),Item(Literal))))))
+
+# Example 2.6 Mapping of Mappings
+
+Mark McGwire: {hr: 65, avg: 0.278}
+Sammy Sosa: {
+    hr: 63,
+    avg: 0.288,
+ }
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),FlowMapping(
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal))),
+  Pair(Key(Literal),FlowMapping(
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal))))))
+
+# Example 2.7 Two Documents in a Stream (each with a leading comment)
+
+# Ranking of 1998 home runs
+---
+- Mark McGwire
+- Sammy Sosa
+- Ken Griffey
+
+# Team ranking
+---
+- Chicago Cubs
+- St Louis Cardinals
+
+==>
+
+Stream(
+  Comment,
+  Document(DirectiveEnd,BlockSequence(Item(Literal),Item(Literal),Item(Literal))),
+  Comment,
+  Document(DirectiveEnd,BlockSequence(Item(Literal),Item(Literal))))
+
+# Example 2.8 Play by Play Feed from a Game
+
+---
+time: 20:03:20
+player: Sammy Sosa
+action: strike (miss)
+...
+---
+time: 20:03:47
+player: Sammy Sosa
+action: grand slam
+...
+
+==>
+
+Stream(
+  Document(DirectiveEnd,BlockMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))),
+  DocEnd,
+  Document(DirectiveEnd,BlockMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))),
+  DocEnd)
+
+# Example 2.9 Single Document with Two Comments
+
+---
+hr: # 1998 hr ranking
+- Mark McGwire
+- Sammy Sosa
+# 1998 rbi ranking
+rbi:
+- Sammy Sosa
+- Ken Griffey
+
+==>
+
+Stream(Document(
+  DirectiveEnd,
+  BlockMapping(
+    Pair(Key(Literal),Comment,BlockSequence(
+      Item(Literal),
+      Item(Literal))),
+  Comment,
+  Pair(Key(Literal),BlockSequence(
+    Item(Literal),
+    Item(Literal))))))
+
+# Example 2.10 Node for “Sammy Sosa” appears twice in this document
+
+---
+hr:
+- Mark McGwire
+# Following node labeled SS
+- &SS Sammy Sosa
+rbi:
+- *SS # Subsequent occurrence
+- Ken Griffey
+
+==>
+
+Stream(Document(
+  DirectiveEnd,
+  BlockMapping(
+    Pair(Key(Literal),BlockSequence(
+      Item(Literal),
+      Comment,
+      Item(Anchored(Anchor,Literal)))),
+    Pair(Key(Literal),BlockSequence(
+      Item(Alias),Comment,
+      Item(Literal))))))
+
+# Example 2.11 Mapping between Sequences
+
+? - Detroit Tigers
+  - Chicago cubs
+: - 2001-07-23
+
+? [ New York Yankees,
+    Atlanta Braves ]
+: [ 2001-07-02, 2001-08-12,
+    2001-08-14 ]
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(BlockSequence(Item(Literal),Item(Literal))),BlockSequence(Item(Literal))),
+  Pair(Key(FlowSequence(Item(Literal),Item(Literal))),FlowSequence(Item(Literal),Item(Literal),Item(Literal))))))
+
+# Example 2.12 Compact Nested Mapping
+
+---
+# Products purchased
+- item    : Super Hoop
+  quantity: 1
+- item    : Basketball
+  quantity: 4
+- item    : Big Shoes
+  quantity: 1
+
+==>
+
+Stream(Document(DirectiveEnd,Comment,BlockSequence(
+  Item(BlockMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))),
+  Item(BlockMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))),
+  Item(BlockMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))))))
+
+# Example 2.13 In literals, newlines are preserved
+
+# ASCII Art
+--- |
+  \//||\/||
+  // ||  ||__
+
+==>
+
+Stream(Comment,Document(DirectiveEnd,BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))
+
+# Example 2.14 In the folded scalars, newlines become spaces
+
+--- >
+  Mark McGwire's
+  year was crippled
+  by a knee injury.
+
+==>
+
+Stream(Document(DirectiveEnd,BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))
+
+# Example 2.15 Folded newlines are preserved for “more indented” and blank lines
+
+--- >
+ Sammy Sosa completed another
+ fine season with great stats.
+
+   63 Home Runs
+   0.288 Batting Average
+
+ What a year!
+
+==>
+
+Stream(Document(DirectiveEnd,BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))
+
+# Example 2.16 Indentation determines scope
+
+name: Mark McGwire
+accomplishment: >
+  Mark set a major league
+  home run record in 1998.
+stats: |
+  65 Home Runs
+  0.278 Batting Average
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))))
+
+# Example 2.17 Quoted Scalars
+
+unicode: "Sosa did fine.\u263A"
+control: "\b1998\t1999\t2000\n"
+hex esc: "\x0d\x0a is \r\n"
+
+single: '"Howdy!" he cried.'
+quoted: ' # Not a ''comment''.'
+tie-fighter: '|\-*-/|'
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal),QuotedLiteral))))
+
+# Example 2.18 Multi-line Flow Scalars
+
+plain:
+  This unquoted scalar
+  spans many lines.
+
+quoted: "So does this
+  quoted scalar.\n"
+
+==>
+
+Stream(Document(BlockMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),QuotedLiteral))))
+
+# Example 2.19 Integers
+
+canonical: 12345
+decimal: +12345
+octal: 0o14
+hexadecimal: 0xC
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal))))
+
+# Example 2.20 Floating Point
+
+canonical: 1.23015e+3
+exponential: 12.3015e+02
+fixed: 1230.15
+negative infinity: -.inf
+not a number: .nan
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal))))
+
+# Example 2.21 Miscellaneous
+
+null:
+booleans: [ true, false ]
+string: '012345'
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal)),
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal))),
+  Pair(Key(Literal),QuotedLiteral))))
+
+# Example 2.22 Timestamps
+
+canonical: 2001-12-15T02:59:43.1Z
+iso8601: 2001-12-14t21:59:43.10-05:00
+spaced: 2001-12-14 21:59:43.10 -5
+date: 2002-12-14
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal))))
+
+# Example 2.23 Various Explicit Tags
+
+---
+not-date: !!str 2002-04-28
+
+picture: !!binary |
+ R0lGODlhDAAMAIQAAP//9/X
+ 17unp5WZmZgAAAOfn515eXv
+ Pz7Y6OjuDg4J+fn5OTk6enp
+ 56enmleECcgggoBADs=
+
+application specific tag: !something |
+ The semantics of the tag
+ above may be different for
+ different documents.
+
+==>
+
+Stream(Document(DirectiveEnd,BlockMapping(
+  Pair(Key(Literal),Tagged(Tag,Literal)),
+  Pair(Key(Literal),Tagged(Tag,BlockLiteral(BlockLiteralHeader,BlockLiteralContent))),
+  Pair(Key(Literal),Tagged(Tag,BlockLiteral(BlockLiteralHeader,BlockLiteralContent))))))
+
+# Example 2.24 Global Tags
+
+%TAG ! tag:clarkevans.com,2002:
+--- !shape
+  # Use the ! handle for presenting
+  # tag:clarkevans.com,2002:circle
+- !circle
+  center: &ORIGIN {x: 73, y: 129}
+  radius: 7
+- !line
+  start: *ORIGIN
+  finish: { x: 89, y: 102 }
+- !label
+  start: *ORIGIN
+  color: 0xFFEEBB
+  text: Pretty vector drawing.
+
+==>
+
+Stream(Document(
+  Directive(DirectiveName,DirectiveContent),
+  DirectiveEnd,
+  Tagged(Tag,Comment,Comment,BlockSequence(
+    Item(Tagged(Tag,BlockMapping(
+      Pair(Key(Literal),Anchored(Anchor,FlowMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal)))),
+      Pair(Key(Literal),Literal)))),
+    Item(Tagged(Tag,BlockMapping(
+      Pair(Key(Literal),Alias),
+      Pair(Key(Literal),FlowMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal)))))),
+    Item(Tagged(Tag,BlockMapping(
+      Pair(Key(Literal),Alias),
+      Pair(Key(Literal),Literal),
+      Pair(Key(Literal),Literal))))))))
+
+# Example 2.25 Unordered Sets
+
+# Sets are represented as a
+# Mapping where each key is
+# associated with a null value
+--- !!set
+? Mark McGwire
+? Sammy Sosa
+? Ken Griffey
+
+==>
+
+Stream(
+  Comment,
+  Comment,
+  Comment,
+  Document(
+    DirectiveEnd,
+    Tagged(Tag,BlockMapping(
+      Pair(Key(Literal)),
+      Pair(Key(Literal)),
+      Pair(Key(Literal))))))
+
+# Example 2.26 Ordered Mappings
+
+# Ordered maps are represented as
+# A sequence of mappings, with
+# each mapping having one key
+--- !!omap
+- Mark McGwire: 65
+- Sammy Sosa: 63
+- Ken Griffey: 58
+
+==>
+
+Stream(
+  Comment,
+  Comment,
+  Comment,
+  Document(DirectiveEnd,Tagged(Tag,BlockSequence(
+    Item(BlockMapping(Pair(Key(Literal),Literal))),
+    Item(BlockMapping(Pair(Key(Literal),Literal))),
+    Item(BlockMapping(Pair(Key(Literal),Literal)))))))
+
+# Example 2.27 Invoice
+
+--- !<tag:clarkevans.com,2002:invoice>
+invoice: 34843
+date   : 2001-01-23
+bill-to: &id001
+  given  : Chris
+  family : Dumars
+  address:
+    lines: |
+      458 Walkman Dr.
+      Suite #292
+    city    : Royal Oak
+    state   : MI
+    postal  : 48046
+ship-to: *id001
+product:
+- sku         : BL394D
+  quantity    : 4
+  description : Basketball
+  price       : 450.00
+- sku         : BL4438H
+  quantity    : 1
+  description : Super Hoop
+  price       : 2392.00
+tax  : 251.42
+total: 4443.52
+comments:
+  Late afternoon is best.
+  Backup contact is Nancy
+  Billsmer @ 338-4338.
+
+==>
+
+Stream(Document(DirectiveEnd,Tagged(Tag,BlockMapping(
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Anchored(Anchor,BlockMapping(
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),BlockMapping(
+      Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+      Pair(Key(Literal),Literal),
+      Pair(Key(Literal),Literal),
+      Pair(Key(Literal),Literal)))))),
+  Pair(Key(Literal),Alias),
+  Pair(Key(Literal),BlockSequence(
+    Item(BlockMapping(
+      Pair(Key(Literal),Literal),
+      Pair(Key(Literal),Literal),
+      Pair(Key(Literal),Literal),
+      Pair(Key(Literal),Literal))),
+    Item(BlockMapping(
+      Pair(Key(Literal),Literal),
+      Pair(Key(Literal),Literal),
+      Pair(Key(Literal),Literal),
+      Pair(Key(Literal),Literal))))),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),Literal)))))
+
+# Example 2.28 Log File
+
+---
+Time: 2001-11-23 15:01:42 -5
+User: ed
+Warning:
+  This is an error message
+  for the log file
+---
+Time: 2001-11-23 15:02:31 -5
+User: ed
+Warning:
+  A slightly different error
+  message.
+---
+Date: 2001-11-23 15:03:17 -5
+User: ed
+Fatal:
+  Unknown variable "bar"
+Stack:
+- file: TopClass.py
+  line: 23
+  code: |
+    x = MoreObject("345\n")
+- file: MoreClass.py
+  line: 58
+  code: |-
+    foo = bar
+
+==>
+
+Stream(
+  Document(DirectiveEnd,BlockMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))),
+  Document(DirectiveEnd,BlockMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))),
+  Document(DirectiveEnd,BlockMapping(
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),BlockSequence(
+      Item(BlockMapping(
+        Pair(Key(Literal),Literal),
+        Pair(Key(Literal),Literal),
+        Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))),
+      Item(BlockMapping(
+        Pair(Key(Literal),Literal),
+        Pair(Key(Literal),Literal),
+        Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))))))))
+
+# Example 5.1 Byte Order Mark
+
+﻿# Comment only.
+
+==>
+
+Stream(Comment)
+
+# Example 5.3 Block Structure Indicators
+
+sequence:
+- one
+- two
+mapping:
+  ? sky
+  : blue
+  sea : green
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),BlockSequence(
+    Item(Literal),
+    Item(Literal))),
+  Pair(Key(Literal),BlockMapping(
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal))))))
+
+# Example 5.4 Flow Collection Indicators
+
+sequence: [ one, two, ]
+mapping: { sky: blue, sea: green }
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal))),
+  Pair(Key(Literal),FlowMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))))))
+
+# Example 5.5 Comment Indicator
+
+# Comment only.
+
+==>
+
+Stream(Comment)
+
+# Example 5.6 Node Property Indicators
+
+anchored: !local &anchor value
+alias: *anchor
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Tagged(Tag,Anchored(Anchor,Literal))),
+  Pair(Key(Literal),Alias))))
+
+# Example 5.7 Block Scalar Indicators
+
+literal: |
+  some
+  text
+folded: >
+  some
+  text
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))))
+
+# Example 5.8 Quoted Scalar Indicators
+
+single: 'text'
+double: "text"
+
+==>
+
+Stream(Document(BlockMapping(Pair(Key(Literal),QuotedLiteral),Pair(Key(Literal),QuotedLiteral))))
+
+# Example 5.9 Directive Indicator
+
+%YAML 1.2
+--- text
+
+==>
+
+Stream(Document(Directive(DirectiveName,DirectiveContent),DirectiveEnd,Literal))
+
+# Example 5.12 Tabs and Spaces
+
+# Tabs and spaces
+quoted: "Quoted Q       "
+block:	|
+  void main() {
+  	printf("Hello, world!\n");
+  }
+
+==>
+
+Stream(Comment,Document(BlockMapping(
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))))
+
+# Example 5.13 Escaped Characters
+
+- "Fun with \\"
+- "\" \a \b \e \f"
+- "\n \r \t \v \0"
+- "\  \_ \N \L \P \
+  \x41 \u0041 \U00000041"
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(QuotedLiteral),
+  Item(QuotedLiteral),
+  Item(QuotedLiteral),
+  Item(QuotedLiteral))))
+
+# Example 6.1 Indentation Spaces
+
+  # Leading comment line spaces are
+   # neither content nor indentation.
+    
+Not indented:
+ By one space: |
+    By four
+      spaces
+ Flow style: [    # Leading spaces
+   By two,        # in flow style
+  Also by two,    # are neither
+  	Still by two   # content nor
+    ]             # indentation.
+
+==>
+
+Stream(Comment,Comment,Document(BlockMapping(
+  Pair(Key(Literal),BlockMapping(
+    Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+    Pair(Key(Literal),FlowSequence(Comment,
+      Item(Literal),Comment,
+      Item(Literal),Comment,
+      Item(Literal),Comment)))))),Comment)
+
+# Example 6.2 Indentation Indicators
+
+? a
+: -	b
+  -  -	c
+     - d
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),BlockSequence(
+    Item(Literal),
+    Item(BlockSequence(Item(Literal),Item(Literal))))))))
+
+# Example 6.3 Separation Spaces
+
+- foo:	 bar
+- - baz
+  -	baz
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(BlockMapping(Pair(Key(Literal),Literal))),
+  Item(BlockSequence(Item(Literal),Item(Literal))))))
+
+# Example 6.4 Line Prefixes
+
+plain: text
+  lines
+quoted: "text
+  	lines"
+block: |
+  text
+   	lines
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))))
+
+# Example 6.5 Empty Lines
+
+Folding:
+  "Empty line
+   	
+  as a line feed"
+Chomping: |
+  Clipped empty lines
+ 
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))))
+
+# Example 6.6 Line Folding
+
+>-
+  trimmed
+  
+ 
+
+  as
+  space
+
+==>
+
+Stream(Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))
+
+# Example 6.7 Block Folding
+
+>
+  foo 
+ 
+  	 bar
+
+  baz
+
+==>
+
+Stream(Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))
+
+# Example 6.8 Flow Folding
+
+"
+  foo 
+ 
+  	 bar
+
+  baz "
+
+==>
+
+Stream(Document(QuotedLiteral))
+
+# Example 6.9 Separated Comment
+
+key:    # Comment
+  valueeof
+
+==>
+
+Stream(Document(BlockMapping(Pair(Key(Literal),Comment,Literal))))
+
+# Example 6.10 Comment Lines
+
+  # Comment
+   
+
+==>
+
+Stream(Comment)
+
+# Example 6.11 Multi-Line Comments
+
+key:    # Comment
+        # lines
+  value
+
+==>
+
+Stream(Document(BlockMapping(Pair(Key(Literal),Comment,Comment,Literal))))
+
+# Example 6.12 Separation Spaces
+
+{ first: Sammy, last: Sosa }:
+# Statistics:
+  hr:  # Home runs
+     65
+  avg: # Average
+   0.278
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(
+    Key(FlowMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))),
+    Comment,
+    BlockMapping(
+      Pair(Key(Literal),Comment,Literal),
+      Pair(Key(Literal),Comment,Literal))))))
+
+# Example 6.13 Reserved Directives
+
+%FOO  bar baz # Should be ignored
+               # with a warning.
+--- "foo"
+
+==>
+
+Stream(Document(
+  Directive(DirectiveName,DirectiveContent,Comment),
+  Comment,
+  DirectiveEnd,
+  QuotedLiteral))
+
+# Example 6.14 “YAML” directive
+
+%YAML 1.3 # Attempt parsing
+           # with a warning
+---
+"foo"
+
+==>
+
+Stream(Document(
+  Directive(DirectiveName,DirectiveContent,Comment),
+  Comment,
+  DirectiveEnd,
+  QuotedLiteral))
+
+# Example 6.16 “TAG” directive
+
+%TAG !yaml! tag:yaml.org,2002:
+---
+!yaml!str "foo"
+
+==>
+
+Stream(Document(
+  Directive(DirectiveName,DirectiveContent),
+  DirectiveEnd,
+  Tagged(Tag,QuotedLiteral)))
+
+# Example 6.18 Primary Tag Handle
+
+# Private
+!foo "bar"
+...
+# Global
+%TAG ! tag:example.com,2000:app/
+---
+!foo "bar"
+
+==>
+
+Stream(
+  Comment,
+  Document(Tagged(Tag,QuotedLiteral)),
+  DocEnd,
+  Comment,
+  Document(
+    Directive(DirectiveName,DirectiveContent),
+    DirectiveEnd,
+    Tagged(Tag,QuotedLiteral)))
+
+# Example 6.19 Secondary Tag Handle
+
+%TAG !! tag:example.com,2000:app/
+---
+!!int 1 - 3 # Interval, not integer
+
+==>
+
+Stream(Document(
+  Directive(DirectiveName,DirectiveContent),
+  DirectiveEnd,
+  Tagged(Tag,Literal)),Comment)
+
+# Example 6.20 Tag Handles
+
+%TAG !e! tag:example.com,2000:app/
+---
+!e!foo "bar"
+
+==>
+
+Stream(Document(
+  Directive(DirectiveName,DirectiveContent),
+  DirectiveEnd,
+  Tagged(Tag,QuotedLiteral)))
+
+# Example 6.21 Local Tag Prefix
+
+%TAG !m! !my-
+--- # Bulb here
+!m!light fluorescent
+...
+%TAG !m! !my-
+--- # Color here
+!m!light green
+
+==>
+
+Stream(Document(
+  Directive(DirectiveName,DirectiveContent),
+  DirectiveEnd,Comment,
+  Tagged(Tag,Literal)
+), DocEnd, Document(
+  Directive(DirectiveName,DirectiveContent),
+  DirectiveEnd, Comment,
+  Tagged(Tag,Literal)))
+
+# Example 6.22 Global Tag Prefix
+
+%TAG !e! tag:example.com,2000:app/
+---
+- !e!foo "bar"
+
+==>
+
+Stream(Document(
+  Directive(DirectiveName,DirectiveContent),
+  DirectiveEnd,
+  BlockSequence(Item(Tagged(Tag,QuotedLiteral)))))
+
+# Example 6.23 Node Properties
+
+!!str &a1 "foo":
+  !!str bar
+&a2 baz : *a1
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Tagged(Tag,Anchored(Anchor,QuotedLiteral))),Tagged(Tag,Literal)),
+  Pair(Key(Anchored(Anchor,Literal)),Alias))))
+
+# Example 6.24 Verbatim Tags
+
+!<tag:yaml.org,2002:str> foo :
+  !<!bar> baz
+
+==>
+
+Stream(Document(BlockMapping(Pair(Key(Tagged(Tag,Literal)),Tagged(Tag,Literal)))))
+
+# Example 6.26 Tag Shorthands
+
+%TAG !e! tag:example.com,2000:app/
+---
+- !local foo
+- !!str bar
+- !e!tag%21 baz
+
+==>
+
+Stream(Document(
+  Directive(DirectiveName,DirectiveContent),
+  DirectiveEnd,
+  BlockSequence(
+    Item(Tagged(Tag,Literal)),
+    Item(Tagged(Tag,Literal)),
+    Item(Tagged(Tag,Literal)))))
+
+# Example 6.28 Non-Specific Tags
+
+# Assuming conventional resolution:
+- "12"
+- 12
+- ! 12
+
+==>
+
+Stream(Comment,Document(BlockSequence(
+  Item(QuotedLiteral),
+  Item(Literal),
+  Item(Tagged(Tag,Literal)))))
+
+# Example 6.29 Node Anchors
+
+First occurrence: &anchor Value
+Second occurrence: *anchor
+
+==>
+
+Stream(Document(BlockMapping(Pair(Key(Literal),Anchored(Anchor,Literal)),Pair(Key(Literal),Alias))))
+
+# Example 7.1 Alias Nodes
+
+First occurrence: &anchor Foo
+Second occurrence: *anchor
+Override anchor: &anchor Bar
+Reuse anchor: *anchor
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Anchored(Anchor,Literal)),
+  Pair(Key(Literal),Alias),
+  Pair(Key(Literal),Anchored(Anchor,Literal)),
+  Pair(Key(Literal),Alias))))
+
+# Example 7.2 Empty Content
+
+{
+  foo : !!str,
+  !!str : bar,
+}
+
+==>
+
+Stream(Document(FlowMapping(Pair(Key(Literal),Tagged(Tag)),Pair(Key(Tagged(Tag)),Literal))))
+
+# Example 7.3 Completely Empty Flow Nodes
+
+{
+  ? foo :,
+  : bar,
+}
+
+==>
+
+Stream(Document(FlowMapping(Pair(Key(Literal)),Pair(Key(Literal)))))
+
+# Example 7.4 Double Quoted Implicit Keys
+
+"implicit block key" : [
+  "implicit flow key" : value,
+ ]
+
+==>
+
+Stream(Document(BlockMapping(Pair(Key(QuotedLiteral),FlowSequence(
+  Item(FlowMapping(Pair(Key(QuotedLiteral),Literal))))))))
+
+# Example 7.5 Double Quoted Line Breaks
+
+"folded 
+to a space,	
+ 
+to a line feed, or     \
+ \ 	non-content"
+
+==>
+
+Stream(Document(QuotedLiteral))
+
+# Example 7.6 Double Quoted Lines
+
+" 1st non-empty
+
+ 2nd non-empty 
+    3rd non-empty "
+
+==>
+
+Stream(Document(QuotedLiteral))
+
+# Example 7.7 Single Quoted Characters
+
+'here''s to "quotes"'
+
+==>
+
+Stream(Document(QuotedLiteral))
+
+# Example 7.8 Single Quoted Implicit Keys
+
+'implicit block key' : [
+  'implicit flow key' : value,
+ ]
+
+==>
+
+Stream(Document(BlockMapping(Pair(Key(QuotedLiteral),FlowSequence(Item(FlowMapping(Pair(Key(QuotedLiteral),Literal))))))))
+
+# Example 7.9 Single Quoted Lines
+
+' 1st non-empty
+
+ 2nd non-empty 
+	3rd non-empty '
+
+==>
+
+Stream(Document(QuotedLiteral))
+
+# Example 7.10 Plain Characters
+
+# Outside flow collection:
+- ::vector
+- ": - ()"
+- Up, up, and away!
+- -123
+- https://example.com/foo#bar
+# Inside flow collection:
+- [ ::vector,
+  ": - ()",
+  "Up, up and away!",
+  -123,
+  https://example.com/foo#bar ]
+
+==>
+
+Stream(Comment,Document(BlockSequence(
+  Item(Literal),
+  Item(QuotedLiteral),
+  Item(Literal),
+  Item(Literal),
+  Item(Literal),
+  Comment,
+  Item(FlowSequence(Item(Literal),Item(QuotedLiteral),Item(QuotedLiteral),Item(Literal),Item(Literal))))))
+
+# Example 7.12 Plain Lines
+
+1st non-empty
+
+ 2nd non-empty 
+	3rd non-empty
+
+==>
+
+Stream(Document(Literal))
+
+# Example 7.13 Flow Sequence
+
+- [ one, two, ]
+- [three ,four]
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(FlowSequence(Item(Literal),Item(Literal))),
+  Item(FlowSequence(Item(Literal),Item(Literal))))))
+
+# Example 7.13 Flow Sequence
+
+- [ one, two, ]
+- [three ,four]
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(FlowSequence(Item(Literal),Item(Literal))),
+  Item(FlowSequence(Item(Literal),Item(Literal))))))
+
+# Example 7.14 Flow Sequence Entries
+
+[
+"double
+ quoted", 'single
+           quoted',
+plain
+ text, [ nested ],
+single: pair,
+]
+
+==>
+
+Stream(Document(FlowSequence(
+  Item(QuotedLiteral),
+  Item(QuotedLiteral),
+  Item(Literal),
+  Item(FlowSequence(Item(Literal))),
+  Item(FlowMapping(Pair(Key(Literal),Literal))))))
+
+# Example 7.15 Flow Mappings
+
+- { one : two , three: four , }
+- {five: six,seven : eight}
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(FlowMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))),
+  Item(FlowMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal))))))
+
+# Example 7.16 Flow Mapping Entries
+
+{
+? explicit: entry,
+implicit: entry,
+?
+}
+
+==>
+
+Stream(Document(FlowMapping(Pair(Key(Literal),Literal),Pair(Key(Literal),Literal),Pair)))
+
+# Example 7.17 Flow Mapping Separate Values
+
+{
+unquoted : "separate",
+https://foo.com,
+omitted value:,
+: omitted key,
+}
+
+==>
+
+Stream(Document(FlowMapping(
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal)),
+  Pair(Key(Literal)),
+  Pair(Key(Literal)))))
+
+# Example 7.18 Flow Mapping Adjacent Values
+
+{
+"adjacent":value,
+"readable": value,
+"empty":
+}
+
+==>
+
+Stream(Document(FlowMapping(
+  Pair(Key(QuotedLiteral),Literal),
+  Pair(Key(QuotedLiteral),Literal),
+  Pair(Key(QuotedLiteral)))))
+
+# Example 7.19 Single Pair Flow Mappings
+
+[
+foo: bar
+]
+
+==>
+
+Stream(Document(FlowSequence(Item(FlowMapping(Pair(Key(Literal),Literal))))))
+
+# Example 7.20 Single Pair Explicit Entry
+
+[
+? foo
+ bar : baz
+]
+
+==>
+
+Stream(Document(FlowSequence(Item(FlowMapping(Pair(Key(Literal),Literal))))))
+
+# Example 7.21 Single Pair Implicit Entries
+
+- [ YAML : separate ]
+- [ : empty key entry ]
+- [ {JSON: like}:adjacent ]
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(FlowSequence(Item(FlowMapping(Pair(Key(Literal),Literal))))),
+  Item(FlowSequence(Item(FlowMapping(Pair(Literal))))),
+  Item(FlowSequence(Item(FlowMapping(Pair(Key(FlowMapping(Pair(Key(Literal),Literal))),Literal))))))))
+
+# Example 7.23 Flow Content
+
+- [ a, b ]
+- { a: b }
+- "a"
+- 'b'
+- c
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(FlowSequence(Item(Literal),Item(Literal))),
+  Item(FlowMapping(Pair(Key(Literal),Literal))),
+  Item(QuotedLiteral),
+  Item(QuotedLiteral),
+  Item(Literal))))
+
+# Example 7.24 Flow Nodes
+
+- !!str "a"
+- 'b'
+- &anchor "c"
+- *anchor
+- !!str
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(Tagged(Tag,QuotedLiteral)),
+  Item(QuotedLiteral),
+  Item(Anchored(Anchor,QuotedLiteral)),
+  Item(Alias),
+  Item(Tagged(Tag)))))
+
+# Example 8.1 Block Scalar Header
+
+- | # Empty header
+ literal
+- >1 # Indentation indicator
+ ·folded
+- |+ # Chomping indicator
+ keep
+
+- >1- # Both indicators
+  strip
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(BlockLiteral(BlockLiteralHeader,Comment,BlockLiteralContent)),
+  Item(BlockLiteral(BlockLiteralHeader,Comment,BlockLiteralContent)),
+  Item(BlockLiteral(BlockLiteralHeader,Comment,BlockLiteralContent)),
+  Item(BlockLiteral(BlockLiteralHeader,Comment,BlockLiteralContent)))))
+
+# Example 8.2 Block Indentation Indicator
+
+- |
+ detected
+- >
+ 
+  
+  # detected
+- |1
+  explicit
+- >
+ 	
+ detected
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Item(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Item(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Item(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))))
+
+# Example 8.4 Chomping Final Line Break
+
+strip: |-
+  text
+clip: |
+  text
+keep: |+
+  text
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))))
+
+# Example 8.5 Chomping Trailing Lines
+
+# Strip
+  # Comments:
+strip: |-
+  # text
+  
+ # Clip
+  # comments:
+
+clip: |
+  # text
+ 
+ # Keep
+  # comments:
+
+keep: |+
+  # text
+
+ # Trail
+  # comments.
+
+==>
+
+Stream(Comment,Comment,Document(BlockMapping(
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Comment,Comment,
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Comment,Comment,
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))),
+Comment,Comment)
+
+# Example 8.6 Empty Scalar Chomping
+
+strip: >-
+
+clip: >
+
+keep: |+
+
+a: b
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Pair(Key(Literal),Literal))))
+
+# Example 8.7 Literal Scalar
+
+|
+ literal
+ 	text
+
+==>
+
+Stream(Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))
+
+
+# Example 8.8 Literal Content
+
+|
+ 
+  
+  literal
+   
+  
+  text
+
+ # Comment
+
+==>
+
+Stream(Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),Comment)
+
+# Example 8.9 Folded Scalar
+
+>
+ folded
+ text
+
+==>
+
+Stream(Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))
+
+# Example 8.10 Folded Lines
+
+>
+
+ folded
+ line
+
+ next
+ line
+   * bullet
+
+   * list
+   * lines
+
+ last
+ line
+
+# Comment
+
+==>
+
+Stream(Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),Comment)
+
+# Example 8.11 More Indented Lines
+
+>
+
+ folded
+ line
+
+ next
+ line
+   * bullet
+
+   * list
+   * lines
+
+ last
+ line
+
+# Comment
+
+==>
+
+Stream(Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),Comment)
+
+# Example 8.12 Empty Separation Lines
+
+>
+
+ folded
+ line
+
+ next
+ line
+   * bullet
+
+   * list
+   * lines
+
+ last
+ line
+
+# Comment
+
+==>
+
+Stream(Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),Comment)
+
+
+# Example 8.13 Final Empty Lines
+
+>
+
+ folded
+ line
+
+ next
+ line
+   * bullet
+
+   * list
+   * lines
+
+ last
+ line
+
+# Comment
+
+==>
+
+Stream(Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),Comment)
+
+# Example 8.14 Block Sequence
+
+block sequence:
+  - one
+  - two : three
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),BlockSequence(
+    Item(Literal),
+    Item(BlockMapping(Pair(Key(Literal),Literal))))))))
+
+# Example 8.15 Block Sequence Entry Types
+
+- # Empty
+- |
+ block node
+- - one # Compact
+  - two # sequence
+- one: two # Compact mapping
+
+==>
+
+Stream(Document(BlockSequence(
+  Item,Comment,
+  Item(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Item(BlockSequence(Item(Literal),Comment,Item(Literal))),Comment,
+  Item(BlockMapping(Pair(Key(Literal),Literal))))),Comment)
+
+# Example 8.16 Block Mappings
+
+block mapping:
+ key: value
+
+==>
+
+Stream(Document(BlockMapping(Pair(Key(Literal),BlockMapping(Pair(Key(Literal),Literal))))))
+
+# Example 8.17 Explicit Block Mapping Entries
+
+? explicit key # Empty value
+? |
+  block key
+: - one # Explicit compact
+  - two # block value
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal)),Comment,
+  Pair(Key(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),BlockSequence(
+    Item(Literal),Comment,
+    Item(Literal))))),Comment)
+
+# Example 8.18 Implicit Block Mapping Entries
+
+plain key: in-line value
+: # Both empty
+"quoted key":
+- entry
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Literal),
+  Pair,Comment,
+  Pair(Key(QuotedLiteral),BlockSequence(Item(Literal))))))
+
+# Example 8.19 Compact Block Mappings
+
+- sun: yellow
+- ? earth: blue
+  : moon: white
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(BlockMapping(Pair(Key(Literal),Literal))),
+  Item(BlockMapping(
+    Pair(Key(BlockMapping(Pair(Key(Literal),Literal))),BlockMapping(Pair(Key(Literal),Literal))))))))
+
+# Example 8.20 Block Node Types
+
+-
+  "flow in block"
+- >
+ Block scalar
+- !!map # Block collection
+  foo : bar
+
+==>
+
+Stream(Document(BlockSequence(
+  Item(QuotedLiteral),
+  Item(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Item(Tagged(Tag,Comment,BlockMapping(Pair(Key(Literal),Literal)))))))
+
+# Example 8.21 Block Scalar Nodes
+
+literal: |2
+  value
+folded:
+   !foo
+  >1
+ value
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  Pair(Key(Literal),Tagged(Tag,BlockLiteral(BlockLiteralHeader,BlockLiteralContent))))))
+
+# Example 8.22 Block Collection Nodes
+
+sequence: !!seq
+- entry
+- !!seq
+ - nested
+mapping: !!map
+ foo: bar
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Tagged(Tag,BlockSequence(
+    Item(Literal),
+    Item(Tagged(Tag,BlockSequence(Item(Literal))))))),
+  Pair(Key(Literal),Tagged(Tag,BlockMapping(
+    Pair(Key(Literal),Literal)))))))
+
+# Example 9.1 Document Prefix
+
+# Comment
+# lines
+Document
+
+==>
+
+Stream(Comment,Comment,Document(Literal))
+
+# Example 9.2 Document Markers
+
+%YAML 1.2
+---
+Document
+... # Suffix
+
+==>
+
+Stream(
+  Document(Directive(DirectiveName,DirectiveContent),DirectiveEnd,Literal),
+  DocEnd,Comment)
+
+# Example 9.3 Bare Documents
+
+Bare
+document
+...
+# No document
+...
+|
+%!PS-Adobe-2.0 # Not the first line
+
+==>
+
+Stream(
+  Document(Literal),
+  DocEnd,
+  Comment,
+  DocEnd,
+  Document(BlockLiteral(BlockLiteralHeader,BlockLiteralContent)))
+
+# Example 9.4 Explicit Documents
+
+---
+{ matches
+% : 20 }
+...
+---
+# Empty
+...
+
+==>
+
+Stream(
+  Document(
+    DirectiveEnd,
+    FlowMapping(Pair(Key(Literal),Literal))),
+  DocEnd,
+  Document(DirectiveEnd),
+  Comment,
+  DocEnd)
+
+# Example 9.5 Directives Documents
+
+%YAML 1.2
+--- |
+%!PS-Adobe-2.0
+...
+%YAML 1.2
+---
+# Empty
+...
+
+==>
+
+Stream(
+  Document(
+    Directive(DirectiveName,DirectiveContent),
+    DirectiveEnd,
+    BlockLiteral(BlockLiteralHeader,BlockLiteralContent)),
+  DocEnd,
+  Document(
+    Directive(DirectiveName,DirectiveContent),
+    DirectiveEnd),
+  Comment,
+  DocEnd)
+
+# Example 9.6 Stream
+
+Document
+---
+# Empty
+...
+%YAML 1.2
+---
+matches %: 20
+
+==>
+
+Stream(
+  Document(Literal),
+  Document(DirectiveEnd),
+  Comment,
+  DocEnd,
+  Document(
+    Directive(DirectiveName,DirectiveContent),
+    DirectiveEnd,
+    BlockMapping(Pair(Key(Literal),Literal))))
+
+# Example 10.1 !!map Examples
+
+Block style: !!map
+  Clark : Evans
+  Ingy  : döt Net
+  Oren  : Ben-Kiki
+
+Flow style: !!map { Clark: Evans, Ingy: döt Net, Oren: Ben-Kiki }
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Tagged(Tag,BlockMapping(
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal)))),
+  Pair(Key(Literal),Tagged(Tag,FlowMapping(
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal),
+    Pair(Key(Literal),Literal)))))))
+
+# Example 10.2 !!seq Examples
+
+Block style: !!seq
+- Clark Evans
+- Ingy döt Net
+- Oren Ben-Kiki
+
+Flow style: !!seq [ Clark Evans, Ingy döt Net, Oren Ben-Kiki ]
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Tagged(Tag,BlockSequence(
+    Item(Literal),
+    Item(Literal),
+    Item(Literal)))),
+  Pair(Key(Literal),Tagged(Tag,FlowSequence(Item(Literal),Item(Literal),Item(Literal)))))))
+
+# Example 10.3 !!str Examples
+
+Block style: !!str |-
+  String: just a theory.
+
+Flow style: !!str "String: just a theory."
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Tagged(Tag,BlockLiteral(BlockLiteralHeader,BlockLiteralContent))),
+  Pair(Key(Literal),Tagged(Tag,QuotedLiteral)))))
+
+# Example 10.4 !!null Examples
+
+!!null null: value for null key
+key with null value: !!null null
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Tagged(Tag,Literal)),Literal),
+  Pair(Key(Literal),Tagged(Tag,Literal)))))
+
+# Example 10.5 !!bool Examples
+
+YAML is a superset of JSON: !!bool true
+Pluto is a planet: !!bool false
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Tagged(Tag,Literal)),
+  Pair(Key(Literal),Tagged(Tag,Literal)))))
+
+# Example 10.6 !!int Examples
+
+negative: !!int -12
+zero: !!int 0
+positive: !!int 34
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Tagged(Tag,Literal)),
+  Pair(Key(Literal),Tagged(Tag,Literal)),
+  Pair(Key(Literal),Tagged(Tag,Literal)))))
+
+# Example 10.7 !!float Examples
+
+negative: !!float -1
+zero: !!float 0
+positive: !!float 2.3e4
+infinity: !!float .inf
+not a number: !!float .nan
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Tagged(Tag,Literal)),
+  Pair(Key(Literal),Tagged(Tag,Literal)),
+  Pair(Key(Literal),Tagged(Tag,Literal)),
+  Pair(Key(Literal),Tagged(Tag,Literal)),
+  Pair(Key(Literal),Tagged(Tag,Literal)))))
+
+# Example 10.8 JSON Tag Resolution
+
+A null: null
+Booleans: [ true, false ]
+Integers: [ 0, -0, 3, -19 ]
+Floats: [ 0., -0.0, 12e03, -2E+05 ]
+Invalid: [ True, Null,
+  0o7, 0x3A, +12.3 ]
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal))),
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal),Item(Literal),Item(Literal))),
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal),Item(Literal),Item(Literal))),
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal),Item(Literal),Item(Literal),Item(Literal))))))
+
+# Example 10.9 Core Tag Resolution
+
+A null: null
+Also a null: # Empty
+Not a null: ""
+Booleans: [ true, True, false, FALSE ]
+Integers: [ 0, 0o7, 0x3A, -19 ]
+Floats: [
+  0., -0.0, .5, +12e03, -2E+05 ]
+Also floats: [
+  .inf, -.Inf, +.INF, .NAN ]
+
+==>
+
+Stream(Document(BlockMapping(
+  Pair(Key(Literal),Literal),
+  Pair(Key(Literal)),Comment,
+  Pair(Key(Literal),QuotedLiteral),
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal),Item(Literal),Item(Literal))),
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal),Item(Literal),Item(Literal))),
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal),Item(Literal),Item(Literal),Item(Literal))),
+  Pair(Key(Literal),FlowSequence(Item(Literal),Item(Literal),Item(Literal),Item(Literal))))))

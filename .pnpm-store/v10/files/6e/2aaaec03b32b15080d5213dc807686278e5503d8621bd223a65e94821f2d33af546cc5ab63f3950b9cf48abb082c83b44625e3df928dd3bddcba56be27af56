@@ -1,0 +1,1 @@
+{"version":3,"file":"WebhookApi.d.ts","sourceRoot":"","sources":["../../../src/api/endpoints/WebhookApi.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,gBAAgB,EAAE,MAAM,mBAAmB,CAAC;AAC1D,OAAO,EAAE,WAAW,EAAE,MAAM,eAAe,CAAC;AAI5C,qBAAa,UAAW,SAAQ,WAAW;IAC5B,aAAa;IAOb,mBAAmB;IAOnB,aAAa;CAM3B"}

@@ -1,0 +1,55 @@
+{
+  "name": "@speechify/api-sdk",
+  "version": "2.5.4",
+  "description": "Official Speechify AI API SDK",
+  "type": "module",
+  "files": [
+    "/lib",
+    "/src"
+  ],
+  "main": "./lib/cjs/src/index.js",
+  "module": "./lib/esm/src/index.js",
+  "types": "./lib/cjs/src/index.d.ts",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./lib/cjs/src/index.d.ts",
+        "default": "./lib/cjs/src/index.js"
+      },
+      "import": {
+        "types": "./lib/esm/src/index.d.ts",
+        "default": "./lib/esm/src/index.js"
+      }
+    }
+  },
+  "keywords": [
+    "speechify",
+    "ai",
+    "api",
+    "sdk",
+    "text-to-speech",
+    "tts"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.17.16",
+    "@vitest/browser": "^3.0.0",
+    "playwright": "^1.50.0",
+    "prettier": "^3.4.2",
+    "typedoc": "^0.27.6",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.0"
+  },
+  "volta": {
+    "node": "20.16.0",
+    "pnpm": "9.15.5"
+  },
+  "scripts": {
+    "build:js": "./scripts/build.sh",
+    "build:docs": "typedoc --out docs --customCss ./docs-theme/style.css src/index.ts",
+    "build": "pnpm run \"/^build:.*/\"",
+    "test:watch": "vitest watch -r . --project node",
+    "test:node": "vitest run -r . --project node",
+    "test:browser": "vitest run -r . --project browser"
+  }
+}

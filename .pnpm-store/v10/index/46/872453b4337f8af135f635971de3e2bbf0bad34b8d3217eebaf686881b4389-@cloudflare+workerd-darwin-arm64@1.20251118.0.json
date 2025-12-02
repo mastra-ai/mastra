@@ -1,0 +1,25 @@
+{
+  "name": "@cloudflare/workerd-darwin-arm64",
+  "version": "1.20251118.0",
+  "requiresBuild": false,
+  "files": {
+    "bin/workerd": {
+      "checkedAt": 1764662925600,
+      "integrity": "sha512-9dS5WxYCOFqPsEhqLibuJfPqpCUMNd6sLebFjxatwOl9VH262kpkUOWK9YRO7JgUIu3reTnvMw06I437pX1PPw==",
+      "mode": 493,
+      "size": 99206880
+    },
+    "package.json": {
+      "checkedAt": 1764662925601,
+      "integrity": "sha512-yPklNRaFjsIcG+dYp0PWy9qBJAHfnnNrZI/F3spxuQ965ELYnajLHcaHyWbbFVO1HbwKb3hphbRAFrkjtm++hA==",
+      "mode": 420,
+      "size": 377
+    },
+    "README.md": {
+      "checkedAt": 1764662925601,
+      "integrity": "sha512-L8m4AJSQvINTM/bNBgg/uBoMKyIbiVHk1NxS8U0KEyVpdwZzPMmszKKhbu/6+7Cqh7cYiy5llVoH2lhO4KwsFw==",
+      "mode": 420,
+      "size": 259
+    }
+  }
+}

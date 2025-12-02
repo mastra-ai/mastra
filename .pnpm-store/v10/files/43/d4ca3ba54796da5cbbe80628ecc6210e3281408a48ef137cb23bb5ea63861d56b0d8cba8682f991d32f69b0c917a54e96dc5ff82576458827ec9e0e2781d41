@@ -1,0 +1,50 @@
+{
+  "name": "rollup-plugin-esbuild",
+  "version": "6.2.1",
+  "packageManager": "pnpm@10.5.2",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "import": "./dist/index.mjs",
+    "default": "./dist/index.js"
+  },
+  "author": "EGOIST",
+  "license": "MIT",
+  "repository": "https://github.com/egoist/rollup-plugin-esbuild",
+  "scripts": {
+    "test": "vitest",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "pnpm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/node": "22.13.5",
+    "esbuild": "^0.25.0",
+    "prettier": "^3.5.2",
+    "react": "^19.0.0",
+    "rollup": "^4.34.8",
+    "ts-essentials": "^10.0.4",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.7",
+    "vue": "^3.5.13"
+  },
+  "dependencies": {
+    "debug": "^4.4.0",
+    "es-module-lexer": "^1.6.0",
+    "get-tsconfig": "^4.10.0",
+    "unplugin-utils": "^0.2.4"
+  },
+  "peerDependencies": {
+    "esbuild": ">=0.18.0",
+    "rollup": "^1.20.0 || ^2.0.0 || ^3.0.0 || ^4.0.0"
+  },
+  "engines": {
+    "node": ">=14.18.0"
+  }
+}

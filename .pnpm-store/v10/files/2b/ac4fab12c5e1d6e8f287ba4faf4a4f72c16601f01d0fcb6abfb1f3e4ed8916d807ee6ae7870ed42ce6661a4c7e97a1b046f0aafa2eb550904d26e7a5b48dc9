@@ -1,0 +1,51 @@
+{
+  "name": "@libsql/isomorphic-fetch",
+  "version": "0.3.1",
+  "keywords": [
+    "fetch",
+    "isomorphic",
+    "node",
+    "deno",
+    "workers"
+  ],
+  "description": "Isomorphic fetch() in Node, Deno and Cloudflare Workers",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/libsql/isomorphic-ts.git",
+    "directory": "isomorphic-fetch"
+  },
+  "homepage": "https://github.com/libsql/isomorphic-ts/tree/main/isomorphic-fetch",
+  "authors": [
+    "Jan Špaček <honza@chiselstrike.com>"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "node.cjs",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "bun": "./web.js",
+        "node": "./node.js",
+        "deno": "./web.js",
+        "workerd": "./web.js",
+        "default": "./web.js"
+      },
+      "require": {
+        "bun": "./web.cjs",
+        "node": "./node.cjs",
+        "workerd": "./web.cjs",
+        "default": "./web.cjs"
+      }
+    }
+  },
+  "files": [
+    "*.mjs",
+    "*.cjs",
+    "*.js",
+    "*.d.ts"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

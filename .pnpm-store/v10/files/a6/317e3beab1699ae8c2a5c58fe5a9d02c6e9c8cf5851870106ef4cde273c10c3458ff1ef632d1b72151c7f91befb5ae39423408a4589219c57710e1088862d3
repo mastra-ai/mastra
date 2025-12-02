@@ -1,0 +1,1 @@
+{"version":3,"sources":["../src/Logger.js"],"names":["Logger","Roarr","child","package"],"mappings":";;;;;;;AAEA;;;;AAEA,MAAMA,MAAM,GAAGC,eACZC,KADY,CACN;AACLC,EAAAA,OAAO,EAAE;AADJ,CADM,CAAf;;eAKeH,M","sourcesContent":["// @flow\n\nimport Roarr from 'roarr';\n\nconst Logger = Roarr\n  .child({\n    package: 'global-agent',\n  });\n\nexport default Logger;\n"],"file":"Logger.js"}

@@ -1,0 +1,83 @@
+types:
+  AudioIsolationAudioIsolationRequestFileFormat:
+    enum:
+      - pcm_s16le_16
+      - other
+    inline: true
+    source:
+      openapi: openapi.json
+  AudioIsolationAudioIsolationStreamRequestFileFormat:
+    enum:
+      - pcm_s16le_16
+      - other
+    inline: true
+    source:
+      openapi: openapi.json
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    audio_isolation:
+      path: /v1/audio-isolation
+      method: POST
+      auth: false
+      docs: Removes background noise from audio.
+      source:
+        openapi: openapi.json
+      display-name: Audio isolation
+      request:
+        name: Body_Audio_Isolation_v1_audio_isolation_post
+        body:
+          properties:
+            audio:
+              type: file
+              docs: The audio file from which vocals/speech will be isolated from.
+            file_format:
+              type: optional<AudioIsolationAudioIsolationRequestFileFormat>
+              docs: >-
+                The format of input audio. Options are 'pcm_s16le_16' or 'other'
+                For `pcm_s16le_16`, the input audio must be 16-bit PCM at a
+                16kHz sample rate, single channel (mono), and little-endian byte
+                order. Latency will be lower than with passing an encoded
+                waveform.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: file
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+    audio_isolation_stream:
+      path: /v1/audio-isolation/stream
+      method: POST
+      auth: false
+      docs: Removes background noise from audio.
+      source:
+        openapi: openapi.json
+      display-name: Audio isolation stream
+      request:
+        name: Body_Audio_Isolation_Stream_v1_audio_isolation_stream_post
+        body:
+          properties:
+            audio:
+              type: file
+              docs: The audio file from which vocals/speech will be isolated from.
+            file_format:
+              type: optional<AudioIsolationAudioIsolationStreamRequestFileFormat>
+              docs: >-
+                The format of input audio. Options are 'pcm_s16le_16' or 'other'
+                For `pcm_s16le_16`, the input audio must be 16-bit PCM at a
+                16kHz sample rate, single channel (mono), and little-endian byte
+                order. Latency will be lower than with passing an encoded
+                waveform.
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: file
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+  source:
+    openapi: openapi.json

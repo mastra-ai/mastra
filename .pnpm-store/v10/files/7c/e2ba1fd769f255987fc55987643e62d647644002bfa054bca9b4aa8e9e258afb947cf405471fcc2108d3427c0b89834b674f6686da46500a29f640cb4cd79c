@@ -1,0 +1,35 @@
+import { XdrEncoder } from '../../../xdr/XdrEncoder';
+import { NlmProc } from './constants';
+import * as msg from './messages';
+import type { IWriter, IWriterGrowable } from '@jsonjoy.com/util/lib/buffers';
+export declare class NlmEncoder<W extends IWriter & IWriterGrowable = IWriter & IWriterGrowable> {
+    readonly writer: W;
+    protected readonly xdr: XdrEncoder;
+    constructor(writer?: W);
+    encodeMessage(message: msg.NlmMessage, proc: NlmProc, isRequest: boolean): Uint8Array;
+    writeMessage(message: msg.NlmMessage, proc: NlmProc, isRequest: boolean): void;
+    private writeRequest;
+    private writeResponse;
+    private writeCookie;
+    private writeNetobj;
+    private writeNlm4Holder;
+    private writeNlm4Lock;
+    private writeNlm4Share;
+    private writeTestArgs;
+    private writeLockArgs;
+    private writeCancelArgs;
+    private writeUnlockArgs;
+    private writeShareArgs;
+    private writeTestRequest;
+    private writeTestResponse;
+    private writeLockRequest;
+    private writeResponse4;
+    private writeCancelRequest;
+    private writeUnlockRequest;
+    private writeGrantedRequest;
+    private writeShareRequest;
+    private writeShareResponse;
+    private writeUnshareRequest;
+    private writeNmLockRequest;
+    private writeFreeAllRequest;
+}

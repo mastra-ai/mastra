@@ -1,0 +1,44 @@
+imports:
+  root: ../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    outbound_call:
+      path: /v1/convai/sip-trunk/outbound-call
+      method: POST
+      auth: false
+      docs: Handle an outbound call via SIP trunk
+      source:
+        openapi: openapi.json
+      display-name: Handle An Outbound Call Via Sip Trunk
+      request:
+        name: BodyHandleAnOutboundCallViaSipTrunkV1ConvaiSipTrunkOutboundCallPost
+        body:
+          properties:
+            agent_id: string
+            agent_phone_number_id: string
+            to_number: string
+            conversation_initiation_client_data:
+              type: optional<root.ConversationInitiationClientDataRequestInput>
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.SipTrunkOutboundCallResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            agent_id: agent_id
+            agent_phone_number_id: agent_phone_number_id
+            to_number: to_number
+          response:
+            body:
+              success: true
+              message: message
+              sip_call_id: sip_call_id
+      audiences:
+        - convai
+  source:
+    openapi: openapi.json

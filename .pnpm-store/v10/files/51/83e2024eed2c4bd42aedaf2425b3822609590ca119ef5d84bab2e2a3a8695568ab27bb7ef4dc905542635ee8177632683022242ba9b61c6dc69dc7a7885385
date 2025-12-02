@@ -1,0 +1,82 @@
+// src/ui/markdown/markdown-text.tsx
+import { memo } from "react";
+import { CodeHeader } from "./code-header.mjs";
+import classNames from "classnames";
+import {
+  MarkdownTextPrimitive,
+  unstable_memoizeMarkdownComponents,
+  useIsMarkdownCodeBlock
+} from "@assistant-ui/react-markdown";
+import { INTERNAL } from "@assistant-ui/react";
+import { jsx } from "react/jsx-runtime";
+var { withSmoothContextProvider, useSmoothStatus } = INTERNAL;
+var defaultComponents = unstable_memoizeMarkdownComponents({
+  h1: ({ className, ...props }) => /* @__PURE__ */ jsx("h1", { className: classNames("aui-md-h1", className), ...props }),
+  h2: ({ className, ...props }) => /* @__PURE__ */ jsx("h2", { className: classNames("aui-md-h2", className), ...props }),
+  h3: ({ className, ...props }) => /* @__PURE__ */ jsx("h3", { className: classNames("aui-md-h3", className), ...props }),
+  h4: ({ className, ...props }) => /* @__PURE__ */ jsx("h4", { className: classNames("aui-md-h4", className), ...props }),
+  h5: ({ className, ...props }) => /* @__PURE__ */ jsx("h5", { className: classNames("aui-md-h5", className), ...props }),
+  h6: ({ className, ...props }) => /* @__PURE__ */ jsx("h6", { className: classNames("aui-md-h6", className), ...props }),
+  p: ({ className, ...props }) => /* @__PURE__ */ jsx("p", { className: classNames("aui-md-p", className), ...props }),
+  a: ({ className, ...props }) => /* @__PURE__ */ jsx("a", { className: classNames("aui-md-a", className), ...props }),
+  blockquote: ({ className, ...props }) => /* @__PURE__ */ jsx(
+    "blockquote",
+    {
+      className: classNames("aui-md-blockquote", className),
+      ...props
+    }
+  ),
+  ul: ({ className, ...props }) => /* @__PURE__ */ jsx("ul", { className: classNames("aui-md-ul", className), ...props }),
+  ol: ({ className, ...props }) => /* @__PURE__ */ jsx("ol", { className: classNames("aui-md-ol", className), ...props }),
+  hr: ({ className, ...props }) => /* @__PURE__ */ jsx("hr", { className: classNames("aui-md-hr", className), ...props }),
+  table: ({ className, ...props }) => /* @__PURE__ */ jsx("table", { className: classNames("aui-md-table", className), ...props }),
+  th: ({ className, ...props }) => /* @__PURE__ */ jsx("th", { className: classNames("aui-md-th", className), ...props }),
+  td: ({ className, ...props }) => /* @__PURE__ */ jsx("td", { className: classNames("aui-md-td", className), ...props }),
+  tr: ({ className, ...props }) => /* @__PURE__ */ jsx("tr", { className: classNames("aui-md-tr", className), ...props }),
+  sup: ({ className, ...props }) => /* @__PURE__ */ jsx("sup", { className: classNames("aui-md-sup", className), ...props }),
+  pre: ({ className, ...props }) => /* @__PURE__ */ jsx("pre", { className: classNames("aui-md-pre", className), ...props }),
+  code: ({ className, ...props }) => {
+    const isCodeBlock = useIsMarkdownCodeBlock();
+    return /* @__PURE__ */ jsx(
+      "code",
+      {
+        className: classNames(!isCodeBlock && "aui-md-inline-code", className),
+        ...props
+      }
+    );
+  },
+  CodeHeader
+});
+var makeMarkdownText = ({
+  className,
+  components: userComponents,
+  ...rest
+} = {}) => {
+  const components = {
+    ...defaultComponents,
+    ...Object.fromEntries(
+      // ignore undefined values, so undefined values do not override default components
+      Object.entries(userComponents ?? {}).filter(([_, v]) => v !== void 0)
+    )
+  };
+  const MarkdownTextImpl = () => {
+    const status = useSmoothStatus();
+    return /* @__PURE__ */ jsx(
+      MarkdownTextPrimitive,
+      {
+        components,
+        ...rest,
+        className: classNames(
+          status.type === "running" && "aui-md-running",
+          className
+        )
+      }
+    );
+  };
+  MarkdownTextImpl.displayName = "MarkdownText";
+  return memo(withSmoothContextProvider(MarkdownTextImpl), () => true);
+};
+export {
+  makeMarkdownText
+};
+//# sourceMappingURL=markdown-text.mjs.map

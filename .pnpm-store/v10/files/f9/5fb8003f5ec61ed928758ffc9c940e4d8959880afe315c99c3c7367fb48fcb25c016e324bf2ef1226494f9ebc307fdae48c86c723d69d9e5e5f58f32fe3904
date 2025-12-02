@@ -1,0 +1,1 @@
+{"version":3,"file":"latex.d.ts","sourceRoot":"","sources":["../../../src/document/transformers/latex.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,gBAAgB,EAAE,MAAM,UAAU,CAAC;AAEjD,OAAO,EAAE,6BAA6B,EAAE,MAAM,aAAa,CAAC;AAE5D,qBAAa,gBAAiB,SAAQ,6BAA6B;gBACrD,OAAO,GAAE,gBAAqB;CAI3C"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"ALTER.d.ts","sourceRoot":"","sources":["../../../lib/commands/ALTER.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,sCAAsC,CAAC;AACrE,OAAO,EAAE,aAAa,EAAE,iBAAiB,EAAW,MAAM,mCAAmC,CAAC;AAC9F,OAAO,EAAE,gBAAgB,EAAe,MAAM,UAAU,CAAC;;;;IAKvD;;;;;OAKG;gDACkB,aAAa,SAAS,aAAa,UAAU,gBAAgB;mCAIpC,kBAAkB,IAAI,CAAC;;AAbvE,wBAc6B"}

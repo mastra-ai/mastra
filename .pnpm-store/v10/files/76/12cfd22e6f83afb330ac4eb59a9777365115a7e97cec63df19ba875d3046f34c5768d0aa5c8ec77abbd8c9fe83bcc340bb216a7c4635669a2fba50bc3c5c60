@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/type_utils.ts"],
+  "sourcesContent": ["/**\n * Common utilities for manipulating TypeScript types.\n * @module\n */\n\n/**\n * Hack! This type causes TypeScript to simplify how it renders object types.\n *\n * It is functionally the identity for object types, but in practice it can\n * simplify expressions like `A & B`.\n */\nexport type Expand<ObjectType extends Record<any, any>> =\n  ObjectType extends Record<any, any>\n    ? {\n        [Key in keyof ObjectType]: ObjectType[Key];\n      }\n    : never;\n\n/**\n * An `Omit<>` type that:\n * 1. Applies to each element of a union.\n * 2. Preserves the index signature of the underlying type.\n */\nexport type BetterOmit<T, K extends keyof T> = {\n  [Property in keyof T as Property extends K ? never : Property]: T[Property];\n};\n\n/**\n * Convert a union type like `A | B | C` into an intersection type like\n * `A & B & C`.\n */\nexport type UnionToIntersection<UnionType> = (\n  UnionType extends any ? (k: UnionType) => void : never\n) extends (k: infer I) => void\n  ? I\n  : never;\n"],
+  "mappings": ";;;;;;;;;;;;;;AAAA;AAAA;",
+  "names": []
+}

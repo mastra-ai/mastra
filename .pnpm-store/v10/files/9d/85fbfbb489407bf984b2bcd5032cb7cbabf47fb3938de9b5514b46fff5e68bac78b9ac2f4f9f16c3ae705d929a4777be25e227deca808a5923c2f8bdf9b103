@@ -1,0 +1,1 @@
+{"version":3,"sources":["../src/handleValueOrFn.ts"],"sourcesContent":["import { handleValueOrFn as origHandleValueOrFn } from './utils/handleValueOrFn';\n\n/**\n * @deprecated - Use `handleValueOrFn` from `@clerk/shared/utils` instead.\n */\nexport const handleValueOrFn = origHandleValueOrFn;\n"],"mappings":";;;;;;AAKO,IAAMA,mBAAkB;","names":["handleValueOrFn"]}

@@ -1,0 +1,5 @@
+{
+  "main": "../dist/cjs/react-auth0/index.js",
+  "module": "../dist/esm/react-auth0/index.js",
+  "types": "../dist/cjs-types/react-auth0/index.d.ts"
+}

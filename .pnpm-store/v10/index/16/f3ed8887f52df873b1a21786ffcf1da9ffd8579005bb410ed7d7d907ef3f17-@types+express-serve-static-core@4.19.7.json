@@ -1,0 +1,31 @@
+{
+  "name": "@types/express-serve-static-core",
+  "version": "4.19.7",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662907125,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662907126,
+      "integrity": "sha512-rhHTFuQeRAGT+58iYrTYs7fmRYPmZGAJVhVKbalPRlKhVrHEUg3IhCkMBs/DQBbqVs2vib3SAVkfBJbaKV8U2w==",
+      "mode": 420,
+      "size": 931
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662907140,
+      "integrity": "sha512-QHsp6HZ9/fFOIN/NsZ8cMgHVuMhXESOTIxIw/Eqde1FfV4gtnrtVLunhVWXF/mBtpa/iAVBOSixOAnC5s2+PQg==",
+      "mode": 420,
+      "size": 42556
+    },
+    "package.json": {
+      "checkedAt": 1764662907142,
+      "integrity": "sha512-YRnx9kWwfz/VcyxLXCFUmU7dKxVBNV3MCsPVCLp6Sv+55UQVDA3pqr1MGN4cST3pgCJPUJ/8AdnINOuAYlXTdw==",
+      "mode": 420,
+      "size": 1622
+    }
+  }
+}

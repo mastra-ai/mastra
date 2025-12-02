@@ -1,0 +1,1 @@
+{"version":3,"file":"types.js","sourceRoot":"","sources":["../../source/utils/types.ts"],"names":[],"mappings":"","sourcesContent":["export type Mutable<T> = {\n\t-readonly[P in keyof T]: T[P]\n};\n\nexport type ObjectEntries<T> = T extends ArrayLike<infer U>\n\t? Array<[string, U]>\n\t: Array<{[K in keyof T]: [K, T[K]]}[keyof T]>;\n"]}

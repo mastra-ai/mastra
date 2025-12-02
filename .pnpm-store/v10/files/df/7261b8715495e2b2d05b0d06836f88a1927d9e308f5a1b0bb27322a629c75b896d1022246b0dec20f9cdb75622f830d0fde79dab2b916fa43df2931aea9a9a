@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/react-auth0/index.ts"],
+  "sourcesContent": ["/**\n * React login component for use with Auth0.\n *\n * @module\n */\nexport { ConvexProviderWithAuth0 } from \"./ConvexProviderWithAuth0.js\";\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAKA,qCAAwC;",
+  "names": []
+}

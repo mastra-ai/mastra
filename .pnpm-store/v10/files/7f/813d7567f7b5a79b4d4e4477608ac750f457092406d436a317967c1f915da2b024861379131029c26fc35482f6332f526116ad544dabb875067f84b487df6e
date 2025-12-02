@@ -1,0 +1,95 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.firestore.admin.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/type/dayofweek.proto";
+
+option csharp_namespace = "Google.Cloud.Firestore.Admin.V1";
+option go_package = "cloud.google.com/go/firestore/apiv1/admin/adminpb;adminpb";
+option java_multiple_files = true;
+option java_outer_classname = "ScheduleProto";
+option java_package = "com.google.firestore.admin.v1";
+option objc_class_prefix = "GCFS";
+option php_namespace = "Google\\Cloud\\Firestore\\Admin\\V1";
+option ruby_package = "Google::Cloud::Firestore::Admin::V1";
+
+// A backup schedule for a Cloud Firestore Database.
+//
+// This resource is owned by the database it is backing up, and is deleted along
+// with the database. The actual backups are not though.
+message BackupSchedule {
+  option (google.api.resource) = {
+    type: "firestore.googleapis.com/BackupSchedule"
+    pattern: "projects/{project}/databases/{database}/backupSchedules/{backup_schedule}"
+  };
+
+  // Output only. The unique backup schedule identifier across all locations and
+  // databases for the given project.
+  //
+  // This will be auto-assigned.
+  //
+  // Format is
+  // `projects/{project}/databases/{database}/backupSchedules/{backup_schedule}`
+  string name = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The timestamp at which this backup schedule was created and
+  // effective since.
+  //
+  // No backups will be created for this schedule before this time.
+  google.protobuf.Timestamp create_time = 3
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Output only. The timestamp at which this backup schedule was most recently
+  // updated. When a backup schedule is first created, this is the same as
+  // create_time.
+  google.protobuf.Timestamp update_time = 10
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // At what relative time in the future, compared to its creation time,
+  // the backup should be deleted, e.g. keep backups for 7 days.
+  //
+  // The maximum supported retention period is 14 weeks.
+  google.protobuf.Duration retention = 6;
+
+  // A oneof field to represent when backups will be taken.
+  oneof recurrence {
+    // For a schedule that runs daily.
+    DailyRecurrence daily_recurrence = 7;
+
+    // For a schedule that runs weekly on a specific day.
+    WeeklyRecurrence weekly_recurrence = 8;
+  }
+}
+
+// Represents a recurring schedule that runs every day.
+//
+// The time zone is UTC.
+message DailyRecurrence {}
+
+// Represents a recurring schedule that runs on a specified day of the week.
+//
+// The time zone is UTC.
+message WeeklyRecurrence {
+  // The day of week to run.
+  //
+  // DAY_OF_WEEK_UNSPECIFIED is not allowed.
+  google.type.DayOfWeek day = 2;
+}

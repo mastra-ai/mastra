@@ -1,0 +1,7 @@
+import { Paginator } from "@smithy/types";
+import { QueryCommandInput, QueryCommandOutput } from "../commands/QueryCommand";
+import { DynamoDBPaginationConfiguration } from "./Interfaces";
+/**
+ * @public
+ */
+export declare const paginateQuery: (config: DynamoDBPaginationConfiguration, input: QueryCommandInput, ...rest: any[]) => Paginator<QueryCommandOutput>;

@@ -1,0 +1,85 @@
+{
+  "name": "@mastra/schema-compat",
+  "version": "1.0.0-beta.1",
+  "description": "Tool schema compatibility layer for Mastra.ai",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./zod-to-json": {
+      "import": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.js"
+      },
+      "require": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "keywords": [
+    "mastra",
+    "schema",
+    "tool",
+    "compatibility",
+    "zod"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "json-schema": "^0.4.0",
+    "zod-from-json-schema": "^0.5.0",
+    "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "@types/json-schema": "^7.0.15",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "4.0.12",
+    "@vitest/ui": "4.0.12",
+    "eslint": "^9.37.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "4.0.12",
+    "zod": "^3.25.76",
+    "@internal/lint": "0.0.53",
+    "@internal/types-builder": "0.0.28",
+    "@internal/ai-sdk-v4": "0.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/schema-compat"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "test": "vitest run",
+    "lint": "eslint ."
+  }
+}

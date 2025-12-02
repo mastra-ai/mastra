@@ -1,0 +1,27 @@
+{
+    "author": {
+        "name": "Datalanche, Inc.",
+        "url": "https://www.datalanche.com"
+    },
+    "name": "json-bignum",
+    "homepage": "https://github.com/datalanche/json-bignum",
+    "description": "Node.js JSON replacement which handles 64-bit integers and arbitrary-precision decimals.",
+    "version": "0.0.3",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/datalanche/json-bignum.git"
+    },
+    "main": "lib/index.js",
+    "directories": {
+        "lib": "./lib"
+    },
+    "licenses": [
+        {
+            "type": "MIT",
+            "url": "https://github.com/datalanche/json-bignum/raw/master/LICENSE"
+        }
+    ],
+    "engines": {
+        "node": ">=0.8"
+    }
+}

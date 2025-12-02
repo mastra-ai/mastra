@@ -1,0 +1,55 @@
+#error-name {
+  color: var(--danger-fg);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#error-title {
+  color: var(--title-fg);
+  font-size: 32px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#error-message {
+  color: var(--danger-fg);
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  align-items: flex-start;
+  gap: 12px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+#error-message svg {
+  margin-top: 1.5px;
+}
+
+#error-hint {
+  border-top: 1px solid var(--border);
+  padding-top: 15px;
+  margin-top: 15px;
+  font-size: 15px;
+  font-style: italic;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding-left: 1px;
+}
+#error-hint svg {
+  margin-bottom: -2px;
+}
+#error-hint strong {
+  color: var(--title-fg);
+}
+#error-hint a {
+  color: var(--links-fg);
+}
+
+@media (min-width: 1024px) {
+  #error-hint {
+    align-items: center;
+  }
+}

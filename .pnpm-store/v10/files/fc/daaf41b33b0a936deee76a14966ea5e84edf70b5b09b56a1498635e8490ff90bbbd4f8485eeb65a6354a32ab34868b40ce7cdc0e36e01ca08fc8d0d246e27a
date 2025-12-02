@@ -1,0 +1,10 @@
+const gitHub = {
+    id: 'github',
+    paths: {
+        pull: 'pulls',
+        branch: 'tree',
+        ci: 'actions',
+        diff: 'compare'
+    }
+};
+export default gitHub;

@@ -1,0 +1,15 @@
+---
+title: Docs
+description: Get started with building and running jscodeshift codemods.
+template: doc
+hero:
+  tagline: Get started with building and running jscodeshift codemods.
+  actions:
+    - text: Get started
+      link: /overview/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: GitHub
+      link: https://github.com/facebook/jscodeshift
+      icon: external
+---

@@ -1,0 +1,115 @@
+{
+  "name": "tsup",
+  "version": "8.5.0",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662905907,
+      "integrity": "sha512-mAiHKNXfgA3TGwNOjlE/5OyI9keLJmrNdnKQWDUshW6AtRSwMHLuzzzPcG5ra4JpAW6ZuLLGwK4eWuuat6IpDg==",
+      "mode": 420,
+      "size": 1063
+    },
+    "dist/chunk-2YH5KWEM.js": {
+      "checkedAt": 1764662905911,
+      "integrity": "sha512-uD9QIvPwHtRGEr9M0skFp7b8h7ssA8r113CvWN777hIPUcXXOxAJu+B3fzMS/xfMXF1t3L1jMDbikKQR58/2kw==",
+      "mode": 420,
+      "size": 6884
+    },
+    "dist/chunk-JZ25TPTY.js": {
+      "checkedAt": 1764662905914,
+      "integrity": "sha512-rJyOQaZR1J4ttRpHtMVhi/gd/Q4amnMBup3CSM9KMRMYaeSLGenEHG3N2/t2U0jLrEDmKMvmgyW6hXkb7wRJxg==",
+      "mode": 420,
+      "size": 1429
+    },
+    "dist/chunk-TWFEYLU4.js": {
+      "checkedAt": 1764662905915,
+      "integrity": "sha512-OkO0id6tNOJ1dcWCNHKfWffhGtsGbcApJfPakZWG3zMZ8nvl2WAgkjSEhic6WGCs4KfpJUIQ5c7MA7sUnxhOlA==",
+      "mode": 420,
+      "size": 12997
+    },
+    "dist/chunk-U46XF7P4.js": {
+      "checkedAt": 1764662905917,
+      "integrity": "sha512-RHQM9jf3r+2WLkKSMv/FtraS6Wd2uORiMsc+3v+wjbjccGQ2Zwz/0AEDUf241Xk7XnzHcl9jd+A2wOMLg+dRgQ==",
+      "mode": 420,
+      "size": 142
+    },
+    "dist/chunk-VGC3FXLU.js": {
+      "checkedAt": 1764662905918,
+      "integrity": "sha512-bscXjJPG+sBKpUcQvwr5l88E6Rou4QjGPt85VFMtPw0fipBi3Yib4TjjM30aWKG318tVDb8vW8c5+AtZf/vHtg==",
+      "mode": 420,
+      "size": 6659
+    },
+    "assets/cjs_shims.js": {
+      "checkedAt": 1764662905922,
+      "integrity": "sha512-9JpBIDmtIYtEgdNfZhLswDIG5DhuA4unwKNdadUBpKVSgPK0Tz9wqOQrapl3wr5RbJ7ZonjEv7qpr9TNju0dnw==",
+      "mode": 420,
+      "size": 498
+    },
+    "dist/cli-default.js": {
+      "checkedAt": 1764662905925,
+      "integrity": "sha512-SIJAxPpPB2v3ItTWpJfu9s1oN1WPy6/39fTVNssz27MgP0BYXZcGP7dKrkZoCFOALSXhl+r9v54HLC1X2X5kIw==",
+      "mode": 493,
+      "size": 308
+    },
+    "dist/cli-main.js": {
+      "checkedAt": 1764662905926,
+      "integrity": "sha512-njY092Tlh6Pgd1PrZo+WyU9+89KTr2MYwbzCOJvPe7iK7avD960InOrpxF5VUr5gXb7Py43XF0jU6MndRihxIA==",
+      "mode": 420,
+      "size": 234
+    },
+    "dist/cli-node.js": {
+      "checkedAt": 1764662905928,
+      "integrity": "sha512-5ll+tOxjPT/5RdLJRWQLCgWNDIf4qRoJYv1oxflLnvovrng3ndS8ZFlWqo0tD+sabYlTzwFzW2o/XrJjfX+2Ag==",
+      "mode": 493,
+      "size": 338
+    },
+    "assets/esm_shims.js": {
+      "checkedAt": 1764662905929,
+      "integrity": "sha512-WdNx3XrXrQFxpD3vzulWtfnj3+KD2pEDy0TqvxsU/MPSmoG2CFAn/D9ftfiDpLJwYs5/F9FB/2iOfseLujQrLA==",
+      "mode": 420,
+      "size": 322
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662905930,
+      "integrity": "sha512-NDqWdnM98wU6t8C77SWjPn7OXHGxZpDc1TbKRFnpBCCHne2xKrxWu9ejJMDE9IUSXzeQcsjI+kY836VE8bB84Q==",
+      "mode": 420,
+      "size": 59220
+    },
+    "dist/rollup.js": {
+      "checkedAt": 1764662905931,
+      "integrity": "sha512-MdkkE+/Qdm5OTBq7EULvgY7Vu/x6L/a9FgUFIfVPoqAN4BpvooBbYHYw6fZw9SFXjgmQr8723xv5jSdmPyhA8Q==",
+      "mode": 420,
+      "size": 267411
+    },
+    "assets/package.json": {
+      "checkedAt": 1764662905932,
+      "integrity": "sha512-1ZkEg01ueCM7QOSlSlDI0UV4CG7L1C7IaF3ukIzdd+FqfHxfDONHWYjL0lvONxTt1NtUgksD1KnAPysi4ZHJJQ==",
+      "mode": 420,
+      "size": 27
+    },
+    "package.json": {
+      "checkedAt": 1764662905933,
+      "integrity": "sha512-UFAaCsrn7HA1OkREljbda5qQe2vWy45Ro0Kzi86su2DMTbAKEmlHE/vXpmlG5rmXqHblF2Dtpem+BnfVcPjruw==",
+      "mode": 420,
+      "size": 2471
+    },
+    "schema.json": {
+      "checkedAt": 1764662905935,
+      "integrity": "sha512-6/7OkcircB6uERQkY62okcKwcoPKcYveY4u6L7XBjuih7JXHsGG2FjtcGjNxt6ocD0dD0iw/OdgsycmMFhwwrg==",
+      "mode": 420,
+      "size": 10133
+    },
+    "README.md": {
+      "checkedAt": 1764662905935,
+      "integrity": "sha512-p4mHXGYxReRG21m+UNmt16pNsv2iCl6IqQaW1gDGH71Qh9ZDsg3G3218/+cehxFSyKNkNHCTlMTWtQQBU80ETQ==",
+      "mode": 420,
+      "size": 2003
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662905939,
+      "integrity": "sha512-YVfQMn2IAor5OGW5jU3+gK3lUXuSWFUY+xR+4Zlh74AaCqu+6VWTRN30mVOJw2itcEhVchqOkFLR8V4cIT+sUw==",
+      "mode": 420,
+      "size": 17619
+    }
+  }
+}

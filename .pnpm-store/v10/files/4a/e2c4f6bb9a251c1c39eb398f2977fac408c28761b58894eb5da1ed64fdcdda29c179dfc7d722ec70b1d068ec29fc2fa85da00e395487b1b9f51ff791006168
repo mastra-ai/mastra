@@ -1,0 +1,81 @@
+imports:
+  root: ../../../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get:
+      path: /v1/voices/pvc/{voice_id}/samples/{sample_id}/speakers
+      method: GET
+      auth: false
+      docs: >-
+        Retrieve the status of the speaker separation process and the list of
+        detected speakers if complete.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+        sample_id:
+          type: string
+          docs: Sample ID to be used
+      display-name: Retrieve Speaker Separation Status
+      response:
+        docs: Successful Response
+        type: root.SpeakerSeparationResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+            sample_id: VW7YKqPnjY4h39yTbx2L
+          response:
+            body:
+              voice_id: DCwhRBWXzGAHq8TQ4Fs18
+              sample_id: DCwhRBWXzGAHq8TQ4Fs18
+              status: not_started
+              speakers:
+                key:
+                  speaker_id: DCwhRBWXzGAHq8TQ4Fs18
+                  duration_secs: 5
+                  utterances:
+                    - start: 0
+                      end: 1
+              selected_speaker_ids:
+                - selected_speaker_ids
+    separate:
+      path: /v1/voices/pvc/{voice_id}/samples/{sample_id}/separate-speakers
+      method: POST
+      auth: false
+      docs: Start speaker separation process for a sample
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+        sample_id:
+          type: string
+          docs: Sample ID to be used
+      display-name: Start Speaker Separation
+      response:
+        docs: Successful Response
+        type: root.StartSpeakerSeparationResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+            sample_id: VW7YKqPnjY4h39yTbx2L
+          response:
+            body:
+              status: ok
+  source:
+    openapi: openapi.json

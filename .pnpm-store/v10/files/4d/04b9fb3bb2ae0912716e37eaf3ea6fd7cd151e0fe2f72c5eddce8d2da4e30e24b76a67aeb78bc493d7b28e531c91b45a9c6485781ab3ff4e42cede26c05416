@@ -1,0 +1,41 @@
+{
+	"$id": "/inference/schemas/visual-question-answering/input.json",
+	"$schema": "http://json-schema.org/draft-06/schema#",
+	"description": "Inputs for Visual Question Answering inference",
+	"title": "VisualQuestionAnsweringInput",
+	"type": "object",
+	"properties": {
+		"inputs": {
+			"description": "One (image, question) pair to answer",
+			"type": "object",
+			"title": "VisualQuestionAnsweringInputData",
+			"properties": {
+				"image": {
+					"description": "The image."
+				},
+				"question": {
+					"description": "The question to answer based on the image."
+				}
+			},
+			"required": ["question", "image"]
+		},
+		"parameters": {
+			"description": "Additional inference parameters",
+			"$ref": "#/$defs/VisualQuestionAnsweringParameters"
+		}
+	},
+	"$defs": {
+		"VisualQuestionAnsweringParameters": {
+			"title": "VisualQuestionAnsweringParameters",
+			"description": "Additional inference parameters for Visual Question Answering",
+			"type": "object",
+			"properties": {
+				"top_k": {
+					"type": "integer",
+					"description": "The number of answers to return (will be chosen by order of likelihood). Note that we return less than topk answers if there are not enough options available within the context."
+				}
+			}
+		}
+	},
+	"required": ["inputs"]
+}

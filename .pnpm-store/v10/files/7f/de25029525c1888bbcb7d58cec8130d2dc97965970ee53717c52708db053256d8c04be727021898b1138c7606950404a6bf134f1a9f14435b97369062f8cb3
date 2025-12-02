@@ -1,0 +1,63 @@
+import {
+  getDefaultValueInZodStack
+} from "./chunk-KZ2S76DS.mjs";
+import {
+  getFieldConfigInZodStack
+} from "./chunk-MP7AHYAO.mjs";
+import {
+  inferFieldType
+} from "./chunk-CRJAZYP4.mjs";
+
+// src/v4/schema-parser.ts
+import { z } from "zod/v4";
+function parseField(key, schema) {
+  const baseSchema = getBaseSchema(schema);
+  const fieldConfig = getFieldConfigInZodStack(schema);
+  const type = inferFieldType(baseSchema, fieldConfig);
+  const defaultValue = getDefaultValueInZodStack(schema);
+  const options = baseSchema.def.entries;
+  let optionValues = [];
+  if (options) {
+    if (!Array.isArray(options)) {
+      optionValues = Object.entries(options);
+    } else {
+      optionValues = options.map((value) => [value, value]);
+    }
+  }
+  let subSchema = [];
+  if (baseSchema instanceof z.ZodObject) {
+    subSchema = Object.entries(baseSchema.shape).map(
+      ([key2, field]) => parseField(key2, field)
+    );
+  }
+  if (baseSchema instanceof z.ZodArray) {
+    subSchema = [parseField("0", baseSchema.def.element)];
+  }
+  return {
+    key,
+    type,
+    required: !schema.safeParse(void 0).success,
+    default: defaultValue,
+    description: schema.description,
+    fieldConfig,
+    options: optionValues,
+    schema: subSchema
+  };
+}
+function parseSchema(schema) {
+  const shape = schema.shape;
+  const fields = Object.entries(shape).map(
+    ([key, field]) => parseField(key, field)
+  );
+  return { fields };
+}
+function getBaseSchema(schema) {
+  if ("innerType" in schema.def) {
+    return getBaseSchema(schema.def.innerType);
+  }
+  return schema;
+}
+
+export {
+  parseSchema
+};

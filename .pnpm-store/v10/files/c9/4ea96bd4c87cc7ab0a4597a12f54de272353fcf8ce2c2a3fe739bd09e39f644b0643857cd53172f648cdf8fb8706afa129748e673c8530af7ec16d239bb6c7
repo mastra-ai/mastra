@@ -1,0 +1,1 @@
+{"version":3,"file":"DEL.d.ts","sourceRoot":"","sources":["../../../lib/commands/DEL.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,sCAAsC,CAAC;AACrE,OAAO,EAAE,aAAa,EAAE,WAAW,EAAW,MAAM,mCAAmC,CAAC;AAExF,MAAM,WAAW,cAAc;IAC7B,IAAI,CAAC,EAAE,aAAa,CAAA;CACrB;;;IAIC;;;;;;;;OAQG;gDACkB,aAAa,OAAO,aAAa,YAAY,cAAc;mCAQlC,WAAW;;AAnB3D,wBAoB6B"}

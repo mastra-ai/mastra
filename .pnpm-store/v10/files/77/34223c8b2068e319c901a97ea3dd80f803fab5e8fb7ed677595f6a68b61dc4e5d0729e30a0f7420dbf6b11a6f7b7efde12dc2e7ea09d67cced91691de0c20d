@@ -1,0 +1,31 @@
+{
+  "name": "@changesets/write",
+  "version": "0.4.0",
+  "description": "Writes a changeset to a file",
+  "main": "dist/changesets-write.cjs.js",
+  "module": "dist/changesets-write.esm.js",
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/changesets-write.cjs.mjs",
+        "default": "./dist/changesets-write.cjs.js"
+      },
+      "module": "./dist/changesets-write.esm.js",
+      "import": "./dist/changesets-write.cjs.mjs",
+      "default": "./dist/changesets-write.cjs.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/changesets/changesets/tree/main/packages/write",
+  "dependencies": {
+    "@changesets/types": "^6.1.0",
+    "fs-extra": "^7.0.1",
+    "human-id": "^4.1.1",
+    "prettier": "^2.7.1"
+  },
+  "devDependencies": {
+    "@changesets/parse": "*",
+    "@changesets/test-utils": "*"
+  }
+}

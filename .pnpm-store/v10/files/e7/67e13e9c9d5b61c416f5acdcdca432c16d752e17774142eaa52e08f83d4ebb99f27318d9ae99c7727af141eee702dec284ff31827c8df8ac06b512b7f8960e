@@ -1,0 +1,364 @@
+# If statements
+
+<?php
+
+if ($a > 0) {
+  echo "Yes";
+}
+
+if ($a==0) {
+  echo "bad";
+} else {
+  echo "good";
+}
+
+if ($a==0) {
+  echo "bad";
+} elseif ($a==3) {
+  echo "bad";
+} else {
+  echo "good";
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  IfStatement(if,
+    ParenthesizedExpression(BinaryExpression(
+      VariableName,
+      CompareOp,
+      Integer)),
+    Block(EchoStatement(echo,String))),
+  IfStatement(if,
+    ParenthesizedExpression(BinaryExpression(
+      VariableName,
+      CompareOp,
+      Integer)),
+    Block(EchoStatement(echo,String)),
+    else, Block(EchoStatement(echo,String))),
+  IfStatement(if,
+    ParenthesizedExpression(BinaryExpression(
+      VariableName,
+      CompareOp,
+      Integer)),
+    Block(EchoStatement(echo,String)),
+    elseif, ParenthesizedExpression(BinaryExpression(VariableName,CompareOp,Integer)),
+    Block(EchoStatement(echo,String)),
+    else, Block(EchoStatement(echo,String))))
+
+# Alternative if statements
+
+<?php
+
+if ($a) echo 1; else echo 0;
+if ($a):
+  echo 1;
+  echo 2;
+else:
+  echo 0;
+endif;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  IfStatement(if,
+    ParenthesizedExpression(VariableName),
+    EchoStatement(echo,Integer),
+    else, EchoStatement(echo,Integer)),
+  IfStatement(if,
+    ParenthesizedExpression(VariableName),
+    ColonBlock(
+      EchoStatement(echo,Integer),
+      EchoStatement(echo,Integer)),
+    else, ColonBlock(EchoStatement(echo,Integer)),
+    endif))
+
+# While statements
+
+<?php
+while ($a < 10) {
+  echo $a;
+  $a++;
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  WhileStatement(while,
+    ParenthesizedExpression(BinaryExpression(VariableName,CompareOp,Integer)),
+    Block(
+      EchoStatement(echo,VariableName),
+      ExpressionStatement(UpdateExpression(VariableName, ArithOp)))))
+
+# Alternative while statements
+
+<?php
+
+while ($a<5) echo $a++;
+while ($a<9):
+  echo ++$a;
+  echo $b;
+endwhile;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  WhileStatement(while,
+    ParenthesizedExpression(BinaryExpression(VariableName, CompareOp, Integer)),
+    EchoStatement(echo,UpdateExpression(VariableName, ArithOp))),
+  WhileStatement(while,
+    ParenthesizedExpression(BinaryExpression(VariableName, CompareOp, Integer)),
+    ColonBlock(
+      EchoStatement(echo,UpdateExpression(ArithOp, VariableName)),
+      EchoStatement(echo,VariableName)),
+    endwhile))
+
+# For statements
+
+<?php
+
+for($a=0;$a<5;$a++) echo $a;
+for($a=0;$a<5;$a++):
+  echo $a;
+endfor;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ForStatement(for,
+    ForSpec(
+      AssignmentExpression(VariableName, AssignOp, Integer),
+      BinaryExpression(VariableName, CompareOp, Integer),
+      UpdateExpression(VariableName, ArithOp)),
+    EchoStatement(echo,VariableName)),
+  ForStatement(for,
+    ForSpec(
+      AssignmentExpression(VariableName, AssignOp, Integer),
+      BinaryExpression(VariableName, CompareOp, Integer),
+      UpdateExpression(VariableName, ArithOp)),
+    ColonBlock(EchoStatement(echo,VariableName)),
+    endfor))
+
+# Switch statements
+
+<?php
+switch ($a) {
+  case 0:
+  echo "bad";
+  break;
+  case 1:
+  echo "good";
+  break;
+  default:
+  echo "bad";
+  break;
+}
+?>
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  SwitchStatement(switch,
+    ParenthesizedExpression(VariableName),
+    Block(
+      CaseStatement(case,
+        Integer,
+        EchoStatement(echo,String), BreakStatement(break)),
+      CaseStatement(case,
+        Integer,
+        EchoStatement(echo,String), BreakStatement(break)),
+      DefaultStatement(default,
+        EchoStatement(echo,String), BreakStatement(break)))),
+  TextInterpolation(PhpClose))
+
+# Alternative switch statements
+
+<?php
+
+switch ($a):
+  case 0;
+  echo 0;
+  break;
+  case 5:
+  echo 1;
+  break;
+  default;
+  echo 0;
+  break;
+endswitch;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  SwitchStatement(switch,
+    ParenthesizedExpression(VariableName),
+    ColonBlock(
+      CaseStatement(case,
+        Integer,
+        EchoStatement(echo,Integer),
+        BreakStatement(break)),
+      CaseStatement(case,
+        Integer,
+        EchoStatement(echo,Integer),
+        BreakStatement(break)),
+      DefaultStatement(default,
+        EchoStatement(echo,Integer),
+        BreakStatement(break)))
+    endswitch))
+
+# Include statement
+
+<?php
+include "015.inc";
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ExpressionStatement(IncludeExpression(include, String)))
+
+# Do-while statements
+
+<?php
+do {
+  echo $i;
+  $i--;
+} while($i>0);
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  DoStatement(do,
+    Block(
+      EchoStatement(echo,VariableName),
+      ExpressionStatement(UpdateExpression(VariableName, ArithOp))),
+    while, ParenthesizedExpression(BinaryExpression(VariableName, CompareOp, Integer))))
+
+# Try statements
+
+<?php
+
+try {
+} catch (MyException) {
+} catch (OtherException|YetAnotherException $e) {
+} finally {
+}
+
+try {
+  ThrowException();
+} catch (MyException $exception) {
+  print "There was an exception: " . $exception->getException();
+  print "\n";
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  TryStatement(
+    try, Block,
+    catch, CatchDeclarator(NamedType(Name)), Block,
+    catch, CatchDeclarator(UnionType(NamedType(Name), LogicOp, NamedType(Name)), VariableName), Block,
+    finally, Block),
+  TryStatement(
+    try, Block(ExpressionStatement(CallExpression(Name,ArgList))),
+    catch, CatchDeclarator(NamedType(Name), VariableName), Block(
+      ExpressionStatement(PrintIntrinsic(print, BinaryExpression(
+        String,
+        ConcatOp,
+        CallExpression(MemberExpression(VariableName,Name),ArgList)))),
+      ExpressionStatement(PrintIntrinsic(print, String(EscapeSequence))))))
+
+# Foreach statements
+
+<?php
+foreach ($a as $b[0]) {
+  echo $b[0]."\n";
+}
+
+foreach($arr as $key => $value);
+
+foreach($a as $b):
+  echo $a;
+  echo $b;
+endforeach;
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ForeachStatement(foreach,
+    ForSpec(VariableName, as, SubscriptExpression(VariableName, Integer)),
+    Block(
+      EchoStatement(echo,BinaryExpression(
+        SubscriptExpression(VariableName, Integer),
+        ConcatOp,
+        String(EscapeSequence))))),
+  ForeachStatement(foreach,
+    ForSpec(VariableName, as, Pair(VariableName, VariableName)), EmptyStatement),
+  ForeachStatement(foreach,
+    ForSpec(VariableName, as, VariableName),
+    ColonBlock(
+      EchoStatement(echo,VariableName),
+      EchoStatement(echo,VariableName)),
+    endforeach))
+
+# Case insensitive keywords
+
+<?php
+
+FOREACH ($a AS $b) {
+  DO {
+    if ($c) {
+      d();
+    } else {
+      e();
+    }
+  } while ($f);
+}
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  ForeachStatement(foreach,
+    ForSpec(VariableName, as, VariableName),
+    Block(
+      DoStatement(do,
+        Block(
+          IfStatement(if,
+            ParenthesizedExpression(VariableName),
+            Block(ExpressionStatement(CallExpression(Name, ArgList))),
+            else, Block(ExpressionStatement(CallExpression(Name, ArgList))))),
+        while, ParenthesizedExpression(VariableName)))))
+
+# Accessing Constants
+
+<?php
+
+echo ANOTHER_CONST;
+echo ANIMALS[1];
+
+==>
+
+Template(
+  TextInterpolation(PhpOpen),
+  EchoStatement(echo,
+    Name
+  ),
+  EchoStatement(echo,
+    SubscriptExpression(
+      Name,
+      Integer
+    )
+  )
+)
+

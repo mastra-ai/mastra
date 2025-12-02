@@ -1,0 +1,81 @@
+{
+	"name": "@sindresorhus/is",
+	"version": "7.1.0",
+	"description": "Type check values",
+	"license": "MIT",
+	"repository": "sindresorhus/is",
+	"funding": "https://github.com/sindresorhus/is?sponsor=1",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		"types": "./distribution/index.d.ts",
+		"default": "./distribution/index.js"
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"build": "del distribution && tsc",
+		"test": "tsc --noEmit && xo && ava",
+		"prepare": "npm run build"
+	},
+	"files": [
+		"distribution"
+	],
+	"keywords": [
+		"type",
+		"types",
+		"is",
+		"check",
+		"checking",
+		"validate",
+		"validation",
+		"utility",
+		"util",
+		"typeof",
+		"instanceof",
+		"object",
+		"assert",
+		"assertion",
+		"test",
+		"kind",
+		"primitive",
+		"verify",
+		"compare",
+		"typescript",
+		"typeguards",
+		"types"
+	],
+	"devDependencies": {
+		"@sindresorhus/tsconfig": "^6.0.0",
+		"@types/jsdom": "^21.1.7",
+		"@types/node": "^20.14.10",
+		"@types/zen-observable": "^0.8.7",
+		"ava": "^6.1.3",
+		"del-cli": "^5.1.0",
+		"expect-type": "^0.19.0",
+		"jsdom": "^24.1.0",
+		"rxjs": "^7.8.1",
+		"tempy": "^3.1.0",
+		"tsimp": "2.0.11",
+		"typescript": "5.5.3",
+		"xo": "^0.58.0",
+		"zen-observable": "^0.10.0"
+	},
+	"ava": {
+		"environmentVariables": {
+			"TSIMP_DIAG": "error"
+		},
+		"extensions": {
+			"ts": "module"
+		},
+		"nodeArguments": [
+			"--import=tsimp/import"
+		]
+	}
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@ast-grep/napi-darwin-arm64",
+  "version": "0.36.3",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662922507,
+      "integrity": "sha512-qWxdll8TUocveAMXMZDSOhPHt+0vAhyx0M9sA4TufkzpTgsDBeORSUxBk4VYF/x23AzdH+blV7Ezms1Dq7zf8w==",
+      "mode": 420,
+      "size": 610
+    },
+    "README.md": {
+      "checkedAt": 1764662922510,
+      "integrity": "sha512-beRTbUPe7coVZ0sLcTtEyspadP+CrAGShHSS07eAY1/41szFpQf3ddRG2ZuzwPd0EXxpn7tZNa2XtxJU/uOIXw==",
+      "mode": 420,
+      "size": 98
+    },
+    "ast-grep-napi.darwin-arm64.node": {
+      "checkedAt": 1764662922518,
+      "integrity": "sha512-DvqsKrFUbda3/XAr0twgkIaElYDFAp7tJxI5Ex3EtXUw6TM2I4sc01jwehGcX01WRgWNFJDb0g5UyAnEntxw6w==",
+      "mode": 420,
+      "size": 6128096
+    }
+  }
+}

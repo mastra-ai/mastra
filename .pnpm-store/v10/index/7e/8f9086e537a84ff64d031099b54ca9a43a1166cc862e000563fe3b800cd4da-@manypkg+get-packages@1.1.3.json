@@ -1,0 +1,67 @@
+{
+  "name": "@manypkg/get-packages",
+  "version": "1.1.3",
+  "requiresBuild": false,
+  "files": {
+    "dist/get-packages.cjs.dev.js": {
+      "checkedAt": 1764662903890,
+      "integrity": "sha512-Yp+TEFpvCpQ8BuIGbJCUWs78oiWRExe62f63R0Ol0L/Ea4YtfdJH+B7SJrkdmB4QgGZUkCDvlGp6pJ6RxQawaw==",
+      "mode": 420,
+      "size": 10088
+    },
+    "dist/get-packages.cjs.js": {
+      "checkedAt": 1764662903891,
+      "integrity": "sha512-7grwQnv3Cs3B981ryu3MPPpQuMrpYIY6xCd1mNokLelGLohC3V470coaM6pybzhr4aPktW/F1jtgHlVWGlqs1g==",
+      "mode": 420,
+      "size": 186
+    },
+    "dist/get-packages.cjs.prod.js": {
+      "checkedAt": 1764662903891,
+      "integrity": "sha512-6uq1/o9Mxqe8E5rPcDYbxoPOl7SZO9wYXxlmg4bHD4lrDW1Et5vx8RZbCqDYsXG8p08ZPcwiaNRGp0t9xAW1+w==",
+      "mode": 420,
+      "size": 8520
+    },
+    "package.json": {
+      "checkedAt": 1764662903892,
+      "integrity": "sha512-BEsg/EaGqORORw0amoZZaMTv7GtA/Eph7au1/9WT69QsVo3fK5PNk9Xync+ctM8sb8/cLf11siU83f2Oa22jrA==",
+      "mode": 420,
+      "size": 386
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662903892,
+      "integrity": "sha512-XsKkPGlePVFB3p7NJrA3NbeP1+BfKvdRXQyaGI+k0rw264ENsgSydSMnoqP/9dtErJDYWRdno4EIk0HinNwP2w==",
+      "mode": 420,
+      "size": 2667
+    },
+    "README.md": {
+      "checkedAt": 1764662903893,
+      "integrity": "sha512-MXZbW48vWKwzcqoc8X5TjawutkvAaqGfQFwnGrx6TkwplVTu2dOeE52HPR9+uYlQo5RLmEaZL6PLcL+JljkoZw==",
+      "mode": 420,
+      "size": 1033
+    },
+    "dist/get-packages.cjs.d.ts": {
+      "checkedAt": 1764662903893,
+      "integrity": "sha512-nR+QZMVnOKcaaG+vR5IQdP4Z+6u0u/EIx5SgXZ3V0MHc3HkyLB2jAcZp3xgZ6qYYwDX9LbFRynT1kDFHxd0Aeg==",
+      "mode": 420,
+      "size": 42
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662903894,
+      "integrity": "sha512-yhcEuu96CrIgC9brHR51ECPfN3TcU9wbrFpzodLrHD7JysGk7C9gw1umX0icwQsBRTncmPW6NKpJchQPJovSUg==",
+      "mode": 420,
+      "size": 583
+    },
+    "src/index.test.ts": {
+      "checkedAt": 1764662903897,
+      "integrity": "sha512-aQAyDRFpFBWSmBrqEPPwwu+upPCrlElcWZx+8x/W01U/1NAlAS9AwpDwOvDP+g7ohhzqZ2Y+6Brs+JMXRAt+rw==",
+      "mode": 420,
+      "size": 5067
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662903898,
+      "integrity": "sha512-LZJ+gyS0OiOZ2gk2NuSIdARoE01b3/Ky7Jq9ytd4OZ7+z490FvQonGWOxN72AMBquZWNWdKVmgj735Dy06OKuA==",
+      "mode": 420,
+      "size": 6550
+    }
+  }
+}

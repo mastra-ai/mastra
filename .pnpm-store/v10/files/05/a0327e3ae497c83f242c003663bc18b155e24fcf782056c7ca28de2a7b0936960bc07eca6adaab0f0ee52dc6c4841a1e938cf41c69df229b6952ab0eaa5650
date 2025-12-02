@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/react-clerk/index.ts"],
+  "sourcesContent": ["/**\n * React login component for use with Clerk.\n *\n * @module\n */\nexport { ConvexProviderWithClerk } from \"./ConvexProviderWithClerk.js\";\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAKA,qCAAwC;",
+  "names": []
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"APPEND.js","sourceRoot":"","sources":["../../../lib/commands/APPEND.ts"],"names":[],"mappings":";;AAGA,kBAAe;IACb,YAAY,EAAE,KAAK;IACnB;;;;;OAKG;IACH,YAAY,CAAC,MAAqB,EAAE,GAAkB,EAAE,KAAoB;QAC1E,MAAM,CAAC,IAAI,CAAC,QAAQ,EAAE,GAAG,EAAE,KAAK,CAAC,CAAC;IACpC,CAAC;IAED,cAAc,EAAE,SAAyC;CAC/B,CAAC"}

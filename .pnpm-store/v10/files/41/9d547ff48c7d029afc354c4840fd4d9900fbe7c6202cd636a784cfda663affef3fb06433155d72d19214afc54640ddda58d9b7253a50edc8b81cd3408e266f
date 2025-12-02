@@ -1,0 +1,177 @@
+import { z } from 'zod';
+import type { MastraBase } from '../../../base.js';
+import type { MastraLLMVNext } from '../../../llm/model/model.loop.js';
+import type { Mastra } from '../../../mastra/index.js';
+import type { OutputProcessor } from '../../../processors/index.js';
+import type { DynamicArgument } from '../../../types/index.js';
+import type { Agent } from '../../agent.js';
+import { MessageList } from '../../message-list/index.js';
+import type { AgentExecuteOnFinishOptions } from '../../types.js';
+export type AgentCapabilities = {
+    agentName: string;
+    logger: MastraBase['logger'];
+    getMemory: Agent['getMemory'];
+    getModel: Agent['getModel'];
+    generateMessageId: Mastra['generateId'];
+    _agentNetworkAppend?: boolean;
+    saveStepMessages: Agent['saveStepMessages'];
+    convertTools: Agent['convertTools'];
+    getMemoryMessages: Agent['getMemoryMessages'];
+    runInputProcessors: Agent['__runInputProcessors'];
+    executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
+    outputProcessors?: DynamicArgument<OutputProcessor[]>;
+    llm: MastraLLMVNext;
+};
+declare const coreToolSchema: z.ZodObject<{
+    id: z.ZodOptional<z.ZodString>;
+    description: z.ZodOptional<z.ZodString>;
+    parameters: z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodAny]>;
+    outputSchema: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodAny]>>;
+    execute: z.ZodOptional<z.ZodFunction<z.ZodTuple<[z.ZodAny, z.ZodAny], null>, z.ZodPromise<z.ZodAny>>>;
+    type: z.ZodOptional<z.ZodUnion<[z.ZodLiteral<"function">, z.ZodLiteral<"provider-defined">, z.ZodUndefined]>>;
+    args: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, "strip", z.ZodTypeAny, {
+    execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+    outputSchema?: any;
+    type?: "function" | "provider-defined" | undefined;
+    id?: string | undefined;
+    description?: string | undefined;
+    args?: Record<string, any> | undefined;
+    parameters?: any;
+}, {
+    execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+    outputSchema?: any;
+    type?: "function" | "provider-defined" | undefined;
+    id?: string | undefined;
+    description?: string | undefined;
+    args?: Record<string, any> | undefined;
+    parameters?: any;
+}>;
+export type CoreTool = z.infer<typeof coreToolSchema>;
+export declare const storageThreadSchema: z.ZodObject<{
+    id: z.ZodString;
+    title: z.ZodOptional<z.ZodString>;
+    resourceId: z.ZodString;
+    createdAt: z.ZodDate;
+    updatedAt: z.ZodDate;
+    metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, "strip", z.ZodTypeAny, {
+    id: string;
+    resourceId: string;
+    createdAt: Date;
+    updatedAt: Date;
+    title?: string | undefined;
+    metadata?: Record<string, any> | undefined;
+}, {
+    id: string;
+    resourceId: string;
+    createdAt: Date;
+    updatedAt: Date;
+    title?: string | undefined;
+    metadata?: Record<string, any> | undefined;
+}>;
+export declare const prepareToolsStepOutputSchema: z.ZodObject<{
+    convertedTools: z.ZodRecord<z.ZodString, z.ZodObject<{
+        id: z.ZodOptional<z.ZodString>;
+        description: z.ZodOptional<z.ZodString>;
+        parameters: z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodAny]>;
+        outputSchema: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodAny]>>;
+        execute: z.ZodOptional<z.ZodFunction<z.ZodTuple<[z.ZodAny, z.ZodAny], null>, z.ZodPromise<z.ZodAny>>>;
+        type: z.ZodOptional<z.ZodUnion<[z.ZodLiteral<"function">, z.ZodLiteral<"provider-defined">, z.ZodUndefined]>>;
+        args: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "strip", z.ZodTypeAny, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }>>;
+}, "strip", z.ZodTypeAny, {
+    convertedTools: Record<string, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }>;
+}, {
+    convertedTools: Record<string, {
+        execute?: ((args_0: any, args_1: any) => Promise<any>) | undefined;
+        outputSchema?: any;
+        type?: "function" | "provider-defined" | undefined;
+        id?: string | undefined;
+        description?: string | undefined;
+        args?: Record<string, any> | undefined;
+        parameters?: any;
+    }>;
+}>;
+export declare const prepareMemoryStepOutputSchema: z.ZodObject<{
+    threadExists: z.ZodBoolean;
+    thread: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+        title: z.ZodOptional<z.ZodString>;
+        resourceId: z.ZodString;
+        createdAt: z.ZodDate;
+        updatedAt: z.ZodDate;
+        metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "strip", z.ZodTypeAny, {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    }, {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    }>>;
+    messageList: z.ZodType<MessageList, z.ZodTypeDef, MessageList>;
+    tripwire: z.ZodOptional<z.ZodBoolean>;
+    tripwireReason: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    threadExists: boolean;
+    messageList: MessageList;
+    tripwire?: boolean | undefined;
+    thread?: {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    } | undefined;
+    tripwireReason?: string | undefined;
+}, {
+    threadExists: boolean;
+    messageList: MessageList;
+    tripwire?: boolean | undefined;
+    thread?: {
+        id: string;
+        resourceId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        title?: string | undefined;
+        metadata?: Record<string, any> | undefined;
+    } | undefined;
+    tripwireReason?: string | undefined;
+}>;
+export type PrepareMemoryStepOutput = z.infer<typeof prepareMemoryStepOutputSchema>;
+export type PrepareToolsStepOutput = z.infer<typeof prepareToolsStepOutputSchema>;
+export {};
+//# sourceMappingURL=schema.d.ts.map

@@ -1,0 +1,31 @@
+{
+  "name": "@types/pdf-parse",
+  "version": "1.1.5",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662911902,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662911902,
+      "integrity": "sha512-0l8BWDSNhICUTOEHQ8u7y0snoKFkJpMSE6OZ88B9jskXh3b09FZ7wjYMjR9nTNq0/FLLtfxjBabgaID4CPPoQw==",
+      "mode": 420,
+      "size": 1268
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662911903,
+      "integrity": "sha512-qU9s+Eu2I2R0ax14Rx+nj5glKm/aBChzVUA0ynSEa+vg78bEZoEYcHs4OrAnia96prZSz8Uk0NF8UA3mQQhM8g==",
+      "mode": 420,
+      "size": 623
+    },
+    "package.json": {
+      "checkedAt": 1764662911904,
+      "integrity": "sha512-CiZyj2dJf3YTL9TTF2apgrR8QL/+R+wqqS/f2kvqxMsZdPPE6QfNFU7g1/6eaSRIW723hbHNhQuLbo3ubU6azQ==",
+      "mode": 420,
+      "size": 852
+    }
+  }
+}

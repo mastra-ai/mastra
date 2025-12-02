@@ -1,0 +1,50 @@
+{
+  "name": "node-html-better-parser",
+  "version": "1.5.8",
+  "description": "A very fast HTML parser, generating a simplified DOM, with basic element query support.",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "test": "jest",
+    "clean": "del-cli ./dist/",
+    "ts:cjs": "tsc -m commonjs",
+    "ts:umd": "tsc -t es5 -m umd -d false --outDir ./dist/umd/",
+    "build": "npm run test && npm run clean && npm run ts:cjs && npm run ts:umd",
+    "dev": "tsc -w",
+    "prepare": "npm run build",
+    "release": "npm run build && release-it"
+  },
+  "keywords": [
+    "fast html parser nodejs typescript"
+  ],
+  "author": "Xiaoyi Shi <ashi009@gmail.com>",
+  "contributors": [
+    "taoqf<tao_qiufeng@126.com>",
+    "François Billioud<f.billioud@gmail.com>"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "html-entities": "^2.3.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "latest",
+    "del-cli": "latest",
+    "jest": "^30.0.2",
+    "release-it": "latest",
+    "ts-jest": "^29.4.0",
+    "ts-node": "latest",
+    "typescript": "next"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sharcoux/node-html-parser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Sharcoux/node-html-parser/issues"
+  },
+  "homepage": "https://github.com/Sharcoux/node-html-parser"
+}

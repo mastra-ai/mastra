@@ -1,0 +1,30 @@
+import { ComponentType, type FC } from "react";
+import { TooltipIconButton } from "./base/tooltip-icon-button";
+import { ThreadConfig } from "./thread-config";
+import { ThreadPrimitive } from "@assistant-ui/react";
+declare const Thread: FC<ThreadConfig>;
+declare const exports: {
+    Root: import("react").ForwardRefExoticComponent<Omit<import("react").ClassAttributes<HTMLDivElement> & import("react").HTMLAttributes<HTMLDivElement> & {
+        asChild?: boolean;
+    }, "ref"> & {
+        config?: ThreadConfig | undefined;
+    } & {
+        children?: import("react").ReactNode | undefined;
+    } & import("react").RefAttributes<HTMLDivElement>>;
+    Viewport: import("react").ForwardRefExoticComponent<Partial<Omit<Omit<import("react").ClassAttributes<HTMLDivElement> & import("react").HTMLAttributes<HTMLDivElement> & {
+        asChild?: boolean;
+    }, "ref"> & {
+        autoScroll?: boolean | undefined;
+    } & import("react").RefAttributes<HTMLDivElement>, "ref">> & import("react").RefAttributes<HTMLDivElement>>;
+    Messages: FC<{
+        unstable_flexGrowDiv?: boolean;
+        components?: Partial<ThreadPrimitive.Messages.Props["components"]>;
+        MessagesFooter?: ComponentType | undefined;
+    }>;
+    FollowupSuggestions: FC;
+    ScrollToBottom: import("react").ForwardRefExoticComponent<Partial<TooltipIconButton.Props> & import("react").RefAttributes<HTMLButtonElement>>;
+    ViewportFooter: import("react").ForwardRefExoticComponent<Partial<Omit<import("react").DetailedHTMLProps<import("react").HTMLAttributes<HTMLDivElement>, HTMLDivElement>, "ref">> & import("react").RefAttributes<HTMLDivElement>>;
+};
+declare const _default: typeof Thread & typeof exports;
+export default _default;
+//# sourceMappingURL=thread.d.ts.map

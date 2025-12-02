@@ -1,0 +1,116 @@
+{
+	"name": "@poppinss/colors",
+	"version": "4.1.5",
+	"description": "A wrapper on top of kleur with ability to write test against the color functions",
+	"main": "build/index.js",
+	"type": "module",
+	"files": [
+		"build",
+		"!build/tests",
+		"!build/bin"
+	],
+	"exports": {
+		".": "./build/index.js",
+		"./types": "./build/src/types.js"
+	},
+	"scripts": {
+		"pretest": "npm run lint",
+		"test": "c8 npm run quick:test",
+		"lint": "eslint .",
+		"format": "prettier --write .",
+		"typecheck": "tsc --noEmit",
+		"precompile": "npm run lint && npm run clean",
+		"compile": "tsup-node && tsc --emitDeclarationOnly --declaration",
+		"clean": "del-cli build",
+		"build": "npm run compile",
+		"version": "npm run build",
+		"prepublishOnly": "npm run build",
+		"release": "release-it",
+		"quick:test": "node --import=@poppinss/ts-exec --enable-source-maps bin/test.ts"
+	},
+	"devDependencies": {
+		"@adonisjs/eslint-config": "^3.0.0-next.0",
+		"@adonisjs/prettier-config": "^1.4.5",
+		"@adonisjs/tsconfig": "^2.0.0-next.0",
+		"@japa/assert": "^4.0.1",
+		"@japa/runner": "^4.2.0",
+		"@poppinss/ts-exec": "^1.4.0",
+		"@release-it/conventional-changelog": "^10.0.1",
+		"@swc/core": "^1.12.9",
+		"@types/node": "^24.0.10",
+		"c8": "^10.1.3",
+		"del-cli": "^6.0.0",
+		"eslint": "^9.30.1",
+		"prettier": "^3.6.2",
+		"release-it": "^19.0.3",
+		"tsup": "^8.5.0",
+		"typescript": "^5.8.3"
+	},
+	"dependencies": {
+		"kleur": "^4.1.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/poppinss/colors.git"
+	},
+	"bugs": {
+		"url": "https://github.com/poppinss/colors/issues"
+	},
+	"keywords": [
+		"kleur",
+		"colors"
+	],
+	"author": "virk",
+	"license": "MIT",
+	"homepage": "https://github.com/poppinss/colors#readme",
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	},
+	"tsup": {
+		"entry": [
+			"./index.ts",
+			"./src/types.ts"
+		],
+		"outDir": "./build",
+		"clean": true,
+		"format": "esm",
+		"dts": false,
+		"sourcemap": false,
+		"target": "esnext"
+	},
+	"release-it": {
+		"git": {
+			"requireCleanWorkingDir": true,
+			"requireUpstream": true,
+			"commitMessage": "chore(release): ${version}",
+			"tagAnnotation": "v${version}",
+			"push": true,
+			"tagName": "v${version}"
+		},
+		"github": {
+			"release": true
+		},
+		"npm": {
+			"publish": true,
+			"skipChecks": true
+		},
+		"plugins": {
+			"@release-it/conventional-changelog": {
+				"preset": {
+					"name": "angular"
+				}
+			}
+		}
+	},
+	"c8": {
+		"reporter": [
+			"text",
+			"html"
+		],
+		"exclude": [
+			"tests/**"
+		]
+	},
+	"prettier": "@adonisjs/prettier-config"
+}

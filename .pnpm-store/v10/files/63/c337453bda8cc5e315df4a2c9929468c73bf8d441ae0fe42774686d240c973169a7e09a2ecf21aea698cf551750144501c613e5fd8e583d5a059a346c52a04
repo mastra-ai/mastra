@@ -1,0 +1,191 @@
+import type { CoreMessage, CoreSystemMessage } from '../ai-sdk.types.d.ts';
+import { z } from 'zod';
+import type { MastraDBMessage } from '../agent/index.js';
+import { SpanType } from '../observability/index.js';
+import type { TracingContext } from '../observability/index.js';
+export type ScoringSamplingConfig = {
+    type: 'none';
+} | {
+    type: 'ratio';
+    rate: number;
+};
+export type ScoringSource = 'LIVE' | 'TEST';
+export type ScoringEntityType = 'AGENT' | 'WORKFLOW' | SpanType;
+export type ScoringPrompts = {
+    description: string;
+    prompt: string;
+};
+export type ScoringInput = {
+    runId?: string;
+    input?: any;
+    output: any;
+    additionalContext?: Record<string, any>;
+    requestContext?: Record<string, any>;
+    tracingContext?: TracingContext;
+};
+export type ScoringHookInput = {
+    runId?: string;
+    scorer: Record<string, any>;
+    input: any;
+    output: any;
+    metadata?: Record<string, any>;
+    additionalContext?: Record<string, any>;
+    source: ScoringSource;
+    entity: Record<string, any>;
+    entityType: ScoringEntityType;
+    requestContext?: Record<string, any>;
+    tracingContext?: TracingContext;
+    structuredOutput?: boolean;
+    traceId?: string;
+    spanId?: string;
+    resourceId?: string;
+    threadId?: string;
+};
+export declare const scoringExtractStepResultSchema: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+export type ScoringExtractStepResult = z.infer<typeof scoringExtractStepResultSchema>;
+export declare const scoringValueSchema: z.ZodNumber;
+export declare const scoreResultSchema: z.ZodObject<{
+    result: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    score: z.ZodNumber;
+    prompt: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    score: number;
+    result?: Record<string, any> | undefined;
+    prompt?: string | undefined;
+}, {
+    score: number;
+    result?: Record<string, any> | undefined;
+    prompt?: string | undefined;
+}>;
+export type ScoringAnalyzeStepResult = z.infer<typeof scoreResultSchema>;
+export type ScoringInputWithExtractStepResult<TExtract = any> = ScoringInput & {
+    runId: string;
+    extractStepResult?: TExtract;
+    extractPrompt?: string;
+};
+export type ScoringInputWithExtractStepResultAndAnalyzeStepResult<TExtract = any, TScore = any> = ScoringInputWithExtractStepResult<TExtract> & {
+    score: number;
+    analyzeStepResult?: TScore;
+    analyzePrompt?: string;
+};
+export type ScoringInputWithExtractStepResultAndScoreAndReason = ScoringInputWithExtractStepResultAndAnalyzeStepResult & {
+    reason?: string;
+    reasonPrompt?: string;
+};
+export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason & ScoringHookInput & {
+    id: string;
+    entityId: string;
+    scorerId: string;
+    createdAt: Date;
+    updatedAt: Date;
+    preprocessStepResult?: Record<string, any>;
+    preprocessPrompt?: string;
+    generateScorePrompt?: string;
+    generateReasonPrompt?: string;
+};
+export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
+export type AnalyzeStepFn = (input: ScoringInputWithExtractStepResult) => Promise<ScoringAnalyzeStepResult>;
+export type ReasonStepFn = (input: ScoringInputWithExtractStepResultAndAnalyzeStepResult) => Promise<{
+    reason: string;
+    reasonPrompt?: string;
+} | null>;
+export type ScorerOptions = {
+    name: string;
+    description: string;
+    extract?: ExtractionStepFn;
+    analyze: AnalyzeStepFn;
+    reason?: ReasonStepFn;
+    metadata?: Record<string, any>;
+    isLLMScorer?: boolean;
+};
+export type ScorerRunInputForAgent = {
+    inputMessages: MastraDBMessage[];
+    rememberedMessages: MastraDBMessage[];
+    systemMessages: CoreMessage[];
+    taggedSystemMessages: Record<string, CoreSystemMessage[]>;
+};
+export type ScorerRunOutputForAgent = MastraDBMessage[];
+export declare const saveScorePayloadSchema: z.ZodObject<{
+    runId: z.ZodString;
+    scorerId: z.ZodString;
+    entityId: z.ZodString;
+    score: z.ZodNumber;
+    input: z.ZodOptional<z.ZodAny>;
+    output: z.ZodAny;
+    source: z.ZodEnum<["LIVE", "TEST"]>;
+    entityType: z.ZodOptional<z.ZodEnum<["AGENT", "WORKFLOW", ...SpanType[]]>>;
+    scorer: z.ZodRecord<z.ZodString, z.ZodAny>;
+    traceId: z.ZodOptional<z.ZodString>;
+    spanId: z.ZodOptional<z.ZodString>;
+    preprocessStepResult: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    extractStepResult: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    analyzeStepResult: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    reason: z.ZodOptional<z.ZodString>;
+    metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    preprocessPrompt: z.ZodOptional<z.ZodString>;
+    extractPrompt: z.ZodOptional<z.ZodString>;
+    generateScorePrompt: z.ZodOptional<z.ZodString>;
+    generateReasonPrompt: z.ZodOptional<z.ZodString>;
+    analyzePrompt: z.ZodOptional<z.ZodString>;
+    additionalContext: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    requestContext: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    entity: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    resourceId: z.ZodOptional<z.ZodString>;
+    threadId: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    runId: string;
+    source: "LIVE" | "TEST";
+    score: number;
+    scorerId: string;
+    entityId: string;
+    scorer: Record<string, any>;
+    input?: any;
+    output?: any;
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    metadata?: Record<string, any> | undefined;
+    entityType?: "AGENT" | "WORKFLOW" | SpanType | undefined;
+    traceId?: string | undefined;
+    spanId?: string | undefined;
+    preprocessStepResult?: Record<string, any> | undefined;
+    extractStepResult?: Record<string, any> | undefined;
+    analyzeStepResult?: Record<string, any> | undefined;
+    reason?: string | undefined;
+    preprocessPrompt?: string | undefined;
+    extractPrompt?: string | undefined;
+    generateScorePrompt?: string | undefined;
+    generateReasonPrompt?: string | undefined;
+    analyzePrompt?: string | undefined;
+    additionalContext?: Record<string, any> | undefined;
+    requestContext?: Record<string, any> | undefined;
+    entity?: Record<string, any> | undefined;
+}, {
+    runId: string;
+    source: "LIVE" | "TEST";
+    score: number;
+    scorerId: string;
+    entityId: string;
+    scorer: Record<string, any>;
+    input?: any;
+    output?: any;
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    metadata?: Record<string, any> | undefined;
+    entityType?: "AGENT" | "WORKFLOW" | SpanType | undefined;
+    traceId?: string | undefined;
+    spanId?: string | undefined;
+    preprocessStepResult?: Record<string, any> | undefined;
+    extractStepResult?: Record<string, any> | undefined;
+    analyzeStepResult?: Record<string, any> | undefined;
+    reason?: string | undefined;
+    preprocessPrompt?: string | undefined;
+    extractPrompt?: string | undefined;
+    generateScorePrompt?: string | undefined;
+    generateReasonPrompt?: string | undefined;
+    analyzePrompt?: string | undefined;
+    additionalContext?: Record<string, any> | undefined;
+    requestContext?: Record<string, any> | undefined;
+    entity?: Record<string, any> | undefined;
+}>;
+export type ValidatedSaveScorePayload = z.infer<typeof saveScorePayloadSchema>;
+//# sourceMappingURL=types.d.ts.map

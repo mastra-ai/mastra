@@ -1,0 +1,1 @@
+{"version":3,"sources":["../src/full.ts"],"sourcesContent":["export {\n  makeSyntaxHighlighter,\n  makePrismSyntaxHighlighter,\n  makePrismAsyncSyntaxHighlighter,\n} from \"./react-syntax-highlighter-full\";\n"],"mappings":";AAAA;AAAA,EACE;AAAA,EACA;AAAA,EACA;AAAA,OACK;","names":[]}

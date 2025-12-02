@@ -1,0 +1,17 @@
+import { z } from 'zod/v4';
+import { SchemaProvider, ParsedSchema, SchemaValidation } from '@autoform/core';
+
+declare class ZodProvider<T extends z.ZodObject> implements SchemaProvider<z.infer<T>> {
+    private schema;
+    /**
+     * Provider to use Zod schemas for AutoForm
+     *
+     * @param schema - Zod schema to use for validation
+     */
+    constructor(schema: T);
+    parseSchema(): ParsedSchema;
+    validateSchema(values: z.infer<T>): SchemaValidation;
+    getDefaultValues(): Record<string, any>;
+}
+
+export { ZodProvider };

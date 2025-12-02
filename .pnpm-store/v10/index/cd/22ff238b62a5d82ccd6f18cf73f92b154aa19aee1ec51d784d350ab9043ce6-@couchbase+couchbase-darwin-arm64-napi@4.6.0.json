@@ -1,0 +1,31 @@
+{
+  "name": "@couchbase/couchbase-darwin-arm64-napi",
+  "version": "4.6.0",
+  "requiresBuild": false,
+  "files": {
+    "index.js": {
+      "checkedAt": 1764662924755,
+      "integrity": "sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==",
+      "mode": 420,
+      "size": 0
+    },
+    "package.json": {
+      "checkedAt": 1764662924761,
+      "integrity": "sha512-z2NSUjYlCUIQkAhhpopaF7lBdwpdVj2lnmrLaQUuMfx+gTorwPKICgLLd70IdYkxwupIU8P2Ud7CstP7ECb46A==",
+      "mode": 420,
+      "size": 566
+    },
+    "README.md": {
+      "checkedAt": 1764662924762,
+      "integrity": "sha512-GPGK3iwJ/3m/ziPEbkBWUNzf2CE8UxLGObVllyWgMqDQbahLrlcy7vWRHwy/iLJzNOH8CI/kgqHgMBljHeISyw==",
+      "mode": 420,
+      "size": 115
+    },
+    "couchbase-v4.6.0-napi-v6-darwin-arm64-boringssl.node": {
+      "checkedAt": 1764662924790,
+      "integrity": "sha512-jpYomLUrq8RXPd7mVtPs5FYJwm6AuEaJVozeCLSRg+oQyquJ8LoFYkXnq8BNbzJgmro9D3AAo75DYz/2TWC/UA==",
+      "mode": 493,
+      "size": 13240344
+    }
+  }
+}

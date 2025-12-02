@@ -1,0 +1,17 @@
+// src/v4/validator.ts
+import { z } from "zod/v4";
+function validateSchema(schema, values) {
+  try {
+    schema.parse(values);
+    return { success: true, data: values };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false, errors: error.issues };
+    }
+    throw error;
+  }
+}
+
+export {
+  validateSchema
+};

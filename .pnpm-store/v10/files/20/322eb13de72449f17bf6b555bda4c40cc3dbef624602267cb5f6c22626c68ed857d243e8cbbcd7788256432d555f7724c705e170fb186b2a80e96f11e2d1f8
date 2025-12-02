@@ -1,0 +1,12 @@
+'use strict';
+
+var chunkKEXGB7FK_cjs = require('./chunk-KEXGB7FK.cjs');
+
+
+
+Object.defineProperty(exports, "MastraBase", {
+  enumerable: true,
+  get: function () { return chunkKEXGB7FK_cjs.MastraBase; }
+});
+//# sourceMappingURL=base.cjs.map
+//# sourceMappingURL=base.cjs.map

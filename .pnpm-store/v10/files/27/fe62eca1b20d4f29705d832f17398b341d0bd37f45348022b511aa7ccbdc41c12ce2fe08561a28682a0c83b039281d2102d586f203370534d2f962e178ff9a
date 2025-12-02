@@ -1,0 +1,97 @@
+Name: couchbase-cxx-client
+Summary: Couchbase C++ SDK
+Version: @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@
+Release: @COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@%{?dist}
+Vendor: Couchbase, Inc.
+Packager: Couchbase SDK Team <support@couchbase.com>
+License: ASL 2.0
+URL: https://docs.couchbase.com/cxx-sdk/current/hello-world/overview.html
+%if 0%{?suse_version} == 1500
+BuildRequires: gcc13, gcc13-c++
+%else
+BuildRequires: gcc, gcc-c++
+%endif
+BuildRequires: cmake >= 3.19
+Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
+
+%if 0%{?amzn}
+# The additional linker flags break AmazonLinux
+# https://bugzilla.redhat.com/show_bug.cgi?id=2043092
+%undefine _package_note_flags
+%endif
+
+%description
+This is the client and protocol library for Couchbase project.
+
+%package tools
+Summary: Couchbase C++ SDK, command line tools
+Requires: %{name}%{?_isa} = %{version}-%{release}
+%description -n %{name}-tools
+CLI tools from the Couchbase C++ SDK.
+
+%package devel
+Summary: Couchbase C++ SDK, development files
+Requires: %{name}%{?_isa} = %{version}-%{release}
+%description devel
+Development files for the Couchbase C++ SDK.
+
+%prep
+%autosetup -p1 -n@COUCHBASE_CXX_CLIENT_TARBALL_NAME@
+%cmake \
+%if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
+    -S "." -B "redhat-linux-build" \
+%endif
+%if 0%{?suse_version} == 1500
+    -DCMAKE_C_COMPILER=gcc-13 \
+    -DCMAKE_CXX_COMPILER=g++-13 \
+%endif
+    -DBUILD_SHARED_LIBS=OFF \
+    -DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
+    -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
+
+%build
+%if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
+/usr/bin/cmake --build "redhat-linux-build" -j${RPM_BUILD_NCPUS} --verbose
+%else
+%if 0%{?suse_version} == 1500
+cd build
+%endif
+%cmake_build
+%endif
+
+%install
+%if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
+DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
+%else
+%cmake_install
+%endif
+%if 0%{?suse_version} == 1500
+%__mv %{buildroot}%{_docdir}/../tao %{buildroot}%{_docdir}/tao
+%endif
+
+%files
+%license %{_docdir}/couchbase*/LICENSE.txt
+%license %{_docdir}/tao/pegtl/LICENSE
+%license %{_docdir}/tao/json/LICENSE
+%{_libdir}/libcouchbase_cxx_client.so.*
+
+%files tools
+%{_bindir}/cbc
+
+%files devel
+%{_includedir}/couchbase
+%{_includedir}/tao
+%{_libdir}/cmake/*/*.cmake
+%{_libdir}/libcouchbase_cxx_client.so
+%{_libdir}/libcouchbase_cxx_client_static.a
+%{_libdir}/pkgconfig/couchbase_cxx_client.pc
+%{_libdir}/pkgconfig/couchbase_cxx_client_static.pc
+
+%changelog
+* @COUCHBASE_CXX_CLIENT_RPM_DATE@ Couchbase SDK Team <support@couchbase.com> - @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@-@COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@
+- Automated build.

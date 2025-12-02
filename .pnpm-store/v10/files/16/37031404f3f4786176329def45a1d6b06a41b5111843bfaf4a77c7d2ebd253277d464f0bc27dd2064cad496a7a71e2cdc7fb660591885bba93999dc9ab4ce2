@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg viewBox="0 0 540 280" width="540px" height="280px" xmlns="http://www.w3.org/2000/svg">
+  <rect width="540" height="280" style="fill: rgb(255, 255, 255);"/>
+  <g transform="matrix(1, 0, 0, 1, 61.018997, -319.418854)">
+    <rect x="128.981" y="349.42" width="340" height="30" style="fill: rgb(238, 238, 238);"/>
+    <text style="font-family: monospace; font-size: 14px; white-space: pre;" x="135.709" y="369.298">@cloudflare/workers-types</text>
+  </g>
+  <g transform="matrix(1, 0, 0, 1, 61.018997, -289.418793)">
+    <rect x="128.981" y="349.42" width="340" height="30" style="fill: rgb(221, 221, 221);"/>
+    <text style="font-family: monospace; font-size: 14px; white-space: pre;"><tspan x="135.709" y="369.298">@cloudflare/workers-types/</tspan><tspan style="fill: rgb(0, 85, 220); font-weight: 700;">2021-11-03</tspan></text>
+  </g>
+  <g transform="matrix(1, 0, 0, 1, 61.018997, -259.418793)">
+    <rect x="128.981" y="349.42" width="340" height="30" style="fill: rgb(238, 238, 238);"/>
+    <text style="font-family: monospace; font-size: 14px; white-space: pre;"><tspan x="135.709" y="369.298">@cloudflare/workers-types/</tspan><tspan style="fill: rgb(0, 54, 130); font-weight: 700;">2022-01-31</tspan></text>
+  </g>
+  <g transform="matrix(1, 0, 0, 1, 61.018997, -229.418869)">
+    <rect x="128.981" y="349.42" width="340" height="30" style="fill: rgb(221, 221, 221);"/>
+    <text style="font-family: monospace; font-size: 14px; white-space: pre;"><tspan x="135.709" y="369.298">@cloudflare/workers-types/</tspan><tspan style="fill: rgb(0, 85, 220); font-weight: 700;">2022-03-21</tspan></text>
+  </g>
+  <g transform="matrix(1, 0, 0, 1, 61.018997, -199.418839)">
+    <rect x="128.981" y="349.42" width="340" height="30" style="fill: rgb(238, 238, 238);"/>
+    <text style="font-family: monospace; font-size: 14px; white-space: pre;"><tspan x="135.709" y="369.298">@cloudflare/workers-types/</tspan><tspan style="fill: rgb(0, 54, 130); font-weight: 700;">2022-08-04</tspan></text>
+  </g>
+  <g transform="matrix(1, 0, 0, 1, 61.018997, -169.418839)">
+    <rect x="128.981" y="349.42" width="340" height="30" style="fill: rgb(221, 221, 221);"/>
+    <text style="font-family: monospace; font-size: 14px; white-space: pre;"><tspan x="135.709" y="369.298">@cloudflare/workers-types/</tspan><tspan style="fill: rgb(0, 85, 220); font-weight: 700;">2022-10-31</tspan></text>
+  </g>
+  <g transform="matrix(1, 0, 0, 1, 61.017925, -139.418854)">
+    <rect x="128.981" y="349.42" width="340" height="30" style="fill: rgb(238, 238, 238);"/>
+    <text style="font-family: monospace; font-size: 14px; white-space: pre;"><tspan x="135.709" y="369.298">@cloudflare/workers-types/</tspan><tspan style="fill: rgb(0, 54, 130); font-weight: 700;">2022-11-30</tspan></text>
+  </g>
+  <g transform="matrix(1, 0, 0, 1, 61.017925, -109.418816)">
+    <rect x="128.981" y="349.42" width="340" height="30" style="fill: rgb(221, 221, 221);"/>
+    <text style="font-family: monospace; font-size: 14px; white-space: pre;" x="135.709" y="369.298">@cloudflare/workers-types/experimental</text>
+  </g>
+  <line style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0);" x1="160" y1="60" x2="190" y2="60"/>
+  <line style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0);" x1="160" y1="90" x2="190" y2="90"/>
+  <line style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0);" x1="160" y1="120" x2="190" y2="120"/>
+  <line style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0);" x1="160" y1="150" x2="190" y2="150"/>
+  <line style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0);" x1="160" y1="180" x2="190" y2="180"/>
+  <line style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0);" x1="160" y1="210" x2="190" y2="210"/>
+  <line style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0);" x1="175" y1="60" x2="175" y2="240"/>
+  <line style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0); stroke-dasharray: 2px;" x1="175" y1="30" x2="175" y2="60"/>
+  <line style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0); stroke-dasharray: 2px;" x1="175" y1="240" x2="175" y2="270"/>
+  <text style="fill: rgb(51, 51, 51); font-family: monospace; font-size: 14px; font-weight: 700; text-anchor: middle; white-space: pre;" transform="matrix(1, 0, 0, 1, 307.347992, -77.253761)"><tspan x="52.652" y="98.052">types Entrypoint</tspan></text>
+  <text style="fill: rgb(51, 51, 51); font-family: monospace; font-size: 14px; font-weight: 700; text-anchor: end; white-space: pre;" x="157.185" y="20.798">compatibility_date</text>
+  <text style="fill: rgb(0, 85, 220); font-family: monospace; font-size: 14px; font-weight: 700; text-anchor: end; white-space: pre;" x="153.994" y="64.798">2021-11-03</text>
+  <text style="fill: rgb(0, 54, 130); font-family: monospace; font-size: 14px; font-weight: 700; text-anchor: end; white-space: pre;" x="153.994" y="94.798">2022-01-31</text>
+  <text style="fill: rgb(0, 85, 220); font-family: monospace; font-size: 14px; font-weight: 700; text-anchor: end; white-space: pre;" x="153.994" y="124.798">2022-03-21</text>
+  <text style="fill: rgb(0, 54, 130); font-family: monospace; font-size: 14px; font-weight: 700; text-anchor: end; white-space: pre;" x="153.994" y="154.798">2022-08-04</text>
+  <text style="fill: rgb(0, 85, 220); font-family: monospace; font-size: 14px; font-weight: 700; text-anchor: end; white-space: pre;" x="153.994" y="184.798">2022-10-31</text>
+  <text style="fill: rgb(0, 54, 130); font-family: monospace; font-size: 14px; font-weight: 700; text-anchor: end; white-space: pre;" x="153.994" y="214.798">2022-11-30</text>
+</svg>

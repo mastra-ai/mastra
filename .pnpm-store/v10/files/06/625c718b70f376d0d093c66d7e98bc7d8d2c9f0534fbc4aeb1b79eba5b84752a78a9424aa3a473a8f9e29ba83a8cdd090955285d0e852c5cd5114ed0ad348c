@@ -1,0 +1,1 @@
+{"version":3,"file":"ARRTRIM.d.ts","sourceRoot":"","sources":["../../../lib/commands/ARRTRIM.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,sCAAsC,CAAC;AACrE,OAAO,EAAE,aAAa,EAAE,UAAU,EAAE,WAAW,EAAE,SAAS,EAAW,MAAM,mCAAmC,CAAC;;;IAI7G;;;;;;;;;OASG;gDACkB,aAAa,OAAO,aAAa,QAAQ,aAAa,SAAS,MAAM,QAAQ,MAAM;mCAK1D,WAAW,GAAG,WAAW,WAAW,GAAG,SAAS,CAAC;;AAjBjG,wBAkB6B"}

@@ -1,0 +1,354 @@
+types:
+  TextToVoiceCreatePreviewsRequestOutputFormat:
+    enum:
+      - mp3_22050_32
+      - mp3_44100_32
+      - mp3_44100_64
+      - mp3_44100_96
+      - mp3_44100_128
+      - mp3_44100_192
+      - pcm_8000
+      - pcm_16000
+      - pcm_22050
+      - pcm_24000
+      - pcm_44100
+      - pcm_48000
+      - ulaw_8000
+      - alaw_8000
+      - opus_48000_32
+      - opus_48000_64
+      - opus_48000_96
+      - opus_48000_128
+      - opus_48000_192
+    docs: >-
+      Output format of the generated audio. Formatted as
+      codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is
+      represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be
+      subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires
+      you to be subscribed to Pro tier or above. Note that the μ-law format
+      (sometimes written mu-law, often approximated as u-law) is commonly used
+      for Twilio audio inputs.
+    default: mp3_44100_192
+    source:
+      openapi: openapi.json
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    create_previews:
+      path: /v1/text-to-voice/create-previews
+      method: POST
+      auth: false
+      docs: Create a voice from a text prompt.
+      source:
+        openapi: openapi.json
+      display-name: Voice design
+      request:
+        name: VoiceDesignRequest
+        query-parameters:
+          output_format:
+            type: optional<TextToVoiceCreatePreviewsRequestOutputFormat>
+            default: mp3_44100_192
+            docs: The output format of the generated audio.
+        body:
+          properties:
+            voice_description:
+              type: string
+              docs: Description to use for the created voice.
+              validation:
+                minLength: 20
+                maxLength: 1000
+            text:
+              type: optional<string>
+              docs: Text to generate, text length has to be between 100 and 1000.
+              validation:
+                minLength: 100
+                maxLength: 1000
+            auto_generate_text:
+              type: optional<boolean>
+              docs: >-
+                Whether to automatically generate a text suitable for the voice
+                description.
+              default: false
+            loudness:
+              type: optional<double>
+              docs: >-
+                Controls the volume level of the generated voice. -1 is
+                quietest, 1 is loudest, 0 corresponds to roughly -24 LUFS.
+              default: 0.5
+              validation:
+                min: -1
+                max: 1
+            quality:
+              type: optional<double>
+              docs: Higher quality results in better voice output but less variety.
+              default: 0.9
+              validation:
+                min: -1
+                max: 1
+            seed:
+              type: optional<integer>
+              docs: >-
+                Random number that controls the voice generation. Same seed with
+                same inputs produces same voice.
+              validation:
+                min: 0
+                max: 2147483647
+            guidance_scale:
+              type: optional<double>
+              docs: >-
+                Controls how closely the AI follows the prompt. Lower numbers
+                give the AI more freedom to be creative, while higher numbers
+                force it to stick more to the prompt. High numbers can cause
+                voice to sound artificial or robotic. We recommend to use
+                longer, more detailed prompts at lower Guidance Scale.
+              default: 5
+              validation:
+                min: 0
+                max: 100
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.VoiceDesignPreviewResponse
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            voice_description: A sassy squeaky mouse
+          response:
+            body:
+              previews:
+                - audio_base_64: audio_base_64
+                  generated_voice_id: generated_voice_id
+                  media_type: media_type
+                  duration_secs: 1.1
+              text: text
+    create_voice_from_preview:
+      path: /v1/text-to-voice/create-voice-from-preview
+      method: POST
+      auth: false
+      docs: Add a generated voice to the voice library.
+      source:
+        openapi: openapi.json
+      display-name: Save a voice preview
+      request:
+        name: SaveVoicePreviewRequest
+        body:
+          properties:
+            voice_name:
+              type: string
+              docs: Name to use for the created voice.
+            voice_description:
+              type: string
+              docs: Description to use for the created voice.
+              validation:
+                minLength: 20
+                maxLength: 1000
+            generated_voice_id:
+              type: string
+              docs: >-
+                The generated_voice_id to create, call POST
+                /v1/text-to-voice/create-previews and fetch the
+                generated_voice_id from the response header if don't have one
+                yet.
+            labels:
+              type: optional<map<string, optional<string>>>
+              docs: >-
+                Optional, metadata to add to the created voice. Defaults to
+                None.
+            played_not_selected_voice_ids:
+              type: optional<list<string>>
+              docs: >-
+                List of voice ids that the user has played but not selected.
+                Used for RLHF.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.Voice
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            voice_name: Sassy squeaky mouse
+            voice_description: A sassy squeaky mouse
+            generated_voice_id: 37HceQefKmEi3bGovXjL
+          response:
+            body:
+              voice_id: 21m00Tcm4TlvDq8ikWAM
+              name: Rachel
+              samples:
+                - sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                  file_name: sample.mp3
+                  mime_type: audio/mpeg
+                  size_bytes: 1000000
+                  hash: '1234567890'
+                  duration_secs: 1.1
+                  remove_background_noise: true
+                  has_isolated_audio: true
+                  has_isolated_audio_preview: true
+                  speaker_separation:
+                    voice_id: DCwhRBWXzGAHq8TQ4Fs18
+                    sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                    status: not_started
+                  trim_start: 1
+                  trim_end: 1
+              category: professional
+              fine_tuning:
+                is_allowed_to_fine_tune: true
+                state:
+                  eleven_multilingual_v2: fine_tuned
+                verification_failures:
+                  - verification_failures
+                verification_attempts_count: 2
+                manual_verification_requested: false
+                language: language
+                progress:
+                  key: 1.1
+                message:
+                  key: value
+                dataset_duration_seconds: 1.1
+                verification_attempts:
+                  - text: Hello, how are you?
+                    date_unix: 1714204800
+                    accepted: true
+                    similarity: 0.95
+                    levenshtein_distance: 2
+                    recording:
+                      recording_id: CwhRBWXzGAHq8TQ4Fs17
+                      mime_type: audio/mpeg
+                      size_bytes: 1000000
+                      upload_date_unix: 1714204800
+                      transcription: Hello, how are you?
+                slice_ids:
+                  - slice_ids
+                manual_verification:
+                  extra_text: Please verify the voice is that of a female.
+                  request_time_unix: 1714204800
+                  files:
+                    - file_id: CwhRBWXzGAHq8TQ4Fs18
+                      file_name: file.mp3
+                      mime_type: audio/mpeg
+                      size_bytes: 1000000
+                      upload_date_unix: 1714204800
+                max_verification_attempts: 1
+                next_max_verification_attempts_reset_unix_ms: 1
+                finetuning_state:
+                  key: value
+              labels:
+                accent: American
+                age: middle-aged
+                description: expressive
+                gender: female
+                use_case: social media
+              description: A warm, expressive voice with a touch of humor.
+              preview_url: >-
+                https://storage.googleapis.com/eleven-public-prod/premade/voices/9BWtsMINqrJLrRacOk9x/405766b8-1f4e-4d3c-aba1-6f25333823ec.mp3
+              available_for_tiers:
+                - creator
+                - enterprise
+              settings:
+                stability: 1
+                similarity_boost: 1
+                style: 0
+                use_speaker_boost: true
+                speed: 1
+              sharing:
+                status: enabled
+                history_item_sample_id: DCwhRBWXzGAHq8TQ4Fs18
+                date_unix: 1714204800
+                whitelisted_emails:
+                  - example@example.com
+                public_owner_id: DCwhRBWXzGAHq8TQ4Fs18
+                original_voice_id: DCwhRBWXzGAHq8TQ4Fs18
+                financial_rewards_enabled: true
+                free_users_allowed: true
+                live_moderation_enabled: true
+                rate: 0.05
+                notice_period: 30
+                disable_at_unix: 1714204800
+                voice_mixing_allowed: false
+                featured: true
+                category: professional
+                reader_app_enabled: true
+                image_url: image_url
+                ban_reason: ban_reason
+                liked_by_count: 100
+                cloned_by_count: 50
+                name: Rachel
+                description: A female voice with a soft and friendly tone.
+                labels:
+                  accent: American
+                  gender: female
+                review_status: allowed
+                review_message: review_message
+                enabled_in_library: true
+                instagram_username: instagram_username
+                twitter_username: twitter_username
+                youtube_username: youtube_username
+                tiktok_username: tiktok_username
+                moderation_check:
+                  date_checked_unix: 1714204800
+                  name_value: Rachel
+                  name_check: true
+                  description_value: A female voice with a soft and friendly tone.
+                  description_check: true
+                  sample_ids:
+                    - sample1
+                    - sample2
+                  sample_checks:
+                    - 0.95
+                    - 0.98
+                  captcha_ids:
+                    - captcha1
+                    - captcha2
+                  captcha_checks:
+                    - 0.95
+                    - 0.98
+                reader_restricted_on:
+                  - resource_type: read
+                    resource_id: FCwhRBWXzGAHq8TQ4Fs18
+              high_quality_base_model_ids:
+                - eleven_v2_flash
+                - eleven_flash_v2
+                - eleven_turbo_v2_5
+                - eleven_multilingual_v2
+                - eleven_v2_5_flash
+                - eleven_flash_v2_5
+                - eleven_turbo_v2
+              verified_languages:
+                - language: en
+                  model_id: eleven_turbo_v2_5
+                  accent: American
+                  locale: locale
+                  preview_url: preview_url
+              safety_control: NONE
+              voice_verification:
+                requires_verification: false
+                is_verified: true
+                verification_failures:
+                  - verification_failures
+                verification_attempts_count: 0
+                language: en
+                verification_attempts:
+                  - text: Hello, how are you?
+                    date_unix: 1714204800
+                    accepted: true
+                    similarity: 0.95
+                    levenshtein_distance: 2
+                    recording:
+                      recording_id: CwhRBWXzGAHq8TQ4Fs17
+                      mime_type: audio/mpeg
+                      size_bytes: 1000000
+                      upload_date_unix: 1714204800
+                      transcription: Hello, how are you?
+              permission_on_resource: permission_on_resource
+              is_owner: false
+              is_legacy: false
+              is_mixed: false
+              created_at_unix: 1
+  source:
+    openapi: openapi.json

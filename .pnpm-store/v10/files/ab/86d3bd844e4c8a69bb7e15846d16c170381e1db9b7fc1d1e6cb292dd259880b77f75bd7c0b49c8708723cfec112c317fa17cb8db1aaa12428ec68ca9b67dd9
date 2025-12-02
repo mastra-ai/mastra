@@ -1,0 +1,60 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    create:
+      path: /v1/forced-alignment
+      method: POST
+      auth: false
+      docs: >-
+        Force align an audio file to text. Use this endpoint to get the timing
+        information for each character and word in an audio file based on a
+        provided text transcript.
+      source:
+        openapi: openapi.json
+      display-name: Create Forced Alignment
+      request:
+        name: Body_Create_forced_alignment_v1_forced_alignment_post
+        body:
+          properties:
+            file:
+              type: file
+              docs: >-
+                The file to align. All major audio formats are supported. The
+                file size must be less than 1GB.
+            text:
+              type: string
+              docs: >-
+                The text to align with the audio. The input text can be in any
+                format, however diarization is not supported at this time.
+            enabled_spooled_file:
+              type: optional<boolean>
+              docs: >-
+                If true, the file will be streamed to the server and processed
+                in chunks. This is useful for large files that cannot be loaded
+                into memory. The default is false.
+              default: false
+        content-type: multipart/form-data
+      response:
+        docs: Successful Response
+        type: root.ForcedAlignmentResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            text: text
+          response:
+            body:
+              characters:
+                - text: H
+                  start: 0
+                  end: 0.02
+              words:
+                - text: Hello
+                  start: 0
+                  end: 1.02
+  source:
+    openapi: openapi.json

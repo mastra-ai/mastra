@@ -1,0 +1,61 @@
+import { GetOptions, PostOptions, PutOptions, WorkOSOptions } from './common/interfaces';
+import { DirectorySync } from './directory-sync/directory-sync';
+import { Events } from './events/events';
+import { Organizations } from './organizations/organizations';
+import { OrganizationDomains } from './organization-domains/organization-domains';
+import { Passwordless } from './passwordless/passwordless';
+import { Portal } from './portal/portal';
+import { SSO } from './sso/sso';
+import { Webhooks } from './webhooks/webhooks';
+import { Mfa } from './mfa/mfa';
+import { AuditLogs } from './audit-logs/audit-logs';
+import { UserManagement } from './user-management/user-management';
+import { FGA } from './fga/fga';
+import { HttpClient } from './common/net/http-client';
+import { IronSessionProvider } from './common/iron-session/iron-session-provider';
+import { Widgets } from './widgets/widgets';
+import { Actions } from './actions/actions';
+import { Vault } from './vault/vault';
+import { CryptoProvider } from './common/crypto/crypto-provider';
+export declare class WorkOS {
+    readonly key?: string | undefined;
+    readonly options: WorkOSOptions;
+    readonly baseURL: string;
+    readonly client: HttpClient;
+    readonly clientId?: string;
+    readonly actions: Actions;
+    readonly auditLogs: AuditLogs;
+    readonly directorySync: DirectorySync;
+    readonly organizations: Organizations;
+    readonly organizationDomains: OrganizationDomains;
+    readonly passwordless: Passwordless;
+    readonly portal: Portal;
+    readonly sso: SSO;
+    readonly webhooks: Webhooks;
+    readonly mfa: Mfa;
+    readonly events: Events;
+    readonly userManagement: UserManagement;
+    readonly fga: FGA;
+    readonly widgets: Widgets;
+    readonly vault: Vault;
+    constructor(key?: string | undefined, options?: WorkOSOptions);
+    createWebhookClient(): Webhooks;
+    createActionsClient(): Actions;
+    getCryptoProvider(): CryptoProvider;
+    createHttpClient(options: WorkOSOptions, userAgent: string): HttpClient;
+    createIronSessionProvider(): IronSessionProvider;
+    get version(): string;
+    post<Result = any, Entity = any>(path: string, entity: Entity, options?: PostOptions): Promise<{
+        data: Result;
+    }>;
+    get<Result = any>(path: string, options?: GetOptions): Promise<{
+        data: Result;
+    }>;
+    put<Result = any, Entity = any>(path: string, entity: Entity, options?: PutOptions): Promise<{
+        data: Result;
+    }>;
+    delete(path: string, query?: any): Promise<void>;
+    emitWarning(warning: string): void;
+    private handleParseError;
+    private handleHttpError;
+}

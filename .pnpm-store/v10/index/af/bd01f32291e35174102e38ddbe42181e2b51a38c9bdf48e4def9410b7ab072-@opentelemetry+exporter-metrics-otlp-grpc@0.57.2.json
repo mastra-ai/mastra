@@ -1,0 +1,79 @@
+{
+  "name": "@opentelemetry/exporter-metrics-otlp-grpc",
+  "version": "0.57.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662915300,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662915301,
+      "integrity": "sha512-/mTF2fiWyDEVWU7uPJKGwFBlrrTmvgnbO+JJGvRL3SoMonEYCqUz/hUJEXSoeMo4BXc5ZRQUXVeQAk+L4JMg0A==",
+      "mode": 420,
+      "size": 1434
+    },
+    "build/src/OTLPMetricExporter.js": {
+      "checkedAt": 1764662915302,
+      "integrity": "sha512-9v43oIkU9eigU3SzcwCiFwkoveBK+CveYj0PqHLHK9ekKGbLNl9EeTf+jei+mDj921/Hz2W3VfXNF45t1fyOXQ==",
+      "mode": 420,
+      "size": 1565
+    },
+    "build/src/version.js": {
+      "checkedAt": 1764662915303,
+      "integrity": "sha512-ZZqxsmnMyJKrqCHWReCdbiITzXTzSplD80N5Ah7tEH1ISKNejjohjyz919QRc061nmds1+uFq1BlcIqYUDSH4A==",
+      "mode": 420,
+      "size": 833
+    },
+    "package.json": {
+      "checkedAt": 1764662915303,
+      "integrity": "sha512-Hx9bQAvllud5WcPSlUS+ayXc7v/mbdTCdTqMGyqs6UCdrnvG+ss+dKVREXGBhxnaS/NjQUlXJur4Nt8jQXhRhQ==",
+      "mode": 420,
+      "size": 2472
+    },
+    "build/src/index.js.map": {
+      "checkedAt": 1764662915305,
+      "integrity": "sha512-cw6+4YJmRaoNZ2XBdgcRLmvtooy2+ib+gzVfh9Uitqc/ZKmgu23zfqJ+bAOWU1gdYM3PsKcTgwdTEtKZFRMMtw==",
+      "mode": 420,
+      "size": 1007
+    },
+    "build/src/OTLPMetricExporter.js.map": {
+      "checkedAt": 1764662915307,
+      "integrity": "sha512-ffNxUHi38EzC+Q02yOY/cOHdV75EfXHyYowT8ekHu+Dy237gj/YKMVHcgclTIDq7/Pqvpl5/8mm4+Se1edH39w==",
+      "mode": 420,
+      "size": 1935
+    },
+    "build/src/version.js.map": {
+      "checkedAt": 1764662915307,
+      "integrity": "sha512-xYXklFaoTdlYRT/zkWr5G1y18XLG5amebsH2uUGSi7+yGuahhkCnxIrd8sAiiANinYzwWd4G8E9Jmn273hcPqQ==",
+      "mode": 420,
+      "size": 922
+    },
+    "README.md": {
+      "checkedAt": 1764662915308,
+      "integrity": "sha512-VnK0rJ+JBPJBHpsJBH0jV6diA5UZHbEm+NpDAOcQ8hlGRMPTfjFnBoIiu6gk2yNHHmIk2ScW2Y4T1LJv69lRFQ==",
+      "mode": 420,
+      "size": 7232
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662915308,
+      "integrity": "sha512-izrtveNCTnPT6PlEv1WDGXnAZrzj9oqJTMS82wbVrF5imsit5g6LtVEknPJbjm+qivEmmLRFgq/EQo6Poo9wxA==",
+      "mode": 420,
+      "size": 73
+    },
+    "build/src/OTLPMetricExporter.d.ts": {
+      "checkedAt": 1764662915310,
+      "integrity": "sha512-wkW4E/hyCZru+9zAl/uZ72n/b0PacNrhXBvd05maV3qXxukxjC1826jkQ3XxYZdTx6rYMZG2IKttmgyC4L85oA==",
+      "mode": 420,
+      "size": 438
+    },
+    "build/src/version.d.ts": {
+      "checkedAt": 1764662915311,
+      "integrity": "sha512-+u1vTBB4fbX+7I/2jMzpAleoi2I3rTR2JJSL756xSYnXJ6qeGE0+1h6LR5H/c4mJo1dq4G/PNYDM5VIKR8OK5Q==",
+      "mode": 420,
+      "size": 78
+    }
+  }
+}

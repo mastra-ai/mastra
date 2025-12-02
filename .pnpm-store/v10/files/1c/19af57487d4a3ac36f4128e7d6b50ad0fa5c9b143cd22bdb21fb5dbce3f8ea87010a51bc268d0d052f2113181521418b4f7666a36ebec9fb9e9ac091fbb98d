@@ -1,0 +1,29 @@
+import type { ColumnarVectors, RequestTiming, Vector } from "./types";
+export declare const isRuntimeFullyNodeCompatible: boolean;
+/** An error class for errors returned by the turbopuffer API. */
+export declare class TurbopufferError extends Error {
+    error: string;
+    status?: number;
+    constructor(error: string, { status, cause }: {
+        status?: number;
+        cause?: Error;
+    });
+}
+export declare function buildUrl(baseUrl: string, path: string, query?: Record<string, string | undefined>): URL;
+/** A helper function to determine if a status code should be retried. */
+export declare function statusCodeShouldRetry(statusCode?: number): boolean;
+/** A helper function to delay for a given number of milliseconds. */
+export declare function delay(ms: number): Promise<unknown>;
+export declare function make_request_timing({ request_start, response_start, body_read_end, decompress_end, deserialize_end, requestCompressionDuration, }: {
+    request_start: number;
+    response_start: number;
+    body_read_end?: number;
+    decompress_end?: number;
+    deserialize_end?: number;
+    requestCompressionDuration?: number;
+}): RequestTiming;
+export declare function parseIntMetric(value: string | null): number;
+export declare function parseFloatMetric(value: string | null): number;
+export declare function parseServerTiming(value: string): Record<string, string>;
+export declare function fromColumnar(cv: ColumnarVectors): Vector[];
+//# sourceMappingURL=helpers.d.ts.map

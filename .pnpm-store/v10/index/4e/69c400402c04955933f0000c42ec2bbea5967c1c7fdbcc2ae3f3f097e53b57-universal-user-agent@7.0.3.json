@@ -1,0 +1,79 @@
+{
+  "name": "universal-user-agent",
+  "version": "7.0.3",
+  "requiresBuild": false,
+  "files": {
+    "index.js": {
+      "checkedAt": 1764662915807,
+      "integrity": "sha512-wAYf3m3nUePCCgBCBCryb8zp0VtGi2w7pY4vYhAMpFpC0JUXkJK4MAWX3blvvzhUMyvZkHCL4+LzFfGyHiUc0Q==",
+      "mode": 420,
+      "size": 355
+    },
+    "index.test.js": {
+      "checkedAt": 1764662915810,
+      "integrity": "sha512-/pmuHTZtooSNx/bMNZKF9nrClIeILP32O7YER+3eKv0v8Ru2M5QpUYvqKVgUxQzvPE8P9aSL2hGs/5gnlVQOZA==",
+      "mode": 420,
+      "size": 1052
+    },
+    "package.json": {
+      "checkedAt": 1764662915814,
+      "integrity": "sha512-9wir8KxmYRN6aa3wW8tGB4Lwq8K8MA1N0ng5G3VXBbLI7RyoTZYPNNwoIMRFPxpFy8SGMjhvfN8mCTZYRCNWAA==",
+      "mode": 420,
+      "size": 787
+    },
+    "CODE_OF_CONDUCT.md": {
+      "checkedAt": 1764662915815,
+      "integrity": "sha512-5sb+GHQU/UcfHTv0Q7DX0ZFwFXqNpbydbqtOhz+pa5AScKs9Ugtugt5+W5hmqzSp6IZ9wGKnf5U4Agm7SQJ6/Q==",
+      "mode": 420,
+      "size": 3240
+    },
+    "LICENSE.md": {
+      "checkedAt": 1764662915816,
+      "integrity": "sha512-K73C6BZaCtiYgqCUBlU6/9biIt/EbhdeYeNbiXz5VWz/OYAxEiTdlFxS4F8tAfHp/met0gLCh0VAfx5qQnPS3w==",
+      "mode": 420,
+      "size": 813
+    },
+    "README.md": {
+      "checkedAt": 1764662915816,
+      "integrity": "sha512-Vs65L433Y5ZNjJt4uJkFpkYTvOBVLyjyMINeVCY3OYtnZPXzlMF0AWhgfrRLqVGtahEcBlquORL2Vd8rKmSkSA==",
+      "mode": 420,
+      "size": 713
+    },
+    "SECURITY.md": {
+      "checkedAt": 1764662915818,
+      "integrity": "sha512-hY9IiLY1GqzGFHoJ+jDMxTmRUYlfUkIH9EP/pzpHgECpRmtrM9sT/OO8BbI803YfTua4o0Uv70Vspdzz+hpFLg==",
+      "mode": 420,
+      "size": 193
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662915819,
+      "integrity": "sha512-MGzb7zQdwA2oBdEKMLQlTQyyD3XY+DIkp6ZSNJhlBa/Y5//hx1KWOgt4wI6+5Hys6NxJr2hcU6lWg6NgkylyrQ==",
+      "mode": 420,
+      "size": 140
+    },
+    "index.test-d.ts": {
+      "checkedAt": 1764662915820,
+      "integrity": "sha512-vsYPVrvc0HifeGe/qIW+4gNu8VpZQf906hciuXEE2U1m+MRt38Zeba4BpaUxIOZTcZ3QPB85a20yK8922Elt0g==",
+      "mode": 420,
+      "size": 115
+    },
+    ".github/workflows/release.yml": {
+      "checkedAt": 1764662915825,
+      "integrity": "sha512-8m3EZTM972oIf0aSwT4fUhzZPkzk+1lve5bTvPMudZWD/YSqS25QJvBuKgIAENj/9b2eQRjDMTiZlOTB7LH3ww==",
+      "mode": 420,
+      "size": 732
+    },
+    ".github/workflows/test.yml": {
+      "checkedAt": 1764662915826,
+      "integrity": "sha512-6DgbYoAyijw9uF+05lnbQVInk8GLtvtONWWIxVG2EE+c+Xmrd3CYRJDKucHDBoCyd6BW7uurRXqHKJFSoiRgDg==",
+      "mode": 420,
+      "size": 1289
+    },
+    ".github/workflows/update-prettier.yml": {
+      "checkedAt": 1764662915827,
+      "integrity": "sha512-Sq8RvyRwm0TTUq3h/t/+h6KgaJ2SlcDzdsAt0JzuTv9nMkuHEZFIuENSXGUrK2AYXmhPNX0N94WeoUL0i2ybpg==",
+      "mode": 420,
+      "size": 666
+    }
+  }
+}

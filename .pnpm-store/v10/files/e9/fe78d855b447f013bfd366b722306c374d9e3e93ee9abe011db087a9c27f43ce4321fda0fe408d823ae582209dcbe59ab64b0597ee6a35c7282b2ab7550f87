@@ -1,0 +1,119 @@
+import type { AccessTokenGetter, AccessTokenResponse, AccessTokenScope, AudioSpeechRequest, AudioSpeechResponse, AudioStreamRequest, SpeechifyAccessTokenManagerOptions, VoicesCreateRequest, VoicesCreateResponse, VoicesListResponse } from "./types.js";
+export type { SpeechifyError } from "./fetch.js";
+export type { AccessTokenGetter, AccessTokenResponse, AccessTokenScope, AccessTokenServerResponse, AudioSpeechFormat, AudioSpeechRequest, AudioSpeechRequestOptions, AudioSpeechResponse, AudioStreamFormat, AudioStreamRequest, Gender, SpeechifyAccessTokenManagerOptions, SpeechMark, SpeechMarkChunk, VoiceLanguage, VoiceModel, VoiceModelName, VoicesCreateRequest, VoicesCreateResponse, VoicesListEntry, VoicesListResponse, } from "./types.js";
+/**
+ * The Speechify client options.
+ */
+export interface SpeechifyOptions {
+    /**
+     * Strict mode will throw an error if the API key is used in the browser environment.
+     * Otherwise, it will only log a warning.
+     */
+    strict?: boolean;
+    /**
+     * API Key can be used for server-side usage. It is the simplest form, but it's not suitable for
+     * the public client environment.
+     * Access Token is recommended for the public client environment.
+     * Read more about this at https://docs.sws.speechify.com/docs/authentication.
+     */
+    apiKey?: string;
+    /**
+     * API URL is the base URL for the Speechify API. It is optional and defaults to the production URL,
+     * which is https://api.sws.speechify.com.
+     * If you know what you're doing, you can use this option to point to a different environment, like staging or development.
+     */
+    apiUrl?: string;
+}
+/**
+ * The Speechify client.
+ */
+export declare class Speechify {
+    #private;
+    constructor(options: SpeechifyOptions);
+    /**
+     * Get the current version of the package
+     */
+    get version(): string;
+    /**
+     * Set the [access token](https://docs.sws.speechify.com/docs/authentication#access-tokens) for the client.
+     * @param token The Access Token to set.
+     */
+    setAccessToken(token: string | undefined): void;
+    /**
+     * Set the [API key](https://docs.sws.speechify.com/docs/authentication#api-keys) for the client.
+     * @param key The API Key to set.
+     */
+    setApiKey(key: string | undefined): void;
+    /**
+     * Get the list of available voices.
+     * [API Reference](https://docs.sws.speechify.com/reference/getvoices-1).
+     * @returns The list of available voices.
+     */
+    voicesList(): Promise<VoicesListResponse>;
+    /**
+     * Create a new voice.
+     * [API Reference](https://docs.sws.speechify.com/reference/createvoice).
+     * @param req Request details.
+     * @returns The newly created voice details.
+     */
+    voicesCreate(req: VoicesCreateRequest): Promise<VoicesCreateResponse>;
+    /**
+     * Delete a voice.
+     * [API Reference](https://docs.sws.speechify.com/reference/deletevoice).
+     * @param voiceId The ID of the voice to delete.
+     */
+    voicesDelete(voiceId: string): Promise<void>;
+    /**
+     * Download sample audio for a personal cloned voice.
+     * [API Reference](https://docs.sws.speechify.com/v1/api-reference/api-reference/tts/voices/download-sample).
+     * @param voiceId The ID of the voice to delete.
+     * @returns A Blob containing the audio sample data
+     */
+    voiceSampleDownload(voiceId: string): Promise<Blob>;
+    /**
+     * Issue a short-living access token to be used by the public-client.
+     * [API Reference](https://docs.sws.speechify.com/reference/createaccesstoken).
+     * This method must only be called server-side, and the resultant token should be passed to the client.
+     * Read more about this at https://docs.sws.speechify.com/docs/authentication#access-tokens.
+     * You need to call this method regularly to issue the new token and keep it fresh.
+     * The expiration time is defined by the expiresIn property on the return value.
+     * @param scope a single scope, or an array of scopes to issue the token for.
+     * @returns The token details
+     */
+    accessTokenIssue(scope: AccessTokenScope | AccessTokenScope[]): Promise<AccessTokenResponse>;
+    /**
+     * Generate audio from text.
+     * [API Reference](https://docs.sws.speechify.com/reference/getspeech).
+     * @param req Request details.
+     * @returns The object containing raw audio data and additional information.
+     */
+    audioGenerate(req: AudioSpeechRequest): Promise<AudioSpeechResponse>;
+    /**
+     * Stream audio from text.
+     * [API Reference](https://docs.sws.speechify.com/reference/getstream).
+     */
+    audioStream(req: AudioStreamRequest): Promise<ReadableStream<Uint8Array<ArrayBufferLike>>>;
+}
+/**
+ * The Speechify Access Token Manager handles the access token issue, refresh, and erasing
+ * in accordance with the end-user auth status change.
+ * You have to implement the AccessTokenGetter function to obtain the access token
+ * (typically it should be a plain HTTP call to your own server endpoint calling
+ * the [token issue API](https://docs.sws.speechify.com/reference/createaccesstoken)).
+ * This API is also exposed via the SDK as the {@link Speechify.accessTokenIssue} method.
+ * Read more [about the Speechify authentication](https://docs.sws.speechify.com/docs/authentication).
+ */
+export declare class SpeechifyAccessTokenManager {
+    #private;
+    /**
+     * @param speechifyClient An instance of Speechify, to be managed by this manager.
+     * @param getToken The async function to obtain the access token.
+     * @param options The Speechify Access Token Manager init options.
+     */
+    constructor(speechifyClient: Speechify, getToken: AccessTokenGetter, options?: SpeechifyAccessTokenManagerOptions);
+    /**
+     * Set the user authentication status. Call this method when the user logs in or logs out.
+     * It is safe to call this method multiple times with the same value.
+     */
+    setIsAuthenticated(isAuthenticated: boolean): void;
+}

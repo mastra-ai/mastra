@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "changelog": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": [
+            {
+              "type": "string",
+              "title": "Changelog Generator Path"
+            },
+            { "title": "Changelog Generator Options" }
+          ],
+          "minItems": 1,
+          "maxItems": 2
+        },
+        {
+          "enum": [false],
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "title": "Changelog Generator Path"
+        }
+      ],
+      "description": "The configuration for changelog generators.",
+      "default": ["@changesets/cli", null]
+    },
+    "fixed": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "description": "Packages that should always be released together with the same version.",
+      "default": []
+    },
+    "linked": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "description": "Packages that should be linked together so when they are being released, they will be released at the same version.",
+      "default": []
+    },
+    "commit": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": [
+            {
+              "type": "string",
+              "title": "Commit Generator Path"
+            },
+            { "title": "Commit Generator Options" }
+          ],
+          "minItems": 1,
+          "maxItems": 2
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "title": "Commit Generator Path"
+        }
+      ],
+      "description": "Determines whether Changesets should commit the results of the add and version command.",
+      "default": false
+    },
+    "prettier": {
+      "type": "boolean",
+      "description": "When false, Changesets won't format with Prettier",
+      "default": true
+    },
+    "privatePackages": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "tag": { "type": "boolean" },
+            "version": { "type": "boolean" }
+          }
+        },
+        {
+          "const": false
+        }
+      ]
+    },
+    "access": {
+      "enum": ["restricted", "public"],
+      "type": "string",
+      "description": "Determines whether Changesets should publish packages to the registry publicly or to a restricted scope.",
+      "default": "restricted"
+    },
+    "baseBranch": {
+      "type": "string",
+      "default": "master",
+      "description": "Determines the branch that Changesets uses when finding what packages have changed."
+    },
+    "changedFilePatterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": ["**"],
+      "description": "Glob patterns for changed files that should determining the package as changed."
+    },
+    "ignore": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Packages that should not be released.",
+      "default": []
+    },
+    "updateInternalDependencies": {
+      "enum": ["patch", "minor"],
+      "type": "string",
+      "description": "The minimum bump type to trigger automatic update of internal dependencies that are part of the same release.",
+      "default": "patch"
+    },
+    "bumpVersionsWithWorkspaceProtocolOnly": {
+      "type": "boolean",
+      "default": false,
+      "description": "Determines whether Changesets should only bump dependency ranges that use workspace protocol of packages that are part of the workspace."
+    },
+    "snapshot": {
+      "type": "object",
+      "properties": {
+        "useCalculatedVersion": {
+          "type": "boolean",
+          "description": "It can be used to make generated snapshot versions use the calculated version (based on the changeset files) as a base version, instead of 0.0.0"
+        },
+        "prereleaseTemplate": {
+          "type": "string",
+          "description": "A template for the prerelease (suffix) part of the generated snapshot version. The template can use the following variable patterns: {commit}, {tag}, {datetime}, {timestamp}.",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

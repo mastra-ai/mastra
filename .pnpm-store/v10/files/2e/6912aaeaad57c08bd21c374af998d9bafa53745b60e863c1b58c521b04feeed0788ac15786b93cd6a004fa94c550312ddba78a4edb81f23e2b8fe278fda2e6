@@ -1,0 +1,60 @@
+{
+  "name": "changesets-changelog-github-local",
+  "type": "module",
+  "version": "1.0.1",
+  "description": "A local-only version of '@changesets/changelog-github' that doesn't rely on GitHub's API.",
+  "author": "LekoArts",
+  "license": "MIT",
+  "homepage": "https://github.com/LekoArts/changesets-changelog-github-local#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LekoArts/changesets-changelog-github-local.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LekoArts/changesets-changelog-github-local/issues"
+  },
+  "keywords": [
+    "changesets",
+    "changelog",
+    "github",
+    "local",
+    "git"
+  ],
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@napi-rs/simple-git": "^0.1.22"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^5.4.1",
+    "@changesets/cli": "^2.29.7",
+    "@changesets/types": "^6.1.0",
+    "@types/node": "^22.18.12",
+    "eslint": "^9.38.0",
+    "eslint-plugin-format": "^1.0.2",
+    "tsdown": "^0.11.9",
+    "typescript": "^5.9.3",
+    "vitest": "^3.1.3"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "changeset": "changeset",
+    "release": "changeset publish"
+  }
+}

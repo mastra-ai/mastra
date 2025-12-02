@@ -1,0 +1,87 @@
+[![view on npm](https://badgen.net/npm/v/wordwrapjs)](https://www.npmjs.org/package/wordwrapjs)
+[![npm module downloads](https://badgen.net/npm/dt/wordwrapjs)](https://www.npmjs.org/package/wordwrapjs)
+[![Gihub repo dependents](https://badgen.net/github/dependents-repo/75lb/wordwrapjs)](https://github.com/75lb/wordwrapjs/network/dependents?dependent_type=REPOSITORY)
+[![Gihub package dependents](https://badgen.net/github/dependents-pkg/75lb/wordwrapjs)](https://github.com/75lb/wordwrapjs/network/dependents?dependent_type=PACKAGE)
+[![Node.js CI](https://github.com/75lb/wordwrapjs/actions/workflows/node.js.yml/badge.svg)](https://github.com/75lb/wordwrapjs/actions/workflows/node.js.yml)
+[![js-standard-style](https://img.shields.io/badge/code%20style-standard-brightgreen.svg)](https://github.com/feross/standard)
+
+# wordwrapjs
+
+Word wrapping for plain text.
+
+## Synopsis
+
+Wrap some text in a 20 character column.
+
+```js
+import wordwrap from 'wordwrapjs'
+
+const text = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+const result = wordwrap.wrap(text, { width: 20 })
+```
+
+`result` now looks like this:
+```
+Lorem ipsum dolor
+sit amet,
+consectetur
+adipiscing elit, sed
+do eiusmod tempor
+incididunt ut labore
+et dolore magna
+aliqua.
+```
+
+Force long words to wrap by setting the `break` flag.
+
+```
+Welcome to Node.js v16.6.2.
+> wrap = require('wordwrapjs')
+
+> url = 'https://github.com/75lb/wordwrapjs'
+> wrap.lines(url, { width: 18 })
+[ 'https://github.com/75lb/wordwrapjs' ]
+
+> wrap.lines(url, { width: 18, break: true })
+[ 'https://github.com', '/75lb/wordwrapjs' ]
+```
+
+## Load anywhere
+
+This library is compatible with Node.js, the Web and any style of module loader. It can be loaded anywhere, natively without transpilation.
+
+Node.js:
+
+```js
+const wordwrap = require('wordwrapjs')
+```
+
+Within Node.js with ECMAScript Module support enabled:
+
+```js
+import wordwrap from 'wordwrapjs'
+```
+
+Within an modern browser ECMAScript Module:
+
+```js
+import wordwrap from './node_modules/wordwrapjs/dist/index.mjs'
+```
+
+Old browser (adds `window.wordwrapjs`):
+
+```html
+<script nomodule src="./node_modules/wordwrapjs/dist/index.js"></script>
+```
+
+## API Reference
+
+{{#module name="wordwrapjs"}}
+{{>body~}}
+{{>member-index~}}
+{{>members~}}
+{{/module}}
+
+* * *
+
+&copy; 2015-25 Lloyd Brookes \<opensource@75lb.com\>. Documented by [jsdoc-to-markdown](https://github.com/jsdoc2md/jsdoc-to-markdown).

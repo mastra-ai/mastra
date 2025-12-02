@@ -1,0 +1,31 @@
+{
+  "name": "@types/mysql",
+  "version": "2.15.26",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662914855,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662914858,
+      "integrity": "sha512-zgcNzgMioR9xqpqnRv06ukjmq+83NNArdC8SUzZ510ob8Lg4dwJQFcCxQZVw9GAEyyBHLUPYn4EHCrpFPETCOg==",
+      "mode": 420,
+      "size": 657
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662914860,
+      "integrity": "sha512-/8gaPHEV8/xuz7BBOR3EPpXmxifvOhx6vzWVFceW9TZeZnx1xtpCYVPIZUs+Nq+KO6rzsfKaEjDhLgjp8+sBSg==",
+      "mode": 420,
+      "size": 22234
+    },
+    "package.json": {
+      "checkedAt": 1764662914860,
+      "integrity": "sha512-QePzEIq9+n/5/+MxM7qWTs2Kam7yu8KS5/HVLGKD3tOeCo7Z/abTGmsCmdP8+aboDDVoZxS6IQym+I1zWcWQhQ==",
+      "mode": 420,
+      "size": 1267
+    }
+  }
+}

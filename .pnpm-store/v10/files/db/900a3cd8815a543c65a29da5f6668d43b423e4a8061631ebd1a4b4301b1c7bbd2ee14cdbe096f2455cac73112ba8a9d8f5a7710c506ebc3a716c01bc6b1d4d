@@ -1,0 +1,1 @@
+extend-diff-ignore = third_party_cache/.*(\.hash|libllhttp\.pc)$

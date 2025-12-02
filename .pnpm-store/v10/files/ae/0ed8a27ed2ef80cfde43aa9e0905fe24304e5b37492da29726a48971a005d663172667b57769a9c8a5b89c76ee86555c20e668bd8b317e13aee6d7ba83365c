@@ -1,0 +1,1 @@
+{"version":3,"file":"core-model-message.d.ts","sourceRoot":"","sources":["../../../../../src/agent/message-list/utils/ai-v4-v5/core-model-message.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,WAAW,IAAI,aAAa,EAAE,MAAM,qBAAqB,CAAC;AACxE,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;AAE5C,wBAAgB,iCAAiC,CAC/C,GAAG,EAAE,aAAa,GAAG,QAAQ,CAAC,YAAY,GACzC,GAAG,IAAI,QAAQ,CAAC,YAAY,CA4B9B"}

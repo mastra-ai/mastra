@@ -1,0 +1,287 @@
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.WorkOS = void 0;
+const exceptions_1 = require("./common/exceptions");
+const directory_sync_1 = require("./directory-sync/directory-sync");
+const events_1 = require("./events/events");
+const organizations_1 = require("./organizations/organizations");
+const organization_domains_1 = require("./organization-domains/organization-domains");
+const passwordless_1 = require("./passwordless/passwordless");
+const portal_1 = require("./portal/portal");
+const sso_1 = require("./sso/sso");
+const webhooks_1 = require("./webhooks/webhooks");
+const mfa_1 = require("./mfa/mfa");
+const audit_logs_1 = require("./audit-logs/audit-logs");
+const user_management_1 = require("./user-management/user-management");
+const fga_1 = require("./fga/fga");
+const bad_request_exception_1 = require("./common/exceptions/bad-request.exception");
+const http_client_1 = require("./common/net/http-client");
+const subtle_crypto_provider_1 = require("./common/crypto/subtle-crypto-provider");
+const fetch_client_1 = require("./common/net/fetch-client");
+const widgets_1 = require("./widgets/widgets");
+const actions_1 = require("./actions/actions");
+const vault_1 = require("./vault/vault");
+const conflict_exception_1 = require("./common/exceptions/conflict.exception");
+const parse_error_1 = require("./common/exceptions/parse-error");
+const VERSION = '7.71.0';
+const DEFAULT_HOSTNAME = 'api.workos.com';
+const HEADER_AUTHORIZATION = 'Authorization';
+const HEADER_IDEMPOTENCY_KEY = 'Idempotency-Key';
+const HEADER_WARRANT_TOKEN = 'Warrant-Token';
+class WorkOS {
+    constructor(key, options = {}) {
+        this.key = key;
+        this.options = options;
+        this.auditLogs = new audit_logs_1.AuditLogs(this);
+        this.directorySync = new directory_sync_1.DirectorySync(this);
+        this.organizations = new organizations_1.Organizations(this);
+        this.organizationDomains = new organization_domains_1.OrganizationDomains(this);
+        this.passwordless = new passwordless_1.Passwordless(this);
+        this.portal = new portal_1.Portal(this);
+        this.sso = new sso_1.SSO(this);
+        this.mfa = new mfa_1.Mfa(this);
+        this.events = new events_1.Events(this);
+        this.fga = new fga_1.FGA(this);
+        this.widgets = new widgets_1.Widgets(this);
+        this.vault = new vault_1.Vault(this);
+        if (!key) {
+            // process might be undefined in some environments
+            this.key =
+                typeof process !== 'undefined'
+                    ? process === null || process === void 0 ? void 0 : process.env.WORKOS_API_KEY
+                    : undefined;
+            if (!this.key) {
+                throw new exceptions_1.NoApiKeyProvidedException();
+            }
+        }
+        if (this.options.https === undefined) {
+            this.options.https = true;
+        }
+        this.clientId = this.options.clientId;
+        if (!this.clientId && typeof process !== 'undefined') {
+            this.clientId = process === null || process === void 0 ? void 0 : process.env.WORKOS_CLIENT_ID;
+        }
+        const protocol = this.options.https ? 'https' : 'http';
+        const apiHostname = this.options.apiHostname || DEFAULT_HOSTNAME;
+        const port = this.options.port;
+        this.baseURL = `${protocol}://${apiHostname}`;
+        if (port) {
+            this.baseURL = this.baseURL + `:${port}`;
+        }
+        let userAgent = `workos-node/${VERSION}`;
+        if (options.appInfo) {
+            const { name, version } = options.appInfo;
+            userAgent += ` ${name}: ${version}`;
+        }
+        this.webhooks = this.createWebhookClient();
+        this.actions = this.createActionsClient();
+        // Must initialize UserManagement after baseURL is configured
+        this.userManagement = new user_management_1.UserManagement(this, this.createIronSessionProvider());
+        this.client = this.createHttpClient(options, userAgent);
+    }
+    createWebhookClient() {
+        return new webhooks_1.Webhooks(this.getCryptoProvider());
+    }
+    createActionsClient() {
+        return new actions_1.Actions(this.getCryptoProvider());
+    }
+    getCryptoProvider() {
+        return new subtle_crypto_provider_1.SubtleCryptoProvider();
+    }
+    createHttpClient(options, userAgent) {
+        var _a;
+        return new fetch_client_1.FetchHttpClient(this.baseURL, Object.assign(Object.assign({}, options.config), { timeout: options.timeout, headers: Object.assign(Object.assign({}, (_a = options.config) === null || _a === void 0 ? void 0 : _a.headers), { Authorization: `Bearer ${this.key}`, 'User-Agent': userAgent }) }));
+    }
+    createIronSessionProvider() {
+        throw new Error('IronSessionProvider not implemented. Use WorkOSNode or WorkOSWorker instead.');
+    }
+    get version() {
+        return VERSION;
+    }
+    post(path, entity, options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const requestHeaders = {};
+            if (options.idempotencyKey) {
+                requestHeaders[HEADER_IDEMPOTENCY_KEY] = options.idempotencyKey;
+            }
+            if (options.warrantToken) {
+                requestHeaders[HEADER_WARRANT_TOKEN] = options.warrantToken;
+            }
+            let res;
+            try {
+                res = yield this.client.post(path, entity, {
+                    params: options.query,
+                    headers: requestHeaders,
+                });
+            }
+            catch (error) {
+                this.handleHttpError({ path, error });
+                throw error;
+            }
+            try {
+                return { data: yield res.toJSON() };
+            }
+            catch (error) {
+                yield this.handleParseError(error, res);
+                throw error;
+            }
+        });
+    }
+    get(path, options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const requestHeaders = {};
+            if (options.accessToken) {
+                requestHeaders[HEADER_AUTHORIZATION] = `Bearer ${options.accessToken}`;
+            }
+            if (options.warrantToken) {
+                requestHeaders[HEADER_WARRANT_TOKEN] = options.warrantToken;
+            }
+            let res;
+            try {
+                res = yield this.client.get(path, {
+                    params: options.query,
+                    headers: requestHeaders,
+                });
+            }
+            catch (error) {
+                this.handleHttpError({ path, error });
+                throw error;
+            }
+            try {
+                return { data: yield res.toJSON() };
+            }
+            catch (error) {
+                yield this.handleParseError(error, res);
+                throw error;
+            }
+        });
+    }
+    put(path, entity, options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const requestHeaders = {};
+            if (options.idempotencyKey) {
+                requestHeaders[HEADER_IDEMPOTENCY_KEY] = options.idempotencyKey;
+            }
+            let res;
+            try {
+                res = yield this.client.put(path, entity, {
+                    params: options.query,
+                    headers: requestHeaders,
+                });
+            }
+            catch (error) {
+                this.handleHttpError({ path, error });
+                throw error;
+            }
+            try {
+                return { data: yield res.toJSON() };
+            }
+            catch (error) {
+                yield this.handleParseError(error, res);
+                throw error;
+            }
+        });
+    }
+    delete(path, query) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield this.client.delete(path, {
+                    params: query,
+                });
+            }
+            catch (error) {
+                this.handleHttpError({ path, error });
+                throw error;
+            }
+        });
+    }
+    emitWarning(warning) {
+        // tslint:disable-next-line:no-console
+        console.warn(`WorkOS: ${warning}`);
+    }
+    handleParseError(error, res) {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            if (error instanceof SyntaxError) {
+                const rawResponse = res.getRawResponse();
+                const requestID = (_a = rawResponse.headers.get('X-Request-ID')) !== null && _a !== void 0 ? _a : '';
+                const rawStatus = rawResponse.status;
+                const rawBody = yield rawResponse.text();
+                throw new parse_error_1.ParseError({
+                    message: error.message,
+                    rawBody,
+                    rawStatus,
+                    requestID,
+                });
+            }
+        });
+    }
+    handleHttpError({ path, error }) {
+        var _a;
+        if (!(error instanceof http_client_1.HttpClientError)) {
+            throw new Error(`Unexpected error: ${error}`, { cause: error });
+        }
+        const { response } = error;
+        if (response) {
+            const { status, data, headers } = response;
+            const requestID = (_a = headers['X-Request-ID']) !== null && _a !== void 0 ? _a : '';
+            const { code, error_description: errorDescription, error, errors, message, } = data;
+            switch (status) {
+                case 401: {
+                    throw new exceptions_1.UnauthorizedException(requestID);
+                }
+                case 409: {
+                    throw new conflict_exception_1.ConflictException({ requestID, message, error });
+                }
+                case 422: {
+                    throw new exceptions_1.UnprocessableEntityException({
+                        code,
+                        errors,
+                        message,
+                        requestID,
+                    });
+                }
+                case 404: {
+                    throw new exceptions_1.NotFoundException({
+                        code,
+                        message,
+                        path,
+                        requestID,
+                    });
+                }
+                case 429: {
+                    const retryAfter = headers.get('Retry-After');
+                    throw new exceptions_1.RateLimitExceededException(data.message, requestID, retryAfter ? Number(retryAfter) : null);
+                }
+                default: {
+                    if (error || errorDescription) {
+                        throw new exceptions_1.OauthException(status, requestID, error, errorDescription, data);
+                    }
+                    else if (code && errors) {
+                        // Note: ideally this should be mapped directly with a `400` status code.
+                        // However, this would break existing logic for the `OauthException` exception.
+                        throw new bad_request_exception_1.BadRequestException({
+                            code,
+                            errors,
+                            message,
+                            requestID,
+                        });
+                    }
+                    else {
+                        throw new exceptions_1.GenericServerException(status, data.message, data, requestID);
+                    }
+                }
+            }
+        }
+    }
+}
+exports.WorkOS = WorkOS;

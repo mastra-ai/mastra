@@ -1,0 +1,42 @@
+{
+  "name": "@autoform/react",
+  "version": "4.0.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "build": "tsup src/index.tsx --format cjs,esm --dts",
+    "dev": "tsup src/index.tsx --format cjs,esm --dts --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vantezzen/autoform"
+  },
+  "devDependencies": {
+    "@autoform/eslint-config": "*",
+    "@autoform/typescript-config": "*",
+    "@turbo/gen": "^1.12.4",
+    "@types/eslint": "^8.56.5",
+    "@types/node": "^20.11.24",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "eslint": "^8.57.0",
+    "react": "^19.1.0",
+    "react-hook-form": "^7.53.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.3.3",
+    "@autoform/zod": "*",
+    "@autoform/yup": "*",
+    "@autoform/joi": "*",
+    "@hookform/resolvers": "^3.9.0"
+  },
+  "dependencies": {
+    "@autoform/core": "*"
+  },
+  "peerDependencies": {
+    "@hookform/resolvers": "^3.9.0",
+    "react": "^16.8.0 || ^17 || ^18 || ^19",
+    "react-hook-form": "^7"
+  }
+}

@@ -1,0 +1,38 @@
+{
+    "name": "@types/send",
+    "version": "1.2.0",
+    "description": "TypeScript definitions for send",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/send",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Mike Jerred",
+            "githubUsername": "MikeJerred",
+            "url": "https://github.com/MikeJerred"
+        },
+        {
+            "name": "Piotr Błażejewicz",
+            "githubUsername": "peterblazejewicz",
+            "url": "https://github.com/peterblazejewicz"
+        },
+        {
+            "name": "Sebastian Beltran",
+            "githubUsername": "bjohansebas",
+            "url": "https://github.com/bjohansebas"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/send"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/node": "*"
+    },
+    "peerDependencies": {},
+    "typesPublisherContentHash": "6206894073da01205b509452f1fd1e673ee949f6908141b011a12357cc16a273",
+    "typeScriptVersion": "5.2"
+}

@@ -1,0 +1,78 @@
+{
+  "name": "@rollup/plugin-virtual",
+  "version": "3.0.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Load virtual modules from memory",
+  "license": "MIT",
+  "repository": {
+    "url": "rollup/plugins",
+    "directory": "packages/virtual"
+  },
+  "author": "Rich Harris",
+  "homepage": "https://github.com/rollup/plugins/tree/master/packages/virtual#readme",
+  "bugs": "https://github.com/rollup/rollup-plugin-virtual/issues",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/es/index.js",
+  "exports": {
+    "types": "./types/index.d.ts",
+    "import": "./dist/es/index.js",
+    "default": "./dist/cjs/index.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "ci:coverage": "nyc pnpm test && nyc report --reporter=text-lcov > coverage.lcov",
+    "ci:lint": "pnpm build && pnpm lint",
+    "ci:lint:commits": "commitlint --from=${CIRCLE_BRANCH} --to=${CIRCLE_SHA1}",
+    "ci:test": "pnpm test -- --verbose",
+    "prebuild": "del-cli dist",
+    "prepare": "if [ ! -d 'dist' ]; then pnpm build; fi",
+    "prerelease": "pnpm build",
+    "pretest": "pnpm build",
+    "release": "pnpm --workspace-root plugin:release --pkg $npm_package_name",
+    "test": "ava",
+    "test:ts": "tsc --noEmit"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "types",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "rollup",
+    "plugin",
+    "memory",
+    "module",
+    "modules",
+    "virtual"
+  ],
+  "peerDependencies": {
+    "rollup": "^1.20.0||^2.0.0||^3.0.0||^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "rollup": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-typescript": "^9.0.1",
+    "rollup": "^4.0.0-24",
+    "typescript": "^4.8.3"
+  },
+  "types": "./types/index.d.ts",
+  "ava": {
+    "files": [
+      "!**/fixtures/**",
+      "!**/helpers/**",
+      "!**/recipes/**",
+      "!**/types.ts"
+    ]
+  }
+}

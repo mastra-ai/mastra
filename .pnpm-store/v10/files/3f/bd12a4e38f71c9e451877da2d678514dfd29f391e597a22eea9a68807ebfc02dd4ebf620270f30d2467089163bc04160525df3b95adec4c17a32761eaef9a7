@@ -1,0 +1,54 @@
+'use strict';
+
+var chunkKP42JLXE_cjs = require('../chunk-KP42JLXE.cjs');
+
+// src/relevance/relevance-score-provider.ts
+function createSimilarityPrompt(query, text) {
+  return `Rate the semantic similarity between the following the query and the text on a scale from 0 to 1 (decimals allowed), where 1 means exactly the same meaning and 0 means completely different:
+
+Query: ${query}
+
+Text: ${text}
+
+Relevance score (0-1):`;
+}
+
+// src/relevance/mastra-agent/index.ts
+var MastraAgentRelevanceScorer = class {
+  agent;
+  constructor(name, model) {
+    this.agent = new chunkKP42JLXE_cjs.Agent({
+      id: `relevance-scorer-${name}`,
+      name: `Relevance Scorer ${name}`,
+      instructions: `You are a specialized agent for evaluating the relevance of text to queries.
+Your task is to rate how well a text passage answers a given query.
+Output only a number between 0 and 1, where:
+1.0 = Perfectly relevant, directly answers the query
+0.0 = Completely irrelevant
+Consider:
+- Direct relevance to the question
+- Completeness of information
+- Quality and specificity
+Always return just the number, no explanation.`,
+      model
+    });
+  }
+  async getRelevanceScore(query, text) {
+    const prompt = createSimilarityPrompt(query, text);
+    const model = await this.agent.getModel();
+    let response;
+    if (model.specificationVersion === "v2") {
+      const responseText = await this.agent.generate(prompt);
+      response = responseText.text;
+    } else {
+      const responseText = await this.agent.generateLegacy(prompt);
+      response = responseText.text;
+    }
+    return parseFloat(response);
+  }
+};
+
+exports.MastraAgentRelevanceScorer = MastraAgentRelevanceScorer;
+exports.createSimilarityPrompt = createSimilarityPrompt;
+//# sourceMappingURL=index.cjs.map
+//# sourceMappingURL=index.cjs.map

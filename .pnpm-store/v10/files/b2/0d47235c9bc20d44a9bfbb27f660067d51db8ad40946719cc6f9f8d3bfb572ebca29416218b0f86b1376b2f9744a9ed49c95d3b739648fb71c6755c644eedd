@@ -1,0 +1,124 @@
+"use client";
+
+// src/ui/thread.tsx
+import { forwardRef } from "react";
+import { ArrowDownIcon } from "lucide-react";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import Composer from "./composer.mjs";
+import ThreadWelcome from "./thread-welcome.mjs";
+import { TooltipIconButton } from "./base/tooltip-icon-button.mjs";
+import AssistantMessage from "./assistant-message.mjs";
+import UserMessage from "./user-message.mjs";
+import EditComposer from "./edit-composer.mjs";
+import {
+  ThreadConfigProvider,
+  useThreadConfig
+} from "./thread-config.mjs";
+import { ThreadPrimitive, useThread } from "@assistant-ui/react";
+import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+var Thread = (config) => {
+  const {
+    components: {
+      Composer: ComposerComponent = Composer,
+      ThreadWelcome: ThreadWelcomeComponent = ThreadWelcome,
+      MessagesFooter,
+      ...messageComponents
+    } = {}
+  } = config;
+  return /* @__PURE__ */ jsx(ThreadRoot, { config, children: /* @__PURE__ */ jsxs(ThreadViewport, { children: [
+    /* @__PURE__ */ jsx(ThreadWelcomeComponent, {}),
+    /* @__PURE__ */ jsx(
+      ThreadMessages,
+      {
+        MessagesFooter,
+        components: messageComponents
+      }
+    ),
+    /* @__PURE__ */ jsx(ThreadFollowupSuggestions, {}),
+    /* @__PURE__ */ jsxs(ThreadViewportFooter, { children: [
+      /* @__PURE__ */ jsx(ThreadScrollToBottom, {}),
+      /* @__PURE__ */ jsx(ComposerComponent, {})
+    ] })
+  ] }) });
+};
+var ThreadRootStyled = withDefaults(ThreadPrimitive.Root, {
+  className: "aui-root aui-thread-root"
+});
+var ThreadRoot = forwardRef(
+  ({ config, ...props }, ref) => {
+    return /* @__PURE__ */ jsx(ThreadConfigProvider, { config, children: /* @__PURE__ */ jsx(ThreadRootStyled, { ...props, ref }) });
+  }
+);
+ThreadRoot.displayName = "ThreadRoot";
+var ThreadViewport = withDefaults(ThreadPrimitive.Viewport, {
+  className: "aui-thread-viewport"
+});
+ThreadViewport.displayName = "ThreadViewport";
+var ThreadViewportFooter = withDefaults("div", {
+  className: "aui-thread-viewport-footer"
+});
+ThreadViewportFooter.displayName = "ThreadViewportFooter";
+var ThreadMessages = ({
+  components,
+  MessagesFooter,
+  unstable_flexGrowDiv: flexGrowDiv = true,
+  ...rest
+}) => {
+  return /* @__PURE__ */ jsxs(Fragment, { children: [
+    /* @__PURE__ */ jsx(
+      ThreadPrimitive.Messages,
+      {
+        components: {
+          ...components,
+          UserMessage: components?.UserMessage ?? UserMessage,
+          AssistantMessage: components?.AssistantMessage ?? AssistantMessage,
+          EditComposer: components?.EditComposer ?? EditComposer
+        },
+        ...rest
+      }
+    ),
+    MessagesFooter && /* @__PURE__ */ jsx(MessagesFooter, {}),
+    flexGrowDiv && /* @__PURE__ */ jsx(ThreadPrimitive.If, { empty: false, children: /* @__PURE__ */ jsx("div", { style: { flexGrow: 1 } }) })
+  ] });
+};
+ThreadMessages.displayName = "ThreadMessages";
+var ThreadFollowupSuggestions = () => {
+  const suggestions = useThread((t) => t.suggestions);
+  return /* @__PURE__ */ jsx(ThreadPrimitive.If, { empty: false, running: false, children: /* @__PURE__ */ jsx("div", { className: "aui-thread-followup-suggestions", children: suggestions?.map((suggestion, idx) => /* @__PURE__ */ jsx(
+    ThreadPrimitive.Suggestion,
+    {
+      className: "aui-thread-followup-suggestion",
+      prompt: suggestion.prompt,
+      method: "replace",
+      autoSend: true,
+      children: suggestion.prompt
+    },
+    idx
+  )) }) });
+};
+var ThreadScrollToBottomIconButton = withDefaults(TooltipIconButton, {
+  variant: "outline",
+  className: "aui-thread-scroll-to-bottom"
+});
+var ThreadScrollToBottom = forwardRef((props, ref) => {
+  const {
+    strings: {
+      thread: { scrollToBottom: { tooltip = "Scroll to bottom" } = {} } = {}
+    } = {}
+  } = useThreadConfig();
+  return /* @__PURE__ */ jsx(ThreadPrimitive.ScrollToBottom, { asChild: true, children: /* @__PURE__ */ jsx(ThreadScrollToBottomIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(ArrowDownIcon, {}) }) });
+});
+ThreadScrollToBottom.displayName = "ThreadScrollToBottom";
+var exports = {
+  Root: ThreadRoot,
+  Viewport: ThreadViewport,
+  Messages: ThreadMessages,
+  FollowupSuggestions: ThreadFollowupSuggestions,
+  ScrollToBottom: ThreadScrollToBottom,
+  ViewportFooter: ThreadViewportFooter
+};
+var thread_default = Object.assign(Thread, exports);
+export {
+  thread_default as default
+};
+//# sourceMappingURL=thread.mjs.map

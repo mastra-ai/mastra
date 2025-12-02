@@ -1,0 +1,49 @@
+{
+	"name": "jsondiffpatch",
+	"version": "0.7.3",
+	"author": "Benjamin Eidelman <beneidel@gmail.com>",
+	"description": "JSON diff & patch (object and array diff, text diff, multiple output formats)",
+	"contributors": ["Benjamin Eidelman <beneidel@gmail.com>"],
+	"type": "module",
+	"sideEffects": ["*.css"],
+	"main": "./lib/index.js",
+	"types": "./lib/index.d.ts",
+	"exports": {
+		".": "./lib/index.js",
+		"./with-text-diffs": "./lib/with-text-diffs.js",
+		"./formatters/*": "./lib/formatters/*.js",
+		"./formatters/styles/*.css": "./lib/formatters/styles/*.css"
+	},
+	"files": ["bin", "lib"],
+	"bin": {
+		"jsondiffpatch": "./bin/jsondiffpatch.js"
+	},
+	"scripts": {
+		"build": "tsc && ncp ./src/formatters/styles/ ./lib/formatters/styles/",
+		"type-check": "tsc --noEmit",
+		"lint": "biome check --error-on-warnings .",
+		"test": "vitest --coverage",
+		"prepack": "npm run build && cp ../../MIT-LICENSE.txt . && cp ../../README.md .",
+		"prepublishOnly": "npm run test && npm run lint"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/benjamine/jsondiffpatch.git"
+	},
+	"keywords": ["json", "diff", "patch"],
+	"dependencies": {
+		"@dmsnell/diff-match-patch": "^1.1.0"
+	},
+	"devDependencies": {
+		"@vitest/coverage-v8": "^3.0.9",
+		"ncp": "^2.0.0",
+		"tslib": "^2.6.2",
+		"typescript": "^5.8.2",
+		"vitest": "^3.0.9"
+	},
+	"license": "MIT",
+	"engines": {
+		"node": "^18.0.0 || >=20.0.0"
+	},
+	"homepage": "https://github.com/benjamine/jsondiffpatch"
+}

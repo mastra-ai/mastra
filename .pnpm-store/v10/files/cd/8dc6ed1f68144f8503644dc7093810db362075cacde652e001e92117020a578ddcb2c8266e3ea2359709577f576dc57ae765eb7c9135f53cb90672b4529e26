@@ -1,0 +1,4 @@
+/**
+ * @jest-environment miniflare
+ */
+export {};

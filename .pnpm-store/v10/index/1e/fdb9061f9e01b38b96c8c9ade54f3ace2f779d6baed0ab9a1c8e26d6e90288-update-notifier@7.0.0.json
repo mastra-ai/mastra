@@ -1,0 +1,43 @@
+{
+  "name": "update-notifier",
+  "version": "7.0.0",
+  "requiresBuild": false,
+  "files": {
+    "license": {
+      "checkedAt": 1764662916866,
+      "integrity": "sha512-9Ko9biztsEUyfGPY7C4WmGlaxGm9AyoiehJZ4t7puBjwt84X+ju9rmInMX+jkZSKMhWrUz3Q+oeNwPrTRQk89A==",
+      "mode": 420,
+      "size": 1254
+    },
+    "check.js": {
+      "checkedAt": 1764662916869,
+      "integrity": "sha512-WQA7ihJQDG1+/b7UzFqh5bLRZID4uxiwk88DHovhiIP8oL2pRE1hkZMedZOVoBlGQLSI224Yz3M6hr8knXQNrg==",
+      "mode": 420,
+      "size": 768
+    },
+    "index.js": {
+      "checkedAt": 1764662916870,
+      "integrity": "sha512-ocFSFP5B8jVWZrSN3CFOhehBaj55OmeuV/qJj3WLN03hvcIf9d4QJBLG+Em2qS8E5BUvZHMcKYzVVdBTom1PUw==",
+      "mode": 420,
+      "size": 206
+    },
+    "update-notifier.js": {
+      "checkedAt": 1764662916871,
+      "integrity": "sha512-orxG06dgyk8ARDn7Y53UH1ykj1ss/7rGynEMQlMKzy9hkpRFqkUb1Mcu0IM4JufVan4WJQB8FRKpNv5A/KNqIg==",
+      "mode": 420,
+      "size": 4946
+    },
+    "package.json": {
+      "checkedAt": 1764662916872,
+      "integrity": "sha512-1x/Dh8YNqDUxDeq20ZOWTNMGR3ruR1N1mF6il4WFhglikemxcTPtK/GDRtiHaMRGVB1L+QYVlSJDN7ZhLLmTAg==",
+      "mode": 420,
+      "size": 1290
+    },
+    "readme.md": {
+      "checkedAt": 1764662916874,
+      "integrity": "sha512-bCWeHAg/O/Zg/z9QIXAIX0K8ftIin3cHpCU9uL6HRhfx72OBLZR92p/lh8cR9100kgxKzlSI2m/L8o2AymmLAg==",
+      "mode": 420,
+      "size": 6334
+    }
+  }
+}

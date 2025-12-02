@@ -1,0 +1,49 @@
+{
+	"name": "unicorn-magic",
+	"version": "0.1.0",
+	"description": "Some useful utilities I often need",
+	"license": "MIT",
+	"repository": "sindresorhus/unicorn-magic",
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		"types": "./index.d.ts",
+		"node": "./node.js",
+		"default": "./default.js"
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"test": "xo && ava && tsc index.d.ts"
+	},
+	"files": [
+		"node.js",
+		"default.js",
+		"index.d.ts"
+	],
+	"keywords": [
+		"utilities",
+		"util",
+		"extras",
+		"url",
+		"path",
+		"delay",
+		"wait",
+		"settimeout",
+		"sleep"
+	],
+	"devDependencies": {
+		"ava": "^5.3.1",
+		"in-range": "^3.0.0",
+		"time-span": "^5.1.0",
+		"typescript": "^5.2.2",
+		"xo": "^0.56.0"
+	}
+}

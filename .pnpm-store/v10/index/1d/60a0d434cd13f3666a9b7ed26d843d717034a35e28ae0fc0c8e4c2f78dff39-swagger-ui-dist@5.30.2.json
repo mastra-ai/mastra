@@ -1,0 +1,199 @@
+{
+  "name": "swagger-ui-dist",
+  "version": "5.30.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662923439,
+      "integrity": "sha512-mPa3m3ePewoVQVvXUMOooJfWUFEctOyBFRiOEVxHBT/nAPV4iVwJcFHJvD37YZfCsToV3iAyc+GjIYiE+G6Q6A==",
+      "mode": 420,
+      "size": 11358
+    },
+    "NOTICE": {
+      "checkedAt": 1764662923440,
+      "integrity": "sha512-tqqAner6LZitgluMU5MSeYNnaP2rkxpa6W7e/uwl1EFSfw7KXz02Xeqf5wahfuAWjv+Or5A2AQS5nEtbf8I8iQ==",
+      "mode": 420,
+      "size": 55
+    },
+    "index.css": {
+      "checkedAt": 1764662923443,
+      "integrity": "sha512-H3j+JPgr1X5jT5YnnQybo1jwkp+SsUboCSwVLaCRYitDEQs+PYmDRwRVNmySDwmPlLUI4GrlnZ3eh9D25BA16g==",
+      "mode": 420,
+      "size": 202
+    },
+    "swagger-ui.css": {
+      "checkedAt": 1764662923444,
+      "integrity": "sha512-eZpfl9qlKnbDvlJ2brfdx3nhlP1FMsA23w65motxKdYsUcfMcdO2bcLPr7mXhvyzmDZwuzYCJKrl/sEo1ditVQ==",
+      "mode": 420,
+      "size": 155212
+    },
+    "index.html": {
+      "checkedAt": 1764662923445,
+      "integrity": "sha512-zWxjBI8Xhfh3X11OHV2nZggjALF5yIqWHfy4JuGrQBfZw3hToiqmvqlyWxDrY3DsMeVtE/O5IyFdEH/JAQknXw==",
+      "mode": 420,
+      "size": 734
+    },
+    "oauth2-redirect.html": {
+      "checkedAt": 1764662923446,
+      "integrity": "sha512-YvXXt+/RrbmVWclswapLY+VHGZvAUucutjhgs33KwE9TL4czixI5W0r/PCg2VfS8DumpMWgZBwfdgDNeo7aStw==",
+      "mode": 420,
+      "size": 102
+    },
+    "absolute-path.js": {
+      "checkedAt": 1764662923447,
+      "integrity": "sha512-JpGl8Ny5v1CYSu8F9OJnf+aAYdd75OcHz1/Qkc8noKtSeWnEs+mgKm6SwZ/8eMCGRg0UWwx0azDvkXU3Jq+jHA==",
+      "mode": 420,
+      "size": 530
+    },
+    "index.js": {
+      "checkedAt": 1764662923448,
+      "integrity": "sha512-Oquc17ZSE7xeuiWnNg/PNglBD1nADZwEmvq4OFVBiWiL7eknw+FmKXpBP+32BKc7cxwXPrMNaV91/bX5CRwAdg==",
+      "mode": 420,
+      "size": 813
+    },
+    "oauth2-redirect.js": {
+      "checkedAt": 1764662923457,
+      "integrity": "sha512-etKZvQYmf7Pd75OGdnQ4zA9oG/9aWITLk3yN3pfDPRngc+CAfYN1WcKEBPlhgXD/uVxVvRn8ThTdfPCRxcBZJA==",
+      "mode": 420,
+      "size": 1329
+    },
+    "swagger-initializer.js": {
+      "checkedAt": 1764662923457,
+      "integrity": "sha512-lJFwyq/hf2YoyTpp0I9GI0s/vB7Z+Sk48uXcoo5Edg52qktAK+uvW6oBpMpZDxRtNClpjRdBiTfRrEZZYzal9g==",
+      "mode": 420,
+      "size": 539
+    },
+    "swagger-ui-bundle.js": {
+      "checkedAt": 1764662923463,
+      "integrity": "sha512-S3rkmTECRsgtsysO1CAFdy2KElfxyyEKzzQ/GudcfJ09ahsZIM3G4uvtsgCXMXsnvmSJA3O9FWQtzFyq8QMuzA==",
+      "mode": 420,
+      "size": 1510159
+    },
+    "swagger-ui-es-bundle-core.js": {
+      "checkedAt": 1764662923464,
+      "integrity": "sha512-tHATL/wJbtRh8oE35wHfP8+QiCdF0Zk8R91u8gBSc2MADqrMtjhnLS1VCA8qPiQtf3SP4UHKlJ4FkIFiaU/kJg==",
+      "mode": 420,
+      "size": 475339
+    },
+    "swagger-ui-es-bundle.js": {
+      "checkedAt": 1764662923468,
+      "integrity": "sha512-de352fwbT4P3v8ILUj+z9MzAeR/lNQS1inOoPM4mPoD04RnGPGWfS95hUQWpLKBucHH7IYuP9W+ioFjYV5qjwQ==",
+      "mode": 420,
+      "size": 1509913
+    },
+    "swagger-ui-standalone-preset.js": {
+      "checkedAt": 1764662923472,
+      "integrity": "sha512-oGq+mP+3XUyYDm9vsprsd6YdhOokdkcLNUZnmEE6HJzG0F9fIaB8kgGZsjdfTWN8w/1f2kN4a/0xkla0hsetcQ==",
+      "mode": 420,
+      "size": 250335
+    },
+    "swagger-ui.js": {
+      "checkedAt": 1764662923474,
+      "integrity": "sha512-Dvdgrw6qPS2sONbflIpioUXyZ5f7aaMv4FNp8M86kty7+nsjk/fcU9/pXuE+XB6ywKyz690a+C4TmWStRRUdBA==",
+      "mode": 420,
+      "size": 352124
+    },
+    "package.json": {
+      "checkedAt": 1764662923478,
+      "integrity": "sha512-9qgUk9aMHanFNCls2Jh/lSjmnSrVVTy57rsPyV4VFxb+3MxjL4uV7N6dbXUPIT3Ac8ZQicRnsl4y/RQNzl4jWQ==",
+      "mode": 420,
+      "size": 559
+    },
+    "swagger-ui-bundle.js.map": {
+      "checkedAt": 1764662923484,
+      "integrity": "sha512-qy90hnuCK6lB2tPlBTwl5c1MBdKP34f7qvB+Wx0Y+hfmYEweBqr+7JFH4Z9AJV0RqfobdNdvjdhc6IZFwgWoaA==",
+      "mode": 420,
+      "size": 1920878
+    },
+    "swagger-ui-es-bundle-core.js.map": {
+      "checkedAt": 1764662923494,
+      "integrity": "sha512-k2yqsI1DCS61haSvoeh3eOwDuT2RsWeMR52C59cjszb1WNNPdaV289M791y5vuMLzAQZm4JxnL9r3H4HL3Sw/A==",
+      "mode": 420,
+      "size": 1629686
+    },
+    "swagger-ui-es-bundle.js.map": {
+      "checkedAt": 1764662923504,
+      "integrity": "sha512-Vl17jpkdpcz4dz6KDLOvhfJWPzTcKkTU8fkNrGZdVlVPSHrsROW27zFoQlaW27G23fVB2rJrNM+0/bGZdfq28Q==",
+      "mode": 420,
+      "size": 1912421
+    },
+    "swagger-ui-standalone-preset.js.map": {
+      "checkedAt": 1764662923506,
+      "integrity": "sha512-kz+Lymzqh1Ryd25Q5d1YyJxpXFhKKxBZBuciAEXPxrh7gERINCEjC8GAlzxvM6zedvSaZUdwFr+5i/fl4tfyWA==",
+      "mode": 420,
+      "size": 330036
+    },
+    "swagger-ui.css.map": {
+      "checkedAt": 1764662923507,
+      "integrity": "sha512-0XSXAu5smfCdVqTBFQ9hz5OWK/G2q7LGHdhswwIYbUwCgkAJHzy7M1Foog8r9IFLhzGXlwBJp5rzsqCt+hAE5A==",
+      "mode": 420,
+      "size": 258968
+    },
+    "swagger-ui.js.map": {
+      "checkedAt": 1764662923512,
+      "integrity": "sha512-nglPQ/fMrh8N6ykWwVQh7ps+5eGKAQB3RC3B9N0shG3bD4atmwAeYBSJG7Krsy63uMT51Q4wl/hFJEIkd/Y0jw==",
+      "mode": 420,
+      "size": 1215299
+    },
+    "README.md": {
+      "checkedAt": 1764662923513,
+      "integrity": "sha512-LpoqRk3WUu7OAeCRESGBDpX9/Jhqyhr/YB8S1kzsMlB+YQBOtg2+9TQIDsHKZ4LTb893dO1dmU10GEopjS3kAg==",
+      "mode": 420,
+      "size": 1726
+    },
+    "favicon-16x16.png": {
+      "checkedAt": 1764662923513,
+      "integrity": "sha512-SYdYxJq8nUqxYCZhRSJDpocMXE9EpAgDA0R7cRT3FO9t7xFfQVox4zJN2SOst96QIBh2UsjCMYOvmbHg7m3MdQ==",
+      "mode": 420,
+      "size": 665
+    },
+    "favicon-32x32.png": {
+      "checkedAt": 1764662923514,
+      "integrity": "sha512-xl7IRueNLOIxHxxzcXfih0TtnegwadLgA7GpJS3B28qWDN2nXR0hejdyzGbi2xViqOtQ0NXLrUZj0vNRUob76w==",
+      "mode": 420,
+      "size": 628
+    },
+    "log.bundle-sizes.swagger-ui.txt": {
+      "checkedAt": 1764662923516,
+      "integrity": "sha512-3PfkrQlh+aNqO1qqZgXRKaXe9KuAsPFVLVRd8oHbrbDrdqlFuX84eskdzLNPB9CQWecyYvQZt7teMTAFYZiLGg==",
+      "mode": 420,
+      "size": 3921
+    },
+    "log.es-bundle-core-sizes.swagger-ui.txt": {
+      "checkedAt": 1764662923517,
+      "integrity": "sha512-GKQmed+rO3XrcQH6qsuL8nfQOqXe9twlIPBaByiBu9mmDuWd1i/mQXH9VXGGxbfBxxmGT1zTB6GbGJdYPY8AVw==",
+      "mode": 420,
+      "size": 403
+    },
+    "log.es-bundle-sizes.swagger-ui.txt": {
+      "checkedAt": 1764662923516,
+      "integrity": "sha512-3PfkrQlh+aNqO1qqZgXRKaXe9KuAsPFVLVRd8oHbrbDrdqlFuX84eskdzLNPB9CQWecyYvQZt7teMTAFYZiLGg==",
+      "mode": 420,
+      "size": 3921
+    },
+    "swagger-ui-bundle.js.LICENSE.txt": {
+      "checkedAt": 1764662923517,
+      "integrity": "sha512-E6Ka4HQPxetbVY8dQpadsukxPJSIxUFIttHsjLvybRQtbae5b99Qk6258YSRWQ4ahDTiDRSkxE7kpuUL5x2EQw==",
+      "mode": 420,
+      "size": 3326
+    },
+    "swagger-ui-es-bundle-core.js.LICENSE.txt": {
+      "checkedAt": 1764662923518,
+      "integrity": "sha512-+PHzZaynYAsZsmTtjdvGn5Rbzub/2zcI177FHpNELn4Q5VGQ9UtFdSWXVFy8Akx5GTP376hyerJJHa80Z2QMuA==",
+      "mode": 420,
+      "size": 1495
+    },
+    "swagger-ui-es-bundle.js.LICENSE.txt": {
+      "checkedAt": 1764662923517,
+      "integrity": "sha512-E6Ka4HQPxetbVY8dQpadsukxPJSIxUFIttHsjLvybRQtbae5b99Qk6258YSRWQ4ahDTiDRSkxE7kpuUL5x2EQw==",
+      "mode": 420,
+      "size": 3326
+    },
+    "swagger-ui-standalone-preset.js.LICENSE.txt": {
+      "checkedAt": 1764662923519,
+      "integrity": "sha512-DTPUQ4ap1xGN21rGDmy2hA2d4A5wkIew/l9RzHiZeYdVtvflquS0kiJInPsfN6EIxQYunfN2cZF0/PHM3WmttQ==",
+      "mode": 420,
+      "size": 618
+    }
+  }
+}

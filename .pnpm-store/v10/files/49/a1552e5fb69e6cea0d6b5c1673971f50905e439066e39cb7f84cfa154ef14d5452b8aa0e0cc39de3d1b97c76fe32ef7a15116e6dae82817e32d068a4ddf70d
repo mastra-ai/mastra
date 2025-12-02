@@ -1,0 +1,66 @@
+{
+    "interfaces": {
+        "google.cloud.speech.v1.Adaptation": {
+            "retry_codes": {
+                "non_idempotent": [],
+                "idempotent": [
+                    "DEADLINE_EXCEEDED",
+                    "UNAVAILABLE"
+                ]
+            },
+            "retry_params": {
+                "default": {
+                    "initial_retry_delay_millis": 100,
+                    "retry_delay_multiplier": 1.3,
+                    "max_retry_delay_millis": 60000,
+                    "initial_rpc_timeout_millis": 60000,
+                    "rpc_timeout_multiplier": 1,
+                    "max_rpc_timeout_millis": 60000,
+                    "total_timeout_millis": 600000
+                }
+            },
+            "methods": {
+                "CreatePhraseSet": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                },
+                "GetPhraseSet": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                },
+                "ListPhraseSet": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                },
+                "UpdatePhraseSet": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                },
+                "DeletePhraseSet": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                },
+                "CreateCustomClass": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                },
+                "GetCustomClass": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                },
+                "ListCustomClasses": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                },
+                "UpdateCustomClass": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                },
+                "DeleteCustomClass": {
+                    "retry_codes_name": "non_idempotent",
+                    "retry_params_name": "default"
+                }
+            }
+        }
+    }
+}

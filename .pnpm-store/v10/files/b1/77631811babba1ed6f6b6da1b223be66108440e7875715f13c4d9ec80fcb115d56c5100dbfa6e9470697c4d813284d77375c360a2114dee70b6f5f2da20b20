@@ -1,0 +1,73 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get_characters_usage_metrics:
+      path: /v1/usage/character-stats
+      method: GET
+      auth: false
+      docs: >-
+        Returns the usage metrics for the current user or the entire workspace
+        they are part of. The response provides a time axis based on the
+        specified aggregation interval (default: day), with usage values for
+        each interval along that axis. Usage is broken down by the selected
+        breakdown type. For example, breakdown type "voice" will return the
+        usage of each voice for each interval along the time axis.
+      source:
+        openapi: openapi.json
+      display-name: Get character usage metrics
+      request:
+        name: UsageGetCharactersUsageMetricsRequest
+        query-parameters:
+          start_unix:
+            type: integer
+            docs: >-
+              UTC Unix timestamp for the start of the usage window, in
+              milliseconds. To include the first day of the window, the
+              timestamp should be at 00:00:00 of that day.
+          end_unix:
+            type: integer
+            docs: >-
+              UTC Unix timestamp for the end of the usage window, in
+              milliseconds. To include the last day of the window, the timestamp
+              should be at 23:59:59 of that day.
+          include_workspace_metrics:
+            type: optional<boolean>
+            default: false
+            docs: Whether or not to include the statistics of the entire workspace.
+          breakdown_type:
+            type: optional<root.BreakdownTypes>
+            docs: >-
+              How to break down the information. Cannot be "user" if
+              include_workspace_metrics is False.
+          aggregation_interval:
+            type: optional<root.UsageAggregationInterval>
+            docs: >-
+              How to aggregate usage data over time. Can be "hour", "day",
+              "week", "month", or "cumulative".
+          metric:
+            type: optional<root.MetricType>
+            docs: Which metric to aggregate.
+      response:
+        docs: Successful Response
+        type: root.UsageCharactersResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - query-parameters:
+            start_unix: 1
+            end_unix: 1
+          response:
+            body:
+              time:
+                - 1738252091000
+                - 1739404800000
+              usage:
+                All:
+                  - 49
+                  - 1053
+  source:
+    openapi: openapi.json

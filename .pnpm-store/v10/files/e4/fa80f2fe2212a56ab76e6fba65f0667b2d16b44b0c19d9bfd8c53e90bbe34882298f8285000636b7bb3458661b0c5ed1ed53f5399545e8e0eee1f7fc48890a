@@ -1,0 +1,20 @@
+{
+	"compilerOptions": {
+		"allowSyntheticDefaultImports": true,
+		"lib": ["ES2022", "DOM"],
+		"module": "ESNext",
+		"target": "ESNext",
+		"moduleResolution": "node",
+		"forceConsistentCasingInFileNames": true,
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"skipLibCheck": true,
+		"noImplicitOverride": true,
+		"outDir": "./dist",
+		"declaration": true,
+		"declarationMap": true
+	},
+	"include": ["src", "scripts"],
+	"exclude": ["dist"]
+}

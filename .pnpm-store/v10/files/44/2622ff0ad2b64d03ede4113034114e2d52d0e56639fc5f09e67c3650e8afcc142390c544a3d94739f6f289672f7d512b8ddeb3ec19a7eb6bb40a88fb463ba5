@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../src/model-context/registry/index.ts"],"sourcesContent":["export * from \"./ModelContextRegistry\";\nexport * from \"./ModelContextRegistryHandles\";\n"],"mappings":";AAAA,cAAc;AACd,cAAc;","names":[]}

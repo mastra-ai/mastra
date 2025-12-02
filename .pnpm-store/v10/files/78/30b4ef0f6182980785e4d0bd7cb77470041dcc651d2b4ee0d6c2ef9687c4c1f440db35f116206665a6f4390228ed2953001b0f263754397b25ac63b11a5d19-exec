@@ -1,0 +1,13 @@
+{
+    "name": "@types/mongodb",
+    "version": "4.0.7",
+    "typings": null,
+    "description": "Stub TypeScript definitions entry for mongodb, which provides its own types definitions",
+    "main": "",
+    "scripts": {},
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "mongodb": "*"
+    }
+}

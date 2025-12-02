@@ -1,0 +1,115 @@
+{
+  "name": "@lancedb/lancedb",
+  "description": "LanceDB: A serverless, low-latency vector database for AI applications",
+  "keywords": [
+    "database",
+    "lance",
+    "lancedb",
+    "search",
+    "vector",
+    "vector database",
+    "ann"
+  ],
+  "private": false,
+  "version": "0.22.3",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./embedding": "./dist/embedding/index.js",
+    "./embedding/openai": "./dist/embedding/openai.js",
+    "./embedding/transformers": "./dist/embedding/transformers.js"
+  },
+  "types": "dist/index.d.ts",
+  "napi": {
+    "name": "lancedb",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-musl",
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc"
+      ]
+    }
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.33.0",
+    "@aws-sdk/client-kms": "^3.33.0",
+    "@aws-sdk/client-s3": "^3.33.0",
+    "@biomejs/biome": "^1.7.3",
+    "@jest/globals": "^29.7.0",
+    "@napi-rs/cli": "^2.18.3",
+    "@types/axios": "^0.14.0",
+    "@types/jest": "^29.1.2",
+    "@types/node": "^22.7.4",
+    "@types/tmp": "^0.2.6",
+    "apache-arrow-15": "npm:apache-arrow@15.0.0",
+    "apache-arrow-16": "npm:apache-arrow@16.0.0",
+    "apache-arrow-17": "npm:apache-arrow@17.0.0",
+    "apache-arrow-18": "npm:apache-arrow@18.0.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "shx": "^0.3.4",
+    "tmp": "^0.2.3",
+    "ts-jest": "^29.1.2",
+    "typedoc": "^0.26.4",
+    "typedoc-plugin-markdown": "^4.2.1",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^7.1.0"
+  },
+  "ava": {
+    "timeout": "3m"
+  },
+  "engines": {
+    "node": ">= 18"
+  },
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build:debug": "napi build --platform --no-const-enum --dts ../lancedb/native.d.ts --js ../lancedb/native.js lancedb",
+    "build:release": "napi build --platform --no-const-enum --release --dts ../lancedb/native.d.ts --js ../lancedb/native.js dist/",
+    "build": "npm run build:debug && npm run tsc && shx cp lancedb/*.node dist/",
+    "build-release": "npm run build:release && npm run tsc",
+    "tsc": "tsc -b",
+    "posttsc": "shx cp lancedb/native.d.ts dist/native.d.ts",
+    "lint-ci": "biome ci .",
+    "docs": "typedoc --plugin typedoc-plugin-markdown --treatWarningsAsErrors --out ../docs/src/js lancedb/index.ts",
+    "postdocs": "node typedoc_post_process.js",
+    "lint": "biome check . && biome format .",
+    "lint-fix": "biome check --write . && biome format --write .",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "jest --verbose",
+    "integration": "S3_TEST=1 npm run test",
+    "universal": "napi universal",
+    "version": "napi version"
+  },
+  "dependencies": {
+    "reflect-metadata": "^0.2.2"
+  },
+  "optionalDependencies": {
+    "@lancedb/lancedb-darwin-x64": "0.22.3",
+    "@lancedb/lancedb-darwin-arm64": "0.22.3",
+    "@lancedb/lancedb-linux-x64-gnu": "0.22.3",
+    "@lancedb/lancedb-linux-arm64-gnu": "0.22.3",
+    "@lancedb/lancedb-linux-x64-musl": "0.22.3",
+    "@lancedb/lancedb-linux-arm64-musl": "0.22.3",
+    "@lancedb/lancedb-win32-x64-msvc": "0.22.3",
+    "@lancedb/lancedb-win32-arm64-msvc": "0.22.3"
+  },
+  "peerDependencies": {
+    "apache-arrow": ">=15.0.0 <=18.1.0"
+  }
+}

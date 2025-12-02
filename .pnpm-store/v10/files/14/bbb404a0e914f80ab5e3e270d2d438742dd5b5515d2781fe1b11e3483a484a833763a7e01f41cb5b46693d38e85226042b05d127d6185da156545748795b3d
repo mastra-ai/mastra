@@ -1,0 +1,62 @@
+"use strict";
+"use client";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/user-action-bar.tsx
+var user_action_bar_exports = {};
+__export(user_action_bar_exports, {
+  default: () => user_action_bar_default
+});
+module.exports = __toCommonJS(user_action_bar_exports);
+var import_react = require("react");
+var import_lucide_react = require("lucide-react");
+var import_tooltip_icon_button = require("./base/tooltip-icon-button.js");
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_thread_config = require("./thread-config.js");
+var import_react2 = require("@assistant-ui/react");
+var import_jsx_runtime = require("react/jsx-runtime");
+var useAllowEdit = (ensureCapability = false) => {
+  const { userMessage: { allowEdit = true } = {} } = (0, import_thread_config.useThreadConfig)();
+  const editSupported = (0, import_react2.useThread)((t) => t.capabilities.edit);
+  return allowEdit && (!ensureCapability || editSupported);
+};
+var UserActionBar = () => {
+  const allowEdit = useAllowEdit(true);
+  if (!allowEdit) return null;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UserActionBarRoot, { hideWhenRunning: true, autohide: "not-last", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UserActionBarEdit, {}) });
+};
+UserActionBar.displayName = "UserActionBar";
+var UserActionBarRoot = (0, import_withDefaults.withDefaults)(import_react2.ActionBarPrimitive.Root, {
+  className: "aui-user-action-bar-root"
+});
+UserActionBarRoot.displayName = "UserActionBarRoot";
+var UserActionBarEdit = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: { userMessage: { edit: { tooltip = "Edit" } = {} } = {} } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  const allowEdit = useAllowEdit();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ActionBarPrimitive.Edit, { disabled: !allowEdit, asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_tooltip_icon_button.TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PencilIcon, {}) }) });
+});
+UserActionBarEdit.displayName = "UserActionBarEdit";
+var exports2 = {
+  Root: UserActionBarRoot,
+  Edit: UserActionBarEdit
+};
+var user_action_bar_default = Object.assign(UserActionBar, exports2);
+//# sourceMappingURL=user-action-bar.js.map

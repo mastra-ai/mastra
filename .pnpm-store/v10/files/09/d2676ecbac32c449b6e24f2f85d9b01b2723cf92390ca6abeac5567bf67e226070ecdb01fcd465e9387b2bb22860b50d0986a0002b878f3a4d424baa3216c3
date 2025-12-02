@@ -1,0 +1,91 @@
+{
+  "name": "@standard-community/standard-json",
+  "version": "0.3.5",
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "standard-schema",
+    "standard-community",
+    "standard-schema-community",
+    "json-schema",
+    "convertor"
+  ],
+  "homepage": "https://github.com/standard-community",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/standard-community/standard-json.git"
+  },
+  "bugs": {
+    "url": "https://github.com/standard-community/standard-json/issues"
+  },
+  "exports": {
+    "import": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "require": {
+      "types": "./dist/index.d.cts",
+      "default": "./dist/index.cjs"
+    }
+  },
+  "peerDependencies": {
+    "@standard-schema/spec": "^1.0.0",
+    "@types/json-schema": "^7.0.15",
+    "@valibot/to-json-schema": "^1.3.0",
+    "arktype": "^2.1.20",
+    "effect": "^3.16.8",
+    "typebox": "^1.0.17",
+    "quansync": "^0.2.11",
+    "sury": "^10.0.0",
+    "valibot": "^1.1.0",
+    "zod": "^3.25.0 || ^4.0.0",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "peerDependenciesMeta": {
+    "@valibot/to-json-schema": {
+      "optional": true
+    },
+    "arktype": {
+      "optional": true
+    },
+    "effect": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    },
+    "sury": {
+      "optional": true
+    },
+    "valibot": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    },
+    "zod-to-json-schema": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.4",
+    "@types/node": "^24.3.1",
+    "pkgroll": "^2.13.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "scripts": {
+    "build": "pkgroll --clean-dist",
+    "format": "biome check --write .",
+    "test": "vitest"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@dmsnell/diff-match-patch",
+  "version": "1.1.0",
+  "requiresBuild": false,
+  "files": {
+    "index.js": {
+      "checkedAt": 1764662908210,
+      "integrity": "sha512-1JUOeJPC/WP/01RoAq5HDJzmcYTYphkF8LABokNT4A/l4zCIztf6xzMRycJCFwu+phyjRkB9O57gpLODE4YcWw==",
+      "mode": 420,
+      "size": 83416
+    },
+    "package.json": {
+      "checkedAt": 1764662908211,
+      "integrity": "sha512-e4ucM8xI4D7lPR+6K3qZd80i1T80k12floXdvNhwuL7YztsLkyyFwR2jzlBNUtLxFhdLmbSWNg4Hvq24upuYnw==",
+      "mode": 420,
+      "size": 505
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662908211,
+      "integrity": "sha512-oJo7SHkelL6EiY95ssySEBDd3GNVmbBcmkWm3OAO97bLxsQNT2cdp/syxJtjQuLN4564+jJ/EoFbzl2c+yvBnw==",
+      "mode": 420,
+      "size": 2407
+    }
+  }
+}

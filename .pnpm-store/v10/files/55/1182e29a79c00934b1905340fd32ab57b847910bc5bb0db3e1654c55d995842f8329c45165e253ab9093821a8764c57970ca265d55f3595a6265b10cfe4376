@@ -1,0 +1,259 @@
+/* thread */
+.aui-thread-root {
+  @apply bg-aui-background box-border h-full;
+}
+
+.aui-thread-viewport {
+  @apply flex h-full flex-col items-center overflow-y-scroll scroll-smooth bg-inherit px-4 pt-8;
+}
+
+.aui-thread-viewport-footer {
+  @apply sticky bottom-0 mt-3 flex w-full max-w-[var(--aui-thread-max-width)] flex-col items-center justify-end rounded-t-lg bg-inherit pb-4;
+}
+
+.aui-thread-scroll-to-bottom {
+  @apply absolute -top-8 rounded-full disabled:invisible;
+}
+
+.aui-thread-followup-suggestions {
+  @apply flex min-h-8 items-center justify-center gap-2;
+}
+
+.aui-thread-followup-suggestion {
+  @apply bg-aui-background hover:bg-aui-muted/80 rounded-full border px-3 py-1 text-sm transition-colors ease-in;
+}
+
+/* thread welcome */
+
+.aui-thread-welcome-root {
+  @apply flex w-full max-w-[var(--aui-thread-max-width)] flex-grow flex-col;
+}
+
+.aui-thread-welcome-center {
+  @apply flex w-full flex-grow flex-col items-center justify-center;
+}
+
+.aui-thread-welcome-message {
+  @apply mt-4 font-medium;
+}
+
+.aui-thread-welcome-suggestions {
+  @apply mt-3 flex w-full items-stretch justify-center gap-4;
+}
+
+.aui-thread-welcome-suggestion {
+  @apply hover:bg-aui-muted/80 flex max-w-sm grow basis-0 flex-col items-center justify-center rounded-lg border p-3 transition-colors ease-in;
+}
+
+.aui-thread-welcome-suggestion-text {
+  @apply line-clamp-2 text-ellipsis text-sm font-semibold;
+}
+
+/* thread composer */
+
+.aui-composer-root {
+  @apply focus-within:border-aui-ring/20 flex w-full flex-wrap items-end rounded-lg border bg-inherit px-2.5 shadow-sm transition-colors ease-in;
+}
+
+.aui-composer-input {
+  @apply placeholder:text-aui-muted-foreground max-h-40 flex-grow resize-none border-none bg-transparent px-2 py-4 text-sm outline-none focus:ring-0 disabled:cursor-not-allowed;
+}
+
+.aui-composer-send {
+  @apply my-2.5 size-8 p-2 transition-opacity ease-in;
+}
+.aui-composer-cancel {
+  @apply my-2.5 size-8 p-2 transition-opacity ease-in;
+}
+.aui-composer-attach {
+  @apply my-2.5 size-8 p-2 transition-opacity ease-in;
+}
+
+.aui-composer-attachments {
+  @apply flex w-full flex-row gap-3 px-10;
+}
+
+/* attachment */
+
+.aui-attachment-root {
+  @apply relative mt-3;
+}
+
+.aui-attachment-content {
+  @apply flex h-12 w-40 items-center justify-center gap-2 rounded-lg border p-1;
+}
+
+.aui-attachment-preview-trigger {
+  @apply hover:bg-aui-accent/50 cursor-pointer transition-colors;
+}
+
+.aui-attachment-thumb {
+  @apply bg-aui-muted flex size-10 items-center justify-center rounded border text-sm;
+}
+
+.aui-attachment-text {
+  @apply flex-grow basis-0;
+}
+
+.aui-attachment-name {
+  @apply text-aui-muted-foreground line-clamp-1 text-ellipsis break-all text-xs font-bold;
+}
+
+.aui-attachment-type {
+  @apply text-aui-muted-foreground text-xs;
+}
+
+.aui-attachment-remove {
+  @apply text-aui-muted-foreground [&>svg]:bg-aui-background absolute -right-3 -top-3 size-6 [&>svg]:size-4 [&>svg]:rounded-full;
+}
+
+/* user message */
+
+.aui-user-message-root {
+  @apply grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] gap-y-2 [&:where(>*)]:col-start-2;
+  @apply w-full max-w-[var(--aui-thread-max-width)] py-4;
+}
+
+:where(.aui-user-message-root) > .aui-branch-picker-root {
+  @apply col-span-full col-start-1 row-start-3;
+  @apply -mr-1 justify-end;
+}
+
+.aui-user-branch-picker {
+  @apply col-span-full col-start-1 row-start-3;
+  @apply -mr-1 justify-end;
+}
+
+.aui-user-message-content {
+  @apply bg-aui-muted text-aui-foreground max-w-[calc(var(--aui-thread-max-width)*0.8)] break-words rounded-3xl px-5 py-2.5;
+
+  @apply col-start-2 row-start-2;
+}
+
+.aui-user-message-attachments {
+  @apply flex w-full flex-row gap-3;
+
+  @apply col-span-full col-start-1 row-start-1;
+  @apply justify-end;
+}
+
+/* user action bar */
+
+.aui-user-action-bar-root {
+  @apply flex flex-col items-end;
+
+  @apply col-start-1 row-start-2 mr-3 mt-2.5;
+}
+
+/* edit composer */
+
+.aui-edit-composer-root {
+  @apply bg-aui-muted my-4 flex w-full max-w-[var(--aui-thread-max-width)] flex-col gap-2 rounded-xl;
+}
+
+.aui-edit-composer-input {
+  @apply text-aui-foreground flex h-8 w-full resize-none bg-transparent p-4 pb-0 outline-none;
+}
+
+.aui-edit-composer-footer {
+  @apply mx-3 mb-3 flex items-center justify-center gap-2 self-end;
+}
+
+/* assistant message */
+
+.aui-assistant-message-root {
+  @apply grid grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr];
+  @apply relative w-full max-w-[var(--aui-thread-max-width)] py-4;
+}
+
+:where(.aui-assistant-message-root) > .aui-avatar-root {
+  @apply col-start-1 row-span-full row-start-1 mr-4;
+}
+
+.aui-assistant-avatar {
+  @apply col-start-1 row-span-full row-start-1 mr-4;
+}
+
+:where(.aui-assistant-message-root) > .aui-branch-picker-root {
+  @apply col-start-2 row-start-2;
+  @apply -ml-2 mr-2;
+}
+
+.aui-assistant-branch-picker {
+  @apply col-start-2 row-start-2;
+  @apply -ml-2 mr-2;
+}
+
+.aui-assistant-message-content {
+  @apply text-aui-foreground max-w-[calc(var(--aui-thread-max-width)*0.8)] break-words leading-7;
+
+  @apply col-span-2 col-start-2 row-start-1 my-1.5;
+}
+
+/* assistant action bar */
+
+.aui-assistant-action-bar-root {
+  @apply text-aui-muted-foreground flex gap-1;
+
+  @apply col-start-3 row-start-2;
+  @apply -ml-1;
+  @apply data-[floating]:bg-aui-background data-[floating]:absolute data-[floating]:rounded-md data-[floating]:border data-[floating]:p-1 data-[floating]:shadow-sm;
+}
+
+.aui-assistant-action-bar-feedback-positive {
+  @apply data-[submitted]:text-green-600 data-[submitted]:hover:text-green-700 dark:data-[submitted]:text-green-500 dark:data-[submitted]:hover:text-green-400;
+}
+
+.aui-assistant-action-bar-feedback-negative {
+  @apply data-[submitted]:text-red-600 data-[submitted]:hover:text-red-700 dark:data-[submitted]:text-red-500 dark:data-[submitted]:hover:text-red-400;
+}
+
+/* branch picker */
+
+.aui-branch-picker-root {
+  @apply text-aui-muted-foreground inline-flex items-center text-xs;
+}
+
+.aui-branch-picker-state {
+  @apply font-medium;
+}
+
+/* text */
+
+.aui-text {
+  @apply whitespace-pre-line;
+}
+
+.aui-text-running::after {
+  @apply animate-pulse font-sans content-['\25CF'] ltr:ml-1 rtl:mr-1;
+}
+
+/* thread-list */
+
+.aui-thread-list-root {
+  @apply flex flex-col items-stretch gap-1.5;
+}
+
+.aui-thread-list-item {
+  @apply data-[active]:bg-aui-muted hover:bg-aui-muted focus-visible:bg-aui-muted focus-visible:ring-aui-ring flex items-center gap-2 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2;
+}
+
+.aui-thread-list-new {
+  @apply data-[active]:bg-aui-muted hover:bg-aui-muted flex items-center justify-start gap-1 rounded-lg px-2.5 py-2 text-start;
+}
+
+.aui-thread-list-new > .lucide-plus {
+  @apply size-5;
+}
+
+.aui-thread-list-item-trigger {
+  @apply flex-grow px-3 py-2 text-start;
+}
+
+.aui-thread-list-item-title {
+  @apply text-sm;
+}
+
+.aui-thread-list-item-archive {
+  @apply hover:text-aui-primary text-aui-foreground ml-auto mr-3 size-4 p-0;
+}

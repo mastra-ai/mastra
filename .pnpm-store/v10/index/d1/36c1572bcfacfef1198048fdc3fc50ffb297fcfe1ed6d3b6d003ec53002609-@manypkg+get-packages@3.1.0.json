@@ -1,0 +1,55 @@
+{
+  "name": "@manypkg/get-packages",
+  "version": "3.1.0",
+  "requiresBuild": false,
+  "files": {
+    "dist/manypkg-get-packages.js": {
+      "checkedAt": 1764662910325,
+      "integrity": "sha512-P47toY/PISZqtVKF8ce36CJp3O2tzYFBGmm77XZSIFUapNnWRMChMQujjx97uAtGcFJJQnB0xBee4GiqsE7CHQ==",
+      "mode": 420,
+      "size": 2155
+    },
+    "package.json": {
+      "checkedAt": 1764662910329,
+      "integrity": "sha512-z/6cyFSGLqLoDgjwAjQ2afuZGHNucxzg5fvkYGOw2ZsNolTx1pnX9BVJd9n6kp2svaR/ywWgOk/vZ9j4iLnDuw==",
+      "mode": 420,
+      "size": 552
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662910329,
+      "integrity": "sha512-Tj78H340fjz9jyTGHZwaLVY/7bVXKxLhi/RQjYqA0sz44JbJxvAfmEfvVp4W0OQGxOjS4F4NcQFhFIro3wS3jw==",
+      "mode": 420,
+      "size": 8780
+    },
+    "README.md": {
+      "checkedAt": 1764662910331,
+      "integrity": "sha512-trLwcpyGUDHSb6/tmyByjuTMymHX1qz4UosiFKOlaCsQJ1vuw/gzcdWBlGRtnjGLYtf0+sy5yQmZupZKlE9s3g==",
+      "mode": 420,
+      "size": 1389
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662910332,
+      "integrity": "sha512-x3j481mtB+3bKTtBNedH1T1+LQOuT3alW1ZBEbaI+JqF54JiB+f9DRL6vjaLVg0S6pSoWYKyWQPDtp1uFkJ4LA==",
+      "mode": 420,
+      "size": 1128
+    },
+    "src/index.test.ts": {
+      "checkedAt": 1764662910334,
+      "integrity": "sha512-bxN6qGgURhOVbxQJfWGe5Sb46Smr4LcuSqhmzUvkg3UoUItTIyNWDQmsSLSKO+ed4LXftXIabQgXzu0BIHtcvw==",
+      "mode": 420,
+      "size": 7446
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662910335,
+      "integrity": "sha512-P9YoSQXno+mdKY4PTt86QIfyREmCQxpatVWCKCiGQKUyVr3WR0yeZM/GWbQ0ndoqGsgxSiFJ+7cLBiIC8EwQBA==",
+      "mode": 420,
+      "size": 2565
+    },
+    "dist/manypkg-get-packages.d.ts": {
+      "checkedAt": 1764662910337,
+      "integrity": "sha512-jJTNG5P0QOvvAeXKJuVs6xtcAnzXU2o8PuJky7N2s3EAF+w+2UHWESbu6mj8RLXtvxSowiiFOcBzCidSFzCYjg==",
+      "mode": 420,
+      "size": 294
+    }
+  }
+}

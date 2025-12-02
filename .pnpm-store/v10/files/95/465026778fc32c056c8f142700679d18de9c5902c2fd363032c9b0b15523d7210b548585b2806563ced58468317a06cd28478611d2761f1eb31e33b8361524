@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/cli/lib/updates.ts"],
+  "sourcesContent": ["import { logMessage } from \"../../bundler/log.js\";\nimport { autoUpdateCursorRules } from \"./cursorRules.js\";\nimport { getVersion } from \"./versionApi.js\";\n\n/**\n * Check the version of the `convex` NPM package and automatically update Cursor\n * rules if applicable.\n */\nexport async function checkVersion() {\n  const version = await getVersion();\n  if (version === null) {\n    return;\n  }\n\n  if (version.message) {\n    logMessage(version.message);\n  }\n\n  if (version.cursorRulesHash) {\n    await autoUpdateCursorRules(version.cursorRulesHash);\n  }\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,iBAA2B;AAC3B,yBAAsC;AACtC,wBAA2B;AAM3B,eAAsB,eAAe;AACnC,QAAM,UAAU,UAAM,8BAAW;AACjC,MAAI,YAAY,MAAM;AACpB;AAAA,EACF;AAEA,MAAI,QAAQ,SAAS;AACnB,+BAAW,QAAQ,OAAO;AAAA,EAC5B;AAEA,MAAI,QAAQ,iBAAiB;AAC3B,cAAM,0CAAsB,QAAQ,eAAe;AAAA,EACrD;AACF;",
+  "names": []
+}

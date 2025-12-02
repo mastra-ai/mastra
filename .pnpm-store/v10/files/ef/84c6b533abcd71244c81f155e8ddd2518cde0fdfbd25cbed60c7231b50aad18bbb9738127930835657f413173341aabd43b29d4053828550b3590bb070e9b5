@@ -1,0 +1,57 @@
+{
+  "name": "raf-schd",
+  "version": "4.0.3",
+  "description": "A scheduler based on requestAnimationFrame",
+  "main": "dist/raf-schd.cjs.js",
+  "module": "dist/raf-schd.esm.js",
+  "sideEffects": false,
+  "files": [
+    "/dist",
+    "/src"
+  ],
+  "author": "Alex Reardon <alexreardon@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexreardon/raf-schd.git"
+  },
+  "keywords": [
+    "performance",
+    "raf",
+    "requestAnimationFrame",
+    "cancelAnimationFrame"
+  ],
+  "config": {
+    "prettier_target": "*.{js,md,json} src/**/*.{js,md,json} test/**/*.{js,md,json}"
+  },
+  "scripts": {
+    "build": "yarn run build:clean && yarn run build:dist && yarn run build:flow",
+    "test": "jest",
+    "validate": "yarn run prettier:check && yarn run typecheck",
+    "prettier:check": "prettier --debug-check $npm_package_config_prettier_target",
+    "prettier:write": "prettier --write $npm_package_config_prettier_target",
+    "typecheck": "flow check",
+    "build:clean": "rimraf dist",
+    "build:dist": "rollup -c",
+    "build:flow": "echo \"// @flow\n\nexport * from '../src';\" > dist/raf-schd.cjs.js.flow",
+    "prepublish": "yarn run build"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.5.0",
+    "@babel/preset-env": "^7.5.2",
+    "@babel/preset-flow": "^7.0.0",
+    "babel-eslint": "10.0.2",
+    "babel-jest": "^24.8.0",
+    "cross-env": "^5.2.0",
+    "flow-bin": "0.102.0",
+    "jest": "24.8.0",
+    "prettier": "^1.18.2",
+    "raf-stub": "3.0.0",
+    "rimraf": "^2.6.3",
+    "rollup": "^1.16.6",
+    "rollup-plugin-babel": "^4.3.3",
+    "rollup-plugin-replace": "^2.2.0",
+    "rollup-plugin-terser": "^5.1.1"
+  },
+  "dependencies": {}
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@unrs/resolver-binding-darwin-arm64",
+  "version": "1.11.1",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662915911,
+      "integrity": "sha512-GuS0nJ5K4KS41ZlTkUFv2avHwAkV0w5UzphfNa0quFgo1KGsvvTqd8wpkAQtjR1+dqmM4+YtR2bZ54NPOVR+FQ==",
+      "mode": 420,
+      "size": 584
+    },
+    "README.md": {
+      "checkedAt": 1764662915914,
+      "integrity": "sha512-UAPHWV7j2hPBEOHPFedJcVxd7ZIfjdb2vbN6x9a0U+2iYXd2R9vQofQZvWaX1IPvoqh9Gyp/G9Rx4BEo5GS0Ug==",
+      "mode": 420,
+      "size": 114
+    },
+    "resolver.darwin-arm64.node": {
+      "checkedAt": 1764662915933,
+      "integrity": "sha512-nl170nDh88w/To5PiutwlL1xjZ224QElSj8jPR0+OnzKwJlD/gOF8uepqMfK9pWtTbbuKBHLQyj5sfDBcA23mQ==",
+      "mode": 420,
+      "size": 1768880
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/cli/codegen_templates/tsconfig.ts"],
+  "sourcesContent": ["export function tsconfigCodegen() {\n  return `{\n  /* This TypeScript project config describes the environment that\n   * Convex functions run in and is used to typecheck them.\n   * You can modify it, but some settings are required to use Convex.\n   */\n  \"compilerOptions\": {\n    /* These settings are not required by Convex and can be modified. */\n    \"allowJs\": true,\n    \"strict\": true,\n    \"moduleResolution\": \"Bundler\",\n    \"jsx\": \"react-jsx\",\n    \"skipLibCheck\": true,\n    \"allowSyntheticDefaultImports\": true,\n\n    /* These compiler options are required by Convex */\n    \"target\": \"ESNext\",\n    \"lib\": [\"ES2021\", \"dom\"],\n    \"forceConsistentCasingInFileNames\": true,\n    \"module\": \"ESNext\",\n    \"isolatedModules\": true,\n    \"noEmit\": true,\n  },\n  \"include\": [\"./**/*\"],\n  \"exclude\": [\"./_generated\"]\n}`;\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAO,SAAS,kBAAkB;AAChC,SAAO;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAyBT;",
+  "names": []
+}

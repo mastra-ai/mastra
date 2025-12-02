@@ -1,0 +1,26 @@
+{
+  "name": "@manypkg/find-root",
+  "version": "3.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Thinkmill/manypkg.git",
+    "directory": "packages/find-root"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./dist/manypkg-find-root.js",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@manypkg/tools": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "fixturez": "^1.1.0",
+    "vitest": "^3.1.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

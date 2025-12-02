@@ -1,0 +1,67 @@
+{
+  "name": "@changesets/types",
+  "version": "4.1.0",
+  "requiresBuild": false,
+  "files": {
+    "dist/types.cjs.dev.js": {
+      "checkedAt": 1764662903891,
+      "integrity": "sha512-deBZmuLJzOYKea4VWud3vCmIPjtw1tR58QIgPRyZb6ByoMfi8zKY6CXn6h0EFSMVMnsk2/P3IvSvydjYPyHAbA==",
+      "mode": 420,
+      "size": 15
+    },
+    "dist/types.cjs.js": {
+      "checkedAt": 1764662903891,
+      "integrity": "sha512-W9rJ/ZBVDzvt3UtIdHpqNC/Bhl0cgoI7VeSmZ4z69qjjvU7Ncl3UYvx0CM/ZCE4NXAPoU7A9vTRRQDYxUVP4LA==",
+      "mode": 420,
+      "size": 172
+    },
+    "dist/types.cjs.prod.js": {
+      "checkedAt": 1764662903892,
+      "integrity": "sha512-DkRopWgXkz9WxU+BMAC39cvzXRROtp6+KKn53oZFcrdRMZnud+jhmsMZXe7loxARBlVs6pUykN4Sn5lSVp5Upw==",
+      "mode": 420,
+      "size": 14
+    },
+    "dist/types.esm.js": {
+      "checkedAt": 1764662903892,
+      "integrity": "sha512-vmiIOMqGhuXJBom/KrWFzvETfJmbSMcLkvZ6XDTcFWl7XRHJgu1tcb4eHn97TgcziEqpfD96M5qO0DV3z3S+CQ==",
+      "mode": 420,
+      "size": 1
+    },
+    "package.json": {
+      "checkedAt": 1764662903893,
+      "integrity": "sha512-kuPd9s9bhq2DU78ZvhzsEAUFztW7+S8h3i8Z3IRkRb4zNMxVylwAKhVUg4UbL0l5TeNVnfNi1eiwktWY4hqz/w==",
+      "mode": 420,
+      "size": 292
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662903893,
+      "integrity": "sha512-wjHaTpoisVvTN3I5XOcH90/S5lzdfYnpML8PPth4H3sH9xV6GBEqQ0ARGyKN4wU8ELIEF+PvTHWM/mB6Fu3AHQ==",
+      "mode": 420,
+      "size": 8969
+    },
+    "README.md": {
+      "checkedAt": 1764662903894,
+      "integrity": "sha512-q7pDQxKlgK87RAe5cz8PRmSFDHBGDYKolRgtrzNsqyASmyVkXLipcB2nySuZ5c5DoX1bcjQyJNzz8CZ88JsuyA==",
+      "mode": 420,
+      "size": 522
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662903894,
+      "integrity": "sha512-9bI5++ijAMEmYfV6INznTgKP494FY1QgptH9fssJ500N4ekflJkzKkSH4TAtcZNITgS2GsT3eUXBQz/aiVkVKg==",
+      "mode": 420,
+      "size": 3933
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662903895,
+      "integrity": "sha512-ljuUqv72Cg/DSJQn0by++SYPnYqpP+coelC7dc1saoxyyRLFKAShxwzBhswhwArhmIBUarEJDziI3YhlJdU5ag==",
+      "mode": 420,
+      "size": 3754
+    },
+    "dist/types.cjs.d.ts": {
+      "checkedAt": 1764662903896,
+      "integrity": "sha512-nR+QZMVnOKcaaG+vR5IQdP4Z+6u0u/EIx5SgXZ3V0MHc3HkyLB2jAcZp3xgZ6qYYwDX9LbFRynT1kDFHxd0Aeg==",
+      "mode": 420,
+      "size": 42
+    }
+  }
+}

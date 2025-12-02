@@ -1,0 +1,80 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.cloud.speech.v2;
+
+option go_package = "cloud.google.com/go/speech/apiv2/speechpb;speechpb";
+option java_multiple_files = true;
+option java_outer_classname = "LocationsMetadataProto";
+option java_package = "com.google.cloud.speech.v2";
+
+// Representes a singular feature of a model. If the feature is `recognizer`,
+// the release_state of the feature represents the release_state of the model
+message ModelFeature {
+  // The name of the feature (Note: the feature can be `recognizer`)
+  string feature = 1;
+
+  // The release state of the feature
+  string release_state = 2;
+}
+
+// Represents the collection of features belonging to a model
+message ModelFeatures {
+  // Repeated field that contains all features of the model
+  repeated ModelFeature model_feature = 1;
+}
+
+// The metadata about the models in a given region for a specific locale.
+// Currently this is just the features of the model
+message ModelMetadata {
+  // Map of the model name -> features of that model
+  map<string, ModelFeatures> model_features = 1;
+}
+
+// The metadata about locales available in a given region. Currently this is
+// just the models that are available for each locale
+message LanguageMetadata {
+  // Map of locale (language code) -> models
+  map<string, ModelMetadata> models = 1;
+}
+
+// The access metadata for a particular region. This can be applied if the org
+// policy for the given project disallows a particular region.
+message AccessMetadata {
+  // Describes the different types of constraints that can be applied on a
+  // region.
+  enum ConstraintType {
+    // Unspecified constraint applied.
+    CONSTRAINT_TYPE_UNSPECIFIED = 0;
+
+    // The project's org policy disallows the given region.
+    RESOURCE_LOCATIONS_ORG_POLICY_CREATE_CONSTRAINT = 1;
+  }
+
+  // Describes the different types of constraints that are applied.
+  ConstraintType constraint_type = 1;
+}
+
+// Main metadata for the Locations API for STT V2. Currently this is just the
+// metadata about locales, models, and features
+message LocationsMetadata {
+  // Information about available locales, models, and features represented in
+  // the hierarchical structure of locales -> models -> features
+  LanguageMetadata languages = 1;
+
+  // Information about access metadata for the region and given project.
+  AccessMetadata access_metadata = 2;
+}

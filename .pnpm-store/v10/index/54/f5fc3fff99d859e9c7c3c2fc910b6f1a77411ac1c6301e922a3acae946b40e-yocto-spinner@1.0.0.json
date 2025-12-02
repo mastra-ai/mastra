@@ -1,0 +1,37 @@
+{
+  "name": "yocto-spinner",
+  "version": "1.0.0",
+  "requiresBuild": false,
+  "files": {
+    "license": {
+      "checkedAt": 1764662917242,
+      "integrity": "sha512-0fM2/ycrxrltyaBKfQ748Ck23VlPUUBgNAR47ldf4B1V/HoXTfWBSk+vcshGKwEpmOynu4mOP5o+hyBfuRNa8g==",
+      "mode": 420,
+      "size": 1117
+    },
+    "index.js": {
+      "checkedAt": 1764662917243,
+      "integrity": "sha512-4zdtOe/RJ4AbR7DU5qwwTceCfYS24Pc+g7z/jxU/laFw+gFCZl14q3saK7xPoU6ZdsjJQGhwyfV0bsSews7YBw==",
+      "mode": 420,
+      "size": 4922
+    },
+    "package.json": {
+      "checkedAt": 1764662917244,
+      "integrity": "sha512-ReTWar7GKWr/6EbzZJfCcXe2gIJhzx1nE+Xm5Sw3DNhO/XYAt95mHy976vTbDa28A/161h//wLhTfOfe/wG13w==",
+      "mode": 420,
+      "size": 1015
+    },
+    "readme.md": {
+      "checkedAt": 1764662917245,
+      "integrity": "sha512-/2woI7brSmQfqzPvtTTG7MPlw0xXA2ef94SCiAARsNfONocJRGHppwGTHSf7WnjEK9f9RtmQiP/y0ripF/4juA==",
+      "mode": 420,
+      "size": 4748
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662917246,
+      "integrity": "sha512-tneToPVE5ufRD5QYRzaNm7eyZfUkCgZ8qYanrLebGD82t0OFvZVyB2LUOffdi2YkoyNFAhA9q8qllI3To6Y7kQ==",
+      "mode": 420,
+      "size": 2675
+    }
+  }
+}

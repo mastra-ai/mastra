@@ -1,0 +1,61 @@
+{
+  "name": "css-box-model",
+  "version": "1.2.1",
+  "description": "Get accurate and well named css box model information about an Element 📦",
+  "author": "Alex Reardon <alexreardon@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexreardon/css-box-model.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alexreardon/css-box-model/issues"
+  },
+  "keywords": [
+    "css",
+    "box model",
+    "css box model",
+    "getBoundingClientRect",
+    "DOMRect",
+    "ClientRect",
+    "Rect",
+    "Spacing",
+    "DOM"
+  ],
+  "files": [
+    "/dist",
+    "/src"
+  ],
+  "main": "dist/css-box-model.cjs.js",
+  "module": "dist/css-box-model.esm.js",
+  "types": "src/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "test": "yarn jest",
+    "lint": "yarn prettier --debug-check src/** test/**",
+    "validate": "yarn lint && flow check",
+    "build:clean": "rimraf dist",
+    "build:flow": "echo \"// @flow\n\nexport * from '../src';\" > dist/css-box-model.cjs.js.flow",
+    "build:dist": "yarn rollup --config rollup.config.js",
+    "build": "yarn build:clean && yarn build:dist && yarn build:flow",
+    "prepublishOnly": "yarn build"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.5.5",
+    "@babel/preset-env": "^7.5.5",
+    "@babel/preset-flow": "^7.0.0",
+    "babel-plugin-dev-expression": "^0.2.2",
+    "flow-bin": "0.106.1",
+    "jest": "^24.9.0",
+    "prettier": "1.18.2",
+    "rimraf": "^3.0.0",
+    "rollup": "^1.20.2",
+    "rollup-plugin-babel": "^4.3.3",
+    "rollup-plugin-node-resolve": "^5.2.0",
+    "rollup-plugin-replace": "^2.2.0",
+    "rollup-plugin-terser": "^5.1.1"
+  },
+  "dependencies": {
+    "tiny-invariant": "^1.0.6"
+  }
+}

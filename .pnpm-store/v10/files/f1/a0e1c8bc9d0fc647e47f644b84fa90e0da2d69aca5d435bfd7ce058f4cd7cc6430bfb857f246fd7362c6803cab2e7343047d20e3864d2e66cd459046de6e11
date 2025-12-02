@@ -1,0 +1,26 @@
+import type { ModelMessage, ToolSet } from 'ai-v5';
+import type { MastraPrimitives } from '../../action/index.js';
+import { MastraBase } from '../../base.js';
+import type { Mastra } from '../../mastra/index.js';
+import type { MastraModelOutput } from '../../stream/base/output.js';
+import type { OutputSchema } from '../../stream/base/schema.js';
+import type { ModelManagerModelConfig } from '../../stream/types.js';
+import type { ModelLoopStreamArgs } from './model.loop.types.js';
+import type { MastraModelOptions } from './shared.types.js';
+export declare class MastraLLMVNext extends MastraBase {
+    #private;
+    constructor({ mastra, models, options, }: {
+        mastra?: Mastra;
+        models: ModelManagerModelConfig[];
+        options?: MastraModelOptions;
+    });
+    __registerPrimitives(p: MastraPrimitives): void;
+    __registerMastra(p: Mastra): void;
+    getProvider(): string;
+    getModelId(): string;
+    getModel(): import("./shared.types").MastraLanguageModelV2;
+    private _applySchemaCompat;
+    convertToMessages(messages: string | string[] | ModelMessage[]): ModelMessage[];
+    stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({ resumeContext, runId, stopWhen, maxSteps, tools, modelSettings, toolChoice, threadId, resourceId, structuredOutput, options, outputProcessors, returnScorerData, providerOptions, tracingContext, messageList, requireToolApproval, _internal, agentId, toolCallId, methodType, includeRawChunks, }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT>;
+}
+//# sourceMappingURL=model.loop.d.ts.map

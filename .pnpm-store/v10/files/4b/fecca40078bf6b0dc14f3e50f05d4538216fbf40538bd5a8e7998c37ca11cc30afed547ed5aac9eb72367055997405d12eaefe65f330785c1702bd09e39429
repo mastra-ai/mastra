@@ -1,0 +1,75 @@
+{
+  "name": "@sevinf/maybe",
+  "version": "0.5.0",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "sideEffects": false,
+  "author": "Sergey Tatarintsev <sergey@tatarintsev.me> (https://github.com/SevInf)",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "test": "jest",
+    "build:esm": "tsc --module es2015 --outDir dist/esm --declaration --declarationDir dist/types",
+    "build:cjs": "tsc --module commonjs --outDir dist/cjs",
+    "build": "run-s build:*",
+    "prettier": "prettier '**/*.{ts,json,md}'",
+    "format": "yarn prettier --write",
+    "lint:eslint": "eslint . --ext ts",
+    "lint:prettier": "yarn prettier --check",
+    "lint": "run-s lint:*",
+    "tsc:check": "tsc --noEmit",
+    "prerelease": "run-s clean test build",
+    "release": "standard-version",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^7.5.2",
+    "@commitlint/config-conventional": "^7.5.0",
+    "@types/jest": "^24.0.12",
+    "@typescript-eslint/eslint-plugin": "^1.7.0",
+    "@typescript-eslint/parser": "^1.7.0",
+    "eslint": "^5.16.0",
+    "eslint-config-prettier": "^4.2.0",
+    "husky": "^2.2.0",
+    "jest": "^24.7.1",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^1.17.0",
+    "rimraf": "^2.6.3",
+    "standard-version": "^5.0.2",
+    "ts-jest": "^24.0.2",
+    "typescript": "^3.4.5"
+  },
+  "jest": {
+    "preset": "ts-jest"
+  },
+  "prettier": {
+    "tabWidth": 4,
+    "singleQuote": true,
+    "overrides": [
+      {
+        "files": [
+          "*.json",
+          ".*.json",
+          "*.md"
+        ],
+        "options": {
+          "tabWidth": 2
+        }
+      }
+    ]
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "run-s lint tsc:check",
+      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
+    }
+  }
+}

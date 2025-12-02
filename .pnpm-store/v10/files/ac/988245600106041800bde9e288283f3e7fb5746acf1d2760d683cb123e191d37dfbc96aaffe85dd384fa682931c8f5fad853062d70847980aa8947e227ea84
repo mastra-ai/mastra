@@ -1,0 +1,6 @@
+import { z } from 'zod/v4';
+import { ParsedSchema } from '@autoform/core';
+
+declare function parseSchema(schema: z.ZodObject): ParsedSchema;
+
+export { parseSchema };

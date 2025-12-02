@@ -1,0 +1,49 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/v4/default-values.ts
+var default_values_exports = {};
+__export(default_values_exports, {
+  getDefaultValueInZodStack: () => getDefaultValueInZodStack,
+  getDefaultValues: () => getDefaultValues
+});
+module.exports = __toCommonJS(default_values_exports);
+var import_v4 = require("zod/v4");
+function getDefaultValueInZodStack(schema) {
+  if (schema instanceof import_v4.z.ZodDefault) {
+    return schema.def.defaultValue;
+  }
+  return void 0;
+}
+function getDefaultValues(schema) {
+  const shape = schema.shape;
+  const defaultValues = {};
+  for (const [key, field] of Object.entries(shape)) {
+    const defaultValue = getDefaultValueInZodStack(field);
+    if (defaultValue !== void 0) {
+      defaultValues[key] = defaultValue;
+    }
+  }
+  return defaultValues;
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  getDefaultValueInZodStack,
+  getDefaultValues
+});

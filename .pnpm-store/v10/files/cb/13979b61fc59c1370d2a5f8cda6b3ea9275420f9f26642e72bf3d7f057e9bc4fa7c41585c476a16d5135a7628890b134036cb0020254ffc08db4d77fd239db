@@ -1,0 +1,79 @@
+import type { Attributes } from "@opentelemetry/api";
+import type { ChatMessage } from "./__generated__/opentelemetryInputMessages.js";
+import type { OutputMessage } from "./__generated__/opentelemetryOutputMessages.js";
+export type GenAIInputMessage = ChatMessage;
+export type GenAIInputMessagePart = ChatMessage["parts"][number];
+export type GenAIOutputMessage = OutputMessage & {
+    /** @deprecated use parts instead */
+    text?: string;
+};
+export type GenAIOutputMessagePart = OutputMessage["parts"][number];
+/**
+ * Convert GenAI span attributes to OpenInference span attributes
+ * @param spanAttributes - The span attributes containing GenAI span attributes to convert
+ * @returns The converted OpenInference span attributes
+ */
+export declare const convertGenAISpanAttributesToOpenInferenceSpanAttributes: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map provider and system to openinference attributes
+ * @todo add some heuristics that can map incoming provider names to the correct OpenInference provider name
+ * @param spanAttributes - The span attributes containing provider and system to map
+ * @returns The mapped provider and system attributes
+ */
+export declare const mapProviderAndSystem: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map model name to openinference attributes
+ * @param spanAttributes - The span attributes containing model name to map
+ * @returns The mapped model name attributes
+ */
+export declare const mapModels: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map span kind to openinference attributes
+ * @param spanAttributes - The span attributes containing span kind to map
+ * @returns The mapped span kind attributes
+ */
+export declare const mapSpanKind: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map invocation parameters to openinference attributes
+ * @param spanAttributes - The span attributes containing invocation parameters to map
+ * @returns The mapped invocation parameters attributes
+ */
+export declare const mapInvocationParameters: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map input value to openinference attributes
+ * @param spanAttributes - The span attributes containing input value to map
+ * @returns The mapped input value attributes
+ */
+export declare const mapInputValue: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map output value to openinference attributes
+ * @param spanAttributes - The span attributes containing output value to map
+ * @returns The mapped output value attributes
+ */
+export declare const mapOutputValue: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map input messages to openinference attributes
+ * @param spanAttributes - The span attributes containing input messages to map
+ * @returns The mapped input messages attributes
+ */
+export declare const mapInputMessages: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map output messages to openinference attributes
+ * @param spanAttributes - The span attributes containing output messages to map
+ * @returns The mapped output messages attributes
+ */
+export declare const mapOutputMessages: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map usage token counts to openinference attributes
+ * @param spanAttributes - The span attributes containing usage token counts to map
+ * @returns The mapped usage token counts attributes
+ */
+export declare const mapTokenCounts: (spanAttributes: Attributes) => Attributes;
+/**
+ * Map tool execution to openinference attributes
+ * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/#execute-tool-span
+ * @param spanAttributes - The span attributes containing tool execution to map
+ * @returns The mapped tool execution attributes
+ */
+export declare const mapToolExecution: (spanAttributes: Attributes) => Attributes;
+//# sourceMappingURL=attributes.d.ts.map

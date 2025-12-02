@@ -1,0 +1,80 @@
+{
+  "bin": {
+    "arrow2csv": "bin/arrow2csv.js"
+  },
+  "version": "18.1.0",
+  "name": "apache-arrow",
+  "unpkg": "Arrow.es2015.min.js",
+  "jsdelivr": "Arrow.es2015.min.js",
+  "browser": {
+    "./Arrow.node.js": "./Arrow.dom.js",
+    "./Arrow.node.mjs": "./Arrow.dom.mjs"
+  },
+  "main": "Arrow.node.js",
+  "type": "commonjs",
+  "module": "Arrow.node.mjs",
+  "sideEffects": false,
+  "esm": {
+    "mode": "all",
+    "sourceMap": true
+  },
+  "types": "Arrow.node.d.ts",
+  "license": "Apache-2.0",
+  "description": "Apache Arrow columnar in-memory format",
+  "author": "Apache Software Foundation",
+  "homepage": "https://github.com/apache/arrow/blob/main/js/README.md",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apache/arrow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/apache/arrow/issues"
+  },
+  "keywords": [
+    "apache",
+    "arrow"
+  ],
+  "dependencies": {
+    "@types/node": "^20.13.0",
+    "@swc/helpers": "^0.5.11",
+    "@types/command-line-args": "^5.2.3",
+    "@types/command-line-usage": "^5.0.4",
+    "command-line-args": "^5.2.1",
+    "command-line-usage": "^7.0.1",
+    "flatbuffers": "^24.3.25",
+    "json-bignum": "^0.0.3",
+    "tslib": "^2.6.2"
+  },
+  "exports": {
+    ".": {
+      "node": {
+        "import": {
+          "types": "./Arrow.node.d.ts",
+          "default": "./Arrow.node.mjs"
+        },
+        "require": {
+          "types": "./Arrow.node.d.ts",
+          "default": "./Arrow.node.js"
+        }
+      },
+      "import": {
+        "types": "./Arrow.dom.d.ts",
+        "default": "./Arrow.dom.mjs"
+      },
+      "require": {
+        "types": "./Arrow.dom.d.ts",
+        "default": "./Arrow.dom.js"
+      }
+    },
+    "./*": {
+      "import": {
+        "types": "./*.d.ts",
+        "default": "./*.mjs"
+      },
+      "require": {
+        "types": "./*.d.ts",
+        "default": "./*.js"
+      }
+    }
+  }
+}

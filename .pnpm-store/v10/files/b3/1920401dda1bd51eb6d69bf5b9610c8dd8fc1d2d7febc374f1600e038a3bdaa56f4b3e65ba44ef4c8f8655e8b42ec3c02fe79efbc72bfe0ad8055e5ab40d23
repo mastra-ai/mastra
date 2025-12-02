@@ -1,0 +1,1 @@
+{"version":3,"file":"useGlobalKeyHandler.d.ts","sourceRoot":"","sources":["../../src/hooks/useGlobalKeyHandler.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,OAAO,EAAE,MAAM,gBAAgB,CAAC;AAW9C;;;;GAIG;AACH,wBAAgB,mBAAmB,CAAC,EAClC,aAAa,EACb,qBAAqB,GACtB,EAAE;IACD,aAAa,EAAE,OAAO,GAAG,IAAI,CAAC;IAC9B,qBAAqB,EAAE,OAAO,GAAG,IAAI,CAAC;CACvC,GAAG,IAAI,CAkBP"}

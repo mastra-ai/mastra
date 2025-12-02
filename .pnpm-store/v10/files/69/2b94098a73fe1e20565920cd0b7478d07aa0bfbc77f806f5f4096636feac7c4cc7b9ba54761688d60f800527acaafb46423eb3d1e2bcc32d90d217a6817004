@@ -1,0 +1,33 @@
+import { Reader } from '@jsonjoy.com/buffers/lib/Reader';
+import { XdrDecoder } from '../../../xdr/XdrDecoder';
+import { NlmProc } from './constants';
+import * as msg from './messages';
+export declare class NlmDecoder {
+    protected readonly xdr: XdrDecoder;
+    constructor(reader?: Reader);
+    decodeMessage(reader: Reader, proc: NlmProc, isRequest: boolean): msg.NlmMessage | undefined;
+    private decodeRequest;
+    private decodeResponse;
+    private readCookie;
+    private readNetobj;
+    private readNlm4Holder;
+    private readNlm4Lock;
+    private readNlm4Share;
+    private readTestArgs;
+    private readLockArgs;
+    private readCancelArgs;
+    private readUnlockArgs;
+    private readShareArgs;
+    private decodeTestRequest;
+    private decodeTestResponse;
+    private decodeLockRequest;
+    private decodeResponse4;
+    private decodeCancelRequest;
+    private decodeUnlockRequest;
+    private decodeGrantedRequest;
+    private decodeShareRequest;
+    private decodeShareResponse;
+    private decodeUnshareRequest;
+    private decodeNmLockRequest;
+    private decodeFreeAllRequest;
+}

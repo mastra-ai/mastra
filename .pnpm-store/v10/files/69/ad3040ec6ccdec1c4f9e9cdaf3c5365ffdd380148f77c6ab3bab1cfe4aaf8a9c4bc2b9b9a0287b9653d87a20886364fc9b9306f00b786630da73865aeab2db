@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "lib": ["es2017"],
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "strict": true,
+    "target": "es6",
+    "newLine": "lf",
+    "moduleResolution": "node"
+  },
+  "include": ["*.ts"]
+}

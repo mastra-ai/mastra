@@ -1,0 +1,4 @@
+#pragma once
+#pragma message(                                                                                   \
+    "This header will soon be removed. Use <gsl/algorithm> instead of <gsl/gsl_algorithm>")
+#include <gsl/algorithm>

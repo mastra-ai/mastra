@@ -1,0 +1,1 @@
+{"version":3,"file":"ECHO.js","sourceRoot":"","sources":["../../../lib/commands/ECHO.ts"],"names":[],"mappings":";;AAGA,kBAAe;IACb,iBAAiB,EAAE,IAAI;IACvB,YAAY,EAAE,IAAI;IAClB;;;;OAIG;IACH,YAAY,CAAC,MAAqB,EAAE,OAAsB;QACxD,MAAM,CAAC,IAAI,CAAC,MAAM,EAAE,OAAO,CAAC,CAAC;IAC/B,CAAC;IACD,cAAc,EAAE,SAA6C;CACnC,CAAC"}

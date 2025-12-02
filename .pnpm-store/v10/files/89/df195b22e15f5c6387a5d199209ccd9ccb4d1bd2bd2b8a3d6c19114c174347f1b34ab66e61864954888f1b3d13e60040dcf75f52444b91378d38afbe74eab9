@@ -1,0 +1,1 @@
+{"version":3,"file":"tool.d.ts","sourceRoot":"","sources":["../../src/model-context/tool.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,IAAI,EAAE,MAAM,kBAAkB,CAAC;AAIxC,wBAAgB,IAAI,CAAC,KAAK,SAAS,MAAM,CAAC,MAAM,EAAE,OAAO,CAAC,EAAE,OAAO,GAAG,GAAG,EACvE,IAAI,EAAE,IAAI,CAAC,KAAK,EAAE,OAAO,CAAC,GACzB,IAAI,CAAC,KAAK,EAAE,OAAO,CAAC,CAEtB"}

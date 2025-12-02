@@ -1,0 +1,71 @@
+{
+  "name": "vite-plugin-lib-inject-css",
+  "type": "module",
+  "version": "2.2.2",
+  "description": "Inject css at the top of chunk file in lib mode using `import` statement, support multiple entries.",
+  "author": "秦旭洋 <emosheep@qq.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emosheeep/vite-plugin-lib-inject-css"
+  },
+  "keywords": [
+    "vite",
+    "plugin",
+    "lib",
+    "build",
+    "vite-lib",
+    "vite-plugin",
+    "vite-build",
+    "css",
+    "style",
+    "styles",
+    "inject",
+    "inline"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "CHANGELOG.md",
+    "dist"
+  ],
+  "peerDependencies": {
+    "vite": "*"
+  },
+  "dependencies": {
+    "@ast-grep/napi": "^0.36.2",
+    "magic-string": "^0.30.17",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^4.12.0",
+    "@changesets/cli": "^2.28.1",
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "@types/node": "^20.17.30",
+    "eslint": "^9.24.0",
+    "simple-git-hooks": "^2.12.1",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.2.6"
+  },
+  "simple-git-hooks": {
+    "commit-msg": "npx commitlint -e",
+    "pre-commit": "npx eslint . && npx tsc --noEmit"
+  },
+  "scripts": {
+    "watch": "tsup --watch",
+    "build": "tsup",
+    "lint": "eslint . --fix",
+    "changeset": "changeset",
+    "versions": "changeset version"
+  }
+}

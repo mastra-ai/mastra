@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/cli/version.ts"],
+  "sourcesContent": ["import { version as versionInner } from \"../index.js\";\n\nexport const version = process.env.CONVEX_VERSION_OVERRIDE || versionInner;\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,eAAwC;AAEjC,MAAM,UAAU,QAAQ,IAAI,2BAA2B,SAAAA;",
+  "names": ["versionInner"]
+}

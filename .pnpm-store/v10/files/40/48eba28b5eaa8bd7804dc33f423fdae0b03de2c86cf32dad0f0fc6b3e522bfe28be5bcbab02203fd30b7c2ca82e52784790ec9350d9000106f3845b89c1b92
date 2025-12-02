@@ -1,0 +1,196 @@
+import type { z as zV3 } from 'zod/v3';
+import type { z as zV4, ZodType } from 'zod/v4';
+import type { Targets } from 'zod-to-json-schema';
+import type { JSONSchema7 } from './json-schema.js';
+import type { UnsupportedZodType as UnsupportedZodTypeV3, ShapeValue as ShapeValueV3, StringCheckType, NumberCheckType, ArrayCheckType, AllZodType as AllZodTypeV3 } from './schema-compatibility-v3.js';
+import type { UnsupportedZodType as UnsupportedZodTypeV4, ShapeValue as ShapeValueV4, AllZodType as AllZodTypeV4 } from './schema-compatibility-v4.js';
+import type { Schema, ModelInformation } from './types.js';
+type ConstraintHelperText = string[];
+export declare abstract class SchemaCompatLayer {
+    private model;
+    private v3Layer;
+    private v4Layer;
+    /**
+     * Creates a new schema compatibility instance.
+     *
+     * @param model - The language model this compatibility layer applies to
+     */
+    constructor(model: ModelInformation);
+    /**
+     * Gets the language model associated with this compatibility layer.
+     *
+     * @returns The language model instance
+     */
+    getModel(): ModelInformation;
+    getUnsupportedZodTypes(v: ZodType): readonly string[];
+    /**
+     * Type guard for optional Zod types
+     */
+    isOptional(v: zV4.ZodType): v is zV4.ZodOptional<any>;
+    isOptional(v: zV3.ZodType): v is zV3.ZodOptional<any>;
+    /**
+     * Type guard for object Zod types
+     */
+    isObj(v: zV4.ZodType): v is zV4.ZodObject<any, any>;
+    isObj(v: zV3.ZodType): v is zV3.ZodObject<any, any, any, any, any>;
+    /**
+     * Type guard for null Zod types
+     */
+    isNull(v: zV4.ZodType): v is zV4.ZodNull;
+    isNull(v: zV3.ZodType): v is zV3.ZodNull;
+    /**
+     * Type guard for array Zod types
+     */
+    isArr(v: zV4.ZodType): v is zV4.ZodArray<any>;
+    isArr(v: zV3.ZodType): v is zV3.ZodArray<any, any>;
+    /**
+     * Type guard for union Zod types
+     */
+    isUnion(v: zV4.ZodType): v is zV4.ZodUnion<[zV4.ZodType, ...zV4.ZodType[]]>;
+    isUnion(v: zV3.ZodType): v is zV3.ZodUnion<[zV3.ZodType, ...zV3.ZodType[]]>;
+    /**
+     * Type guard for string Zod types
+     */
+    isString(v: zV4.ZodType): v is zV4.ZodString;
+    isString(v: zV3.ZodType): v is zV3.ZodString;
+    /**
+     * Type guard for number Zod types
+     */
+    isNumber(v: zV4.ZodType): v is zV4.ZodNumber;
+    isNumber(v: zV3.ZodType): v is zV3.ZodNumber;
+    /**
+     * Type guard for date Zod types
+     */
+    isDate(v: zV4.ZodType): v is zV4.ZodDate;
+    isDate(v: zV3.ZodType): v is zV3.ZodDate;
+    /**
+     * Type guard for default Zod types
+     */
+    isDefault(v: zV4.ZodType): v is zV4.ZodDefault<any>;
+    isDefault(v: zV3.ZodType): v is zV3.ZodDefault<any>;
+    /**
+     * Determines whether this compatibility layer should be applied for the current model.
+     *
+     * @returns True if this compatibility layer should be used, false otherwise
+     * @abstract
+     */
+    abstract shouldApply(): boolean;
+    /**
+     * Returns the JSON Schema target format for this provider.
+     *
+     * @returns The schema target format, or undefined to use the default 'jsonSchema7'
+     * @abstract
+     */
+    abstract getSchemaTarget(): Targets | undefined;
+    /**
+     * Processes a specific Zod type according to the provider's requirements.
+     *
+     * @param value - The Zod type to process
+     * @returns The processed Zod type
+     * @abstract
+     */
+    abstract processZodType(value: zV4.ZodType): zV4.ZodType;
+    abstract processZodType(value: zV3.ZodType): zV3.ZodType;
+    abstract processZodType(value: zV4.ZodType | zV3.ZodType): zV4.ZodType | zV3.ZodType;
+    /**
+     * Default handler for Zod object types. Recursively processes all properties in the object.
+     *
+     * @param value - The Zod object to process
+     * @returns The processed Zod object
+     */
+    defaultZodObjectHandler(value: zV4.ZodObject<any, any>, options?: {
+        passthrough?: boolean;
+    }): zV4.ZodObject<any, any>;
+    defaultZodObjectHandler(value: zV3.ZodObject<any, any>, options?: {
+        passthrough?: boolean;
+    }): zV3.ZodObject<any, any>;
+    /**
+     * Merges validation constraints into a parameter description.
+     *
+     * This helper method converts validation constraints that may not be supported
+     * by a provider into human-readable descriptions.
+     *
+     * @param description - The existing parameter description
+     * @param constraints - The validation constraints to merge
+     * @returns The updated description with constraints, or undefined if no constraints
+     */
+    mergeParameterDescription(description: string | undefined, constraints: ConstraintHelperText): string | undefined;
+    /**
+     * Default handler for unsupported Zod types. Throws an error for specified unsupported types.
+     *
+     * @param value - The Zod type to check
+     * @param throwOnTypes - Array of type names to throw errors for
+     * @returns The original value if not in the throw list
+     * @throws Error if the type is in the unsupported list
+     */
+    defaultUnsupportedZodTypeHandler<T extends zV4.ZodObject | zV3.AnyZodObject>(value: T, throwOnTypes?: T extends zV4.ZodObject ? UnsupportedZodTypeV4[] : T extends zV3.AnyZodObject ? UnsupportedZodTypeV3[] : never): T extends zV4.ZodObject ? ShapeValueV4<T> : T extends zV3.AnyZodObject ? ShapeValueV3<T> : never;
+    /**
+     * Default handler for Zod array types. Processes array constraints according to provider support.
+     *
+     * @param value - The Zod array to process
+     * @param handleChecks - Array constraints to convert to descriptions vs keep as validation
+     * @returns The processed Zod array
+     */
+    defaultZodArrayHandler(value: zV4.ZodArray<any>, handleChecks?: readonly ArrayCheckType[]): zV4.ZodArray<any>;
+    defaultZodArrayHandler(value: zV3.ZodArray<any, any>, handleChecks?: readonly ArrayCheckType[]): zV3.ZodArray<any, any>;
+    /**
+     * Default handler for Zod union types. Processes all union options.
+     *
+     * @param value - The Zod union to process
+     * @returns The processed Zod union
+     * @throws Error if union has fewer than 2 options
+     */
+    defaultZodUnionHandler(value: zV4.ZodUnion<[zV4.ZodType, ...zV4.ZodType[]]>): zV4.ZodType;
+    defaultZodUnionHandler(value: zV3.ZodUnion<[zV3.ZodType, ...zV3.ZodType[]]>): zV3.ZodType;
+    /**
+     * Default handler for Zod string types. Processes string validation constraints.
+     *
+     * @param value - The Zod string to process
+     * @param handleChecks - String constraints to convert to descriptions vs keep as validation
+     * @returns The processed Zod string
+     */
+    defaultZodStringHandler(value: zV4.ZodString, handleChecks?: readonly StringCheckType[]): zV4.ZodString;
+    defaultZodStringHandler(value: zV3.ZodString, handleChecks?: readonly StringCheckType[]): zV3.ZodString;
+    /**
+     * Default handler for Zod number types. Processes number validation constraints.
+     *
+     * @param value - The Zod number to process
+     * @param handleChecks - Number constraints to convert to descriptions vs keep as validation
+     * @returns The processed Zod number
+     */
+    defaultZodNumberHandler(value: zV4.ZodNumber, handleChecks?: readonly NumberCheckType[]): zV4.ZodNumber;
+    defaultZodNumberHandler(value: zV3.ZodNumber, handleChecks?: readonly NumberCheckType[]): zV3.ZodNumber;
+    /**
+     * Default handler for Zod date types. Converts dates to ISO strings with constraint descriptions.
+     *
+     * @param value - The Zod date to process
+     * @returns A Zod string schema representing the date in ISO format
+     */
+    defaultZodDateHandler(value: zV4.ZodDate): zV4.ZodString;
+    defaultZodDateHandler(value: zV3.ZodDate): zV3.ZodString;
+    /**
+     * Default handler for Zod optional types. Processes the inner type and maintains optionality.
+     *
+     * @param value - The Zod optional to process
+     * @param handleTypes - Types that should be processed vs passed through
+     * @returns The processed Zod optional
+     */
+    defaultZodOptionalHandler(value: zV4.ZodOptional<any>, handleTypes?: readonly AllZodTypeV4[]): zV4.ZodType;
+    defaultZodOptionalHandler(value: zV3.ZodOptional<any>, handleTypes?: readonly AllZodTypeV3[]): zV3.ZodType;
+    /**
+     * Processes a Zod object schema and converts it to an AI SDK Schema.
+     *
+     * @param zodSchema - The Zod object schema to process
+     * @returns An AI SDK Schema with provider-specific compatibility applied
+     */
+    processToAISDKSchema(zodSchema: zV3.ZodSchema | zV4.ZodType): Schema;
+    /**
+     * Processes a Zod object schema and converts it to a JSON Schema.
+     *
+     * @param zodSchema - The Zod object schema to process
+     * @returns A JSONSchema7 object with provider-specific compatibility applied
+     */
+    processToJSONSchema(zodSchema: zV3.ZodSchema | zV4.ZodType): JSONSchema7;
+}
+export {};
+//# sourceMappingURL=schema-compatibility.d.ts.map

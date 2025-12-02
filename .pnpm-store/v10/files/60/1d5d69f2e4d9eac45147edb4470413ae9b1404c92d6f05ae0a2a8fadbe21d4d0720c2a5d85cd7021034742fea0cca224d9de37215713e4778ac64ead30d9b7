@@ -1,0 +1,120 @@
+{
+  "name": "miniflare",
+  "version": "4.20251118.1",
+  "description": "Fun, full-featured, fully-local simulator for Cloudflare Workers",
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "worker",
+    "local",
+    "cloudworker"
+  ],
+  "homepage": "https://github.com/cloudflare/workers-sdk/tree/main/packages/miniflare#readme",
+  "bugs": {
+    "url": "https://github.com/cloudflare/workers-sdk/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cloudflare/workers-sdk.git",
+    "directory": "packages/miniflare"
+  },
+  "license": "MIT",
+  "author": "MrBBot <me@mrbbot.dev>",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "bin": {
+    "miniflare": "bootstrap.js"
+  },
+  "files": [
+    "dist/src",
+    "bootstrap.js"
+  ],
+  "dependencies": {
+    "@cspotcode/source-map-support": "0.8.1",
+    "acorn": "8.14.0",
+    "acorn-walk": "8.3.2",
+    "exit-hook": "2.2.1",
+    "glob-to-regexp": "0.4.1",
+    "sharp": "^0.33.5",
+    "stoppable": "1.1.0",
+    "undici": "7.14.0",
+    "workerd": "1.20251118.0",
+    "ws": "8.18.0",
+    "youch": "4.1.0-beta.10",
+    "zod": "3.22.3"
+  },
+  "devDependencies": {
+    "@ava/typescript": "^4.1.0",
+    "@cloudflare/workers-types": "^4.20251118.0",
+    "@microsoft/api-extractor": "^7.52.8",
+    "@puppeteer/browsers": "^2.10.6",
+    "@types/debug": "^4.1.7",
+    "@types/estree": "^1.0.0",
+    "@types/glob-to-regexp": "^0.4.1",
+    "@types/http-cache-semantics": "^4.0.1",
+    "@types/mime": "^3.0.4",
+    "@types/node": "^20.19.9",
+    "@types/stoppable": "^1.1.1",
+    "@types/which": "^2.0.1",
+    "@types/ws": "^8.5.7",
+    "@typescript-eslint/eslint-plugin": "^8.35.1",
+    "@typescript-eslint/parser": "^8.35.1",
+    "ava": "^6.0.1",
+    "capnp-es": "^0.0.11",
+    "capnweb": "^0.1.0",
+    "chokidar": "^4.0.1",
+    "concurrently": "^8.2.2",
+    "devalue": "^5.3.2",
+    "devtools-protocol": "^0.0.1182435",
+    "esbuild": "0.25.4",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-es": "^4.1.0",
+    "eslint-plugin-prettier": "^5.0.1",
+    "expect-type": "^0.15.0",
+    "get-port": "^7.1.0",
+    "heap-js": "^2.5.0",
+    "http-cache-semantics": "^4.1.0",
+    "kleur": "^4.1.5",
+    "mime": "^3.0.0",
+    "postal-mime": "^2.4.3",
+    "pretty-bytes": "^6.0.0",
+    "rimraf": "^6.0.1",
+    "source-map": "^0.6.1",
+    "ts-dedent": "^2.2.0",
+    "typescript": "^5.8.3",
+    "which": "^2.0.2",
+    "xdg-app-paths": "^8.3.0",
+    "@cloudflare/cli": "1.1.3",
+    "@cloudflare/containers-shared": "0.3.0",
+    "@cloudflare/eslint-config-shared": "1.1.0",
+    "@cloudflare/kv-asset-handler": "0.4.0",
+    "@cloudflare/workers-shared": "0.18.8",
+    "@cloudflare/workflows-shared": "0.3.8"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "workers-sdk": {
+    "prerelease": true
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs && pnpm run types:build",
+    "capnp:workerd": "node scripts/build-capnp.mjs",
+    "check:lint": "eslint --max-warnings=0 \"{src,test}/**/*.ts\" \"types/**/*.ts\"",
+    "check:type": "tsc",
+    "clean": "rimraf ./dist ./dist-types",
+    "dev": "concurrently -n esbuild,typechk,typewrk -c yellow,blue,blue.dim \"node scripts/build.mjs watch\" \"node scripts/types.mjs tsconfig.json watch\" \"node scripts/types.mjs src/workers/tsconfig.json watch\"",
+    "lint:fix": "pnpm run check:lint --fix",
+    "test": "ava",
+    "posttest": "rimraf ./.tmp",
+    "test:ci": "pnpm run test",
+    "types:build": "node scripts/types.mjs tsconfig.json && node scripts/types.mjs src/workers/tsconfig.json"
+  }
+}

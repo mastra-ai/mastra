@@ -1,0 +1,4 @@
+export type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '../../ai-sdk.types.d.ts';
+export type * as AIV4Type from '../../ai-sdk.types.d.ts';
+export type * as AIV5Type from 'ai-v5';
+//# sourceMappingURL=types.d.ts.map

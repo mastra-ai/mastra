@@ -1,0 +1,10 @@
+language: node_js
+node_js:
+- "node"
+install:
+- npm install
+- npm install coveralls
+script:
+- npm run coverage
+after_success:
+- npm run coveralls

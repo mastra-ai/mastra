@@ -1,0 +1,67 @@
+{
+  "name": "@manypkg/get-packages",
+  "version": "2.2.2",
+  "requiresBuild": false,
+  "files": {
+    "dist/manypkg-get-packages.cjs.dev.js": {
+      "checkedAt": 1764662915746,
+      "integrity": "sha512-QmhrALALdeegmQJq/4CUiRyMlcza+hQY43Sm9wRLLI+Jwt4/6MQ2mMM3qeB5yVAqkqR4u1m755u53UhmqZZKpg==",
+      "mode": 420,
+      "size": 2111
+    },
+    "dist/manypkg-get-packages.cjs.js": {
+      "checkedAt": 1764662915747,
+      "integrity": "sha512-QoZN3P2yFY6nDx2D9kx18dncO8vBCu4VCCByoftYZ1RPSDpW0x9EsGr+iVsEAkv/xe1TyNW7HZwis4OoEEoiCA==",
+      "mode": 420,
+      "size": 202
+    },
+    "dist/manypkg-get-packages.cjs.prod.js": {
+      "checkedAt": 1764662915746,
+      "integrity": "sha512-QmhrALALdeegmQJq/4CUiRyMlcza+hQY43Sm9wRLLI+Jwt4/6MQ2mMM3qeB5yVAqkqR4u1m755u53UhmqZZKpg==",
+      "mode": 420,
+      "size": 2111
+    },
+    "package.json": {
+      "checkedAt": 1764662915747,
+      "integrity": "sha512-C4X1T4YHCVKDbHB3Do3GCnPWbEEzxURPmrLgjFl8LUKE+NJmEtWvttt/GXNLxn9Q8gqMiIczW1bPbs9chOs2ZQ==",
+      "mode": 420,
+      "size": 458
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662915748,
+      "integrity": "sha512-XbVJuNIzE/0zksJP2WKAgiWlmdbZ9bWBGAnFCHRTQ+f6S5z96ki4SD43UL8U57VGc9/LZkz6aNRv8oV1KZ/CYA==",
+      "mode": 420,
+      "size": 6351
+    },
+    "README.md": {
+      "checkedAt": 1764662915748,
+      "integrity": "sha512-HvfaLIwJUUJ5fClvy++tS5Sdb+H/mHjQhoTb8ksKXZ6cPAD1gEe2NdTJhm7xPVmEHobETEBAu3fRhwjTM7uxPg==",
+      "mode": 420,
+      "size": 1393
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662915749,
+      "integrity": "sha512-ONkVrJcBr+idbfaAH8ZpQh74UMRNRcvvtvW9rJ4V/7ZpnIi9FN3xAQLzbl/W1bjtMHUNki+I2utx/h1+dlq7UQ==",
+      "mode": 420,
+      "size": 1118
+    },
+    "src/index.test.ts": {
+      "checkedAt": 1764662915749,
+      "integrity": "sha512-06SQhaQsbC2ObTzxwXVz7tKcreNF4Sqby+TgXVwkazJPNcV95Wwk1iM33itRLllQLZPIEafzY/PNRURIUzT2lw==",
+      "mode": 420,
+      "size": 6045
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662915750,
+      "integrity": "sha512-g4aserfp8/l1lNY6WpHgYSMUM4sYT6iH8p0lKFbPgelo4l8LVQkSeSzGUQJtjN7tqRGK9OIRzvd74gkQkSAu3A==",
+      "mode": 420,
+      "size": 2187
+    },
+    "dist/manypkg-get-packages.cjs.d.ts": {
+      "checkedAt": 1764662915751,
+      "integrity": "sha512-nR+QZMVnOKcaaG+vR5IQdP4Z+6u0u/EIx5SgXZ3V0MHc3HkyLB2jAcZp3xgZ6qYYwDX9LbFRynT1kDFHxd0Aeg==",
+      "mode": 420,
+      "size": 42
+    }
+  }
+}

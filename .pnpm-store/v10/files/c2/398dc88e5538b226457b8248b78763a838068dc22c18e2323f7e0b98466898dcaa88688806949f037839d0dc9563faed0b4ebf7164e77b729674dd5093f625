@@ -1,0 +1,70 @@
+{
+	"name": "nano-spawn",
+	"version": "2.0.0",
+	"description": "Tiny process execution for humans — a better child_process",
+	"license": "MIT",
+	"repository": "sindresorhus/nano-spawn",
+	"funding": "https://github.com/sindresorhus/nano-spawn?sponsor=1",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		"types": "./source/index.d.ts",
+		"default": "./source/index.js"
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=20.17"
+	},
+	"scripts": {
+		"test": "xo && c8 ava && npm run type",
+		"type": "tsd -t ./source/index.d.ts -f ./source/index.test-d.ts"
+	},
+	"files": [
+		"source/**/*.js",
+		"source/**/*.d.ts"
+	],
+	"keywords": [
+		"spawn",
+		"exec",
+		"child",
+		"process",
+		"subprocess",
+		"execute",
+		"fork",
+		"execfile",
+		"file",
+		"shell",
+		"bin",
+		"binary",
+		"binaries",
+		"npm",
+		"path",
+		"local",
+		"zx",
+		"execa"
+	],
+	"devDependencies": {
+		"@types/node": "^22.5.4",
+		"ava": "^6.1.3",
+		"c8": "^10.1.2",
+		"get-node": "^15.0.1",
+		"log-process-errors": "^12.0.1",
+		"path-key": "^4.0.0",
+		"tempy": "^3.1.0",
+		"tsd": "^0.32.0",
+		"typescript": "^5.8.3",
+		"xo": "^0.60.0",
+		"yoctocolors": "^2.1.1"
+	},
+	"ava": {
+		"concurrency": 1,
+		"timeout": "240s",
+		"require": [
+			"./test/helpers/setup.js"
+		]
+	}
+}

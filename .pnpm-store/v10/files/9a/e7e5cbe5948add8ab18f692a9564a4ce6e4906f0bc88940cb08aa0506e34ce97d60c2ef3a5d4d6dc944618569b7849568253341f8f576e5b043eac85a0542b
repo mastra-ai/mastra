@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/index.ts"],
+  "sourcesContent": ["import { Octokit as Core } from \"@octokit/core\";\nimport { requestLog } from \"@octokit/plugin-request-log\";\nimport {\n  paginateRest,\n  type PaginateInterface,\n} from \"@octokit/plugin-paginate-rest\";\nimport { legacyRestEndpointMethods } from \"@octokit/plugin-rest-endpoint-methods\";\nexport type { RestEndpointMethodTypes } from \"@octokit/plugin-rest-endpoint-methods\";\n\nimport { VERSION } from \"./version.js\";\n\ntype Constructor<T> = new (...args: any[]) => T;\n\nexport const Octokit: typeof Core &\n  Constructor<\n    ReturnType<typeof legacyRestEndpointMethods> & {\n      paginate: PaginateInterface;\n    }\n  > = Core.plugin(requestLog, legacyRestEndpointMethods, paginateRest).defaults(\n  {\n    userAgent: `octokit-rest.js/${VERSION}`,\n  },\n);\n\nexport type Octokit = InstanceType<typeof Octokit>;\n"],
+  "mappings": "AAAA,SAAS,WAAW,YAAY;AAChC,SAAS,kBAAkB;AAC3B;AAAA,EACE;AAAA,OAEK;AACP,SAAS,iCAAiC;AAG1C,SAAS,eAAe;AAIjB,MAAM,UAKP,KAAK,OAAO,YAAY,2BAA2B,YAAY,EAAE;AAAA,EACrE;AAAA,IACE,WAAW,mBAAmB,OAAO;AAAA,EACvC;AACF;",
+  "names": []
+}

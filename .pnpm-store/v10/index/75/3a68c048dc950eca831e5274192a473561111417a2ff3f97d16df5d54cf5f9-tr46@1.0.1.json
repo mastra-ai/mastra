@@ -1,0 +1,43 @@
+{
+  "name": "tr46",
+  "version": "1.0.1",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662906045,
+      "integrity": "sha512-fAz/HooJwpe3hVvoqDDRm/bhFiOUghCmhPNi8Gp7i554WzNRYG8QrQzJjWIGLXTKyTG+ktlDn9t5nK5pH3IBiA==",
+      "mode": 438,
+      "size": 835
+    },
+    "README.md": {
+      "checkedAt": 1764662906049,
+      "integrity": "sha512-ATJ32bzP2jM7I/LHu7qFwimX+IgZ1nPZcEGqjiS/k1n1ovX/wGx0KvBslshjZ3bKaSuriqXyLjRfiq14VsOEww==",
+      "mode": 438,
+      "size": 2024
+    },
+    "index.js": {
+      "checkedAt": 1764662906051,
+      "integrity": "sha512-wnOpIYyyZi0Mvb9FUdRBDsbA/4/e9qa5SzkaWNHdBoJUMFtg5tu5ebGW/OTCshABTy7qhAE4ZV+THiUJJmcRBQ==",
+      "mode": 438,
+      "size": 6772
+    },
+    "LICENSE.md": {
+      "checkedAt": 1764662906052,
+      "integrity": "sha512-IWMfVYqk2BFWv+TSuqbH0IaHrwaUur/F9LHLGGGsMfthRzO+HLQefd6qDjdGW60Di6klPU7fyBczewy+z3fyyQ==",
+      "mode": 438,
+      "size": 1081
+    },
+    "lib/regexes.js": {
+      "checkedAt": 1764662906053,
+      "integrity": "sha512-yz30rAcmjR0c+XpIze2gCqg/ArfmVAUl3hSfjqgm5soUdEmREC9WdPWGefXJWvMYf+XoUDPLa5Va8JT+dJKROw==",
+      "mode": 438,
+      "size": 59396
+    },
+    "lib/mappingTable.json": {
+      "checkedAt": 1764662906055,
+      "integrity": "sha512-4W6I8wGoHTp+No/UzWleaL3ToGTH0Hv4sSOF3YWHxpdN70HemOfgqAVbImwFD/66HRVqXQ90+C6ZA9Cq12iStA==",
+      "mode": 438,
+      "size": 252306
+    }
+  }
+}

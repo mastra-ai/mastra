@@ -1,0 +1,44 @@
+imports:
+  root: ../../../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get:
+      path: /v1/voices/pvc/{voice_id}/samples/{sample_id}/audio
+      method: GET
+      auth: false
+      docs: >-
+        Retrieve the first 30 seconds of voice sample audio with or without
+        noise removal.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+        sample_id:
+          type: string
+          docs: Sample ID to be used
+      display-name: Retrieve Voice Sample Audio
+      response:
+        docs: Successful Response
+        type: root.VoiceSamplePreviewResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+            sample_id: VW7YKqPnjY4h39yTbx2L
+          response:
+            body:
+              audio_base_64: audio_base_64
+              voice_id: DCwhRBWXzGAHq8TQ4Fs18
+              sample_id: DCwhRBWXzGAHq8TQ4Fs18
+              media_type: audio/mpeg
+              duration_secs: 5
+  source:
+    openapi: openapi.json

@@ -1,0 +1,31 @@
+{
+  "name": "@types/keygrip",
+  "version": "1.0.6",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662907858,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662907859,
+      "integrity": "sha512-+YBC/wm2WLIpPreW8C6fsmCnQMnFj8RCPAlxGUygbcG7RiSKDFgPfafrhcEX6HWg5PstvGC62O8pQ4e4qEsDaA==",
+      "mode": 420,
+      "size": 982
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662907860,
+      "integrity": "sha512-7JNpVznX4khSYhV0mgR/5VqaBVl0gi83O6SlLZACenKnkDkNn8bmlsRBn3TB81CifAvtdI5M86EuLn246fPYaw==",
+      "mode": 420,
+      "size": 397
+    },
+    "package.json": {
+      "checkedAt": 1764662907861,
+      "integrity": "sha512-KA41kcwOiN5n5nnmLyvfpSVyGCzOtwhcaaf2yCULZxG7FxGMv3LTdaze/iKkmFjiBfEQE9JwH0M6B2T6lDvcDg==",
+      "mode": 420,
+      "size": 777
+    }
+  }
+}

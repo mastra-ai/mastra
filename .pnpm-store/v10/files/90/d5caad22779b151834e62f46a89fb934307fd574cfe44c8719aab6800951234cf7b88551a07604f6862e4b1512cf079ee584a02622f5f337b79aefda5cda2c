@@ -1,0 +1,28 @@
+{
+  "name": "@clickhouse/client",
+  "description": "Official JS client for ClickHouse DB - Node.js implementation",
+  "homepage": "https://clickhouse.com",
+  "version": "1.12.1",
+  "license": "Apache-2.0",
+  "keywords": [
+    "clickhouse",
+    "sql",
+    "client"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ClickHouse/clickhouse-js.git"
+  },
+  "private": false,
+  "engines": {
+    "node": ">=16"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@clickhouse/client-common": "1.12.1"
+  }
+}

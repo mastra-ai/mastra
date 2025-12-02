@@ -1,0 +1,89 @@
+{
+  "name": "@vitest/eslint-plugin",
+  "version": "1.3.23",
+  "license": "MIT",
+  "description": "Eslint plugin for vitest",
+  "repository": "vitest-dev/eslint-plugin-vitest",
+  "keywords": [
+    "eslint",
+    "eslintplugin",
+    "eslint-plugin",
+    "vitest eslint plugin",
+    "vitest",
+    "eslint plugin"
+  ],
+  "author": "Verite Mugabo <https://veritemugabo.com/>",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@typescript-eslint/scope-manager": "^8.46.1",
+    "@typescript-eslint/utils": "^8.46.1"
+  },
+  "devDependencies": {
+    "@types/eslint": "^9.6.1",
+    "@types/node": "^22.18.10",
+    "@typescript-eslint/rule-tester": "^8.46.1",
+    "bumpp": "^10.3.1",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.37.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-doc-generator": "^2.3.0",
+    "eslint-plugin-eslint-plugin": "^7.0.0",
+    "eslint-remote-tester": "^4.0.3",
+    "eslint-remote-tester-repositories": "^2.0.2",
+    "jiti": "^2.6.1",
+    "prettier": "^3.6.2",
+    "tsdown": "^0.15.7",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.1",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "eslint": ">= 8.57.0",
+    "typescript": ">= 5.0.0",
+    "vitest": "*"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    },
+    "vitest": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "endOfLine": "auto"
+  },
+  "scripts": {
+    "build": "tsdown --format esm --format cjs",
+    "typecheck": "tsc --noEmit",
+    "lint:eslint-docs": "pnpm build && eslint-doc-generator --check",
+    "lint:js": "eslint .",
+    "lint": "concurrently --prefixColors auto \"pnpm:lint:*\"",
+    "release": "bumpp package.json --commit --push --tag && pnpm build && pnpm publish",
+    "stub": "unbuild --stub",
+    "test:ci": "npm run format:check && vitest run",
+    "format:check": "npx prettier 'src/**/*.ts' --check",
+    "format:fix": "npx prettier '**/*.{ts,js}' --write",
+    "test": "vitest",
+    "update:eslint-docs": "pnpm build && eslint-doc-generator"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "name": "@clack/core",
+  "version": "1.0.0-alpha.6",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.mts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bombshell-dev/clack.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/bombshell-dev/clack/issues"
+  },
+  "homepage": "https://github.com/bombshell-dev/clack/tree/main/packages/core#readme",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "ask",
+    "clack",
+    "cli",
+    "command-line",
+    "command",
+    "input",
+    "interact",
+    "interface",
+    "menu",
+    "prompt",
+    "prompts",
+    "stdin",
+    "ui"
+  ],
+  "author": {
+    "name": "Nate Moore",
+    "email": "nate@natemoo.re",
+    "url": "https://twitter.com/n_moore"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "picocolors": "^1.0.0",
+    "sisteransi": "^1.0.5"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4",
+    "fast-wrap-ansi": "^0.1.3"
+  },
+  "scripts": {
+    "build": "unbuild",
+    "test": "vitest run"
+  }
+}

@@ -1,0 +1,65 @@
+// src/ui/user-message.tsx
+import { forwardRef } from "react";
+import { MessagePrimitive } from "@assistant-ui/react";
+import BranchPicker from "./branch-picker.mjs";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import UserActionBar from "./user-action-bar.mjs";
+import ContentPart from "./content-part.mjs";
+import Attachment from "./attachment-ui.mjs";
+import { jsx, jsxs } from "react/jsx-runtime";
+var UserMessage = () => {
+  return /* @__PURE__ */ jsxs(UserMessageRoot, { children: [
+    /* @__PURE__ */ jsx(UserMessageAttachments, {}),
+    /* @__PURE__ */ jsxs(MessagePrimitive.If, { hasContent: true, children: [
+      /* @__PURE__ */ jsx(UserActionBar, {}),
+      /* @__PURE__ */ jsx(UserMessageContent, {})
+    ] }),
+    /* @__PURE__ */ jsx(BranchPicker, {})
+  ] });
+};
+UserMessage.displayName = "UserMessage";
+var UserMessageRoot = withDefaults(MessagePrimitive.Root, {
+  className: "aui-user-message-root"
+});
+UserMessageRoot.displayName = "UserMessageRoot";
+var UserMessageContentWrapper = withDefaults("div", {
+  className: "aui-user-message-content"
+});
+var UserMessageContent = forwardRef(({ components, ...props }, ref) => {
+  return /* @__PURE__ */ jsx(UserMessageContentWrapper, { ...props, ref, children: /* @__PURE__ */ jsx(
+    MessagePrimitive.Content,
+    {
+      components: {
+        ...components,
+        Text: components?.Text ?? ContentPart.Text
+      }
+    }
+  ) });
+});
+UserMessageContent.displayName = "UserMessageContent";
+var UserMessageAttachmentsContainer = withDefaults("div", {
+  className: "aui-user-message-attachments"
+});
+var UserMessageAttachments = ({
+  components
+}) => {
+  return /* @__PURE__ */ jsx(MessagePrimitive.If, { hasAttachments: true, children: /* @__PURE__ */ jsx(UserMessageAttachmentsContainer, { children: /* @__PURE__ */ jsx(
+    MessagePrimitive.Attachments,
+    {
+      components: {
+        ...components,
+        Attachment: components?.Attachment ?? Attachment
+      }
+    }
+  ) }) });
+};
+var exports = {
+  Root: UserMessageRoot,
+  Content: UserMessageContent,
+  Attachments: UserMessageAttachments
+};
+var user_message_default = Object.assign(UserMessage, exports);
+export {
+  user_message_default as default
+};
+//# sourceMappingURL=user-message.mjs.map

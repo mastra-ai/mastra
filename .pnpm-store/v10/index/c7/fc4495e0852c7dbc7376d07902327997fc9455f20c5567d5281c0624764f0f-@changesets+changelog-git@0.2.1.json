@@ -1,0 +1,85 @@
+{
+  "name": "@changesets/changelog-git",
+  "version": "0.2.1",
+  "requiresBuild": false,
+  "files": {
+    "dist/changesets-changelog-git.cjs.default.js": {
+      "checkedAt": 1764662904182,
+      "integrity": "sha512-jNXpaTKCA1OJ+v2d/R2nz3vMEa48hPh4MkFWOQYjObnspXow9uCnYBxtGf6epwvgNurPJdXaVeuCpHuVDBsEoQ==",
+      "mode": 420,
+      "size": 73
+    },
+    "dist/changesets-changelog-git.cjs.js": {
+      "checkedAt": 1764662904184,
+      "integrity": "sha512-zw8fxromN3rHTn9Uptn0FedplvsaU4VF8QhRzD+uM0e1EzTzxOBfoo5wYut72dpsFSsHK6dAZBkl6Z2yZW6XQA==",
+      "mode": 420,
+      "size": 1054
+    },
+    "dist/changesets-changelog-git.esm.js": {
+      "checkedAt": 1764662904185,
+      "integrity": "sha512-n5Nx5cBVh6EzvM2RTdHCeSDlcdLkU+Y4CSNjEyjaJtKH2pDUQlWgM2xJdmnZYPDOgE1d/DWukIt/Gxc6TdinBw==",
+      "mode": 420,
+      "size": 976
+    },
+    "package.json": {
+      "checkedAt": 1764662904185,
+      "integrity": "sha512-XeaaeoYu8zSZ1vmN2wKNI+m9M5OECDIj1dRFTcQ52taP7eE08H7GBz2TnvflXRMAmljpWCBm9cjnclndihCuvw==",
+      "mode": 420,
+      "size": 812
+    },
+    "dist/changesets-changelog-git.cjs.d.mts.map": {
+      "checkedAt": 1764662904186,
+      "integrity": "sha512-cLR0tw1RlnK2DK8Kcaais8Fi3wRqFTeafzpIRj4Psgb+cBxt18rY6qSttV6I+bR+FJpAvVr/nDhAahNqeOwW1g==",
+      "mode": 420,
+      "size": 147
+    },
+    "dist/changesets-changelog-git.cjs.d.ts.map": {
+      "checkedAt": 1764662904187,
+      "integrity": "sha512-NjDLtKZOtQAXfjQD489f5kGJiw1Db6Q78NkSeqCgQ86u6J1aEKd4JUrL6QX7MXF1T4vE/q7Xw9xMuIq7GOW2iQ==",
+      "mode": 420,
+      "size": 146
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662904188,
+      "integrity": "sha512-Ginj2UUZnfbZuUEYTjRomJ5IXqXhRMrEEBGzKGDSxVd6d+ie9olBFlGoUszTq0IfCFyVRGm9qIzFq2by6yO+IA==",
+      "mode": 420,
+      "size": 4827
+    },
+    "dist/changesets-changelog-git.cjs.mjs": {
+      "checkedAt": 1764662904188,
+      "integrity": "sha512-OwtqOQw7aan13oWIN7PC/4sorUESGhwxXMwj/vCD3wStrjSNYUDkQUsvrFFqCftCIMYCp1gvL4vrZK2fAKnIhg==",
+      "mode": 420,
+      "size": 125
+    },
+    "dist/changesets-changelog-git.cjs.d.mts": {
+      "checkedAt": 1764662904189,
+      "integrity": "sha512-Levng6L2Fb2RxquiM6HpxbUZd88UiO9TUDW1eb4NdeVywlNz8GR2EwHetU7ygegQTdipN5ZyEnjYCD6o2BbEgA==",
+      "mode": 420,
+      "size": 186
+    },
+    "dist/changesets-changelog-git.cjs.d.ts": {
+      "checkedAt": 1764662904189,
+      "integrity": "sha512-gERr7Z4kZ3ZsxU3/Zkq7C1Tjp/DWAG1PDQC97MO7wCPafW/NHhg/gBYTTYToSh1Ymeb1R+8mKPAKBbcsaOrk0w==",
+      "mode": 420,
+      "size": 153
+    },
+    "dist/changesets-changelog-git.cjs.default.d.ts": {
+      "checkedAt": 1764662904190,
+      "integrity": "sha512-Va8Lacg73xbU7KbjjLh4RTwMTfU2mFbYFGAGtVMEpObQ/JYJXfRtBSEiGgqJiVcdHN41GaDap2Ckv8vAK42BOg==",
+      "mode": 420,
+      "size": 66
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662904190,
+      "integrity": "sha512-TvUemF5Hrg2KI0R9kdto9SxNoJM927V+ZnwJ/juZkRbDYm0mmkEw+77o2pjJ4VqSslrahe9UYAe+7rKENE4/9g==",
+      "mode": 420,
+      "size": 159
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662904192,
+      "integrity": "sha512-b7qQ41uWnuIqVZCTUfb41CkDrf76zZ54kVgphcO5cuC0bXzTAo+fgNrHziXNKyIb4c5XVl4S4ILbcwP6fIHvFA==",
+      "mode": 420,
+      "size": 1278
+    }
+  }
+}

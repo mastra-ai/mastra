@@ -1,0 +1,25 @@
+{
+  "name": "node-screenshots-darwin-universal",
+  "version": "0.2.1",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662911156,
+      "integrity": "sha512-sg72gWa41nuHkat+HwtnZv9igVCAKqONToBES/VZfuLY5OmUPRxOAzNpGZgqHKOuIFLEG9b9KHUVZWdyoYDk9A==",
+      "mode": 420,
+      "size": 281
+    },
+    "README.md": {
+      "checkedAt": 1764662911157,
+      "integrity": "sha512-4PEjDzkiZC53kVRbtmGFj06IvRnFBABXAix4gPFUd6DWffbZti6cxdnxnOPN8zjrA7PAv7qF/qIDBf63wzsuKQ==",
+      "mode": 420,
+      "size": 108
+    },
+    "node-screenshots.darwin-universal.node": {
+      "checkedAt": 1764662911159,
+      "integrity": "sha512-DzR/J9kFGBEDV7CVtu0p4c4X/+VHxvKYMItx9q8cnjH7Z+mvXs8DAKZLxmWvKuycrML5m1PvkaCFTGEZvehDeg==",
+      "mode": 420,
+      "size": 1244648
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@types/cookies",
+  "version": "0.9.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662907796,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662907796,
+      "integrity": "sha512-2XXegZSgSpOe4fs/DRq2+8GsIFjGt+mV5b69NsgSA/8l26HnPoLrcJgF7VnOZgLuSuCWDVTWwcaU3rBG1xFE6w==",
+      "mode": 420,
+      "size": 839
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662907797,
+      "integrity": "sha512-bHjxjhnt9CXL9weTbe0HrsEI2sOwnuAI2gqziiaOXyBA/fsUH/aDi4DcFEKeTr0TGEpDE7SwBycbRNL+S+rTjQ==",
+      "mode": 420,
+      "size": 6101
+    },
+    "package.json": {
+      "checkedAt": 1764662907799,
+      "integrity": "sha512-CuP0rx1BnL8QI80ESttYMGgsBVqjxT3iNbpSO1W9WuFGoTvvUKuGz1VyN2brH9t5ScXClgvvouyUQGtncJvU9g==",
+      "mode": 420,
+      "size": 1396
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "react-docgen-typescript",
+  "version": "2.4.0",
+  "description": "",
+  "homepage": "https://github.com/styleguidist/react-docgen-typescript/",
+  "bugs": "https://github.com/styleguidist/react-docgen-typescript/issues",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "precommit": "lint-staged",
+    "tsc": "tsc",
+    "tsc:watch": "tsc -w",
+    "prepublishOnly": "tsc -d",
+    "test": "tsc && mocha --timeout 10000 ./lib/**/__tests__/**.js",
+    "test:debug": "tsc && mocha --inspect ./lib/**/__tests__/**.js",
+    "print": "npm run tsc && node ./lib/print.js",
+    "print:sample1": "npm run tsc && node ./lib/print.js ./src/__tests__/data/ColumnHigherOrderComponent.tsx simple",
+    "lint": "eslint -c lint.json 'src/**/*.{ts,tsx}'",
+    "lint:fix": "npm run lint -- --fix",
+    "prettier:base": "prettier --parser typescript --single-quote --trailing-comma none",
+    "prettier:check": "npm run prettier:base -- -l \"src/**/*.{ts,tsx}\"",
+    "prettier:write": "npm run prettier:base -- --write \"src/**/*.{ts,tsx}\""
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "typescript": ">= 4.3.x"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.1.0",
+    "@types/lodash": "^4.14.137",
+    "@types/mocha": "^5.2.5",
+    "@types/node": "^15.6.1",
+    "@types/prop-types": "^15.5.4",
+    "@types/react": "^16.9.34",
+    "@types/source-map-support": "^0.4.1",
+    "chai": "^4.1.2",
+    "eslint": "^7.32.0",
+    "husky": "^0.14.3",
+    "install": "^0.13.0",
+    "lint-staged": "^16.1.0",
+    "lodash": "^4.17.15",
+    "mocha": "^11.5.0",
+    "prettier": "^1.19.1",
+    "prop-types": "^15.6.2",
+    "react": "^16.4.2",
+    "source-map-support": "^0.5.6",
+    "typescript": "^4.3.2"
+  },
+  "files": [
+    "lib",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/styleguidist/react-docgen-typescript.git"
+  }
+}

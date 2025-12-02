@@ -1,0 +1,31 @@
+{
+  "name": "@types/big.js",
+  "version": "6.2.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662922515,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662922515,
+      "integrity": "sha512-DA9rZPKSpTVrw2nIy3h7u1mteJSTJOb8h/ikdynVCYN7WdCLLuAjAj7GKh9DF5vY4bmRQX0X/nbU0OlNMw9vXg==",
+      "mode": 420,
+      "size": 523
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662922516,
+      "integrity": "sha512-bOWnPVOrToXXwS9ZREm+AdN7F47ggZSH6AZaLjO70HNYB98NOihIDbVX78Y149lHS8dal0yL8AWDaRwIn1hCKA==",
+      "mode": 420,
+      "size": 15912
+    },
+    "package.json": {
+      "checkedAt": 1764662922519,
+      "integrity": "sha512-YoE4rEPWpoQPcDP4uFyIZVvh+7+1TOWDy0mzi0YbzqluUaASOSTFj44IMDvaPa9TGEz2mSlhI2hZwyrarcwDFw==",
+      "mode": 420,
+      "size": 940
+    }
+  }
+}

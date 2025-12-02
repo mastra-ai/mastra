@@ -1,0 +1,49 @@
+{
+  "name": "@babel/preset-flow",
+  "version": "7.27.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662917719,
+      "integrity": "sha512-KYRMN3MVTuiy5XkFDHd5PnQmHaQnt3z16nsBDePxZ9YNmq7IFlslpBBlR3UI+zvlbEemzowOYeKil9a0ZkOYxQ==",
+      "mode": 420,
+      "size": 1106
+    },
+    "README.md": {
+      "checkedAt": 1764662917720,
+      "integrity": "sha512-L0uRnEf7O8NJF+nlMjKLG+0a8qTf2ft7PC0nQFc0SQntElIBfoC9BKpB1JsWZjRJ4R9L6XVDTmgDe002TuojFA==",
+      "mode": 420,
+      "size": 451
+    },
+    "lib/index.js": {
+      "checkedAt": 1764662917722,
+      "integrity": "sha512-BpY2sUMDvFsS6jk3/8M7y/MktdacMsKomhoLuOD73PwMXeEGaljKeQFNM3hTa/L3kQE/X55v/xg4LeN1OBCMdQ==",
+      "mode": 420,
+      "size": 1177
+    },
+    "lib/index.js.map": {
+      "checkedAt": 1764662917723,
+      "integrity": "sha512-Rx/rSVbh7rbabl4Vl4m/B/vR0QHZAmWHp19dT1trEvsNPVLe+g0rVgNqE/E6smLU1g5oaZK2q2K+yilENNeD9A==",
+      "mode": 420,
+      "size": 2597
+    },
+    "lib/normalize-options.js": {
+      "checkedAt": 1764662917723,
+      "integrity": "sha512-E8XzkLu0+XxurNRCuXWWs3LApgXgeMyaGrsAEUTmVIW9ulo4rWhbKDuiQ6tzFJ2f3YbHnpQXNfyB2bSTFtM7cw==",
+      "mode": 420,
+      "size": 614
+    },
+    "lib/normalize-options.js.map": {
+      "checkedAt": 1764662917725,
+      "integrity": "sha512-8WCKnoieA3+dGg6dmgzSl4VcwOBvKF4LrCqz+jW8UaLIe2pKK9TNCBYVbTPFFCOiMzLkFK7OC/43yglaYc1eTA==",
+      "mode": 420,
+      "size": 2005
+    },
+    "package.json": {
+      "checkedAt": 1764662917725,
+      "integrity": "sha512-XIMKzjMfwArRquFn9nRPVQks5F1TEVVO2xI7HNjpwbCnpiYa93+qkxYiImXWqsmA6cYG+Q4q8vE9iTwlWvsDGA==",
+      "mode": 420,
+      "size": 1126
+    }
+  }
+}

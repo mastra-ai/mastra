@@ -1,0 +1,21 @@
+"use strict";
+// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Models = void 0;
+const resource_1 = require("../resource.js");
+class Models extends resource_1.APIResource {
+    /**
+     * Reranks the provided documents, according to the provided query.
+     *
+     * The results will be sorted by descending order of relevance. For each document,
+     * the index and the score will be returned. The index is relative to the documents
+     * array that was passed in. The score is the query-document relevancy determined
+     * by the reranker model. The value will be returned in descending order to
+     * relevance.
+     */
+    rerank(body, options) {
+        return this._client.post('/models/rerank', { body, ...options });
+    }
+}
+exports.Models = Models;
+//# sourceMappingURL=models.js.map

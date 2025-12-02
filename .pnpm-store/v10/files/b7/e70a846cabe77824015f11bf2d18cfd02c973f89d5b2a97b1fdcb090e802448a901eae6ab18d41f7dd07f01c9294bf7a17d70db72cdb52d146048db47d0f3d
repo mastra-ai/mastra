@@ -1,0 +1,70 @@
+{
+	"name": "type-fest",
+	"version": "5.2.0",
+	"description": "A collection of essential TypeScript types",
+	"license": "(MIT OR CC0-1.0)",
+	"repository": "sindresorhus/type-fest",
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./index.d.ts"
+		},
+		"./globals": {
+			"types": "./source/globals/index.d.ts"
+		}
+	},
+	"types": "./index.d.ts",
+	"sideEffects": false,
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"test:tsc": "tsc",
+		"test:tsd": "tsd",
+		"test:xo": "xo",
+		"test:linter": "node --test",
+		"test": "run-p test:*"
+	},
+	"files": [
+		"index.d.ts",
+		"source",
+		"license-mit",
+		"license-cc0"
+	],
+	"keywords": [
+		"typescript",
+		"ts",
+		"types",
+		"utility",
+		"util",
+		"utilities",
+		"omit",
+		"merge",
+		"json",
+		"generics"
+	],
+	"dependencies": {
+		"tagged-tag": "^1.0.0"
+	},
+	"devDependencies": {
+		"@sindresorhus/tsconfig": "^8.0.1",
+		"@typescript-eslint/parser": "^8.44.0",
+		"eslint": "^9.35.0",
+		"expect-type": "^1.2.2",
+		"npm-run-all2": "^8.0.4",
+		"tsd": "^0.33.0",
+		"typescript": "^5.9.2",
+		"xo": "^1.2.2"
+	},
+	"tsd": {
+		"compilerOptions": {
+			"noUnusedLocals": false
+		}
+	}
+}

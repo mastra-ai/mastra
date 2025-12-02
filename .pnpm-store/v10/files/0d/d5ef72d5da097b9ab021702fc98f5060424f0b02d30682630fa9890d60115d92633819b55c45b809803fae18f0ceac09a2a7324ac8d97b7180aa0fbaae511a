@@ -1,0 +1,758 @@
+# standalone assignment expression
+
+x = 3;
+
+==>
+
+Program(
+  ExpressionStatement(AssignmentExpression(
+    Identifier,
+    AssignOp,
+    IntegerLiteral)))
+
+
+# standalone binary expression
+
+a > b;
+a < b;
+a == b;
+a >= b;
+a <= b;
+a != b;
+a && b;
+a || b;
+a & b;
+a | b;
+a ^ b;
+a % b;
+a << b;
+a >> b;
+a >>> b;
+3 + 2;
+3 - 2;
+3 * 2;
+9 / 3;
+
+==>
+
+Program(
+  ExpressionStatement(BinaryExpression(Identifier, CompareOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, CompareOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, CompareOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, CompareOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, CompareOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, CompareOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, LogicOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, LogicOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, BitOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, BitOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, BitOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, ArithOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, BitOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, BitOp, Identifier)),
+  ExpressionStatement(BinaryExpression(Identifier, BitOp, Identifier)),
+  ExpressionStatement(BinaryExpression(IntegerLiteral, ArithOp, IntegerLiteral)),
+  ExpressionStatement(BinaryExpression(IntegerLiteral, ArithOp, IntegerLiteral)),
+  ExpressionStatement(BinaryExpression(IntegerLiteral, ArithOp, IntegerLiteral)),
+  ExpressionStatement(BinaryExpression(IntegerLiteral, ArithOp, IntegerLiteral)))
+
+
+# instanceof expressions
+
+a instanceof C.D;
+a instanceof List<B>;
+c instanceof C[];
+
+==>
+
+Program(
+  ExpressionStatement(InstanceofExpression(
+    Identifier,
+    instanceof,
+    ScopedTypeName(TypeName, TypeName))),
+  ExpressionStatement(InstanceofExpression(
+    Identifier,
+    instanceof,
+    GenericType(TypeName, TypeArguments(TypeName)))),
+  ExpressionStatement(InstanceofExpression(
+    Identifier,
+    instanceof,
+    ArrayType(TypeName, Dimension))))
+
+
+# if statements
+
+if (x)
+  y;
+
+==>
+
+Program(
+  IfStatement(if,
+    ParenthesizedExpression(Identifier),
+    ExpressionStatement(Identifier)))
+
+
+# if statements with braces
+
+if (x) {
+  y;
+}
+
+==>
+
+Program(
+  IfStatement(if,
+    ParenthesizedExpression(Identifier),
+    Block(ExpressionStatement(Identifier))))
+
+
+# if statements with assignment without braces
+
+if (x = 3)
+  y = 2;
+
+==>
+
+Program(
+  IfStatement(if,
+    ParenthesizedExpression(
+      AssignmentExpression(
+        Identifier,
+        AssignOp,
+        IntegerLiteral)),
+    ExpressionStatement(
+      AssignmentExpression(
+        Identifier,
+        AssignOp,
+        IntegerLiteral))))
+
+
+# if then else statement
+
+if (x = 3) {
+  y = 9;
+} else {
+  y = 0;
+}
+
+==>
+
+Program(
+  IfStatement(if,
+    ParenthesizedExpression(
+      AssignmentExpression(
+        Identifier,
+        AssignOp,
+        IntegerLiteral)),
+    Block(
+      ExpressionStatement(AssignmentExpression(
+        Identifier,
+        AssignOp,
+        IntegerLiteral))),
+    else,
+    Block(
+      ExpressionStatement(AssignmentExpression(
+        Identifier,
+        AssignOp,
+        IntegerLiteral)))))
+
+
+# nested if then else statements
+
+if (a)
+  if (b)
+    c();
+  else
+    d();
+
+==>
+
+Program(
+  IfStatement(if,
+    ParenthesizedExpression(Identifier),
+    IfStatement(if,
+      ParenthesizedExpression(Identifier),
+      ExpressionStatement(MethodInvocation(MethodName(Identifier), ArgumentList)),
+      else,
+      ExpressionStatement(MethodInvocation(MethodName(Identifier), ArgumentList)))))
+
+
+# ternary expressions
+
+max = (a > b) ? a : b;
+
+==>
+
+Program(
+  ExpressionStatement(AssignmentExpression(
+    Identifier,
+    AssignOp,
+    TernaryExpression(
+      ParenthesizedExpression(BinaryExpression(
+        Identifier,
+        CompareOp,
+        Identifier)),
+      LogicOp,
+      Identifier,
+      Identifier))))
+
+
+# for statement
+
+for(int i = 1; i < 11; i++) {
+  System.out.println("Count is: " + i);
+}
+
+for (j.init(i); j.check(); j.update()) {
+  System.out.println(j);
+}
+
+==>
+
+Program(
+  ForStatement(for, ForSpec(
+    LocalVariableDeclaration(
+      PrimitiveType,
+      VariableDeclarator(
+        Definition,
+        AssignOp,
+        IntegerLiteral)),
+    BinaryExpression(
+      Identifier,
+      CompareOp,
+      IntegerLiteral),
+    UpdateExpression(Identifier, UpdateOp,)),
+    Block(
+      ExpressionStatement(MethodInvocation(
+        FieldAccess(
+          Identifier,
+          Identifier),
+        MethodName(Identifier),
+        ArgumentList(BinaryExpression(
+          StringLiteral,
+          ArithOp,
+          Identifier)))))),
+  ForStatement(for, ForSpec(
+    MethodInvocation(
+      Identifier,
+      MethodName(Identifier),
+      ArgumentList(Identifier)),
+    MethodInvocation(
+      Identifier,
+      MethodName(Identifier),
+      ArgumentList),
+    MethodInvocation(
+      Identifier,
+      MethodName(Identifier),
+      ArgumentList)),
+    Block(
+      ExpressionStatement(MethodInvocation(
+        FieldAccess(
+          Identifier,
+          Identifier),
+        MethodName(Identifier),
+        ArgumentList(Identifier))))))
+
+
+# Enhanced for statements
+
+for (A b : c) {
+  d(b);
+}
+
+==>
+
+Program(
+  EnhancedForStatement(for, ForSpec(
+    TypeName,
+    Definition,
+    Identifier),
+    Block(
+      ExpressionStatement(MethodInvocation(
+        MethodName(Identifier),
+        ArgumentList(Identifier))))))
+
+
+# while statement
+
+class WhileDemo {
+    public static void main(String[] args){
+        int count = 1;
+        while (count < 11) {
+            System.out.println("Count is: " + count);
+            count++;
+        }
+    }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        Modifiers(public, static),
+        void,
+        Definition,
+        FormalParameters(
+          FormalParameter(
+            ArrayType(
+              TypeName,
+              Dimension),
+            Definition)),
+        Block(
+          LocalVariableDeclaration(
+            PrimitiveType,
+            VariableDeclarator(
+              Definition,
+              AssignOp,
+              IntegerLiteral)),
+          WhileStatement(while,
+            ParenthesizedExpression(
+              BinaryExpression(
+                Identifier,
+                CompareOp,
+                IntegerLiteral)),
+            Block(
+              ExpressionStatement(MethodInvocation(
+                FieldAccess(
+                  Identifier,
+                  Identifier),
+                MethodName(Identifier),
+                ArgumentList(
+                  BinaryExpression(StringLiteral, ArithOp, Identifier)))),
+              ExpressionStatement(UpdateExpression(Identifier, UpdateOp)))))))))
+
+
+# try-with-resources statements
+
+try (FileInputStream input = new FileInputStream("file.txt")) {
+  int data = input.read();
+}
+
+==>
+
+Program(
+  TryWithResourcesStatement(try,
+    ResourceSpecification(
+      Resource(
+        TypeName,
+        Definition,
+        AssignOp,
+        ObjectCreationExpression(new,
+          TypeName,
+          ArgumentList(StringLiteral)))),
+    Block(
+      LocalVariableDeclaration(
+        PrimitiveType,
+        VariableDeclarator(
+          Definition,
+          AssignOp,
+          MethodInvocation(
+            Identifier,
+            MethodName(Identifier),
+            ArgumentList))))))
+
+
+# return statement
+
+return x;
+return x * y;
+return x + 2;
+return fire(x);
+
+==>
+
+Program(
+  ReturnStatement(return,Identifier),
+  ReturnStatement(return,BinaryExpression(Identifier, ArithOp, Identifier)),
+  ReturnStatement(return,BinaryExpression(Identifier, ArithOp, IntegerLiteral)),
+  ReturnStatement(return,MethodInvocation(MethodName(Identifier), ArgumentList(Identifier))))
+
+
+# annotation
+
+@SuppressWarnings(value = "unchecked")
+@GwtCompatible(emulated = true)
+class Duck {
+
+}
+
+==>
+
+Program(
+  ClassDeclaration(
+    Modifiers(
+      Annotation(
+        Identifier,
+        AnnotationArgumentList(
+          ElementValuePair(
+            Identifier,
+            AssignOp,
+            StringLiteral))),
+      Annotation(
+        Identifier,
+        AnnotationArgumentList(
+          ElementValuePair(
+            Identifier,
+            AssignOp,
+            BooleanLiteral)))),
+    class,
+    Definition,
+    ClassBody))
+
+
+# marker annotation
+
+@Override
+class Quack {
+  @bar
+  public void foo() {
+
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(
+    Modifiers(MarkerAnnotation(Identifier)),
+    class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        Modifiers(MarkerAnnotation(Identifier), public),
+        void,
+        Definition,
+        FormalParameters,
+        Block))))
+
+
+# single element annotation
+
+@Duck(waddle.swim)
+@SuppressWarnings("unchecked")
+class Quack {
+
+}
+
+==>
+
+Program(
+  ClassDeclaration(
+    Modifiers(
+      Annotation(Identifier, AnnotationArgumentList(FieldAccess(Identifier, Identifier))),
+      Annotation(Identifier, AnnotationArgumentList(StringLiteral))),
+    class,
+    Definition,
+    ClassBody))
+
+
+# lambda expression
+
+class LambdaTest {
+  void singleton() {
+    version -> create;
+    (a, b) -> a + b;
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        void,
+        Definition,
+        FormalParameters,
+        Block(
+          ExpressionStatement(LambdaExpression(
+            Definition,
+            Identifier)),
+          ExpressionStatement(LambdaExpression(
+            InferredParameters(Definition, Definition),
+            BinaryExpression(Identifier, ArithOp, Identifier))))))))
+
+
+# switch statement
+
+public class SwitchDemo {
+  public static void main(String[] args) {
+    int destinysChild = 2;
+    String destinysChildString;
+    switch (destinysChild) {
+        case 1:  destinysChildString = "Beyonce";
+                 break;
+        case 2:  destinysChildString = "Kelly";
+                 break;
+        case 3:  destinysChildString = "Michelle";
+                 break;
+        default: destinysChildString = "Invalid";
+                 break;
+    }
+    System.out.println(destinysChildString);
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(
+    Modifiers(public),
+    class,
+    Definition,
+    ClassBody(
+      MethodDeclaration(
+        Modifiers(public, static),
+        void,
+        Definition,
+        FormalParameters(
+          FormalParameter(
+            ArrayType(
+              TypeName,
+              Dimension),
+            Definition)),
+        Block(
+          LocalVariableDeclaration(
+            PrimitiveType,
+            VariableDeclarator(
+              Definition,
+              AssignOp,
+              IntegerLiteral)),
+          LocalVariableDeclaration(
+            TypeName,
+            VariableDeclarator(Definition)),
+          SwitchStatement(switch,
+            ParenthesizedExpression(Identifier),
+            SwitchBlock(
+              SwitchLabel(case,IntegerLiteral),
+              ExpressionStatement(AssignmentExpression(
+                Identifier,
+                AssignOp,
+                StringLiteral)),
+              BreakStatement(break),
+              SwitchLabel(case,IntegerLiteral),
+              ExpressionStatement(AssignmentExpression(
+                Identifier,
+                AssignOp,
+                StringLiteral)),
+              BreakStatement(break),
+              SwitchLabel(case,IntegerLiteral),
+              ExpressionStatement(AssignmentExpression(
+                Identifier,
+                AssignOp,
+                StringLiteral)),
+              BreakStatement(break),
+              SwitchLabel(default),
+              ExpressionStatement(AssignmentExpression(
+                Identifier,
+                AssignOp,
+                StringLiteral)),
+              BreakStatement(break))),
+          ExpressionStatement(MethodInvocation(
+            FieldAccess(
+              Identifier,
+              Identifier),
+            MethodName(Identifier),
+            ArgumentList(Identifier))))))))
+
+
+# type arguments
+
+class Box <T> {
+  private T theObject;
+  public Box( T arg) { theObject = arg; }
+  // more code
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+      TypeParameters(
+        TypeParameter(
+          Definition)),
+    ClassBody(
+      FieldDeclaration(
+        Modifiers(private),
+          TypeName,
+          VariableDeclarator(Definition)),
+      ConstructorDeclaration(
+        Modifiers(public),
+        Definition,
+        FormalParameters(
+          FormalParameter(
+            TypeName,
+            Definition)),
+        ConstructorBody(
+          ExpressionStatement(AssignmentExpression(
+            Identifier, AssignOp, Identifier)))),
+      LineComment)))
+
+
+# wildcard
+
+class WildcardDemo {
+  List<? extends B> a;
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+      ClassBody(
+        FieldDeclaration(
+          GenericType(
+            TypeName,
+            TypeArguments(
+              Wildcard(extends, TypeName))),
+          VariableDeclarator(Definition)))))
+
+
+# type arguments with generic types
+
+class someClass <T> {
+  public List<T> someMethod() {
+     List< T > list = Collections.< T >emptyList();
+     return list;
+  }
+  public static <S> void anotherMethod(S arg) {
+     List< S > list = Collections.< S >emptyList();
+  }
+}
+
+==>
+
+Program(
+  ClassDeclaration(class,
+    Definition,
+    TypeParameters(
+      TypeParameter(
+        Definition)),
+      ClassBody(
+        MethodDeclaration(
+          Modifiers(public),
+            GenericType(
+              TypeName,
+              TypeArguments(TypeName)),
+            Definition,
+            FormalParameters,
+            Block(
+              LocalVariableDeclaration(
+                GenericType(
+                  TypeName,
+                  TypeArguments(TypeName)),
+                VariableDeclarator(
+                  Definition,
+                  AssignOp,
+                  MethodInvocation(
+                    Identifier,
+                    TypeArguments(TypeName),
+                    MethodName(Identifier),
+                    ArgumentList))),
+              ReturnStatement(return,Identifier))),
+        MethodDeclaration(
+          Modifiers(public, static),
+          TypeParameters(
+            TypeParameter(
+              Definition)),
+          void,
+            Definition,
+            FormalParameters(
+              FormalParameter(
+                TypeName,
+                Definition)),
+            Block(
+              LocalVariableDeclaration(
+                GenericType(
+                  TypeName,
+                  TypeArguments(TypeName)),
+                VariableDeclarator(
+                  Definition,
+                  AssignOp,
+                  MethodInvocation(
+                    Identifier,
+                    TypeArguments(TypeName),
+                    MethodName(Identifier),
+                    ArgumentList))))))))
+
+
+# empty type arguments
+
+Box<Integer> integerBox = new Box<>();
+
+==>
+
+Program(
+  LocalVariableDeclaration(
+    GenericType(TypeName, TypeArguments(TypeName)),
+    VariableDeclarator(
+      Definition,
+      AssignOp,
+      ObjectCreationExpression(new,
+        GenericType(TypeName, TypeArguments),
+        ArgumentList))))
+
+
+# method references
+
+action = bar::method;
+foo.bar::method;
+String[]::new;
+Foo<T>::apply;
+super::something;
+
+==>
+
+Program(
+  ExpressionStatement(AssignmentExpression(Identifier, AssignOp, MethodReference(Identifier, Identifier))),
+  ExpressionStatement(MethodReference(FieldAccess(Identifier, Identifier), Identifier)),
+  ExpressionStatement(MethodReference(ArrayType(TypeName, Dimension), new)),
+  ExpressionStatement(MethodReference(GenericType(TypeName, TypeArguments(TypeName)), Identifier)),
+  ExpressionStatement(MethodReference(super, Identifier)))
+
+# text block
+
+x = """
+    hello
+    multi-""-line
+    foo""";
+
+==>
+
+Program(ExpressionStatement(AssignmentExpression(Identifier,AssignOp,TextBlock)))
+
+# precedence
+
+x = 1 < 2 || a & b ^ c * 2 && 1 + d | e;
+
+==>
+
+Program(ExpressionStatement(AssignmentExpression(Identifier,AssignOp,
+  BinaryExpression(
+    BinaryExpression(IntegerLiteral,CompareOp,IntegerLiteral),
+    LogicOp,
+    BinaryExpression(
+      BinaryExpression(
+        BinaryExpression(Identifier,BitOp,Identifier),
+        BitOp,
+        BinaryExpression(Identifier,ArithOp,IntegerLiteral)),
+      LogicOp,
+      BinaryExpression(
+        BinaryExpression(IntegerLiteral,ArithOp,Identifier),
+        BitOp,
+        Identifier))))))
+
+# Unicode identifiers
+
+Amélie + 橘子;
+
+==>
+
+Program(ExpressionStatement(BinaryExpression(Identifier,ArithOp,Identifier)))

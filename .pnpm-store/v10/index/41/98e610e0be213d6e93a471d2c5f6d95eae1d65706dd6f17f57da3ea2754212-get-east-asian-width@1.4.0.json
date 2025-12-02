@@ -1,0 +1,43 @@
+{
+  "name": "get-east-asian-width",
+  "version": "1.4.0",
+  "requiresBuild": false,
+  "files": {
+    "license": {
+      "checkedAt": 1764662905183,
+      "integrity": "sha512-0fM2/ycrxrltyaBKfQ748Ck23VlPUUBgNAR47ldf4B1V/HoXTfWBSk+vcshGKwEpmOynu4mOP5o+hyBfuRNa8g==",
+      "mode": 420,
+      "size": 1117
+    },
+    "index.js": {
+      "checkedAt": 1764662905184,
+      "integrity": "sha512-WIsxOD2aRm6+OixJfhFB0q3mOGt3G5nlerJPr/Nr7v7eRaxzbJExy8FWiWxsUjwofXgBjHvk52gW055M6zfU+A==",
+      "mode": 420,
+      "size": 730
+    },
+    "lookup.js": {
+      "checkedAt": 1764662905184,
+      "integrity": "sha512-VG8Bhlx1mMsqo92AXX4u6kNkQfcZFoXVnQ/eTvJrab2QkboeBwf3rji0Jx6cDi9iiD9kvuPILxiqWdN9GWfXLg==",
+      "mode": 420,
+      "size": 9096
+    },
+    "package.json": {
+      "checkedAt": 1764662905185,
+      "integrity": "sha512-YSQpI9fSQJCSm0LQsXaQOwF+vPKl25NKOGPHY4t2k3dPwtrguhlLjad8YbzI8dOlljdr+7vGSJVR/WxJuK+2sg==",
+      "mode": 420,
+      "size": 1267
+    },
+    "readme.md": {
+      "checkedAt": 1764662905186,
+      "integrity": "sha512-XLGC3+hlvz1RcCcf9f9GrUzKi27QOCNNMfHoqUhNO2lcwiY09K02dB65FcT03Smot4EtzmoTfAziv856LALZRw==",
+      "mode": 420,
+      "size": 1867
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662905187,
+      "integrity": "sha512-ssnBpwCb6B81Jbk5Xwl2qBC7pR/gbvuOQoO85i2h4SV6ckJTa3BP29CX8/dsZnw//uM1g0P95VDUshbfSjMCQQ==",
+      "mode": 420,
+      "size": 1542
+    }
+  }
+}

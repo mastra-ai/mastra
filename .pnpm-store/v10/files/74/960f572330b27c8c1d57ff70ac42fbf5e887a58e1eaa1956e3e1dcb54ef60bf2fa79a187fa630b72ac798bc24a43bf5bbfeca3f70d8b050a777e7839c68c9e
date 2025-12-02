@@ -1,0 +1,137 @@
+imports:
+  root: ../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    create:
+      path: /v1/voices/pvc
+      method: POST
+      auth: false
+      docs: Creates a new PVC voice with metadata but no samples
+      source:
+        openapi: openapi.json
+      display-name: Create PVC voice
+      request:
+        name: CreatePvcVoiceRequest
+        body:
+          properties:
+            name:
+              type: string
+              docs: >-
+                The name that identifies this voice. This will be displayed in
+                the dropdown of the website.
+              validation:
+                maxLength: 100
+            language:
+              type: string
+              docs: Language used in the samples.
+            description:
+              type: optional<string>
+              docs: Description to use for the created voice.
+              validation:
+                maxLength: 500
+            labels:
+              type: optional<map<string, optional<string>>>
+              docs: Serialized labels dictionary for the voice.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddVoiceResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - request:
+            name: John Smith
+            language: en
+          response:
+            body:
+              voice_id: b38kUX8pkfYO2kHyqfFy
+    update:
+      path: /v1/voices/pvc/{voice_id}
+      method: POST
+      auth: false
+      docs: Edit PVC voice metadata
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+      display-name: Edit Pvc Voice
+      request:
+        name: BodyEditPvcVoiceV1VoicesPvcVoiceIdPost
+        body:
+          properties:
+            name:
+              type: optional<string>
+              docs: >-
+                The name that identifies this voice. This will be displayed in
+                the dropdown of the website.
+              validation:
+                maxLength: 100
+            language:
+              type: optional<string>
+              docs: Language used in the samples.
+            description:
+              type: optional<string>
+              docs: Description to use for the created voice.
+              validation:
+                maxLength: 500
+            labels:
+              type: optional<map<string, optional<string>>>
+              docs: Serialized labels dictionary for the voice.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AddVoiceResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          request: {}
+          response:
+            body:
+              voice_id: b38kUX8pkfYO2kHyqfFy
+    train:
+      path: /v1/voices/pvc/{voice_id}/train
+      method: POST
+      auth: false
+      docs: Start PVC training process for a voice.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        voice_id:
+          type: string
+          docs: >-
+            Voice ID to be used, you can use https://api.elevenlabs.io/v1/voices
+            to list all the available voices.
+      display-name: Run Pvc Training
+      request:
+        name: BodyRunPvcTrainingV1VoicesPvcVoiceIdTrainPost
+        body:
+          properties:
+            model_id:
+              type: optional<string>
+              docs: The model ID to use for the conversion.
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.StartPvcVoiceTrainingResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            voice_id: 21m00Tcm4TlvDq8ikWAM
+          request: {}
+          response:
+            body:
+              status: ok
+  source:
+    openapi: openapi.json

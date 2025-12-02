@@ -1,0 +1,64 @@
+import type { AppendMessage, Unsubscribe } from "../../types";
+import { ExportedMessageRepository, MessageRepository } from "../utils/MessageRepository";
+import { DefaultThreadComposerRuntimeCore } from "../composer/DefaultThreadComposerRuntimeCore";
+import { AddToolResultOptions, ThreadSuggestion, SubmitFeedbackOptions, ThreadRuntimeCore, SpeechState, RuntimeCapabilities, SubmittedFeedback, ThreadRuntimeEventType, StartRunConfig, ResumeRunConfig } from "../core/ThreadRuntimeCore";
+import { DefaultEditComposerRuntimeCore } from "../composer/DefaultEditComposerRuntimeCore";
+import { SpeechSynthesisAdapter } from "../adapters/speech/SpeechAdapterTypes";
+import { FeedbackAdapter } from "../adapters/feedback/FeedbackAdapter";
+import { AttachmentAdapter } from "../adapters/attachment";
+import { ModelContextProvider } from "../../model-context";
+import { ThreadMessageLike } from "../external-store";
+type BaseThreadAdapters = {
+    speech?: SpeechSynthesisAdapter | undefined;
+    feedback?: FeedbackAdapter | undefined;
+    attachments?: AttachmentAdapter | undefined;
+};
+export declare abstract class BaseThreadRuntimeCore implements ThreadRuntimeCore {
+    private readonly _contextProvider;
+    private _subscriptions;
+    private _isInitialized;
+    protected readonly repository: MessageRepository;
+    abstract get adapters(): BaseThreadAdapters | undefined;
+    abstract get isDisabled(): boolean;
+    abstract get isLoading(): boolean;
+    abstract get suggestions(): readonly ThreadSuggestion[];
+    abstract get extras(): unknown;
+    abstract get capabilities(): RuntimeCapabilities;
+    abstract append(message: AppendMessage): void;
+    abstract startRun(config: StartRunConfig): void;
+    abstract resumeRun(config: ResumeRunConfig): void;
+    abstract addToolResult(options: AddToolResultOptions): void;
+    abstract cancelRun(): void;
+    get messages(): readonly import("../..").ThreadMessage[];
+    get state(): string | number | boolean | import("assistant-stream/utils").ReadonlyJSONObject | import("assistant-stream/utils").ReadonlyJSONArray | null;
+    readonly composer: DefaultThreadComposerRuntimeCore;
+    constructor(_contextProvider: ModelContextProvider);
+    getModelContext(): import("../..").AssistantConfig;
+    private _editComposers;
+    getEditComposer(messageId: string): DefaultEditComposerRuntimeCore | undefined;
+    beginEdit(messageId: string): void;
+    getMessageById(messageId: string): {
+        parentId: string | null;
+        message: import("../..").ThreadMessage;
+    };
+    getBranches(messageId: string): string[];
+    switchToBranch(branchId: string): void;
+    protected _notifySubscribers(): void;
+    _notifyEventSubscribers(event: ThreadRuntimeEventType): void;
+    subscribe(callback: () => void): Unsubscribe;
+    private _submittedFeedback;
+    getSubmittedFeedback(messageId: string): SubmittedFeedback | undefined;
+    submitFeedback({ messageId, type }: SubmitFeedbackOptions): void;
+    private _stopSpeaking;
+    speech: SpeechState | undefined;
+    speak(messageId: string): void;
+    stopSpeaking(): void;
+    protected ensureInitialized(): void;
+    export(): ExportedMessageRepository;
+    import(data: ExportedMessageRepository): void;
+    reset(initialMessages?: readonly ThreadMessageLike[]): void;
+    private _eventSubscribers;
+    unstable_on(event: ThreadRuntimeEventType, callback: () => void): Unsubscribe;
+}
+export {};
+//# sourceMappingURL=BaseThreadRuntimeCore.d.ts.map

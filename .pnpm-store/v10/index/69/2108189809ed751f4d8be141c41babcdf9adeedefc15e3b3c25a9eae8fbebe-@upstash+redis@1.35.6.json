@@ -1,0 +1,115 @@
+{
+  "name": "@upstash/redis",
+  "version": "v1.35.6",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662930316,
+      "integrity": "sha512-ncce8+8NiM9BBGpNWYuQuCK/4+FQnO83+5qmveC3SNCevDf40/KtNRb1mwcqbbNUty+zdGUXwD5aMCQ60QVvmQ==",
+      "mode": 420,
+      "size": 1079
+    },
+    "cloudflare.js": {
+      "checkedAt": 1764662930317,
+      "integrity": "sha512-X8jqOMZevaDCTN0DA9mVAQfO1G2mgvWI5o7Vy0qOASeWfYPsTNFfY/lcLianHG5h7vmT3LbY7abnstA4buy2Vg==",
+      "mode": 420,
+      "size": 135811
+    },
+    "fastly.js": {
+      "checkedAt": 1764662930323,
+      "integrity": "sha512-9Xekr5no9hRr1dzEpkgli0nHMIMDkFg3z4MDwGSw5gzWiabdc8/HtqiV0B8sL5Mn3XZfzgq5fcxp0yD7IMyxiA==",
+      "mode": 420,
+      "size": 134750
+    },
+    "nodejs.js": {
+      "checkedAt": 1764662930326,
+      "integrity": "sha512-T3l51/M+8O1cw1oE7pmjrQ+kSsxi3vDQpvWdd5FZXxkgJ8w9TwjJ2iBPNb2TF9mMQ5fRHQsBqNjF/JM0AFOx9Q==",
+      "mode": 420,
+      "size": 137163
+    },
+    "package.json": {
+      "checkedAt": 1764662930328,
+      "integrity": "sha512-EMmWHZA7moGYvv3oucu4ZMS33JiScWXUzrcYP24LSHuoAexxSRBS+dvchDlC7vjZj4mNc7wFrUehoQxLKDftfA==",
+      "mode": 420,
+      "size": 1965
+    },
+    "README.md": {
+      "checkedAt": 1764662930330,
+      "integrity": "sha512-9w6L2NIvOwN65ryfIJm2FjNVHCmmY2L91N1m82BVV2XMpg4PhdfkeY4nCgyUbkVmKkdw1JOIlixaPi0dP0PvWg==",
+      "mode": 420,
+      "size": 3259
+    },
+    "chunk-TAJI6TAE.mjs": {
+      "checkedAt": 1764662930331,
+      "integrity": "sha512-d4bAQ97nXlP2+oyAO9QWkgWRJO31ZjX4d8bpdf8+kVa943ZoEPjrhHkOuokffM3HPE8BR1k7aLfe0x2qdphYwA==",
+      "mode": 420,
+      "size": 132084
+    },
+    "cloudflare.mjs": {
+      "checkedAt": 1764662930332,
+      "integrity": "sha512-Z/paoZ7sRhSieo6C3MXARVfle4ixM+/H+TsctVdNpQ1UwjvHnkBjPI5DAJFHrV20YIOPqqgTaYxE7nySBmBZHA==",
+      "mode": 420,
+      "size": 2962
+    },
+    "fastly.mjs": {
+      "checkedAt": 1764662930333,
+      "integrity": "sha512-GLJ+yZ5Wz4aKKqlM6TGbF7698VG6l+Ct9SNaWiufuWZpkFcaXuG/OoVMBOxm5uzvo2Nj2tbwK7jc6nppNB/S3Q==",
+      "mode": 420,
+      "size": 1917
+    },
+    "nodejs.mjs": {
+      "checkedAt": 1764662930333,
+      "integrity": "sha512-wZefhL19G0UEq+lVVFGi0SArGOPNeHiDfsEjaX2UwhqYWqSNPKNO2jViytuLyo1ywGb/ZLT+N1xdrJSEVv+NWQ==",
+      "mode": 420,
+      "size": 4330
+    },
+    "cloudflare.d.mts": {
+      "checkedAt": 1764662930334,
+      "integrity": "sha512-QAl2YjZrCdHv1PuyBknjoL66j/gJGjT6hpT2Q2pReeC6tIKa6B8bL7pTGxwqpPibyt52ko13CdMneUB1W2jAkA==",
+      "mode": 420,
+      "size": 5579
+    },
+    "fastly.d.mts": {
+      "checkedAt": 1764662930336,
+      "integrity": "sha512-PDUjR9h9XtoJfUmfuqeX032ZGaZrMWUSp2rhwpjXwwhj54GZe2MXG7memIOCaQyoUTI3RZmn6iXidaEKBJmAXQ==",
+      "mode": 420,
+      "size": 5324
+    },
+    "nodejs.d.mts": {
+      "checkedAt": 1764662930337,
+      "integrity": "sha512-E7RqbFg2wTK5kvFM4rfs0engb8Jo/p6DX8rh1m/ad0aYf3ecdxMo3dfWiKwHRWh9ltNxUXw6hFiefq2nx9JcRw==",
+      "mode": 420,
+      "size": 6497
+    },
+    "zmscore-Cq_Bzgy4.d.mts": {
+      "checkedAt": 1764662930339,
+      "integrity": "sha512-+t5yX8nNf8dRzVjNXHMtnt6bbIpAp7ds2ottBOjdnJfpbUvAZ9FUHyb2BG2hPkuxLl1boDZkd03PENLwYZ0VdQ==",
+      "mode": 420,
+      "size": 144771
+    },
+    "cloudflare.d.ts": {
+      "checkedAt": 1764662930340,
+      "integrity": "sha512-CKO+VWRzoxktiLfVMGyVZMXxyn5covl+58KO/AwuJECSWqbpk7OV2NCeQ4W/ZwGGvDL+Vg465yNuDLcV0PIPUQ==",
+      "mode": 420,
+      "size": 5577
+    },
+    "fastly.d.ts": {
+      "checkedAt": 1764662930340,
+      "integrity": "sha512-hvKx8zOGsUE2eKm2D+FTIDWPXtv2scis0rU02UiaIc2CzlZoSc00FQmQ1httsDyKPg8gLOVGYiFgLTP+jJXhOQ==",
+      "mode": 420,
+      "size": 5322
+    },
+    "nodejs.d.ts": {
+      "checkedAt": 1764662930341,
+      "integrity": "sha512-HzCTxdtWtKN3i4uzSBDiyFK1l5UTrGOt6wBRwXaHa1CKYCQ6pm8Ps2VeoVxFvsA5aodZRvOtveYngsZP4XDcOQ==",
+      "mode": 420,
+      "size": 6495
+    },
+    "zmscore-Cq_Bzgy4.d.ts": {
+      "checkedAt": 1764662930339,
+      "integrity": "sha512-+t5yX8nNf8dRzVjNXHMtnt6bbIpAp7ds2ottBOjdnJfpbUvAZ9FUHyb2BG2hPkuxLl1boDZkd03PENLwYZ0VdQ==",
+      "mode": 420,
+      "size": 144771
+    }
+  }
+}

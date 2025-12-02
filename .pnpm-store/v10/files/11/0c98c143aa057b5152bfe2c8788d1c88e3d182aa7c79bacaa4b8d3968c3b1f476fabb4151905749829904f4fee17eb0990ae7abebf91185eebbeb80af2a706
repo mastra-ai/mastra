@@ -1,0 +1,134 @@
+imports:
+  root: ../__package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    simulate_conversation:
+      path: /v1/convai/agents/{agent_id}/simulate-conversation
+      method: POST
+      auth: false
+      docs: Run a conversation between the agent and a simulated user.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        agent_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Simulates A Conversation
+      request:
+        name: >-
+          BodySimulatesAConversationV1ConvaiAgentsAgentIdSimulateConversationPost
+        body:
+          properties:
+            simulation_specification:
+              type: root.ConversationSimulationSpecification
+              docs: >-
+                A specification detailing how the conversation should be
+                simulated
+            extra_evaluation_criteria:
+              type: optional<list<root.PromptEvaluationCriteria>>
+              docs: A list of evaluation criteria to test
+        content-type: application/json
+      response:
+        docs: Successful Response
+        type: root.AgentSimulatedChatTestResponseModel
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            agent_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            simulation_specification:
+              simulated_user_config:
+                first_message: Hello, how can I help you today?
+                language: en
+          response:
+            body:
+              simulated_conversation:
+                - role: user
+                  message: message
+                  tool_calls:
+                    - request_id: request_id
+                      tool_name: tool_name
+                      params_as_json: params_as_json
+                      tool_has_been_called: true
+                  tool_results:
+                    - request_id: request_id
+                      tool_name: tool_name
+                      result_value: result_value
+                      is_error: true
+                      tool_has_been_called: true
+                  feedback:
+                    score: like
+                    time_in_call_secs: 1
+                  llm_override: llm_override
+                  time_in_call_secs: 1
+                  rag_retrieval_info:
+                    chunks:
+                      - document_id: document_id
+                        chunk_id: chunk_id
+                        vector_distance: 1.1
+                    embedding_model: e5_mistral_7b_instruct
+                    retrieval_query: retrieval_query
+                    rag_latency_secs: 1.1
+              analysis:
+                evaluation_criteria_results:
+                  key:
+                    criteria_id: criteria_id
+                    result: success
+                    rationale: rationale
+                data_collection_results:
+                  key:
+                    data_collection_id: data_collection_id
+                    rationale: rationale
+                call_successful: success
+                transcript_summary: transcript_summary
+      audiences:
+        - convai
+    simulate_conversation_stream:
+      path: /v1/convai/agents/{agent_id}/simulate-conversation/stream
+      method: POST
+      auth: false
+      docs: >-
+        Run a conversation between the agent and a simulated user and stream
+        back the response. Response is streamed back as partial lists of
+        messages that should be concatenated and once the conversation has
+        complete a single final message with the conversation analysis will be
+        sent.
+      source:
+        openapi: openapi.json
+      path-parameters:
+        agent_id:
+          type: string
+          docs: The id of an agent. This is returned on agent creation.
+      display-name: Simulates A Conversation (Stream)
+      request:
+        name: >-
+          BodySimulatesAConversationStreamV1ConvaiAgentsAgentIdSimulateConversationStreamPost
+        body:
+          properties:
+            simulation_specification:
+              type: root.ConversationSimulationSpecification
+              docs: >-
+                A specification detailing how the conversation should be
+                simulated
+            extra_evaluation_criteria:
+              type: optional<list<root.PromptEvaluationCriteria>>
+              docs: A list of evaluation criteria to test
+        content-type: application/json
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - path-parameters:
+            agent_id: 21m00Tcm4TlvDq8ikWAM
+          request:
+            simulation_specification:
+              simulated_user_config:
+                first_message: Hello, how can I help you today?
+                language: en
+      audiences:
+        - convai
+  source:
+    openapi: openapi.json

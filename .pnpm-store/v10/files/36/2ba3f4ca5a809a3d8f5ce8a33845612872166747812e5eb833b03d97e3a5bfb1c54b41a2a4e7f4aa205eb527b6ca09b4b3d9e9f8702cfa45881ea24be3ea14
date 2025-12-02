@@ -1,0 +1,25 @@
+{
+    "name": "@types/doctrine",
+    "version": "0.0.9",
+    "description": "TypeScript definitions for doctrine",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/doctrine",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "rictic",
+            "githubUsername": "rictic",
+            "url": "https://github.com/rictic"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/doctrine"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "dea17b890a48df03a6c648bedbb2ad110a471852c99e31b00a940d7ed3169e26",
+    "typeScriptVersion": "4.5"
+}

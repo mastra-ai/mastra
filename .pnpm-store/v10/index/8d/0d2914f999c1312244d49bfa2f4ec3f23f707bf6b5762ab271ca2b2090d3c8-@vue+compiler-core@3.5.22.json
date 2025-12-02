@@ -1,0 +1,55 @@
+{
+  "name": "@vue/compiler-core",
+  "version": "3.5.22",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662910054,
+      "integrity": "sha512-5uIok4m0hJ3DRtHFusR+fj1EQ4wTpHp8JpR+iob1Dx51Yr2o/pjKAqaBhFNr9W+EcZXAHKyZxbwuWntkZGGZEw==",
+      "mode": 420,
+      "size": 1091
+    },
+    "dist/compiler-core.cjs.js": {
+      "checkedAt": 1764662910054,
+      "integrity": "sha512-nSANmEhLPK046vn/anYibnp+eEkTNL5cFZwk4YvEByAXUHONsm05QHRgVQtCepB6NL5uCtJjzxPxXvuW1XvWmQ==",
+      "mode": 420,
+      "size": 203922
+    },
+    "dist/compiler-core.cjs.prod.js": {
+      "checkedAt": 1764662910056,
+      "integrity": "sha512-ylKYt7qcz90DpqAwdowczRPIub4DPeNq6Y2q3XfXZQqzdqPG3ewt4ApH8TgldpGZDU5f9Sg9IBwanW3O8uNWLw==",
+      "mode": 420,
+      "size": 199309
+    },
+    "dist/compiler-core.esm-bundler.js": {
+      "checkedAt": 1764662910057,
+      "integrity": "sha512-Grv/9SSHCF4YY/tTYWsIgdtCgooCElbnOsAjtbMOL4m0aepaEBdtH/11VtgTQHznJi7nGFK3eboYOYQsL3pI9Q==",
+      "mode": 420,
+      "size": 173980
+    },
+    "index.js": {
+      "checkedAt": 1764662910058,
+      "integrity": "sha512-B9GW8UEyoqbhKfi8ps21WRYFRT8TeMK3/6Hi9VYTHenghHJV7LZjJxFFC7xhOhTIc0O+4kMqvTeCCm8ysQR4Gg==",
+      "mode": 420,
+      "size": 191
+    },
+    "package.json": {
+      "checkedAt": 1764662910059,
+      "integrity": "sha512-jUVQUGvXZWD93PK30DNUxxYJs1K/hmssarexc4QJk+3S4+ykETn2g51jqV3IVNEWIypY88qQCn+77oag9wQs/Q==",
+      "mode": 420,
+      "size": 1386
+    },
+    "README.md": {
+      "checkedAt": 1764662910060,
+      "integrity": "sha512-qJWijpUZ09X4U+AASag8xRNbKpAuwSh3It9xIEyCjxsHbauWqd7xV9j2NQb51Tgcq16AED3c6Bpp5p06SQwLNw==",
+      "mode": 420,
+      "size": 21
+    },
+    "dist/compiler-core.d.ts": {
+      "checkedAt": 1764662910061,
+      "integrity": "sha512-ImPaw2JuVXvtQZ2u3y04EcwwQMbpOz1Kx2rxrGwwjCrRAVQBMdnvfEboN1sfpOVyEXE/xyxWmSUj4a142s38eQ==",
+      "mode": 420,
+      "size": 45983
+    }
+  }
+}

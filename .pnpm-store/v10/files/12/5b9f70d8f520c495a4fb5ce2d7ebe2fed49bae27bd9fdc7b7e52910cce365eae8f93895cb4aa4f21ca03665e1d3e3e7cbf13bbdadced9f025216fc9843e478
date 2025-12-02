@@ -1,0 +1,53 @@
+{
+  "name": "react-docgen",
+  "version": "8.0.2",
+  "description": "A library to extract information from React components for documentation generation.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/reactjs/react-docgen.git",
+    "directory": "packages/react-docgen"
+  },
+  "type": "module",
+  "browser": {
+    "./dist/importer/fsImporter.js": "./dist/importer/ignoreImporter.js",
+    "./src/importer/fsImporter.ts": "./src/importer/ignoreImporter.ts",
+    "./dist/importer/makeFsImporter.js": "./dist/importer/makeIgnoreImporter.js",
+    "./src/importer/makeFsImporter.ts": "./src/importer/makeIgnoreImporter.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": "^20.9.0 || >=22"
+  },
+  "main": "dist/main.js",
+  "typings": "dist/main.d.ts",
+  "keywords": [
+    "react",
+    "documentation",
+    "documentation-generation"
+  ],
+  "author": {
+    "name": "Felix Kling (http://github.com/fkling)"
+  },
+  "contributors": [
+    "Daniel Tschinder (http://github.com/danez)"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/traverse": "^7.28.0",
+    "@babel/types": "^7.28.2",
+    "@types/babel__core": "^7.20.5",
+    "@types/babel__traverse": "^7.20.7",
+    "@types/doctrine": "^0.0.9",
+    "@types/resolve": "^1.20.2",
+    "doctrine": "^3.0.0",
+    "resolve": "^1.22.1",
+    "strip-indent": "^4.0.0"
+  },
+  "scripts": {
+    "build": "rimraf dist/ && tsc",
+    "test": "vitest run"
+  }
+}

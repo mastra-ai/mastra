@@ -1,0 +1,22 @@
+import { AbortController, AbortSignal } from "./lib/abort";
+import { Body, DataBody, JsonBody, StreamBody } from "./lib/body";
+import { ContextOptions } from "./lib/context";
+import { PushHandler } from "./lib/context-http2";
+import { CookieJar } from "./lib/cookie-jar";
+import { AbortError, DecodeFunction, Decoder, RequestInit, FetchInit, HttpProtocols, Method, OnTrailers, TimeoutError, HttpVersion } from "./lib/core";
+import { Headers } from "./lib/headers";
+import { Request } from "./lib/request";
+import { Response } from "./lib/response";
+declare const setup: (opts: Partial<ContextOptions>) => void;
+declare const fetch: (input: string | Request, init?: Partial<FetchInit> | undefined) => Promise<Response>;
+declare const disconnect: (url: string) => Promise<void>;
+declare const disconnectAll: () => Promise<void>;
+declare const onPush: (handler?: PushHandler | undefined) => void;
+declare function context(opts?: Partial<ContextOptions>): {
+    disconnect: (url: string) => Promise<void>;
+    disconnectAll: () => Promise<void>;
+    fetch: (input: string | Request, init?: Partial<FetchInit> | undefined) => Promise<Response>;
+    onPush: (handler?: PushHandler | undefined) => void;
+    setup: (opts: Partial<ContextOptions>) => void;
+};
+export { setup, context, fetch, disconnect, disconnectAll, onPush, AbortController, AbortSignal, RequestInit, FetchInit, HttpProtocols, Body, JsonBody, StreamBody, DataBody, Headers, Request, Response, AbortError, TimeoutError, HttpVersion, OnTrailers, ContextOptions, DecodeFunction, Decoder, CookieJar, Method, };

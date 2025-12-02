@@ -1,0 +1,38 @@
+{
+  "name": "fetch-to-node",
+  "version": "2.1.0",
+  "description": "Node.js-compatible request and response objects for WinterTC runtimes",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "prepack": "npm run clean && npm run compile",
+    "compile": "tsc --build tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "repository": "https://github.com/mhart/fetch-to-node",
+  "keywords": [
+    "node",
+    "fetch",
+    "whatwg",
+    "wintertc",
+    "http",
+    "request",
+    "response"
+  ],
+  "author": "Michael Hart <mhart@cloudflare.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts",
+    "LICENSE",
+    "README.md"
+  ]
+}

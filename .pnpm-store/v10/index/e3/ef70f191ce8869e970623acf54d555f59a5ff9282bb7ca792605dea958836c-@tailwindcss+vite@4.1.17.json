@@ -1,0 +1,37 @@
+{
+  "name": "@tailwindcss/vite",
+  "version": "4.1.17",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662909717,
+      "integrity": "sha512-UW0evW4uY4tOthwMahMNIkF5F5ZMIUaAOZKrKejekB9DSxWDZh9JIezD2wLSdbejV1zfMxhfbHaRRB7TIiPaQg==",
+      "mode": 420,
+      "size": 990
+    },
+    "README.md": {
+      "checkedAt": 1764662909718,
+      "integrity": "sha512-c9Q4r+dqYZd5e45WFWdxUBs9nN5yPidO19/l/heo/dAOD5ymHzS+kAuFXS5UvicQ6rJrQC42Y6M7WBw4hf2L+g==",
+      "mode": 420,
+      "size": 2798
+    },
+    "dist/index.mjs": {
+      "checkedAt": 1764662909718,
+      "integrity": "sha512-w4nF6qd3f6IEwmwsMpOxGp3texVe9vb9QSgpDevi4BBbHOX5hNHNGWgtOHorAH+lKTTbUlopJEitLLO7gLfiAg==",
+      "mode": 420,
+      "size": 5544
+    },
+    "dist/index.d.mts": {
+      "checkedAt": 1764662909720,
+      "integrity": "sha512-uupE739Bnjij1dpt8cssCGnqfBWy0yB3bcjUf+Vm0hV7tX4p8EYj/wT7mPLsGtdoSC5gvtDNQ+fp4I5tED6gIQ==",
+      "mode": 420,
+      "size": 295
+    },
+    "LICENSE": {
+      "checkedAt": 1764662909720,
+      "integrity": "sha512-9X+sI7UOelzzysUtes9vKamnAYfathdWUsIyS1QlQ5lSXr/i62gEli2uj9/sd5mFKW+aAmOdaTEAhqFEG5CWIA==",
+      "mode": 420,
+      "size": 1071
+    }
+  }
+}

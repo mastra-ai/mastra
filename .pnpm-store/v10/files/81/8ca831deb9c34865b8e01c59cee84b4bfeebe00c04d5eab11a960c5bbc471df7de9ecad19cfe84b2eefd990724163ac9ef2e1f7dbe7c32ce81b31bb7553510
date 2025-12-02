@@ -1,0 +1,6 @@
+// src/types/modules/addons.ts
+var r = /* @__PURE__ */ ((e) => (e.TAB = "tab", e.PANEL = "panel", e.TOOL = "tool", e.TOOLEXTRA = "toolextra", e.PREVIEW = "preview", e.experimental_PAGE =
+"page", e.experimental_TEST_PROVIDER = "test-provider", e))(r || {});
+export {
+  r as Addon_TypesEnum
+};

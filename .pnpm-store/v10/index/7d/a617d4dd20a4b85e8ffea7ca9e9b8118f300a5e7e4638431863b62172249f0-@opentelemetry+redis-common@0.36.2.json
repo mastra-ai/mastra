@@ -1,0 +1,61 @@
+{
+  "name": "@opentelemetry/redis-common",
+  "version": "0.36.2",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662914773,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662914774,
+      "integrity": "sha512-JBOmCeLXtP/co1ulPuXoYJEjysVzyYjtAvUZmZ2tGl8KPrY5YuYWwv9h3Y4n6HH1gwt7Mex4e9el6nNmLz5IBA==",
+      "mode": 420,
+      "size": 2756
+    },
+    "build/test/redis-common.test.js": {
+      "checkedAt": 1764662914776,
+      "integrity": "sha512-BwhX3H5aLbwpzN89Tbbnnnfl6AA5GQoiONSlCgWchby0nhrOKK5255shDPDHZ7QUzEZAz2XTpv++RVfm0OwFSA==",
+      "mode": 420,
+      "size": 1829
+    },
+    "package.json": {
+      "checkedAt": 1764662914779,
+      "integrity": "sha512-BJUKSGd30ZcB9raTHRsJ3raGlN8sRCu1fnNNNVIEHoGKe3qhq963nhu8XcAfNAgvsKw3beVLO0wJY5UOPgTz+w==",
+      "mode": 420,
+      "size": 1435
+    },
+    "build/src/index.js.map": {
+      "checkedAt": 1764662914780,
+      "integrity": "sha512-ZOkJfpg9o7Nf84rQ/zU5OOw6aOXG+tDEL2IMVhDQL/QueI//gjVpLeDQtGXPIDxy6TjLJnokq9einQyIh+EuzA==",
+      "mode": 420,
+      "size": 3731
+    },
+    "build/test/redis-common.test.js.map": {
+      "checkedAt": 1764662914780,
+      "integrity": "sha512-NdcfqKO2cugzc++UkuNjlG2GUE9el0xpB1KKVv1XVzCzm7XVfOlGFNDUp88EszugxjtjPz/OuN+GFI6UQlCqag==",
+      "mode": 420,
+      "size": 2616
+    },
+    "README.md": {
+      "checkedAt": 1764662914781,
+      "integrity": "sha512-/BuO2hoH+xApuWJyRLqZDAa4HBHCdYouQsA0Sd1/pXwZeH2DAWVllfmQTl6mRwd7vWM2YBvwyVLPq12NQYezag==",
+      "mode": 420,
+      "size": 168
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662914781,
+      "integrity": "sha512-SX6ujkOMfrvOyhSJrlIQRqhpu2e8YAdFws/eHXeKdKZGEMXPiVlojo9k+PBqKTZcsAJXahNO79pgmkJO7tT/Kw==",
+      "mode": 420,
+      "size": 600
+    },
+    "build/test/redis-common.test.d.ts": {
+      "checkedAt": 1764662914797,
+      "integrity": "sha512-FdEtXInNRpABWQXs1ozrva5nqLWDn2yU6i9B/djhtzfx7yn8FjpAj8gnMjZl/mc+CNgfLHEB5+WQCMMiqMR2sw==",
+      "mode": 420,
+      "size": 58
+    }
+  }
+}

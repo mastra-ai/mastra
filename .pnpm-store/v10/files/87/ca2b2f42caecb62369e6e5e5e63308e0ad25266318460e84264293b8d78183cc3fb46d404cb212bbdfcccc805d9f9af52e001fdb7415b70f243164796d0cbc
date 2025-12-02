@@ -1,0 +1,33 @@
+import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types.js';
+import type { MastraMemory } from '../../../memory/memory.js';
+import type { MemoryConfig } from '../../../memory/types.js';
+import type { Span, SpanType, TracingContext } from '../../../observability/index.js';
+import type { RequestContext } from '../../../request-context/index.js';
+import type { OutputSchema } from '../../../stream/base/schema.js';
+import type { InnerAgentExecutionOptions } from '../../agent.types.js';
+import type { SaveQueueManager } from '../../save-queue/index.js';
+import type { AgentMethodType } from '../../types.js';
+import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema.js';
+interface MapResultsStepOptions<OUTPUT extends OutputSchema | undefined = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined> {
+    capabilities: AgentCapabilities;
+    options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+    resourceId?: string;
+    runId: string;
+    requestContext: RequestContext;
+    memory?: MastraMemory;
+    memoryConfig?: MemoryConfig;
+    saveQueueManager: SaveQueueManager;
+    agentSpan: Span<SpanType.AGENT_RUN>;
+    agentId: string;
+    methodType: AgentMethodType;
+}
+export declare function createMapResultsStep<OUTPUT extends OutputSchema | undefined = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined>({ capabilities, options, resourceId, runId, requestContext, memory, memoryConfig, saveQueueManager, agentSpan, agentId, methodType, }: MapResultsStepOptions<OUTPUT, FORMAT>): ({ inputData, bail, tracingContext, }: {
+    inputData: {
+        "prepare-tools-step": PrepareToolsStepOutput;
+        "prepare-memory-step": PrepareMemoryStepOutput;
+    };
+    bail: <T>(value: T) => T;
+    tracingContext: TracingContext;
+}) => Promise<import("../../../stream").MastraModelOutput<OUTPUT> | ModelLoopStreamArgs<any, OUTPUT>>;
+export {};
+//# sourceMappingURL=map-results-step.d.ts.map

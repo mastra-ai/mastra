@@ -1,0 +1,49 @@
+{
+  "name": "@uiw/codemirror-theme-dracula",
+  "version": "4.25.2",
+  "requiresBuild": false,
+  "files": {
+    "cjs/index.js": {
+      "checkedAt": 1764662921479,
+      "integrity": "sha512-yATB930vzMoImy9iZ9K6VazlaM2qF25sd0bXue+LJglhOv58e3i/lb6jWMPqfxUxUtMCtIXxrw5kOjhIrEebtQ==",
+      "mode": 420,
+      "size": 2588
+    },
+    "esm/index.js": {
+      "checkedAt": 1764662921496,
+      "integrity": "sha512-PrTjSuNr61t/xLdyNRk9qeW1FJ6/+Zsj3YGfIBl7CPLA48M6stnl3+xAE6Zuk0BwikY7eLh2bnyR/EHUhayGAg==",
+      "mode": 420,
+      "size": 1489
+    },
+    "package.json": {
+      "checkedAt": 1764662921498,
+      "integrity": "sha512-cb/KAKTxyC/DGobMc1r6Nm5big1xzXW4rPC22r7fJTXqGzok7FHP658PNR4yAMqodjIxeYyhh0L2hq8N/evJqA==",
+      "mode": 420,
+      "size": 1034
+    },
+    "README.md": {
+      "checkedAt": 1764662921500,
+      "integrity": "sha512-+y6CEOZnhly8McLkVV89oQEVK/oGrbPCmUEJyTjZ4BDTtH7Oid4AybrKra6ZF2yRGKz2QSdZ/hvmKcC042c+cA==",
+      "mode": 420,
+      "size": 9823
+    },
+    "cjs/index.d.ts": {
+      "checkedAt": 1764662921501,
+      "integrity": "sha512-iCG5AtHrhuuJ2G44psPc1Y+7YFEC2gvDn3f8jsTNSldJKAorqc03+PPARqZgzmx/YCDIuXRy9pmqjCThkAat0g==",
+      "mode": 420,
+      "size": 397
+    },
+    "esm/index.d.ts": {
+      "checkedAt": 1764662921501,
+      "integrity": "sha512-iCG5AtHrhuuJ2G44psPc1Y+7YFEC2gvDn3f8jsTNSldJKAorqc03+PPARqZgzmx/YCDIuXRy9pmqjCThkAat0g==",
+      "mode": 420,
+      "size": 397
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662921502,
+      "integrity": "sha512-N0VUZsLJV5dBWwoNb1QuVEcUpC3Mr67Q8fnDXTUnzYTfawfb6dCrJAwISkaSWS0Svw3p/gBjmbkVweQFUj0L/g==",
+      "mode": 420,
+      "size": 1567
+    }
+  }
+}

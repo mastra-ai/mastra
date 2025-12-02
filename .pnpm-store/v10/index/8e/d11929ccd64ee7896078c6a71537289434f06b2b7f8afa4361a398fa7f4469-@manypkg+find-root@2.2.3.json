@@ -1,0 +1,73 @@
+{
+  "name": "@manypkg/find-root",
+  "version": "2.2.3",
+  "requiresBuild": false,
+  "files": {
+    "dist/manypkg-find-root.cjs.dev.js": {
+      "checkedAt": 1764662929822,
+      "integrity": "sha512-1+ls9dcHbW3bXzymYaetZ/iXUYYlpzJuzELWa74mGQgJINIxr1jSl8YhiUelYLHFotGFWHlxwnWUwEEagXAuLw==",
+      "mode": 420,
+      "size": 5257
+    },
+    "dist/manypkg-find-root.cjs.js": {
+      "checkedAt": 1764662929823,
+      "integrity": "sha512-F21aWzcpVxWC4P4cGq4xA/U69LYSV26eJTVOJhV8oa2AYOh/IpmocC5Nqx6dS7H43fUwIZoDMOGrtVJzvYGqIw==",
+      "mode": 420,
+      "size": 196
+    },
+    "dist/manypkg-find-root.cjs.prod.js": {
+      "checkedAt": 1764662929822,
+      "integrity": "sha512-1+ls9dcHbW3bXzymYaetZ/iXUYYlpzJuzELWa74mGQgJINIxr1jSl8YhiUelYLHFotGFWHlxwnWUwEEagXAuLw==",
+      "mode": 420,
+      "size": 5257
+    },
+    "dist/manypkg-find-root.esm.js": {
+      "checkedAt": 1764662929824,
+      "integrity": "sha512-pqwUTjBuEmv1u8516m/P6xrTcuSomNtJJk0j8EZPnHgI/fpzZ9kkorIKKXexxgpcKWBEANZjYcFCtYpIzyFX/g==",
+      "mode": 420,
+      "size": 4576
+    },
+    "package.json": {
+      "checkedAt": 1764662929825,
+      "integrity": "sha512-GY3z3qspZcqPVLESFNztHGEWGQdBYTJoGyiXZWskWsfOqT8yL0QvIAETeLGb1cGJXQNwxgowCpm/vQ/aLq4rNg==",
+      "mode": 420,
+      "size": 484
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662929826,
+      "integrity": "sha512-ohxmgbnP93Hm83fWPdJxYuY0jfuqBwH7Hm/vkNBAZN8mCfmk5WBTinlZNot/Us+BabOTfA6+AWSAElh+PKIgcA==",
+      "mode": 420,
+      "size": 4374
+    },
+    "README.md": {
+      "checkedAt": 1764662929828,
+      "integrity": "sha512-OkAM7iOxxnebZqg0+S2efypBfHEBlc8+MSAY8vye55wBiFc4gvg/CvY179tSSYS7w7TZZ5xFK/Kw+QeGyqliGA==",
+      "mode": 420,
+      "size": 317
+    },
+    "dist/declarations/src/index.d.ts": {
+      "checkedAt": 1764662929828,
+      "integrity": "sha512-E78U9YofZpNOdyLyGGOZ+IrcVn//a/hyXILbdXYX26tpeig9nqeVJZN3/0uUbZf7SlULC+wPhLvzb4K5XjKIAA==",
+      "mode": 420,
+      "size": 1226
+    },
+    "src/index.test.ts": {
+      "checkedAt": 1764662929829,
+      "integrity": "sha512-TGQkgoFj0hHnMAXJ4VgXgI4hGtuBxafoNfdYP2sraU/8gqVz0SpYEsCzFGuUHaTXuSsR5FLtlRHa7T4gtfZARA==",
+      "mode": 420,
+      "size": 2570
+    },
+    "src/index.ts": {
+      "checkedAt": 1764662929830,
+      "integrity": "sha512-vLxagLdm73/HiJeWNnVlTSBe/pF/Maf2dDgLjSPRysdwnTeBNJgImb6xmEjSTEhIvkK2hoYMc0EXtW/CFuUrpw==",
+      "mode": 420,
+      "size": 5224
+    },
+    "dist/manypkg-find-root.cjs.d.ts": {
+      "checkedAt": 1764662929830,
+      "integrity": "sha512-nR+QZMVnOKcaaG+vR5IQdP4Z+6u0u/EIx5SgXZ3V0MHc3HkyLB2jAcZp3xgZ6qYYwDX9LbFRynT1kDFHxd0Aeg==",
+      "mode": 420,
+      "size": 42
+    }
+  }
+}

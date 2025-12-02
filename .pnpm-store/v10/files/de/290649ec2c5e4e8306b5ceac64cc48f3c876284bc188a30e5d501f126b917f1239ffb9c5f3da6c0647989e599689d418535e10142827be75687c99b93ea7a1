@@ -1,0 +1,1 @@
+{"version":3,"file":"TIME.d.ts","sourceRoot":"","sources":["../../../lib/commands/TIME.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,eAAe,EAAW,MAAM,eAAe,CAAC;;;;IAKvD;;;;;;OAMG;gDACkB,aAAa;mCAGY;QAC5C,aAAa,EAAE,gBAAgB,GAAG,MAAM,EAAE,CAAC;QAC3C,YAAY,EAAE,gBAAgB,GAAG,MAAM,EAAE,CAAC;KAC3C;;AAhBH,wBAiB6B"}

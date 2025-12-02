@@ -1,0 +1,32 @@
+import { AccountlessApplicationAPI, ActorTokenAPI, AllowlistIdentifierAPI, BetaFeaturesAPI, BlocklistIdentifierAPI, ClientAPI, DomainAPI, EmailAddressAPI, InstanceAPI, InvitationAPI, JwksAPI, JwtTemplatesApi, OAuthApplicationsApi, OrganizationAPI, PhoneNumberAPI, ProxyCheckAPI, RedirectUrlAPI, SamlConnectionAPI, SessionAPI, SignInTokenAPI, SignUpAPI, TestingTokenAPI, UserAPI, WaitlistEntryAPI, WebhookAPI } from './endpoints';
+import { buildRequest } from './request';
+export type CreateBackendApiOptions = Parameters<typeof buildRequest>[0];
+export type ApiClient = ReturnType<typeof createBackendApiClient>;
+export declare function createBackendApiClient(options: CreateBackendApiOptions): {
+    __experimental_accountlessApplications: AccountlessApplicationAPI;
+    actorTokens: ActorTokenAPI;
+    allowlistIdentifiers: AllowlistIdentifierAPI;
+    betaFeatures: BetaFeaturesAPI;
+    blocklistIdentifiers: BlocklistIdentifierAPI;
+    clients: ClientAPI;
+    domains: DomainAPI;
+    emailAddresses: EmailAddressAPI;
+    instance: InstanceAPI;
+    invitations: InvitationAPI;
+    jwks: JwksAPI;
+    jwtTemplates: JwtTemplatesApi;
+    oauthApplications: OAuthApplicationsApi;
+    organizations: OrganizationAPI;
+    phoneNumbers: PhoneNumberAPI;
+    proxyChecks: ProxyCheckAPI;
+    redirectUrls: RedirectUrlAPI;
+    samlConnections: SamlConnectionAPI;
+    sessions: SessionAPI;
+    signInTokens: SignInTokenAPI;
+    signUps: SignUpAPI;
+    testingTokens: TestingTokenAPI;
+    users: UserAPI;
+    waitlistEntries: WaitlistEntryAPI;
+    webhooks: WebhookAPI;
+};
+//# sourceMappingURL=factory.d.ts.map

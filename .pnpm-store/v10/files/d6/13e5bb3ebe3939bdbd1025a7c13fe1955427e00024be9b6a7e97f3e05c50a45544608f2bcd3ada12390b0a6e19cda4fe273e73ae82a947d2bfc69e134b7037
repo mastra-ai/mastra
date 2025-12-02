@@ -1,0 +1,24 @@
+{
+  "name": "@manypkg/tools",
+  "version": "1.1.2",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Thinkmill/manypkg.git",
+    "directory": "packages/tools"
+  },
+  "license": "MIT",
+  "main": "dist/manypkg-tools.cjs.js",
+  "dependencies": {
+    "fast-glob": "^3.3.2",
+    "jju": "^1.4.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/jju": "^1.4.2",
+    "@types/js-yaml": "^4.0.9",
+    "jest-fixtures": "^0.6.0"
+  },
+  "engines": {
+    "node": ">=14.18.0"
+  }
+}

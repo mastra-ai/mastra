@@ -1,0 +1,1 @@
+{"version":3,"file":"analytics.mjs","sourceRoot":"","sources":["../../../src/resources/dns-firewall/analytics/analytics.ts"],"names":[],"mappings":"AAAA,sFAAsF;OAE/E,EAAE,WAAW,EAAE;OACf,KAAK,UAAU;OACf,EAAmB,OAAO,EAAE;AAEnC,MAAM,OAAO,SAAU,SAAQ,WAAW;IAA1C;;QACE,YAAO,GAAuB,IAAI,UAAU,CAAC,OAAO,CAAC,IAAI,CAAC,OAAO,CAAC,CAAC;IACrE,CAAC;CAAA;AAED,SAAS,CAAC,OAAO,GAAG,OAAO,CAAC"}

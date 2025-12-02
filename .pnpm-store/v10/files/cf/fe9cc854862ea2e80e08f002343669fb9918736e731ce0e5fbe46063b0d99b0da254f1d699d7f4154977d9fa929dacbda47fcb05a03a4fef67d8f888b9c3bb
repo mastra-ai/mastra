@@ -1,0 +1,26 @@
+{
+  "name": "@manypkg/get-packages",
+  "version": "3.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Thinkmill/manypkg.git",
+    "directory": "packages/get-packages"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./dist/manypkg-get-packages.js",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@manypkg/find-root": "^3.1.0",
+    "@manypkg/tools": "^2.1.0"
+  },
+  "devDependencies": {
+    "fixturez": "^1.1.0",
+    "vitest": "^3.1.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,18 @@
+import { IExporterTransport } from '../exporter-transport';
+import { HeadersFactory } from '../configuration/otlp-http-configuration';
+/**
+ * @deprecated favor the fetch transport
+ * @see {@link createFetchTransport}
+ */
+export interface XhrRequestParameters {
+    url: string;
+    headers: HeadersFactory;
+}
+/**
+ * @deprecated use {@link createFetchTransport} instead
+ *
+ * Creates an exporter transport that uses XHR to send the data
+ * @param parameters applied to each request made by transport
+ */
+export declare function createXhrTransport(parameters: XhrRequestParameters): IExporterTransport;
+//# sourceMappingURL=xhr-transport.d.ts.map

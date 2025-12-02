@@ -1,0 +1,87 @@
+{
+  "name": "fix-dts-default-cjs-exports",
+  "type": "module",
+  "version": "1.0.1",
+  "packageManager": "pnpm@10.6.3",
+  "description": "Utility to fix TypeScript declarations when using default exports in CommonJS.",
+  "author": "userquin <userquin@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/userquin/fix-dts-default-cjs-exports.git"
+  },
+  "bugs": "https://github.com/userquin/fix-dts-default-cjs-exports/issues",
+  "keywords": [
+    "rollup",
+    "cjs",
+    "typescript",
+    "default exports"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./rollup": {
+      "import": {
+        "types": "./dist/rollup.d.mts",
+        "default": "./dist/rollup.mjs"
+      },
+      "require": {
+        "types": "./dist/rollup.d.cts",
+        "default": "./dist/rollup.cjs"
+      }
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "rollup": [
+        "./dist/rollup.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepack": "pkgroll --clean-dist",
+    "test:full": "pnpm test:coverage && pnpm test:attw",
+    "test:coverage": "vitest run --coverage",
+    "test": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "pnpm lint --fix",
+    "release": "bumpp && npm publish",
+    "test:attw": "pnpm test:reexport-types && pnpm test:reexport-default && pnpm test:mixed-declarations",
+    "test:reexport-types": "attw --pack test/fixtures/reexport-types",
+    "test:reexport-default": "attw --pack test/fixtures/reexport-default",
+    "test:mixed-declarations": "attw --pack test/fixtures/mixed-declarations"
+  },
+  "dependencies": {
+    "magic-string": "^0.30.17",
+    "mlly": "^1.7.4",
+    "rollup": "^4.34.8"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^4.3.0",
+    "@arethetypeswrong/cli": "^0.17.4",
+    "@types/node": "^20.14.8",
+    "@vitest/coverage-v8": "^3.0.6",
+    "bumpp": "^10.0.3",
+    "eslint": "^9.21.0",
+    "pathe": "^2.0.3",
+    "pkgroll": "^2.11.0",
+    "typescript": "^5.7.3",
+    "unbuild": "3.3.1",
+    "vitest": "^3.0.6"
+  }
+}

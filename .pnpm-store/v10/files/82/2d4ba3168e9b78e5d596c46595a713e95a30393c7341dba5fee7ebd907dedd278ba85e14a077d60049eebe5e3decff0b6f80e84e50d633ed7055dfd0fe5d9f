@@ -1,0 +1,73 @@
+import { ReadableStream, WritableStream } from 'stream/web';
+import type { ReadableStreamGetReaderOptions, ReadableWritablePair, StreamPipeOptions } from 'stream/web';
+import type { WorkflowResult, WorkflowRunStatus } from '../workflows/index.js';
+import type { MastraBaseStream } from './base/base.js';
+import { consumeStream } from './base/consume-stream.js';
+import type { WorkflowStreamEvent } from './types.js';
+export declare class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>> implements MastraBaseStream<WorkflowStreamEvent> {
+    #private;
+    /**
+     * Unique identifier for this workflow run
+     */
+    runId: string;
+    /**
+     * Unique identifier for this workflow
+     */
+    workflowId: string;
+    constructor({ runId, workflowId, stream, }: {
+        runId: string;
+        workflowId: string;
+        stream: ReadableStream<WorkflowStreamEvent>;
+    });
+    /**
+     * @internal
+     */
+    updateResults(results: TResult): void;
+    /**
+     * @internal
+     */
+    rejectResults(error: Error): void;
+    /**
+     * @internal
+     */
+    resume(stream: ReadableStream<WorkflowStreamEvent>): void;
+    consumeStream(options?: Parameters<typeof consumeStream>[0]): Promise<void>;
+    get fullStream(): ReadableStream<WorkflowStreamEvent>;
+    get status(): WorkflowRunStatus;
+    get result(): Promise<TResult>;
+    get usage(): Promise<import("@ai-sdk/provider-v5").LanguageModelV2Usage>;
+    /**
+     * @deprecated Use `fullStream.locked` instead
+     */
+    get locked(): boolean;
+    /**
+     * @deprecated Use `fullStream.cancel()` instead
+     */
+    cancel(reason?: any): Promise<void>;
+    /**
+     * @deprecated Use `fullStream.getReader()` instead
+     */
+    getReader(options?: ReadableStreamGetReaderOptions): ReadableStreamDefaultReader<WorkflowStreamEvent> | ReadableStreamBYOBReader;
+    /**
+     * @deprecated Use `fullStream.pipeThrough()` instead
+     */
+    pipeThrough<T>(transform: ReadableWritablePair<T, WorkflowStreamEvent>, options?: StreamPipeOptions): ReadableStream<T>;
+    /**
+     * @deprecated Use `fullStream.pipeTo()` instead
+     */
+    pipeTo(destination: WritableStream<WorkflowStreamEvent>, options?: StreamPipeOptions): Promise<void>;
+    /**
+     * @deprecated Use `fullStream.tee()` instead
+     */
+    tee(): [ReadableStream<WorkflowStreamEvent>, ReadableStream<WorkflowStreamEvent>];
+    /**
+     * @deprecated Use `fullStream[Symbol.asyncIterator]()` instead
+     */
+    [Symbol.asyncIterator](): AsyncIterableIterator<WorkflowStreamEvent>;
+    /**
+     * Helper method to treat this object as a ReadableStream
+     * @deprecated Use `fullStream` directly instead
+     */
+    toReadableStream(): ReadableStream<WorkflowStreamEvent>;
+}
+//# sourceMappingURL=RunOutput.d.ts.map

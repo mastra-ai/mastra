@@ -1,0 +1,9 @@
+export const originIcons = {
+    pinned: '📌',
+    packageManager: '📦',
+    environment: '🌐',
+    lock: '🔒'
+};
+export const getOriginIcon = (name) => {
+    return originIcons[name] ?? '';
+};

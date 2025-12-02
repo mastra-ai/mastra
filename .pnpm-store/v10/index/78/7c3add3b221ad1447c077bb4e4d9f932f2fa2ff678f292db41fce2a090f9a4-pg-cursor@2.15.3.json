@@ -1,0 +1,37 @@
+{
+  "name": "pg-cursor",
+  "version": "2.15.3",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662927833,
+      "integrity": "sha512-deIXW9Mn1d54xCJyQjMwDaueAOH1K6DlvcJhc24W15Nb/chR8VqHdiIrQcyQZpqqvMk/GtHkrxebEREGz9MdmA==",
+      "mode": 420,
+      "size": 1077
+    },
+    "index.js": {
+      "checkedAt": 1764662927845,
+      "integrity": "sha512-bWDzU6jsOz5UV7vG6VnJpYRmeKhwqvLPt3pR4a4qoytlSPg6N0NP5z8fYXzS+pzlRV8CXLuZt0lV2OhJh0Fo9A==",
+      "mode": 420,
+      "size": 6684
+    },
+    "package.json": {
+      "checkedAt": 1764662927847,
+      "integrity": "sha512-UJMKpzsDckK4kkVwurIUvuzVSR50npdzXtvS6ZFI0JsH/v7ifMbsxhyjIBQGnYYthO89IW3yid/I63dgpsp3ig==",
+      "mode": 420,
+      "size": 753
+    },
+    "README.md": {
+      "checkedAt": 1764662927847,
+      "integrity": "sha512-cFpEVGqt6f6CVhrxFLoY6tkzKlvPbWWg5+JuzL/9XTejc0h2kFbhPh2UQx9Ct3ng6B4354lUCzgs+wGxCfM6Zg==",
+      "mode": 420,
+      "size": 1498
+    },
+    "esm/index.mjs": {
+      "checkedAt": 1764662927852,
+      "integrity": "sha512-w8Ua3Mgi6oBfL1rWBZUzmbiDggwauA59CujPGaloOpTUN2+o2v33hzoWbFwneE++oEGhroemXcuuopgsRkzihg==",
+      "mode": 420,
+      "size": 131
+    }
+  }
+}

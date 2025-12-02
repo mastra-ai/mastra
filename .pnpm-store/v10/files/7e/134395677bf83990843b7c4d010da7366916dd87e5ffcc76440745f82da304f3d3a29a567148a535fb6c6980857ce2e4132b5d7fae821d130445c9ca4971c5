@@ -1,0 +1,1 @@
+{"version":3,"file":"storage-memory.d.ts","sourceRoot":"","sources":["../src/storage-memory.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,wBAAwB,EAAE,MAAM,eAAe,CAAA;AAExD,qBAAa,oBAAoB;IAC/B,OAAO,CAAC,cAAc,CAAyC;IAE/D,WAAW,CAAC,GAAG,EAAE,wBAAwB,GAAG,GAAG,GAAG,SAAS;IAI3D,WAAW,CAAC,GAAG,EAAE,wBAAwB,EAAE,KAAK,EAAE,GAAG,GAAG,IAAI,GAAG,IAAI;CAGpE"}

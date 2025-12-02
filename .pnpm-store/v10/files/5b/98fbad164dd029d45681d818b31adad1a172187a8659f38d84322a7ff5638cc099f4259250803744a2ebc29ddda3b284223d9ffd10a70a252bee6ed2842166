@@ -1,0 +1,57 @@
+{
+  "name": "assistant-stream",
+  "version": "0.2.36",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils.d.ts",
+      "default": "./dist/utils.js"
+    }
+  },
+  "source": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "utils",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "devDependencies": {
+    "@standard-schema/spec": "^1.0.0",
+    "@types/node": "^24.8.1",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.6",
+    "tsx": "^4.20.6",
+    "vitest": "^3.2.4",
+    "@assistant-ui/x-buildutils": "0.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://www.assistant-ui.com/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/assistant-ui/assistant-ui/tree/main/packages/assistant-stream"
+  },
+  "bugs": {
+    "url": "https://github.com/assistant-ui/assistant-ui/issues"
+  },
+  "dependencies": {
+    "@types/json-schema": "^7.0.15",
+    "nanoid": "5.1.6",
+    "secure-json-parse": "^4.1.0"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.mts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint ."
+  }
+}

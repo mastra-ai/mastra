@@ -1,0 +1,42 @@
+
+> @better-auth/core@1.4.3 build /home/runner/work/better-auth/better-auth/packages/core
+> tsdown
+
+[34mℹ[39m tsdown [2mv0.16.5[22m powered by rolldown [2mv1.0.0-beta.50[22m
+[34mℹ[39m Using tsdown config: [4m/home/runner/work/better-auth/better-auth/packages/core/tsdown.config.ts[24m
+[34mℹ[39m entry: [34msrc/index.ts, src/db/index.ts, src/db/adapter/index.ts, src/async_hooks/index.ts, src/context/index.ts, src/env/index.ts, src/oauth2/index.ts, src/api/index.ts, src/social-providers/index.ts, src/utils/index.ts, src/error/index.ts[39m
+[34mℹ[39m tsconfig: [34mtsconfig.json[39m
+[34mℹ[39m Build start
+[34mℹ[39m [2mdist/[22m[1msocial-providers/index.mjs[22m    [2m 79.87 kB[22m [2m│ gzip: 10.31 kB[22m
+[34mℹ[39m [2mdist/[22m[1mdb/index.mjs[22m                  [2m  1.58 kB[22m [2m│ gzip:  0.49 kB[22m
+[34mℹ[39m [2mdist/[22m[1mapi/index.mjs[22m                 [2m  0.83 kB[22m [2m│ gzip:  0.40 kB[22m
+[34mℹ[39m [2mdist/[22m[1mcontext/index.mjs[22m             [2m  0.74 kB[22m [2m│ gzip:  0.27 kB[22m
+[34mℹ[39m [2mdist/[22m[1moauth2/index.mjs[22m              [2m  0.61 kB[22m [2m│ gzip:  0.24 kB[22m
+[34mℹ[39m [2mdist/[22m[1menv/index.mjs[22m                 [2m  0.44 kB[22m [2m│ gzip:  0.25 kB[22m
+[34mℹ[39m [2mdist/[22m[1merror/index.mjs[22m               [2m  0.16 kB[22m [2m│ gzip:  0.13 kB[22m
+[34mℹ[39m [2mdist/[22m[1masync_hooks/index.mjs[22m         [2m  0.11 kB[22m [2m│ gzip:  0.10 kB[22m
+[34mℹ[39m [2mdist/[22m[1mutils/index.mjs[22m               [2m  0.09 kB[22m [2m│ gzip:  0.09 kB[22m
+[34mℹ[39m [2mdist/[22m[1mdb/adapter/index.mjs[22m          [2m  0.01 kB[22m [2m│ gzip:  0.03 kB[22m
+[34mℹ[39m [2mdist/[22m[1mindex.mjs[22m                     [2m  0.01 kB[22m [2m│ gzip:  0.03 kB[22m
+[34mℹ[39m [2mdist/[22moauth2-B2XPHgx5.mjs           [2m  9.19 kB[22m [2m│ gzip:  2.13 kB[22m
+[34mℹ[39m [2mdist/[22menv-DwlNAN_D.mjs              [2m  7.67 kB[22m [2m│ gzip:  2.54 kB[22m
+[34mℹ[39m [2mdist/[22mcontext-DgQ9XGBl.mjs          [2m  3.89 kB[22m [2m│ gzip:  1.00 kB[22m
+[34mℹ[39m [2mdist/[22merror-BhAKg8LX.mjs            [2m  1.77 kB[22m [2m│ gzip:  0.79 kB[22m
+[34mℹ[39m [2mdist/[22masync_hooks-BfRfbd1J.mjs      [2m  0.87 kB[22m [2m│ gzip:  0.46 kB[22m
+[34mℹ[39m [2mdist/[22mutils-C5EN75oV.mjs            [2m  0.13 kB[22m [2m│ gzip:  0.12 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1msocial-providers/index.d.mts[22m[39m  [2m  3.87 kB[22m [2m│ gzip:  1.19 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mcontext/index.d.mts[22m[39m           [2m  3.05 kB[22m [2m│ gzip:  0.96 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1merror/index.d.mts[22m[39m             [2m  1.84 kB[22m [2m│ gzip:  0.72 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mdb/index.d.mts[22m[39m                [2m  1.01 kB[22m [2m│ gzip:  0.37 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mindex.d.mts[22m[39m                   [2m  0.87 kB[22m [2m│ gzip:  0.33 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mutils/index.d.mts[22m[39m             [2m  0.84 kB[22m [2m│ gzip:  0.43 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1moauth2/index.d.mts[22m[39m            [2m  0.79 kB[22m [2m│ gzip:  0.30 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1menv/index.d.mts[22m[39m               [2m  0.59 kB[22m [2m│ gzip:  0.30 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mdb/adapter/index.d.mts[22m[39m        [2m  0.53 kB[22m [2m│ gzip:  0.24 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mapi/index.d.mts[22m[39m               [2m  0.29 kB[22m [2m│ gzip:  0.16 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1masync_hooks/index.d.mts[22m[39m       [2m  0.14 kB[22m [2m│ gzip:  0.10 kB[22m
+[34mℹ[39m [2mdist/[22m[32mindex-CVLGS-cz.d.mts[39m          [2m208.78 kB[22m [2m│ gzip: 32.75 kB[22m
+[34mℹ[39m [2mdist/[22m[32mindex-CdubV7uy.d.mts[39m          [2m  3.31 kB[22m [2m│ gzip:  1.11 kB[22m
+[34mℹ[39m [2mdist/[22m[32mindex-DgwIISs7.d.mts[39m          [2m  0.24 kB[22m [2m│ gzip:  0.16 kB[22m
+[34mℹ[39m 31 files, total: 334.14 kB
+[32m✔[39m Build complete in [32m4707ms[39m

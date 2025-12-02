@@ -1,0 +1,25 @@
+{
+  "name": "@firebase/auth-interop-types",
+  "version": "0.2.4",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662906842,
+      "integrity": "sha512-P2kNzcN9OpL+Ht/IFQstcKoqMkn6y86eHi9gn16xw5ysDA2lZK0+Utk35bGa8pwrqchin8843yCEVz1Tjk5/+A==",
+      "mode": 420,
+      "size": 639
+    },
+    "README.md": {
+      "checkedAt": 1764662906844,
+      "integrity": "sha512-GxexGsB3XKWIiDHSTERCHkeIZ09zDy/VkbPXngGrjoYthc4ZXrjv1Ka8sGPhtluwYry50E2XhvOWPb658CU0ng==",
+      "mode": 420,
+      "size": 196
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662906845,
+      "integrity": "sha512-3Hc+IZE4ZPIssNuKv+BGpXgasqHoIziYvhmZuptb5Tu1jCIIfRxG1289FMaW0d1gxk4xLy9PvwVh/jYdnilggQ==",
+      "mode": 420,
+      "size": 1131
+    }
+  }
+}

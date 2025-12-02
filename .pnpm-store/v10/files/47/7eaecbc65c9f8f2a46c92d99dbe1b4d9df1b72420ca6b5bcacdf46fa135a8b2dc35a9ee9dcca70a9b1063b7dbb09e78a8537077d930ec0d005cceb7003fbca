@@ -1,0 +1,72 @@
+{
+  "name": "@paralleldrive/cuid2",
+  "private": false,
+  "type": "module",
+  "types": "index.d.ts",
+  "bin": {
+    "cuid2": "./bin/cuid2.js"
+  },
+  "files": [
+    "src/index.js",
+    "index.js",
+    "index.d.ts",
+    "bin/cuid2.js"
+  ],
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint --fix . --ignore-pattern '*.d.ts'",
+    "typescript": "npx -p typescript tsc --esModuleInterop --rootDir . src/index-test.js --noEmit --allowJs --checkJs --target es2020 --moduleResolution node && echo 'TypeScript Complete.'",
+    "test": "NODE_ENV=test node src/index-test.js && NODE_ENV=test node src/bin-test.js",
+    "test-color": "NODE_ENV=test node src/index-test.js && NODE_ENV=test node src/bin-test.js",
+    "collision-test": "NODE_ENV=test node src/collision-test.js",
+    "histogram": "NODE_ENV=test node src/histogram.js",
+    "watch": "watch 'npm run -s test && npm run -s lint && npm run -s typescript' src",
+    "update": "updtr",
+    "release": "node release.js",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ericelliott/cuid2.git"
+  },
+  "keywords": [
+    "uuid",
+    "guid",
+    "cuid",
+    "unique",
+    "id",
+    "ids",
+    "identifier",
+    "identifiers"
+  ],
+  "author": "Eric Elliott",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ericelliott/cuid2/issues"
+  },
+  "homepage": "https://github.com/ericelliott/cuid2#readme",
+  "devDependencies": {
+    "@types/node": "24.8.1",
+    "@types/react": "19.2.2",
+    "eslint": "8.30.0",
+    "eslint-config-next": "13.1.1",
+    "eslint-config-prettier": "8.5.0",
+    "eslint-plugin-prettier": "4.2.1",
+    "husky": "^9.0.11",
+    "next": "^15.5.6",
+    "prettier": "2.8.1",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "release-it": "^19.0.5",
+    "riteway": "^9.0.0-rc.1",
+    "updtr": "4.0.0",
+    "watch": "^0.13.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "error-causes": "^3.0.2"
+  },
+  "version": "2.3.0"
+}

@@ -1,0 +1,49 @@
+{
+  "name": "hono-openapi",
+  "version": "1.1.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662912574,
+      "integrity": "sha512-z2MJazuXAxCi+Hy0MkVZIsMlGzwCOzxZ5h2MzpLrGbuJ2dBOAJiJKJEpWm3OUTm6l296FckE4I8uaTxc7uAbUQ==",
+      "mode": 420,
+      "size": 1066
+    },
+    "dist/index.cjs": {
+      "checkedAt": 1764662912587,
+      "integrity": "sha512-E+fEqHhm561X3vtWYSoNx+MAfHc0KiMlOpj7HWeUzylReW4DcudGSCJb6YMiWtdTRfRMIYn4oeLoH1zY1J5F7A==",
+      "mode": 420,
+      "size": 15350
+    },
+    "dist/index.d.cts": {
+      "checkedAt": 1764662912589,
+      "integrity": "sha512-8ac2xe89CD48oLr7O5rRhsjQct++XKHzvfR5Y2Or17ZdU6QA+ILWeyJwKIM9sAqpNPio9Gpn3n+YpBNUmlDqlg==",
+      "mode": 420,
+      "size": 12870
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662912591,
+      "integrity": "sha512-ch74CaVSMRJtbJ5EKULUNjy/fdSAGqB3kZdIQyTzXi4mKnEFRxrMUEgJPnUBEvKVXmhCs6NfQwN9ET71YnGxDA==",
+      "mode": 420,
+      "size": 15025
+    },
+    "package.json": {
+      "checkedAt": 1764662912591,
+      "integrity": "sha512-MoaWEv68MgCEWL3OBSyCQAJer0H3TCWWHsALaxaI8vypnFzhT1Jgz2p8jwILGf2cHTUj/V91DAU2WiKXhMBqMA==",
+      "mode": 420,
+      "size": 1925
+    },
+    "README.md": {
+      "checkedAt": 1764662912592,
+      "integrity": "sha512-GquqWc6Wmsj6AVcShJpnsjmHOwsU+F/dyZ8ZTm+OmKVTR5PI4rWTDOTf3xByXgCCgQBrXZklvhpXJD7OWZaKnw==",
+      "mode": 420,
+      "size": 1376
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662912589,
+      "integrity": "sha512-8ac2xe89CD48oLr7O5rRhsjQct++XKHzvfR5Y2Or17ZdU6QA+ILWeyJwKIM9sAqpNPio9Gpn3n+YpBNUmlDqlg==",
+      "mode": 420,
+      "size": 12870
+    }
+  }
+}

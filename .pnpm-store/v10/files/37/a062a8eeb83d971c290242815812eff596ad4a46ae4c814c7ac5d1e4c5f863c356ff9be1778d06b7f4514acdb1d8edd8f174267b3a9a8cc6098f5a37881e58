@@ -1,0 +1,72 @@
+import type { TranscriptionModel, SpeechModel } from 'ai-v5';
+import type { ToolsInput } from '../agent/index.js';
+import { MastraVoice } from './voice.js';
+import type { VoiceEventType, VoiceEventMap } from '.';
+export declare class CompositeVoice extends MastraVoice<unknown, unknown, unknown, ToolsInput, VoiceEventMap> {
+    protected speakProvider?: MastraVoice;
+    protected listenProvider?: MastraVoice;
+    protected realtimeProvider?: MastraVoice;
+    constructor({ input, output, realtime, }: {
+        input?: MastraVoice | TranscriptionModel;
+        output?: MastraVoice | SpeechModel;
+        realtime?: MastraVoice;
+    });
+    /**
+     * Convert text to speech using the configured provider
+     * @param input Text or text stream to convert to speech
+     * @param options Speech options including speaker and provider-specific options
+     * @returns Audio stream or void if in realtime mode
+     */
+    speak(input: string | NodeJS.ReadableStream, options?: {
+        speaker?: string;
+    } & any): Promise<NodeJS.ReadableStream | void>;
+    listen(audioStream: NodeJS.ReadableStream, options?: any): Promise<string | void | NodeJS.ReadableStream>;
+    getSpeakers(): Promise<{
+        voiceId: string;
+    }[]>;
+    getListener(): Promise<{
+        enabled: boolean;
+    }>;
+    updateConfig(options: Record<string, unknown>): void;
+    /**
+     * Initializes a WebSocket or WebRTC connection for real-time communication
+     * @returns Promise that resolves when the connection is established
+     */
+    connect(options?: Record<string, unknown>): Promise<void>;
+    /**
+     * Relay audio data to the voice provider for real-time processing
+     * @param audioData Audio data to send
+     */
+    send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void>;
+    /**
+     * Trigger voice providers to respond
+     */
+    answer(options?: Record<string, unknown>): Promise<void>;
+    /**
+     * Equip the voice provider with instructions
+     * @param instructions Instructions to add
+     */
+    addInstructions(instructions: string): void;
+    /**
+     * Equip the voice provider with tools
+     * @param tools Array of tools to add
+     */
+    addTools(tools: ToolsInput): void;
+    /**
+     * Disconnect from the WebSocket or WebRTC connection
+     */
+    close(): void;
+    /**
+     * Register an event listener
+     * @param event Event name (e.g., 'speaking', 'writing', 'error')
+     * @param callback Callback function that receives event data
+     */
+    on<E extends VoiceEventType>(event: E, callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void): void;
+    /**
+     * Remove an event listener
+     * @param event Event name (e.g., 'speaking', 'writing', 'error')
+     * @param callback Callback function to remove
+     */
+    off<E extends VoiceEventType>(event: E, callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void): void;
+}
+//# sourceMappingURL=composite-voice.d.ts.map

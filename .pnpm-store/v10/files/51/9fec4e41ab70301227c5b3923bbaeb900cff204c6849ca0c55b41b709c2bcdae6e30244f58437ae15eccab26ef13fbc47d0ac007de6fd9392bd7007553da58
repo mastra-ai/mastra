@@ -1,0 +1,13 @@
+
+> @better-auth/telemetry@1.4.3 build /home/runner/work/better-auth/better-auth/packages/telemetry
+> tsdown
+
+[34mℹ[39m tsdown [2mv0.16.5[22m powered by rolldown [2mv1.0.0-beta.50[22m
+[34mℹ[39m Using tsdown config: [4m/home/runner/work/better-auth/better-auth/packages/telemetry/tsdown.config.ts[24m
+[34mℹ[39m entry: [34msrc/index.ts[39m
+[34mℹ[39m tsconfig: [34mtsconfig.json[39m
+[34mℹ[39m Build start
+[34mℹ[39m [2mdist/[22m[1mindex.mjs[22m    [2m17.97 kB[22m [2m│ gzip: 4.78 kB[22m
+[34mℹ[39m [2mdist/[22m[32m[1mindex.d.mts[22m[39m  [2m 7.19 kB[22m [2m│ gzip: 1.83 kB[22m
+[34mℹ[39m 2 files, total: 25.16 kB
+[32m✔[39m Build complete in [32m2574ms[39m

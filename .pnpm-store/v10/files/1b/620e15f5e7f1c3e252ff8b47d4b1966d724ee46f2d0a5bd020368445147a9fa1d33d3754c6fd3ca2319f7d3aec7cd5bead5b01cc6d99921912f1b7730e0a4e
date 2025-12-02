@@ -1,0 +1,167 @@
+"use strict";
+"use client";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/composer.tsx
+var composer_exports = {};
+__export(composer_exports, {
+  default: () => composer_default
+});
+module.exports = __toCommonJS(composer_exports);
+var import_react = require("react");
+var import_lucide_react = require("lucide-react");
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_thread_config = require("./thread-config.js");
+var import_tooltip_icon_button = require("./base/tooltip-icon-button.js");
+var import_CircleStopIcon = require("./base/CircleStopIcon.js");
+var import_react2 = require("@assistant-ui/react");
+var import_attachment_ui = __toESM(require("./attachment-ui.js"));
+var import_jsx_runtime = require("react/jsx-runtime");
+var useAllowAttachments = (ensureCapability = false) => {
+  const { composer: { allowAttachments = true } = {} } = (0, import_thread_config.useThreadConfig)();
+  const attachmentsSupported = (0, import_react2.useThread)((t) => t.capabilities.attachments);
+  return allowAttachments && (!ensureCapability || attachmentsSupported);
+};
+var Composer = () => {
+  const allowAttachments = useAllowAttachments(true);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(ComposerRoot, { children: [
+    allowAttachments && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerAttachments, {}),
+    allowAttachments && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerAddAttachment, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerInput, { autoFocus: true }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerAction, {})
+  ] });
+};
+Composer.displayName = "Composer";
+var ComposerRoot = (0, import_withDefaults.withDefaults)(import_react2.ComposerPrimitive.Root, {
+  className: "aui-composer-root"
+});
+ComposerRoot.displayName = "ComposerRoot";
+var ComposerInputStyled = (0, import_withDefaults.withDefaults)(import_react2.ComposerPrimitive.Input, {
+  rows: 1,
+  autoFocus: true,
+  className: "aui-composer-input"
+});
+var ComposerInput = (0, import_react.forwardRef)(
+  (props, ref) => {
+    const {
+      strings: {
+        composer: { input: { placeholder = "Write a message..." } = {} } = {}
+      } = {}
+    } = (0, import_thread_config.useThreadConfig)();
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerInputStyled, { placeholder, ...props, ref });
+  }
+);
+ComposerInput.displayName = "ComposerInput";
+var ComposerAttachmentsContainer = (0, import_withDefaults.withDefaults)("div", {
+  className: "aui-composer-attachments"
+});
+var ComposerAttachments = ({ components }) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerAttachmentsContainer, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    import_react2.ComposerPrimitive.Attachments,
+    {
+      components: {
+        ...components,
+        Attachment: components?.Attachment ?? import_attachment_ui.default
+      }
+    }
+  ) });
+};
+var ComposerAttachButton = (0, import_withDefaults.withDefaults)(import_tooltip_icon_button.TooltipIconButton, {
+  variant: "default",
+  className: "aui-composer-attach"
+});
+var ComposerAddAttachment = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: {
+      composer: { addAttachment: { tooltip = "Attach file" } = {} } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  const allowAttachments = useAllowAttachments();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ComposerPrimitive.AddAttachment, { disabled: !allowAttachments, asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ComposerAttachButton,
+    {
+      tooltip,
+      variant: "ghost",
+      ...props,
+      ref,
+      children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PaperclipIcon, {})
+    }
+  ) });
+});
+ComposerAddAttachment.displayName = "ComposerAddAttachment";
+var useAllowCancel = () => {
+  const cancelSupported = (0, import_react2.useThread)((t) => t.capabilities.cancel);
+  return cancelSupported;
+};
+var ComposerAction = () => {
+  const allowCancel = useAllowCancel();
+  if (!allowCancel) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerSend, {});
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ThreadPrimitive.If, { running: false, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerSend, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ThreadPrimitive.If, { running: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerCancel, {}) })
+  ] });
+};
+ComposerAction.displayName = "ComposerAction";
+var ComposerSendButton = (0, import_withDefaults.withDefaults)(import_tooltip_icon_button.TooltipIconButton, {
+  variant: "default",
+  className: "aui-composer-send"
+});
+var ComposerSend = (0, import_react.forwardRef)(
+  (props, ref) => {
+    const {
+      strings: { composer: { send: { tooltip = "Send" } = {} } = {} } = {}
+    } = (0, import_thread_config.useThreadConfig)();
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ComposerPrimitive.Send, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerSendButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.SendHorizontalIcon, {}) }) });
+  }
+);
+ComposerSend.displayName = "ComposerSend";
+var ComposerCancelButton = (0, import_withDefaults.withDefaults)(import_tooltip_icon_button.TooltipIconButton, {
+  variant: "default",
+  className: "aui-composer-cancel"
+});
+var ComposerCancel = (0, import_react.forwardRef)(
+  (props, ref) => {
+    const {
+      strings: { composer: { cancel: { tooltip = "Cancel" } = {} } = {} } = {}
+    } = (0, import_thread_config.useThreadConfig)();
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ComposerPrimitive.Cancel, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComposerCancelButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_CircleStopIcon.CircleStopIcon, {}) }) });
+  }
+);
+ComposerCancel.displayName = "ComposerCancel";
+var exports2 = {
+  Root: ComposerRoot,
+  Input: ComposerInput,
+  Action: ComposerAction,
+  Send: ComposerSend,
+  Cancel: ComposerCancel,
+  AddAttachment: ComposerAddAttachment,
+  Attachments: ComposerAttachments
+};
+var composer_default = Object.assign(Composer, exports2);
+//# sourceMappingURL=composer.js.map

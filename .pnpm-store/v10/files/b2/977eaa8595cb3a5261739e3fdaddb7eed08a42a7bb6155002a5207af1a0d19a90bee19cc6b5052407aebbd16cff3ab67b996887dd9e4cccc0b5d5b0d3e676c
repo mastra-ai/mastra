@@ -1,0 +1,58 @@
+{
+  "name": "assistant-cloud",
+  "description": "Cloud integration for assistant-ui",
+  "keywords": [
+    "assistant",
+    "cloud",
+    "ai",
+    "chat",
+    "assistant-ui"
+  ],
+  "version": "0.1.4",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "source": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "assistant-stream": "^0.2.36"
+  },
+  "devDependencies": {
+    "@types/node": "^24.8.1",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.6",
+    "tsx": "^4.20.6",
+    "vitest": "^3.2.4",
+    "@assistant-ui/x-buildutils": "0.0.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "homepage": "https://www.assistant-ui.com/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/assistant-ui/assistant-ui/tree/main/packages/cloud"
+  },
+  "bugs": {
+    "url": "https://github.com/assistant-ui/assistant-ui/issues"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.mts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint ."
+  }
+}

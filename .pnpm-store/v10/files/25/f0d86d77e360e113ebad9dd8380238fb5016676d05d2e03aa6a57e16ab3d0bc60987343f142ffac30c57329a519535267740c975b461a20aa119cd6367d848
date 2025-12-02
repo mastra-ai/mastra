@@ -1,0 +1,34 @@
+import { ISpeechConfigAudioDevice } from "../common.speech/Exports.js";
+import { AudioSourceEvent, EventSource, IAudioSource, IAudioStreamNode } from "../common/Exports.js";
+import { AudioStreamFormatImpl } from "../sdk/Audio/AudioStreamFormat.js";
+import { IRecorder } from "./IRecorder.js";
+export declare const AudioWorkletSourceURLPropertyName = "MICROPHONE-WorkletSourceUrl";
+export declare class MicAudioSource implements IAudioSource {
+    private readonly privRecorder;
+    private readonly deviceId?;
+    private static readonly AUDIOFORMAT;
+    private privStreams;
+    private privId;
+    private privEvents;
+    private privInitializeDeferral;
+    private privMediaStream;
+    private privContext;
+    private privMicrophoneLabel;
+    private privOutputChunkSize;
+    private privIsClosing;
+    constructor(privRecorder: IRecorder, deviceId?: string, audioSourceId?: string, mediaStream?: MediaStream);
+    get format(): Promise<AudioStreamFormatImpl>;
+    turnOn(): Promise<void>;
+    id(): string;
+    attach(audioNodeId: string): Promise<IAudioStreamNode>;
+    detach(audioNodeId: string): void;
+    turnOff(): Promise<void>;
+    get events(): EventSource<AudioSourceEvent>;
+    get deviceInfo(): Promise<ISpeechConfigAudioDevice>;
+    setProperty(name: string, value: string): void;
+    private getMicrophoneLabel;
+    private listen;
+    private onEvent;
+    private createAudioContext;
+    private destroyAudioContext;
+}

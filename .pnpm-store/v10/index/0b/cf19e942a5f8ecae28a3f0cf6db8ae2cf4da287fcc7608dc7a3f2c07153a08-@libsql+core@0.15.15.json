@@ -1,0 +1,91 @@
+{
+  "name": "@libsql/core",
+  "version": "0.15.15",
+  "requiresBuild": false,
+  "files": {
+    "lib-cjs/api.js": {
+      "checkedAt": 1764662925618,
+      "integrity": "sha512-wVPR0qILJbYVHAO/fhwtfrg/8/B3dDiGsdYb+3aOBKLUMguZAlZ/7UmH9jODG5Z/1kguv2Lg3G0mvh99yTPQlg==",
+      "mode": 420,
+      "size": 582
+    },
+    "lib-esm/api.js": {
+      "checkedAt": 1764662925620,
+      "integrity": "sha512-itFccODAi9xLaxLvw1yWpeYKqveDNGX7urZvYBtjR1U69zQBOQdHbpnE7ijMTULAOEbxyXdm9jIf7aPNGODuSQ==",
+      "mode": 420,
+      "size": 447
+    },
+    "lib-cjs/config.js": {
+      "checkedAt": 1764662925622,
+      "integrity": "sha512-dShoLi+i2RZl+P4ArJnvKGXSd3kKuXhh4xuTbihtSEWhqcLRpWbib+vA1FrU/oRjISOnUvrBPWf45qfwFoJBhA==",
+      "mode": 420,
+      "size": 5469
+    },
+    "lib-esm/config.js": {
+      "checkedAt": 1764662925624,
+      "integrity": "sha512-1qgm0V1ro4XuXtqSHoSLj9e/MStVeaV27LiLJS1bBkED9SsSW/85zBeI2cbU9mPn26SjuvXNq1R5ssm6srA1PQ==",
+      "mode": 420,
+      "size": 5204
+    },
+    "lib-cjs/uri.js": {
+      "checkedAt": 1764662925627,
+      "integrity": "sha512-dZGSZlsJVam+fV+hjUgNsOUi5ZX4iOxLHYmXwhP6puzo88sri7IqDDl54lsicZ4uejv89MRqbHLVV0W5meyb4w==",
+      "mode": 420,
+      "size": 4819
+    },
+    "lib-esm/uri.js": {
+      "checkedAt": 1764662925628,
+      "integrity": "sha512-KuchF3h6uP5VFD6sV9kVUSxloZWthz4EUrbErRIaonc1KGyRU1mgm8qOyGUD0W3VvT4NuTrOVnLyOcEA77jBuA==",
+      "mode": 420,
+      "size": 4603
+    },
+    "lib-cjs/util.js": {
+      "checkedAt": 1764662925629,
+      "integrity": "sha512-P7yPiEHoOBmsgnBs2W3qKgYYFu/7wApPBJKzFEODcfqmfj9N6wawSd2YUGavHRKa9xbRIH8d+2f+kfNpMgd79w==",
+      "mode": 420,
+      "size": 1857
+    },
+    "lib-esm/util.js": {
+      "checkedAt": 1764662925629,
+      "integrity": "sha512-loi0K/I9YRxgf1EJ8x7BVfiGcRGM7pupeLnkZBsmirA09seZ9Ab3jHU+dmu8OvMagNxJfwgosB96AZ7uYQHnSg==",
+      "mode": 420,
+      "size": 1593
+    },
+    "lib-cjs/package.json": {
+      "checkedAt": 1764662925630,
+      "integrity": "sha512-cj41HM7Dzf8fJXGluFoLwfupG7ascWbqCly9r0swKX1ZF3mIA1/RBYUtKVdDZw5UfqVeDeUI6I3kFDxloh+B2Q==",
+      "mode": 420,
+      "size": 27
+    },
+    "package.json": {
+      "checkedAt": 1764662925630,
+      "integrity": "sha512-uoA3XMjfGxCWg65JDGLV9Wnw6EsECdKKTr8owRYcY4AJGMLXLTTz4wO2d5s8URtHKz6xcIgfK9enu/fdKL85tg==",
+      "mode": 420,
+      "size": 2532
+    },
+    "lib-esm/api.d.ts": {
+      "checkedAt": 1764662925631,
+      "integrity": "sha512-ANaiGSKNlnjooT3vCgkXejOxQS6Jx2SHw2l57Pc21ne7/4VoDhOhy02gNijxFBvcXyBs1oP0JQg2tw8Vp9yfxg==",
+      "mode": 420,
+      "size": 19233
+    },
+    "lib-esm/config.d.ts": {
+      "checkedAt": 1764662925632,
+      "integrity": "sha512-IT2xDpvpzGOStulrWtfKbpw00rBeWrTh5jpbz78ETL67N7uPXh2NpA0tmeBrPVqdia8aryWCc88WdQMfbsquPA==",
+      "mode": 420,
+      "size": 777
+    },
+    "lib-esm/uri.d.ts": {
+      "checkedAt": 1764662925633,
+      "integrity": "sha512-0MTdiN1MYpEcOmZV623eKvptZ018wEDBRDTYKQWcnPUI4Kg6JZXZXuWbshD0EPdOQUKWSlif3JueficCD4Wzvg==",
+      "mode": 420,
+      "size": 765
+    },
+    "lib-esm/util.d.ts": {
+      "checkedAt": 1764662925634,
+      "integrity": "sha512-JBDhdWa0Jpln25lfKC8aT8f2CRUF9W0GWhD3mejIDqns7GZR5z1nbYNXhDhNNBPiRIAsQtKtILsXN/pjKhfUfA==",
+      "mode": 420,
+      "size": 611
+    }
+  }
+}

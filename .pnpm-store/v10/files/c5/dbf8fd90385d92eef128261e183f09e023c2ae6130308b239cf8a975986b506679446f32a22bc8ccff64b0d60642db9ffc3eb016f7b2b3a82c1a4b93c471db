@@ -1,0 +1,96 @@
+'use strict';
+
+var stream = require('stream');
+
+// src/logger/multi-logger.ts
+var MultiLogger = class {
+  loggers;
+  constructor(loggers) {
+    this.loggers = loggers;
+  }
+  debug(message, ...args) {
+    this.loggers.forEach((logger) => logger.debug(message, ...args));
+  }
+  info(message, ...args) {
+    this.loggers.forEach((logger) => logger.info(message, ...args));
+  }
+  warn(message, ...args) {
+    this.loggers.forEach((logger) => logger.warn(message, ...args));
+  }
+  error(message, ...args) {
+    this.loggers.forEach((logger) => logger.error(message, ...args));
+  }
+  trackException(error) {
+    this.loggers.forEach((logger) => logger.trackException(error));
+  }
+  getTransports() {
+    const transports = [];
+    this.loggers.forEach((logger) => transports.push(...logger.getTransports().entries()));
+    return new Map(transports);
+  }
+  async listLogs(transportId, params) {
+    for (const logger of this.loggers) {
+      const logs = await logger.listLogs(transportId, params);
+      if (logs.total > 0) {
+        return logs;
+      }
+    }
+    return { logs: [], total: 0, page: params?.page ?? 1, perPage: params?.perPage ?? 100, hasMore: false };
+  }
+  async listLogsByRunId(args) {
+    for (const logger of this.loggers) {
+      const logs = await logger.listLogsByRunId(args);
+      if (logs.total > 0) {
+        return logs;
+      }
+    }
+    return { logs: [], total: 0, page: args.page ?? 1, perPage: args.perPage ?? 100, hasMore: false };
+  }
+};
+
+// src/logger/noop-logger.ts
+var noopLogger = {
+  debug: () => {
+  },
+  info: () => {
+  },
+  warn: () => {
+  },
+  error: () => {
+  },
+  cleanup: async () => {
+  },
+  getTransports: () => /* @__PURE__ */ new Map(),
+  trackException: () => {
+  },
+  listLogs: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+  listLogsByRunId: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false })
+};
+var LoggerTransport = class extends stream.Transform {
+  constructor(opts = {}) {
+    super({ ...opts, objectMode: true });
+  }
+  async listLogsByRunId(_args) {
+    return { logs: [], total: 0, page: _args?.page ?? 1, perPage: _args?.perPage ?? 100, hasMore: false };
+  }
+  async listLogs(_args) {
+    return { logs: [], total: 0, page: _args?.page ?? 1, perPage: _args?.perPage ?? 100, hasMore: false };
+  }
+};
+var createCustomTransport = (stream, listLogs, listLogsByRunId) => {
+  let transport = stream;
+  if (listLogs) {
+    transport.listLogs = listLogs;
+  }
+  if (listLogsByRunId) {
+    transport.listLogsByRunId = listLogsByRunId;
+  }
+  return transport;
+};
+
+exports.LoggerTransport = LoggerTransport;
+exports.MultiLogger = MultiLogger;
+exports.createCustomTransport = createCustomTransport;
+exports.noopLogger = noopLogger;
+//# sourceMappingURL=chunk-CBAB7GOD.cjs.map
+//# sourceMappingURL=chunk-CBAB7GOD.cjs.map

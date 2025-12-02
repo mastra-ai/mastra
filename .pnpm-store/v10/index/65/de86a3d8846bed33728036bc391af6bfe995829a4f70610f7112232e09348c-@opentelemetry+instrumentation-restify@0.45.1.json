@@ -1,0 +1,169 @@
+{
+  "name": "@opentelemetry/instrumentation-restify",
+  "version": "0.45.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662915103,
+      "integrity": "sha512-3Gto0TuM+VlkS5NfEZKwLHGqelz2U71DtEgPqJ7sjU0/FqInjsjDtAqx/bIzsxc6eP2DWQ1vc54Mno/1bCglVw==",
+      "mode": 420,
+      "size": 11357
+    },
+    "build/src/enums/AttributeNames.js": {
+      "checkedAt": 1764662915104,
+      "integrity": "sha512-+jEIEWV6hI/tCslOKdLXT9LcURnNzXUGpiWm50xaOu1FULgVUXAk+gY+rwCxTimsoWcQZd1ISY8tXYnVNxe3Kg==",
+      "mode": 420,
+      "size": 1075
+    },
+    "build/src/constants.js": {
+      "checkedAt": 1764662915105,
+      "integrity": "sha512-/H96zH28cqS6Pw2jBSYT5xleIo4kItUEtcmUAU6kcml9xavCsR0zRTmDuxl2tlAkUXfkJZIwDqAS3IB2I9BX2A==",
+      "mode": 420,
+      "size": 996
+    },
+    "build/src/index.js": {
+      "checkedAt": 1764662915106,
+      "integrity": "sha512-Edl6m5ZyfP1VTRSiK3yUFfcPweEbOQkJQJvpcY12Fl4yR4s0mIMDhcsu6jti27I5A/lnK3uXv5DDiGVhzePTNg==",
+      "mode": 420,
+      "size": 1382
+    },
+    "build/src/instrumentation.js": {
+      "checkedAt": 1764662915107,
+      "integrity": "sha512-Zb2B4TcRBmAT71Ll2+SwcSs/U7u7ON351Tj7yOcTyq/U3Ad8ybWkeQUW3yAv915FwBd87Cb1S7zMOD/Sls0n0A==",
+      "mode": 420,
+      "size": 7858
+    },
+    "build/src/internal-types.js": {
+      "checkedAt": 1764662915108,
+      "integrity": "sha512-CitmhYhkfRX2ecYO3yiILksxatvYdpObMwuu+KM9hlHxzai9zW7RVqEoJ7GtSvRV+9sBb1UHRCsQNwRqBCuZDw==",
+      "mode": 420,
+      "size": 119
+    },
+    "build/src/types.js": {
+      "checkedAt": 1764662915108,
+      "integrity": "sha512-5DglEYdUIPh0/bRuoFfmeRa7E7+TKVQCHT9gS7PQWFoAa7H/GiO1OsvukaMr6KuLaUZJhhX/0jl+WZZFCkXE+A==",
+      "mode": 420,
+      "size": 944
+    },
+    "build/src/utils.js": {
+      "checkedAt": 1764662915109,
+      "integrity": "sha512-CZBzDjk2qzevE5tU+Jmcigk7cbDQcUK05x8BjZ9fJ673VusadaLL3B0MEt6SLjpKtrN8K4dyMyaKqvTx/VgZ+Q==",
+      "mode": 420,
+      "size": 1360
+    },
+    "build/src/version.js": {
+      "checkedAt": 1764662915110,
+      "integrity": "sha512-x8AvLwJUvmwzvjDLfn1qk62hH53oslPRnk6Je/zC61gCEu0f/e8NWdCxC9bJNh4pvDFMw+/K7ZlSVl8/IA0Biw==",
+      "mode": 420,
+      "size": 937
+    },
+    "package.json": {
+      "checkedAt": 1764662915112,
+      "integrity": "sha512-pqjwCW1NaV+L8MpJPI4GzxNiplTSfgF85hCmuMj7HPYyTiMm8+tqp48GrtvkyTEndtzplHgqJgVWnnObQ25XIg==",
+      "mode": 420,
+      "size": 2082
+    },
+    "build/src/enums/AttributeNames.js.map": {
+      "checkedAt": 1764662915113,
+      "integrity": "sha512-Vt8+ZM75us1fU0HApzonv43BDKhvoz2orb2no0ANftBT+EYemg+QR9KSGjoNheTJovdEYU6nlDMz8rJXj3CRvA==",
+      "mode": 420,
+      "size": 1102
+    },
+    "build/src/constants.js.map": {
+      "checkedAt": 1764662915114,
+      "integrity": "sha512-JiOGALUzhC+oS1Tv6iiz1VuizRM3+C2iTPaGpF5fmFHZncY+mIJ2euBte0u4iq1HwXWOQ0nynORFD0r3qfIsNQ==",
+      "mode": 420,
+      "size": 1172
+    },
+    "build/src/index.js.map": {
+      "checkedAt": 1764662915131,
+      "integrity": "sha512-r1qgP8d1jB3+7QREJhdngvJKwIVL2H7LgUMETSKf+ORl1lg69CyWrBexzKxAAd8lq7/Zy+eRxEpjRWfSm8/8lg==",
+      "mode": 420,
+      "size": 929
+    },
+    "build/src/instrumentation.js.map": {
+      "checkedAt": 1764662915135,
+      "integrity": "sha512-O6A4YnmBtbHN+jNtcNH+CBKXVDfGBoxgriWVBSs+LNeXS/bXKqe/m1nRdA8wBWEAPIqwDYtPrAL3tDw57dZdPw==",
+      "mode": 420,
+      "size": 13405
+    },
+    "build/src/internal-types.js.map": {
+      "checkedAt": 1764662915136,
+      "integrity": "sha512-Z6OjadYRc32FMSFsJDA2qyxp1/z+SzXxQVv7sfzzAuh18gsqzSISJpyrfgqqU9IE2suiqI1aQEOzMxgX4cLO3A==",
+      "mode": 420,
+      "size": 1462
+    },
+    "build/src/types.js.map": {
+      "checkedAt": 1764662915138,
+      "integrity": "sha512-stpHi9dTwzOwngMgoX7m+C9YKLptcMIh6Rn6ph17wzbzuzPuwWhXJByMI+I5yAjbKrYU5tUrIADyYUSewp2sfw==",
+      "mode": 420,
+      "size": 1792
+    },
+    "build/src/utils.js.map": {
+      "checkedAt": 1764662915144,
+      "integrity": "sha512-eaTZKiCUtwsyp845AXrOOS8lPO7+j5d7SF6Vt/B81V2B1Xo1Y+x/pl+X+o36nuEl3NEQ06yzpPH7JNMDP5W1gQ==",
+      "mode": 420,
+      "size": 1754
+    },
+    "build/src/version.js.map": {
+      "checkedAt": 1764662915144,
+      "integrity": "sha512-5irHbQGO2VQ98frlQ3D7S5+78vblJKEoLZYZYhCINz2xq8zrkeE8pzG/iqzGzhS4c1y/t/nt9uASbs3W+a85pw==",
+      "mode": 420,
+      "size": 1034
+    },
+    "README.md": {
+      "checkedAt": 1764662915145,
+      "integrity": "sha512-0qDDt8mW+9ft+H4X9nbtne6WQ5kqym32XNZUOWI9FLNXiuhuDcUHtPLZN6aze6ptlsKOEX4aZQWCB+ZfblRitQ==",
+      "mode": 420,
+      "size": 4026
+    },
+    "build/src/enums/AttributeNames.d.ts": {
+      "checkedAt": 1764662915147,
+      "integrity": "sha512-RquTWk+u1m980V8mkwAPKJINq6PvOE2uElLwguv68h1CaL3826vYpZXpmZDLqkQqw5IzBSWwZZRu15CV6iOREg==",
+      "mode": 420,
+      "size": 200
+    },
+    "build/src/constants.d.ts": {
+      "checkedAt": 1764662915148,
+      "integrity": "sha512-/sBQHuAfYu7mTwGJVjE/Ul28dOYHjA8/62yeWqEyiOd+8ZEI7wjXM2PQ7FuT3QY4mGIgKTaHmLYZLmNxw2kFmw==",
+      "mode": 420,
+      "size": 184
+    },
+    "build/src/index.d.ts": {
+      "checkedAt": 1764662915149,
+      "integrity": "sha512-f5bCNq7mJOBqOXWZ6IDZCqwdPio0eGNqx0R+wsjwMngQGxePCN5oF+lmPr5xOVc7w1fVztLvUruJzaPB4BSjQg==",
+      "mode": 420,
+      "size": 135
+    },
+    "build/src/instrumentation.d.ts": {
+      "checkedAt": 1764662915151,
+      "integrity": "sha512-BOmx4/pjXI0WcMTXnR0okSIcgfAFQh8PY70c2/GBF6Ze9cXskzN4yyBIvZpWuCHimfl2qrwn7yLAywRzx2ZOSA==",
+      "mode": 420,
+      "size": 567
+    },
+    "build/src/internal-types.d.ts": {
+      "checkedAt": 1764662915151,
+      "integrity": "sha512-Rq0hu72b+Yg40o5jeRc0e8uk60rvq268IqqLDkJy9EzhIso9oYfs9T3iT70j7ohNKug4z7PcqTvmE4PvjbReDQ==",
+      "mode": 420,
+      "size": 759
+    },
+    "build/src/types.d.ts": {
+      "checkedAt": 1764662915152,
+      "integrity": "sha512-sVk+QlIJlCqQTJcW0LxIYqH9TybNR+LRqRBSLkBkD0G940UErmesOpBCAYK7BYBsF95dspNMDy6fX+SCb1/NdA==",
+      "mode": 420,
+      "size": 877
+    },
+    "build/src/utils.d.ts": {
+      "checkedAt": 1764662915152,
+      "integrity": "sha512-qaE9pG/FzGMwofnbak/H4H2b1mkkDTB4dWd/BhdkltVNCEDAQj+7WuSoagR/6YV4X5ODgvVgbB50wrYsNehVAA==",
+      "mode": 420,
+      "size": 179
+    },
+    "build/src/version.d.ts": {
+      "checkedAt": 1764662915153,
+      "integrity": "sha512-oQQHPzvOwb9EabhoTVSlGJvm6/rVNt4HDY0V1N2hHm8llsWS1fqxAKsDOZyzKcVDNJeVu5ErYr4K2jp8mNB9Sw==",
+      "mode": 420,
+      "size": 164
+    }
+  }
+}

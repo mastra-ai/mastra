@@ -1,0 +1,1 @@
+{"version":3,"file":"VoidResponse.d.ts","sourceRoot":"","sources":["../../../../src/lib/types/VoidResponse.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,WAAW,CAAC;AAE1C,oBAAY,YAAY,GAAG,eAAe,GAAG,aAAa,CAAC;AAE3D,UAAU,eAAe;IACvB,KAAK,EAAE,IAAI,CAAC;CACb;AAED,UAAU,aAAa;IACrB,KAAK,EAAE,aAAa,CAAC;CACtB"}

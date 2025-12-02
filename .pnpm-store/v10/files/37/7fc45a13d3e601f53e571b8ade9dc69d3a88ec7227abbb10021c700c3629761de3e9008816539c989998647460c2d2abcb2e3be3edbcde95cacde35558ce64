@@ -1,0 +1,72 @@
+{
+    "schema": "1.0",
+    "comment": "This file maps proto services/RPCs to the corresponding library clients/methods",
+    "language": "typescript",
+    "protoPackage": "google.cloud.texttospeech.v1beta1",
+    "libraryPackage": "@google-cloud/text-to-speech",
+    "services": {
+        "TextToSpeech": {
+            "clients": {
+                "grpc": {
+                    "libraryClient": "TextToSpeechClient",
+                    "rpcs": {
+                        "ListVoices": {
+                            "methods": [
+                                "listVoices"
+                            ]
+                        },
+                        "SynthesizeSpeech": {
+                            "methods": [
+                                "synthesizeSpeech"
+                            ]
+                        },
+                        "StreamingSynthesize": {
+                            "methods": [
+                                "streamingSynthesize"
+                            ]
+                        }
+                    }
+                },
+                "grpc-fallback": {
+                    "libraryClient": "TextToSpeechClient",
+                    "rpcs": {
+                        "ListVoices": {
+                            "methods": [
+                                "listVoices"
+                            ]
+                        },
+                        "SynthesizeSpeech": {
+                            "methods": [
+                                "synthesizeSpeech"
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "TextToSpeechLongAudioSynthesize": {
+            "clients": {
+                "grpc": {
+                    "libraryClient": "TextToSpeechLongAudioSynthesizeClient",
+                    "rpcs": {
+                        "SynthesizeLongAudio": {
+                            "methods": [
+                                "synthesizeLongAudio"
+                            ]
+                        }
+                    }
+                },
+                "grpc-fallback": {
+                    "libraryClient": "TextToSpeechLongAudioSynthesizeClient",
+                    "rpcs": {
+                        "SynthesizeLongAudio": {
+                            "methods": [
+                                "synthesizeLongAudio"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

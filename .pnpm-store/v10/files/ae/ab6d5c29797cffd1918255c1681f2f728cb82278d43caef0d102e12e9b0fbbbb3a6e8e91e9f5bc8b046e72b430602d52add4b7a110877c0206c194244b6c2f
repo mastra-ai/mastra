@@ -1,0 +1,32 @@
+{
+    "name": "@types/accepts",
+    "version": "1.3.7",
+    "description": "TypeScript definitions for accepts",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/accepts",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Stefan Reichel",
+            "githubUsername": "bomret",
+            "url": "https://github.com/bomret"
+        },
+        {
+            "name": "Brice BERNARD",
+            "githubUsername": "brikou",
+            "url": "https://github.com/brikou"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/accepts"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/node": "*"
+    },
+    "typesPublisherContentHash": "6569dfd8e52a2d97af22ceb69fba418404767ad512a6f119070c9a595d5365e8",
+    "typeScriptVersion": "4.5"
+}

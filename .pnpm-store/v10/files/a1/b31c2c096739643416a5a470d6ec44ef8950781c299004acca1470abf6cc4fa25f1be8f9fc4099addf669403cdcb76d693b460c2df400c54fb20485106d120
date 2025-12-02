@@ -1,0 +1,45 @@
+---
+title: Introduction
+---
+
+import { Steps, LinkCard, Card, CardGrid } from '@astrojs/starlight/components';
+
+`jscodeshift` is a toolkit for building and running codemods over multiple JavaScript or TypeScript files. It provides:
+
+- A runner, which executes the provided transform for each file passed to it. It also outputs a summary of how many files have **not** been transformed.
+- A wrapper around [recast](https://github.com/benjamn/recast), providing a different API.  Recast is an AST-to-AST transform tool and also tries to preserve the style of original code
+as much as possible.
+
+## How does jscodeshift work?
+
+<Steps>
+  1. **Parsing Code into AST**
+
+      First, jscodeshift takes your JavaScript code and converts it into an Abstract Syntax Tree (AST). An AST is a tree representation of your code where each node represents a different part of the code, like variables, functions, and expressions.
+  
+  2. **Transforming the AST**
+      
+      Using jscodeshift, you can navigate through the AST and apply transformations. For example, you can find all instances of a certain function and rename it or change its parameters.
+  
+  3. **Generating Code from AST**
+      
+      After transforming the AST, jscodeshift converts it back into JavaScript code. The result is your original code with the specified changes applied.
+</Steps>
+
+## Installation
+
+Get jscodeshift from [npm](https://www.npmjs.com/package/jscodeshift):
+
+```
+$ npm install -g jscodeshift
+```
+
+This will install the runner as `jscodeshift`.
+
+
+## Getting started
+
+<CardGrid>
+  <LinkCard title="Build jscodeshift codemods" href="/build/api-reference/" />
+  <LinkCard title="Run jscodeshift codemods" href="/run/cli/" />
+</CardGrid>

@@ -1,0 +1,80 @@
+"use client";
+
+// src/ui/thread-welcome.tsx
+import { forwardRef } from "react";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import { Avatar } from "./base/avatar.mjs";
+import { useThreadConfig } from "./thread-config.mjs";
+import { ThreadPrimitive, useThread } from "@assistant-ui/react";
+import { jsx, jsxs } from "react/jsx-runtime";
+var ThreadWelcome = () => {
+  return /* @__PURE__ */ jsxs(ThreadWelcomeRoot, { children: [
+    /* @__PURE__ */ jsxs(ThreadWelcomeCenter, { children: [
+      /* @__PURE__ */ jsx(ThreadWelcomeAvatar, {}),
+      /* @__PURE__ */ jsx(ThreadWelcomeMessage, {})
+    ] }),
+    /* @__PURE__ */ jsx(ThreadWelcomeSuggestions, {})
+  ] });
+};
+ThreadWelcome.displayName = "ThreadWelcome";
+var ThreadWelcomeRootStyled = withDefaults("div", {
+  className: "aui-thread-welcome-root"
+});
+var ThreadWelcomeCenter = withDefaults("div", {
+  className: "aui-thread-welcome-center"
+});
+var ThreadWelcomeRoot = forwardRef((props, ref) => {
+  return /* @__PURE__ */ jsx(ThreadPrimitive.Empty, { children: /* @__PURE__ */ jsx(ThreadWelcomeRootStyled, { ...props, ref }) });
+});
+ThreadWelcomeRoot.displayName = "ThreadWelcomeRoot";
+var ThreadWelcomeAvatar = () => {
+  const { assistantAvatar: avatar = { fallback: "A" } } = useThreadConfig();
+  return /* @__PURE__ */ jsx(Avatar, { ...avatar });
+};
+var ThreadWelcomeMessageStyled = withDefaults("p", {
+  className: "aui-thread-welcome-message"
+});
+var ThreadWelcomeMessage = forwardRef(({ message: messageProp, ...rest }, ref) => {
+  const {
+    welcome: { message } = {},
+    strings: {
+      welcome: { message: defaultMessage = "How can I help you today?" } = {}
+    } = {}
+  } = useThreadConfig();
+  return /* @__PURE__ */ jsx(ThreadWelcomeMessageStyled, { ...rest, ref, children: messageProp ?? message ?? defaultMessage });
+});
+ThreadWelcomeMessage.displayName = "ThreadWelcomeMessage";
+var ThreadWelcomeSuggestionContainer = withDefaults("div", {
+  className: "aui-thread-welcome-suggestions"
+});
+var ThreadWelcomeSuggestionStyled = withDefaults(ThreadPrimitive.Suggestion, {
+  className: "aui-thread-welcome-suggestion"
+});
+var ThreadWelcomeSuggestion = ({
+  suggestion: { text, prompt }
+}) => {
+  return /* @__PURE__ */ jsx(ThreadWelcomeSuggestionStyled, { prompt, method: "replace", autoSend: true, children: /* @__PURE__ */ jsx("span", { className: "aui-thread-welcome-suggestion-text", children: text ?? prompt }) });
+};
+var ThreadWelcomeSuggestions = () => {
+  const suggestions2 = useThread((t) => t.suggestions);
+  const { welcome: { suggestions } = {} } = useThreadConfig();
+  const finalSuggestions = suggestions2.length ? suggestions2 : suggestions;
+  return /* @__PURE__ */ jsx(ThreadWelcomeSuggestionContainer, { children: finalSuggestions?.map((suggestion, idx) => {
+    const key = `${suggestion.prompt}-${idx}`;
+    return /* @__PURE__ */ jsx(ThreadWelcomeSuggestion, { suggestion }, key);
+  }) });
+};
+ThreadWelcomeSuggestions.displayName = "ThreadWelcomeSuggestions";
+var exports = {
+  Root: ThreadWelcomeRoot,
+  Center: ThreadWelcomeCenter,
+  Avatar: ThreadWelcomeAvatar,
+  Message: ThreadWelcomeMessage,
+  Suggestions: ThreadWelcomeSuggestions,
+  Suggestion: ThreadWelcomeSuggestion
+};
+var thread_welcome_default = Object.assign(ThreadWelcome, exports);
+export {
+  thread_welcome_default as default
+};
+//# sourceMappingURL=thread-welcome.mjs.map

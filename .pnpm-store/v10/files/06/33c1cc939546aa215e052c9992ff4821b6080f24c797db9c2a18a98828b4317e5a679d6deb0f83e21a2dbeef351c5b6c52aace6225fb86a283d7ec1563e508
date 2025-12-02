@@ -1,0 +1,83 @@
+{
+  "name": "error-stack-parser-es",
+  "type": "module",
+  "version": "1.0.5",
+  "packageManager": "pnpm@9.15.3",
+  "description": "Cross-browser Error parser",
+  "maintainers": [
+    "Anthony Fu <anthonyfu117@hotmail.com> (https://antfu.me)",
+    "Eric Wendelin <me@eriwen.com> (https://www.eriwen.com)",
+    "Victor Homyakov <vkhomyackov@gmail.com> (https://github.com/victor-homyakov)",
+    "Oliver Salzburg (https://github.com/oliversalzburg)",
+    "Ben Gourley (https://github.com/bengourley)"
+  ],
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/antfu",
+  "homepage": "https://github.com/antfu/error-stack-parser-es#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/antfu/error-stack-parser-es.git"
+  },
+  "bugs": "https://github.com/antfu/error-stack-parser-es/issues",
+  "keywords": [],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./lite": {
+      "types": "./dist/lite.d.ts",
+      "import": "./dist/lite.mjs",
+      "require": "./dist/lite.cjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/*",
+        "./dist/index.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "dev": "unbuild --stub",
+    "lint": "eslint .",
+    "prepublishOnly": "nr build",
+    "release": "bumpp && npm publish",
+    "start": "esno src/index.ts",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^3.12.2",
+    "@antfu/ni": "^23.2.0",
+    "@antfu/utils": "^8.0.0",
+    "@types/node": "^22.10.5",
+    "bumpp": "^9.9.3",
+    "eslint": "^9.17.0",
+    "esno": "^4.8.0",
+    "lint-staged": "^15.3.0",
+    "pnpm": "^9.15.3",
+    "rimraf": "^6.0.1",
+    "simple-git-hooks": "^2.11.1",
+    "typescript": "^5.7.3",
+    "unbuild": "^3.2.0",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "lint-staged": {
+    "*": "eslint --fix"
+  }
+}

@@ -1,0 +1,77 @@
+"use strict";
+"use client";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/edit-composer.tsx
+var edit_composer_exports = {};
+__export(edit_composer_exports, {
+  default: () => edit_composer_default
+});
+module.exports = __toCommonJS(edit_composer_exports);
+var import_react = require("react");
+var import_button = require("./base/button.js");
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_thread_config = require("./thread-config.js");
+var import_react2 = require("@assistant-ui/react");
+var import_jsx_runtime = require("react/jsx-runtime");
+var EditComposer = () => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(EditComposerRoot, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EditComposerInput, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(EditComposerFooter, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EditComposerCancel, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EditComposerSend, {})
+    ] })
+  ] });
+};
+EditComposer.displayName = "EditComposer";
+var EditComposerRoot = (0, import_withDefaults.withDefaults)(import_react2.ComposerPrimitive.Root, {
+  className: "aui-edit-composer-root"
+});
+EditComposerRoot.displayName = "EditComposerRoot";
+var EditComposerInput = (0, import_withDefaults.withDefaults)(import_react2.ComposerPrimitive.Input, {
+  className: "aui-edit-composer-input"
+});
+EditComposerInput.displayName = "EditComposerInput";
+var EditComposerFooter = (0, import_withDefaults.withDefaults)("div", {
+  className: "aui-edit-composer-footer"
+});
+EditComposerFooter.displayName = "EditComposerFooter";
+var EditComposerCancel = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: { editComposer: { cancel: { label = "Cancel" } = {} } = {} } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ComposerPrimitive.Cancel, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_button.Button, { variant: "ghost", ...props, ref, children: props.children ?? label }) });
+});
+EditComposerCancel.displayName = "EditComposerCancel";
+var EditComposerSend = (0, import_react.forwardRef)((props, ref) => {
+  const {
+    strings: { editComposer: { send: { label = "Send" } = {} } = {} } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.ComposerPrimitive.Send, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_button.Button, { ...props, ref, children: props.children ?? label }) });
+});
+EditComposerSend.displayName = "EditComposerSend";
+var exports2 = {
+  Root: EditComposerRoot,
+  Input: EditComposerInput,
+  Footer: EditComposerFooter,
+  Cancel: EditComposerCancel,
+  Send: EditComposerSend
+};
+var edit_composer_default = Object.assign(EditComposer, exports2);
+//# sourceMappingURL=edit-composer.js.map

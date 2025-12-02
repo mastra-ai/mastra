@@ -1,0 +1,49 @@
+imports:
+  root: __package__.yml
+service:
+  auth: false
+  base-path: ''
+  endpoints:
+    get_all:
+      path: /v1/models
+      method: GET
+      auth: false
+      docs: Gets a list of available models.
+      source:
+        openapi: openapi.json
+      display-name: List models
+      response:
+        docs: Successful Response
+        type: list<root.Model>
+        status-code: 200
+      errors:
+        - root.UnprocessableEntityError
+      examples:
+        - response:
+            body:
+              - model_id: eleven_multilingual_v2
+                name: Eleven Multilingual v2
+                can_be_finetuned: true
+                can_do_text_to_speech: true
+                can_do_voice_conversion: true
+                can_use_style: true
+                can_use_speaker_boost: true
+                serves_pro_voices: false
+                token_cost_factor: 1
+                description: >-
+                  Our state of the art multilingual speech synthesis model, able
+                  to generate life-like speech in 29 languages.
+                requires_alpha_access: false
+                max_characters_request_free_user: 2500
+                max_characters_request_subscribed_user: 5000
+                maximum_text_length_per_request: 1000000
+                languages:
+                  - language_id: en
+                    name: English
+                model_rates:
+                  character_cost_multiplier: 1
+                concurrency_group: standard
+  source:
+    openapi: openapi.json
+  display-name: Models
+docs: Access the different models of the platform.

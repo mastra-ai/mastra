@@ -1,0 +1,136 @@
+{
+    "interfaces": {
+        "google.pubsub.v1.Subscriber": {
+            "retry_codes": {
+                "non_idempotent": [],
+                "idempotent": [
+                    "DEADLINE_EXCEEDED",
+                    "UNAVAILABLE"
+                ],
+                "unknown_aborted_unavailable": [
+                    "UNKNOWN",
+                    "ABORTED",
+                    "UNAVAILABLE"
+                ],
+                "unavailable": [
+                    "UNAVAILABLE"
+                ],
+                "unknown_aborted_internal_unavailable": [
+                    "UNKNOWN",
+                    "ABORTED",
+                    "INTERNAL",
+                    "UNAVAILABLE"
+                ],
+                "deadline_exceeded_resource_exhausted_aborted_internal_unavailable": [
+                    "DEADLINE_EXCEEDED",
+                    "RESOURCE_EXHAUSTED",
+                    "ABORTED",
+                    "INTERNAL",
+                    "UNAVAILABLE"
+                ]
+            },
+            "retry_params": {
+                "default": {
+                    "initial_retry_delay_millis": 100,
+                    "retry_delay_multiplier": 1.3,
+                    "max_retry_delay_millis": 60000,
+                    "initial_rpc_timeout_millis": 60000,
+                    "rpc_timeout_multiplier": 1,
+                    "max_rpc_timeout_millis": 60000,
+                    "total_timeout_millis": 600000
+                },
+                "693222d32e887d96c8faeadca469f7763ccda85a": {
+                    "initial_retry_delay_millis": 100,
+                    "retry_delay_multiplier": 4,
+                    "max_retry_delay_millis": 60000,
+                    "initial_rpc_timeout_millis": 60000,
+                    "rpc_timeout_multiplier": 1,
+                    "max_rpc_timeout_millis": 60000,
+                    "total_timeout_millis": 600000
+                }
+            },
+            "methods": {
+                "CreateSubscription": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                },
+                "GetSubscription": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                },
+                "UpdateSubscription": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "ListSubscriptions": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                },
+                "DeleteSubscription": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "ModifyAckDeadline": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "Acknowledge": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "Pull": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_internal_unavailable",
+                    "retry_params_name": "default"
+                },
+                "StreamingPull": {
+                    "timeout_millis": 900000,
+                    "retry_codes_name": "deadline_exceeded_resource_exhausted_aborted_internal_unavailable",
+                    "retry_params_name": "693222d32e887d96c8faeadca469f7763ccda85a"
+                },
+                "ModifyPushConfig": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "GetSnapshot": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                },
+                "ListSnapshots": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                },
+                "CreateSnapshot": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "UpdateSnapshot": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "DeleteSnapshot": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unavailable",
+                    "retry_params_name": "default"
+                },
+                "Seek": {
+                    "timeout_millis": 60000,
+                    "retry_codes_name": "unknown_aborted_unavailable",
+                    "retry_params_name": "default"
+                }
+            }
+        }
+    }
+}

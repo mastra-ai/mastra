@@ -1,0 +1,25 @@
+{
+  "name": "@libsql/darwin-arm64",
+  "version": "0.5.22",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662926017,
+      "integrity": "sha512-F42vJRL+cSgtRL41dvRkAlz+Evgm4/4iiEp0ztTqfLWqWtUyV4FYU6/G7W9Z2pWPJfuxaYBzLi65KPqkIl3Fcw==",
+      "mode": 420,
+      "size": 761
+    },
+    "README.md": {
+      "checkedAt": 1764662926018,
+      "integrity": "sha512-2eyr9XTaF7j2nDIuH5pn1zoCGLwhxU7mqrsJ5XqN8Vn80CdAdgmuC/6Lg71FKj1goV6L9ld0cNIkUxfwSfwd9w==",
+      "mode": 420,
+      "size": 82
+    },
+    "index.node": {
+      "checkedAt": 1764662926045,
+      "integrity": "sha512-hIfd3D+7Yf9cNdlkIrZua6u7VnEms5YB+MF4tyOoqOvb5nAV8Vjw0ov0vu9U45+PNTO5/rEjwy9pqjVrSPq6Dw==",
+      "mode": 493,
+      "size": 7837584
+    }
+  }
+}

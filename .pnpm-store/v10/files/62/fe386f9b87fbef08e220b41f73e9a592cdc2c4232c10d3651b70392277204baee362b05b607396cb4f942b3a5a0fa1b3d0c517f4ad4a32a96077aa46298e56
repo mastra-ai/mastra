@@ -1,0 +1,100 @@
+{
+  "name": "heap-js",
+  "version": "2.7.1",
+  "description": "Efficient Binary heap (priority queue, binary tree) data structure for JavaScript / TypeScript. Includes JavaScript methods, Python's heapq module methods, and Java's PriorityQueue methods.",
+  "keywords": [
+    "heap",
+    "binary heap",
+    "priority queue",
+    "tree",
+    "binary tree",
+    "data structure",
+    "algorithm",
+    "typescript"
+  ],
+  "main": "dist/heap-js.umd.js",
+  "module": "dist/heap-js.es5.js",
+  "types": "dist/types/Heap.d.ts",
+  "author": "Ignacio Lago @ignlg <ignacio@ignaciolago.com>",
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/ignlg/heap-js.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json && rollup -c && rimraf compiled && typedoc",
+    "lint": "eslint --fix 'src/**/*.ts'",
+    "prebuild": "rimraf dist",
+    "precommit": "lint-staged",
+    "report-coverage": "cat ./coverage/lcov.info | coveralls",
+    "start": "tsc-watch --onSuccess \"rollup -c\"",
+    "test": "jest --coverage --no-cache",
+    "test:heapUsage": "node --expose-gc ./node_modules/.bin/jest --runInBand --logHeapUsage",
+    "test:prod": "npm run lint && npm run test -- --coverage --no-cache",
+    "test:watch": "jest --watch",
+    "benchmark": "node benchmark/benchmark.js"
+  },
+  "lint-staged": {
+    "src/**/*.ts": [
+      "eslint --fix",
+      "jest --coverage --no-cache"
+    ]
+  },
+  "jest": {
+    "transform": {
+      ".(ts|tsx)": "<rootDir>/node_modules/ts-jest"
+    },
+    "testRegex": "(/__tests__/.*|\\.(test|spec))\\.(ts|tsx|js)$",
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js"
+    ],
+    "coveragePathIgnorePatterns": [
+      "/node_modules/"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 100,
+        "functions": 100,
+        "lines": 100,
+        "statements": 100
+      }
+    }
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@types/benchmark": "^2.1.5",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "benchmark": "^2.1.4",
+    "coveralls": "^3.1.1",
+    "cross-env": "^7.0.3",
+    "eslint": "<9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "lint-staged": "^15.3.0",
+    "lodash.camelcase": "^4.3.0",
+    "prettier": "^3.4.2",
+    "prettier-eslint": "^16.3.0",
+    "rimraf": "^6.0.1",
+    "rollup": "^4.29.1",
+    "rollup-plugin-sourcemaps": "^0.6.3",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "tsc-watch": "^6.2.1",
+    "typedoc": "^0.27.6",
+    "typescript": "^5.7.2"
+  }
+}

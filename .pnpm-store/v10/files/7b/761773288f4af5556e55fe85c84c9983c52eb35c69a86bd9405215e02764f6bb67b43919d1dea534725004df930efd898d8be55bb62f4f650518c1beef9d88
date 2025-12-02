@@ -1,0 +1,37 @@
+{
+  "name": "@rushstack/terminal",
+  "version": "0.19.1",
+  "description": "User interface primitives for console applications",
+  "main": "lib/index.js",
+  "typings": "dist/terminal.d.ts",
+  "license": "MIT",
+  "repository": {
+    "url": "https://github.com/microsoft/rushstack.git",
+    "type": "git",
+    "directory": "libraries/terminal"
+  },
+  "dependencies": {
+    "supports-color": "~8.1.1",
+    "@rushstack/node-core-library": "5.17.0",
+    "@rushstack/problem-matcher": "0.1.1"
+  },
+  "devDependencies": {
+    "@rushstack/heft": "1.0.0",
+    "@types/supports-color": "8.1.3",
+    "eslint": "~9.25.1",
+    "decoupled-local-node-rig": "1.0.0"
+  },
+  "peerDependencies": {
+    "@types/node": "*"
+  },
+  "peerDependenciesMeta": {
+    "@types/node": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "heft build --clean",
+    "_phase:build": "heft run --only build -- --clean",
+    "_phase:test": "heft run --only test -- --clean"
+  }
+}

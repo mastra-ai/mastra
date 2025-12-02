@@ -1,0 +1,48 @@
+{
+  "name": "@opentelemetry/redis-common",
+  "version": "0.36.2",
+  "description": "Redis utilities for redis instrumentations",
+  "main": "build/src/index.js",
+  "types": "build/src/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "compile": "tsc --build tsconfig.json",
+    "precompile": "tsc --version && lerna run version:update --scope @opentelemetry/redis-common --include-dependencies",
+    "prewatch": "npm run precompile",
+    "prepublishOnly": "npm run compile",
+    "test": "nyc ts-mocha -p tsconfig.json 'test/**/*.test.ts'",
+    "watch": "tsc -w"
+  },
+  "repository": "open-telemetry/opentelemetry-js-contrib",
+  "keywords": [
+    "opentelemetry",
+    "redis-common"
+  ],
+  "files": [
+    "build/**/*.js",
+    "build/**/*.js.map",
+    "build/**/*.d.ts"
+  ],
+  "author": "OpenTelemetry Authors",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=14"
+  },
+  "bugs": {
+    "url": "https://github.com/open-telemetry/opentelemetry-js-contrib/issues"
+  },
+  "homepage": "https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/redis-common#readme",
+  "devDependencies": {
+    "@types/mocha": "^9.1.1",
+    "@types/node": "18.6.5",
+    "mocha": "7.2.0",
+    "nyc": "15.1.0",
+    "ts-mocha": "10.0.0",
+    "typescript": "4.4.4"
+  },
+  "gitHead": "96a87b48934f0afcf1fe637eed6704f35bd8e973"
+}

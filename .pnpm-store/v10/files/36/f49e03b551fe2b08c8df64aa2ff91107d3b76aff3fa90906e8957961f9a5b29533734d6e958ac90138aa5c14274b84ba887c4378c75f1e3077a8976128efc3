@@ -1,0 +1,126 @@
+"use strict";
+"use client";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/ui/assistant-modal.tsx
+var assistant_modal_exports = {};
+__export(assistant_modal_exports, {
+  default: () => assistant_modal_default
+});
+module.exports = __toCommonJS(assistant_modal_exports);
+var import_react = require("react");
+var import_lucide_react = require("lucide-react");
+var import_react2 = require("@assistant-ui/react");
+var import_thread = __toESM(require("./thread.js"));
+var import_withDefaults = require("./utils/withDefaults.js");
+var import_tooltip_icon_button = require("./base/tooltip-icon-button.js");
+var import_thread_config = require("./thread-config.js");
+var import_jsx_runtime = require("react/jsx-runtime");
+var AssistantModal = (config) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(AssistantModalRoot, { config, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantModalTrigger, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantModalContent, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_thread.default, {}) })
+  ] });
+};
+AssistantModal.displayName = "AssistantModal";
+var AssistantModalRoot = ({
+  config,
+  ...props
+}) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_thread_config.ThreadConfigProvider, { config, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.AssistantModalPrimitive.Root, { ...props }) });
+};
+AssistantModalRoot.displayName = "AssistantModalRoot";
+var AssistantModalTrigger = (0, import_react.forwardRef)((props, ref) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantModalAnchor, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react2.AssistantModalPrimitive.Trigger, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistantModalButton, { ...props, ref }) }) });
+});
+AssistantModalTrigger.displayName = "AssistantModalTrigger";
+var AssistantModalAnchor = (0, import_withDefaults.withDefaults)(import_react2.AssistantModalPrimitive.Anchor, {
+  className: "aui-root aui-modal-anchor"
+});
+AssistantModalAnchor.displayName = "AssistantModalAnchor";
+var ModalButtonStyled = (0, import_withDefaults.withDefaults)(import_tooltip_icon_button.TooltipIconButton, {
+  variant: "default",
+  className: "aui-modal-button"
+});
+var AssistantModalButton = (0, import_react.forwardRef)(({ "data-state": state, ...rest }, ref) => {
+  const {
+    strings: {
+      assistantModal: {
+        open: {
+          button: { tooltip: openTooltip = "Close Assistant" } = {}
+        } = {},
+        closed: {
+          button: { tooltip: closedTooltip = "Open Assistant" } = {}
+        } = {}
+      } = {}
+    } = {}
+  } = (0, import_thread_config.useThreadConfig)();
+  const tooltip = state === "open" ? openTooltip : closedTooltip;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ModalButtonStyled,
+    {
+      side: "left",
+      tooltip,
+      "data-state": state,
+      ...rest,
+      ref,
+      children: rest.children ?? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          import_lucide_react.BotIcon,
+          {
+            "data-state": state,
+            className: "aui-modal-button-closed-icon"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          import_lucide_react.ChevronDownIcon,
+          {
+            "data-state": state,
+            className: "aui-modal-button-open-icon"
+          }
+        )
+      ] })
+    }
+  );
+});
+AssistantModalButton.displayName = "AssistantModalButton";
+var AssistantModalContent = (0, import_withDefaults.withDefaults)(import_react2.AssistantModalPrimitive.Content, {
+  className: "aui-root aui-modal-content",
+  sideOffset: 16
+});
+AssistantModalContent.displayName = "AssistantModalContent";
+var exports2 = {
+  Root: AssistantModalRoot,
+  Trigger: AssistantModalTrigger,
+  Content: AssistantModalContent,
+  Button: AssistantModalButton,
+  Anchor: AssistantModalAnchor
+};
+var assistant_modal_default = Object.assign(AssistantModal, exports2);
+//# sourceMappingURL=assistant-modal.js.map

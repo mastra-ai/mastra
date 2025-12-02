@@ -1,0 +1,29 @@
+{
+  "name": "@rushstack/problem-matcher",
+  "entries": [
+    {
+      "version": "0.1.1",
+      "tag": "@rushstack/problem-matcher_v0.1.1",
+      "date": "Tue, 30 Sep 2025 23:57:45 GMT",
+      "comments": {
+        "patch": [
+          {
+            "comment": "Fix multi-line looping problem matcher message parsing"
+          }
+        ]
+      }
+    },
+    {
+      "version": "0.1.0",
+      "tag": "@rushstack/problem-matcher_v0.1.0",
+      "date": "Tue, 30 Sep 2025 20:33:51 GMT",
+      "comments": {
+        "minor": [
+          {
+            "comment": "Add @rushstack/problem-matcher library to parse and use VS Code style problem matchers"
+          }
+        ]
+      }
+    }
+  ]
+}

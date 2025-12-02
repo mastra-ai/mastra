@@ -1,0 +1,31 @@
+{
+  "name": "@types/react-syntax-highlighter",
+  "version": "15.5.13",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662919871,
+      "integrity": "sha512-HQaIQk9pwOcyKutyDk4o2a87WnotwYuLGYFW43emGm4FvIJFKPyg+OYaw5sTegKAKf+C5SKa1ACjzCLivbaHrQ==",
+      "mode": 420,
+      "size": 1141
+    },
+    "README.md": {
+      "checkedAt": 1764662919873,
+      "integrity": "sha512-J70y9DxlAEaEXGsBZNICqZ8MNW1aHWqrcZNwrOJXqawJPR8EHlMEzYsdK5wy4TN/I4kIgWB04SOPBE17zqGcQw==",
+      "mode": 420,
+      "size": 771
+    },
+    "index.d.ts": {
+      "checkedAt": 1764662919874,
+      "integrity": "sha512-fvz4BY0wgMdVjAaq1A+HTd4Ch2CJlDAUvevgVfqykpvLpl6UnHoyNlAKId7YRCu3qZD8KGHEDM/5lDBXuzJNWQ==",
+      "mode": 420,
+      "size": 193031
+    },
+    "package.json": {
+      "checkedAt": 1764662919877,
+      "integrity": "sha512-k/7WtaKWklmwB/yg8/pRKoWjA807pmFg6gZ5Bxd+UVsxeqwaAAw/r+30HzPGKncIb+E21S0L2o1KXlzDGaRsJg==",
+      "mode": 420,
+      "size": 1479
+    }
+  }
+}

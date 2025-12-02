@@ -1,0 +1,5 @@
+import { ComponentType, type FC } from "react";
+import type { SyntaxHighlighterProps as SHP } from "react-syntax-highlighter";
+import type { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
+export declare const makeMakeSyntaxHighlighter: (SyntaxHighlighter: ComponentType<SHP>) => (config: Omit<SHP, "language" | "children">) => FC<SyntaxHighlighterProps>;
+//# sourceMappingURL=make-syntax-highlighter.d.ts.map

@@ -1,0 +1,44 @@
+{
+  "name": "assert-options",
+  "version": "0.8.3",
+  "description": "Generic options parameter handling.",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "test": "mocha --timeout 10000 --import=tsx test/**/*.spec.ts --exit"
+  },
+  "files": [
+    "dist/src",
+    "dist/index.js"
+  ],
+  "homepage": "https://github.com/vitaly-t/assert-options",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vitaly-t/assert-options.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vitaly-t/assert-options/issues",
+    "email": "vitaly.tomilov@gmail.com"
+  },
+  "keywords": [
+    "assert",
+    "options"
+  ],
+  "author": {
+    "name": "Vitaly Tomilov",
+    "email": "vitaly.tomilov@gmail.com"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "@types/chai": "5.2.0",
+    "@types/mocha": "10.0.10",
+    "@types/node": "22.13.11",
+    "chai": "5.2.0",
+    "mocha": "11.1.0",
+    "tsx": "4.19.3",
+    "typescript": "5.8.2"
+  }
+}

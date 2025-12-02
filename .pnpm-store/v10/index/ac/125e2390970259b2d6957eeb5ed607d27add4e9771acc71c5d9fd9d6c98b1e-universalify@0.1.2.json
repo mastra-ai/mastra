@@ -1,0 +1,31 @@
+{
+  "name": "universalify",
+  "version": "0.1.2",
+  "requiresBuild": false,
+  "files": {
+    "package.json": {
+      "checkedAt": 1764662928633,
+      "integrity": "sha512-uz2w4lZkej+TWHeZ+N9Jy6icQJl+fny3kRWvf32tpYLG/MGJqqDOyBoc7GywL3zUs44AXDLybzEuxcVwUnEaGQ==",
+      "mode": 436,
+      "size": 820
+    },
+    "index.js": {
+      "checkedAt": 1764662928634,
+      "integrity": "sha512-bO/+xxruPQCbTpiNR8RCgNdDOEQLuyKONg4Zmiflox2e3VUmE2D0f9ioHEvYeNeDitMYclhJSZqfTBBZklaCfw==",
+      "mode": 436,
+      "size": 777
+    },
+    "LICENSE": {
+      "checkedAt": 1764662928635,
+      "integrity": "sha512-pbs/at7xx/YXvA/EeNUBu6IUrMMh+EerE1URm1WGO2+l8ctpSZuv/dwamKLHiKjL7PI653/zdK5KBvd/iU6u7Q==",
+      "mode": 436,
+      "size": 1100
+    },
+    "README.md": {
+      "checkedAt": 1764662928637,
+      "integrity": "sha512-h5bDd0MX09yYFT+SbppMzxPdraSAZwunF6jwoRmSAWmBlUZx/o4jtDV1AwissT3LlSKlVOCwI61Mzaomw9xirA==",
+      "mode": 436,
+      "size": 2008
+    }
+  }
+}

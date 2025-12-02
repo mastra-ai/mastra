@@ -1,0 +1,100 @@
+{
+  "name": "react-redux",
+  "version": "9.2.0",
+  "description": "Official React bindings for Redux",
+  "keywords": [
+    "react",
+    "reactjs",
+    "redux"
+  ],
+  "license": "MIT",
+  "author": "Dan Abramov <dan.abramov@me.com> (https://github.com/gaearon)",
+  "homepage": "https://github.com/reduxjs/react-redux",
+  "repository": "github:reduxjs/react-redux",
+  "bugs": "https://github.com/reduxjs/react-redux/issues",
+  "module": "dist/react-redux.legacy-esm.js",
+  "main": "dist/cjs/index.js",
+  "react-native": "./dist/react-redux.legacy-esm.js",
+  "types": "dist/react-redux.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/react-redux.d.ts",
+      "react-server": "./dist/rsc.mjs",
+      "react-native": "./dist/react-redux.legacy-esm.js",
+      "import": "./dist/react-redux.mjs",
+      "default": "./dist/cjs/index.js"
+    },
+    "./alternate-renderers": {
+      "types": "./dist/react-redux.d.ts",
+      "import": "./dist/react-redux.mjs",
+      "default": "./dist/cjs/index.js"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "yarn clean && tsup",
+    "clean": "rimraf lib dist es coverage",
+    "api-types": "api-extractor run --local",
+    "format": "prettier --write \"{src,test}/**/*.{js,ts,tsx}\" \"docs/**/*.md\"",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
+    "prepack": "yarn build",
+    "pretest": "yarn lint",
+    "test": "vitest --run --typecheck",
+    "test:watch": "vitest --watch",
+    "type-tests": "tsc --noEmit -p tsconfig.test.json",
+    "coverage": "codecov"
+  },
+  "peerDependencies": {
+    "@types/react": "^18.2.25 || ^19",
+    "react": "^18.0 || ^19",
+    "redux": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
+    "redux": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@types/use-sync-external-store": "^0.0.6",
+    "use-sync-external-store": "^1.4.0"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.47.0",
+    "@reduxjs/toolkit": "^2.2.5",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^20.14.2",
+    "@types/prop-types": "^15.7.12",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "codecov": "^3.8.3",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-react": "^7.34.2",
+    "jsdom": "^25.0.1",
+    "prettier": "^3.3.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "redux": "^5.0.1",
+    "rimraf": "^5.0.7",
+    "tsup": "^8.3.5",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^7.12.0",
+    "vitest": "^1.6.0"
+  },
+  "packageManager": "yarn@4.4.1"
+}

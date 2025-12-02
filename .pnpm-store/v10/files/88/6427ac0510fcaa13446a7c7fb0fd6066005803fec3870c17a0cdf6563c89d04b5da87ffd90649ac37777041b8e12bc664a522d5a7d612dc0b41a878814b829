@@ -1,0 +1,63 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+__exportStar(require("./authenticate-with-code-options.interface"), exports);
+__exportStar(require("./authenticate-with-code-and-verifier-options.interface"), exports);
+__exportStar(require("./authenticate-with-email-verification-options.interface"), exports);
+__exportStar(require("./authenticate-with-magic-auth-options.interface"), exports);
+__exportStar(require("./authenticate-with-options-base.interface"), exports);
+__exportStar(require("./authenticate-with-organization-selection.interface"), exports);
+__exportStar(require("./authenticate-with-password-options.interface"), exports);
+__exportStar(require("./authenticate-with-refresh-token-options.interface"), exports);
+__exportStar(require("./authenticate-with-session-cookie.interface"), exports);
+__exportStar(require("./authenticate-with-totp-options.interface"), exports);
+__exportStar(require("./authentication-event.interface"), exports);
+__exportStar(require("./authentication-radar-risk-detected-event.interface"), exports);
+__exportStar(require("./authentication-response.interface"), exports);
+__exportStar(require("./authorization-url-options.interface"), exports);
+__exportStar(require("./create-magic-auth-options.interface"), exports);
+__exportStar(require("./create-organization-membership-options.interface"), exports);
+__exportStar(require("./create-password-reset-options.interface"), exports);
+__exportStar(require("./create-user-options.interface"), exports);
+__exportStar(require("./email-verification.interface"), exports);
+__exportStar(require("./enroll-auth-factor.interface"), exports);
+__exportStar(require("./factor.interface"), exports);
+__exportStar(require("./identity.interface"), exports);
+__exportStar(require("./impersonator.interface"), exports);
+__exportStar(require("./invitation.interface"), exports);
+__exportStar(require("./list-auth-factors-options.interface"), exports);
+__exportStar(require("./list-invitations-options.interface"), exports);
+__exportStar(require("./list-organization-memberships-options.interface"), exports);
+__exportStar(require("./list-sessions-options.interface"), exports);
+__exportStar(require("./list-user-feature-flags-options.interface"), exports);
+__exportStar(require("./list-users-options.interface"), exports);
+__exportStar(require("./magic-auth.interface"), exports);
+__exportStar(require("./oauth-tokens.interface"), exports);
+__exportStar(require("./organization-membership.interface"), exports);
+__exportStar(require("./password-reset.interface"), exports);
+__exportStar(require("./refresh-and-seal-session-data.interface"), exports);
+__exportStar(require("./reset-password-options.interface"), exports);
+__exportStar(require("./revoke-session-options.interface"), exports);
+__exportStar(require("./send-invitation-options.interface"), exports);
+__exportStar(require("./send-magic-auth-code-options.interface"), exports);
+__exportStar(require("./send-password-reset-email-options.interface"), exports);
+__exportStar(require("./send-verification-email-options.interface"), exports);
+__exportStar(require("./session.interface"), exports);
+__exportStar(require("./update-organization-membership-options.interface"), exports);
+__exportStar(require("./update-user-options.interface"), exports);
+__exportStar(require("./update-user-password-options.interface"), exports);
+__exportStar(require("./user.interface"), exports);
+__exportStar(require("./verify-email-options.interface"), exports);

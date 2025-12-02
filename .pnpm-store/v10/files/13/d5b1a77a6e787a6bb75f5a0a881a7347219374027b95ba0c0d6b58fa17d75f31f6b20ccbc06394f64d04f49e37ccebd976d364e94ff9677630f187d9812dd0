@@ -1,0 +1,18 @@
+{
+  "name": "node-screenshots-darwin-arm64",
+  "version": "0.2.1",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "node-screenshots.darwin-arm64.node",
+  "files": [
+    "node-screenshots.darwin-arm64.node"
+  ],
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">= 10"
+  }
+}

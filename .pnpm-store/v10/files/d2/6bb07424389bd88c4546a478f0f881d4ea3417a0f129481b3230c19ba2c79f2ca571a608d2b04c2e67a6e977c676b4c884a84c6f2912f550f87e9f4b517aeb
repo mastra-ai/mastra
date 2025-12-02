@@ -1,0 +1,1 @@
+{"version":3,"file":"ALIASADD.js","sourceRoot":"","sources":["../../../lib/commands/ALIASADD.ts"],"names":[],"mappings":";;AAGA,kBAAe;IACb,iBAAiB,EAAE,IAAI;IACvB,YAAY,EAAE,IAAI;IAClB;;;;;OAKG;IACH,YAAY,CAAC,MAAqB,EAAE,KAAoB,EAAE,KAAoB;QAC5E,MAAM,CAAC,IAAI,CAAC,aAAa,EAAE,KAAK,EAAE,KAAK,CAAC,CAAC;IAC3C,CAAC;IACD,cAAc,EAAE,SAAqD;CAC3C,CAAC"}

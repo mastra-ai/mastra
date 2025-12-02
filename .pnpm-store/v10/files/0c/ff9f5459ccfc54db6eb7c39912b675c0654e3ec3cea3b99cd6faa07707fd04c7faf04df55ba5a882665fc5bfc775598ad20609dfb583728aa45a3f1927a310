@@ -1,0 +1,80 @@
+{
+  "name": "posthog-node",
+  "version": "5.11.2",
+  "description": "PostHog Node.js integration",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/node"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!src/__tests__"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "PostHog",
+    "email": "hey@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "main": "dist/entrypoints/index.node.js",
+  "module": "dist/entrypoints/index.node.mjs",
+  "types": "dist/entrypoints/index.node.d.ts",
+  "dependencies": {
+    "@posthog/core": "1.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
+    "@rslib/core": "^0.10.5",
+    "@posthog-tooling/tsconfig-base": "1.0.0"
+  },
+  "keywords": [
+    "posthog",
+    "stats",
+    "analysis",
+    "funnels"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/entrypoints/index.node.d.ts",
+      "edge": {
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
+      },
+      "node": {
+        "import": "./dist/entrypoints/index.node.mjs",
+        "require": "./dist/entrypoints/index.node.js",
+        "default": "./dist/entrypoints/index.node.js"
+      },
+      "edge-light": {
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
+      },
+      "workerd": {
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
+      },
+      "import": "./dist/entrypoints/index.node.mjs",
+      "require": "./dist/entrypoints/index.node.js"
+    }
+  },
+  "scripts": {
+    "clean": "rimraf dist coverage",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "test:unit": "jest",
+    "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
+    "build": "rslib build",
+    "dev": "rslib build -w",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
+    "generate-references": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
+  }
+}

@@ -1,0 +1,68 @@
+"use client";
+
+// src/ui/branch-picker.tsx
+import { forwardRef } from "react";
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { TooltipIconButton } from "./base/tooltip-icon-button.mjs";
+import { withDefaults } from "./utils/withDefaults.mjs";
+import { useThreadConfig } from "./thread-config.mjs";
+import { BranchPickerPrimitive, useThread } from "@assistant-ui/react";
+import { jsx, jsxs } from "react/jsx-runtime";
+var useAllowBranchPicker = (ensureCapability = false) => {
+  const { branchPicker: { allowBranchPicker = true } = {} } = useThreadConfig();
+  const branchPickerSupported = useThread((t) => t.capabilities.edit);
+  return allowBranchPicker && (!ensureCapability || branchPickerSupported);
+};
+var BranchPicker = () => {
+  const allowBranchPicker = useAllowBranchPicker(true);
+  if (!allowBranchPicker) return null;
+  return /* @__PURE__ */ jsxs(BranchPickerRoot, { hideWhenSingleBranch: true, children: [
+    /* @__PURE__ */ jsx(BranchPickerPrevious, {}),
+    /* @__PURE__ */ jsx(BranchPickerState, {}),
+    /* @__PURE__ */ jsx(BranchPickerNext, {})
+  ] });
+};
+BranchPicker.displayName = "BranchPicker";
+var BranchPickerRoot = withDefaults(BranchPickerPrimitive.Root, {
+  className: "aui-branch-picker-root"
+});
+BranchPickerRoot.displayName = "BranchPickerRoot";
+var BranchPickerPrevious = forwardRef((props, ref) => {
+  const {
+    strings: {
+      branchPicker: { previous: { tooltip = "Previous" } = {} } = {}
+    } = {}
+  } = useThreadConfig();
+  const allowBranchPicker = useAllowBranchPicker();
+  return /* @__PURE__ */ jsx(BranchPickerPrimitive.Previous, { disabled: !allowBranchPicker, asChild: true, children: /* @__PURE__ */ jsx(TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(ChevronLeftIcon, {}) }) });
+});
+BranchPickerPrevious.displayName = "BranchPickerPrevious";
+var BranchPickerStateWrapper = withDefaults("span", {
+  className: "aui-branch-picker-state"
+});
+var BranchPickerState = forwardRef((props, ref) => {
+  return /* @__PURE__ */ jsxs(BranchPickerStateWrapper, { ...props, ref, children: [
+    /* @__PURE__ */ jsx(BranchPickerPrimitive.Number, {}),
+    " / ",
+    /* @__PURE__ */ jsx(BranchPickerPrimitive.Count, {})
+  ] });
+});
+BranchPickerState.displayName = "BranchPickerState";
+var BranchPickerNext = forwardRef((props, ref) => {
+  const {
+    strings: { branchPicker: { next: { tooltip = "Next" } = {} } = {} } = {}
+  } = useThreadConfig();
+  const allowBranchPicker = useAllowBranchPicker();
+  return /* @__PURE__ */ jsx(BranchPickerPrimitive.Next, { disabled: !allowBranchPicker, asChild: true, children: /* @__PURE__ */ jsx(TooltipIconButton, { tooltip, ...props, ref, children: props.children ?? /* @__PURE__ */ jsx(ChevronRightIcon, {}) }) });
+});
+BranchPickerNext.displayName = "BranchPickerNext";
+var exports = {
+  Root: BranchPickerRoot,
+  Previous: BranchPickerPrevious,
+  Next: BranchPickerNext
+};
+var branch_picker_default = Object.assign(BranchPicker, exports);
+export {
+  branch_picker_default as default
+};
+//# sourceMappingURL=branch-picker.mjs.map

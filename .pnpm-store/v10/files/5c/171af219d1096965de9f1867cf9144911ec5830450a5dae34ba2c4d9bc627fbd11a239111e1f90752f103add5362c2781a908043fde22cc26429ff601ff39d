@@ -1,0 +1,42 @@
+{
+  "name": "wordwrapjs",
+  "author": "Lloyd Brookes <opensource@75lb.com>",
+  "version": "5.1.1",
+  "description": "Word-wrapping for javascript.",
+  "repository": "https://github.com/75lb/wordwrapjs",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "import": "./index.js",
+    "require": "./dist/index.cjs"
+  },
+  "keywords": [
+    "word",
+    "line",
+    "wrap",
+    "text",
+    "columns",
+    "wordwrap"
+  ],
+  "engines": {
+    "node": ">=12.17"
+  },
+  "scripts": {
+    "test": "npm run dist && npm run test:ci",
+    "test:ci": "75lb-nature test-runner test/test.?js",
+    "docs": "75lb-nature jsdoc2md -t README.hbs index.js > README.md",
+    "dist": "75lb-nature cjs-build index.js && 75lb-nature simple-rollup index.js"
+  },
+  "devDependencies": {},
+  "files": [
+    "index.js",
+    "dist"
+  ],
+  "standard": {
+    "ignore": [
+      "dist",
+      "tmp"
+    ],
+    "envs": []
+  }
+}

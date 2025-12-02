@@ -1,0 +1,122 @@
+{
+  "name": "@poppinss/dumper",
+  "version": "0.6.4",
+  "description": "Pretty print JavaScript data types in the terminal and the browser",
+  "main": "build/index.js",
+  "type": "module",
+  "files": [
+    "build",
+    "!build/bin",
+    "!build/examples",
+    "!build/tests"
+  ],
+  "scripts": {
+    "pretest": "npm run lint",
+    "test": "npm run quick:test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "clean": "del-cli build",
+    "typecheck": "tsc --noEmit",
+    "precompile": "npm run lint && npm run clean",
+    "compile": "tsup-node && tsc --emitDeclarationOnly --declaration",
+    "build": "npm run compile",
+    "version": "npm run build",
+    "prepublishOnly": "npm run build",
+    "release": "release-it",
+    "quick:test": "node --import @poppinss/ts-exec --enable-source-maps bin/test.js"
+  },
+  "exports": {
+    ".": "./build/index.js",
+    "./types": "./build/src/types.js",
+    "./html": "./build/formatters/html/main.js",
+    "./html/types": "./build/formatters/html/types.js",
+    "./console": "./build/formatters/console/main.js",
+    "./console/types": "./build/formatters/console/types.js"
+  },
+  "devDependencies": {
+    "@adonisjs/eslint-config": "^3.0.0-next.0",
+    "@adonisjs/prettier-config": "^1.4.5",
+    "@adonisjs/tsconfig": "^2.0.0-next.0",
+    "@japa/expect": "^3.0.4",
+    "@japa/runner": "^4.2.0",
+    "@japa/snapshot": "^2.0.8",
+    "@poppinss/ts-exec": "^1.4.0",
+    "@poppinss/utils": "^6.10.0",
+    "@release-it/conventional-changelog": "^10.0.1",
+    "@types/luxon": "^3.6.2",
+    "del-cli": "^6.0.0",
+    "eslint": "^9.30.1",
+    "luxon": "^3.6.1",
+    "prettier": "^3.6.2",
+    "release-it": "^19.0.3",
+    "rxjs": "^7.8.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@poppinss/colors": "^4.1.5",
+    "@sindresorhus/is": "^7.0.2",
+    "supports-color": "^10.0.0"
+  },
+  "homepage": "https://github.com/poppinss/dumper#readme",
+  "bugs": {
+    "url": "https://github.com/poppinss/dumper/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/poppinss/dumper.git"
+  },
+  "keywords": [
+    "dumper",
+    "inspect",
+    "object-inspect",
+    "pretty"
+  ],
+  "author": "Harminder Virk <virk@adonisjs.com>",
+  "license": "MIT",
+  "publishConfig": {
+    "provenance": true,
+    "access": "public"
+  },
+  "tsup": {
+    "entry": [
+      "index.ts",
+      "src/types.ts",
+      "formatters/html/main.ts",
+      "formatters/html/types.ts",
+      "formatters/console/main.ts",
+      "formatters/console/types.ts"
+    ],
+    "outDir": "./build",
+    "clean": true,
+    "format": "esm",
+    "dts": false,
+    "sourcemap": false,
+    "target": "esnext"
+  },
+  "release-it": {
+    "git": {
+      "requireCleanWorkingDir": true,
+      "requireUpstream": true,
+      "commitMessage": "chore(release): ${version}",
+      "tagAnnotation": "v${version}",
+      "push": true,
+      "tagName": "v${version}"
+    },
+    "github": {
+      "release": true
+    },
+    "npm": {
+      "publish": true,
+      "skipChecks": true
+    },
+    "plugins": {
+      "@release-it/conventional-changelog": {
+        "preset": {
+          "name": "angular"
+        }
+      }
+    }
+  },
+  "prettier": "@adonisjs/prettier-config"
+}

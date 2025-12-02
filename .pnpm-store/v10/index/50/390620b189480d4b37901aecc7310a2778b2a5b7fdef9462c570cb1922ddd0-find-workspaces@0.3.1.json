@@ -1,0 +1,43 @@
+{
+  "name": "find-workspaces",
+  "version": "0.3.1",
+  "requiresBuild": false,
+  "files": {
+    "LICENSE": {
+      "checkedAt": 1764662917584,
+      "integrity": "sha512-hVsylRRA+QU4qhBu/Dq2+111n1Os96hsr8oqLVBAXY0paSTMswCeCwsgY5qElkxI1yy5W4nmikq3qdMayAHM2g==",
+      "mode": 420,
+      "size": 1074
+    },
+    "dist/index.js": {
+      "checkedAt": 1764662917585,
+      "integrity": "sha512-57kGdl7dpyFnhkwluUKui4/0QvbprvQ+403jAaOdaoZli+M954RxGdOqOpLmwFN9InfBarMs2v991Axpz+xiuw==",
+      "mode": 420,
+      "size": 4770
+    },
+    "package.json": {
+      "checkedAt": 1764662917586,
+      "integrity": "sha512-w3jlVQ0wJqQR8bnF89vscJ0Ri05Cn5Kdl0Bn+JfohnGRSvJr0zyw45cic+eRzv2Q5Jct7vxo5/iGryXt1XByRQ==",
+      "mode": 420,
+      "size": 1199
+    },
+    "CHANGELOG.md": {
+      "checkedAt": 1764662917587,
+      "integrity": "sha512-GRhkt02szkV1E3OF6Om+RgWnU4U8nlT+BsoVYNJ5B09B5NJTvv19tw+SyYFZfI8WfXcpd/jOi+bujKeVIWO7XA==",
+      "mode": 420,
+      "size": 851
+    },
+    "README.md": {
+      "checkedAt": 1764662917589,
+      "integrity": "sha512-ToPdz617UZ13h4hJAnQwMXErVOJ4Q0eAd/HqUjLJx2SJ+irlAjiZau8EwIKI0r3vWwxL5ikcHcA1QBsz5hG2GA==",
+      "mode": 420,
+      "size": 2802
+    },
+    "dist/index.d.ts": {
+      "checkedAt": 1764662917589,
+      "integrity": "sha512-LR98/VRux2uM5ibYR9xcUvKJIUfuSoDr3NC1cqylzIgKiUUq3MCwS8J0H6cPSSb7FypLgx3Nx/xGBEeOUB51uw==",
+      "mode": 420,
+      "size": 690
+    }
+  }
+}

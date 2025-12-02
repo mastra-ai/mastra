@@ -1,0 +1,1 @@
+{"version":3,"file":"ReadonlyStore.d.ts","sourceRoot":"","sources":["../../src/context/ReadonlyStore.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,SAAS,CAAC;AAExC,MAAM,MAAM,aAAa,CAAC,CAAC,IAAI,IAAI,CAAC,QAAQ,CAAC,CAAC,CAAC,EAAE,UAAU,GAAG,SAAS,CAAC,CAAC;AAEzE,eAAO,MAAM,aAAa,GAAI,CAAC,EAAE,OAAO,aAAa,CAAC,CAAC,CAAC,GAAG,SAAS,KACvC,QAAQ,CAAC,CAAC,CACtC,CAAC"}

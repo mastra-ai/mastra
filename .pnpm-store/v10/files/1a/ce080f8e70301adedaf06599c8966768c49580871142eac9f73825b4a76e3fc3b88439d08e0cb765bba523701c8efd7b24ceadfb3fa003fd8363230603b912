@@ -1,0 +1,43 @@
+import type { Position } from 'css-box-model';
+import type {
+  DroppableDimension,
+  Viewport,
+  DragImpact,
+  DraggableDimension,
+  DraggableDimensionMap,
+  LiftEffect,
+} from '../../../types';
+import getPageBorderBoxCenterFromImpact from '../get-page-border-box-center';
+import getClientFromPageBorderBoxCenter from './get-client-from-page-border-box-center';
+
+interface Args {
+  impact: DragImpact;
+  draggable: DraggableDimension;
+  droppable: DroppableDimension;
+  draggables: DraggableDimensionMap;
+  viewport: Viewport;
+  afterCritical: LiftEffect;
+}
+
+export default ({
+  impact,
+  draggable,
+  droppable,
+  draggables,
+  viewport,
+  afterCritical,
+}: Args): Position => {
+  const pageBorderBoxCenter: Position = getPageBorderBoxCenterFromImpact({
+    impact,
+    draggable,
+    draggables,
+    droppable,
+    afterCritical,
+  });
+
+  return getClientFromPageBorderBoxCenter({
+    pageBorderBoxCenter,
+    draggable,
+    viewport,
+  });
+};

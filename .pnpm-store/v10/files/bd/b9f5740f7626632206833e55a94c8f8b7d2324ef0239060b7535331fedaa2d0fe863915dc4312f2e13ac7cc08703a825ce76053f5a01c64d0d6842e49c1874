@@ -1,0 +1,1 @@
+{"version":3,"file":"model-method-from-agent.d.ts","sourceRoot":"","sources":["../../../src/llm/model/model-method-from-agent.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,aAAa,CAAC;AAEnD,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,oBAAoB,CAAC;AAE1D,wBAAgB,6BAA6B,CAAC,UAAU,EAAE,eAAe,GAAG,eAAe,CAY1F"}

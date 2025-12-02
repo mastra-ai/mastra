@@ -1,0 +1,1 @@
+{"version":3,"sources":["builder/fixedsizebinary.ts"],"names":[],"mappings":"AAiBA,OAAO,EAAE,eAAe,EAAE,MAAM,YAAY,CAAC;AAC7C,OAAO,EAAE,iBAAiB,EAAE,MAAM,eAAe,CAAC;AAGlD,cAAc;AACd,qBAAa,sBAAsB,CAAC,KAAK,GAAG,GAAG,CAAE,SAAQ,iBAAiB,CAAC,eAAe,EAAE,KAAK,CAAC;CAAI","file":"fixedsizebinary.d.ts","sourceRoot":"../src"}

@@ -1,0 +1,19 @@
+import { ReadableStream } from 'stream/web';
+import type z from 'zod';
+import type { Run, Step } from '../workflows/index.js';
+import type { ChunkType } from './types.js';
+export declare class MastraWorkflowStream<TState extends z.ZodObject<any>, TInput extends z.ZodType<any>, TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> extends ReadableStream<ChunkType> {
+    #private;
+    constructor({ createStream, run, }: {
+        createStream: (writer: WritableStream<ChunkType>) => Promise<ReadableStream<any>> | ReadableStream<any>;
+        run: Run<any, TSteps, TState, TInput, TOutput>;
+    });
+    get status(): Promise<"success" | "failed" | "suspended">;
+    get result(): Promise<import("../workflows").WorkflowResult<TState, TInput, TOutput, TSteps> | undefined>;
+    get usage(): Promise<{
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+    }>;
+}
+//# sourceMappingURL=MastraWorkflowStream.d.ts.map

@@ -1,0 +1,68 @@
+include(CMakePushCheckState)
+include(CheckSymbolExists)
+
+cmake_push_check_state(RESET)
+find_library(EXECINFO_LIBRARY NAMES execinfo)
+if(EXECINFO_LIBRARY)
+  set(CMAKE_REQUIRED_LIBRARIES "${EXECINFO_LIBRARY}")
+  list(APPEND PLATFORM_LIBRARIES "${EXECINFO_LIBRARY}")
+endif(EXECINFO_LIBRARY)
+check_symbol_exists(backtrace execinfo.h HAVE_BACKTRACE)
+cmake_pop_check_state()
+
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_DEFINITIONS "-D_GNU_SOURCE")
+find_library(DL_LIBRARY NAMES dl)
+if(DL_LIBRARY)
+  set(CMAKE_REQUIRED_LIBRARIES "${DL_LIBRARY}")
+  list(APPEND PLATFORM_LIBRARIES "${DL_LIBRARY}")
+endif(DL_LIBRARY)
+check_symbol_exists(dladdr dlfcn.h HAVE_DLADDR)
+cmake_pop_check_state()
+
+option(ENABLE_BUILD_WITH_TIME_TRACE "Enable -ftime-trace to generate time tracing .json files on clang" OFF)
+
+function(set_project_options target_name)
+  if(ENABLE_BUILD_WITH_TIME_TRACE)
+    target_compile_options(${target_name} PRIVATE -ftime-trace)
+  endif()
+
+  target_compile_features(${target_name} PRIVATE cxx_std_17)
+  if(MSVC)
+    target_compile_options(${target_name} PRIVATE /bigobj)
+    target_link_libraries(${target_name} PRIVATE iphlpapi)
+  endif()
+
+  if(HAVE_BACKTRACE)
+    target_compile_definitions(${target_name} PRIVATE -DHAVE_BACKTRACE=1)
+  endif()
+
+  if(HAVE_DLADDR)
+    target_compile_definitions(${target_name} PRIVATE -DHAVE_DLADDR=1)
+  endif()
+
+  if(HAVE_BACKTRACE OR HAVE_DLADDR)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+      target_compile_options(${target_name} PRIVATE -ggdb3)
+    endif()
+    target_compile_definitions(${target_name} PRIVATE -D_GNU_SOURCE=1)
+    target_link_libraries(${target_name} PRIVATE -rdynamic)
+  endif()
+endfunction()
+
+function(propagate_public_compile_definitions receiver)
+  set(receiver_target ${receiver})
+  set(donor_targets ${ARGN})
+
+  set(all_defs "")
+  foreach(donor IN LISTS donor_targets)
+    get_target_property(defs ${donor} INTERFACE_COMPILE_DEFINITIONS)
+    if(defs)
+      list(APPEND all_defs ${defs})
+    endif()
+  endforeach()
+
+  list(REMOVE_DUPLICATES all_defs)
+
+  target_compile_definitions(${receiver_target} PUBLIC ${all_defs})
+endfunction()

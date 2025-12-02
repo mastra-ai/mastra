@@ -1,0 +1,8 @@
+export declare const makeSyntaxHighlighter: (config: Omit<import("react-syntax-highlighter").SyntaxHighlighterProps, "language" | "children">) => import("react").FC<import("@assistant-ui/react-markdown").SyntaxHighlighterProps>;
+export declare const makePrismSyntaxHighlighter: (config: Omit<import("react-syntax-highlighter").SyntaxHighlighterProps, "language" | "children">) => import("react").FC<import("@assistant-ui/react-markdown").SyntaxHighlighterProps>;
+export declare const makePrismAsyncSyntaxHighlighter: (config: Omit<import("react-syntax-highlighter").SyntaxHighlighterProps, "language" | "children">) => import("react").FC<import("@assistant-ui/react-markdown").SyntaxHighlighterProps>;
+export declare const makePrismAsyncLightSyntaxHighlighter: (config: Omit<import("react-syntax-highlighter").SyntaxHighlighterProps, "language" | "children">) => import("react").FC<import("@assistant-ui/react-markdown").SyntaxHighlighterProps>;
+export declare const makePrismLightSyntaxHighlighter: (config: Omit<import("react-syntax-highlighter").SyntaxHighlighterProps, "language" | "children">) => import("react").FC<import("@assistant-ui/react-markdown").SyntaxHighlighterProps>;
+export declare const makeLightSyntaxHighlighter: (config: Omit<import("react-syntax-highlighter").SyntaxHighlighterProps, "language" | "children">) => import("react").FC<import("@assistant-ui/react-markdown").SyntaxHighlighterProps>;
+export declare const makeLightAsyncSyntaxHighlighter: (config: Omit<import("react-syntax-highlighter").SyntaxHighlighterProps, "language" | "children">) => import("react").FC<import("@assistant-ui/react-markdown").SyntaxHighlighterProps>;
+//# sourceMappingURL=react-syntax-highlighter-full.d.ts.map

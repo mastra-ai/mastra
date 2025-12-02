@@ -1,0 +1,43 @@
+{
+    "object": "list",
+    "data": [
+        {
+            "object": "role",
+            "id": "role_01EHQMYV6MBK39QC5PZXHY59C5",
+            "name": "Admin",
+            "slug": "admin",
+            "description": null,
+            "permissions": [
+                "posts:create",
+                "posts:delete"
+            ],
+            "type": "EnvironmentRole",
+            "created_at": "2024-01-01T00:00:00.000Z",
+            "updated_at": "2024-01-01T00:00:00.000Z"
+        },
+        {
+            "object": "role",
+            "id": "role_01EHQMYV6MBK39QC5PZXHY59C3",
+            "name": "Member",
+            "slug": "member",
+            "description": null,
+            "permissions": [],
+            "type": "EnvironmentRole",
+            "created_at": "2024-01-01T00:00:00.000Z",
+            "updated_at": "2024-01-01T00:00:00.000Z"
+        },
+        {
+            "object": "role",
+            "id": "role_01EHQMYV6MBK39QC5PZXHY59C3",
+            "name": "OrganizationMember",
+            "slug": "org-member",
+            "description": null,
+            "permissions": [
+                "posts:read"
+            ],
+            "type": "OrganizationRole",
+            "created_at": "2024-01-01T00:00:00.000Z",
+            "updated_at": "2024-01-01T00:00:00.000Z"
+        }
+    ]
+}

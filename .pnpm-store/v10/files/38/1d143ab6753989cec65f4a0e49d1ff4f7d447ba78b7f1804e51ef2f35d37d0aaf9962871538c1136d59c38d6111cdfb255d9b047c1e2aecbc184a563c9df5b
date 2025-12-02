@@ -1,0 +1,21 @@
+"use client";
+
+// src/ui/markdown/useCopyToClipboard.tsx
+import { useState } from "react";
+var useCopyToClipboard = ({
+  copiedDuration = 3e3
+} = {}) => {
+  const [isCopied, setIsCopied] = useState(false);
+  const copyToClipboard = (value) => {
+    if (!value) return;
+    navigator.clipboard.writeText(value).then(() => {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), copiedDuration);
+    });
+  };
+  return { isCopied, copyToClipboard };
+};
+export {
+  useCopyToClipboard
+};
+//# sourceMappingURL=useCopyToClipboard.mjs.map

@@ -1,0 +1,22 @@
+# comment
+
+// This is a comment
+/* This is also a comment */
+/* this comment /* // /** ends here: */
+
+==>
+
+Program(LineComment, BlockComment, BlockComment)
+
+
+# comments and literals
+
+123;
+// comment
+
+==>
+
+Program(
+  ExpressionStatement(IntegerLiteral),
+  LineComment)
+

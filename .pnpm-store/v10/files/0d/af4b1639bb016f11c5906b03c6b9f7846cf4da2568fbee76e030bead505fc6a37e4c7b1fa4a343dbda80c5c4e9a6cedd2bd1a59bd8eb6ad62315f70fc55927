@@ -1,0 +1,1 @@
+{"version":3,"file":"HGETALL.d.ts","sourceRoot":"","sources":["../../../lib/commands/HGETALL.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAC;AACjD,OAAO,EAAE,aAAa,EAAE,QAAQ,EAAE,eAAe,EAAW,MAAM,eAAe,CAAC;;;;IAMhF;;;;OAIG;gDACkB,aAAa,OAAO,aAAa;;;;0BAOnB,SAAS,eAAe,EAAE,eAAe,CAAC;;;AAf/E,wBAiB6B"}

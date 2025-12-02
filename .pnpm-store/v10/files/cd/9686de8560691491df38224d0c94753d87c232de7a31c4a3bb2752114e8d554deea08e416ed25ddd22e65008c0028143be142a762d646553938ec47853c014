@@ -1,0 +1,25 @@
+{
+	"name": "compromise-three",
+	"version": "14.14.4",
+	"description": "",
+	"type": "module",
+	"module": "./../src/three.js",
+	"main": "./../src/three.js",
+	"types": "./../types/three.d.ts",
+	"exports": {
+		"./package.json": "./package.json",
+		".": {
+			"import": {
+				"types": "./../types/three/three.d.ts",
+				"default": "./../src/three.js"
+			},
+			"require": {
+				"types": "./../types/three.d.cts",
+				"default": "./../builds/three/compromise-three.cjs"
+			}
+		}
+	},
+	"author": "Spencer Kelly <spencermountain@gmail.com> (http://spencermounta.in)",
+	"license": "MIT",
+	"sideEffects": true
+}

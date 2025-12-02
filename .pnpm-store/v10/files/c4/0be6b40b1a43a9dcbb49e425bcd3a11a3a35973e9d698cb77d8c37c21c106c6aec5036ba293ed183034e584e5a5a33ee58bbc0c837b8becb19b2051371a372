@@ -1,0 +1,28 @@
+"use client";
+
+// src/ui/content-part.tsx
+import { ContentPartPrimitive } from "@assistant-ui/react";
+import { INTERNAL } from "@assistant-ui/react";
+import classNames from "classnames";
+import { jsx } from "react/jsx-runtime";
+var { useSmoothStatus, withSmoothContextProvider } = INTERNAL;
+var Text = () => {
+  const status = useSmoothStatus();
+  return /* @__PURE__ */ jsx(
+    ContentPartPrimitive.Text,
+    {
+      className: classNames(
+        "aui-text",
+        status.type === "running" && "aui-text-running"
+      ),
+      component: "p"
+    }
+  );
+};
+var exports = { Text: withSmoothContextProvider(Text) };
+var content_part_default = exports;
+export {
+  Text,
+  content_part_default as default
+};
+//# sourceMappingURL=content-part.mjs.map

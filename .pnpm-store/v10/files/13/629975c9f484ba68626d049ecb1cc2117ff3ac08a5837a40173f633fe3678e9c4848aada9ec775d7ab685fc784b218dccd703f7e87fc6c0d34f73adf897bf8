@@ -1,0 +1,27 @@
+{
+  "include": ["src", ".eslintrc.cjs"],
+  "compileOnSave": true,
+  "compilerOptions": {
+    /* Basic Options */
+    "target": "es2022",
+    "module": "es2020",
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "stripInternal": true,
+    "outDir": "./dist/types",
+    "rootDir": "./src",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    /* Strict Type-Checking Options */
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    /* Module Resolution Options */
+    "esModuleInterop": true,
+    /* Advanced Options */
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react"
+  }
+}

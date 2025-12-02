@@ -1,0 +1,3086 @@
+---
+title: AST Grammar
+---
+
+jscodeshift provides 278 node types which are mapped to their corresponding node type in `ast-types`. This is a comprehensive list of each node type used in `jscodeshift`.
+
+For an easier approach to identifying the AST node type in a piece of code, please refer to [AST Explorer](https://astexplorer.net/).
+
+
+
+### AnyTypeAnnotation
+A type annotation representing any type.
+
+```typescript
+export interface AnyTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "AnyTypeAnnotation";
+}
+```
+
+### ArrayExpression
+Represents an array literal.
+
+```typescript
+export interface ArrayExpression extends Omit<Expression, "type"> {
+    type: "ArrayExpression";
+    elements: (K.ExpressionKind | K.SpreadElementKind | K.RestElementKind | null)[];
+}
+```
+
+### ArrayPattern
+A pattern that matches an array from a destructuring assignment.
+
+```typescript
+export interface ArrayPattern extends Omit<Pattern, "type"> {
+    type: "ArrayPattern";
+    elements: (K.PatternKind | K.SpreadElementKind | null)[];
+}
+```
+
+### ArrayTypeAnnotation
+A type annotation for arrays.
+
+```typescript
+export interface ArrayTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "ArrayTypeAnnotation";
+    elementType: K.FlowTypeKind;
+}
+```
+
+### ArrowFunctionExpression
+An arrow function expression.
+
+```typescript
+export interface ArrowFunctionExpression extends Omit<Function, "type" | "id" | "body" | "generator">, Omit<Expression, "type"> {
+    type: "ArrowFunctionExpression";
+    id?: null;
+    body: K.BlockStatementKind | K.ExpressionKind;
+    generator?: false;
+}
+```
+
+### AssignmentExpression
+Represents an assignment expression.
+
+```typescript
+export interface AssignmentExpression extends Omit<Expression, "type"> {
+    type: "AssignmentExpression";
+    operator: "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>=" | ">>>=" | "|=" | "^=" | "&=" | "**=" | "||=" | "&&=" | "??=";
+    left: K.PatternKind | K.MemberExpressionKind;
+    right: K.ExpressionKind;
+}
+```
+
+### AssignmentPattern
+A pattern that matches an assignment from a destructuring assignment.
+
+```typescript
+export interface AssignmentPattern extends Omit<Pattern, "type"> {
+    type: "AssignmentPattern";
+    left: K.PatternKind;
+    right: K.ExpressionKind;
+}
+```
+
+### AwaitExpression
+Represents an await expression.
+
+```typescript
+export interface AwaitExpression extends Omit<Expression, "type"> {
+    type: "AwaitExpression";
+    argument: K.ExpressionKind | null;
+    all?: boolean;
+}
+```
+
+### BigIntLiteral
+A literal representing a big integer.
+
+```typescript
+export interface BigIntLiteral extends Omit<Literal, "type" | "value"> {
+    type: "BigIntLiteral";
+    value: string | number;
+    extra?: {
+        rawValue: string;
+        raw: string;
+    };
+}
+```
+
+### BigIntLiteralTypeAnnotation
+A type annotation for big integer literals.
+
+```typescript
+export interface BigIntLiteralTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "BigIntLiteralTypeAnnotation";
+    value: null;
+    raw: string;
+}
+```
+
+### BigIntTypeAnnotation
+A type annotation for big integers.
+
+```typescript
+export interface BigIntTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "BigIntTypeAnnotation";
+}
+```
+
+### BinaryExpression
+Represents a binary expression.
+
+```typescript
+export interface BinaryExpression extends Omit<Expression, "type"> {
+    type: "BinaryExpression";
+    operator: "==" | "!=" | "===" | "!==" | "<" | "<=" | ">" | ">=" | "<<" | ">>" | ">>>" | "+" | "-" | "*" | "/" | "%" | "&" | "|" | "^" | "in" | "instanceof" | "**";
+    left: K.ExpressionKind;
+    right: K.ExpressionKind;
+}
+```
+
+### BindExpression
+Represents a bind expression.
+
+```typescript
+export interface BindExpression extends Omit<Expression, "type"> {
+    type: "BindExpression";
+    object: K.ExpressionKind | null;
+    callee: K.ExpressionKind;
+}
+```
+
+### Block
+A comment block.
+
+```typescript
+export interface Block extends Comment {
+    type: "Block";
+}
+```
+
+### BlockStatement
+Represents a block statement.
+
+```typescript
+export interface BlockStatement extends Omit<Statement, "type"> {
+    type: "BlockStatement";
+    body: K.StatementKind[];
+    directives?: K.DirectiveKind[];
+}
+```
+
+### BooleanLiteral
+A literal representing a boolean value.
+
+```typescript
+export interface BooleanLiteral extends Omit<Literal, "type" | "value"> {
+    type: "BooleanLiteral";
+    value: boolean;
+}
+```
+
+### BooleanLiteralTypeAnnotation
+A type annotation for boolean literals.
+
+```typescript
+export interface BooleanLiteralTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "BooleanLiteralTypeAnnotation";
+    value: boolean;
+    raw: string;
+}
+```
+
+### BooleanTypeAnnotation
+A type annotation for boolean values.
+
+```typescript
+export interface BooleanTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "BooleanTypeAnnotation";
+}
+```
+
+### BreakStatement
+Represents a break statement.
+
+```typescript
+export interface BreakStatement extends Omit<Statement, "type"> {
+    type: "BreakStatement";
+    label?: K.IdentifierKind | null;
+}
+```
+
+### CallExpression
+Represents a call expression.
+
+```typescript
+export interface CallExpression extends Omit<Expression, "type">, Omit<ChainElement, "type"> {
+    type: "CallExpression";
+    callee: K.ExpressionKind;
+    arguments: (K.ExpressionKind | K.SpreadElementKind)[];
+    typeArguments?: null | K.TypeParameterInstantiationKind;
+}
+```
+
+### CatchClause
+Represents a catch clause in a try statement.
+
+```typescript
+export interface CatchClause extends Omit<Node, "type"> {
+    type: "CatchClause";
+    param?: K.PatternKind | null;
+    guard?: K.ExpressionKind | null;
+    body: K.BlockStatementKind;
+}
+```
+
+### ChainElement
+An element of a chain expression.
+
+```typescript
+export interface ChainElement extends Node {
+    optional?: boolean;
+}
+```
+
+### ChainExpression
+Represents a chain expression.
+
+```typescript
+export interface ChainExpression extends Omit<Expression, "type"> {
+    type: "ChainExpression";
+    expression: K.ChainElementKind;
+}
+```
+
+### ClassBody
+Represents the body of a class, which contains method definitions.
+
+```typescript
+export interface ClassBody extends Omit<Declaration, "type"> {
+    type: "ClassBody";
+    body: (K.MethodDefinitionKind | K.VariableDeclaratorKind | K.ClassPropertyDefinitionKind | K.ClassPropertyKind | K.ClassPrivatePropertyKind | K.ClassAccessorPropertyKind | K.ClassMethodKind | K.ClassPrivateMethodKind | K.StaticBlockKind | K.TSDeclareMethodKind | K.TSCallSignatureDeclarationKind | K.TSConstructSignatureDeclarationKind | K.TSIndexSignatureKind | K.TSMethodSignatureKind | K.TSPropertySignatureKind)[];
+}
+```
+
+### ClassDeclaration
+Represents a class declaration.
+
+```typescript
+export interface ClassDeclaration extends Omit<Declaration, "type"> {
+    type: "ClassDeclaration";
+    id: K.IdentifierKind | null;
+    body: K.ClassBodyKind;
+    superClass?: K.ExpressionKind | null;
+    typeParameters?: K.TypeParameterDeclarationKind | K.TSTypeParameterDeclarationKind | null;
+    superTypeParameters?: K.TypeParameterInstantiationKind | K.TSTypeParameterInstantiationKind | null;
+    implements?: K.ClassImplementsKind[] | K.TSExpressionWithTypeArgumentsKind[];
+}
+```
+
+### ClassExpression
+Represents a class expression.
+
+```typescript
+export interface ClassExpression extends Omit<Expression, "type"> {
+    type: "ClassExpression";
+    id?: K.IdentifierKind | null;
+    body: K.ClassBodyKind;
+    superClass?: K.ExpressionKind | null;
+    typeParameters?: K.TypeParameterDeclarationKind | K.TSTypeParameterDeclarationKind | null;
+    superTypeParameters?: K.TypeParameterInstantiationKind | K.TSTypeParameterInstantiationKind | null;
+    implements?: K.ClassImplementsKind[] | K.TSExpressionWithTypeArgumentsKind[];
+}
+```
+
+### ClassImplements
+Represents an implementation of a class.
+
+```typescript
+export interface ClassImplements extends Omit<Node, "type"> {
+    type: "ClassImplements";
+    id: K.IdentifierKind;
+    superClass?: K.ExpressionKind | null;
+    typeParameters?: K.TypeParameterInstantiationKind | null;
+}
+```
+
+### ClassMethod
+Represents a method of a class.
+
+```typescript
+export interface ClassMethod extends Omit<Declaration, "type">, Omit<Function, "type" | "body"> {
+    type: "ClassMethod";
+    key: K.LiteralKind | K.IdentifierKind | K.ExpressionKind;
+    kind?: "get" | "set" | "method" | "constructor";
+    body: K.BlockStatementKind;
+    access?: "public" | "private" | "protected" | null;
+    computed?: boolean;
+    static?: boolean;
+    abstract?: boolean;
+    accessibility?: "public" | "private" | "protected" | null;
+    decorators?: K.DecoratorKind[] | null;
+    definite?: boolean;
+    optional?: boolean;
+    override?: boolean;
+    readonly?: boolean;
+}
+```
+
+### ClassPrivateMethod
+Represents a
+
+ private method of a class.
+
+```typescript
+export interface ClassPrivateMethod extends Omit<Declaration, "type">, Omit<Function, "type" | "body"> {
+    type: "ClassPrivateMethod";
+    key: K.PrivateNameKind;
+    body: K.BlockStatementKind;
+    access?: "public" | "private" | "protected" | null;
+    computed?: boolean;
+    static?: boolean;
+    decorators?: K.DecoratorKind[] | null;
+}
+```
+
+### ClassPrivateProperty
+Represents a private property of a class.
+
+```typescript
+export interface ClassPrivateProperty extends Omit<Declaration, "type"> {
+    type: "ClassPrivateProperty";
+    key: K.PrivateNameKind;
+    value?: K.ExpressionKind | null;
+    access?: "public" | "private" | "protected" | null;
+    computed?: boolean;
+    static?: boolean;
+    decorators?: K.DecoratorKind[] | null;
+    optional?: boolean;
+    override?: boolean;
+    readonly?: boolean;
+    variance?: K.VarianceKind | "plus" | "minus" | null;
+    definite?: boolean;
+}
+```
+
+### ClassProperty
+Represents a property of a class.
+
+```typescript
+export interface ClassProperty extends Omit<Declaration, "type"> {
+    type: "ClassProperty";
+    key: K.LiteralKind | K.IdentifierKind | K.ExpressionKind;
+    value?: K.ExpressionKind | null;
+    access?: "public" | "private" | "protected" | null;
+    computed?: boolean;
+    static?: boolean;
+    decorators?: K.DecoratorKind[] | null;
+    optional?: boolean;
+    override?: boolean;
+    readonly?: boolean;
+    variance?: K.VarianceKind | "plus" | "minus" | null;
+    definite?: boolean;
+}
+```
+
+### ClassPropertyDefinition
+Represents a property definition in a class.
+
+```typescript
+export interface ClassPropertyDefinition extends Omit<Declaration, "type"> {
+    type: "ClassPropertyDefinition";
+    key: K.LiteralKind | K.IdentifierKind | K.ExpressionKind;
+    value?: K.ExpressionKind | null;
+    access?: "public" | "private" | "protected" | null;
+    computed?: boolean;
+    static?: boolean;
+    decorators?: K.DecoratorKind[] | null;
+    optional?: boolean;
+    override?: boolean;
+    readonly?: boolean;
+    variance?: K.VarianceKind | "plus" | "minus" | null;
+    definite?: boolean;
+}
+```
+
+### Comment
+Represents a comment in the code.
+
+```typescript
+export interface Comment extends Printable {
+    type: "Comment";
+    value: string;
+}
+```
+
+### CommentBlock
+Represents a block comment.
+
+```typescript
+export interface CommentBlock extends Comment {
+    type: "Block";
+}
+```
+
+### CommentLine
+Represents a line comment.
+
+```typescript
+export interface CommentLine extends Comment {
+    type: "Line";
+}
+```
+
+### ComprehensionBlock
+Represents a comprehension block.
+
+```typescript
+export interface ComprehensionBlock extends Omit<Node, "type"> {
+    type: "ComprehensionBlock";
+    left: K.PatternKind;
+    right: K.ExpressionKind;
+    each: boolean;
+}
+```
+
+### ComprehensionExpression
+Represents a comprehension expression.
+
+```typescript
+export interface ComprehensionExpression extends Omit<Expression, "type"> {
+    type: "ComprehensionExpression";
+    body: K.ExpressionKind;
+    blocks: K.ComprehensionBlockKind[];
+    filter?: K.ExpressionKind | null;
+}
+```
+
+### ConditionalExpression
+Represents a conditional expression (ternary).
+
+```typescript
+export interface ConditionalExpression extends Omit<Expression, "type"> {
+    type: "ConditionalExpression";
+    test: K.ExpressionKind;
+    consequent: K.ExpressionKind;
+    alternate: K.ExpressionKind;
+}
+```
+
+### ContinueStatement
+Represents a continue statement.
+
+```typescript
+export interface ContinueStatement extends Omit<Statement, "type"> {
+    type: "ContinueStatement";
+    label?: K.IdentifierKind | null;
+}
+```
+
+### DebuggerStatement
+Represents a debugger statement.
+
+```typescript
+export interface DebuggerStatement extends Omit<Statement, "type"> {
+    type: "DebuggerStatement";
+}
+```
+
+### Declaration
+Represents a declaration in the code.
+
+```typescript
+export interface Declaration extends Statement {
+    type: "Declaration";
+}
+```
+
+### DeclareClass
+Represents a Flow type declaration for a class.
+
+```typescript
+export interface DeclareClass extends Omit<Declaration, "type"> {
+    type: "DeclareClass";
+    id: K.IdentifierKind;
+    typeParameters?: K.TypeParameterDeclarationKind | null;
+    extends: K.InterfaceExtendsKind[];
+    body: K.ObjectTypeAnnotationKind;
+    mixins?: K.InterfaceExtendsKind[] | null;
+    implements?: K.ClassImplementsKind[] | K.TSExpressionWithTypeArgumentsKind[];
+}
+```
+
+### DeclaredPredicate
+Represents a declared predicate in Flow.
+
+```typescript
+export interface DeclaredPredicate extends Omit<FlowPredicate, "type"> {
+    type: "DeclaredPredicate";
+    value: K.ExpressionKind;
+}
+```
+
+### DeclareExportAllDeclaration
+Represents a Flow type declaration for exporting everything.
+
+```typescript
+export interface DeclareExportAllDeclaration extends Omit<Declaration, "type"> {
+    type: "DeclareExportAllDeclaration";
+    source?: K.LiteralKind | null;
+}
+```
+
+### DeclareExportDeclaration
+Represents a Flow type declaration for exporting.
+
+```typescript
+export interface DeclareExportDeclaration extends Omit<Declaration, "type"> {
+    type: "DeclareExportDeclaration";
+    default: boolean;
+    declaration?: K.DeclarationKind | K.ExpressionKind | null;
+    specifiers?: K.ExportSpecifierKind[] | null;
+    source?: K.LiteralKind | null;
+}
+```
+
+### DeclareFunction
+Represents a Flow type declaration for a function.
+
+```typescript
+export interface DeclareFunction extends Omit<Declaration, "type"> {
+    type: "DeclareFunction";
+    id: K.IdentifierKind;
+}
+```
+
+### DeclareInterface
+Represents a Flow type declaration for an interface.
+
+```typescript
+export interface DeclareInterface extends Omit<Declaration, "type"> {
+    type: "DeclareInterface";
+    id: K.IdentifierKind;
+    typeParameters?: K.TypeParameterDeclarationKind | null;
+    extends: K.InterfaceExtendsKind[];
+    body: K.ObjectTypeAnnotationKind;
+}
+```
+
+### DeclareModule
+Represents a Flow type declaration for a module.
+
+```typescript
+export interface DeclareModule extends Omit<Declaration, "type"> {
+    type: "DeclareModule";
+    id: K.StringLiteralKind | K.IdentifierKind;
+    body: K.BlockStatementKind;
+    kind?: "commonjs" | "es" | null;
+}
+```
+
+### DeclareModuleExports
+Represents a Flow type declaration for module exports.
+
+```typescript
+export interface DeclareModuleExports extends Omit<Declaration, "type"> {
+    type: "DeclareModuleExports";
+    typeAnnotation: K.TypeAnnotationKind;
+}
+```
+
+### DeclareOpaqueType
+Represents a Flow type declaration for an opaque type.
+
+```typescript
+export interface DeclareOpaqueType extends Omit<Declaration, "type"> {
+    type: "DeclareOpaqueType";
+    id: K.IdentifierKind;
+    typeParameters?: K.TypeParameterDeclarationKind | null;
+    impltype: K.FlowTypeKind;
+    supertype?: K.FlowTypeKind | null;
+}
+```
+
+### DeclareTypeAlias
+Represents a Flow type declaration for a type alias.
+
+```typescript
+export interface DeclareTypeAlias extends Omit<Declaration, "type"> {
+    type: "DeclareTypeAlias";
+    id: K.IdentifierKind;
+    typeParameters?: K.TypeParameterDeclarationKind | null;
+    right: K.FlowTypeKind;
+}
+```
+
+### DeclareVariable
+Represents a Flow type declaration for a variable.
+
+```typescript
+export interface DeclareVariable extends Omit<Declaration, "type"> {
+    type: "DeclareVariable";
+    id: K.IdentifierKind;
+}
+```
+
+### Decorator
+Represents a decorator.
+
+```typescript
+export interface Decorator extends Omit<Node, "type"> {
+    type: "Decorator";
+    expression: K.ExpressionKind;
+}
+```
+
+### Directive
+Represents a directive in a function or a script.
+
+```typescript
+export interface Directive extends Node {
+    type: "Directive";
+    value: K.DirectiveLiteralKind;
+}
+```
+
+### DirectiveLiteral
+Represents the value of a directive.
+
+```typescript
+export interface DirectiveLiteral extends Omit<Literal, "type"> {
+    type: "DirectiveLiteral";
+    value: string;
+}
+```
+
+### DoExpression
+Represents a do expression.
+
+```typescript
+export interface DoExpression extends Omit<Expression, "type"> {
+    type: "DoExpression";
+    body: K.BlockStatementKind;
+}
+```
+
+### DoWhileStatement
+Represents a do...while statement.
+
+```typescript
+export interface DoWhileStatement extends Omit<Statement, "type"> {
+    type: "DoWhileStatement";
+    test: K.ExpressionKind;
+    body: K.StatementKind;
+}
+```
+
+### EmptyStatement
+Represents an empty statement.
+
+```typescript
+export interface EmptyStatement extends Omit<Statement, "type"> {
+    type: "EmptyStatement";
+}
+```
+
+### EmptyTypeAnnotation
+A type annotation for an empty type.
+
+```typescript
+export interface EmptyTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "EmptyTypeAnnotation";
+}
+```
+
+### EnumBooleanBody
+Represents the body of a boolean enum.
+
+```typescript
+export interface EnumBooleanBody extends Omit<Node, "type"> {
+    type: "EnumBooleanBody";
+    members: K.EnumBooleanMemberKind[];
+    explicitType?: boolean;
+    hasUnknownMembers?: boolean
+
+;
+}
+```
+
+### EnumBooleanMember
+Represents a member of a boolean enum.
+
+```typescript
+export interface EnumBooleanMember extends Omit<Node, "type"> {
+    type: "EnumBooleanMember";
+    id: K.IdentifierKind;
+    init: K.BooleanLiteralKind;
+}
+```
+
+### EnumDeclaration
+Represents an enum declaration.
+
+```typescript
+export interface EnumDeclaration extends Omit<Declaration, "type"> {
+    type: "EnumDeclaration";
+    id: K.IdentifierKind;
+    body: K.EnumBooleanBodyKind | K.EnumNumberBodyKind | K.EnumStringBodyKind | K.EnumSymbolBodyKind;
+}
+```
+
+### EnumDefaultedMember
+Represents a defaulted member of an enum.
+
+```typescript
+export interface EnumDefaultedMember extends Omit<Node, "type"> {
+    type: "EnumDefaultedMember";
+    id: K.IdentifierKind;
+}
+```
+
+### EnumNumberBody
+Represents the body of a number enum.
+
+```typescript
+export interface EnumNumberBody extends Omit<Node, "type"> {
+    type: "EnumNumberBody";
+    members: K.EnumNumberMemberKind[];
+    explicitType?: boolean;
+    hasUnknownMembers?: boolean;
+}
+```
+
+### EnumNumberMember
+Represents a member of a number enum.
+
+```typescript
+export interface EnumNumberMember extends Omit<Node, "type"> {
+    type: "EnumNumberMember";
+    id: K.IdentifierKind;
+    init: K.NumericLiteralKind;
+}
+```
+
+### EnumStringBody
+Represents the body of a string enum.
+
+```typescript
+export interface EnumStringBody extends Omit<Node, "type"> {
+    type: "EnumStringBody";
+    members: K.EnumStringMemberKind[];
+    explicitType?: boolean;
+    hasUnknownMembers?: boolean;
+}
+```
+
+### EnumStringMember
+Represents a member of a string enum.
+
+```typescript
+export interface EnumStringMember extends Omit<Node, "type"> {
+    type: "EnumStringMember";
+    id: K.IdentifierKind;
+    init?: K.StringLiteralKind;
+}
+```
+
+### EnumSymbolBody
+Represents the body of a symbol enum.
+
+```typescript
+export interface EnumSymbolBody extends Omit<Node, "type"> {
+    type: "EnumSymbolBody";
+    members: K.EnumDefaultedMemberKind[];
+    hasUnknownMembers?: boolean;
+}
+```
+
+### ExistentialTypeParam
+Represents an existential type parameter in Flow.
+
+```typescript
+export interface ExistentialTypeParam extends Omit<FlowType, "type"> {
+    type: "ExistentialTypeParam";
+}
+```
+
+### ExistsTypeAnnotation
+A type annotation for an existential type.
+
+```typescript
+export interface ExistsTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "ExistsTypeAnnotation";
+}
+```
+
+### ExportAllDeclaration
+Represents an export all declaration.
+
+```typescript
+export interface ExportAllDeclaration extends Omit<Declaration, "type"> {
+    type: "ExportAllDeclaration";
+    source: K.LiteralKind;
+    exportKind?: "type" | "value" | null;
+}
+```
+
+### ExportBatchSpecifier
+Represents a batch export specifier.
+
+```typescript
+export interface ExportBatchSpecifier extends Omit<Node, "type"> {
+    type: "ExportBatchSpecifier";
+}
+```
+
+### ExportDeclaration
+Represents an export declaration.
+
+```typescript
+export interface ExportDeclaration extends Omit<Declaration, "type"> {
+    type: "ExportDeclaration";
+    default: boolean;
+    declaration?: K.DeclarationKind | K.ExpressionKind | null;
+    specifiers?: K.ExportSpecifierKind[] | null;
+    source?: K.LiteralKind | null;
+}
+```
+
+### ExportDefaultDeclaration
+Represents an export default declaration.
+
+```typescript
+export interface ExportDefaultDeclaration extends Omit<Declaration, "type"> {
+    type: "ExportDefaultDeclaration";
+    declaration: K.DeclarationKind | K.ExpressionKind;
+}
+```
+
+### ExportDefaultSpecifier
+Represents an export default specifier.
+
+```typescript
+export interface ExportDefaultSpecifier extends Omit<Node, "type"> {
+    type: "ExportDefaultSpecifier";
+    exported: K.IdentifierKind;
+}
+```
+
+### ExportNamedDeclaration
+Represents a named export declaration.
+
+```typescript
+export interface ExportNamedDeclaration extends Omit<Declaration, "type"> {
+    type: "ExportNamedDeclaration";
+    declaration?: K.DeclarationKind | null;
+    specifiers: K.ExportSpecifierKind[];
+    source?: K.LiteralKind | null;
+    exportKind?: "type" | "value" | null;
+}
+```
+
+### ExportNamespaceSpecifier
+Represents an export namespace specifier.
+
+```typescript
+export interface ExportNamespaceSpecifier extends Omit<Node, "type"> {
+    type: "ExportNamespaceSpecifier";
+    exported: K.IdentifierKind;
+}
+```
+
+### ExportSpecifier
+Represents an export specifier.
+
+```typescript
+export interface ExportSpecifier extends Omit<Node, "type"> {
+    type: "ExportSpecifier";
+    exported: K.IdentifierKind;
+    local: K.IdentifierKind;
+}
+```
+
+### Expression
+Represents an expression in the code.
+
+```typescript
+export interface Expression extends Node {
+    type: "Expression";
+}
+```
+
+### ExpressionStatement
+Represents an expression statement.
+
+```typescript
+export interface ExpressionStatement extends Omit<Statement, "type"> {
+    type: "ExpressionStatement";
+    expression: K.ExpressionKind;
+    directive?: string;
+}
+```
+
+### File
+Represents a file in the AST.
+
+```typescript
+export interface File extends Omit<Node, "type"> {
+    type: "File";
+    program: K.ProgramKind;
+    comments?: K.CommentKind[] | null;
+    tokens?: any[] | null;
+}
+```
+
+### Flow
+Represents a Flow type.
+
+```typescript
+export interface Flow extends Node {
+    type: "Flow";
+}
+```
+
+### FlowPredicate
+Represents a Flow predicate.
+
+```typescript
+export interface FlowPredicate extends Omit<Flow, "type"> {
+    type: "FlowPredicate";
+}
+```
+
+### FlowType
+Represents a Flow type.
+
+```typescript
+export interface FlowType extends Flow {
+    type: "FlowType";
+}
+```
+
+### ForAwaitStatement
+Represents a for-await statement.
+
+```typescript
+export interface ForAwaitStatement extends Omit<Statement, "type"> {
+    type: "ForAwaitStatement";
+    left: K.VariableDeclarationKind | K.ExpressionKind;
+    right: K.ExpressionKind;
+    body: K.StatementKind;
+}
+```
+
+### ForInStatement
+Represents a for-in statement.
+
+```typescript
+export interface ForInStatement extends Omit<Statement, "type"> {
+    type: "ForInStatement";
+    left: K.VariableDeclarationKind | K.ExpressionKind;
+    right: K.ExpressionKind;
+    body: K.StatementKind;
+}
+```
+
+### ForOfStatement
+Represents a for-of statement.
+
+```typescript
+export interface ForOfStatement extends Omit<Statement, "type"> {
+    type: "ForOfStatement";
+    left: K.VariableDeclarationKind | K.ExpressionKind;
+    right: K.ExpressionKind;
+    body: K.StatementKind;
+}
+```
+
+### ForStatement
+Represents a for statement.
+
+```typescript
+export interface ForStatement extends Omit<Statement, "type"> {
+    type: "ForStatement";
+    init?: K.VariableDeclarationKind | K.ExpressionKind | null;
+    test?: K.ExpressionKind | null;
+    update?: K.ExpressionKind | null;
+    body: K.StatementKind;
+}
+```
+
+### Function
+Represents a function in the code.
+
+```typescript
+export interface Function extends Node {
+    type: "Function";
+    id?: K.IdentifierKind | null;
+    params: (K.PatternKind | K.TSParameterPropertyKind)[];
+    body: K.BlockStatementKind;
+    generator?: boolean;
+    async?: boolean;
+    expression?: boolean;
+    returnType?: K.TypeAnnotationKind | K.TSTypeAnnotationKind | K.NoopKind | null;
+    typeParameters?: K.TypeParameterDeclarationKind | K.TSTypeParameterDeclarationKind | null;
+}
+```
+
+### FunctionDeclaration
+Represents a function declaration.
+
+```typescript
+export interface FunctionDeclaration extends Omit<Function, "type">, Omit<Declaration, "type"> {
+    type: "FunctionDeclaration";
+    body: K.BlockStatementKind;
+    declare?: boolean;
+}
+```
+
+### FunctionExpression
+Represents a function expression.
+
+```typescript
+export interface FunctionExpression extends Omit<Function, "type">, Omit<Expression, "type"> {
+    type: "FunctionExpression";
+}
+```
+
+### FunctionTypeAnnotation
+A type annotation for a function.
+
+```typescript
+export interface FunctionTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "FunctionTypeAnnotation";
+    params: K.FunctionTypeParamKind[];
+    returnType: K.FlowTypeKind;
+    rest?: K.FunctionTypeParamKind | null;
+    typeParameters?: K.TypeParameterDeclarationKind | null;
+}
+```
+
+### FunctionTypeParam
+Represents a parameter in a function type annotation.
+
+```typescript
+export interface FunctionTypeParam extends Omit<Node, "type"> {
+    type: "FunctionTypeParam";
+    name: K.IdentifierKind | null;
+    typeAnnotation: K.FlowTypeKind;
+    optional?: boolean;
+}
+```
+
+### GeneratorExpression
+Represents a generator expression.
+
+```typescript
+export interface GeneratorExpression extends Omit<Expression, "type"> {
+    type: "GeneratorExpression";
+}
+```
+
+### GenericTypeAnnotation
+A type annotation for a generic type.
+
+```typescript
+export interface GenericTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "GenericTypeAnnotation";
+    id: K.IdentifierKind | K.QualifiedTypeIdentifierKind;
+    typeParameters?: K.TypeParameterInstantiationKind | null;
+}
+```
+
+### Identifier
+Represents an identifier.
+
+```typescript
+export interface Identifier extends Omit<Expression
+
+, "type">, Omit<Pattern, "type"> {
+    type: "Identifier";
+    name: string;
+    optional?: boolean;
+    typeAnnotation?: K.TypeAnnotationKind | K.TSTypeAnnotationKind | null;
+    decorators?: K.DecoratorKind[] | null;
+}
+```
+
+### IfStatement
+Represents an if statement.
+
+```typescript
+export interface IfStatement extends Omit<Statement, "type"> {
+    type: "IfStatement";
+    test: K.ExpressionKind;
+    consequent: K.StatementKind;
+    alternate?: K.StatementKind | null;
+}
+```
+
+### Import
+Represents an import expression.
+
+```typescript
+export interface Import extends Omit<Expression, "type"> {
+    type: "Import";
+}
+```
+
+### ImportDeclaration
+Represents an import declaration.
+
+```typescript
+export interface ImportDeclaration extends Omit<Declaration, "type"> {
+    type: "ImportDeclaration";
+    specifiers: (K.ImportSpecifierKind | K.ImportNamespaceSpecifierKind | K.ImportDefaultSpecifierKind)[];
+    source: K.LiteralKind;
+    importKind?: "type" | "typeof" | "value" | null;
+}
+```
+
+### ImportDefaultSpecifier
+Represents a default import specifier.
+
+```typescript
+export interface ImportDefaultSpecifier extends Omit<Node, "type"> {
+    type: "ImportDefaultSpecifier";
+    local: K.IdentifierKind;
+}
+```
+
+### ImportExpression
+Represents an import expression.
+
+```typescript
+export interface ImportExpression extends Omit<Expression, "type"> {
+    type: "ImportExpression";
+    source: K.LiteralKind;
+}
+```
+
+### ImportNamespaceSpecifier
+Represents a namespace import specifier.
+
+```typescript
+export interface ImportNamespaceSpecifier extends Omit<Node, "type"> {
+    type: "ImportNamespaceSpecifier";
+    local: K.IdentifierKind;
+}
+```
+
+### ImportSpecifier
+Represents an import specifier.
+
+```typescript
+export interface ImportSpecifier extends Omit<Node, "type"> {
+    type: "ImportSpecifier";
+    local: K.IdentifierKind;
+    imported: K.IdentifierKind;
+    importKind?: "type" | "typeof" | "value" | null;
+}
+```
+
+### InferredPredicate
+Represents an inferred predicate in Flow.
+
+```typescript
+export interface InferredPredicate extends Omit<FlowPredicate, "type"> {
+    type: "InferredPredicate";
+}
+```
+
+### InterfaceDeclaration
+Represents an interface declaration.
+
+```typescript
+export interface InterfaceDeclaration extends Omit<Declaration, "type"> {
+    type: "InterfaceDeclaration";
+    id: K.IdentifierKind;
+    typeParameters?: K.TypeParameterDeclarationKind | null;
+    extends: K.InterfaceExtendsKind[];
+    body: K.ObjectTypeAnnotationKind;
+}
+```
+
+### InterfaceExtends
+Represents an extension of an interface.
+
+```typescript
+export interface InterfaceExtends extends Omit<Node, "type"> {
+    type: "InterfaceExtends";
+    id: K.IdentifierKind | K.QualifiedTypeIdentifierKind;
+    typeParameters?: K.TypeParameterInstantiationKind | null;
+}
+```
+
+### InterfaceTypeAnnotation
+A type annotation for an interface.
+
+```typescript
+export interface InterfaceTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "InterfaceTypeAnnotation";
+    body: K.ObjectTypeAnnotationKind;
+    extends?: K.InterfaceExtendsKind[] | null;
+}
+```
+
+### InterpreterDirective
+Represents an interpreter directive at the top of a script.
+
+```typescript
+export interface InterpreterDirective extends Omit<Literal, "type"> {
+    type: "InterpreterDirective";
+    value: string;
+}
+```
+
+### IntersectionTypeAnnotation
+A type annotation for an intersection type.
+
+```typescript
+export interface IntersectionTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "IntersectionTypeAnnotation";
+    types: K.FlowTypeKind[];
+}
+```
+
+### JSXAttribute
+Represents an attribute in a JSX element.
+
+```typescript
+export interface JSXAttribute extends Omit<Node, "type"> {
+    type: "JSXAttribute";
+    name: K.JSXIdentifierKind | K.JSXNamespacedNameKind;
+    value?: K.LiteralKind | K.JSXExpressionContainerKind | null;
+}
+```
+
+### JSXClosingElement
+Represents a closing element in JSX.
+
+```typescript
+export interface JSXClosingElement extends Omit<Node, "type"> {
+    type: "JSXClosingElement";
+    name: K.JSXIdentifierKind | K.JSXMemberExpressionKind | K.JSXNamespacedNameKind;
+}
+```
+
+### JSXClosingFragment
+Represents a closing fragment in JSX.
+
+```typescript
+export interface JSXClosingFragment extends Omit<Node, "type"> {
+    type: "JSXClosingFragment";
+}
+```
+
+### JSXElement
+Represents a JSX element.
+
+```typescript
+export interface JSXElement extends Omit<Expression, "type"> {
+    type: "JSXElement";
+    openingElement: K.JSXOpeningElementKind;
+    closingElement?: K.JSXClosingElementKind | null;
+    children: K.JSXElementKind[];
+    selfClosing?: boolean;
+}
+```
+
+### JSXEmptyExpression
+Represents an empty expression in JSX.
+
+```typescript
+export interface JSXEmptyExpression extends Omit<Expression, "type"> {
+    type: "JSXEmptyExpression";
+}
+```
+
+### JSXExpressionContainer
+Represents an expression container in JSX.
+
+```typescript
+export interface JSXExpressionContainer extends Omit<Expression, "type"> {
+    type: "JSXExpressionContainer";
+    expression: K.ExpressionKind | K.JSXEmptyExpressionKind;
+}
+```
+
+### JSXFragment
+Represents a JSX fragment.
+
+```typescript
+export interface JSXFragment extends Omit<Expression, "type"> {
+    type: "JSXFragment";
+    openingFragment: K.JSXOpeningFragmentKind;
+    closingFragment: K.JSXClosingFragmentKind;
+    children: K.JSXElementKind[];
+}
+```
+
+### JSXIdentifier
+Represents an identifier in JSX.
+
+```typescript
+export interface JSXIdentifier extends Omit<Node, "type"> {
+    type: "JSXIdentifier";
+    name: string;
+}
+```
+
+### JSXMemberExpression
+Represents a member expression in JSX.
+
+```typescript
+export interface JSXMemberExpression extends Omit<Expression, "type"> {
+    type: "JSXMemberExpression";
+    object: K.JSXIdentifierKind | K.JSXMemberExpressionKind;
+    property: K.JSXIdentifierKind;
+}
+```
+
+### JSXNamespacedName
+Represents a namespaced name in JSX.
+
+```typescript
+export interface JSXNamespacedName extends Omit<Expression, "type"> {
+    type: "JSXNamespacedName";
+    namespace: K.JSXIdentifierKind;
+    name: K.JSXIdentifierKind;
+}
+```
+
+### JSXOpeningElement
+Represents an opening element in JSX.
+
+```typescript
+export interface JSXOpeningElement extends Omit<Node, "type"> {
+    type: "JSXOpeningElement";
+    name: K.JSXIdentifierKind | K.JSXMemberExpressionKind | K.JSXNamespacedNameKind;
+    attributes: (K.JSXAttributeKind | K.JSXSpreadAttributeKind)[];
+    selfClosing: boolean;
+}
+```
+
+### JSXOpeningFragment
+Represents an opening fragment in JSX.
+
+```typescript
+export interface JSXOpeningFragment extends Omit<Node, "type"> {
+    type: "JSXOpeningFragment";
+}
+```
+
+### JSXSpreadAttribute
+Represents a spread attribute in JSX.
+
+```typescript
+export interface JSXSpreadAttribute extends Omit<Node, "type"> {
+    type: "JSXSpreadAttribute";
+    argument: K.ExpressionKind;
+}
+```
+
+### JSXSpreadChild
+Represents a spread child in JSX.
+
+```typescript
+export interface JSXSpreadChild extends Omit<Expression, "type"> {
+    type: "JSXSpreadChild";
+    expression: K.ExpressionKind;
+}
+```
+
+### JSXText
+Represents text in JSX.
+
+```typescript
+export interface JSXText extends Omit<Literal, "type"> {
+    type: "JSXText";
+    value: string;
+    raw: string;
+}
+```
+
+### LabeledStatement
+Represents a labeled statement.
+
+```typescript
+export interface LabeledStatement extends Omit<Statement, "type"> {
+    type: "LabeledStatement";
+    label: K.IdentifierKind;
+    body: K.StatementKind;
+}
+```
+
+### Line
+Represents a line comment.
+
+```typescript
+export interface Line extends Comment {
+    type: "Line";
+}
+```
+
+### Literal
+Represents a literal value.
+
+```typescript
+export interface Literal extends Expression, Pattern {
+    type: "Literal";
+    value: boolean | number | string | RegExp | null;
+    regex?: { pattern: string; flags: string };
+    raw?: string;
+    bigint?: string;
+}
+```
+
+### LogicalExpression
+Represents a logical expression.
+
+```typescript
+export interface LogicalExpression extends Omit<Expression, "type"> {
+    type: "LogicalExpression";
+    operator: "||" | "&&" | "??";
+    left: K.ExpressionKind;
+    right: K.ExpressionKind;
+}
+```
+
+### MemberExpression
+Represents a member expression.
+
+```typescript
+export interface MemberExpression extends Omit<Expression, "type">, Omit<ChainElement, "type"> {
+    type: "MemberExpression";
+    object: K.ExpressionKind | K.SuperKind;
+    property: K.IdentifierKind | K.ExpressionKind;
+    computed: boolean;
+}
+```
+
+### MemberTypeAnnotation
+A type annotation for a member type.
+
+```typescript
+export interface MemberTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "MemberTypeAnnotation";
+    object: K.IdentifierKind;
+    property: K.IdentifierKind;
+}
+```
+
+### MetaProperty
+Represents a meta property.
+
+```typescript
+export interface MetaProperty extends Omit<Expression, "type
+
+"> {
+    type: "MetaProperty";
+    meta: K.IdentifierKind;
+    property: K.IdentifierKind;
+}
+```
+
+### MethodDefinition
+Represents a method definition.
+
+```typescript
+export interface MethodDefinition extends Omit<Declaration, "type"> {
+    type: "MethodDefinition";
+    key: K.LiteralKind | K.IdentifierKind | K.ExpressionKind;
+    value: K.FunctionExpressionKind;
+    kind?: "get" | "set" | "method" | "constructor";
+    access?: "public" | "private" | "protected" | null;
+    computed?: boolean;
+    static?: boolean;
+    decorators?: K.DecoratorKind[] | null;
+}
+```
+
+### MixedTypeAnnotation
+A type annotation for a mixed type.
+
+```typescript
+export interface MixedTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "MixedTypeAnnotation";
+}
+```
+
+### ModuleSpecifier
+Represents a module specifier.
+
+```typescript
+export interface ModuleSpecifier extends Node {
+    type: "ModuleSpecifier";
+}
+```
+
+### NewExpression
+Represents a new expression.
+
+```typescript
+export interface NewExpression extends Omit<Expression, "type"> {
+    type: "NewExpression";
+    callee: K.ExpressionKind;
+    arguments: (K.ExpressionKind | K.SpreadElementKind)[];
+    typeArguments?: null | K.TypeParameterInstantiationKind;
+}
+```
+
+### Node
+Represents a generic AST node.
+
+```typescript
+export interface Node {
+    type: string;
+    loc?: K.SourceLocationKind | null;
+    comments?: (K.CommentBlockKind | K.CommentLineKind)[] | null;
+}
+```
+
+### Noop
+Represents a no-op (no operation) statement.
+
+```typescript
+export interface Noop extends Omit<Statement, "type"> {
+    type: "Noop";
+}
+```
+
+### NullableTypeAnnotation
+A type annotation for a nullable type.
+
+```typescript
+export interface NullableTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "NullableTypeAnnotation";
+    typeAnnotation: K.FlowTypeKind;
+}
+```
+
+### NullLiteral
+Represents a null literal.
+
+```typescript
+export interface NullLiteral extends Omit<Literal, "type" | "value"> {
+    type: "NullLiteral";
+    value: null;
+}
+```
+
+### NullLiteralTypeAnnotation
+A type annotation for null literals.
+
+```typescript
+export interface NullLiteralTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "NullLiteralTypeAnnotation";
+    value: null;
+    raw: string;
+}
+```
+
+### NullTypeAnnotation
+A type annotation for null types.
+
+```typescript
+export interface NullTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "NullTypeAnnotation";
+}
+```
+
+### NumberLiteralTypeAnnotation
+A type annotation for number literals.
+
+```typescript
+export interface NumberLiteralTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "NumberLiteralTypeAnnotation";
+    value: number;
+    raw: string;
+}
+```
+
+### NumberTypeAnnotation
+A type annotation for number types.
+
+```typescript
+export interface NumberTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "NumberTypeAnnotation";
+}
+```
+
+### NumericLiteral
+Represents a numeric literal.
+
+```typescript
+export interface NumericLiteral extends Omit<Literal, "type" | "value"> {
+    type: "NumericLiteral";
+    value: number;
+    raw?: string;
+}
+```
+
+### NumericLiteralTypeAnnotation
+A type annotation for numeric literals.
+
+```typescript
+export interface NumericLiteralTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "NumericLiteralTypeAnnotation";
+    value: number;
+    raw: string;
+}
+```
+
+### ObjectExpression
+Represents an object expression.
+
+```typescript
+export interface ObjectExpression extends Omit<Expression, "type"> {
+    type: "ObjectExpression";
+    properties: (K.PropertyKind | K.ObjectMethodKind | K.SpreadElementKind | K.RestElementKind)[];
+}
+```
+
+### ObjectMethod
+Represents a method in an object.
+
+```typescript
+export interface ObjectMethod extends Omit<Declaration, "type">, Omit<Function, "type" | "body"> {
+    type: "ObjectMethod";
+    key: K.LiteralKind | K.IdentifierKind | K.ExpressionKind;
+    kind?: "method" | "get" | "set";
+    body: K.BlockStatementKind;
+    computed?: boolean;
+    static?: boolean;
+    shorthand?: boolean;
+    decorators?: K.DecoratorKind[] | null;
+    access?: "public" | "private" | "protected" | null;
+    optional?: boolean;
+    readonly?: boolean;
+    definite?: boolean;
+}
+```
+
+### ObjectPattern
+Represents an object pattern for destructuring.
+
+```typescript
+export interface ObjectPattern extends Omit<Pattern, "type"> {
+    type: "ObjectPattern";
+    properties: (K.PropertyKind | K.RestElementKind)[];
+    decorators?: K.DecoratorKind[] | null;
+}
+```
+
+### ObjectProperty
+Represents a property in an object.
+
+```typescript
+export interface ObjectProperty extends Omit<Declaration, "type"> {
+    type: "ObjectProperty";
+    key: K.LiteralKind | K.IdentifierKind | K.ExpressionKind;
+    value: K.ExpressionKind;
+    computed?: boolean;
+    shorthand?: boolean;
+    decorators?: K.DecoratorKind[] | null;
+    access?: "public" | "private" | "protected" | null;
+    optional?: boolean;
+    readonly?: boolean;
+    definite?: boolean;
+}
+```
+
+### ObjectTypeAnnotation
+A type annotation for object types.
+
+```typescript
+export interface ObjectTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "ObjectTypeAnnotation";
+    properties: K.ObjectTypePropertyKind[];
+    indexers?: K.ObjectTypeIndexerKind[] | null;
+    callProperties?: K.ObjectTypeCallPropertyKind[] | null;
+    internalSlots?: K.ObjectTypeInternalSlotKind[] | null;
+    exact?: boolean;
+    inexact?: boolean;
+}
+```
+
+### ObjectTypeCallProperty
+Represents a call property in an object type annotation.
+
+```typescript
+export interface ObjectTypeCallProperty extends Omit<Node, "type"> {
+    type: "ObjectTypeCallProperty";
+    value: K.FunctionTypeAnnotationKind;
+    static?: boolean;
+}
+```
+
+### ObjectTypeIndexer
+Represents an indexer in an object type annotation.
+
+```typescript
+export interface ObjectTypeIndexer extends Omit<Node, "type"> {
+    type: "ObjectTypeIndexer";
+    id?: K.IdentifierKind | null;
+    key: K.FlowTypeKind;
+    value: K.FlowTypeKind;
+    variance?: K.VarianceKind | "plus" | "minus" | null;
+    static?: boolean;
+}
+```
+
+### ObjectTypeInternalSlot
+Represents an internal slot in an object type annotation.
+
+```typescript
+export interface ObjectTypeInternalSlot extends Omit<Node, "type"> {
+    type: "ObjectTypeInternalSlot";
+    id: K.IdentifierKind;
+    value: K.FlowTypeKind;
+    optional?: boolean;
+    static?: boolean;
+    method?: boolean;
+}
+```
+
+### ObjectTypeProperty
+Represents a property in an object type annotation.
+
+```typescript
+export interface ObjectTypeProperty extends Omit<Node, "type"> {
+    type: "ObjectTypeProperty";
+    key: K.LiteralKind | K.IdentifierKind;
+    value: K.FlowTypeKind;
+    optional?: boolean;
+    variance?: K.VarianceKind | "plus" | "minus" | null;
+    static?: boolean;
+}
+```
+
+### ObjectTypeSpreadProperty
+Represents a spread property in an object type annotation.
+
+```typescript
+export interface ObjectTypeSpreadProperty extends Omit<Node, "type"> {
+    type: "ObjectTypeSpreadProperty";
+    argument: K.FlowTypeKind;
+}
+```
+
+### OpaqueType
+Represents an opaque type.
+
+```typescript
+export interface OpaqueType extends Omit<Declaration, "type"> {
+    type: "OpaqueType";
+    id: K.IdentifierKind;
+    typeParameters?: K.TypeParameterDeclarationKind | null;
+    impltype: K.FlowTypeKind;
+    supertype?: K.FlowTypeKind | null;
+}
+```
+
+### OptionalCallExpression
+Represents an optional call expression.
+
+```typescript
+export interface OptionalCallExpression extends Omit<Expression, "type">, Omit<ChainElement, "type"> {
+    type: "OptionalCallExpression";
+    callee: K.ExpressionKind;
+    arguments: (K.ExpressionKind | K.SpreadElementKind)[];
+    optional?: boolean;
+    typeArguments?: null | K.TypeParameterInstantiationKind;
+}
+```
+
+### OptionalMemberExpression
+Represents an optional member expression.
+
+```typescript
+export interface OptionalMemberExpression extends Omit<Expression, "type">, Omit<ChainElement, "type"> {
+    type: "OptionalMemberExpression";
+    object: K.ExpressionKind | K.SuperKind;
+    property: K.IdentifierKind | K.ExpressionKind;
+    computed?: boolean;
+    optional?: boolean;
+}
+```
+
+### ParenthesizedExpression
+Represents a parenthesized expression.
+
+```typescript
+export interface ParenthesizedExpression extends Omit<Expression, "type"> {
+    type: "ParenthesizedExpression";
+    expression: K.ExpressionKind;
+}
+```
+
+### Pattern
+Represents a pattern in the code.
+
+```typescript
+export interface Pattern extends Node {
+    type: "Pattern";
+}
+```
+
+### Position
+Represents a position in the source code.
+
+```typescript
+export interface Position extends Omit<Node, "type"> {
+    type: "Position";
+    line: number;
+    column: number;
+}
+```
+
+### Printable
+Represents a printable node.
+
+```typescript
+export interface
+
+ Printable extends Node {
+    type: "Printable";
+}
+```
+
+### PrivateName
+Represents a private name.
+
+```typescript
+export interface PrivateName extends Omit<Expression, "type"> {
+    type: "PrivateName";
+    id: K.IdentifierKind;
+}
+```
+
+### Program
+Represents the entire program.
+
+```typescript
+export interface Program extends Omit<Node, "type"> {
+    type: "Program";
+    body: (K.StatementKind | K.ModuleDeclarationKind)[];
+    sourceType: "script" | "module";
+    directives?: K.DirectiveKind[] | null;
+}
+```
+
+### Property
+Represents a property in an object.
+
+```typescript
+export interface Property extends Omit<Declaration, "type"> {
+    type: "Property";
+    key: K.LiteralKind | K.IdentifierKind | K.ExpressionKind;
+    value: K.ExpressionKind;
+    kind?: "init" | "get" | "set";
+    computed?: boolean;
+    method?: boolean;
+    shorthand?: boolean;
+    decorators?: K.DecoratorKind[] | null;
+}
+```
+
+### PropertyPattern
+Represents a pattern property in an object.
+
+```typescript
+export interface PropertyPattern extends Omit<Pattern, "type"> {
+    type: "PropertyPattern";
+    key: K.LiteralKind | K.IdentifierKind | K.ExpressionKind;
+    pattern: K.PatternKind;
+}
+```
+
+### QualifiedTypeIdentifier
+Represents a qualified type identifier in Flow.
+
+```typescript
+export interface QualifiedTypeIdentifier extends Omit<FlowType, "type"> {
+    type: "QualifiedTypeIdentifier";
+    qualification: K.IdentifierKind | K.QualifiedTypeIdentifierKind;
+    id: K.IdentifierKind;
+}
+```
+
+### RegExpLiteral
+Represents a regular expression literal.
+
+```typescript
+export interface RegExpLiteral extends Omit<Literal, "type" | "value"> {
+    type: "RegExpLiteral";
+    value: RegExp;
+    regex: { pattern: string; flags: string };
+}
+```
+
+### RestElement
+Represents a rest element in a destructuring assignment.
+
+```typescript
+export interface RestElement extends Omit<Pattern, "type"> {
+    type: "RestElement";
+    argument: K.PatternKind;
+    decorators?: K.DecoratorKind[] | null;
+}
+```
+
+### RestProperty
+Represents a rest property in an object pattern.
+
+```typescript
+export interface RestProperty extends Omit<Pattern, "type"> {
+    type: "RestProperty";
+    argument: K.PatternKind;
+}
+```
+
+### ReturnStatement
+Represents a return statement.
+
+```typescript
+export interface ReturnStatement extends Omit<Statement, "type"> {
+    type: "ReturnStatement";
+    argument?: K.ExpressionKind | null;
+}
+```
+
+### SequenceExpression
+Represents a sequence expression.
+
+```typescript
+export interface SequenceExpression extends Omit<Expression, "type"> {
+    type: "SequenceExpression";
+    expressions: K.ExpressionKind[];
+}
+```
+
+### SourceLocation
+Represents the source location of a node.
+
+```typescript
+export interface SourceLocation extends Omit<Node, "type"> {
+    type: "SourceLocation";
+    start: K.PositionKind;
+    end: K.PositionKind;
+}
+```
+
+### Specifier
+Represents a specifier in an import or export declaration.
+
+```typescript
+export interface Specifier extends Node {
+    type: "Specifier";
+}
+```
+
+### SpreadElement
+Represents a spread element in an array or function call.
+
+```typescript
+export interface SpreadElement extends Omit<Expression, "type"> {
+    type: "SpreadElement";
+    argument: K.ExpressionKind;
+}
+```
+
+### SpreadElementPattern
+Represents a spread element pattern in an array.
+
+```typescript
+export interface SpreadElementPattern extends Omit<Pattern, "type"> {
+    type: "SpreadElementPattern";
+    argument: K.PatternKind;
+}
+```
+
+### SpreadProperty
+Represents a spread property in an object.
+
+```typescript
+export interface SpreadProperty extends Omit<Pattern, "type"> {
+    type: "SpreadProperty";
+    argument: K.PatternKind;
+}
+```
+
+### SpreadPropertyPattern
+Represents a spread property pattern in an object.
+
+```typescript
+export interface SpreadPropertyPattern extends Omit<Pattern, "type"> {
+    type: "SpreadPropertyPattern";
+    argument: K.PatternKind;
+}
+```
+
+### Statement
+Represents a statement in the code.
+
+```typescript
+export interface Statement extends Node {
+    type: "Statement";
+}
+```
+
+### StringLiteral
+Represents a string literal.
+
+```typescript
+export interface StringLiteral extends Omit<Literal, "type" | "value"> {
+    type: "StringLiteral";
+    value: string;
+    raw?: string;
+}
+```
+
+### StringLiteralTypeAnnotation
+A type annotation for string literals.
+
+```typescript
+export interface StringLiteralTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "StringLiteralTypeAnnotation";
+    value: string;
+    raw: string;
+}
+```
+
+### StringTypeAnnotation
+A type annotation for string types.
+
+```typescript
+export interface StringTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "StringTypeAnnotation";
+}
+```
+
+### Super
+Represents the `super` keyword.
+
+```typescript
+export interface Super extends Omit<Node, "type"> {
+    type: "Super";
+}
+```
+
+### SwitchCase
+Represents a case in a switch statement.
+
+```typescript
+export interface SwitchCase extends Omit<Node, "type"> {
+    type: "SwitchCase";
+    test?: K.ExpressionKind | null;
+    consequent: K.StatementKind[];
+}
+```
+
+### SwitchStatement
+Represents a switch statement.
+
+```typescript
+export interface SwitchStatement extends Omit<Statement, "type"> {
+    type: "SwitchStatement";
+    discriminant: K.ExpressionKind;
+    cases: K.SwitchCaseKind[];
+}
+```
+
+### SymbolTypeAnnotation
+A type annotation for symbol types.
+
+```typescript
+export interface SymbolTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "SymbolTypeAnnotation";
+}
+```
+
+### TaggedTemplateExpression
+Represents a tagged template expression.
+
+```typescript
+export interface TaggedTemplateExpression extends Omit<Expression, "type"> {
+    type: "TaggedTemplateExpression";
+    tag: K.ExpressionKind;
+    quasi: K.TemplateLiteralKind;
+}
+```
+
+### TemplateElement
+Represents an element in a template literal.
+
+```typescript
+export interface TemplateElement extends Omit<Node, "type"> {
+    type: "TemplateElement";
+    tail: boolean;
+    value: { cooked: string; raw: string };
+}
+```
+
+### TemplateLiteral
+Represents a template literal.
+
+```typescript
+export interface TemplateLiteral extends Omit<Expression, "type"> {
+    type: "TemplateLiteral";
+    quasis: K.TemplateElementKind[];
+    expressions: K.ExpressionKind[];
+}
+```
+
+### ThisExpression
+Represents the `this` expression.
+
+```typescript
+export interface ThisExpression extends Omit<Expression, "type"> {
+    type: "ThisExpression";
+}
+```
+
+### ThisTypeAnnotation
+A type annotation for the `this` type.
+
+```typescript
+export interface ThisTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "ThisTypeAnnotation";
+}
+```
+
+### ThrowStatement
+Represents a throw statement.
+
+```typescript
+export interface ThrowStatement extends Omit<Statement, "type"> {
+    type: "ThrowStatement";
+    argument: K.ExpressionKind;
+}
+```
+
+### TryStatement
+Represents a try statement.
+
+```typescript
+export interface TryStatement extends Omit<Statement, "type"> {
+    type: "TryStatement";
+    block: K.BlockStatementKind;
+    handler?: K.CatchClauseKind | null;
+    finalizer?: K.BlockStatementKind | null;
+}
+```
+
+### TSAnyKeyword
+Represents the TypeScript `any` keyword.
+
+```typescript
+export interface TSAnyKeyword extends Omit<TSType, "type"> {
+    type: "TSAnyKeyword";
+}
+```
+
+### TSArrayType
+Represents a TypeScript array type.
+
+```typescript
+export interface TSArrayType extends Omit<TSType, "type"> {
+    type: "TSArrayType";
+    elementType: K.TSTypeKind;
+}
+```
+
+### TSAsExpression
+Represents a TypeScript as-expression.
+
+```typescript
+export interface TSAsExpression extends Omit<Expression, "type"> {
+    type: "TSAsExpression";
+    expression: K.ExpressionKind;
+    typeAnnotation: K.TSTypeKind;
+}
+```
+
+### TSBigIntKeyword
+Represents the TypeScript `bigint` keyword.
+
+```typescript
+export interface TSBigIntKeyword extends Omit<TSType, "type"> {
+    type: "TSBigIntKeyword";
+}
+```
+
+### TSBooleanKeyword
+Represents the TypeScript `boolean` keyword.
+
+```typescript
+export interface TSBooleanKeyword extends Omit<TSType, "type"> {
+    type: "TSBooleanKeyword";
+}
+```
+
+### TSCallSignatureDeclaration
+Represents a TypeScript call signature declaration.
+
+```typescript
+export interface TSCallSignatureDeclaration extends Omit<TSTypeElement, "type"> {
+    type: "TSCallSignatureDeclaration";
+    parameters: (K.IdentifierKind | K.RestElementKind)[];
+    typeAnnotation?: K.TSTypeAnnotationKind | null;
+    typeParameters?: K.TSTypeParameterDeclarationKind | null;
+}
+```
+
+### TSConditionalType
+Represents a TypeScript conditional type.
+
+```typescript
+export interface TSConditionalType extends Omit<TSType, "type"> {
+    type: "TSConditionalType";
+    checkType: K.TSTypeKind;
+    extendsType: K.TSTypeKind;
+    trueType: K.TSTypeKind;
+    falseType: K.TSTypeKind;
+}
+```
+
+### TSConstructorType
+Represents a TypeScript constructor type.
+
+```
+
+typescript
+export interface TSConstructorType extends Omit<TSType, "type"> {
+    type: "TSConstructorType";
+    parameters: (K.IdentifierKind | K.RestElementKind)[];
+    typeAnnotation: K.TSTypeAnnotationKind;
+    typeParameters?: K.TSTypeParameterDeclarationKind | null;
+}
+```
+
+### TSConstructSignatureDeclaration
+Represents a TypeScript construct signature declaration.
+
+```typescript
+export interface TSConstructSignatureDeclaration extends Omit<TSTypeElement, "type"> {
+    type: "TSConstructSignatureDeclaration";
+    parameters: (K.IdentifierKind | K.RestElementKind)[];
+    typeAnnotation?: K.TSTypeAnnotationKind | null;
+    typeParameters?: K.TSTypeParameterDeclarationKind | null;
+}
+```
+
+### TSDeclareFunction
+Represents a TypeScript function declaration.
+
+```typescript
+export interface TSDeclareFunction extends Omit<FunctionDeclaration, "type"> {
+    type: "TSDeclareFunction";
+}
+```
+
+### TSDeclareMethod
+Represents a TypeScript method declaration.
+
+```typescript
+export interface TSDeclareMethod extends Omit<FunctionDeclaration, "type"> {
+    type: "TSDeclareMethod";
+}
+```
+
+### TSEnumDeclaration
+Represents a TypeScript enum declaration.
+
+```typescript
+export interface TSEnumDeclaration extends Omit<Declaration, "type"> {
+    type: "TSEnumDeclaration";
+    id: K.IdentifierKind;
+    members: K.TSEnumMemberKind[];
+    const?: boolean;
+    declare?: boolean;
+    modifiers?: K.ModifierKind[] | null;
+}
+```
+
+### TSEnumMember
+Represents a member of a TypeScript enum.
+
+```typescript
+export interface TSEnumMember extends Omit<Node, "type"> {
+    type: "TSEnumMember";
+    id: K.IdentifierKind | K.StringLiteralKind;
+    initializer?: K.ExpressionKind | null;
+}
+```
+
+### TSExportAssignment
+Represents a TypeScript export assignment.
+
+```typescript
+export interface TSExportAssignment extends Omit<Declaration, "type"> {
+    type: "TSExportAssignment";
+    expression: K.ExpressionKind;
+}
+```
+
+### TSExpressionWithTypeArguments
+Represents a TypeScript expression with type arguments.
+
+```typescript
+export interface TSExpressionWithTypeArguments extends Omit<TSType, "type"> {
+    type: "TSExpressionWithTypeArguments";
+    expression: K.IdentifierKind | K.TSQualifiedNameKind;
+    typeParameters?: K.TSTypeParameterInstantiationKind | null;
+}
+```
+
+### TSExternalModuleReference
+Represents a TypeScript external module reference.
+
+```typescript
+export interface TSExternalModuleReference extends Omit<Declaration, "type"> {
+    type: "TSExternalModuleReference";
+    expression: K.StringLiteralKind;
+}
+```
+
+### TSFunctionType
+Represents a TypeScript function type.
+
+```typescript
+export interface TSFunctionType extends Omit<TSType, "type"> {
+    type: "TSFunctionType";
+    parameters: (K.IdentifierKind | K.RestElementKind)[];
+    typeAnnotation: K.TSTypeAnnotationKind;
+    typeParameters?: K.TSTypeParameterDeclarationKind | null;
+}
+```
+
+### TSHasOptionalTypeAnnotation
+Represents an optional type annotation in TypeScript.
+
+```typescript
+export interface TSHasOptionalTypeAnnotation extends Omit<TSType, "type"> {
+    type: "TSHasOptionalTypeAnnotation";
+    typeAnnotation?: K.TSTypeAnnotationKind | null;
+}
+```
+
+### TSHasOptionalTypeParameterInstantiation
+Represents an optional type parameter instantiation in TypeScript.
+
+```typescript
+export interface TSHasOptionalTypeParameterInstantiation extends Omit<TSType, "type"> {
+    type: "TSHasOptionalTypeParameterInstantiation";
+    typeParameters?: K.TSTypeParameterInstantiationKind | null;
+}
+```
+
+### TSHasOptionalTypeParameters
+Represents optional type parameters in TypeScript.
+
+```typescript
+export interface TSHasOptionalTypeParameters extends Omit<TSType, "type"> {
+    type: "TSHasOptionalTypeParameters";
+    typeParameters?: K.TSTypeParameterDeclarationKind | null;
+}
+```
+
+### TSImportEqualsDeclaration
+Represents a TypeScript import equals declaration.
+
+```typescript
+export interface TSImportEqualsDeclaration extends Omit<Declaration, "type"> {
+    type: "TSImportEqualsDeclaration";
+    id: K.IdentifierKind;
+    moduleReference: K.IdentifierKind | K.TSQualifiedNameKind | K.TSExternalModuleReferenceKind;
+    isExport?: boolean;
+}
+```
+
+### TSImportType
+Represents a TypeScript import type.
+
+```typescript
+export interface TSImportType extends Omit<TSType, "type"> {
+    type: "TSImportType";
+    argument: K.StringLiteralKind;
+    qualifier?: K.IdentifierKind | K.TSQualifiedNameKind | null;
+    typeParameters?: K.TSTypeParameterInstantiationKind | null;
+}
+```
+
+### TSIndexedAccessType
+Represents a TypeScript indexed access type.
+
+```typescript
+export interface TSIndexedAccessType extends Omit<TSType, "type"> {
+    type: "TSIndexedAccessType";
+    objectType: K.TSTypeKind;
+    indexType: K.TSTypeKind;
+}
+```
+
+### TSIndexSignature
+Represents a TypeScript index signature.
+
+```typescript
+export interface TSIndexSignature extends Omit<Declaration, "type"> {
+    type: "TSIndexSignature";
+    parameters: (K.IdentifierKind | K.RestElementKind)[];
+    typeAnnotation?: K.TSTypeAnnotationKind | null;
+    readonly?: boolean;
+    static?: boolean;
+    declare?: boolean;
+    optional?: boolean;
+    accessibility?: "public" | "private" | "protected" | null;
+}
+```
+
+### TSInferType
+Represents a TypeScript infer type.
+
+```typescript
+export interface TSInferType extends Omit<TSType, "type"> {
+    type: "TSInferType";
+    typeParameter: K.TSTypeParameterKind;
+}
+```
+
+### TSInterfaceBody
+Represents the body of a TypeScript interface.
+
+```typescript
+export interface TSInterfaceBody extends Omit<Node, "type"> {
+    type: "TSInterfaceBody";
+    body: K.TSTypeElementKind[];
+}
+```
+
+### TSInterfaceDeclaration
+Represents a TypeScript interface declaration.
+
+```typescript
+export interface TSInterfaceDeclaration extends Omit<Declaration, "type"> {
+    type: "TSInterfaceDeclaration";
+    id: K.IdentifierKind;
+    body: K.TSInterfaceBodyKind;
+    typeParameters?: K.TSTypeParameterDeclarationKind | null;
+    extends?: K.TSExpressionWithTypeArgumentsKind[] | null;
+    declare?: boolean;
+}
+```
+
+### TSIntersectionType
+Represents a TypeScript intersection type.
+
+```typescript
+export interface TSIntersectionType extends Omit<TSType, "type"> {
+    type: "TSIntersectionType";
+    types: K.TSTypeKind[];
+}
+```
+
+### TSLiteralType
+Represents a TypeScript literal type.
+
+```typescript
+export interface TSLiteralType extends Omit<TSType, "type"> {
+    type: "TSLiteralType";
+    literal: K.NumericLiteralKind | K.StringLiteralKind | K.BooleanLiteralKind;
+}
+```
+
+### TSMappedType
+Represents a TypeScript mapped type.
+
+```typescript
+export interface TSMappedType extends Omit<TSType, "type"> {
+    type: "TSMappedType";
+    typeParameter: K.TSTypeParameterKind;
+    nameType?: K.TSTypeKind | null;
+    optional?: boolean | "+" | "-";
+    readonly?: boolean | "+" | "-";
+    typeAnnotation?: K.TSTypeKind | null;
+}
+```
+
+### TSMethodSignature
+Represents a TypeScript method signature.
+
+```typescript
+export interface TSMethodSignature extends Omit<TSTypeElement, "type"> {
+    type: "TSMethodSignature";
+    key: K.ExpressionKind;
+    parameters: (K.IdentifierKind | K.RestElementKind)[];
+    typeAnnotation?: K.TSTypeAnnotationKind | null;
+    typeParameters?: K.TSTypeParameterDeclarationKind | null;
+    computed?: boolean;
+    optional?: boolean;
+}
+```
+
+### TSModuleBlock
+Represents a TypeScript module block.
+
+```typescript
+export interface TSModuleBlock extends Omit<Node, "type"> {
+    type: "TSModuleBlock";
+    body: K.StatementKind[];
+}
+```
+
+### TSModuleDeclaration
+Represents a TypeScript module declaration.
+
+```typescript
+export interface TSModuleDeclaration extends Omit<Declaration, "type"> {
+    type: "TSModuleDeclaration";
+    id: K.IdentifierKind | K.StringLiteralKind;
+    body: K.TSModuleBlockKind | K.TSModuleDeclarationKind;
+    declare?: boolean;
+    global?: boolean;
+    modifiers?: K.ModifierKind[] | null;
+}
+```
+
+### TSNamedTupleMember
+Represents a named tuple member in TypeScript.
+
+```typescript
+export interface TSNamedTupleMember extends Omit<TSType, "type"> {
+    type: "TSNamedTupleMember";
+    elementType: K.TSTypeKind;
+    label: K.IdentifierKind;
+    optional?: boolean;
+}
+```
+
+### TSNamespaceExportDeclaration
+Represents a TypeScript namespace export declaration.
+
+```typescript
+export interface TSNamespaceExportDeclaration extends Omit<Declaration, "type"> {
+    type: "TSNamespaceExportDeclaration";
+    id: K.IdentifierKind;
+}
+```
+
+### TSNeverKeyword
+Represents the TypeScript `never` keyword.
+
+```typescript
+export interface TSNeverKeyword extends Omit<TSType, "type"> {
+    type: "TSNeverKeyword";
+}
+```
+
+### TSNonNullExpression
+Represents a non-null assertion in TypeScript.
+
+```typescript
+export interface TSNonNullExpression extends Omit<Expression, "type"> {
+    type: "TSNonNullExpression";
+    expression: K.ExpressionKind;
+}
+```
+
+### TSNullKeyword
+Represents the TypeScript `null` keyword.
+
+```typescript
+export interface
+
+ TSNullKeyword extends Omit<TSType, "type"> {
+    type: "TSNullKeyword";
+}
+```
+
+### TSNumberKeyword
+Represents the TypeScript `number` keyword.
+
+```typescript
+export interface TSNumberKeyword extends Omit<TSType, "type"> {
+    type: "TSNumberKeyword";
+}
+```
+
+### TSObjectKeyword
+Represents the TypeScript `object` keyword.
+
+```typescript
+export interface TSObjectKeyword extends Omit<TSType, "type"> {
+    type: "TSObjectKeyword";
+}
+```
+
+### TSOptionalType
+Represents an optional type in TypeScript.
+
+```typescript
+export interface TSOptionalType extends Omit<TSType, "type"> {
+    type: "TSOptionalType";
+    typeAnnotation: K.TSTypeKind;
+}
+```
+
+### TSParameterProperty
+Represents a parameter property in TypeScript.
+
+```typescript
+export interface TSParameterProperty extends Omit<Pattern, "type"> {
+    type: "TSParameterProperty";
+    parameter: K.IdentifierKind | K.AssignmentPatternKind;
+    accessibility?: "public" | "private" | "protected" | null;
+    readonly?: boolean;
+}
+```
+
+### TSParenthesizedType
+Represents a parenthesized type in TypeScript.
+
+```typescript
+export interface TSParenthesizedType extends Omit<TSType, "type"> {
+    type: "TSParenthesizedType";
+    typeAnnotation: K.TSTypeKind;
+}
+```
+
+### TSPropertySignature
+Represents a property signature in TypeScript.
+
+```typescript
+export interface TSPropertySignature extends Omit<TSTypeElement, "type"> {
+    type: "TSPropertySignature";
+    key: K.ExpressionKind;
+    typeAnnotation?: K.TSTypeAnnotationKind | null;
+    initializer?: K.ExpressionKind | null;
+    computed?: boolean;
+    optional?: boolean;
+    readonly?: boolean;
+}
+```
+
+### TSQualifiedName
+Represents a qualified name in TypeScript.
+
+```typescript
+export interface TSQualifiedName extends Omit<TSType, "type"> {
+    type: "TSQualifiedName";
+    left: K.IdentifierKind | K.TSQualifiedNameKind;
+    right: K.IdentifierKind;
+}
+```
+
+### TSRestType
+Represents a rest type in TypeScript.
+
+```typescript
+export interface TSRestType extends Omit<TSType, "type"> {
+    type: "TSRestType";
+    typeAnnotation: K.TSTypeKind;
+}
+```
+
+### TSStringKeyword
+Represents the TypeScript `string` keyword.
+
+```typescript
+export interface TSStringKeyword extends Omit<TSType, "type"> {
+    type: "TSStringKeyword";
+}
+```
+
+### TSSymbolKeyword
+Represents the TypeScript `symbol` keyword.
+
+```typescript
+export interface TSSymbolKeyword extends Omit<TSType, "type"> {
+    type: "TSSymbolKeyword";
+}
+```
+
+### TSThisType
+Represents the TypeScript `this` type.
+
+```typescript
+export interface TSThisType extends Omit<TSType, "type"> {
+    type: "TSThisType";
+}
+```
+
+### TSTupleType
+Represents a tuple type in TypeScript.
+
+```typescript
+export interface TSTupleType extends Omit<TSType, "type"> {
+    type: "TSTupleType";
+    elementTypes: K.TSTypeKind[];
+}
+```
+
+### TSType
+Represents a TypeScript type.
+
+```typescript
+export interface TSType extends Node {
+    type: "TSType";
+}
+```
+
+### TSTypeAliasDeclaration
+Represents a TypeScript type alias declaration.
+
+```typescript
+export interface TSTypeAliasDeclaration extends Omit<Declaration, "type"> {
+    type: "TSTypeAliasDeclaration";
+    id: K.IdentifierKind;
+    typeAnnotation: K.TSTypeKind;
+    typeParameters?: K.TSTypeParameterDeclarationKind | null;
+    declare?: boolean;
+}
+```
+
+### TSTypeAnnotation
+Represents a TypeScript type annotation.
+
+```typescript
+export interface TSTypeAnnotation extends Omit<Declaration, "type"> {
+    type: "TSTypeAnnotation";
+    typeAnnotation: K.TSTypeKind;
+}
+```
+
+### TSTypeAssertion
+Represents a TypeScript type assertion.
+
+```typescript
+export interface TSTypeAssertion extends Omit<Expression, "type"> {
+    type: "TSTypeAssertion";
+    expression: K.ExpressionKind;
+    typeAnnotation: K.TSTypeKind;
+}
+```
+
+### TSTypeLiteral
+Represents a TypeScript type literal.
+
+```typescript
+export interface TSTypeLiteral extends Omit<TSType, "type"> {
+    type: "TSTypeLiteral";
+    members: K.TSTypeElementKind[];
+}
+```
+
+### TSTypeOperator
+Represents a TypeScript type operator.
+
+```typescript
+export interface TSTypeOperator extends Omit<TSType, "type"> {
+    type: "TSTypeOperator";
+    operator: "keyof" | "unique" | "readonly";
+    typeAnnotation: K.TSTypeKind;
+}
+```
+
+### TSTypeParameter
+Represents a type parameter in TypeScript.
+
+```typescript
+export interface TSTypeParameter extends Omit<TSType, "type"> {
+    type: "TSTypeParameter";
+    name: string;
+    constraint?: K.TSTypeKind | null;
+    default?: K.TSTypeKind | null;
+}
+```
+
+### TSTypeParameterDeclaration
+Represents a type parameter declaration in TypeScript.
+
+```typescript
+export interface TSTypeParameterDeclaration extends Omit<TSType, "type"> {
+    type: "TSTypeParameterDeclaration";
+    params: K.TSTypeParameterKind[];
+}
+```
+
+### TSTypeParameterInstantiation
+Represents a type parameter instantiation in TypeScript.
+
+```typescript
+export interface TSTypeParameterInstantiation extends Omit<TSType, "type"> {
+    type: "TSTypeParameterInstantiation";
+    params: K.TSTypeKind[];
+}
+```
+
+### TSTypePredicate
+Represents a type predicate in TypeScript.
+
+```typescript
+export interface TSTypePredicate extends Omit<TSType, "type"> {
+    type: "TSTypePredicate";
+    asserts: boolean;
+    parameterName: K.IdentifierKind | K.TSThisTypeKind;
+    typeAnnotation?: K.TSTypeAnnotationKind | null;
+}
+```
+
+### TSTypeQuery
+Represents a type query in TypeScript.
+
+```typescript
+export interface TSTypeQuery extends Omit<TSType, "type"> {
+    type: "TSTypeQuery";
+    exprName: K.IdentifierKind | K.TSQualifiedNameKind;
+}
+```
+
+### TSTypeReference
+Represents a type reference in TypeScript.
+
+```typescript
+export interface TSTypeReference extends Omit<TSType, "type"> {
+    type: "TSTypeReference";
+    typeName: K.IdentifierKind | K.TSQualifiedNameKind;
+    typeParameters?: K.TSTypeParameterInstantiationKind | null;
+}
+```
+
+### TSUndefinedKeyword
+Represents the TypeScript `undefined` keyword.
+
+```typescript
+export interface TSUndefinedKeyword extends Omit<TSType, "type"> {
+    type: "TSUndefinedKeyword";
+}
+```
+
+### TSUnionType
+Represents a union type in TypeScript.
+
+```typescript
+export interface TSUnionType extends Omit<TSType, "type"> {
+    type: "TSUnionType";
+    types: K.TSTypeKind[];
+}
+```
+
+### TSUnknownKeyword
+Represents the TypeScript `unknown` keyword.
+
+```typescript
+export interface TSUnknownKeyword extends Omit<TSType, "type"> {
+    type: "TSUnknownKeyword";
+}
+```
+
+### TSVoidKeyword
+Represents the TypeScript `void` keyword.
+
+```typescript
+export interface TSVoidKeyword extends Omit<TSType, "type"> {
+    type: "TSVoidKeyword";
+}
+```
+
+### TupleTypeAnnotation
+A type annotation for a tuple type.
+
+```typescript
+export interface TupleTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "TupleTypeAnnotation";
+    types: K.FlowTypeKind[];
+}
+```
+
+### TypeAlias
+Represents a type alias in Flow.
+
+```typescript
+export interface TypeAlias extends Omit<Declaration, "type"> {
+    type: "TypeAlias";
+    id: K.IdentifierKind;
+    typeParameters?: K.TypeParameterDeclarationKind | null;
+    right: K.FlowTypeKind;
+}
+```
+
+### TypeAnnotation
+Represents a type annotation.
+
+```typescript
+export interface TypeAnnotation extends Omit<Node, "type"> {
+    type: "TypeAnnotation";
+    typeAnnotation: K.FlowTypeKind;
+}
+```
+
+### TypeCastExpression
+Represents a type cast expression.
+
+```typescript
+export interface TypeCastExpression extends Omit<Expression, "type"> {
+    type: "TypeCastExpression";
+    expression: K.ExpressionKind;
+    typeAnnotation: K.TypeAnnotationKind;
+}
+```
+
+### TypeofTypeAnnotation
+A type annotation for a `typeof` type.
+
+```typescript
+export interface TypeofTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "TypeofTypeAnnotation";
+    argument: K.FlowTypeKind;
+}
+```
+
+### TypeParameter
+Represents a type parameter.
+
+```typescript
+export interface TypeParameter extends Omit<Node, "type"> {
+    type: "TypeParameter";
+    name: string;
+    variance?: K.VarianceKind | "plus" | "minus" | null;
+    bound?: K.TypeAnnotationKind | null;
+    default?: K.FlowTypeKind | null;
+}
+```
+
+### TypeParameterDeclaration
+Represents a type parameter declaration.
+
+```typescript
+export interface TypeParameterDeclaration extends Omit<Node, "type"> {
+    type: "TypeParameterDeclaration";
+    params: K.TypeParameterKind[];
+}
+```
+
+### TypeParameterInstantiation
+Represents a type parameter instantiation.
+
+```typescript
+export interface TypeParameterInstantiation extends Omit<Node, "type"> {
+    type: "TypeParameterInstantiation";
+    params: K.FlowType
+
+Kind[];
+}
+```
+
+### UnaryExpression
+Represents a unary expression.
+
+```typescript
+export interface UnaryExpression extends Omit<Expression, "type"> {
+    type: "UnaryExpression";
+    operator: "-" | "+" | "!" | "~" | "typeof" | "void" | "delete";
+    argument: K.ExpressionKind;
+    prefix: boolean;
+}
+```
+
+### UnionTypeAnnotation
+A type annotation for a union type.
+
+```typescript
+export interface UnionTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "UnionTypeAnnotation";
+    types: K.FlowTypeKind[];
+}
+```
+
+### UpdateExpression
+Represents an update expression.
+
+```typescript
+export interface UpdateExpression extends Omit<Expression, "type"> {
+    type: "UpdateExpression";
+    operator: "++" | "--";
+    argument: K.ExpressionKind;
+    prefix: boolean;
+}
+```
+
+### VariableDeclaration
+Represents a variable declaration.
+
+```typescript
+export interface VariableDeclaration extends Omit<Declaration, "type"> {
+    type: "VariableDeclaration";
+    declarations: K.VariableDeclaratorKind[];
+    kind: "var" | "let" | "const";
+}
+```
+
+### VariableDeclarator
+Represents a variable declarator.
+
+```typescript
+export interface VariableDeclarator extends Omit<Node, "type"> {
+    type: "VariableDeclarator";
+    id: K.PatternKind;
+    init?: K.ExpressionKind | null;
+    definite?: boolean;
+}
+```
+
+### Variance
+Represents a variance in Flow types.
+
+```typescript
+export interface Variance extends Omit<Node, "type"> {
+    type: "Variance";
+    kind: "plus" | "minus";
+}
+```
+
+### VoidTypeAnnotation
+A type annotation for void types.
+
+```typescript
+export interface VoidTypeAnnotation extends Omit<FlowType, "type"> {
+    type: "VoidTypeAnnotation";
+}
+```
+
+### WhileStatement
+Represents a while statement.
+
+```typescript
+export interface WhileStatement extends Omit<Statement, "type"> {
+    type: "WhileStatement";
+    test: K.ExpressionKind;
+    body: K.StatementKind;
+}
+```
+
+### WithStatement
+Represents a with statement.
+
+```typescript
+export interface WithStatement extends Omit<Statement, "type"> {
+    type: "WithStatement";
+    object: K.ExpressionKind;
+    body: K.StatementKind;
+}
+```
+
+### YieldExpression
+Represents a yield expression.
+
+```typescript
+export interface YieldExpression extends Omit<Expression, "type"> {
+    type: "YieldExpression";
+    argument?: K.ExpressionKind | null;
+    delegate: boolean;
+}
+```

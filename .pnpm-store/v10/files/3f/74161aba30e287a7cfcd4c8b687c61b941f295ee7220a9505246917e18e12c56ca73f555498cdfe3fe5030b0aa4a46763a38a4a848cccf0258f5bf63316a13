@@ -1,0 +1,220 @@
+:root {
+  --frame-bg: var(--slate-2);
+  --label-bg: var(--green-5);
+  --label-fg: var(--green-12);
+  --switch-bg: var(--slate-3);
+  --switch-active-bg: var(--slate-a4);
+  --switch-border: var(--slate-7);
+}
+html.dark {
+  --frame-bg: var(--slate-2);
+  --label-bg: var(--green-3);
+  --label-fg: var(--green-11);
+  --switch-bg: var(--slate-3);
+  --switch-active-bg: var(--slate-a4);
+  --switch-border: var(--slate-7);
+}
+
+#stack-frames-wrapper {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+#stack-frames-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: calc(2vw + 7px);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+#all-frames-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+}
+
+#stack-frames {
+  list-style: none;
+}
+
+.stack-frame {
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+.stack-frame.stack-frame-native {
+  display: none;
+  font-style: italic;
+}
+.stack-frame.stack-frame-native a,
+.stack-frame.stack-frame-native code {
+  color: var(--muted-fg);
+}
+
+#stack-frames-wrapper.display-all .stack-frame.stack-frame-native {
+  display: block;
+}
+
+.stack-frame-contents {
+  background: var(--frame-bg);
+  display: flex;
+  padding: 0 calc(1vw + 3px);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stack-frame:not(.stack-frame-native) .stack-frame-contents:hover {
+  background: var(--card-bg);
+}
+.stack-frame:last-child:not(.expanded) .stack-frame-contents {
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.stack-frame-filepath {
+  max-width: 100%;
+}
+
+.stack-frame-location {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 7px;
+  border: none;
+  background: none;
+  flex: 1;
+  color: inherit;
+  font: inherit;
+  padding: 9px 0;
+  align-items:start;
+}
+
+.stack-frame-location a {
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stack-frame-location span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stack-frame-location code {
+  font-family: var(--font-sans);
+}
+
+.stack-frame-extras {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.stack-frame-toggle-indicator {
+  border: none;
+  border-radius: var(--radius);
+  height: 22px;
+  width: 22px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+.stack-frame-toggle-indicator:hover {
+  border: 1px solid var(--switch-border);
+}
+
+.stack-frame-toggle-indicator svg {
+  width: 16px;
+  display: block;
+}
+
+.stack-frame.expanded .stack-frame-toggle-indicator svg {
+  transform: rotate(180deg);
+}
+
+.frame-label {
+  padding: 0px 8px;
+  border-radius: 20px;
+  align-items: center;
+  height: 20px;
+  background: var(--label-bg);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--label-fg);
+  display: none;
+}
+.stack-frame-source {
+  display: none;
+}
+.stack-frame.expanded .stack-frame-source {
+  display: block;
+}
+
+#stack-frames-raw {
+  --pre-bg-color: transparent;
+  border-top: 1px solid var(--border);
+}
+#stack-frames-formatted,
+#stack-frames-raw {
+  display: none;
+}
+#stack-frames-formatted.visible,
+#stack-frames-raw.visible {
+  display: block;
+}
+
+.toggle-switch {
+  display: flex;
+  background: var(--switch-bg);
+  border: 1px solid var(--switch-border);
+  border-radius: var(--radius);
+}
+
+.toggle-switch button {
+  background: none;
+  border: none;
+  font-family: inherit;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-right: 1px solid var(--switch-border);
+}
+
+.toggle-switch button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.toggle-switch button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+  border: none;
+}
+
+.toggle-switch button.active {
+  background: var(--switch-active-bg);
+  color: var(--title-fg);
+}
+
+@media (min-width: 768px) {
+  .stack-frame-contents {
+    padding: 0 12px;
+  }
+
+  #stack-frames-header {
+    padding: 10px 16px;
+  }
+
+  .stack-frame-location {
+    flex-direction: row;
+  }
+}
+
+@media (min-width: 1024px) {
+  .frame-label {
+    display: inline-flex;
+  }
+}

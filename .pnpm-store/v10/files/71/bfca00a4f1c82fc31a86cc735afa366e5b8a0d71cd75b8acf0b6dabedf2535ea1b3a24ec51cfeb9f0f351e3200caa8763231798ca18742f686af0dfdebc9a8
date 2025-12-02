@@ -1,0 +1,49 @@
+{
+  "name": "@uiw/codemirror-theme-dracula",
+  "version": "4.25.2",
+  "description": "Theme dracula for CodeMirror.",
+  "homepage": "https://uiwjs.github.io/react-codemirror/#/theme/data/dracula",
+  "funding": "https://jaywcjlove.github.io/#/sponsor",
+  "author": "kenny wong <wowohoo@qq.com>",
+  "license": "MIT",
+  "main": "./cjs/index.js",
+  "module": "./esm/index.js",
+  "exports": {
+    ".": {
+      "require": "./cjs/index.js",
+      "import": "./esm/index.js"
+    },
+    "./*": "./*"
+  },
+  "scripts": {
+    "watch": "tsbb watch src/*.ts --use-babel",
+    "build": "tsbb build src/*.ts --use-babel"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uiwjs/react-codemirror.git"
+  },
+  "files": [
+    "src",
+    "esm",
+    "cjs"
+  ],
+  "dependencies": {
+    "@uiw/codemirror-themes": "4.25.2"
+  },
+  "keywords": [
+    "codemirror",
+    "codemirror6",
+    "theme",
+    "dracula",
+    "syntax",
+    "ide",
+    "code"
+  ],
+  "jest": {
+    "coverageReporters": [
+      "lcov",
+      "json-summary"
+    ]
+  }
+}
