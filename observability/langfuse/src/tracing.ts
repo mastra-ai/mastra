@@ -33,12 +33,15 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   options?: any;
 }
 
+type LangfusePromptData = { name?: string; version?: number; id?: string };
+
 type TraceData = {
   trace: LangfuseTraceClient; // Langfuse trace object
   spans: Map<string, LangfuseSpanClient | LangfuseGenerationClient>; // Maps span.id to Langfuse span/generation
   events: Map<string, LangfuseEventClient>; // Maps span.id to Langfuse event
   activeSpans: Set<string>; // Tracks which spans haven't ended yet
   rootSpanId?: string; // Track the root span ID
+  langfusePrompt?: LangfusePromptData; // Langfuse prompt data from root span (for prompt linking)
 };
 
 type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
@@ -270,12 +273,17 @@ export class LangfuseExporter extends BaseExporter {
 
   private initTrace(span: AnyExportedSpan): void {
     const trace = this.client.trace(this.buildTracePayload(span));
+
+    // Extract langfuse prompt data from root span for inheritance by child spans
+    const langfuseData = span.metadata?.langfuse as { prompt?: LangfusePromptData } | undefined;
+
     this.traceMap.set(span.traceId, {
       trace,
       spans: new Map(),
       events: new Map(),
       activeSpans: new Set(),
       rootSpanId: span.id,
+      langfusePrompt: langfuseData?.prompt,
     });
   }
 
@@ -418,7 +426,17 @@ export class LangfuseExporter extends BaseExporter {
     if (span.endTime !== undefined) payload.endTime = span.endTime;
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
-    const metadata = span.metadata ?? {};
+
+    // Merge trace-level langfuse data into metadata if not already present on span
+    // This enables prompt linking for child spans (e.g., MODEL_GENERATION) when
+    // tracingOptions.metadata.langfuse is set on the root span (e.g., AGENT_RUN)
+    const traceData = this.traceMap.get(span.traceId);
+    const metadata: Record<string, any> = {
+      ...span.metadata,
+      ...(traceData?.langfusePrompt && !span.metadata?.langfuse
+        ? { langfuse: { prompt: traceData.langfusePrompt } }
+        : {}),
+    };
 
     // Strip special fields from metadata if used in top-level keys
     const attributesToOmit: string[] = [];

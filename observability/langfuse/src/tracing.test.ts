@@ -1628,6 +1628,235 @@ describe('LangfuseExporter', () => {
       // Should preserve langfuse metadata if no prompt was extracted
       expect(call.metadata.langfuse).toEqual({ someOtherField: 'value' });
     });
+
+    it('should inherit langfuse prompt from AGENT_RUN root span to child MODEL_GENERATION span', async () => {
+      // First, create a root AGENT_RUN span with langfuse prompt metadata
+      // (simulates: tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)))
+      const agentSpan = createMockSpan({
+        id: 'agent-span-id',
+        name: 'support-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'support-agent',
+          instructions: 'Help customers',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'customer-support',
+              version: 3,
+              id: 'prompt-uuid-abc123',
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Create a child MODEL_GENERATION span WITHOUT langfuse metadata
+      // (this is what happens in practice - model.ts doesn't pass langfuse metadata)
+      const llmSpan = createMockSpan({
+        id: 'llm-span-id',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+        metadata: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+        },
+      });
+      llmSpan.traceId = 'agent-span-id';
+      llmSpan.parentSpanId = 'agent-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // The MODEL_GENERATION span should inherit the prompt from the AGENT_RUN root span
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-span-id',
+          name: 'gpt-4-call',
+          model: 'gpt-4',
+          prompt: {
+            name: 'customer-support',
+            version: 3,
+            id: 'prompt-uuid-abc123',
+          },
+        }),
+      );
+    });
+
+    it('should inherit langfuse prompt to MODEL_GENERATION even when root span has other metadata', async () => {
+      // Root span with langfuse prompt and other metadata
+      const agentSpan = createMockSpan({
+        id: 'agent-span-id',
+        name: 'support-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'support-agent',
+        },
+        metadata: {
+          userId: 'user-123',
+          sessionId: 'session-456',
+          langfuse: {
+            prompt: {
+              name: 'greeting-prompt',
+              version: 1,
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Child MODEL_GENERATION span without langfuse metadata
+      const llmSpan = createMockSpan({
+        id: 'llm-span-id',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          runId: 'run-123',
+        },
+      });
+      llmSpan.traceId = 'agent-span-id';
+      llmSpan.parentSpanId = 'agent-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should inherit prompt from root span
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: {
+            name: 'greeting-prompt',
+            version: 1,
+          },
+        }),
+      );
+    });
+
+    it('should prefer span-level langfuse prompt over inherited root span prompt', async () => {
+      // Root span with langfuse prompt
+      const agentSpan = createMockSpan({
+        id: 'agent-span-id',
+        name: 'support-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'root-prompt',
+              version: 1,
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Child MODEL_GENERATION span WITH its own langfuse metadata
+      const llmSpan = createMockSpan({
+        id: 'llm-span-id',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'span-specific-prompt',
+              version: 5,
+            },
+          },
+        },
+      });
+      llmSpan.traceId = 'agent-span-id';
+      llmSpan.parentSpanId = 'agent-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should use the span's own prompt, not the inherited one
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: {
+            name: 'span-specific-prompt',
+            version: 5,
+          },
+        }),
+      );
+    });
+
+    it('should not add prompt to MODEL_GENERATION when root span has no langfuse data', async () => {
+      // Root span WITHOUT langfuse metadata
+      const agentSpan = createMockSpan({
+        id: 'agent-span-id',
+        name: 'plain-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          userId: 'user-123',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Child MODEL_GENERATION span without langfuse metadata
+      const llmSpan = createMockSpan({
+        id: 'llm-span-id',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {},
+      });
+      llmSpan.traceId = 'agent-span-id';
+      llmSpan.parentSpanId = 'agent-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should not have prompt field
+      const call = mockSpan.generation.mock.calls[0][0];
+      expect(call.prompt).toBeUndefined();
+    });
   });
 
   describe('Shutdown', () => {
