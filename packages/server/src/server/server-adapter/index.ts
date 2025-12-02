@@ -98,6 +98,9 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> extends Mastra
     this.isDev = isDev;
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
+
+    // Automatically register this adapter with Mastra so getServerApp() works
+    mastra.setServerAdapter(this);
   }
 
   protected mergeRequestContext({

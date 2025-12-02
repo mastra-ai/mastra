@@ -46,13 +46,12 @@ describe('MastraServer (Express) - Server App Access', () => {
   });
 
   describe('Integration with Mastra instance', () => {
-    it('should work when registered with Mastra via setServerAdapter', () => {
+    it('should automatically register with Mastra in constructor', () => {
       const mastra = new Mastra({ logger: false });
       const app = express();
-      const adapter = new MastraServer({ app, mastra });
 
-      // Register adapter with Mastra
-      mastra.setServerAdapter(adapter);
+      // Creating the adapter automatically registers it with Mastra
+      new MastraServer({ app, mastra });
 
       // Access app via Mastra
       const appFromMastra = mastra.getServerApp<Application>();
@@ -63,7 +62,6 @@ describe('MastraServer (Express) - Server App Access', () => {
       const mastra = new Mastra({ logger: false });
       const app = express();
       const adapter = new MastraServer({ app, mastra });
-      mastra.setServerAdapter(adapter);
 
       const appFromAdapter = adapter.getApp<Application>();
       const appFromMastra = mastra.getServerApp<Application>();
@@ -98,9 +96,8 @@ describe('MastraServer (Express) - Server App Access', () => {
         res.json({ message: 'Hello from Express!' });
       });
 
-      // Wire up the adapter
-      const adapter = new MastraServer({ app, mastra });
-      mastra.setServerAdapter(adapter);
+      // Wire up the adapter - automatically registers with mastra
+      new MastraServer({ app, mastra });
 
       // Get the app via mastra.getServerApp() and start a server
       const expressApp = mastra.getServerApp<Application>();
@@ -139,9 +136,8 @@ describe('MastraServer (Express) - Server App Access', () => {
         res.json({ text: `Response to: ${req.body?.prompt || 'no prompt'}` });
       });
 
-      // Wire up
-      const adapter = new MastraServer({ app, mastra });
-      mastra.setServerAdapter(adapter);
+      // Wire up - automatically registers with mastra
+      new MastraServer({ app, mastra });
 
       // Get the app via mastra.getServerApp()
       const expressApp = mastra.getServerApp<Application>();
@@ -197,7 +193,7 @@ describe('MastraServer (Express) - Server App Access', () => {
       const app = express();
       app.use(express.json());
 
-      // Create adapter with app in constructor
+      // Create adapter with app in constructor - automatically registers
       const adapter = new MastraServer({ app, mastra });
 
       // Register context middleware (uses this.app internally)
@@ -207,9 +203,6 @@ describe('MastraServer (Express) - Server App Access', () => {
       app.get('/custom', (req, res) => {
         res.json({ custom: true });
       });
-
-      // Wire up
-      mastra.setServerAdapter(adapter);
 
       // Access via mastra.getServerApp()
       const expressApp = mastra.getServerApp<Application>();

@@ -43,14 +43,13 @@ describe('MastraServer (Hono) - Server App Access', () => {
   });
 
   describe('Integration with Mastra instance', () => {
-    it('should work when registered with Mastra via setServerAdapter', () => {
+    it('should automatically register with Mastra in constructor', () => {
       const mastra = new Mastra({ logger: false });
       const app = new Hono();
       app.get('/health', c => c.json({ status: 'ok' }));
-      const adapter = new MastraServer({ app, mastra });
 
-      // Register adapter with Mastra
-      mastra.setServerAdapter(adapter);
+      // Creating the adapter automatically registers it with Mastra
+      new MastraServer({ app, mastra });
 
       // Access app via Mastra
       const appFromMastra = mastra.getServerApp<Hono>();
@@ -61,7 +60,6 @@ describe('MastraServer (Hono) - Server App Access', () => {
       const mastra = new Mastra({ logger: false });
       const app = new Hono();
       const adapter = new MastraServer({ app, mastra });
-      mastra.setServerAdapter(adapter);
 
       const appFromAdapter = adapter.getApp<Hono>();
       const appFromMastra = mastra.getServerApp<Hono>();
@@ -85,9 +83,8 @@ describe('MastraServer (Hono) - Server App Access', () => {
         }),
       );
 
-      // Wire up the adapter
-      const adapter = new MastraServer({ app, mastra });
-      mastra.setServerAdapter(adapter);
+      // Wire up the adapter - automatically registers with mastra
+      new MastraServer({ app, mastra });
 
       // Access the app and call the route directly
       const honoApp = mastra.getServerApp<Hono>();
@@ -119,9 +116,8 @@ describe('MastraServer (Hono) - Server App Access', () => {
         });
       });
 
-      // Wire up
-      const adapter = new MastraServer({ app, mastra });
-      mastra.setServerAdapter(adapter);
+      // Wire up - automatically registers with mastra
+      new MastraServer({ app, mastra });
 
       // Simulate Inngest function forwarding a request
       const honoApp = mastra.getServerApp<Hono>();
@@ -152,9 +148,8 @@ describe('MastraServer (Hono) - Server App Access', () => {
       const mastra = new Mastra({ logger: false });
       const app = new Hono();
 
-      // Create adapter with app passed in constructor
+      // Create adapter with app passed in constructor - automatically registers
       const adapter = new MastraServer({ app, mastra });
-      mastra.setServerAdapter(adapter);
 
       // Register context middleware (uses this.app internally)
       adapter.registerContextMiddleware();
