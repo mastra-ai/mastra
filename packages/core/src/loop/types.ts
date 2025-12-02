@@ -1,12 +1,13 @@
 import type { WritableStream } from 'node:stream/web';
-import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
 import z from 'zod';
-import type { MessageList } from '../agent/message-list';
+import type { MastraDBMessage, MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { ModelRouterModelId } from '../llm/model';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
-import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
+import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfig } from '../memory';
@@ -35,18 +36,18 @@ export type StreamInternal = {
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
-  model?: MastraLanguageModelV2;
+  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
-  system?: string;
-  messages?: Array<ModelMessage>;
+  messages?: Array<MessageInput>;
 };
 
 export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
   steps: Array<StepResult<TOOLS>>;
   stepNumber: number;
   model: MastraLanguageModelV2;
-  messages: Array<ModelMessage>;
+  messages: Array<MastraDBMessage>;
+  messageList: MessageList;
 }) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
 
 export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {

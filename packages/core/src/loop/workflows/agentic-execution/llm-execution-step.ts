@@ -2,8 +2,7 @@ import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
-import { MessageList } from '../../../agent/message-list';
-import type { MastraDBMessage } from '../../../agent/message-list';
+import { MessageList, type MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../logger';
@@ -25,6 +24,7 @@ import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
+import { resolveModelConfig } from '../../../llm';
 
 type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   model: MastraLanguageModelV2;
@@ -540,16 +540,23 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                   stepNumber: inputData.output?.steps?.length || 0,
                   steps: inputData.output?.steps || [],
                   model,
-                  messages: messageList.get.all.aiV5.model(),
+                  messages: messageList.get.all.db(),
+                  messageList,
                 });
 
                 if (prepareStepResult) {
                   if (prepareStepResult.model) {
-                    stepModel = prepareStepResult.model;
+                    const resolvedStepModel = await resolveModelConfig(prepareStepResult.model);
+                    if (resolvedStepModel.specificationVersion === 'v1') {
+                      throw new Error('v1 language models are not supported in prepareStep');
+                    }
+                    stepModel = resolvedStepModel;
                   }
+
                   if (prepareStepResult.toolChoice) {
                     stepToolChoice = prepareStepResult.toolChoice;
                   }
+
                   if (prepareStepResult.activeTools && stepTools) {
                     const activeToolsSet = new Set(prepareStepResult.activeTools);
                     stepTools = Object.fromEntries(
@@ -557,21 +564,12 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                     ) as typeof tools;
                   }
                   if (prepareStepResult.messages) {
-                    const newMessages = prepareStepResult.messages;
-                    const newMessageList = new MessageList();
-
-                    for (const message of newMessages) {
-                      if (message.role === 'system') {
-                        newMessageList.addSystem(message);
-                      } else if (message.role === 'user') {
-                        newMessageList.add(message, 'input');
-                      } else if (message.role === 'assistant' || message.role === 'tool') {
-                        newMessageList.add(message, 'response');
-                      }
-                    }
-
-                    inputMessages = await newMessageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+                    messageList.add(prepareStepResult.messages, 'input');
                   }
+
+                  // Re-fetch inputMessages from messageList after any modifications
+                  // (either from prepareStepResult.messages or direct messageList mutations)
+                  inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
                 }
               } catch (error) {
                 console.error('Error in prepareStep callback:', error);
