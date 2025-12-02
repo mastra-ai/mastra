@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
 import { createTool } from './tool';
-import { DeferredToolset, ToolSearchIndex, createToolSearchTool, createToolSearch } from './tool-search';
+import { DeferredToolset } from './tool-search';
 
 // Mock embedding function that creates simple embeddings based on word overlap
 function mockEmbed(text: string): number[] {
@@ -82,10 +82,6 @@ const helpTool = createTool({
     return { message: 'How can I help you?' };
   },
 });
-
-// ============================================================================
-// DeferredToolset Tests (Primary API)
-// ============================================================================
 
 describe('DeferredToolset', () => {
   let toolset: DeferredToolset;
@@ -374,118 +370,5 @@ describe('DeferredToolset', () => {
 
       expect(customToolset.searchTool.description).toBe('Custom description');
     });
-  });
-});
-
-// ============================================================================
-// Legacy API Tests (ToolSearchIndex, createToolSearchTool, createToolSearch)
-// ============================================================================
-
-describe('ToolSearchIndex (Legacy)', () => {
-  let searchIndex: ToolSearchIndex;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    searchIndex = new ToolSearchIndex({
-      embedder: mockEmbedder,
-    });
-  });
-
-  describe('index', () => {
-    it('should index tools successfully', async () => {
-      await searchIndex.index({
-        calculator: calculatorTool,
-        weather: weatherTool,
-        sendEmail: emailTool,
-      });
-
-      expect(searchIndex.size).toBe(3);
-      expect(searchIndex.has('calculator')).toBe(true);
-      expect(searchIndex.has('weather')).toBe(true);
-      expect(searchIndex.has('sendEmail')).toBe(true);
-    });
-  });
-
-  describe('search', () => {
-    beforeEach(async () => {
-      await searchIndex.index({
-        calculator: calculatorTool,
-        weather: weatherTool,
-        sendEmail: emailTool,
-      });
-    });
-
-    it('should return matching tools sorted by relevance', async () => {
-      const results = await searchIndex.search('I need to do math calculations');
-
-      expect(results.length).toBeGreaterThan(0);
-      expect(results[0]?.id).toBe('calculator');
-    });
-
-    it('should include score in results', async () => {
-      const results = await searchIndex.search('weather temperature');
-
-      expect(results.length).toBeGreaterThan(0);
-      expect(typeof results[0]?.score).toBe('number');
-    });
-  });
-});
-
-describe('createToolSearchTool (Legacy)', () => {
-  let searchIndex: ToolSearchIndex;
-
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    searchIndex = new ToolSearchIndex({
-      embedder: mockEmbedder,
-    });
-    await searchIndex.index({
-      calculator: calculatorTool,
-      weather: weatherTool,
-      sendEmail: emailTool,
-    });
-  });
-
-  it('should create a search-only tool', async () => {
-    const searchTool = createToolSearchTool({ searchIndex });
-
-    expect(searchTool.id).toBe('tool_search');
-
-    const result = await searchTool.execute?.({ query: 'send an email' });
-    expect(result.matchingTools).toBeDefined();
-  });
-
-  it('should create an auto-execute tool', async () => {
-    const searchTool = createToolSearchTool({
-      searchIndex,
-      autoExecute: true,
-      minScore: 0,
-    });
-
-    const result = await searchTool.execute?.({
-      query: 'calculate math add',
-      toolInput: { operation: 'add', a: 5, b: 3 },
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.result?.result).toBe(8);
-  });
-});
-
-describe('createToolSearch (Legacy)', () => {
-  it('should create a complete tool search setup', async () => {
-    const { searchIndex, searchTool, indexTools } = createToolSearch({
-      embedder: mockEmbedder,
-    });
-
-    await indexTools({
-      calculator: calculatorTool,
-      weather: weatherTool,
-    });
-
-    expect(searchIndex.size).toBe(2);
-
-    const result = await searchTool.execute?.({ query: 'math calculation' });
-    expect(result.matchingTools).toBeDefined();
   });
 });
