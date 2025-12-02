@@ -1,18 +1,18 @@
 ---
 title: "Reference: Run.stream() | Streaming"
-description: Documentation for the `Run.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
+description: Documentation for the `Run.stream()` method in workflows, which enables real-time streaming of responses.
 ---
 
 # Run.stream()
 
-The `.stream()` method allows you to monitor the execution of a workflow run, providing real-time updates on the status of steps.
+The `.stream()` method enables real-time streaming of responses from a workflow.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const { stream } = await run.stream({
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
@@ -40,7 +40,7 @@ const { stream } = await run.stream({
       type: "TracingContext",
       isOptional: true,
       description:
-        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+        "Tracing context for creating child spans and adding metadata.",
       properties: [
         {
           parameters: [
@@ -49,7 +49,7 @@ const { stream } = await run.stream({
               type: "Span",
               isOptional: true,
               description:
-                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+                "Current span for creating child spans and adding metadata.",
             },
           ],
         },
@@ -67,12 +67,18 @@ const { stream } = await run.stream({
               name: "metadata",
               type: "Record<string, any>",
               isOptional: true,
-              description:
-                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+              description: "Metadata to add to the root trace span.",
             },
           ],
         },
       ],
+    },
+    {
+      name: "closeOnSuspend",
+      type: "boolean",
+      description:
+        "Whether to close the stream when the workflow is suspended, or to keep the stream open until the workflow is finished (by success or error). Default value is true.",
+      isOptional: true,
     },
   ]}
 />
@@ -83,22 +89,31 @@ const { stream } = await run.stream({
   content={[
     {
       name: "stream",
-      type: "ReadableStream<StreamEvent>",
+      type: "MastraWorkflowStream<ChunkType>",
       description:
-        "A readable stream that emits workflow execution events in real-time",
+        "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
     },
     {
-      name: "getWorkflowState",
-      type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description:
-        "A function that returns a promise resolving to the final workflow result",
+      name: "stream.status",
+      type: "Promise<RunStatus>",
+      description: "A promise that resolves to the current workflow run status",
     },
     {
-      name: "traceId",
+      name: "stream.result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description: "A promise that resolves to the final workflow result",
+    },
+    {
+      name: "stream.usage",
+      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
+      description: "A promise that resolves to token usage statistics",
+    },
+    {
+      name: "stream.traceId",
       type: "string",
       isOptional: true,
       description:
-        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+        "The trace ID associated with this execution when Tracing is enabled.",
     },
   ]}
 />
@@ -106,29 +121,29 @@ const { stream } = await run.stream({
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-const { getWorkflowState } = await run.stream({
+const run = await workflow.createRun();
+
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
 });
 
-const result = await getWorkflowState();
+const result = await stream.result;
 ```
 
 ## Stream Events
 
 The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
 
-- **`start`**: Workflow execution begins
-- **`step-start`**: A step begins execution
-- **`tool-call`**: A tool call is initiated
-- **`tool-call-streaming-start`**: Tool call streaming begins
-- **`tool-call-delta`**: Incremental tool output updates
-- **`step-result`**: A step completes with results
-- **`step-finish`**: A step finishes execution
-- **`finish`**: Workflow execution completes
+- **`workflow-start`**: Workflow execution begins
+- **`workflow-step-start`**: A step begins execution
+- **`workflow-step-output`**: Custom output from a step
+- **`workflow-step-result`**: A step completes with results
+- **`workflow-finish`**: Workflow execution completes with usage statistics
 
 ## Related
 
 - [Workflows overview](/docs/v1/workflows/overview#running-workflows)
 - [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
+- [Run.resumeStream()](./resumeStream)

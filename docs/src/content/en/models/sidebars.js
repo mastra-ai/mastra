@@ -208,6 +208,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/kimi-for-coding",
+          label: "Kimi For Coding",
+        },
+        {
+          type: "doc",
           id: "providers/llama",
           label: "Llama",
         },

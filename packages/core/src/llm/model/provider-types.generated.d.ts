@@ -421,6 +421,7 @@ export type ProviderModelsMap = {
     'gpt-5.1',
     'kimi-k2-thinking',
   ];
+  readonly 'kimi-for-coding': readonly ['kimi-k2-thinking'];
   readonly cortecs: readonly [
     'claude-4-5-sonnet',
     'claude-sonnet-4',
