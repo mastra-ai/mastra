@@ -3,7 +3,6 @@
   "type": "module",
   "private": true,
   "description": "Example demonstrating direct server app access via mastra.getServerApp()",
-  "main": "index.js",
   "scripts": {
     "demo": "tsx src/demo-cli-batch.ts"
   },

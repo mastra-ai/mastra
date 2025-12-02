@@ -5,9 +5,15 @@ Demonstrates how to use `mastra.getServerApp<T>()` to call routes directly witho
 ## Usage
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { MastraServer } from '@mastra/hono';
 import { Hono } from 'hono';
 import type { Hono as HonoType } from 'hono';
+
+// Create your Mastra instance with tools, workflows, etc.
+const mastra = new Mastra({
+  /* your config */
+});
 
 const app = new Hono();
 const adapter = new MastraServer({ app: app as any, mastra });

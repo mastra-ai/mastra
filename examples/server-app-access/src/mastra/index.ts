@@ -18,21 +18,3 @@ export const mastra = new Mastra({
     paymentProcessorWorkflow,
   },
 });
-
-/**
- * Factory function to create isolated Mastra instances
- * for multi-tenant and multi-instance demos.
- */
-export function createMastraInstance(config: { tenantId?: string; instanceName?: string } = {}) {
-  return new Mastra({
-    tools: {
-      calculatorTool,
-      timestampTool,
-    },
-    workflows: {
-      processMessageWorkflow,
-      dailyReportWorkflow,
-      paymentProcessorWorkflow,
-    },
-  });
-}

@@ -13,8 +13,6 @@ describe('Server App Access', () => {
         logger: false,
       });
 
-      // This test verifies the method exists
-      // Currently FAILS because getServerApp doesn't exist yet
       expect(typeof mastra.getServerApp).toBe('function');
     });
 
@@ -23,8 +21,6 @@ describe('Server App Access', () => {
         logger: false,
       });
 
-      // When no adapter is set, getServerApp should return undefined
-      // Currently FAILS because getServerApp doesn't exist yet
       const app = mastra.getServerApp();
       expect(app).toBeUndefined();
     });
@@ -36,8 +32,6 @@ describe('Server App Access', () => {
         logger: false,
       });
 
-      // This test verifies the method exists
-      // Currently FAILS because setMastraServer doesn't exist yet
       expect(typeof mastra.setMastraServer).toBe('function');
     });
 
@@ -46,8 +40,6 @@ describe('Server App Access', () => {
         logger: false,
       });
 
-      // This test verifies the method exists
-      // Currently FAILS because getMastraServer doesn't exist yet
       expect(typeof mastra.getMastraServer).toBe('function');
     });
 
@@ -56,8 +48,6 @@ describe('Server App Access', () => {
         logger: false,
       });
 
-      // When no adapter is set, getMastraServer should return undefined
-      // Currently FAILS because getMastraServer doesn't exist yet
       const adapter = mastra.getMastraServer();
       expect(adapter).toBeUndefined();
     });

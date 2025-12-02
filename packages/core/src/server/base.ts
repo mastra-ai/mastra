@@ -38,7 +38,7 @@ export abstract class MastraServerBase<TApp = unknown> extends MastraBase {
    * like calling routes via app.fetch() (Hono) or using the app for testing.
    *
    * @template T - The expected type of the app (defaults to TApp)
-   * @returns The app instance
+   * @returns The app instance cast to T. Callers are responsible for ensuring T matches the actual app type.
    *
    * @example
    * ```typescript

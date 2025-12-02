@@ -89,7 +89,7 @@ describe('Server App Access via createHonoServer', () => {
     expect(appFromMastra).toBe(appFromAdapter);
   });
 
-  it('should handle POST requests with body via app.fetch()', async () => {
+  it('should handle GET requests via app.fetch()', async () => {
     const mastra = new Mastra({
       logger: false,
     });
@@ -99,14 +99,12 @@ describe('Server App Access via createHonoServer', () => {
     const app = mastra.getServerApp<Hono>();
     expect(app).toBeDefined();
 
-    // Call a POST endpoint (tools endpoint accepts POST)
     const response = await app!.fetch(
       new Request('http://localhost/api/tools', {
         method: 'GET',
       }),
     );
 
-    // Should return 200 with empty tools object (no tools configured beyond empty {})
     expect(response.status).toBe(200);
   });
 

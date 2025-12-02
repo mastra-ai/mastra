@@ -17,7 +17,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ObservabilityEntrypoint } from '../observability';
 import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
-import type { MastraServerBase } from '../server/adapter-base';
+import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -1725,6 +1725,10 @@ export class Mastra<
       Object.keys(this.#mcpServers).forEach(key => {
         this.#mcpServers?.[key]?.__setLogger(this.#logger);
       });
+    }
+
+    if (this.#serverAdapter) {
+      this.#serverAdapter.__setLogger(this.#logger);
     }
 
     this.#observability.setLogger({ logger: this.#logger });

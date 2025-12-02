@@ -31,6 +31,8 @@ export const calculatorTool = createTool({
       case 'divide':
         result = a / b;
         break;
+      default:
+        throw new Error(`Unsupported operation: ${operation}`);
     }
 
     return { result, operation, operands: { a, b } };
