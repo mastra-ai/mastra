@@ -295,6 +295,41 @@ describe('Tracing', () => {
         expect(parsedContent.id).toBe('32ddf');
       });
 
+      it('should handle invalid JSON strings gracefully', () => {
+        const processor = new SensitiveDataFilter({
+          sensitiveFields: ['email'],
+        });
+
+        const mockSpan = {
+          id: 'model-step-span',
+          name: 'model step',
+          type: SpanType.MODEL_STEP,
+          startTime: new Date(),
+          traceId: 'trace-9846',
+          trace: { traceId: 'trace-9846' } as any,
+          attributes: {},
+          input: {
+            messages: [
+              {
+                role: 'tool',
+                content: '{ email": "test@test.com" }',
+              },
+            ],
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        const input = filtered!.input as any;
+
+        // Invalid JSON should pass through unchanged
+        expect(input.messages[0].content).toBe('{ email": "test@test.com" }');
+      });
+
       it('should handle circular references', () => {
         const processor = new SensitiveDataFilter();
 

@@ -99,7 +99,11 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     if (obj === null || typeof obj !== 'object') {
       // Handle string values - check if they contain JSON that needs redacting
       if (typeof obj === 'string') {
-        return this.redactJsonString(obj);
+        // Quick check - JSON objects/arrays start with { or [
+        const trimmed = obj.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          return this.redactJsonString(obj);
+        }
       }
       return obj;
     }

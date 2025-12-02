@@ -1,6 +1,6 @@
 ---
 mode: agent
-description: Make mobves on a GitHub issue
+description: Make moves on a GitHub issue
 ---
 
 # Make Moves Issue $ISSUE
