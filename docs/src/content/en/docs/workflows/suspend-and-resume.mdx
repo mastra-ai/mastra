@@ -13,7 +13,7 @@ Use `suspend()` to pause workflow execution at a specific step. You can define a
 - If the condition isn’t met, the workflow pauses and returns `suspend()`.
 - If the condition is met, the workflow continues with the remaining logic in the step.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
@@ -58,7 +58,7 @@ export const testWorkflow = createWorkflow({
 
 Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from the suspended step.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -92,6 +92,50 @@ const midnight = new Date();
 midnight.setUTCHours(24, 0, 0, 0);
 setTimeout(handleResume, midnight.getTime() - Date.now());
 ```
+
+## Accessing suspend data with `suspendData`
+When a step is suspended, you may want to access the data that was provided to `suspend()` when the step is later resumed. Use the `suspendData` parameter in your step's execute function to access this data.
+
+```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts" showLineNumbers copy
+const approvalStep = createStep({
+  id: "user-approval",
+  inputSchema: z.object({
+    requestId: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string(),
+    requestDetails: z.string()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  }),
+  execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+    const { requestId } = inputData;
+    const { approved } = resumeData ?? {};
+    
+    // On first execution, suspend with context
+    if (!approved) {
+      return await suspend({
+        reason: "User approval required",
+        requestDetails: `Request ${requestId} pending review`
+      });
+    }
+    
+    // On resume, access the original suspend data
+    const suspendReason = suspendData?.reason || "Unknown";
+    const details = suspendData?.requestDetails || "No details";
+    
+    return {
+      result: `${details} - ${suspendReason} - Decision: ${approved ? 'Approved' : 'Rejected'}`
+    };
+  }
+});
+```
+
+The `suspendData` parameter is automatically populated when a step is resumed and contains the exact data that was passed to the `suspend()` function during the original suspension. This allows you to maintain context about why the workflow was suspended and use that information during the resume process.
 
 ## Identifying suspended executions
 
@@ -139,3 +183,5 @@ Sleep and event methods can be used to pause execution at the workflow level, wh
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Time Travel](/docs/v1/workflows/time-travel)

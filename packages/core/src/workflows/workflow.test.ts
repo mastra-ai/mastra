@@ -13,7 +13,7 @@ import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StreamEvent } from './types';
+import type { ChunkType, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -9183,6 +9183,146 @@ describe('Workflow', () => {
       expect(run.runId).toBe(run2.runId);
     });
 
+    it('should return correct status from storage when creating run with existing runId from different workflow instance', async () => {
+      const suspendStepAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          return suspend({ message: 'Workflow suspended' });
+        })
+        .mockImplementationOnce(() => {
+          return { result: 'completed' };
+        });
+
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: suspendStepAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ resumeMessage: z.string() }),
+      });
+
+      const workflow1 = createWorkflow({
+        id: 'test-resume-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-resume-workflow': workflow1 },
+      });
+
+      // Start workflow and cause it to suspend
+      const run1 = await workflow1.createRun({ runId: 'test-run-id-123' });
+      const result = await run1.start({ inputData: { input: 'test' } });
+
+      expect(result.status).toBe('suspended');
+      expect(result.steps.suspendStep.status).toBe('suspended');
+
+      // Simulate a different workflow instance (e.g., different API request)
+      // This is the scenario: first API call starts workflow and causes suspend,
+      // second API call needs to continue the same workflow
+      const workflow2 = createWorkflow({
+        id: 'test-resume-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      workflow2.__registerMastra(mastra);
+
+      // Create run with the same runId from different workflow instance
+      // Before fix: would return run with 'pending' status
+      // After fix: returns run with correct 'suspended' status from storage
+      const run2 = await workflow2.createRun({ runId: 'test-run-id-123' });
+
+      // The run status should reflect the actual state from storage, not default to 'pending'
+      // This allows the user to check run.workflowRunStatus === 'suspended' and then resume
+      expect(run2.workflowRunStatus).toBe('suspended');
+
+      // Verify we can actually resume the workflow from the different instance
+      // This proves the fix works: different API request can resume a suspended workflow
+      const resumeResult = await run2.resume({
+        resumeData: { resumeMessage: 'resumed from different instance' },
+        step: 'suspendStep',
+      });
+
+      expect(resumeResult.status).toBe('success');
+      expect(suspendStepAction).toHaveBeenCalledTimes(2); // Once for suspend, once for resume
+    });
+
+    it('should update run status from storage snapshot when run exists in memory map', async () => {
+      const suspendStepAction = vi.fn().mockImplementation(async ({ suspend }) => {
+        return suspend({ message: 'Workflow suspended' });
+      });
+
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: suspendStepAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-prove-issue-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-prove-issue-workflow': workflow },
+      });
+
+      const runId = 'test-prove-issue-run-id';
+
+      // Step 1: Create a run and start it, causing it to suspend
+      // This stores the run in memory map AND persists suspended status to storage
+      const run1 = await workflow.createRun({ runId });
+      const result = await run1.start({ inputData: { input: 'test' } });
+
+      expect(result.status).toBe('suspended');
+
+      // Step 2: Manually verify storage has the suspended status
+      const storageSnapshot = await mastra.getStorage()?.loadWorkflowSnapshot({
+        workflowName: 'test-prove-issue-workflow',
+        runId,
+      });
+      expect(storageSnapshot?.status).toBe('suspended'); // Storage has correct status
+
+      // Step 3: Simulate stale status in memory - manually set run status to 'pending'
+      // This simulates what happens when the run exists in memory with stale status
+      // (e.g., from a previous request where status wasn't updated, or when Run status
+      // isn't automatically updated during execution)
+      run1.workflowRunStatus = 'pending' as any; // Force stale status in memory
+
+      // Verify the run in memory now has stale status
+      expect(run1.workflowRunStatus).toBe('pending');
+
+      // Step 4: Call createRun again with the same runId
+      // createRun checks the in-memory run-map first, then looks up storage
+      // It should update the run's status from storage to reflect the actual state
+      const run2 = await workflow.createRun({ runId });
+
+      // Verify run2 is the same instance from memory map
+      expect(run2).toBe(run1); // Same instance from memory map
+
+      // The run status should be updated from storage, not remain stale in memory
+      expect(run2.workflowRunStatus).toBe('suspended');
+    });
+
     it('should handle basic suspend and resume flow with async await syntax', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
@@ -9887,6 +10027,112 @@ describe('Workflow', () => {
       expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
         status: 'success',
       });
+    });
+
+    it('should handle writer.custom during resume operations', async () => {
+      let customEvents: WorkflowStreamEvent[] = [];
+
+      const stepWithWriter = createStep({
+        id: 'step-with-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+        suspendSchema: z.object({ suspendValue: z.number() }),
+        resumeSchema: z.object({ resumeValue: z.number() }),
+        execute: async ({ inputData, resumeData, writer, suspend }) => {
+          if (!resumeData?.resumeValue) {
+            // First run - emit custom event and suspend
+            await writer?.custom({
+              type: 'suspend-event',
+              data: { message: 'About to suspend', value: inputData.value },
+            });
+
+            await suspend({ suspendValue: inputData.value });
+            return { value: inputData.value, success: false };
+          } else {
+            // Resume - emit custom event to test that writer works on resume
+            await writer?.custom({
+              type: 'resume-event',
+              data: {
+                message: 'Successfully resumed',
+                originalValue: inputData.value,
+                resumeValue: resumeData.resumeValue,
+              },
+            });
+
+            return { value: resumeData.resumeValue, success: true };
+          }
+        },
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'test-resume-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+      });
+
+      testWorkflow.then(stepWithWriter).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-resume-writer': testWorkflow },
+      });
+
+      // Create run and start workflow
+      const run = await testWorkflow.createRun();
+
+      // Use streaming to capture custom events
+      let streamResult = run.stream({ inputData: { value: 42 } });
+
+      // Collect all events from the stream - custom events come through directly
+      for await (const event of streamResult.fullStream) {
+        //@ts-expect-error `suspend-event` is custom
+        if (event.type === 'suspend-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const firstResult = await streamResult.result;
+      expect(firstResult.status).toBe('suspended');
+
+      // Check that suspend event was emitted
+      expect(customEvents).toHaveLength(1);
+      expect(customEvents[0].type).toBe('suspend-event');
+      // @ts-expect-error data.message exists on this custom event
+      expect(customEvents[0].data.message).toBe('About to suspend');
+      // @ts-expect-error data.value exists on this custom event
+      expect(customEvents[0].data.value).toBe(42);
+
+      // Reset events for resume test
+      customEvents = [];
+
+      // Resume the workflow using streaming
+      streamResult = run.resumeStream({
+        resumeData: { resumeValue: 99 },
+      });
+
+      // Collect events from resume stream
+      for await (const event of streamResult.fullStream) {
+        // @ts-expect-error `resume-event` is custom
+        if (event.type === 'resume-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const resumeResult = await streamResult.result;
+      expect(resumeResult.status).toBe('success');
+      // @ts-expect-error output exists on success result
+      expect(resumeResult.result).toEqual({ value: 99, success: true });
+
+      // Check that resume event was emitted (this proves writer.custom works during resume)
+      expect(customEvents).toHaveLength(1);
+      expect(customEvents[0].type).toBe('resume-event');
+      // @ts-expect-error data.message exists on this custom event
+      expect(customEvents[0].data.message).toBe('Successfully resumed');
+      // @ts-expect-error data.originalValue exists on this custom event
+      expect(customEvents[0].data.originalValue).toBe(42);
+      // @ts-expect-error data.resumeValue exists on this custom event
+      expect(customEvents[0].data.resumeValue).toBe(99);
     });
 
     it('should handle basic suspend and resume in nested dountil workflow - bug #5650', async () => {
@@ -16896,6 +17142,134 @@ describe('Workflow', () => {
       });
 
       expect(typedStep).toBeDefined();
+    });
+  });
+
+  describe('Suspend Data Access', () => {
+    it('should provide access to suspendData in workflow step on resume', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const suspendDataAccess = createStep({
+        id: 'suspend-data-access-test',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        resumeSchema: z.object({
+          confirm: z.boolean(),
+        }),
+        suspendSchema: z.object({
+          reason: z.string(),
+          originalValue: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+        execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+          const { value } = inputData;
+          const { confirm } = resumeData ?? {};
+
+          // On first execution, suspend with context
+          if (!confirm) {
+            return await suspend({
+              reason: 'User confirmation required',
+              originalValue: value,
+            });
+          }
+
+          // On resume, we can now access the suspend data!
+          const suspendReason = suspendData?.reason || 'Unknown';
+          const originalValue = suspendData?.originalValue || 'Unknown';
+
+          return {
+            result: `Processed ${originalValue} after ${suspendReason}`,
+            wasResumed: true,
+            suspendReason,
+          };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'suspend-data-test-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+      });
+
+      workflow.then(suspendDataAccess).commit();
+
+      const run = await workflow.createRun();
+
+      // Start the workflow - should suspend
+      const initialResult = await run.start({
+        inputData: { value: 'test-value' },
+      });
+
+      expect(initialResult.status).toBe('suspended');
+
+      // Resume the workflow with confirmation
+      const resumedResult = await run.resume({
+        step: suspendDataAccess,
+        resumeData: { confirm: true },
+      });
+
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.result.suspendReason).toBe('User confirmation required');
+      expect(resumedResult.result.result).toBe('Processed test-value after User confirmation required');
+    });
+
+    it('should handle missing suspendData gracefully', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const stepWithoutSuspend = createStep({
+        id: 'no-suspend-step',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        execute: async ({ inputData, suspendData }) => {
+          // Should handle missing suspendData gracefully
+          const message = suspendData ? 'Had suspend data' : 'No suspend data';
+          return { result: `${inputData.value}: ${message}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'no-suspend-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      workflow.then(stepWithoutSuspend).commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: { value: 'test' },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result.result).toBe('test: No suspend data');
     });
   });
 });

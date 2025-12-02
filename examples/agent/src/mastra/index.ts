@@ -47,6 +47,11 @@ export const mastra = new Mastra({
   bundler: {
     sourcemap: true,
   },
+  server: {
+    build: {
+      swaggerUI: true,
+    },
+  },
   scorers: {
     testScorer,
   },

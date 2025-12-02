@@ -927,6 +927,10 @@ const scrubbedAgent = new Agent({
 
 > See [SystemPromptScrubber](/reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
 
+:::note
+When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/v1/server-db/mastra-server#stream-data-redaction) for details.
+:::
+
 ## Hybrid processors
 
 Hybrid processors can be applied either before messages are sent to the language model or before responses are returned to the user. They are useful for tasks like content moderation and PII redaction.
@@ -1595,9 +1599,9 @@ const response = await testAgent.generate(
 console.log(response.object);
 ```
 
-### With Tool Calling
+### Structuring sub agent
 
-Use the `model` property to ensure that your agent can execute multi-step LLM calls with tool calling.
+Use the `model` property to have a separate agent generate the structured output for you.
 
 ```typescript showLineNumbers copy
 import { z } from "zod";
@@ -1659,6 +1663,21 @@ const response = await testAgentThatDoesntSupportStructuredOutput.generate(
 
 console.log(response.object);
 ```
+
+:::info[Gemini 2.5 with tools]
+
+Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
+
+```typescript
+const response = await agentWithTools.generate("Your prompt", {
+  structuredOutput: {
+    schema: yourSchema,
+    jsonPromptInjection: true, // Required for Gemini 2.5 when tools are present
+  },
+});
+```
+
+:::
 
 ## Analyzing images
 
@@ -8928,10 +8947,18 @@ When a schema is provided, the agent receives the working memory as a JSON objec
 }
 ```
 
+### Merge Semantics for Schema-Based Memory
+
+Schema-based working memory uses **merge semantics**, meaning the agent only needs to include fields it wants to add or update. Existing fields are preserved automatically.
+
+- **Object fields are deep merged:** Only provided fields are updated; others remain unchanged
+- **Set a field to `null` to delete it:** This explicitly removes the field from memory
+- **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays are not merged element-by-element)
+
 ## Choosing Between Template and Schema
 
-- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad.
-- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON.
+- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad. Templates use **replace semantics** — the agent must provide the complete memory content on each update.
+- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. Schemas use **merge semantics** — the agent only provides fields to update, and existing fields are preserved.
 - Only one mode can be active at a time: setting both `template` and `schema` is not supported.
 
 ## Example: Multi-step Retention
@@ -10749,7 +10776,6 @@ Use `configSelector` to choose the appropriate tracing configuration based on re
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Provides 'default' instance
     configs: {
       langfuse: {
         serviceName: "langfuse-service",
@@ -10782,7 +10808,7 @@ export const mastra = new Mastra({
         return "langfuse";
       }
 
-      return "default";
+      throw new Error('no config found')
     },
   }),
 });
@@ -13036,6 +13062,64 @@ Key metadata considerations:
 - Only include fields you plan to filter or sort by - extra fields add overhead
 - Add timestamps (e.g., 'createdAt', 'lastUpdated') to track content freshness
 
+## Deleting Vectors
+
+When building RAG applications, you often need to clean up stale vectors when documents are deleted or updated. Mastra provides the `deleteVectors` method that supports deleting vectors by metadata filters, making it easy to remove all embeddings associated with a specific document.
+
+### Delete by Metadata Filter
+
+The most common use case is deleting all vectors for a specific document when a user deletes it:
+
+```ts title="delete-vectors.ts" showLineNumbers copy
+// Delete all vectors for a specific document
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: { docId: "document-123" },
+});
+```
+
+This is particularly useful when:
+- A user deletes a document and you need to remove all its chunks
+- You're re-indexing a document and want to remove old vectors first
+- You need to clean up vectors for a specific user or tenant
+
+### Delete Multiple Documents
+
+You can also use complex filters to delete vectors matching multiple conditions:
+
+```ts title="delete-vectors-advanced.ts" showLineNumbers copy
+// Delete all vectors for multiple documents
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: {
+    docId: { $in: ["doc-1", "doc-2", "doc-3"] },
+  },
+});
+
+// Delete vectors for a specific user's documents
+await store.deleteVectors({
+  indexName: "myCollection",
+  filter: {
+    $and: [
+      { userId: "user-123" },
+      { status: "archived" },
+    ],
+  },
+});
+```
+
+### Delete by Vector IDs
+
+If you have specific vector IDs to delete, you can pass them directly:
+
+```ts title="delete-by-ids.ts" showLineNumbers copy
+// Delete specific vectors by their IDs
+await store.deleteVectors({
+  indexName: "myCollection",
+  ids: ["vec-1", "vec-2", "vec-3"],
+});
+```
+
 ## Best Practices
 
 - Create indexes before bulk insertions
@@ -13484,6 +13568,35 @@ export const mastra = new Mastra({
 });
 ```
 
+## Stream data redaction
+
+When streaming agent responses over HTTP, Mastra automatically redacts sensitive information from stream chunks before sending them to clients. This prevents accidental exposure of:
+
+- System prompts and agent instructions
+- Tool definitions and their parameters
+- API keys and other credentials in request bodies
+- Internal configuration data
+
+This redaction happens at the HTTP boundary, so internal callbacks like `onStepFinish` still have access to the full request data for debugging and observability purposes.
+
+### Configuring redaction
+
+By default, redaction is enabled. If you're using the server adapters directly (e.g., `@mastra/hono` or `@mastra/express`), you can configure this behavior:
+
+```typescript title="Custom server setup" copy
+import { HonoServerAdapter } from "@mastra/hono";
+import { mastra } from "./mastra";
+
+const adapter = new HonoServerAdapter({
+  mastra,
+  streamOptions: {
+    redact: true,
+  },
+});
+```
+
+Set `redact: false` only for internal services or debugging scenarios where you need access to the full request data in stream responses.
+
 
 ---
 title: "Middleware | Server & DB"
@@ -13855,7 +13968,6 @@ export const weatherTool = createTool({
 
 ## Related
 
-- [Request Context Example](/examples/v1/agents/request-context)
 - [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
 - [Tool Request Context](../mcp/overview#using-requestcontext)
@@ -14354,11 +14466,22 @@ console.log(result.messages); // MastraDBMessage[]
 console.log(result.total); // Total count
 console.log(result.hasMore); // Whether more pages exist
 
+// Get messages from multiple threads at once
+const multiThreadResult = await mastra
+  .getStorage()
+  .listMessages({
+    threadId: ["thread-1", "thread-2", "thread-3"],
+    page: 0,
+    perPage: 100
+  });
+
 // Get messages by their IDs
 const messages = await mastra
   .getStorage()
   .listMessagesById({ messageIds: messageIdArr });
 ```
+
+The `threadId` parameter accepts either a single thread ID string or an array of thread IDs to query messages from multiple threads in a single request.
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
 
@@ -17887,6 +18010,7 @@ for await (const chunk of stream.stream) {
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Time Travel](/docs/v1/workflows/time-travel)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
 
 
@@ -17904,7 +18028,7 @@ Some workflows need to pause for human input before continuing. When a workflow 
 
 Human-in-the-loop input works much like [pausing a workflow](/docs/v1/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {12-17,22-26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -17986,7 +18110,7 @@ The data returned by the step can include a reason and help the user understand 
 
 As with [restarting a workflow](/docs/v1/workflows/suspend-and-resume#restarting-a-workflow-with-resume), use `resume()` with `resumeData` to continue a workflow after receiving input from a human. The workflow resumes from the step where it was paused.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -19213,6 +19337,7 @@ if (result.status === "suspended") {
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Time Travel](/docs/v1/workflows/time-travel)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
 
 
@@ -19232,7 +19357,7 @@ Use `suspend()` to pause workflow execution at a specific step. You can define a
 - If the condition isn’t met, the workflow pauses and returns `suspend()`.
 - If the condition is met, the workflow continues with the remaining logic in the step.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
@@ -19277,7 +19402,7 @@ export const testWorkflow = createWorkflow({
 
 Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from the suspended step.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -19311,6 +19436,50 @@ const midnight = new Date();
 midnight.setUTCHours(24, 0, 0, 0);
 setTimeout(handleResume, midnight.getTime() - Date.now());
 ```
+
+## Accessing suspend data with `suspendData`
+When a step is suspended, you may want to access the data that was provided to `suspend()` when the step is later resumed. Use the `suspendData` parameter in your step's execute function to access this data.
+
+```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts" showLineNumbers copy
+const approvalStep = createStep({
+  id: "user-approval",
+  inputSchema: z.object({
+    requestId: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string(),
+    requestDetails: z.string()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  }),
+  execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+    const { requestId } = inputData;
+    const { approved } = resumeData ?? {};
+    
+    // On first execution, suspend with context
+    if (!approved) {
+      return await suspend({
+        reason: "User approval required",
+        requestDetails: `Request ${requestId} pending review`
+      });
+    }
+    
+    // On resume, access the original suspend data
+    const suspendReason = suspendData?.reason || "Unknown";
+    const details = suspendData?.requestDetails || "No details";
+    
+    return {
+      result: `${details} - ${suspendReason} - Decision: ${approved ? 'Approved' : 'Rejected'}`
+    };
+  }
+});
+```
+
+The `suspendData` parameter is automatically populated when a step is resumed and contains the exact data that was passed to the `suspend()` function during the original suspension. This allows you to maintain context about why the workflow was suspended and use that information during the resume process.
 
 ## Identifying suspended executions
 
@@ -19358,6 +19527,324 @@ Sleep and event methods can be used to pause execution at the workflow level, wh
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Time Travel](/docs/v1/workflows/time-travel)
+
+
+---
+title: "Time Travel | Workflows"
+description: "Re-execute workflow steps from a specific point using time travel debugging in Mastra"
+---
+
+# Time Travel
+[EN] Source: https://mastra.ai/en/docs/workflows/time-travel
+
+Time travel allows you to re-execute a workflow starting from any specific step, using either stored snapshot data or custom context you provide. This is useful for debugging failed workflows, testing individual steps with different inputs, or recovering from errors without re-running the entire workflow.
+You can also use time travel to execute a workflow that has not been run yet, starting from any specific step.
+
+## How time travel works
+
+When you call `timeTravel()` on a workflow run:
+
+1. The workflow loads the existing snapshot from storage (if available)
+2. Step results before the target step are reconstructed from the snapshot or provided context
+3. Execution begins from the specified step with the provided or reconstructed input data
+4. The workflow continues to completion from that point forward
+
+Time travel requires storage to be configured since it relies on persisted workflow snapshots.
+
+## Basic usage
+
+Use `run.timeTravel()` to re-execute a workflow from a specific step:
+
+```typescript showLineNumbers copy
+import { mastra } from "./mastra";
+
+const workflow = mastra.getWorkflow("myWorkflow");
+const run = await workflow.createRun();
+
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { previousStepResult: "custom value" },
+});
+```
+
+## Specifying the target step
+
+You can specify the target step using either a step reference or a step ID:
+
+### Using step reference
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: step2,
+  inputData: { value: 10 },
+});
+```
+
+### Using step ID
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+});
+```
+
+### Nested workflow steps
+
+For steps inside nested workflows, use dot notation, an array of step IDS or an array of step references:
+
+```typescript showLineNumbers copy
+// Using dot notation
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  inputData: { value: 10 },
+});
+
+// Using array of step IDs
+const result = await run.timeTravel({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+});
+
+// Using array of step references
+const result = await run.timeTravel({
+  step: [nestedWorkflow, step3],
+  inputData: { value: 10 },
+});
+```
+
+## Providing execution context
+
+You can provide context to specify the state of previous steps when time traveling:
+
+```typescript {3-13} showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+```
+
+The context object contains step results keyed by step ID. Each step result includes:
+
+- `status`: The step's execution status (`success`, `failed`, `suspended`)
+- `payload`: The input data passed to the step
+- `output`: The step's output data (for successful steps)
+- `startedAt`: Timestamp when the step started
+- `endedAt`: Timestamp when the step ended (for completed steps)
+- `suspendPayload`: Data passed to `suspend()` (for suspended steps)
+- `resumePayload`: Data passed to `resume()` (for resumed steps)
+
+## Re-running failed workflows
+
+Time travel is particularly useful for debugging and recovering from failed workflow executions:
+
+```typescript showLineNumbers copy
+const workflow = mastra.getWorkflow("myWorkflow");
+const run = await workflow.createRun();
+
+// Initial run fails at step2
+const failedResult = await run.start({
+  inputData: { value: 1 },
+});
+
+if (failedResult.status === "failed") {
+  // Re-run from step2 with corrected input
+  const recoveredResult = await run.timeTravel({
+    step: "step2",
+    inputData: { step1Result: 5 }, // Provide corrected input
+  });
+}
+```
+
+## Time travel with suspended workflows
+
+You can time travel to resume a suspended workflow from an earlier step:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+// Start workflow - suspends at promptAgent step
+const initialResult = await run.start({
+  inputData: { input: "test" },
+});
+
+if (initialResult.status === "suspended") {
+  // Time travel back to an earlier step with resume data
+  const result = await run.timeTravel({
+    step: "getUserInput",
+    resumeData: {
+      userInput: "corrected input",
+    },
+  });
+}
+```
+
+## Streaming time travel results
+
+Use `timeTravelStream()` to receive streaming events during time travel execution:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+// Access the stream
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+// Get final result
+const result = await output.result;
+```
+
+## Time travel with initial state
+
+You can provide initial state when time traveling to set workflow-level state:
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+  initialState: {
+    counter: 5,
+    metadata: { source: "time-travel" },
+  },
+});
+```
+
+## Error handling
+
+Time travel throws errors in specific situations:
+
+### Running workflow
+
+You cannot time travel to a workflow that is currently running:
+
+```typescript showLineNumbers copy
+try {
+  await run.timeTravel({ step: "step2" });
+} catch (error) {
+  // "This workflow run is still running, cannot time travel"
+}
+```
+
+### Invalid step ID
+
+Time travel throws if the target step doesn't exist in the workflow:
+
+```typescript showLineNumbers copy
+try {
+  await run.timeTravel({ step: "nonExistentStep" });
+} catch (error) {
+  // "Time travel target step not found in execution graph: 'nonExistentStep'. Verify the step id/path."
+}
+```
+
+### Invalid input data
+
+When `validateInputs` is enabled, time travel validates the input data against the step's schema:
+
+```typescript showLineNumbers copy
+try {
+  await run.timeTravel({
+    step: "step2",
+    inputData: { invalidField: "value" },
+  });
+} catch (error) {
+  // "Invalid inputData: \n- step1Result: Required"
+}
+```
+
+## Nested workflows context
+
+When time traveling into a nested workflow, you can provide context for both the parent and nested workflow steps:
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+    nestedWorkflow: {
+      status: "running",
+      payload: { step1Result: 2 },
+      startedAt: Date.now(),
+    },
+  },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+```
+
+## Use cases
+
+### Debugging failed steps
+
+Re-run a failed step with the same or modified input to diagnose issues:
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: failedStepId,
+  context: originalContext, // Use context from the failed run
+});
+```
+
+### Testing step logic on new workflow run
+
+Test individual steps with specific inputs on a new workflow run, useful for testing a step logic without starting workflow execution from the beginning.
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "processData",
+  inputData: { testData: "specific test case" },
+});
+```
+
+### Recovering from transient failures
+
+Re-run steps that failed due to temporary issues (network errors, rate limits):
+
+```typescript showLineNumbers copy
+// After fixing the external service issue
+const result = await run.timeTravel({
+  step: "callExternalApi",
+  inputData: savedInputData,
+});
+```
+
+## Related
+
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Error Handling](/docs/v1/workflows/error-handling)
+- [Control Flow](/docs/v1/workflows/control-flow)
 
 
 ---
@@ -19552,301 +20039,6 @@ const parentWorkflow = createWorkflow({
 - [Step Class](/reference/v1/workflows/step)
 - [Workflow Class](/reference/v1/workflows/workflow)
 
-
-
----
-title: "Example: Request Context | Agents"
-description: Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.
----
-
-# Request Context
-[EN] Source: https://mastra.ai/en/examples/agents/request-context
-
-This example demonstrates how to use request context to create a single agent that dynamically adapts its behavior, capabilities, model selection, tools, memory configuration, input/output processing, and quality scoring based on user subscription tiers.
-
-## Prerequisites
-
-This example uses OpenAI models through Mastra's model router. Make sure to add `OPENAI_API_KEY` to your `.env` file.
-
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-```
-
-## Creating the Dynamic Agent
-
-Create an agent that adapts all its properties based on the user's subscription tier:
-
-```typescript title="src/mastra/agents/support-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { TokenLimiterProcessor } from "@mastra/core/processors";
-import { RequestContext } from "@mastra/core/request-context";
-import {
-  knowledgeBase,
-  ticketSystem,
-  advancedAnalytics,
-  customIntegration,
-} from "../tools/support-tools";
-import { CharacterLimiterProcessor } from "../processors/character-limiter";
-import { responseQualityScorer } from "../scorers/response-quality";
-
-export type UserTier = "free" | "pro" | "enterprise";
-export type SupportRequestContext = {
-  "user-tier": UserTier;
-  language: "en" | "es" | "ja" | "fr";
-};
-
-export const supportAgent = new Agent({
-  id: "support-agent",
-  name: "Support Agent",
-  description: "AI support agent that adapts to user subscription tiers",
-
-  instructions: async ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-    const language = requestContext.get("language");
-
-    return `You are a customer support agent for our SaaS platform.
-    The current user is on the ${userTier} tier and prefers ${language} language.
-
-    Support guidance based on tier:
-    ${userTier === "free" ? "- Provide basic support and documentation links" : ""}
-    ${userTier === "pro" ? "- Offer detailed technical support and best practices" : ""}
-    ${userTier === "enterprise" ? "- Provide priority support with custom solutions and dedicated assistance" : ""}
-
-    Always respond in ${language} language.
-    ${userTier === "enterprise" ? "You have access to custom integrations and advanced analytics." : ""}`;
-  },
-
-  model: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    if (userTier === "enterprise") return "openai/gpt-5.1";
-    if (userTier === "pro") return "openai/gpt-4.1";
-    return "openai/gpt-4.1-nano";
-  },
-
-  tools: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-    const baseTools = [knowledgeBase, ticketSystem];
-
-    if (userTier === "pro" || userTier === "enterprise") {
-      baseTools.push(advancedAnalytics);
-    }
-
-    if (userTier === "enterprise") {
-      baseTools.push(customIntegration);
-    }
-
-    return baseTools;
-  },
-
-  memory: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    switch (userTier) {
-      case "enterprise":
-        return new Memory({
-          storage: new LibSQLStore({ id: 'enterprise-storage', url: "file:enterprise.db" }),
-          options: {
-            semanticRecall: { topK: 15, messageRange: 8 },
-            workingMemory: { enabled: true },
-          },
-        });
-      case "pro":
-        return new Memory({
-          storage: new LibSQLStore({ id: 'pro-storage', url: "file:pro.db" }),
-          options: {
-            semanticRecall: { topK: 8, messageRange: 4 },
-            workingMemory: { enabled: true },
-          },
-        });
-      case "free":
-      default:
-        return new Memory({
-          storage: new LibSQLStore({ id: 'free-storage', url: "file:free.db" }),
-          options: {
-            semanticRecall: { topK: 3, messageRange: 2 },
-            workingMemory: { enabled: false },
-          },
-        });
-    }
-  },
-
-  inputProcessors: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    switch (userTier) {
-      case "enterprise":
-        return [];
-      case "pro":
-        return [new CharacterLimiterProcessor(2000)];
-      case "free":
-      default:
-        return [new CharacterLimiterProcessor(500)];
-    }
-  },
-
-  outputProcessors: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    switch (userTier) {
-      case "enterprise":
-        return [
-          new TokenLimiterProcessor({ limit: 2000, strategy: "truncate" }),
-        ];
-      case "pro":
-        return [
-          new TokenLimiterProcessor({ limit: 500, strategy: "truncate" }),
-        ];
-      case "free":
-      default:
-        return [
-          new TokenLimiterProcessor({ limit: 100, strategy: "truncate" }),
-        ];
-    }
-  },
-
-  scorers: ({
-    requestContext,
-  }: {
-    requestContext: RequestContext<SupportRequestContext>;
-  }) => {
-    const userTier = requestContext.get("user-tier");
-
-    if (userTier === "enterprise") {
-      return [responseQualityScorer];
-    }
-
-    return [];
-  },
-});
-```
-
-> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
-
-## Registering the Agent
-
-Register the agent in your main Mastra instance:
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { supportAgent } from "./agents/support-agent";
-
-export const mastra = new Mastra({
-  agents: { supportAgent },
-});
-```
-
-## Usage Examples
-
-### Free Tier User
-
-```typescript title="src/examples/free-tier-usage.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "../mastra";
-import { RequestContext } from "@mastra/core/request-context";
-import type { SupportRequestContext } from "../mastra/agents/support-agent";
-
-const agent = mastra.getAgent("supportAgent");
-const requestContext = new RequestContext<SupportRequestContext>();
-
-requestContext.set("user-tier", "free");
-requestContext.set("language", "en");
-
-const response = await agent.generate(
-  "I'm having trouble with API rate limits. Can you help?",
-  { requestContext },
-);
-
-console.log(response.text);
-```
-
-### Pro Tier User
-
-```typescript title="src/examples/pro-tier-usage.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "../mastra";
-import { RequestContext } from "@mastra/core/request-context";
-import type { SupportRequestContext } from "../mastra/agents/support-agent";
-
-const agent = mastra.getAgent("supportAgent");
-const requestContext = new RequestContext<SupportRequestContext>();
-
-requestContext.set("user-tier", "pro");
-requestContext.set("language", "es");
-
-const response = await agent.generate(
-  "I need detailed analytics on my API usage patterns and optimization recommendations.",
-  { requestContext },
-);
-
-console.log(response.text);
-```
-
-### Enterprise Tier User
-
-```typescript title="src/examples/enterprise-tier-usage.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "../mastra";
-import { RequestContext } from "@mastra/core/request-context";
-import type { SupportRequestContext } from "../mastra/agents/support-agent";
-
-const agent = mastra.getAgent("supportAgent");
-const requestContext = new RequestContext<SupportRequestContext>();
-
-requestContext.set("user-tier", "enterprise");
-requestContext.set("language", "ja");
-
-const response = await agent.generate(
-  "I need to integrate our custom webhook system with your platform and get real-time analytics on our usage across multiple environments.",
-  { requestContext },
-);
-
-console.log(response.text);
-```
-
-## Key Benefits
-
-This request context approach provides:
-
-- **Cost Optimization**: Enterprise users get premium models and features while free users get basic functionality
-- **Resource Management**: Input and output limits prevent abuse on lower subscription tiers
-- **Quality Assurance**: Response quality scoring only where it adds business value (enterprise tier)
-- **Scalable Architecture**: A single agent definition serves all user segments without code duplication
-- **Personalization**: Language preferences and tier-specific instructions create tailored experiences
-
-## Related
-
-- [Request Context Documentation](/docs/v1/server-db/request-context)
-- [Agent Reference](/reference/v1/agents/agent)
-- [Input Processors](/docs/v1/agents/guardrails)
-- [Output Processors](/docs/v1/agents/guardrails)
-- [Scorers](/docs/v1/evals/overview)
 
 
 ---
@@ -20057,7 +20249,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
         title: "Image Analysis Agent",
         href: "/docs/v1/agents/overview#analyzing-images",
       },
-      { title: "Runtime Context", href: "/examples/v1/agents/request-context" },
       {
         title: "Deploying an MCP Server",
         href: "/docs/v1/mcp/publishing-mcp-server",
@@ -23821,6 +24012,7 @@ export async function POST(req: Request) {
 
   // Transform stream into AI SDK format and create UI messages stream
   const uiMessageStream = createUIMessageStream({
+    originalMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, { from: "agent" })!) {
         writer.write(part);
@@ -23913,6 +24105,7 @@ export async function POST(req: Request) {
   });
 
   const uiMessageStream = createUIMessageStream({
+    initialMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, {
         from: "agent",
@@ -29636,6 +29829,17 @@ const mastra = new Mastra({
 // Retrieve by ID
 const agent = mastra.getAgentById('my-agent');
 ```
+
+### Stream API responses now redact sensitive data
+
+The Mastra server now automatically redacts sensitive information from agent stream responses. This prevents accidental exposure of system prompts, tool definitions, and API keys in `step-start`, `step-finish`, and `finish` stream chunks.
+
+**What's redacted:**
+- `request.body` containing LLM request payloads (system prompts, tool schemas)
+- `metadata.request` in step results
+- `output.steps[].request` in nested step data
+
+This behavior is enabled by default. If you need access to the full request data (e.g., for debugging or internal services), you can disable redaction when using server adapters directly (e.g., `@mastra/hono` or `@mastra/express`).
 
 ## Removed
 
@@ -62713,6 +62917,371 @@ const workflowResult = await runEvals({
 
 
 ---
+title: "Reference: Scorer Utils | Evals"
+description: Utility functions for extracting data from scorer run inputs and outputs, including text content, reasoning, system messages, and tool calls.
+---
+
+# Scorer Utils
+[EN] Source: https://mastra.ai/en/reference/evals/scorer-utils
+
+Mastra provides utility functions to help extract and process data from scorer run inputs and outputs. These utilities are particularly useful in the `preprocess` step of custom scorers.
+
+## Import
+
+```typescript
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getSystemMessagesFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+  extractInputMessages,
+  extractAgentResponseMessages,
+} from "@mastra/evals/scorers/utils";
+```
+
+## Message Extraction
+
+### getAssistantMessageFromRunOutput
+
+Extracts the text content from the first assistant message in the run output.
+
+```typescript
+const scorer = createScorer({
+  id: "my-scorer",
+  description: "My scorer",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { response };
+  })
+  .generateScore(({ results }) => {
+    return results.preprocessStepResult?.response ? 1 : 0;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "The scorer run output (array of MastraDBMessage)",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The assistant message text, or undefined if no assistant message is found.
+
+### getUserMessageFromRunInput
+
+Extracts the text content from the first user message in the run input.
+
+```typescript
+.preprocess(({ run }) => {
+  const userMessage = getUserMessageFromRunInput(run.input);
+  return { userMessage };
+})
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "ScorerRunInputForAgent",
+      isOptional: true,
+      description: "The scorer run input containing input messages",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The user message text, or undefined if no user message is found.
+
+### extractInputMessages
+
+Extracts text content from all input messages as an array.
+
+```typescript
+.preprocess(({ run }) => {
+  const allUserMessages = extractInputMessages(run.input);
+  return { conversationHistory: allUserMessages.join("\n") };
+})
+```
+
+**Returns:** `string[]` - Array of text strings from each input message.
+
+### extractAgentResponseMessages
+
+Extracts text content from all assistant response messages as an array.
+
+```typescript
+.preprocess(({ run }) => {
+  const allResponses = extractAgentResponseMessages(run.output);
+  return { allResponses };
+})
+```
+
+**Returns:** `string[]` - Array of text strings from each assistant message.
+
+## Reasoning Extraction
+
+### getReasoningFromRunOutput
+
+Extracts reasoning text from the run output. This is particularly useful when evaluating responses from reasoning models like `deepseek-reasoner` that produce chain-of-thought reasoning.
+
+Reasoning can be stored in two places:
+1. `content.reasoning` - a string field on the message content
+2. `content.parts` - as parts with `type: 'reasoning'` containing `details`
+
+```typescript
+import { 
+  getReasoningFromRunOutput, 
+  getAssistantMessageFromRunOutput 
+} from "@mastra/evals/scorers/utils";
+
+const reasoningQualityScorer = createScorer({
+  id: "reasoning-quality",
+  name: "Reasoning Quality",
+  description: "Evaluates the quality of model reasoning",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { reasoning, response };
+  })
+  .analyze(({ results }) => {
+    const { reasoning } = results.preprocessStepResult || {};
+    return {
+      hasReasoning: !!reasoning,
+      reasoningLength: reasoning?.length || 0,
+      hasStepByStep: reasoning?.includes("step") || false,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) return 0;
+    // Score based on reasoning length (normalized to 0-1)
+    return Math.min(reasoningLength / 500, 1);
+  })
+  .generateReason(({ results, score }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) {
+      return "No reasoning was provided by the model.";
+    }
+    return `Model provided ${reasoningLength} characters of reasoning. Score: ${score}`;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "The scorer run output (array of MastraDBMessage)",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The reasoning text, or undefined if no reasoning is present.
+
+## System Message Extraction
+
+### getSystemMessagesFromRunInput
+
+Extracts all system messages from the run input, including both standard system messages and tagged system messages (specialized prompts like memory instructions).
+
+```typescript
+.preprocess(({ run }) => {
+  const systemMessages = getSystemMessagesFromRunInput(run.input);
+  return { 
+    systemPromptCount: systemMessages.length,
+    systemPrompts: systemMessages 
+  };
+})
+```
+
+**Returns:** `string[]` - Array of system message strings.
+
+### getCombinedSystemPrompt
+
+Combines all system messages into a single prompt string, joined with double newlines.
+
+```typescript
+.preprocess(({ run }) => {
+  const fullSystemPrompt = getCombinedSystemPrompt(run.input);
+  return { fullSystemPrompt };
+})
+```
+
+**Returns:** `string` - Combined system prompt string.
+
+## Tool Call Extraction
+
+### extractToolCalls
+
+Extracts information about all tool calls from the run output, including tool names, call IDs, and their positions in the message array.
+
+```typescript
+const toolUsageScorer = createScorer({
+  id: "tool-usage",
+  description: "Evaluates tool usage patterns",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+    return {
+      toolsUsed: tools,
+      toolCount: tools.length,
+      toolDetails: toolCallInfos,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { toolCount } = results.preprocessStepResult || {};
+    // Score based on appropriate tool usage
+    return toolCount > 0 ? 1 : 0;
+  });
+```
+
+**Returns:**
+
+```typescript
+{
+  tools: string[];           // Array of tool names
+  toolCallInfos: ToolCallInfo[];  // Detailed tool call information
+}
+```
+
+Where `ToolCallInfo` is:
+
+```typescript
+type ToolCallInfo = {
+  toolName: string;      // Name of the tool
+  toolCallId: string;    // Unique call identifier
+  messageIndex: number;  // Index in the output array
+  invocationIndex: number; // Index within message's tool invocations
+};
+```
+
+## Test Utilities
+
+These utilities help create test data for scorer development.
+
+### createTestMessage
+
+Creates a `MastraDBMessage` object for testing purposes.
+
+```typescript
+import { createTestMessage } from "@mastra/evals/scorers/utils";
+
+const userMessage = createTestMessage({
+  content: "What is the weather?",
+  role: "user",
+});
+
+const assistantMessage = createTestMessage({
+  content: "The weather is sunny.",
+  role: "assistant",
+  toolInvocations: [
+    {
+      toolCallId: "call-1",
+      toolName: "weatherTool",
+      args: { location: "London" },
+      result: { temp: 20 },
+      state: "result",
+    },
+  ],
+});
+```
+
+### createAgentTestRun
+
+Creates a complete test run object for testing scorers.
+
+```typescript
+import { createAgentTestRun, createTestMessage } from "@mastra/evals/scorers/utils";
+
+const testRun = createAgentTestRun({
+  inputMessages: [
+    createTestMessage({ content: "Hello", role: "user" }),
+  ],
+  output: [
+    createTestMessage({ content: "Hi there!", role: "assistant" }),
+  ],
+});
+
+// Run your scorer with the test data
+const result = await myScorer.run({
+  input: testRun.input,
+  output: testRun.output,
+});
+```
+
+## Complete Example
+
+Here's a complete example showing how to use multiple utilities together:
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+} from "@mastra/evals/scorers/utils";
+
+const comprehensiveScorer = createScorer({
+  id: "comprehensive-analysis",
+  name: "Comprehensive Analysis",
+  description: "Analyzes all aspects of an agent response",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    // Extract all relevant data
+    const userMessage = getUserMessageFromRunInput(run.input);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const systemPrompt = getCombinedSystemPrompt(run.input);
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+
+    return {
+      userMessage,
+      response,
+      reasoning,
+      systemPrompt,
+      toolsUsed: tools,
+      toolCount: tools.length,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+    
+    let score = 0;
+    if (response && response.length > 0) score += 0.4;
+    if (reasoning) score += 0.3;
+    if (toolCount > 0) score += 0.3;
+    
+    return score;
+  })
+  .generateReason(({ results, score }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+    
+    const parts = [];
+    if (response) parts.push("provided a response");
+    if (reasoning) parts.push("included reasoning");
+    if (toolCount > 0) parts.push(`used ${toolCount} tool(s)`);
+    
+    return `Score: ${score}. The agent ${parts.join(", ")}.`;
+  });
+```
+
+
+
+---
 title: "Reference: Textual Difference Scorer | Evals"
 description: Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
 ---
@@ -88973,13 +89542,13 @@ voice.on("toolCall", ({ name, args, id }) => {
 
 ---
 title: "Reference: Google | Voice"
-description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
+description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities with support for both API key and Vertex AI authentication."
 ---
 
 # Google
 [EN] Source: https://mastra.ai/en/reference/voice/google
 
-The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, and advanced audio configuration options.
+The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, advanced audio configuration options, and both standard API key authentication and Vertex AI mode for enterprise deployments.
 
 ## Usage Example
 
@@ -88988,17 +89557,6 @@ import { GoogleVoice } from "@mastra/voice-google";
 
 // Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
 const voice = new GoogleVoice();
-
-// Initialize with custom configuration
-const voice = new GoogleVoice({
-  speechModel: {
-    apiKey: "your-speech-api-key",
-  },
-  listeningModel: {
-    apiKey: "your-listening-api-key",
-  },
-  speaker: "en-US-Casual-K",
-});
 
 // Text-to-Speech
 const audioStream = await voice.speak("Hello, world!", {
@@ -89045,6 +89603,29 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
       isOptional: true,
       defaultValue: "'en-US-Casual-K'",
     },
+    {
+      name: "vertexAI",
+      type: "boolean",
+      description:
+        "Enable Vertex AI mode for enterprise deployments. Uses project-based authentication instead of API keys. Requires 'project' to be set.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "project",
+      type: "string",
+      description:
+        "Google Cloud project ID (required when vertexAI is true). Falls back to GOOGLE_CLOUD_PROJECT environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "location",
+      type: "string",
+      description:
+        "Google Cloud region for Vertex AI. Falls back to GOOGLE_CLOUD_LOCATION environment variable.",
+      isOptional: true,
+      defaultValue: "'us-central1'",
+    },
   ]}
 />
 
@@ -89056,7 +89637,21 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
       name: "apiKey",
       type: "string",
       description:
-        "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable",
+        "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable. Not used when vertexAI is true.",
+      isOptional: true,
+    },
+    {
+      name: "keyFilename",
+      type: "string",
+      description:
+        "Path to service account JSON key file. Falls back to GOOGLE_APPLICATION_CREDENTIALS environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "credentials",
+      type: "object",
+      description:
+        "In-memory service account credentials object with client_email and private_key properties.",
       isOptional: true,
     },
   ]}
@@ -89167,14 +89762,127 @@ Returns an array of available voice options, where each node contains:
   ]}
 />
 
+### isUsingVertexAI()
+
+Checks if Vertex AI mode is enabled.
+
+Returns: `boolean` - `true` if using Vertex AI, `false` otherwise
+
+### getProject()
+
+Gets the configured Google Cloud project ID.
+
+Returns: `string | undefined` - The project ID or `undefined` if not set
+
+### getLocation()
+
+Gets the configured Google Cloud location/region.
+
+Returns: `string` - The location (default: `'us-central1'`)
+
+## Authentication
+
+The Google Voice provider supports two authentication methods:
+
+### Standard Mode (API Key)
+
+Uses a Google Cloud API key for authentication. Suitable for development and simple use cases.
+
+```typescript
+// Using environment variable (GOOGLE_API_KEY)
+const voice = new GoogleVoice();
+
+// Using explicit API key
+const voice = new GoogleVoice({
+  speechModel: { apiKey: "your-api-key" },
+  listeningModel: { apiKey: "your-api-key" },
+  speaker: "en-US-Casual-K",
+});
+```
+
+### Vertex AI Mode (Service Account)
+
+Uses Google Cloud project-based authentication with service accounts. Recommended for production and enterprise deployments.
+
+**Benefits:**
+- Better security (no API keys in code)
+- IAM-based access control
+- Project-level billing and quotas
+- Audit logging
+- Enterprise features
+
+**Configuration Options:**
+
+```typescript
+// Using Application Default Credentials (ADC)
+// Set GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT env vars
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  location: "us-central1", // Optional, defaults to 'us-central1'
+});
+
+// Using service account key file
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  speechModel: {
+    keyFilename: "/path/to/service-account.json",
+  },
+  listeningModel: {
+    keyFilename: "/path/to/service-account.json",
+  },
+});
+
+// Using in-memory credentials
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  speechModel: {
+    credentials: {
+      client_email: "service-account@project.iam.gserviceaccount.com",
+      private_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+    },
+  },
+});
+```
+
+**Required Permissions:**
+
+**IAM Roles:**
+
+For Text-to-Speech:
+- `roles/texttospeech.admin` - Text-to-Speech Admin (full access)
+- `roles/texttospeech.editor` - Text-to-Speech Editor (create and manage)
+- `roles/texttospeech.viewer` - Text-to-Speech Viewer (read-only)
+
+For Speech-to-Text:
+- `roles/speech.client` - Speech-to-Text Client
+
+**OAuth Scopes:**
+
+For synchronous Text-to-Speech synthesis:
+- `https://www.googleapis.com/auth/cloud-platform` - Full access to Google Cloud Platform services
+
+For long-audio Text-to-Speech operations:
+- `locations.longAudioSynthesize` - Create long-audio synthesis operations
+- `operations.get` - Get operation status
+- `operations.list` - List operations
+
 ## Important Notes
 
-1. A Google Cloud API key is required. Set it via the `GOOGLE_API_KEY` environment variable or pass it in the constructor.
-2. The default voice is set to 'en-US-Casual-K'.
-3. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
-4. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
-5. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
-6. Available voices can be filtered by language code using the `getSpeakers()` method.
+1. **Authentication**: Either a Google Cloud API key (standard mode) or service account credentials (Vertex AI mode) is required.
+2. **Environment Variables**:
+   - `GOOGLE_API_KEY` - API key for standard mode
+   - `GOOGLE_CLOUD_PROJECT` - Project ID for Vertex AI mode
+   - `GOOGLE_CLOUD_LOCATION` - Location for Vertex AI mode (defaults to 'us-central1')
+   - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account key file
+3. The default voice is set to `'en-US-Casual-K'`.
+4. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
+5. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
+6. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
+7. Available voices can be filtered by language code using the `getSpeakers()` method.
+8. Vertex AI mode provides enterprise features including IAM control, audit logs, and project-level billing.
 
 
 ---
@@ -93327,6 +94035,12 @@ const step1 = createStep({
       type: "z.infer<TResumeSchema>",
       description:
         "The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.",
+    },
+    {
+      name: "suspendData",
+      type: "z.infer<TSuspendSchema>",
+      description:
+        "The suspend data that was originally passed to suspend() when the step was suspended. Only exists if the step is being resumed and was previously suspended with data.",
     },
     {
       name: "mastra",

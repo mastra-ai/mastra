@@ -1,10 +1,12 @@
+import type { Mastra } from '@mastra/core/mastra';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
-type WorkflowRouteBody = {
+export type WorkflowStreamHandlerParams = {
   runId?: string;
   resourceId?: string;
   inputData?: Record<string, any>;
@@ -13,6 +15,56 @@ type WorkflowRouteBody = {
   tracingOptions?: TracingOptions;
   step?: string;
 };
+
+export type WorkflowStreamHandlerOptions = {
+  mastra: Mastra;
+  workflowId: string;
+  params: WorkflowStreamHandlerParams;
+  includeTextStreamParts?: boolean;
+};
+
+/**
+ * Framework-agnostic handler for streaming workflow execution in AI SDK format.
+ * Use this function directly when you need to handle workflow streaming outside of Hono/registerApiRoute.
+ *
+ * @example
+ * // Next.js App Router
+ * export async function POST(req: Request) {
+ *   const params = await req.json();
+ *   return handleWorkflowStream({
+ *     mastra,
+ *     workflowId: 'my-workflow',
+ *     params,
+ *   });
+ * }
+ */
+export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
+  mastra,
+  workflowId,
+  params,
+  includeTextStreamParts = true,
+}: WorkflowStreamHandlerOptions): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
+  const { runId, resourceId, inputData, resumeData, requestContext, ...rest } = params;
+
+  const workflowObj = mastra.getWorkflowById(workflowId);
+  if (!workflowObj) {
+    throw new Error(`Workflow ${workflowId} not found`);
+  }
+
+  const run = await workflowObj.createRun({ runId, resourceId, ...rest });
+
+  const stream = resumeData
+    ? run.resumeStream({ resumeData, ...rest, requestContext })
+    : run.stream({ inputData, ...rest, requestContext });
+
+  return createUIMessageStream<UI_MESSAGE>({
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkV5Stream(stream, { from: 'workflow', includeTextStreamParts })) {
+        writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
+      }
+    },
+  });
+}
 
 export type WorkflowRouteOptions =
   | { path: `${string}:workflowId${string}`; workflow?: never; includeTextStreamParts?: boolean }
@@ -73,9 +125,9 @@ export function workflowRoute({
       },
     },
     handler: async c => {
-      const { runId, resourceId, inputData, resumeData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
+      const params = (await c.req.json()) as WorkflowStreamHandlerParams;
       const mastra = c.get('mastra');
-      const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
+      const contextRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
       let workflowToUse: string | undefined = workflow;
       if (!workflow) {
@@ -94,12 +146,7 @@ export function workflowRoute({
         throw new Error('Workflow ID is required');
       }
 
-      const workflowObj = mastra.getWorkflowById(workflowToUse);
-      if (!workflowObj) {
-        throw new Error(`Workflow ${workflowToUse} not found`);
-      }
-
-      if (requestContext && rest.requestContext) {
+      if (contextRequestContext && params.requestContext) {
         mastra
           .getLogger()
           ?.warn(
@@ -107,18 +154,14 @@ export function workflowRoute({
           );
       }
 
-      const run = await workflowObj.createRun({ runId, resourceId, ...rest });
-
-      const stream = resumeData
-        ? run.resumeStream({ resumeData, ...rest, requestContext: requestContext || rest.requestContext })
-        : run.stream({ inputData, ...rest, requestContext: requestContext || rest.requestContext });
-
-      const uiMessageStream = createUIMessageStream({
-        execute: async ({ writer }) => {
-          for await (const part of toAISdkV5Stream(stream, { from: 'workflow', includeTextStreamParts })) {
-            writer.write(part);
-          }
+      const uiMessageStream = await handleWorkflowStream({
+        mastra,
+        workflowId: workflowToUse,
+        params: {
+          ...params,
+          requestContext: contextRequestContext || params.requestContext,
         },
+        includeTextStreamParts,
       });
 
       return createUIMessageStreamResponse({ stream: uiMessageStream });

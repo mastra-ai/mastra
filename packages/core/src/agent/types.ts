@@ -170,7 +170,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */

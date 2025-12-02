@@ -747,11 +747,11 @@ export class Workflow<
         infer S extends z.ZodObject<any>,
         TPrevSchema,
         infer O,
-        infer R,
-        infer E,
+        any, // Don't infer TResumeSchema - causes issues with heterogeneous tuples
+        any, // Don't infer TSuspendSchema - causes issues with heterogeneous tuples
         TEngineType
       >
-        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, R, E, TEngineType>
+        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, any, any, TEngineType>
         : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
   ) {
@@ -1037,6 +1037,12 @@ export class Workflow<
 
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
+    // If a snapshot exists in storage, update the run's status to reflect the actual state
+    // This fixes the issue where createRun checks storage but doesn't use the snapshot data
+    if (workflowSnapshotInStorage && workflowSnapshotInStorage.status) {
+      run.workflowRunStatus = workflowSnapshotInStorage.status as WorkflowRunStatus;
+    }
+
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
@@ -1217,6 +1223,7 @@ export class Workflow<
         step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
         requestContext,
         tracingContext,
+        writableStream: writer,
         outputOptions: { includeState: true, includeResumeLabels: true },
         label: resume.label,
       });
@@ -1495,7 +1502,7 @@ export class Run<
 
   readonly workflowSteps: Record<string, StepWithComponent>;
 
-  readonly workflowRunStatus: WorkflowRunStatus;
+  workflowRunStatus: WorkflowRunStatus;
 
   readonly workflowEngineType: WorkflowEngineType;
 
