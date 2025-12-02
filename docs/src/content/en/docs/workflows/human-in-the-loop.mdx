@@ -66,7 +66,7 @@ When a workflow is suspended, you can access the payload returned by `suspend()`
 
 ```typescript {12} title="src/test-workflow.ts" showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -97,7 +97,7 @@ As with [restarting a workflow](/docs/v1/workflows/suspend-and-resume#restarting
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.start({
   inputData: {

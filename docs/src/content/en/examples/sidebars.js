@@ -14,18 +14,6 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Agents",
-      collapsed: true,
-      items: [
-        {
-          type: "doc",
-          id: "agents/supervisor-agent",
-          label: "Supervisor Agent",
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "Workflows",
       collapsed: true,
       items: [

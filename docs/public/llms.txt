@@ -51,6 +51,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Custom Scorers | Evals](https://mastra.ai/en/docs/evals/custom-scorers)
 - [Scorers overview | Evals](https://mastra.ai/en/docs/evals/overview): Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
 - [Running Scorers in CI | Evals](https://mastra.ai/en/docs/evals/running-in-ci): Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function.
+- [Manual Install | Getting Started](https://mastra.ai/en/docs/getting-started/manual-install): Set up a Mastra project manually without using the create mastra CLI.
 - [Mastra Docs Server | Getting Started](https://mastra.ai/en/docs/getting-started/mcp-docs-server): Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.
 - [Project Structure | Getting Started](https://mastra.ai/en/docs/getting-started/project-structure): Guide on organizing folders and files in Mastra, including best practices and recommended structures.
 - [Start with Mastra | Getting Started](https://mastra.ai/en/docs/getting-started/start): Choose how to get started with Mastra - quickstart, framework integration, or agentic UI.
@@ -137,7 +138,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Using CopilotKit | Frameworks](https://mastra.ai/en/guides/build-your-ui/copilotkit): Learn how to integrate CopilotKit with Mastra
 - [Integrate Mastra in your Astro project | Frameworks](https://mastra.ai/en/guides/getting-started/astro): A step-by-step guide to integrating Mastra with Astro.
 - [Integrate Mastra in your Express project | Frameworks](https://mastra.ai/en/guides/getting-started/express): A step-by-step guide to integrating Mastra with an Express backend.
-- [Manual Install | Guides](https://mastra.ai/en/guides/getting-started/manual-install): Set up a Mastra project manually without using the create mastra CLI.
 - [Next.js | Frameworks](https://mastra.ai/en/guides/getting-started/next-js): Get started with Mastra and Next.js
 - [Quickstart](https://mastra.ai/en/guides/getting-started/quickstart): Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
 - [Integrate Mastra in your SvelteKit project | Frameworks](https://mastra.ai/en/guides/getting-started/sveltekit): A step-by-step guide to integrating Mastra with SvelteKit.
@@ -178,7 +178,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 58+ AI providers and 1156+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1157+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -208,6 +208,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Inference | Models | Mastra](https://mastra.ai/en/models/providers/inference): Use Inference models with Mastra. 9 models available.
 - [IO Intelligence | Models | Mastra](https://mastra.ai/en/models/providers/io-intelligence): Use IO Intelligence models with Mastra. 17 models available.
 - [IO.NET | Models | Mastra](https://mastra.ai/en/models/providers/io-net): Use IO.NET models with Mastra. 17 models available.
+- [Kimi For Coding | Models | Mastra](https://mastra.ai/en/models/providers/kimi-for-coding): Use Kimi For Coding models with Mastra. 1 model available.
 - [Llama | Models | Mastra](https://mastra.ai/en/models/providers/llama): Use Llama models with Mastra. 7 models available.
 - [LMStudio | Models | Mastra](https://mastra.ai/en/models/providers/lmstudio): Use LMStudio models with Mastra. 3 models available.
 - [LucidQuery AI | Models | Mastra](https://mastra.ai/en/models/providers/lucidquery): Use LucidQuery AI models with Mastra. 2 models available.
