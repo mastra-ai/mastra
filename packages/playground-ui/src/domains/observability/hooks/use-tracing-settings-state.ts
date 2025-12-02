@@ -9,7 +9,7 @@ export interface TracingSettingsStateProps {
 export function useTracingSettingsState({ entityId, entityType }: TracingSettingsStateProps) {
   const [settings, setSettingsState] = useState<TracingSettings | undefined>(undefined);
 
-  const LOCAL_STORAGE_KEY = `mastra-${entityType}-store-${entityId}`;
+  const LOCAL_STORAGE_KEY = `tracing-options-${entityType}:${entityId}`;
 
   useEffect(() => {
     try {
