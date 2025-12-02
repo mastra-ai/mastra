@@ -284,7 +284,6 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
         // Ignore if query fails (e.g., if collection is empty)
       }
 
-      await couchbase_client.createIndex({ indexName: test_indexName, dimension, metric: 'euclidean' });
       await new Promise(resolve => setTimeout(resolve, 5000));
     }, 50000);
 

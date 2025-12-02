@@ -37,15 +37,27 @@ function String_Handler(field: string, value: Record<string, any>): any {
 
 export { String_Handler };
 
+function escapeSqlString(value: string | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return value.replace(/'/g, "''");
+}
+
 function qv_eq_for_strings(field: string, value: string): any {
   if (value === null || value === undefined || value.length === 0) {
     return '';
   }
-  return `(${field} = '${value}')`;
+  const escaped = escapeSqlString(value);
+  return `(${field} = '${escaped}')`;
 }
 
 function qv_ne_for_strings(field: string, value: string): any {
-  return `(${field} != '${value}')`;
+  if (value === null || value === undefined || value.length === 0) {
+    return '';
+  }
+  const escaped = escapeSqlString(value);
+  return `(${field} != '${escaped}')`;
 }
 
 function qv_String_Handler(field: string, value: Record<string, any>): any {

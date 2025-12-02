@@ -486,17 +486,17 @@ export const ragAgent = new Agent({
   </TabItem>
 
   <TabItem value="couchbase" label="Couchbase">
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
+```ts title="vector-store.ts" showLineNumbers copy
 import { COUCHBASE_SEARCH_STORE_PROMPT, COUCHBASE_QUERY_STORE_PROMPT } from "@mastra/couchbase";
 
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
-  {/* Choose the prompt that matches your vector store */}
-  {/* Note: CouchbaseQueryStore requires at least one vector to be upserted before index creation. */}
+  // Choose the prompt that matches your vector store
+  // Note: CouchbaseQueryStore requires at least one vector to be upserted before index creation.
   ${COUCHBASE_SEARCH_STORE_PROMPT}
   ${COUCHBASE_QUERY_STORE_PROMPT}
   `,

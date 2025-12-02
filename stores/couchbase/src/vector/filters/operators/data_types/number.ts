@@ -121,6 +121,10 @@ function qv_eq_for_numbers(field: string, value: number): any {
 }
 
 function qv_ne_for_numbers(field: string, value: number): any {
+  if (null_or_undefined_or_nan_or_infinite(value)) {
+    return '';
+  }
+  value = normalize_number(value);
   return `(${field} != ${value})`;
 }
 

@@ -48,14 +48,14 @@ type CouchbaseQueryVectorIndexStats = IndexStats & {
 
 export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> {
   private clusterPromise: Promise<Cluster>;
-  private cluster: Cluster;
+  private cluster?: Cluster;
   private bucketName: string;
   private collectionName: string;
   private scopeName: string;
-  private collection: Collection;
-  private bucket: Bucket;
-  private scope: Scope;
-  private vector_dimension: number;
+  private collection?: Collection;
+  private bucket?: Bucket;
+  private scope?: Scope;
+  private vector_dimension?: number;
 
   constructor({
     id,
@@ -75,14 +75,9 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
         configProfile: 'wanDevelopment',
       });
       this.clusterPromise = baseClusterPromise;
-      this.cluster = null as unknown as Cluster;
       this.bucketName = bucketName;
       this.collectionName = collectionName;
       this.scopeName = scopeName;
-      this.collection = null as unknown as Collection;
-      this.bucket = null as unknown as Bucket;
-      this.scope = null as unknown as Scope;
-      this.vector_dimension = null as unknown as number;
     } catch (error) {
       throw new MastraError(
         {
@@ -92,7 +87,6 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
           details: {
             connectionString,
             username,
-            password,
             bucketName,
             scopeName,
             collectionName,
@@ -139,6 +133,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
    *
    * @param {string} indexName - The name of the index to describe
    * @returns A promise that resolves to the index statistics including dimension, count, metric, index_metadata and fields_to_index
+   * @note The `count` field is currently not supported and will return -1.
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<CouchbaseQueryVectorIndexStats> {
     try {
@@ -155,8 +150,8 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
 
       // Get the index definition
       const sqlpp_query = `SELECT idx.* FROM system:indexes AS idx WHERE idx.bucket_id = "${this.bucketName}" AND idx.scope_id = "${this.scopeName}" AND idx.keyspace_id = "${this.collectionName}" AND idx.name = "${indexName}";`;
-      const results = await this.cluster.query(sqlpp_query);
-      results.rows.forEach((row: any) => {
+      const results = await this.cluster?.query(sqlpp_query);
+      results?.rows?.forEach((row: any) => {
         if (row.name === indexName) {
           index = row;
         }
@@ -165,7 +160,21 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
       // Extract the index statistics
       const dimensions = index.with.dimension;
       const count = -1; // Not added support yet for adding a count of documents covered by an index
-      const metric = index.with.similarity.toUpperCase() as CouchbaseQueryVectorIndexMetric;
+      const rawSim: string | undefined = index?.with?.similarity;
+      if (!rawSim) {
+        throw new MastraError(
+          {
+            id: 'COUCHBASE_QUERY_VECTOR_DESCRIBE_INDEX_MISSING_SIMILARITY_METRIC',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+            },
+          },
+          new Error(`Index ${indexName} does not have a similarity metric defined`),
+        );
+      }
+      const metric = rawSim.toUpperCase() as CouchbaseQueryVectorIndexMetric;
       const description = index.with.description;
       const fields_to_index = index.index_key
         .map((field: string) => this.parseIndexKeyString(field)) // Extract the field name and type
@@ -264,7 +273,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
       }
 
       // Execute the SQL++ query
-      await this.scope.query(sqlpp_query);
+      await this.scope?.query(sqlpp_query);
     } catch (error: any) {
       // Check for 'already exists' error (Couchbase may throw a 400 or 409, or have a message)
       const message = error?.message || error?.toString();
@@ -319,7 +328,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
 
       const allPromises = [];
       for (let i = 0; i < records.length; i++) {
-        allPromises.push(this.collection.upsert(pointIds[i]!, records[i]));
+        allPromises.push(this.collection?.upsert(pointIds[i]!, records[i]));
       }
       await Promise.all(allPromises);
 
@@ -376,10 +385,10 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
             LIMIT ${topK};`;
 
       // Execute the query
-      const results = await this.cluster.query(sqlpp_query);
+      const results = await this.cluster?.query(sqlpp_query);
 
       const output = [];
-      for (const match of results.rows) {
+      for (const match of results?.rows || []) {
         output.push(match);
       }
       return output;
@@ -403,7 +412,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
     try {
       await this.getCollection();
       const indexes = await this.cluster
-        .queryIndexes()
+        ?.queryIndexes()
         .getAllIndexes(this.bucketName, { scopeName: this.scopeName, collectionName: this.collectionName });
       return indexes?.map((index: any) => index.name) || [];
     } catch (error) {
@@ -424,7 +433,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
       if (!(await this.listIndexes()).includes(indexName)) {
         throw new Error(`Index ${indexName} does not exist`);
       }
-      await this.cluster.queryIndexes().dropIndex(this.bucketName, indexName, {
+      await this.cluster?.queryIndexes().dropIndex(this.bucketName, indexName, {
         scopeName: this.scopeName,
         collectionName: this.collectionName,
         ignoreIfNotExists: true,
