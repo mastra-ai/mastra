@@ -295,69 +295,11 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
   }
 
   /**
-   * Escapes ElasticSearch regexp metacharacters for use in regexp queries.
-   * Escapes special characters that need escaping in ElasticSearch/Lucene regexp syntax.
-   * Handles already-escaped sequences correctly to avoid double-escaping.
-   *
-   * Escapes: . * + ? | { } [ ] ( ) ^ $ \
-   */
-  private escapeElasticSearchRegexp(pattern: string): string {
-    const specialChars = /[.*+?|{}[\]()^$\\]/;
-    let result = '';
-    let i = 0;
-
-    while (i < pattern.length) {
-      const char = pattern[i];
-      if (char === undefined) {
-        i += 1;
-        continue;
-      }
-
-      if (char === '\\') {
-        // This is a backslash - escape it for JSON serialization
-        // The next character will be handled in the next iteration
-        if (i + 1 < pattern.length) {
-          // Escape the backslash and continue to process the next character
-          result += '\\\\';
-          i += 1;
-          continue;
-        } else {
-          // Lone backslash at end - escape it
-          result += '\\\\';
-          i += 1;
-          continue;
-        }
-      }
-
-      // Check if this character needs escaping
-      if (specialChars.test(char)) {
-        result += '\\' + char;
-      } else {
-        result += char;
-      }
-      i += 1;
-    }
-
-    return result;
-  }
-
-  /**
    * Translates regex patterns to ElasticSearch query syntax
    */
   private translateRegexOperator(field: string, value: any): any {
     // Convert value to string if it's not already
     const regexValue = typeof value === 'string' ? value : value.toString();
-
-    // Check for problematic patterns (like newlines, etc.)
-    // ElasticSearch regexp queries support newlines, but we need to escape them properly
-    // For patterns with newlines, use regexp query with proper escaping
-    if (regexValue.includes('\n') || regexValue.includes('\r')) {
-      // Use regexp query with proper escaping for newline-containing patterns
-      // Note: This converts newlines to literal matches; JavaScript dotall semantics
-      // are not directly supported in ElasticSearch regexp queries
-      const escapedRegex = this.escapeElasticSearchRegexp(regexValue);
-      return { regexp: { [field]: escapedRegex } };
-    }
 
     // Process regex pattern to handle anchors properly
     let processedRegex = regexValue;
@@ -390,9 +332,9 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
     }
 
     // Use regexp for other regex patterns
-    // Escape all ElasticSearch regexp metacharacters
-    const escapedRegex = this.escapeElasticSearchRegexp(regexValue);
-    return { regexp: { [field]: escapedRegex } };
+    // Pass the original regex pattern through unchanged to preserve regex semantics
+    // ElasticSearch regexp queries accept valid regex patterns directly
+    return { regexp: { [field]: regexValue } };
   }
 
   private addKeywordIfNeeded(field: string, value: any): string {
