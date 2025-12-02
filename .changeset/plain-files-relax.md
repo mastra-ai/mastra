@@ -6,15 +6,13 @@
 '@mastra/core': patch
 ---
 
-Allow direct access to server app for in-memory route calls
-
-Previously, calling Mastra routes from background jobs (like Inngest functions) required making HTTP requests to `localhost`. Now you can access the underlying server app directly and call routes in-memory using `app.fetch()`.
+Allow direct access to server app handle directly from Mastra instance.
 
 ```ts
 // Before: HTTP request to localhost
 const response = await fetch(`http://localhost:5000/api/tools`);
 
-// After: Direct in-memory call via app.fetch()
+// After: Direct call via app.fetch()
 const app = mastra.getServerApp<Hono>();
 const response = await app.fetch(new Request('http://internal/api/tools'));
 ```
