@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { ResolveHookContext } from 'node:module';
 import { builtinModules } from 'node:module';
@@ -46,10 +47,14 @@ async function getParentPath(specifier: string, url: string): Promise<string | n
     if (!moduleResolveMapLocation) {
       moduleResolveMapLocation = join(process.cwd(), 'module-resolve-map.json');
     }
-    const moduleResolveMap = JSON.parse(
-      // cwd refers to the output/build directory
-      await readFile(moduleResolveMapLocation, 'utf-8'),
-    ) as Record<string, Record<string, string>>;
+
+    let moduleResolveMap: Record<string, Record<string, string>> = {};
+    if (existsSync(moduleResolveMapLocation)) {
+      moduleResolveMap = JSON.parse(await readFile(moduleResolveMapLocation, 'utf-8')) as Record<
+        string,
+        Record<string, string>
+      >;
+    }
 
     for (const [id, rest] of Object.entries(moduleResolveMap)) {
       cache.set(id, rest);

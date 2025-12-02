@@ -1,5 +1,4 @@
 import type { Plugin } from 'rollup';
-import { getPackageInfo } from 'local-pkg';
 import { isDependencyPartOfPackage, slash } from '../utils';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';

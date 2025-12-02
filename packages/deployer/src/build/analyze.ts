@@ -236,11 +236,13 @@ async function validateOutput(
       result.externalDependencies.add(dep);
     }
   }
+  let binaryMapData: Record<string, string[]> = {};
 
-  const binaryMap = await readFile(join(outputDir, 'binary-map.json'), 'utf-8');
-  const binaryMapData = JSON.parse(binaryMap);
+  if (existsSync(join(outputDir, 'binary-map.json'))) {
+    const binaryMap = await readFile(join(outputDir, 'binary-map.json'), 'utf-8');
+    binaryMapData = JSON.parse(binaryMap);
+  }
 
-  const captureErrors = [];
   for (const file of output) {
     if (file.type === 'asset') {
       continue;
