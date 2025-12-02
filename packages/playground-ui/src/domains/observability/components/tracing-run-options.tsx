@@ -1,12 +1,12 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { useCodemirrorTheme } from '@/components/syntax-highlighter';
-import { useWorkflowSettings } from '../context/workflow-settings-context';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { Txt } from '@/ds/components/Txt';
 
-export const WorkflowRunOptions = () => {
+export const TracingRunOptions = () => {
   const theme = useCodemirrorTheme();
-  const { settings, setSettings } = useWorkflowSettings();
+  const { settings, setSettings } = useTracingSettings();
 
   const handleChange = (value: string) => {
     if (!value) {

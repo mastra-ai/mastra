@@ -12,7 +12,7 @@ import {
   useWorkflowRunExecutionResult,
   Skeleton,
   Txt,
-  WorkflowSettingsProvider,
+  TracingSettingsProvider,
 } from '@mastra/playground-ui';
 
 import { WorkflowHeader } from './workflow-header';
@@ -70,7 +70,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       : undefined;
 
   return (
-    <WorkflowSettingsProvider workflowId={workflowId}>
+    <TracingSettingsProvider entityId={workflowId} entityType="workflow">
       <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
         <MainContentLayout>
           <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
@@ -83,6 +83,6 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
           </MainContentContent>
         </MainContentLayout>
       </WorkflowRunProvider>
-    </WorkflowSettingsProvider>
+    </TracingSettingsProvider>
   );
 };

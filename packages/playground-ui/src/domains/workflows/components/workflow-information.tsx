@@ -13,7 +13,7 @@ import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { toast } from '@/lib/toast';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { PlaygroundTabs, TabList, Tab, TabContent } from '@/components/ui/playground-tabs';
-import { WorkflowRunOptions } from './workflow-run-options';
+import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -122,7 +122,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
             ) : null}
           </TabContent>
           <TabContent value="run-options">
-            <WorkflowRunOptions />
+            <TracingRunOptions />
           </TabContent>
         </PlaygroundTabs>
       </div>

@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { WorkflowSettings } from '../context/workflow-settings-context';
+import { TracingSettings } from '../context/tracing-settings-context';
 
-export interface WorkflowSettingsStateProps {
-  workflowId: string;
+export interface TracingSettingsStateProps {
+  entityId: string;
+  entityType: 'workflow' | 'agent';
 }
 
-export function useWorkflowSettingsState({ workflowId }: WorkflowSettingsStateProps) {
-  const [settings, setSettingsState] = useState<WorkflowSettings | undefined>(undefined);
+export function useTracingSettingsState({ entityId, entityType }: TracingSettingsStateProps) {
+  const [settings, setSettingsState] = useState<TracingSettings | undefined>(undefined);
 
-  const LOCAL_STORAGE_KEY = `mastra-workflow-store-${workflowId}`;
+  const LOCAL_STORAGE_KEY = `mastra-${entityType}-store-${entityId}`;
 
   useEffect(() => {
     try {
@@ -25,9 +26,9 @@ export function useWorkflowSettingsState({ workflowId }: WorkflowSettingsStatePr
     // Only run on mount or when initialSettings changes
   }, [LOCAL_STORAGE_KEY]);
 
-  const setSettings = (settingsValue: WorkflowSettings) => {
+  const setSettings = (settingsValue: TracingSettings) => {
     setSettingsState(prev => ({ ...prev, ...settingsValue }));
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ ...settingsValue, workflowId }));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ ...settingsValue, entityId, entityType }));
   };
 
   const resetAll = () => {

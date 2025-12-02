@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { mapWorkflowStreamChunkToWatchResult, useMastraClient } from '@mastra/react';
 import type { ReadableStreamDefaultReader } from 'stream/web';
 import { toast } from '@/lib/toast';
-import { useWorkflowSettings } from '../context/workflow-settings-context';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 
 export const useExecuteWorkflow = () => {
   const client = useMastraClient();
@@ -89,7 +89,7 @@ type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
 
 export const useStreamWorkflow = () => {
   const client = useMastraClient();
-  const { settings } = useWorkflowSettings();
+  const { settings } = useTracingSettings();
   const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
   const [isStreaming, setIsStreaming] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
