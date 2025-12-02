@@ -11,11 +11,10 @@
  * 2. RAW STORAGE - Direct query to the database (listMessages)
  * 3. RECALL - The processed recall output from Memory
  *
- * If any of these differ, we've found a bug.
+ * Tests run with both OpenAI and Anthropic models to ensure provider-agnostic behavior.
  */
 
 import { randomUUID } from 'node:crypto';
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
@@ -23,9 +22,30 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { MastraModelConfig } from '@mastra/core/llm';
 
 type MessagePart = MastraMessageContentV2['parts'][number];
 type OrderEntry = { type: string; content?: string };
+
+// Model configurations for testing
+interface ModelConfig {
+  name: string;
+  model: MastraModelConfig;
+  envVar: string;
+}
+
+const MODEL_CONFIGS: ModelConfig[] = [
+  {
+    name: 'OpenAI GPT-4o',
+    model: 'openai/gpt-4o',
+    envVar: 'OPENAI_API_KEY',
+  },
+  {
+    name: 'Anthropic Claude Sonnet',
+    model: 'anthropic/claude-sonnet-4-5',
+    envVar: 'ANTHROPIC_API_KEY',
+  },
+];
 
 // Helper to add delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -94,368 +114,379 @@ function verifyTextBeforeTool(order: OrderEntry[], source: string): boolean {
   return true;
 }
 
-describe('Message Ordering with LibSQL Storage (Issue #9909)', () => {
-  const dbFile = 'file:ordering-test.db';
+// Create tools for weather tests
+function createWeatherTools() {
+  const getWeatherTool = createTool({
+    id: 'get_weather',
+    description: 'Get the current weather for a city',
+    inputSchema: z.object({ city: z.string().describe('The city to get weather for') }),
+    execute: async (input: { city: string }) => ({
+      city: input.city,
+      weather: 'sunny',
+      temperature: 72,
+    }),
+  });
 
-  const createMemory = () =>
-    new Memory({
-      options: { lastMessages: 20 },
-      storage: new LibSQLStore({
-        id: `ordering-test-${Date.now()}`,
-        url: dbFile,
-      }),
-    });
+  const getForecastTool = createTool({
+    id: 'get_forecast',
+    description: 'Get the weather forecast for the next few days',
+    inputSchema: z.object({ city: z.string().describe('The city to get forecast for') }),
+    execute: async (input: { city: string }) => ({
+      city: input.city,
+      forecast: [
+        { day: 'Tomorrow', weather: 'partly cloudy', high: 75, low: 58 },
+        { day: 'Day after', weather: 'sunny', high: 78, low: 60 },
+      ],
+    }),
+  });
 
-  it('should preserve text ordering: stream -> raw storage -> recall', async () => {
-    const memory = createMemory();
+  return { get_weather: getWeatherTool, get_forecast: getForecastTool };
+}
 
-    const getWeatherTool = createTool({
-      id: 'get_weather',
-      description: 'Get the current weather for a city',
-      inputSchema: z.object({ city: z.string().describe('The city to get weather for') }),
-      execute: async (input: { city: string }) => ({
-        city: input.city,
-        weather: 'sunny',
-        temperature: 72,
-      }),
-    });
+// Create tools for research tests
+function createResearchTools() {
+  const searchTool = createTool({
+    id: 'search',
+    description: 'Search for information',
+    inputSchema: z.object({ query: z.string() }),
+    execute: async (input: { query: string }) => ({ results: [`Result for: ${input.query}`] }),
+  });
 
-    const getForecastTool = createTool({
-      id: 'get_forecast',
-      description: 'Get the weather forecast for the next few days',
-      inputSchema: z.object({ city: z.string().describe('The city to get forecast for') }),
-      execute: async (input: { city: string }) => ({
-        city: input.city,
-        forecast: [
-          { day: 'Tomorrow', weather: 'partly cloudy', high: 75, low: 58 },
-          { day: 'Day after', weather: 'sunny', high: 78, low: 60 },
-        ],
-      }),
-    });
+  const createDocTool = createTool({
+    id: 'create_document',
+    description: 'Create a document',
+    inputSchema: z.object({ title: z.string(), content: z.string() }),
+    execute: async () => ({ id: `doc-${Date.now()}`, status: 'created' }),
+  });
 
-    const agent = new Agent({
-      id: 'ordering-test-agent',
-      name: 'Ordering Test Agent',
-      instructions: `You are a weather assistant. When asked about weather, first explain what you will do, then get the current weather, explain what you found, then get the forecast, and finally summarize everything. Always be verbose between tool calls.`,
-      model: openai('gpt-4o'),
-      memory,
-      tools: { get_weather: getWeatherTool, get_forecast: getForecastTool },
-    });
+  return { search: searchTool, create_document: createDocTool };
+}
 
-    const threadId = randomUUID();
-    const resourceId = 'ordering-test-user';
+// Run tests for each model configuration
+for (const modelConfig of MODEL_CONFIGS) {
+  describe(`Message Ordering with ${modelConfig.name} (Issue #9909)`, () => {
+    const dbFile = 'file:ordering-test.db';
 
-    console.log('\n========================================');
-    console.log('TEST: Stream -> Raw Storage -> Recall');
-    console.log('========================================');
-    console.log('Thread ID:', threadId);
-
-    // === 1. STREAM AND TRACK ORDER ===
-    const streamOrder: OrderEntry[] = [];
-    let textAccumulator = '';
-
-    const stream = await agent.stream("What's the weather in San Francisco?", {
-      memory: { thread: threadId, resource: resourceId },
-      maxSteps: 5,
-    });
-
-    console.log('\n=== STREAMING OUTPUT ===');
-    for await (const chunk of stream.fullStream) {
-      if (chunk.type === 'text-delta') {
-        textAccumulator += chunk.payload?.text || '';
-        process.stdout.write(chunk.payload?.text || '');
-      } else if (chunk.type === 'text-end' && textAccumulator.trim()) {
-        streamOrder.push({ type: 'TEXT', content: textAccumulator.substring(0, 50) });
-        textAccumulator = '';
-      } else if (chunk.type === 'tool-call') {
-        console.log(`\n[TOOL: ${chunk.payload?.toolName}]`);
-        streamOrder.push({ type: 'TOOL', content: chunk.payload?.toolName });
-      } else if (chunk.type === 'step-start') {
-        streamOrder.push({ type: 'STEP' });
-      } else if (chunk.type === 'step-finish') {
-        console.log('\n[STEP FINISH]\n');
-      }
-    }
-    console.log('\n');
-
-    await delay(500);
-
-    // === 2. GET RAW STORAGE ORDER ===
-    const rawStorageResult = await memory.storage.listMessages({ threadId, resourceId });
-    const rawAssistantMsgs = rawStorageResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
-
-    console.log('\n=== RAW STORAGE ===');
-    console.log('Total messages:', rawStorageResult.messages.length);
-    console.log('Assistant messages:', rawAssistantMsgs.length);
-
-    const rawStorageOrder: OrderEntry[] = [];
-    for (const msg of rawAssistantMsgs) {
-      console.log(`\nMessage ${msg.id}:`);
-      const parts = msg.content.parts || [];
-      parts.forEach((p: MessagePart, i: number) => {
-        if (p.type === 'text') {
-          console.log(`  [${i}] TEXT: "${p.text?.substring(0, 50)}..."`);
-        } else if (p.type === 'tool-invocation') {
-          console.log(`  [${i}] TOOL: ${p.toolInvocation?.toolName}`);
-        } else if (p.type === 'step-start') {
-          console.log(`  [${i}] STEP`);
-        }
+    const createMemory = () =>
+      new Memory({
+        options: { lastMessages: 20 },
+        storage: new LibSQLStore({
+          id: `ordering-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          url: dbFile,
+        }),
       });
-      rawStorageOrder.push(...extractOrder(parts));
-    }
 
-    // === 3. GET RECALL ORDER ===
-    const recallResult = await memory.recall({ threadId, resourceId });
-    const recallAssistantMsgs = recallResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
+    const skipIfNoApiKey = () => {
+      if (!process.env[modelConfig.envVar]) {
+        console.log(`Skipping: ${modelConfig.envVar} not set`);
+        return true;
+      }
+      return false;
+    };
 
-    console.log('\n=== RECALL OUTPUT ===');
-    console.log('Total messages:', recallResult.messages.length);
-    console.log('Assistant messages:', recallAssistantMsgs.length);
+    it('should preserve text ordering: stream -> raw storage -> recall', async () => {
+      if (skipIfNoApiKey()) return;
 
-    const recallOrder: OrderEntry[] = [];
-    for (const msg of recallAssistantMsgs) {
-      console.log(`\nMessage ${msg.id}:`);
-      const parts = msg.content.parts || [];
-      parts.forEach((p: MessagePart, i: number) => {
-        if (p.type === 'text') {
-          console.log(`  [${i}] TEXT: "${p.text?.substring(0, 50)}..."`);
-        } else if (p.type === 'tool-invocation') {
-          console.log(`  [${i}] TOOL: ${p.toolInvocation?.toolName}`);
-        } else if (p.type === 'step-start') {
-          console.log(`  [${i}] STEP`);
-        }
+      const memory = createMemory();
+      const tools = createWeatherTools();
+
+      const agent = new Agent({
+        id: `ordering-test-agent-${modelConfig.name}`,
+        name: 'Ordering Test Agent',
+        instructions: `You are a weather assistant. When asked about weather, first explain what you will do, then get the current weather, explain what you found, then get the forecast, and finally summarize everything. Always be verbose between tool calls.`,
+        model: modelConfig.model,
+        memory,
+        tools,
       });
-      recallOrder.push(...extractOrder(parts));
-    }
 
-    // === 4. COMPARE ALL THREE ===
-    const { streamVsRaw, streamVsRecall } = compareOrders(streamOrder, rawStorageOrder, recallOrder);
+      const threadId = randomUUID();
+      const resourceId = 'ordering-test-user';
 
-    // === 5. VERIFY TEXT-BEFORE-TOOL ===
-    const streamCorrect = verifyTextBeforeTool(streamOrder, 'STREAM');
-    const rawCorrect = verifyTextBeforeTool(rawStorageOrder, 'RAW STORAGE');
-    const recallCorrect = verifyTextBeforeTool(recallOrder, 'RECALL');
+      console.log('\n========================================');
+      console.log(`TEST: Stream -> Raw Storage -> Recall (${modelConfig.name})`);
+      console.log('========================================');
+      console.log('Thread ID:', threadId);
 
-    // === 6. ASSERTIONS ===
-    // If stream had text before tool, storage and recall must too
-    const streamFirstText = streamOrder.findIndex(o => o.type === 'TEXT');
-    const streamFirstTool = streamOrder.findIndex(o => o.type === 'TOOL');
+      // === 1. STREAM AND TRACK ORDER ===
+      const streamOrder: OrderEntry[] = [];
+      let textAccumulator = '';
 
-    if (streamFirstText !== -1 && streamFirstTool !== -1 && streamFirstText < streamFirstTool) {
-      expect(rawCorrect).toBe(true);
-      expect(recallCorrect).toBe(true);
-    }
+      const stream = await agent.stream("What's the weather in San Francisco?", {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 5,
+      });
 
-    // Verify no text was lost
-    const streamTextCount = streamOrder.filter(o => o.type === 'TEXT').length;
-    const rawTextCount = rawStorageOrder.filter(o => o.type === 'TEXT').length;
-    const recallTextCount = recallOrder.filter(o => o.type === 'TEXT').length;
-
-    console.log(`\n=== TEXT COUNT ===`);
-    console.log(`Stream: ${streamTextCount}, Raw: ${rawTextCount}, Recall: ${recallTextCount}`);
-
-    expect(rawTextCount).toBeGreaterThanOrEqual(streamTextCount);
-    expect(recallTextCount).toBeGreaterThanOrEqual(streamTextCount);
-  }, 60000);
-
-  it('should preserve ordering with multiple tool calls', async () => {
-    const memory = createMemory();
-
-    const searchTool = createTool({
-      id: 'search',
-      description: 'Search for information',
-      inputSchema: z.object({ query: z.string() }),
-      execute: async (input: { query: string }) => ({ results: [`Result for: ${input.query}`] }),
-    });
-
-    const createDocTool = createTool({
-      id: 'create_document',
-      description: 'Create a document',
-      inputSchema: z.object({ title: z.string(), content: z.string() }),
-      execute: async () => ({ id: `doc-${Date.now()}`, status: 'created' }),
-    });
-
-    const agent = new Agent({
-      id: 'multi-tool-agent',
-      name: 'Multi-Tool Agent',
-      instructions: `You are a research assistant. When asked to research something, first explain your research plan, then search for information multiple times, explain what you found after each search, then create a document with your findings, and finally confirm completion. Always be verbose between tool calls.`,
-      model: openai('gpt-4o'),
-      memory,
-      tools: { search: searchTool, create_document: createDocTool },
-    });
-
-    const threadId = randomUUID();
-    const resourceId = 'multi-tool-test';
-
-    console.log('\n========================================');
-    console.log('TEST: Multiple Tool Calls Ordering');
-    console.log('========================================');
-
-    // === 1. STREAM ===
-    const streamOrder: OrderEntry[] = [];
-    let textAccumulator = '';
-
-    const stream = await agent.stream('Research weather patterns in CA and create a summary.', {
-      memory: { thread: threadId, resource: resourceId },
-      maxSteps: 10,
-    });
-
-    for await (const chunk of stream.fullStream) {
-      if (chunk.type === 'text-delta') {
-        textAccumulator += chunk.payload?.text || '';
-        process.stdout.write(chunk.payload?.text || '');
-      } else if (chunk.type === 'text-end' && textAccumulator.trim()) {
-        streamOrder.push({ type: 'TEXT', content: textAccumulator.substring(0, 50) });
-        textAccumulator = '';
-      } else if (chunk.type === 'tool-call') {
-        console.log(`\n[TOOL: ${chunk.payload?.toolName}]`);
-        streamOrder.push({ type: 'TOOL', content: chunk.payload?.toolName });
-      } else if (chunk.type === 'step-start') {
-        streamOrder.push({ type: 'STEP' });
+      console.log('\n=== STREAMING OUTPUT ===');
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          textAccumulator += chunk.payload?.text || '';
+          process.stdout.write(chunk.payload?.text || '');
+        } else if (chunk.type === 'text-end' && textAccumulator.trim()) {
+          streamOrder.push({ type: 'TEXT', content: textAccumulator.substring(0, 50) });
+          textAccumulator = '';
+        } else if (chunk.type === 'tool-call') {
+          console.log(`\n[TOOL: ${chunk.payload?.toolName}]`);
+          streamOrder.push({ type: 'TOOL', content: chunk.payload?.toolName });
+        } else if (chunk.type === 'step-start') {
+          streamOrder.push({ type: 'STEP' });
+        } else if (chunk.type === 'step-finish') {
+          console.log('\n[STEP FINISH]\n');
+        }
       }
-    }
-    console.log('\n');
+      console.log('\n');
 
-    await delay(500);
+      await delay(500);
 
-    // === 2. RAW STORAGE ===
-    const rawResult = await memory.storage.listMessages({ threadId, resourceId });
-    const rawAssistant = rawResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
-    const rawStorageOrder: OrderEntry[] = [];
-    for (const msg of rawAssistant) {
-      rawStorageOrder.push(...extractOrder(msg.content.parts || []));
-    }
+      // === 2. GET RAW STORAGE ORDER ===
+      const rawStorageResult = await memory.storage.listMessages({ threadId, resourceId });
+      const rawAssistantMsgs = rawStorageResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
 
-    // === 3. RECALL ===
-    const recallResult = await memory.recall({ threadId, resourceId });
-    const recallAssistant = recallResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
-    const recallOrder: OrderEntry[] = [];
-    for (const msg of recallAssistant) {
-      recallOrder.push(...extractOrder(msg.content.parts || []));
-    }
+      console.log('\n=== RAW STORAGE ===');
+      console.log('Total messages:', rawStorageResult.messages.length);
+      console.log('Assistant messages:', rawAssistantMsgs.length);
 
-    // === 4. COMPARE ===
-    compareOrders(streamOrder, rawStorageOrder, recallOrder);
-
-    verifyTextBeforeTool(streamOrder, 'STREAM');
-    verifyTextBeforeTool(rawStorageOrder, 'RAW STORAGE');
-    verifyTextBeforeTool(recallOrder, 'RECALL');
-
-    // Verify search tools were called
-    const searchCalls = rawStorageOrder.filter(o => o.content === 'search');
-    expect(searchCalls.length).toBeGreaterThanOrEqual(1);
-  }, 120000);
-
-  it('should match stream order exactly in storage', async () => {
-    const memory = createMemory();
-
-    const weatherTool = createTool({
-      id: 'get_weather',
-      description: 'Get the current weather for a city',
-      inputSchema: z.object({ city: z.string() }),
-      execute: async ({ city }) => ({ city, temp: 70, condition: 'sunny' }),
-    });
-
-    const forecastTool = createTool({
-      id: 'get_forecast',
-      description: 'Get the weather forecast for the next few days',
-      inputSchema: z.object({ city: z.string() }),
-      execute: async ({ city }) => ({
-        city,
-        forecast: [{ day: 'Tomorrow', high: 72, low: 55 }],
-      }),
-    });
-
-    const agent = new Agent({
-      id: 'exact-match-agent',
-      name: 'Exact Match Agent',
-      instructions: `You are a weather assistant. When asked about weather, first explain what you will do, then get the current weather, explain what you found, then get the forecast, and finally summarize everything. Always be verbose between tool calls.`,
-      model: openai('gpt-4o'),
-      memory,
-      tools: { get_weather: weatherTool, get_forecast: forecastTool },
-    });
-
-    const threadId = randomUUID();
-    const resourceId = 'exact-match-test';
-
-    console.log('\n========================================');
-    console.log('TEST: Exact Stream-Storage Match');
-    console.log('========================================');
-
-    // === STREAM ===
-    const streamOrder: OrderEntry[] = [];
-    let textAccumulator = '';
-
-    const stream = await agent.stream("What's the weather in NYC?", {
-      memory: { thread: threadId, resource: resourceId },
-      maxSteps: 5,
-    });
-
-    for await (const chunk of stream.fullStream) {
-      if (chunk.type === 'text-delta') {
-        textAccumulator += chunk.payload?.text || '';
-      } else if (chunk.type === 'text-end' && textAccumulator.trim()) {
-        streamOrder.push({ type: 'TEXT', content: textAccumulator.substring(0, 50) });
-        textAccumulator = '';
-      } else if (chunk.type === 'tool-call') {
-        streamOrder.push({ type: 'TOOL', content: chunk.payload?.toolName });
-      } else if (chunk.type === 'step-start') {
-        streamOrder.push({ type: 'STEP' });
-      }
-    }
-
-    await delay(500);
-
-    // === RAW STORAGE ===
-    const rawResult = await memory.storage.listMessages({ threadId, resourceId });
-    const rawAssistant = rawResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
-    const rawStorageOrder: OrderEntry[] = [];
-    for (const msg of rawAssistant) {
-      rawStorageOrder.push(...extractOrder(msg.content.parts || []));
-    }
-
-    // === RECALL ===
-    const recallResult = await memory.recall({ threadId, resourceId });
-    const recallAssistant = recallResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
-    const recallOrder: OrderEntry[] = [];
-    for (const msg of recallAssistant) {
-      recallOrder.push(...extractOrder(msg.content.parts || []));
-    }
-
-    // === COMPARE ===
-    const { streamVsRaw, streamVsRecall, rawVsRecall } = compareOrders(streamOrder, rawStorageOrder, recallOrder);
-
-    // If stream had TEXT before TOOL, verify it's preserved
-    const streamFirstText = streamOrder.findIndex(o => o.type === 'TEXT');
-    const streamFirstTool = streamOrder.findIndex(o => o.type === 'TOOL');
-
-    if (streamFirstText !== -1 && streamFirstTool !== -1 && streamFirstText < streamFirstTool) {
-      console.log('\n🔍 Stream had TEXT before TOOL - this MUST be preserved');
-
-      const rawFirstText = rawStorageOrder.findIndex(o => o.type === 'TEXT');
-      const rawFirstTool = rawStorageOrder.findIndex(o => o.type === 'TOOL');
-
-      if (rawFirstText === -1) {
-        console.log('❌ BUG (Issue #9909): Text MISSING in raw storage!');
-        expect.fail('Text that was streamed is missing from raw storage');
-      } else if (rawFirstText >= rawFirstTool) {
-        console.log('❌ BUG (Issue #9909): Text appears AFTER tool in raw storage!');
-        expect(rawFirstText).toBeLessThan(rawFirstTool);
+      const rawStorageOrder: OrderEntry[] = [];
+      for (const msg of rawAssistantMsgs) {
+        console.log(`\nMessage ${msg.id}:`);
+        const parts = msg.content.parts || [];
+        parts.forEach((p: MessagePart, i: number) => {
+          if (p.type === 'text') {
+            console.log(`  [${i}] TEXT: "${p.text?.substring(0, 50)}..."`);
+          } else if (p.type === 'tool-invocation') {
+            console.log(`  [${i}] TOOL: ${p.toolInvocation?.toolName}`);
+          } else if (p.type === 'step-start') {
+            console.log(`  [${i}] STEP`);
+          }
+        });
+        rawStorageOrder.push(...extractOrder(parts));
       }
 
-      const recallFirstText = recallOrder.findIndex(o => o.type === 'TEXT');
-      const recallFirstTool = recallOrder.findIndex(o => o.type === 'TOOL');
+      // === 3. GET RECALL ORDER ===
+      const recallResult = await memory.recall({ threadId, resourceId });
+      const recallAssistantMsgs = recallResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
 
-      if (recallFirstText === -1) {
-        console.log('❌ BUG (Issue #9909): Text MISSING in recall!');
-        expect.fail('Text that was streamed is missing from recall');
-      } else if (recallFirstText >= recallFirstTool) {
-        console.log('❌ BUG (Issue #9909): Text appears AFTER tool in recall!');
-        expect(recallFirstText).toBeLessThan(recallFirstTool);
+      console.log('\n=== RECALL OUTPUT ===');
+      console.log('Total messages:', recallResult.messages.length);
+      console.log('Assistant messages:', recallAssistantMsgs.length);
+
+      const recallOrder: OrderEntry[] = [];
+      for (const msg of recallAssistantMsgs) {
+        console.log(`\nMessage ${msg.id}:`);
+        const parts = msg.content.parts || [];
+        parts.forEach((p: MessagePart, i: number) => {
+          if (p.type === 'text') {
+            console.log(`  [${i}] TEXT: "${p.text?.substring(0, 50)}..."`);
+          } else if (p.type === 'tool-invocation') {
+            console.log(`  [${i}] TOOL: ${p.toolInvocation?.toolName}`);
+          } else if (p.type === 'step-start') {
+            console.log(`  [${i}] STEP`);
+          }
+        });
+        recallOrder.push(...extractOrder(parts));
       }
-    }
 
-    // Raw and recall should always match
-    expect(rawVsRecall).toBe(true);
-  }, 60000);
-});
+      // === 4. COMPARE ALL THREE ===
+      compareOrders(streamOrder, rawStorageOrder, recallOrder);
+
+      // === 5. VERIFY TEXT-BEFORE-TOOL ===
+      const rawCorrect = verifyTextBeforeTool(rawStorageOrder, 'RAW STORAGE');
+      const recallCorrect = verifyTextBeforeTool(recallOrder, 'RECALL');
+
+      // === 6. ASSERTIONS ===
+      const streamFirstText = streamOrder.findIndex(o => o.type === 'TEXT');
+      const streamFirstTool = streamOrder.findIndex(o => o.type === 'TOOL');
+
+      if (streamFirstText !== -1 && streamFirstTool !== -1 && streamFirstText < streamFirstTool) {
+        expect(rawCorrect).toBe(true);
+        expect(recallCorrect).toBe(true);
+      }
+
+      // Verify no text was lost
+      const streamTextCount = streamOrder.filter(o => o.type === 'TEXT').length;
+      const rawTextCount = rawStorageOrder.filter(o => o.type === 'TEXT').length;
+      const recallTextCount = recallOrder.filter(o => o.type === 'TEXT').length;
+
+      console.log(`\n=== TEXT COUNT ===`);
+      console.log(`Stream: ${streamTextCount}, Raw: ${rawTextCount}, Recall: ${recallTextCount}`);
+
+      expect(rawTextCount).toBeGreaterThanOrEqual(streamTextCount);
+      expect(recallTextCount).toBeGreaterThanOrEqual(streamTextCount);
+    }, 90000);
+
+    it('should preserve ordering with multiple tool calls', async () => {
+      if (skipIfNoApiKey()) return;
+
+      const memory = createMemory();
+      const tools = createResearchTools();
+
+      const agent = new Agent({
+        id: `multi-tool-agent-${modelConfig.name}`,
+        name: 'Multi-Tool Agent',
+        instructions: `You are a research assistant. When asked to research something, first explain your research plan, then search for information multiple times, explain what you found after each search, then create a document with your findings, and finally confirm completion. Always be verbose between tool calls.`,
+        model: modelConfig.model,
+        memory,
+        tools,
+      });
+
+      const threadId = randomUUID();
+      const resourceId = 'multi-tool-test';
+
+      console.log('\n========================================');
+      console.log(`TEST: Multiple Tool Calls Ordering (${modelConfig.name})`);
+      console.log('========================================');
+
+      // === 1. STREAM ===
+      const streamOrder: OrderEntry[] = [];
+      let textAccumulator = '';
+
+      const stream = await agent.stream('Research weather patterns in CA and create a summary.', {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 10,
+      });
+
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          textAccumulator += chunk.payload?.text || '';
+          process.stdout.write(chunk.payload?.text || '');
+        } else if (chunk.type === 'text-end' && textAccumulator.trim()) {
+          streamOrder.push({ type: 'TEXT', content: textAccumulator.substring(0, 50) });
+          textAccumulator = '';
+        } else if (chunk.type === 'tool-call') {
+          console.log(`\n[TOOL: ${chunk.payload?.toolName}]`);
+          streamOrder.push({ type: 'TOOL', content: chunk.payload?.toolName });
+        } else if (chunk.type === 'step-start') {
+          streamOrder.push({ type: 'STEP' });
+        }
+      }
+      console.log('\n');
+
+      await delay(500);
+
+      // === 2. RAW STORAGE ===
+      const rawResult = await memory.storage.listMessages({ threadId, resourceId });
+      const rawAssistant = rawResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
+      const rawStorageOrder: OrderEntry[] = [];
+      for (const msg of rawAssistant) {
+        rawStorageOrder.push(...extractOrder(msg.content.parts || []));
+      }
+
+      // === 3. RECALL ===
+      const recallResult = await memory.recall({ threadId, resourceId });
+      const recallAssistant = recallResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
+      const recallOrder: OrderEntry[] = [];
+      for (const msg of recallAssistant) {
+        recallOrder.push(...extractOrder(msg.content.parts || []));
+      }
+
+      // === 4. COMPARE ===
+      compareOrders(streamOrder, rawStorageOrder, recallOrder);
+
+      verifyTextBeforeTool(streamOrder, 'STREAM');
+      verifyTextBeforeTool(rawStorageOrder, 'RAW STORAGE');
+      verifyTextBeforeTool(recallOrder, 'RECALL');
+
+      // Verify search tools were called
+      const searchCalls = rawStorageOrder.filter(o => o.content === 'search');
+      expect(searchCalls.length).toBeGreaterThanOrEqual(1);
+    }, 120000);
+
+    it('should match stream order exactly in storage', async () => {
+      if (skipIfNoApiKey()) return;
+
+      const memory = createMemory();
+      const tools = createWeatherTools();
+
+      const agent = new Agent({
+        id: `exact-match-agent-${modelConfig.name}`,
+        name: 'Exact Match Agent',
+        instructions: `You are a weather assistant. When asked about weather, first explain what you will do, then get the current weather, explain what you found, then get the forecast, and finally summarize everything. Always be verbose between tool calls.`,
+        model: modelConfig.model,
+        memory,
+        tools,
+      });
+
+      const threadId = randomUUID();
+      const resourceId = 'exact-match-test';
+
+      console.log('\n========================================');
+      console.log(`TEST: Exact Stream-Storage Match (${modelConfig.name})`);
+      console.log('========================================');
+
+      // === STREAM ===
+      const streamOrder: OrderEntry[] = [];
+      let textAccumulator = '';
+
+      const stream = await agent.stream("What's the weather in NYC?", {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 5,
+      });
+
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          textAccumulator += chunk.payload?.text || '';
+        } else if (chunk.type === 'text-end' && textAccumulator.trim()) {
+          streamOrder.push({ type: 'TEXT', content: textAccumulator.substring(0, 50) });
+          textAccumulator = '';
+        } else if (chunk.type === 'tool-call') {
+          streamOrder.push({ type: 'TOOL', content: chunk.payload?.toolName });
+        } else if (chunk.type === 'step-start') {
+          streamOrder.push({ type: 'STEP' });
+        }
+      }
+
+      await delay(500);
+
+      // === RAW STORAGE ===
+      const rawResult = await memory.storage.listMessages({ threadId, resourceId });
+      const rawAssistant = rawResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
+      const rawStorageOrder: OrderEntry[] = [];
+      for (const msg of rawAssistant) {
+        rawStorageOrder.push(...extractOrder(msg.content.parts || []));
+      }
+
+      // === RECALL ===
+      const recallResult = await memory.recall({ threadId, resourceId });
+      const recallAssistant = recallResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
+      const recallOrder: OrderEntry[] = [];
+      for (const msg of recallAssistant) {
+        recallOrder.push(...extractOrder(msg.content.parts || []));
+      }
+
+      // === COMPARE ===
+      const { rawVsRecall } = compareOrders(streamOrder, rawStorageOrder, recallOrder);
+
+      // If stream had TEXT before TOOL, verify it's preserved
+      const streamFirstText = streamOrder.findIndex(o => o.type === 'TEXT');
+      const streamFirstTool = streamOrder.findIndex(o => o.type === 'TOOL');
+
+      if (streamFirstText !== -1 && streamFirstTool !== -1 && streamFirstText < streamFirstTool) {
+        console.log('\n🔍 Stream had TEXT before TOOL - this MUST be preserved');
+
+        const rawFirstText = rawStorageOrder.findIndex(o => o.type === 'TEXT');
+        const rawFirstTool = rawStorageOrder.findIndex(o => o.type === 'TOOL');
+
+        if (rawFirstText === -1) {
+          console.log('❌ BUG (Issue #9909): Text MISSING in raw storage!');
+          expect.fail('Text that was streamed is missing from raw storage');
+        } else if (rawFirstText >= rawFirstTool) {
+          console.log('❌ BUG (Issue #9909): Text appears AFTER tool in raw storage!');
+          expect(rawFirstText).toBeLessThan(rawFirstTool);
+        }
+
+        const recallFirstText = recallOrder.findIndex(o => o.type === 'TEXT');
+        const recallFirstTool = recallOrder.findIndex(o => o.type === 'TOOL');
+
+        if (recallFirstText === -1) {
+          console.log('❌ BUG (Issue #9909): Text MISSING in recall!');
+          expect.fail('Text that was streamed is missing from recall');
+        } else if (recallFirstText >= recallFirstTool) {
+          console.log('❌ BUG (Issue #9909): Text appears AFTER tool in recall!');
+          expect(recallFirstText).toBeLessThan(recallFirstTool);
+        }
+      }
+
+      // Raw and recall should always match
+      expect(rawVsRecall).toBe(true);
+    }, 90000);
+  });
+}
