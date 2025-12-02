@@ -18,7 +18,11 @@ import type {
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
 } from '../types';
-import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import {
+  createJsonTextStreamTransformer,
+  createObjectStreamTransformer,
+  validateOutputValue,
+} from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
 
@@ -303,8 +307,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               break;
             case 'object-result':
               self.#bufferedObject = chunk.object;
-              // Only resolve if not already rejected by validation error
-              if (self.#delayedPromises.object.status.type === 'pending') {
+              // Track if the object came from a processor (e.g., StructuredOutputProcessor)
+              // If so, we should resolve immediately since the processor already produced the final object
+              // Otherwise, defer resolution to finish step so output processors can modify the text
+              const isFromProcessor = chunk.metadata?.from === 'structured-output';
+              if (isFromProcessor && self.#delayedPromises.object.status.type === 'pending') {
                 self.#delayedPromises.object.resolve(chunk.object);
               }
               break;
@@ -586,6 +593,43 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.text.resolve(outputText);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
 
+                  // Resolve object with processed text parsed and validated as JSON
+                  // Only attempt if object promise is still pending (not resolved by StructuredOutputProcessor)
+                  // and there's a schema and buffered object (meaning LLM produced structured output)
+                  if (
+                    self.#delayedPromises.object.status.type === 'pending' &&
+                    self.#options.structuredOutput?.schema &&
+                    self.#bufferedObject !== undefined
+                  ) {
+                    const structuredOutput = self.#options.structuredOutput;
+                    const handleValidationError = (error: Error) => {
+                      if (structuredOutput.errorStrategy === 'warn') {
+                        self.logger?.warn(error.message);
+                        self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                      } else if (structuredOutput.errorStrategy === 'fallback') {
+                        self.#delayedPromises.object.resolve(
+                          structuredOutput.fallbackValue as InferSchemaOutput<OUTPUT>,
+                        );
+                      } else {
+                        self.#delayedPromises.object.reject(error);
+                      }
+                    };
+
+                    try {
+                      const parsedObject = JSON.parse(outputText);
+                      const validationResult = await validateOutputValue(parsedObject, structuredOutput.schema);
+                      if (validationResult.success) {
+                        self.#delayedPromises.object.resolve(validationResult.value as InferSchemaOutput<OUTPUT>);
+                      } else {
+                        handleValidationError(validationResult.error);
+                      }
+                    } catch (parseError) {
+                      handleValidationError(
+                        new Error('Failed to parse processed output as JSON', { cause: parseError }),
+                      );
+                    }
+                  }
+
                   // Update response with processed messages after output processors have run
                   if (chunk.payload.metadata) {
                     const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
@@ -599,6 +643,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   const textContent = self.#bufferedText.join('');
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
+
+                  // Resolve object with buffered object if still pending
+                  if (self.#delayedPromises.object.status.type === 'pending') {
+                    self.#delayedPromises.object.resolve(self.#bufferedObject as InferSchemaOutput<OUTPUT>);
+                  }
                 }
               } catch (error) {
                 if (error instanceof TripWire) {
@@ -624,7 +673,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
               self.#delayedPromises.response.resolve(response as LLMStepResult<OUTPUT>['response']);
               self.#delayedPromises.request.resolve(self.#request || {});
-              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+              // Note: text is already resolved in the try-catch block above (lines 586, 600, 608, 614)
+              // for all cases: processor, non-processor, and error handling
               const reasoningText =
                 self.#bufferedReasoning.length > 0
                   ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')

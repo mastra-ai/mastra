@@ -13,6 +13,94 @@ import type { ChunkType } from '../types';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput, ZodLikePartialSchema } from './schema';
 
+/**
+ * Checks if the schema is a Zod schema with safeParse method.
+ */
+function isZodSchema(schema: unknown): schema is z3.ZodType<any, z3.ZodTypeDef, any> | z4.ZodType<any, any> {
+  return (
+    schema !== undefined &&
+    schema !== null &&
+    typeof schema === 'object' &&
+    'safeParse' in schema &&
+    typeof schema.safeParse === 'function'
+  );
+}
+
+/**
+ * Validates a value against the schema, preferring Zod's safeParse.
+ * This is a standalone utility function that can be used outside of the BaseOutputHandler class.
+ */
+export async function validateOutputValue<OUTPUT extends OutputSchema = undefined>(
+  value: unknown,
+  schema: OUTPUT | undefined,
+): Promise<ValidationResult<InferSchemaOutput<OUTPUT>>> {
+  if (!schema) {
+    return {
+      success: true,
+      value: value as InferSchemaOutput<OUTPUT>,
+    };
+  }
+
+  if (isZodSchema(schema)) {
+    try {
+      const result = schema.safeParse(value);
+      if (result.success) {
+        return {
+          success: true,
+          value: result.data as InferSchemaOutput<OUTPUT>,
+        };
+      } else {
+        return {
+          success: false,
+          error: new MastraError(
+            {
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.SYSTEM,
+              id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
+              text: `Structured output validation failed\n${z4.prettifyError(result.error)}\n`,
+              details: {
+                value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+              },
+            },
+            result.error,
+          ),
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error('Zod validation failed', { cause: error }),
+      };
+    }
+  }
+
+  try {
+    if (typeof schema === 'object' && !(schema as Schema<any>).jsonSchema) {
+      // Plain JSONSchema7 object - wrap it using jsonSchema()
+      const result = await safeValidateTypes({ value, schema: jsonSchema(schema as JSONSchema7) });
+      return result as ValidationResult<InferSchemaOutput<OUTPUT>>;
+    } else if ((schema as Schema<any>).jsonSchema) {
+      // Already an AI SDK Schema - use it directly
+      const result = await safeValidateTypes({
+        value,
+        schema: schema as Schema<InferSchemaOutput<OUTPUT>>,
+      });
+      return result;
+    } else {
+      // Should not reach here, but handle as fallback
+      return {
+        success: true,
+        value: value as InferSchemaOutput<OUTPUT>,
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error : new Error('Validation failed', { cause: error }),
+    };
+  }
+}
+
 interface ProcessPartialChunkParams {
   /** Text accumulated from streaming so far */
   accumulatedText: string;
@@ -71,7 +159,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
 
     if (
       options.validatePartialChunks &&
-      this.isZodSchema(schema) &&
+      isZodSchema(schema) &&
       'partial' in schema &&
       typeof schema.partial === 'function'
     ) {
@@ -81,87 +169,10 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
   }
 
   /**
-   * Checks if the original schema is a Zod schema with safeParse method.
-   */
-  protected isZodSchema(schema: unknown): schema is z3.ZodType<any, z3.ZodTypeDef, any> | z4.ZodType<any, any> {
-    return (
-      schema !== undefined &&
-      schema !== null &&
-      typeof schema === 'object' &&
-      'safeParse' in schema &&
-      typeof schema.safeParse === 'function'
-    );
-  }
-
-  /**
    * Validates a value against the schema, preferring Zod's safeParse.
    */
   protected async validateValue(value: unknown): Promise<ValidationResult<InferSchemaOutput<OUTPUT>>> {
-    if (!this.schema) {
-      return {
-        success: true,
-        value: value as InferSchemaOutput<OUTPUT>,
-      };
-    }
-
-    if (this.isZodSchema(this.schema)) {
-      try {
-        const result = this.schema.safeParse(value);
-        if (result.success) {
-          return {
-            success: true,
-            value: result.data as InferSchemaOutput<OUTPUT>,
-          };
-        } else {
-          return {
-            success: false,
-            error: new MastraError(
-              {
-                domain: ErrorDomain.AGENT,
-                category: ErrorCategory.SYSTEM,
-                id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
-                text: `Structured output validation failed\n${z4.prettifyError(result.error)}\n`,
-                details: {
-                  value: typeof value === 'object' ? JSON.stringify(value) : String(value),
-                },
-              },
-              result.error,
-            ),
-          };
-        }
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error : new Error('Zod validation failed', { cause: error }),
-        };
-      }
-    }
-
-    try {
-      if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
-        // Plain JSONSchema7 object - wrap it using jsonSchema()
-        const result = await safeValidateTypes({ value, schema: jsonSchema(this.schema as JSONSchema7) });
-        return result as ValidationResult<InferSchemaOutput<OUTPUT>>;
-      } else if ((this.schema as Schema<any>).jsonSchema) {
-        // Already an AI SDK Schema - use it directly
-        const result = await safeValidateTypes({
-          value,
-          schema: this.schema as Schema<InferSchemaOutput<OUTPUT>>,
-        });
-        return result;
-      } else {
-        // Should not reach here, but handle as fallback
-        return {
-          success: true,
-          value: value as InferSchemaOutput<OUTPUT>,
-        };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error : new Error('Validation failed', { cause: error }),
-      };
-    }
+    return validateOutputValue(value, this.schema);
   }
 
   /**
@@ -386,7 +397,7 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
     // Get enum values from the schema (need to wrap it first to get jsonSchema)
     let enumValues: unknown[] | undefined;
 
-    if (this.isZodSchema(this.schema)) {
+    if (isZodSchema(this.schema)) {
       const wrappedSchema = asSchema(this.schema);
       enumValues = wrappedSchema.jsonSchema?.enum;
     } else if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
