@@ -1431,8 +1431,8 @@ describe('LangfuseExporter', () => {
         isRoot: true,
         attributes: { agentId: 'agent-123' },
         metadata: { userId: 'user-456' },
+        tags: ['production', 'experiment-v2', 'user-request'],
       });
-      (rootSpanWithTags as any).tags = ['production', 'experiment-v2', 'user-request'];
 
       const event: TracingEvent = {
         type: TracingEventType.SPAN_STARTED,
@@ -1461,8 +1461,8 @@ describe('LangfuseExporter', () => {
         type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: { agentId: 'agent-123' },
+        tags: [],
       });
-      (rootSpanEmptyTags as any).tags = [];
 
       const event: TracingEvent = {
         type: TracingEventType.SPAN_STARTED,
@@ -1514,8 +1514,8 @@ describe('LangfuseExporter', () => {
         type: SpanType.WORKFLOW_RUN,
         isRoot: true,
         attributes: { workflowId: 'wf-123' },
+        tags: ['batch-processing', 'priority-high'],
       });
-      (workflowSpanWithTags as any).tags = ['batch-processing', 'priority-high'];
 
       const event: TracingEvent = {
         type: TracingEventType.SPAN_STARTED,
@@ -1542,8 +1542,8 @@ describe('LangfuseExporter', () => {
         type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
+        tags: ['root-tag'],
       });
-      (rootSpan as any).tags = ['root-tag'];
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
@@ -1555,18 +1555,18 @@ describe('LangfuseExporter', () => {
       mockSpan.span.mockClear();
 
       // Create child span (should not have tags even if we set them)
+      // Child spans should not have tags set by the system
+      // but let's verify the exporter handles it correctly even if accidentally set
       const childSpan = createMockSpan({
         id: 'child-span-id',
         name: 'child-tool',
         type: SpanType.TOOL_CALL,
         isRoot: false,
         attributes: { toolId: 'calculator' },
+        tags: ['should-not-appear'],
       });
       childSpan.traceId = 'root-span-id';
       childSpan.parentSpanId = 'root-span-id';
-      // Child spans should not have tags set by the system
-      // but let's verify the exporter handles it correctly even if accidentally set
-      (childSpan as any).tags = ['should-not-appear'];
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
@@ -1632,6 +1632,7 @@ function createMockSpan({
   input,
   output,
   errorInfo,
+  tags,
 }: {
   id: string;
   name: string;
@@ -1642,6 +1643,7 @@ function createMockSpan({
   input?: any;
   output?: any;
   errorInfo?: any;
+  tags?: string[];
 }): AnyExportedSpan {
   return {
     id,
@@ -1652,6 +1654,7 @@ function createMockSpan({
     input,
     output,
     errorInfo,
+    tags,
     startTime: new Date(),
     endTime: undefined,
     traceId: isRoot ? id : 'parent-trace-id',
