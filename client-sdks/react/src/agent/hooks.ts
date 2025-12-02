@@ -12,6 +12,7 @@ import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkT
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
 import { v4 as uuid } from '@lukeed/uuid';
+import { TracingOptions } from '@mastra/core/observability';
 
 export interface MastraChatProps {
   agentId: string;
@@ -25,6 +26,7 @@ interface SharedArgs {
   threadId?: string;
   modelSettings?: ModelSettings;
   signal?: AbortSignal;
+  tracingOptions?: TracingOptions;
 }
 
 export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMessage[] } & (
@@ -79,6 +81,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     modelSettings,
     signal,
     onFinish,
+    tracingOptions,
   }: GenerateArgs) => {
     const {
       frequencyPenalty,
@@ -120,6 +123,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       requestContext,
       ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
       providerOptions: providerOptions as any,
+      tracingOptions,
     });
 
     setIsRunning(false);
@@ -137,7 +141,15 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     }
   };
 
-  const stream = async ({ coreUserMessages, requestContext, threadId, onChunk, modelSettings, signal }: StreamArgs) => {
+  const stream = async ({
+    coreUserMessages,
+    requestContext,
+    threadId,
+    onChunk,
+    modelSettings,
+    signal,
+    tracingOptions,
+  }: StreamArgs) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -183,6 +195,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
+      tracingOptions,
     });
 
     _onChunk.current = onChunk;
@@ -208,6 +221,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     onNetworkChunk,
     modelSettings,
     signal,
+    tracingOptions,
   }: NetworkArgs) => {
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
@@ -240,6 +254,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       runId,
       requestContext,
       ...(threadId ? { thread: threadId, resourceId: resourceId || agentId } : {}),
+      tracingOptions,
     });
 
     const transformer = new AISdkNetworkTransformer();

@@ -486,6 +486,11 @@ const sidebars = {
                   id: "observability/tracing/exporters/otel",
                   label: "OpenTelemetry",
                 },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/posthog",
+                  label: "PostHog",
+                },
               ],
             },
             {
