@@ -43,8 +43,9 @@ export interface StreamOptions {
  * This class extends `MastraServerBase` to inherit app storage functionality
  * and provides the framework for registering routes, middleware, and handling requests.
  *
- * Concrete implementations (like `MastraServer` from @mastra/hono or @mastra/express) extend
- * this class and implement the abstract methods for their specific framework.
+ * Framework-specific adapters in @mastra/hono and @mastra/express extend this class
+ * (both named `MastraServer` in their respective packages) and implement the abstract
+ * methods for their specific framework.
  *
  * @template TApp - The type of the server app (e.g., Hono, Express Application)
  * @template TRequest - The type of the request object
@@ -87,7 +88,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     customRouteAuthConfig?: Map<string, boolean>;
     streamOptions?: StreamOptions;
   }) {
-    super({ app, name: 'MastraServerAdapter' });
+    super({ app, name: 'MastraServer' });
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
