@@ -126,10 +126,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Extract metadata from RequestContext
     const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, metadata, traceState);
 
+    // Tags are only passed for root spans (no parent)
+    const tags = !options.parent ? tracingOptions?.tags : undefined;
+
     const span = this.createSpan<TType>({
       ...rest,
       metadata: enrichedMetadata,
       traceState,
+      tags,
     });
 
     if (span.isEvent) {

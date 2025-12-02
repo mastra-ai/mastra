@@ -365,6 +365,11 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   observabilityInstance: ObservabilityInstance;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
+  /**
+   * Tags for this trace (only set on root spans).
+   * Tags are string labels used to categorize and filter traces.
+   */
+  tags?: string[];
 
   // Methods for span lifecycle
   /** End the span */
@@ -497,6 +502,11 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   parentSpanId?: string;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
+  /**
+   * Tags for this trace (only present on root spans).
+   * Tags are string labels used to categorize and filter traces.
+   */
+  tags?: string[];
 }
 
 export interface IModelSpanTracker {
@@ -608,6 +618,11 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   parentSpanId?: string;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
+  /**
+   * Tags for this trace (only used for root spans).
+   * Tags are string labels used to categorize and filter traces.
+   */
+  tags?: string[];
 }
 
 /**
@@ -773,6 +788,13 @@ export interface TracingOptions {
    * If provided, the root span will be created as a child of this span.
    */
   parentSpanId?: string;
+  /**
+   * Tags to apply to this trace.
+   * Tags are string labels that can be used to categorize and filter traces
+   * in observability platforms like Braintrust and Langfuse.
+   * Note: Tags are only applied to the root span of a trace.
+   */
+  tags?: string[];
 }
 
 export interface SpanIds {
