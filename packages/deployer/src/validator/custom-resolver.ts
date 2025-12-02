@@ -3,7 +3,6 @@ import { readFile } from 'node:fs/promises';
 import type { ResolveHookContext } from 'node:module';
 import { builtinModules } from 'node:module';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { isDependencyPartOfPackage } from '../build/utils';
 
 const cache = new Map<string, Record<string, string>>();
