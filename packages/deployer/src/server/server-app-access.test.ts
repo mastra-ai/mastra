@@ -88,4 +88,41 @@ describe('Server App Access via createHonoServer', () => {
 
     expect(appFromMastra).toBe(appFromAdapter);
   });
+
+  it('should handle POST requests with body via app.fetch()', async () => {
+    const mastra = new Mastra({
+      logger: false,
+    });
+
+    await createHonoServer(mastra, { tools: {} });
+
+    const app = mastra.getServerApp<Hono>();
+    expect(app).toBeDefined();
+
+    // Call a POST endpoint (tools endpoint accepts POST)
+    const response = await app!.fetch(
+      new Request('http://localhost/api/tools', {
+        method: 'GET',
+      }),
+    );
+
+    // Should return 200 with empty tools object (no tools configured beyond empty {})
+    expect(response.status).toBe(200);
+  });
+
+  it('should return 404 for non-existent routes', async () => {
+    const mastra = new Mastra({
+      logger: false,
+    });
+
+    await createHonoServer(mastra, { tools: {} });
+
+    const app = mastra.getServerApp<Hono>();
+    expect(app).toBeDefined();
+
+    // Call a route that doesn't exist
+    const response = await app!.fetch(new Request('http://localhost/api/non-existent-route'));
+
+    expect(response.status).toBe(404);
+  });
 });

@@ -57,6 +57,22 @@ describe('MastraServer (Hono) - Server App Access', () => {
       expect(appFromMastra).toBe(app);
     });
 
+    it('should return the same app from both adapter and mastra', () => {
+      const mastra = new Mastra({ logger: false });
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+      mastra.setServerAdapter(adapter);
+
+      const appFromAdapter = adapter.getApp<Hono>();
+      const appFromMastra = mastra.getServerApp<Hono>();
+      const adapterFromMastra = mastra.getServerAdapter();
+      const appFromRetrievedAdapter = adapterFromMastra?.getApp<Hono>();
+
+      expect(appFromAdapter).toBe(app);
+      expect(appFromMastra).toBe(app);
+      expect(appFromRetrievedAdapter).toBe(app);
+    });
+
     it('should allow calling routes directly via app.fetch() after setup', async () => {
       const mastra = new Mastra({ logger: false });
       const app = new Hono();

@@ -71,7 +71,6 @@ describe('Server App Access', () => {
       const mockApp = { fetch: () => Promise.resolve(new Response('ok')) };
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
-        setApp: () => {},
         __setLogger: () => {}, // Required by MastraBase
       };
 
@@ -96,7 +95,6 @@ describe('Server App Access', () => {
       // Create a mock adapter
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
-        setApp: () => {},
         __setLogger: () => {}, // Required by MastraBase
       };
 
@@ -126,7 +124,6 @@ describe('Server App Access', () => {
 
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
-        setApp: () => {},
         __setLogger: () => {}, // Required by MastraBase
       };
 
@@ -164,7 +161,6 @@ describe('Server App Access', () => {
 
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
-        setApp: () => {},
         __setLogger: () => {}, // Required by MastraBase
       };
 
@@ -267,7 +263,6 @@ describe('Server App Access', () => {
       const mockApp = createMockApiApp();
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
-        setApp: () => {},
         __setLogger: () => {},
       };
 
@@ -305,7 +300,6 @@ describe('Server App Access', () => {
       const mockApp = createMockApiApp();
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
-        setApp: () => {},
         __setLogger: () => {},
       };
 
@@ -345,7 +339,6 @@ describe('Server App Access', () => {
       const mockApp = createMockApiApp();
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
-        setApp: () => {},
         __setLogger: () => {},
       };
 
@@ -387,7 +380,6 @@ describe('Server App Access', () => {
       const mockApp = createMockApiApp();
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
-        setApp: () => {},
         __setLogger: () => {},
       };
 
@@ -409,7 +401,6 @@ describe('Server App Access', () => {
       const mockApp = createMockApiApp();
       const mockAdapter = {
         getApp: <T = unknown>() => mockApp as T,
-        setApp: () => {},
         __setLogger: () => {},
       };
 
