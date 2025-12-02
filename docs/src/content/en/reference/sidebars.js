@@ -397,6 +397,11 @@ const sidebars = {
           id: "vectors/couchbase",
           label: "Couchbase Vector Store",
         },
+        {
+          type: "doc",
+          id: "vectors/elasticsearch",
+          label: "ElasticSearch Vector Store",
+        },
         { type: "doc", id: "vectors/lance", label: "Lance Vector Store" },
         { type: "doc", id: "vectors/libsql", label: "LibSQL Vector Store" },
         { type: "doc", id: "vectors/mongodb", label: "MongoDB Vector Store" },
