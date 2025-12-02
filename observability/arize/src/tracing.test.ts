@@ -1,4 +1,5 @@
 import type { Mutable } from '@arizeai/openinference-genai/types';
+import { SemanticConventions } from '@arizeai/openinference-semantic-conventions';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -192,5 +193,90 @@ describe('ArizeExporter', () => {
         "output.value": "{"text":"The weather in Tokyo is sunny."}",
       }
     `);
+  });
+
+  it('maps threadId and userId attributes to OpenInference session/user identifiers', async () => {
+    exporter = new ArizeExporter({
+      endpoint: 'http://localhost:4318/v1/traces',
+    });
+
+    const testSpan: Mutable<AnyExportedSpan> = {
+      id: 'span-2',
+      traceId: 'trace-2',
+      type: SpanType.MODEL_GENERATION,
+      name: 'Session/User Mapping',
+      startTime: new Date(),
+      endTime: new Date(),
+      input: { messages: [] },
+      output: { text: 'ok' },
+      attributes: {
+        model: 'gpt-4',
+        provider: 'openai',
+      },
+      metadata: {
+        threadId: 'thread-123',
+        userId: 'user-456',
+      },
+    } as unknown as AnyExportedSpan;
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: testSpan,
+    });
+
+    const exportedAttributes = exportedSpans[0].attributes;
+
+    expect(exportedAttributes[SemanticConventions.SESSION_ID]).toBe('thread-123');
+    expect(exportedAttributes[SemanticConventions.USER_ID]).toBe('user-456');
+    expect(exportedAttributes.threadId).toBeUndefined();
+    expect(exportedAttributes.userId).toBeUndefined();
+  });
+
+  it('includes custom attributes in OpenInference metadata payload', async () => {
+    exporter = new ArizeExporter({
+      endpoint: 'http://localhost:4318/v1/traces',
+    });
+
+    const testSpan: Mutable<AnyExportedSpan> = {
+      id: 'span-3',
+      traceId: 'trace-3',
+      type: SpanType.MODEL_GENERATION,
+      name: 'Custom Metadata',
+      startTime: new Date(),
+      endTime: new Date(),
+      input: { text: 'hi' },
+      output: { text: 'hello' },
+      attributes: {
+        model: 'gpt-4',
+        provider: 'openai',
+      },
+      metadata: {
+        companyId: 'acme-co',
+        featureFlag: 'beta',
+        correlation_id: 'corr-123',
+        // reserved fields should not be present in metadata blob
+        input: 'raw-input',
+        output: 'raw-output',
+        sessionId: 'should-not-appear',
+      },
+    } as unknown as AnyExportedSpan;
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: testSpan,
+    });
+
+    const exportedAttributes = exportedSpans[0].attributes;
+    const metadata = exportedAttributes[SemanticConventions.METADATA];
+    expect(typeof metadata).toBe('string');
+    const parsed = JSON.parse(metadata as string);
+    expect(parsed).toMatchObject({
+      companyId: 'acme-co',
+      featureFlag: 'beta',
+      correlation_id: 'corr-123',
+    });
+    expect(parsed.input).toBeUndefined();
+    expect(parsed.output).toBeUndefined();
+    expect(parsed.sessionId).toBeUndefined();
   });
 });
