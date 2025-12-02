@@ -562,7 +562,7 @@ class MastraScorer<
     }
 
     // Resolve the model configuration to a LanguageModel instance
-    // Pass the Mastra instance to enable custom gateway resolution (fixes #10745)
+    // Pass the Mastra instance to enable custom gateway resolution
     const resolvedModel = await resolveModelConfig(modelConfig, undefined, this.#mastra);
 
     const judge = new Agent({
