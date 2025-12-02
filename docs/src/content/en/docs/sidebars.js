@@ -41,6 +41,11 @@ const sidebars = {
           id: "getting-started/mcp-docs-server",
           label: "MCP Docs Server",
         },
+        {
+          type: "doc",
+          id: "getting-started/manual-install",
+          label: "Manual Install",
+        },
       ],
     },
     {
