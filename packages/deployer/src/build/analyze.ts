@@ -88,7 +88,8 @@ function validateError(
       const pkgNameRegex = /.*node_modules\/([^\/]+)\//;
       const stacktraceFrame = parsedStack.find(frame => frame.file && pkgNameRegex.test(frame.file));
       if (stacktraceFrame) {
-        moduleName = stacktraceFrame.file!.match(pkgNameRegex)![1];
+        const match = stacktraceFrame.file!.match(pkgNameRegex);
+        moduleName = match?.[1] ?? getPackageNameFromBundledModuleName(basename(file.name));
       } else {
         moduleName = getPackageNameFromBundledModuleName(basename(file.name));
       }
