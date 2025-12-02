@@ -177,103 +177,48 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
-### Enhanced streaming APIs are now standard
+### New `resumeStream()` method
 
-The experimental streaming APIs (`streamVNext`, `resumeStreamVNext`, `observeStreamVNext`) are now the standard streaming methods for workflows. The enhanced streaming system provides a more robust and feature-rich API for workflow execution monitoring.
+A new `resumeStream()` method is now available for resuming suspended workflows with streaming support. This method was previously only available as the experimental `resumeStreamVNext()`.
 
-#### Key changes
+```typescript showLineNumbers copy
+const stream = await run.stream({ inputData });
+const result = await stream.result;
 
-**Event structure**
+if (result.status === 'suspended') {
+  const resumedStream = await run.resumeStream({
+    resumeData: { value: 'resume data' },
+  });
+  const finalResult = await resumedStream.result;
+}
+```
 
-The event types have been updated to use workflow-specific prefixes for better clarity:
+See [Run.resumeStream()](/reference/v1/streaming/workflows/resumeStream) for details.
 
-- `start` → `workflow-start`
-- `step-start` → `workflow-step-start`
-- `step-finish` → `workflow-step-result`
-- `finish` → `workflow-finish`
-- Added: `workflow-step-output` for custom step outputs
+## Removed
 
-**Return type**
+### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
 
-The `stream()` method now returns a `MastraWorkflowStream` object that extends `ReadableStream` with additional workflow-specific properties:
+The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()` methods have been removed. These methods are now the standard implementation with updated event structures and return types.
 
-- `stream.status`: Promise resolving to the current workflow run status
-- `stream.result`: Promise resolving to the final workflow result
-- `stream.usage`: Promise resolving to token usage statistics
-- `stream.traceId`: Optional trace ID for execution tracking
-
-**New method: resumeStream()**
-
-A new `resumeStream()` method is now available for resuming suspended workflows with streaming support. This method was previously only available as `resumeStreamVNext()`.
-
-**New parameter: closeOnSuspend**
-
-The `stream()` method now accepts a `closeOnSuspend` parameter (default: `true`) to control whether the stream closes when a workflow suspends or remains open until completion.
-
-#### Migration examples
-
-**Event handling**
-
-Update your event type checks to use the new workflow-prefixed event names:
+To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
 
 ```diff
-  const stream = await run.stream({ inputData });
+- const { stream, getWorkflowState } = await run.streamVNext({ inputData });
++ const stream = await run.stream({ inputData });
 
   for await (const chunk of stream) {
 -   if (chunk.type === 'step-start') {
 +   if (chunk.type === 'workflow-step-start') {
-      console.log('Step started:', chunk.payload);
-    }
--   if (chunk.type === 'finish') {
-+   if (chunk.type === 'workflow-finish') {
-      console.log('Workflow finished:', chunk.payload);
+      console.log('Step started');
     }
   }
-```
 
-**Stream properties**
-
-The stream now returns properties directly on the stream object instead of a separate function:
-
-```diff
-- const { stream, getWorkflowState } = await run.stream({ inputData });
 - const result = await getWorkflowState();
-+ const stream = await run.stream({ inputData });
 + const result = await stream.result;
-+ const status = await stream.status;
-+ const usage = await stream.usage;
 ```
 
-**Resume streaming**
-
-The new `resumeStream()` method enables resuming suspended workflows with streaming:
-
-```diff
-  const result = await stream.result;
-
-  if (result.status === 'suspended') {
--   // Not available in old API
-+   const resumedStream = await run.resumeStream({
-+     resumeData: { value: 'resume data' },
-+   });
-+   const finalResult = await resumedStream.result;
-  }
-```
-
-**Observe streaming**
-
-The `observeStream()` method now uses the same enhanced event structure:
-
-```diff
-  const stream = await run.observeStream();
-
-  for await (const chunk of stream) {
--   if (chunk.type === 'step-start') { ... }
-+   if (chunk.type === 'workflow-step-start') { ... }
-  }
-```
-
-## Removed
+See [Run.stream()](/reference/v1/streaming/workflows/stream), [Run.resumeStream()](/reference/v1/streaming/workflows/resumeStream), and [Run.observeStream()](/reference/v1/streaming/workflows/observeStream) for details.
 
 ### Legacy workflows export
 
