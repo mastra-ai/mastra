@@ -125,6 +125,8 @@ Create a `.env` file in the root directory with the following content:
 OPENAI_API_KEY=
 COHERE_API_KEY=
 PINECONE_API_KEY=
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
 DB_URL=postgresql://postgres:postgres@localhost:5432/mastra
 ```
 

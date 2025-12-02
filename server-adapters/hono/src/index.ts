@@ -1,12 +1,16 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
-import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { MastraServerAdapter, redactStreamChunk } from '@mastra/server/server-adapter';
-import type { BodyLimitOptions, ServerRoute, StreamOptions } from '@mastra/server/server-adapter';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
+import { MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
+
+import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
 // Export type definitions for Hono app configuration
 export type HonoVariables = {
@@ -22,38 +26,7 @@ export type HonoVariables = {
 
 export type HonoBindings = {};
 
-export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, HonoRequest, Context> {
-  private taskStore: InMemoryTaskStore;
-  private customRouteAuthConfig?: Map<string, boolean>;
-  private playground?: boolean;
-  private isDev?: boolean;
-
-  constructor({
-    mastra,
-    tools,
-    taskStore,
-    customRouteAuthConfig,
-    playground,
-    isDev,
-    bodyLimitOptions,
-    streamOptions,
-  }: {
-    mastra: Mastra;
-    tools?: Record<string, Tool>;
-    taskStore?: InMemoryTaskStore;
-    customRouteAuthConfig?: Map<string, boolean>;
-    playground?: boolean;
-    isDev?: boolean;
-    bodyLimitOptions?: BodyLimitOptions;
-    streamOptions?: StreamOptions;
-  }) {
-    super({ mastra, bodyLimitOptions, tools, streamOptions });
-    this.taskStore = taskStore || new InMemoryTaskStore();
-    this.customRouteAuthConfig = customRouteAuthConfig;
-    this.playground = playground;
-    this.isDev = isDev;
-  }
-
+export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
       // Parse request context from request body and add to context
@@ -109,8 +82,8 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
       c.set('taskStore', this.taskStore);
       c.set('playground', this.playground === true);
       c.set('isDev', this.isDev === true);
-      c.set('customRouteAuthConfig', this.customRouteAuthConfig);
       c.set('abortSignal', c.req.raw.signal);
+      c.set('customRouteAuthConfig', this.customRouteAuthConfig);
 
       return next();
     };
@@ -184,6 +157,47 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     } else if (route.responseType === 'datastream-response') {
       const fetchResponse = result as globalThis.Response;
       return fetchResponse;
+    } else if (route.responseType === 'mcp-http') {
+      // MCP Streamable HTTP transport
+      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { req, res } = toReqRes(response.req.raw);
+
+      try {
+        await server.startHTTP({
+          url: new URL(response.req.url),
+          httpPath,
+          req,
+          res,
+        });
+        return await toFetchResponse(res);
+      } catch {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal server error' },
+              id: null,
+            }),
+          );
+          return await toFetchResponse(res);
+        }
+        return await toFetchResponse(res);
+      }
+    } else if (route.responseType === 'mcp-sse') {
+      // MCP SSE transport
+      const { server, ssePath, messagePath } = result as MCPSseTransportResult;
+
+      try {
+        return await server.startHonoSSE({
+          url: new URL(response.req.url),
+          ssePath,
+          messagePath,
+          context: response,
+        });
+      } catch {
+        return response.json({ error: 'Error handling MCP SSE request' }, 500);
+      }
     } else {
       return response.status(500);
     }
@@ -238,7 +252,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
           try {
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
-            console.error('Error parsing body', error);
+            console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
             // Zod validation errors should return 400 Bad Request, not 500
             return c.json(
               {
@@ -285,15 +299,18 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     );
   }
 
-  registerContextMiddleware<E extends Env = any>(app: Hono<E, any, any>): void {
-    app.use('*', this.createContextMiddleware());
+  registerContextMiddleware(): void {
+    this.app.use('*', this.createContextMiddleware());
   }
 
-  async registerRoutes<E extends Env = any>(
-    app: Hono<E, any, any>,
-    { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
-  ): Promise<void> {
-    // Cast to base type for super call - safe because registerRoute is generic
-    await super.registerRoutes(app as any, { prefix, openapiPath });
+  registerAuthMiddleware(): void {
+    const authConfig = this.mastra.getServer()?.auth;
+    if (!authConfig) {
+      // No auth config, skip registration
+      return;
+    }
+
+    this.app.use('*', authenticationMiddleware);
+    this.app.use('*', authorizationMiddleware);
   }
 }

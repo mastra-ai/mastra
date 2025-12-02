@@ -57,6 +57,23 @@ export const serverDetailSchema = z.object({
   remotes: z.array(z.unknown()).optional(),
 });
 
+// Tool schemas
+export const mcpToolInfoSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  inputSchema: z.unknown(),
+  outputSchema: z.unknown().optional(),
+  toolType: z.string().optional(),
+});
+
+export const listMcpServerToolsResponseSchema = z.object({
+  tools: z.array(mcpToolInfoSchema),
+});
+
+export const executeToolResponseSchema = z.object({
+  result: z.unknown(),
+});
+
 // JSON-RPC error response schema
 export const jsonRpcErrorSchema = z.object({
   jsonrpc: z.literal('2.0'),

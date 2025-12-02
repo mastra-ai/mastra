@@ -2705,3 +2705,290 @@ describe('MCPServer - Tool Input Validation', () => {
     expect(invalidResult.message).toContain('Message must be at least 3 characters');
   });
 });
+
+/**
+ * Tests for readJsonBody functionality
+ *
+ * These tests verify that MCP server correctly handles request bodies
+ * from both pre-parsed middleware (like express.json()) and raw streams.
+ */
+describe('MCPServer readJsonBody compatibility', () => {
+  const READ_JSON_BODY_PORT = 9400 + Math.floor(Math.random() * 100);
+  let readJsonServer: MCPServer;
+  let readJsonHttpServer: http.Server;
+
+  const echoTool = createTool({
+    id: 'echo',
+    description: 'Echoes the input back',
+    inputSchema: z.object({
+      message: z.string(),
+    }),
+    execute: async ({ message }) => ({ echo: message }),
+  });
+
+  beforeAll(async () => {
+    readJsonServer = new MCPServer({
+      name: 'readJsonBodyTestServer',
+      version: '1.0.0',
+      tools: { echo: echoTool },
+    });
+
+    readJsonHttpServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url || '', `http://localhost:${READ_JSON_BODY_PORT}`);
+      await readJsonServer.startHTTP({
+        url,
+        httpPath: '/mcp',
+        req,
+        res,
+      });
+    });
+
+    await new Promise<void>(resolve => {
+      readJsonHttpServer.listen(READ_JSON_BODY_PORT, resolve);
+    });
+  });
+
+  afterAll(async () => {
+    await readJsonServer.close();
+    readJsonHttpServer.close();
+  });
+
+  describe('HTTP transport with raw stream (no middleware)', () => {
+    it('should read body from stream when no middleware has parsed it', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${READ_JSON_BODY_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from stream' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from stream');
+
+      await client.disconnect();
+    });
+  });
+
+  describe('HTTP transport with pre-parsed body (simulating express.json())', () => {
+    const PREPARSED_PORT = 9500 + Math.floor(Math.random() * 100);
+    let preParsedServer: MCPServer;
+    let preParsedHttpServer: http.Server;
+
+    beforeAll(async () => {
+      preParsedServer = new MCPServer({
+        name: 'preParsedBodyTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // Simulate express.json() by pre-parsing the body
+      preParsedHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${PREPARSED_PORT}`);
+
+        // Simulate express.json() middleware by reading and parsing body first
+        if (req.method === 'POST') {
+          let data = '';
+          for await (const chunk of req) {
+            data += chunk;
+          }
+          if (data) {
+            try {
+              (req as any).body = JSON.parse(data);
+            } catch {
+              // Ignore parse errors, let handler deal with it
+            }
+          }
+        }
+
+        await preParsedServer.startHTTP({
+          url,
+          httpPath: '/mcp',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        preParsedHttpServer.listen(PREPARSED_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await preParsedServer.close();
+      preParsedHttpServer.close();
+    });
+
+    it('should use pre-parsed body from req.body when available', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${PREPARSED_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from pre-parsed' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from pre-parsed');
+
+      await client.disconnect();
+    });
+
+    it('should handle multiple sequential requests with pre-parsed bodies', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${PREPARSED_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+
+      // Multiple calls to ensure session handling works
+      for (let i = 0; i < 3; i++) {
+        const result = await tools['test_echo'].execute!({ message: `request ${i}` });
+        const parsed = JSON.parse((result.content[0] as any).text);
+        expect(parsed.echo).toBe(`request ${i}`);
+      }
+
+      await client.disconnect();
+    });
+  });
+
+  describe('SSE transport with pre-parsed body', () => {
+    const SSE_PORT = 9600 + Math.floor(Math.random() * 100);
+    let sseServer: MCPServer;
+    let sseHttpServer: http.Server;
+
+    beforeAll(async () => {
+      sseServer = new MCPServer({
+        name: 'ssePreParsedTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // Simulate express.json() by pre-parsing the body for POST requests
+      sseHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${SSE_PORT}`);
+
+        // Simulate express.json() middleware
+        if (req.method === 'POST') {
+          let data = '';
+          for await (const chunk of req) {
+            data += chunk;
+          }
+          if (data) {
+            try {
+              (req as any).body = JSON.parse(data);
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+
+        await sseServer.startSSE({
+          url,
+          ssePath: '/sse',
+          messagePath: '/messages',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        sseHttpServer.listen(SSE_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await sseServer.close();
+      sseHttpServer.close();
+    });
+
+    it('should work with SSE transport when body is pre-parsed', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${SSE_PORT}/sse`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from SSE pre-parsed' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from SSE pre-parsed');
+
+      await client.disconnect();
+    });
+  });
+
+  describe('SSE transport with raw stream (no middleware)', () => {
+    const SSE_RAW_PORT = 9700 + Math.floor(Math.random() * 100);
+    let sseRawServer: MCPServer;
+    let sseRawHttpServer: http.Server;
+
+    beforeAll(async () => {
+      sseRawServer = new MCPServer({
+        name: 'sseRawTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // No body parsing - raw stream
+      sseRawHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${SSE_RAW_PORT}`);
+        await sseRawServer.startSSE({
+          url,
+          ssePath: '/sse',
+          messagePath: '/messages',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        sseRawHttpServer.listen(SSE_RAW_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await sseRawServer.close();
+      sseRawHttpServer.close();
+    });
+
+    it('should work with SSE transport when reading from raw stream', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${SSE_RAW_PORT}/sse`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from SSE raw stream' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from SSE raw stream');
+
+      await client.disconnect();
+    });
+  });
+});
