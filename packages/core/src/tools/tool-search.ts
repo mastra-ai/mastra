@@ -9,12 +9,13 @@ import { createTool } from './tool';
 import type { ToolAction, ToolExecutionContext } from './types';
 
 /**
- * Represents a tool with its computed embedding for search
+ * Represents a tool with its computed data for search
  */
 interface IndexedTool {
   id: string;
   description: string;
-  embedding: number[];
+  searchText: string;
+  embedding?: number[];
   tool: ToolAction<any, any, any>;
 }
 
@@ -26,24 +27,164 @@ export interface ToolSearchResult {
   id: string;
   /** The tool description */
   description: string;
-  /** Similarity score (0-1, higher is more similar) */
+  /** Similarity/relevance score (higher is more relevant) */
   score: number;
   /** The original tool */
   tool: ToolAction<any, any, any>;
 }
 
 /**
- * Options for the tool search operation
+ * Search method for tool discovery
  */
-export interface ToolSearchOptions {
-  /** Maximum number of tools to return */
+export type ToolSearchMethod = 'regex' | 'bm25' | 'embedding';
+
+/**
+ * Configuration for createToolSearch
+ */
+export interface ToolSearchConfig {
+  /** Tools to register. Tools with `deferred: true` are loaded on-demand. */
+  tools: Record<string, ToolAction<any, any, any>>;
+  /** Search method: 'regex', 'bm25', or 'embedding' (default: 'bm25') */
+  method?: ToolSearchMethod;
+  /** Embedding model (required when method is 'embedding') */
+  embedder?: MastraEmbeddingModel<string>;
+  /** Custom ID for the search tool (defaults to 'tool_search') */
+  searchToolId?: string;
+  /** Custom description for the search tool */
+  searchToolDescription?: string;
+  /** Maximum number of tools to return in search results (defaults to 5) */
   topK?: number;
-  /** Minimum similarity score threshold (0-1) */
+  /** Minimum score threshold to load a tool (defaults to 0.3 for embedding, 0 for others) */
   minScore?: number;
 }
 
+// ============================================================================
+// Search Implementations
+// ============================================================================
+
 /**
- * Computes cosine similarity between two vectors
+ * Regex-based search - simple pattern matching
+ */
+function regexSearch(query: string, tools: Map<string, IndexedTool>, topK: number): ToolSearchResult[] {
+  const results: ToolSearchResult[] = [];
+
+  // Escape special regex characters and create pattern
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(escapedQuery, 'i');
+
+  for (const indexed of tools.values()) {
+    const matches = pattern.test(indexed.searchText);
+    if (matches) {
+      // Score based on how early the match appears and match length ratio
+      const matchIndex = indexed.searchText.toLowerCase().indexOf(query.toLowerCase());
+      const positionScore = matchIndex >= 0 ? 1 - matchIndex / indexed.searchText.length : 0;
+      const lengthScore = query.length / indexed.searchText.length;
+      const score = (positionScore + lengthScore) / 2;
+
+      results.push({
+        id: indexed.id,
+        description: indexed.description,
+        score: Math.min(1, score),
+        tool: indexed.tool,
+      });
+    }
+  }
+
+  results.sort((a, b) => b.score - a.score);
+  return results.slice(0, topK);
+}
+
+/**
+ * BM25-based search - term frequency with inverse document frequency
+ */
+function bm25Search(
+  query: string,
+  tools: Map<string, IndexedTool>,
+  topK: number,
+  k1 = 1.5,
+  b = 0.75,
+): ToolSearchResult[] {
+  const results: ToolSearchResult[] = [];
+  const queryTerms = tokenize(query);
+
+  if (queryTerms.length === 0) {
+    return [];
+  }
+
+  // Calculate average document length
+  let totalLength = 0;
+  for (const indexed of tools.values()) {
+    totalLength += tokenize(indexed.searchText).length;
+  }
+  const avgDocLength = totalLength / tools.size || 1;
+
+  // Calculate IDF for each query term
+  const idf: Record<string, number> = {};
+  for (const term of queryTerms) {
+    let docCount = 0;
+    for (const indexed of tools.values()) {
+      if (indexed.searchText.toLowerCase().includes(term)) {
+        docCount++;
+      }
+    }
+    // IDF with smoothing
+    idf[term] = Math.log((tools.size - docCount + 0.5) / (docCount + 0.5) + 1);
+  }
+
+  // Calculate BM25 score for each document
+  for (const indexed of tools.values()) {
+    const docTerms = tokenize(indexed.searchText);
+    const docLength = docTerms.length;
+
+    // Count term frequencies
+    const termFreq: Record<string, number> = {};
+    for (const term of docTerms) {
+      termFreq[term] = (termFreq[term] || 0) + 1;
+    }
+
+    let score = 0;
+    for (const term of queryTerms) {
+      const tf = termFreq[term] || 0;
+      if (tf > 0) {
+        const numerator = tf * (k1 + 1);
+        const denominator = tf + k1 * (1 - b + b * (docLength / avgDocLength));
+        score += (idf[term] || 0) * (numerator / denominator);
+      }
+    }
+
+    if (score > 0) {
+      results.push({
+        id: indexed.id,
+        description: indexed.description,
+        score,
+        tool: indexed.tool,
+      });
+    }
+  }
+
+  // Normalize scores to 0-1 range
+  const maxScore = Math.max(...results.map(r => r.score), 1);
+  for (const result of results) {
+    result.score = result.score / maxScore;
+  }
+
+  results.sort((a, b) => b.score - a.score);
+  return results.slice(0, topK);
+}
+
+/**
+ * Tokenize text into terms for BM25
+ */
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(term => term.length > 1);
+}
+
+/**
+ * Cosine similarity between two vectors
  */
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) {
@@ -67,7 +208,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
 /**
  * Default function to generate search text from a tool
  */
-function defaultGetSearchText(tool: ToolAction<any, any, any>, id: string): string {
+function getSearchText(tool: ToolAction<any, any, any>, id: string): string {
   const parts = [id, tool.description];
 
   // Include input schema field names if available
@@ -89,36 +230,6 @@ function defaultGetSearchText(tool: ToolAction<any, any, any>, id: string): stri
 const GLOBAL_THREAD_KEY = '__global__';
 
 /**
- * Configuration for DeferredToolset
- */
-export interface DeferredToolsetConfig {
-  /** The embedding model to use for creating tool embeddings */
-  embedder: MastraEmbeddingModel<string>;
-  /** Optional: Custom function to generate search text from a tool */
-  getSearchText?: (tool: ToolAction<any, any, any>, id: string) => string;
-  /** Custom ID for the search tool (defaults to 'tool_search') */
-  searchToolId?: string;
-  /** Custom description for the search tool */
-  searchToolDescription?: string;
-  /** Maximum number of tools to return in search results (defaults to 5) */
-  topK?: number;
-  /** Minimum similarity score to load a tool (defaults to 0.3) */
-  minScore?: number;
-}
-
-/**
- * Options for adding tools to a DeferredToolset
- */
-export interface AddToolOptions {
-  /**
-   * Whether to defer loading this tool.
-   * If not specified, uses the tool's `deferred` property.
-   * If the tool doesn't have a `deferred` property, defaults to false.
-   */
-  deferLoading?: boolean;
-}
-
-/**
  * Schema for the tool search input
  */
 const toolSearchInputSchema = z.object({
@@ -126,79 +237,20 @@ const toolSearchInputSchema = z.object({
 });
 
 /**
- * DeferredToolset manages tools with deferred loading, similar to Anthropic's Tool Search Tool.
+ * ToolSearch manages tools with deferred loading, similar to Anthropic's Tool Search Tool.
  *
  * Tools marked with `deferred: true` are not loaded into the agent's context initially.
  * Instead, the agent gets a search tool that can discover and load relevant tools on-demand.
  * Once loaded, tools remain available for subsequent calls within the same thread/session.
- *
- * This approach:
- * - Reduces initial context size (fewer tokens)
- * - Improves tool selection accuracy (agent only sees relevant tools)
- * - Preserves prompt caching (deferred tools not in initial prompt)
- * - Scales to hundreds of tools efficiently
- *
- * @example
- * ```typescript
- * import { DeferredToolset, createTool } from '@mastra/core/tools';
- * import { openai } from '@ai-sdk/openai';
- *
- * // Define tools with deferred: true on the tool itself
- * const helpTool = createTool({
- *   id: 'help',
- *   description: 'Get help',
- *   execute: async () => ({ message: 'How can I help?' }),
- * });
- *
- * const createPRTool = createTool({
- *   id: 'github.createPR',
- *   description: 'Create a GitHub pull request',
- *   deferred: true, // This tool will be loaded on-demand
- *   inputSchema: z.object({ title: z.string(), body: z.string() }),
- *   execute: async ({ title, body }) => { ... },
- * });
- *
- * const sendMessageTool = createTool({
- *   id: 'slack.sendMessage',
- *   description: 'Send a Slack message',
- *   deferred: true, // This tool will be loaded on-demand
- *   inputSchema: z.object({ channel: z.string(), message: z.string() }),
- *   execute: async ({ channel, message }) => { ... },
- * });
- *
- * // Create toolset and add tools - deferred property is respected automatically
- * const toolset = new DeferredToolset({
- *   embedder: openai.embedding('text-embedding-3-small'),
- * });
- *
- * await toolset.addTools({
- *   help: helpTool,           // Not deferred - always loaded
- *   createPR: createPRTool,   // Deferred - loaded on-demand
- *   sendMessage: sendMessageTool, // Deferred - loaded on-demand
- * });
- *
- * // Use with an agent
- * const response = await agent.generate('Create a GitHub PR for this fix', {
- *   toolsets: {
- *     myTools: toolset.getTools(threadId),
- *   },
- * });
- *
- * // The agent will:
- * // 1. See only help + tool_search initially
- * // 2. Call tool_search with "github PR"
- * // 3. createPR gets loaded into context
- * // 4. Agent can now call createPR directly
- * ```
  */
-export class DeferredToolset {
-  private embedder: MastraEmbeddingModel<string>;
-  private getSearchText: (tool: ToolAction<any, any, any>, id: string) => string;
+export class ToolSearch {
+  private method: ToolSearchMethod;
+  private embedder?: MastraEmbeddingModel<string>;
 
-  /** Always-loaded tools (deferLoading: false) */
+  /** Always-loaded tools (deferred: false or undefined) */
   private alwaysLoadedTools: Map<string, ToolAction<any, any, any>> = new Map();
 
-  /** Deferred tools with their embeddings */
+  /** Deferred tools with their search data */
   private deferredTools: Map<string, IndexedTool> = new Map();
 
   /** Loaded tool IDs per thread */
@@ -210,24 +262,29 @@ export class DeferredToolset {
   private topK: number;
   private minScore: number;
 
-  /** The search tool instance */
-  private _searchTool: Tool<typeof toolSearchInputSchema, any, any, any, any, string> | null = null;
-
-  constructor(config: DeferredToolsetConfig) {
+  constructor(config: ToolSearchConfig) {
+    this.method = config.method ?? 'bm25';
     this.embedder = config.embedder;
-    this.getSearchText = config.getSearchText ?? defaultGetSearchText;
     this.searchToolId = config.searchToolId ?? 'tool_search';
     this.searchToolDescription =
       config.searchToolDescription ??
       'Search for available tools based on what you need to accomplish. Found tools will be loaded and available for use.';
     this.topK = config.topK ?? 5;
-    this.minScore = config.minScore ?? 0.3;
+    this.minScore = config.minScore ?? (this.method === 'embedding' ? 0.3 : 0);
+
+    if (this.method === 'embedding' && !this.embedder) {
+      throw new Error('Embedder is required when using embedding search method');
+    }
   }
 
   /**
    * Embeds text using the configured embedding model
    */
   private async embed(text: string): Promise<number[]> {
+    if (!this.embedder) {
+      throw new Error('Embedder not configured');
+    }
+
     const isV2 = (this.embedder as any).specificationVersion === 'v2';
 
     if (isV2) {
@@ -246,138 +303,118 @@ export class DeferredToolset {
   }
 
   /**
-   * Adds a single tool to the toolset.
-   *
-   * @param id - The tool identifier
-   * @param tool - The tool to add
-   * @param options - Options including whether to defer loading. If not specified, uses the tool's `deferred` property.
+   * Indexes tools, separating deferred from always-loaded based on tool.deferred property
    */
-  async addTool(id: string, tool: ToolAction<any, any, any>, options: AddToolOptions = {}): Promise<void> {
-    // Use explicit option if provided, otherwise fall back to tool's deferred property
-    const shouldDefer = options.deferLoading ?? tool.deferred ?? false;
-
-    if (shouldDefer) {
-      const searchText = this.getSearchText(tool, id);
-      const embedding = await this.embed(searchText);
-
-      this.deferredTools.set(id, {
-        id,
-        description: tool.description,
-        embedding,
-        tool,
-      });
-    } else {
-      this.alwaysLoadedTools.set(id, tool);
-    }
-  }
-
-  /**
-   * Adds multiple tools to the toolset, automatically respecting each tool's `deferred` property.
-   *
-   * @param tools - Record of tool ID to tool instance
-   * @param options - Options including whether to defer loading. If not specified, uses each tool's `deferred` property.
-   *
-   * @example
-   * ```typescript
-   * // Tools with deferred: true are automatically deferred
-   * await toolset.addTools({
-   *   alwaysLoaded: createTool({ id: 'always', description: '...', execute: ... }),
-   *   deferredTool: createTool({ id: 'deferred', description: '...', deferred: true, execute: ... }),
-   * });
-   *
-   * // Or override for all tools
-   * await toolset.addTools(tools, { deferLoading: true });
-   * ```
-   */
-  async addTools(tools: Record<string, ToolAction<any, any, any>>, options: AddToolOptions = {}): Promise<void> {
-    // If deferLoading is explicitly set, apply to all tools
-    // Otherwise, respect each tool's individual deferred property
-    const explicitDeferLoading = options.deferLoading;
-
+  async indexTools(tools: Record<string, ToolAction<any, any, any>>): Promise<void> {
     const entries = Object.entries(tools);
 
-    // Separate tools into deferred and always-loaded based on their properties
+    // Separate deferred and always-loaded tools
     const deferredEntries: [string, ToolAction<any, any, any>][] = [];
     const alwaysLoadedEntries: [string, ToolAction<any, any, any>][] = [];
 
     for (const [id, tool] of entries) {
-      const shouldDefer = explicitDeferLoading ?? tool.deferred ?? false;
-      if (shouldDefer) {
+      if (tool.deferred) {
         deferredEntries.push([id, tool]);
       } else {
         alwaysLoadedEntries.push([id, tool]);
       }
     }
 
-    // Add always-loaded tools immediately
+    // Add always-loaded tools
     for (const [id, tool] of alwaysLoadedEntries) {
       this.alwaysLoadedTools.set(id, tool);
     }
 
-    // Create embeddings for deferred tools in parallel
+    // Index deferred tools
     if (deferredEntries.length > 0) {
-      const embeddings = await Promise.all(
-        deferredEntries.map(async ([id, tool]) => {
-          const searchText = this.getSearchText(tool, id);
-          const embedding = await this.embed(searchText);
-          return { id, embedding };
-        }),
-      );
+      if (this.method === 'embedding') {
+        // Create embeddings in parallel
+        const embeddings = await Promise.all(
+          deferredEntries.map(async ([id, tool]) => {
+            const searchText = getSearchText(tool, id);
+            const embedding = await this.embed(searchText);
+            return { id, searchText, embedding };
+          }),
+        );
 
-      for (let i = 0; i < deferredEntries.length; i++) {
-        const [id, tool] = deferredEntries[i]!;
-        const { embedding } = embeddings[i]!;
+        for (let i = 0; i < deferredEntries.length; i++) {
+          const [id, tool] = deferredEntries[i]!;
+          const { searchText, embedding } = embeddings[i]!;
 
-        this.deferredTools.set(id, {
-          id,
-          description: tool.description,
-          embedding,
-          tool,
-        });
+          this.deferredTools.set(id, {
+            id,
+            description: tool.description,
+            searchText,
+            embedding,
+            tool,
+          });
+        }
+      } else {
+        // For regex/BM25, just store search text
+        for (const [id, tool] of deferredEntries) {
+          const searchText = getSearchText(tool, id);
+          this.deferredTools.set(id, {
+            id,
+            description: tool.description,
+            searchText,
+            tool,
+          });
+        }
       }
     }
   }
 
   /**
-   * Searches for tools matching the query.
-   *
-   * @param query - Natural language query
-   * @param options - Search options
-   * @returns Matching tools sorted by relevance
+   * Searches for tools matching the query
    */
-  async search(query: string, options: ToolSearchOptions = {}): Promise<ToolSearchResult[]> {
-    const { topK = this.topK, minScore = this.minScore } = options;
-
+  async search(query: string): Promise<ToolSearchResult[]> {
     if (this.deferredTools.size === 0) {
       return [];
     }
 
-    const queryEmbedding = await this.embed(query);
-    const results: ToolSearchResult[] = [];
+    let results: ToolSearchResult[];
 
-    for (const indexed of this.deferredTools.values()) {
-      const score = cosineSimilarity(queryEmbedding, indexed.embedding);
+    switch (this.method) {
+      case 'regex':
+        results = regexSearch(query, this.deferredTools, this.topK);
+        break;
+      case 'bm25':
+        results = bm25Search(query, this.deferredTools, this.topK);
+        break;
+      case 'embedding': {
+        const queryEmbedding = await this.embed(query);
+        results = [];
 
-      if (score >= minScore) {
-        results.push({
-          id: indexed.id,
-          description: indexed.description,
-          score,
-          tool: indexed.tool,
-        });
+        for (const indexed of this.deferredTools.values()) {
+          if (indexed.embedding) {
+            const score = cosineSimilarity(queryEmbedding, indexed.embedding);
+            if (score >= this.minScore) {
+              results.push({
+                id: indexed.id,
+                description: indexed.description,
+                score,
+                tool: indexed.tool,
+              });
+            }
+          }
+        }
+
+        results.sort((a, b) => b.score - a.score);
+        results = results.slice(0, this.topK);
+        break;
       }
     }
 
-    results.sort((a, b) => b.score - a.score);
-    return results.slice(0, topK);
+    // Apply minScore filter for non-embedding methods
+    if (this.method !== 'embedding' && this.minScore > 0) {
+      results = results.filter(r => r.score >= this.minScore);
+    }
+
+    return results;
   }
 
   /**
-   * Loads a deferred tool for a specific thread, making it available in subsequent calls.
-   *
-   * @param toolId - The tool ID to load
-   * @param threadId - Optional thread ID (uses global scope if not provided)
-   * @returns true if the tool was loaded, false if it doesn't exist or is already loaded
+   * Loads a deferred tool for a specific thread
    */
   loadTool(toolId: string, threadId?: string): boolean {
     if (!this.deferredTools.has(toolId)) {
@@ -397,11 +434,7 @@ export class DeferredToolset {
   }
 
   /**
-   * Loads multiple deferred tools for a specific thread.
-   *
-   * @param toolIds - Array of tool IDs to load
-   * @param threadId - Optional thread ID
-   * @returns Number of tools successfully loaded
+   * Loads multiple deferred tools
    */
   loadTools(toolIds: string[], threadId?: string): number {
     let count = 0;
@@ -414,10 +447,7 @@ export class DeferredToolset {
   }
 
   /**
-   * Unloads a tool from a thread's context.
-   *
-   * @param toolId - The tool ID to unload
-   * @param threadId - Optional thread ID
+   * Unloads a tool from a thread's context
    */
   unloadTool(toolId: string, threadId?: string): boolean {
     const key = threadId ?? GLOBAL_THREAD_KEY;
@@ -426,9 +456,7 @@ export class DeferredToolset {
   }
 
   /**
-   * Unloads all tools for a specific thread.
-   *
-   * @param threadId - Optional thread ID
+   * Unloads all tools for a thread
    */
   unloadAllTools(threadId?: string): void {
     const key = threadId ?? GLOBAL_THREAD_KEY;
@@ -436,9 +464,7 @@ export class DeferredToolset {
   }
 
   /**
-   * Gets the list of currently loaded tool IDs for a thread.
-   *
-   * @param threadId - Optional thread ID
+   * Gets loaded tool IDs for a thread
    */
   getLoadedToolIds(threadId?: string): string[] {
     const key = threadId ?? GLOBAL_THREAD_KEY;
@@ -447,38 +473,24 @@ export class DeferredToolset {
   }
 
   /**
-   * Gets all deferred tool IDs.
+   * Gets all deferred tool IDs
    */
   getDeferredToolIds(): string[] {
     return Array.from(this.deferredTools.keys());
   }
 
   /**
-   * Gets all always-loaded tool IDs.
+   * Gets all always-loaded tool IDs
    */
   getAlwaysLoadedToolIds(): string[] {
     return Array.from(this.alwaysLoadedTools.keys());
   }
 
   /**
-   * Checks if a tool exists (in either always-loaded or deferred).
-   */
-  hasTool(toolId: string): boolean {
-    return this.alwaysLoadedTools.has(toolId) || this.deferredTools.has(toolId);
-  }
-
-  /**
-   * Gets a tool by ID (from either always-loaded or deferred).
-   */
-  getTool(toolId: string): ToolAction<any, any, any> | undefined {
-    return this.alwaysLoadedTools.get(toolId) ?? this.deferredTools.get(toolId)?.tool;
-  }
-
-  /**
-   * Creates the search tool that agents use to discover and load deferred tools.
+   * Creates the search tool for this thread
    */
   private createSearchTool(threadId?: string): Tool<typeof toolSearchInputSchema, any, any, any, any, string> {
-    const toolset = this;
+    const toolSearch = this;
 
     return createTool({
       id: this.searchToolId,
@@ -487,27 +499,21 @@ export class DeferredToolset {
       execute: async (inputData: z.infer<typeof toolSearchInputSchema>, _context?: ToolExecutionContext) => {
         const { query } = inputData;
 
-        // Search for matching tools
-        const results = await toolset.search(query, {
-          topK: toolset.topK,
-          minScore: toolset.minScore,
-        });
+        const results = await toolSearch.search(query);
 
         if (results.length === 0) {
           return {
             success: false,
             loadedTools: [],
             message: 'No matching tools found for your query.',
-            suggestion: `Available deferred tools: ${toolset.getDeferredToolIds().join(', ')}`,
+            availableTools: toolSearch.getDeferredToolIds(),
             query,
           };
         }
 
-        // Load matching tools into the thread's context
-        const loadedToolIds: string[] = [];
+        // Load matching tools
         for (const result of results) {
-          toolset.loadTool(result.id, threadId);
-          loadedToolIds.push(result.id);
+          toolSearch.loadTool(result.id, threadId);
         }
 
         return {
@@ -516,17 +522,8 @@ export class DeferredToolset {
             id: r.id,
             description: r.description,
             score: r.score,
-            // Include input schema info for the agent
-            inputSchema: (() => {
-              try {
-                const shape = (r.tool.inputSchema as any)?._def?.shape?.();
-                return shape ? { fields: Object.keys(shape) } : undefined;
-              } catch {
-                return undefined;
-              }
-            })(),
           })),
-          message: `Loaded ${loadedToolIds.length} tool(s). You can now call them directly.`,
+          message: `Loaded ${results.length} tool(s). You can now call them directly.`,
           query,
         };
       },
@@ -534,36 +531,7 @@ export class DeferredToolset {
   }
 
   /**
-   * The search tool instance (for reference/direct use).
-   * Note: Use getTools() to get all available tools including the search tool.
-   */
-  get searchTool(): Tool<typeof toolSearchInputSchema, any, any, any, any, string> {
-    if (!this._searchTool) {
-      this._searchTool = this.createSearchTool();
-    }
-    return this._searchTool;
-  }
-
-  /**
-   * Gets the tools that should be available to an agent for a specific thread.
-   *
-   * Returns:
-   * - All always-loaded tools
-   * - The search tool (for discovering more tools)
-   * - Any deferred tools that have been loaded for this thread
-   *
-   * @param threadId - Optional thread ID for thread-specific loaded tools
-   * @returns A ToolsInput object that can be used with agent.generate() or agent.stream()
-   *
-   * @example
-   * ```typescript
-   * // Use as a toolset with an agent
-   * const response = await agent.generate('Create a GitHub PR', {
-   *   toolsets: {
-   *     myTools: toolset.getTools(threadId),
-   *   },
-   * });
-   * ```
+   * Gets tools for an agent, including search tool and loaded deferred tools
    */
   getTools(threadId?: string): Record<string, ToolAction<any, any, any>> {
     const tools: Record<string, ToolAction<any, any, any>> = {};
@@ -573,10 +541,10 @@ export class DeferredToolset {
       tools[id] = tool;
     }
 
-    // Add the search tool (creates a new one bound to this threadId)
+    // Add search tool
     tools[this.searchToolId] = this.createSearchTool(threadId);
 
-    // Add loaded deferred tools for this thread
+    // Add loaded deferred tools
     const key = threadId ?? GLOBAL_THREAD_KEY;
     const loadedIds = this.loadedToolsByThread.get(key);
 
@@ -591,25 +559,68 @@ export class DeferredToolset {
 
     return tools;
   }
+}
 
-  /**
-   * Gets statistics about the toolset.
-   */
-  getStats(): {
-    alwaysLoadedCount: number;
-    deferredCount: number;
-    loadedByThread: Record<string, number>;
-  } {
-    const loadedByThread: Record<string, number> = {};
-
-    for (const [threadId, loaded] of this.loadedToolsByThread) {
-      loadedByThread[threadId] = loaded.size;
-    }
-
-    return {
-      alwaysLoadedCount: this.alwaysLoadedTools.size,
-      deferredCount: this.deferredTools.size,
-      loadedByThread,
-    };
-  }
+/**
+ * Creates a tool search instance with deferred loading support.
+ *
+ * Tools marked with `deferred: true` are not loaded into the agent's context initially.
+ * Instead, the agent gets a search tool that can discover and load relevant tools on-demand.
+ *
+ * @example
+ * ```typescript
+ * import { createToolSearch, createTool } from '@mastra/core/tools';
+ *
+ * // Define tools - mark some as deferred
+ * const helpTool = createTool({
+ *   id: 'help',
+ *   description: 'Get help',
+ *   execute: async () => ({ message: 'How can I help?' }),
+ * });
+ *
+ * const createPRTool = createTool({
+ *   id: 'github.createPR',
+ *   description: 'Create a GitHub pull request',
+ *   deferred: true, // Loaded on-demand
+ *   execute: async () => { ... },
+ * });
+ *
+ * const sendMessageTool = createTool({
+ *   id: 'slack.sendMessage',
+ *   description: 'Send a Slack message',
+ *   deferred: true, // Loaded on-demand
+ *   execute: async () => { ... },
+ * });
+ *
+ * // Create with BM25 search (default, no embedder needed)
+ * const toolSearch = await createToolSearch({
+ *   tools: { helpTool, createPRTool, sendMessageTool },
+ *   method: 'bm25',
+ * });
+ *
+ * // Or with regex search
+ * const toolSearch = await createToolSearch({
+ *   tools: { helpTool, createPRTool, sendMessageTool },
+ *   method: 'regex',
+ * });
+ *
+ * // Or with embedding search
+ * const toolSearch = await createToolSearch({
+ *   tools: { helpTool, createPRTool, sendMessageTool },
+ *   method: 'embedding',
+ *   embedder: openai.embedding('text-embedding-3-small'),
+ * });
+ *
+ * // Use with an agent
+ * const response = await agent.generate('Create a GitHub PR', {
+ *   toolsets: {
+ *     myTools: toolSearch.getTools(threadId),
+ *   },
+ * });
+ * ```
+ */
+export async function createToolSearch(config: ToolSearchConfig): Promise<ToolSearch> {
+  const toolSearch = new ToolSearch(config);
+  await toolSearch.indexTools(config.tools);
+  return toolSearch;
 }

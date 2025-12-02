@@ -4,9 +4,9 @@ export * from './ui-types';
 export { isVercelTool } from './toolchecks';
 export { ToolStream } from './stream';
 export {
-  DeferredToolset,
-  type DeferredToolsetConfig,
-  type AddToolOptions,
+  ToolSearch,
+  createToolSearch,
+  type ToolSearchConfig,
+  type ToolSearchMethod,
   type ToolSearchResult,
-  type ToolSearchOptions,
 } from './tool-search';
