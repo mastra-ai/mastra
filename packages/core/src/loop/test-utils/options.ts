@@ -1369,6 +1369,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let result: any;
       let doStreamCalls: Array<LanguageModelV2CallOptions>;
       let prepareStepCalls: Array<{
+        model: {
+          modelId: string;
+          provider: string;
+          specificationVersion: string;
+        };
         stepNumber: number;
         steps: Array<any>;
         messages: Array<any>;
@@ -1376,11 +1381,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       beforeEach(async () => {
         const messageList = createMessageListWithUserMessage();
-
         doStreamCalls = [];
         prepareStepCalls = [];
 
-        result = await loopFn({
+        result = loopFn({
           methodType: 'stream',
           runId,
           models: [
@@ -1452,8 +1456,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           messageList,
           stopWhen: stepCountIs(3),
           options: {
-            prepareStep: async ({ stepNumber, steps, messages }) => {
-              prepareStepCalls.push({ stepNumber, steps, messages });
+            prepareStep: async ({ model, stepNumber, steps, messages, messageList: ml }) => {
+              prepareStepCalls.push({
+                model: {
+                  modelId: model.modelId,
+                  provider: model.provider,
+                  specificationVersion: model.specificationVersion,
+                },
+                stepNumber,
+                steps,
+                messages,
+              });
 
               if (stepNumber === 0) {
                 return {
@@ -1461,10 +1474,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     type: 'tool',
                     toolName: 'tool1' as const,
                   },
-                  system: 'system-message-0',
                   messages: [
                     {
-                      role: 'user',
+                      role: 'system' as const,
+                      content: 'system-message-0',
+                    },
+                    {
+                      role: 'user' as const,
                       content: 'new input from prepareStep',
                     },
                   ],
@@ -1474,7 +1490,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               if (stepNumber === 1) {
                 return {
                   activeTools: [],
-                  system: 'system-message-1',
+                  messages: [
+                    {
+                      role: 'system',
+                      content: 'system-message-1',
+                    },
+                    {
+                      role: 'user',
+                      content: 'another new input from prepareStep 222',
+                    },
+                  ],
                 };
               }
             },
