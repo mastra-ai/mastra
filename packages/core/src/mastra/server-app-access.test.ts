@@ -30,25 +30,25 @@ describe('Server App Access', () => {
     });
   });
 
-  describe('Mastra.setServerAdapter() and getServerAdapter()', () => {
-    it('should have setServerAdapter method on Mastra instance', () => {
+  describe('Mastra.setMastraServer() and getMastraServer()', () => {
+    it('should have setMastraServer method on Mastra instance', () => {
       const mastra = new Mastra({
         logger: false,
       });
 
       // This test verifies the method exists
-      // Currently FAILS because setServerAdapter doesn't exist yet
-      expect(typeof mastra.setServerAdapter).toBe('function');
+      // Currently FAILS because setMastraServer doesn't exist yet
+      expect(typeof mastra.setMastraServer).toBe('function');
     });
 
-    it('should have getServerAdapter method on Mastra instance', () => {
+    it('should have getMastraServer method on Mastra instance', () => {
       const mastra = new Mastra({
         logger: false,
       });
 
       // This test verifies the method exists
-      // Currently FAILS because getServerAdapter doesn't exist yet
-      expect(typeof mastra.getServerAdapter).toBe('function');
+      // Currently FAILS because getMastraServer doesn't exist yet
+      expect(typeof mastra.getMastraServer).toBe('function');
     });
 
     it('should return undefined when no server adapter is set', () => {
@@ -56,9 +56,9 @@ describe('Server App Access', () => {
         logger: false,
       });
 
-      // When no adapter is set, getServerAdapter should return undefined
-      // Currently FAILS because getServerAdapter doesn't exist yet
-      const adapter = mastra.getServerAdapter();
+      // When no adapter is set, getMastraServer should return undefined
+      // Currently FAILS because getMastraServer doesn't exist yet
+      const adapter = mastra.getMastraServer();
       expect(adapter).toBeUndefined();
     });
 
@@ -75,10 +75,10 @@ describe('Server App Access', () => {
       };
 
       // Set the adapter
-      mastra.setServerAdapter(mockAdapter as any);
+      mastra.setMastraServer(mockAdapter as any);
 
       // Retrieve the adapter
-      const retrievedAdapter = mastra.getServerAdapter();
+      const retrievedAdapter = mastra.getMastraServer();
       expect(retrievedAdapter).toBe(mockAdapter);
     });
 
@@ -99,7 +99,7 @@ describe('Server App Access', () => {
       };
 
       // Set the adapter
-      mastra.setServerAdapter(mockAdapter as any);
+      mastra.setMastraServer(mockAdapter as any);
 
       // Get the app via convenience method
       const app = mastra.getServerApp();
@@ -127,7 +127,7 @@ describe('Server App Access', () => {
         __setLogger: () => {}, // Required by MastraBase
       };
 
-      mastra.setServerAdapter(mockAdapter as any);
+      mastra.setMastraServer(mockAdapter as any);
 
       // Get the app with type parameter
       const app = mastra.getServerApp<MockHonoApp>();
@@ -164,7 +164,7 @@ describe('Server App Access', () => {
         __setLogger: () => {}, // Required by MastraBase
       };
 
-      mastra.setServerAdapter(mockAdapter as any);
+      mastra.setMastraServer(mockAdapter as any);
 
       // Get the app and call a route directly (the use case from the issue)
       const app = mastra.getServerApp<typeof mockApp>();
@@ -265,7 +265,7 @@ describe('Server App Access', () => {
         __setLogger: () => {},
       };
 
-      mastra.setServerAdapter(mockAdapter as any);
+      mastra.setMastraServer(mockAdapter as any);
 
       // Simulate Inngest function receiving an event with request data
       const inngestEvent = {
@@ -302,7 +302,7 @@ describe('Server App Access', () => {
         __setLogger: () => {},
       };
 
-      mastra.setServerAdapter(mockAdapter as any);
+      mastra.setMastraServer(mockAdapter as any);
 
       // Simulate Inngest function receiving an event to generate agent response
       const inngestEvent = {
@@ -341,7 +341,7 @@ describe('Server App Access', () => {
         __setLogger: () => {},
       };
 
-      mastra.setServerAdapter(mockAdapter as any);
+      mastra.setMastraServer(mockAdapter as any);
 
       // Simulate Inngest function triggering a workflow
       const inngestEvent = {
@@ -382,7 +382,7 @@ describe('Server App Access', () => {
         __setLogger: () => {},
       };
 
-      mastra.setServerAdapter(mockAdapter as any);
+      mastra.setMastraServer(mockAdapter as any);
 
       const app = mastra.getServerApp<typeof mockApp>();
       expect(app).toBeDefined();
@@ -403,7 +403,7 @@ describe('Server App Access', () => {
         __setLogger: () => {},
       };
 
-      mastra.setServerAdapter(mockAdapter as any);
+      mastra.setMastraServer(mockAdapter as any);
 
       async function handleInngestEvent(event: {
         data: {

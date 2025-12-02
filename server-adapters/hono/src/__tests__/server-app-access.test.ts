@@ -60,7 +60,7 @@ describe('MastraServer (Hono) - Server App Access', () => {
 
       const appFromAdapter = adapter.getApp<Hono>();
       const appFromMastra = mastra.getServerApp<Hono>();
-      const adapterFromMastra = mastra.getServerAdapter();
+      const adapterFromMastra = mastra.getMastraServer();
       const appFromRetrievedAdapter = adapterFromMastra?.getApp<Hono>();
 
       expect(appFromAdapter).toBe(app);

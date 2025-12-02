@@ -100,7 +100,7 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> extends Mastra
     this.streamOptions = { redact: true, ...streamOptions };
 
     // Automatically register this adapter with Mastra so getServerApp() works
-    mastra.setServerAdapter(this);
+    mastra.setMastraServer(this);
   }
 
   protected mergeRequestContext({

@@ -24,14 +24,14 @@ describe('Server App Access via createHonoServer', () => {
     expect(app).toBe(returnedApp);
   });
 
-  it('should expose the server adapter via mastra.getServerAdapter()', async () => {
+  it('should expose the server adapter via mastra.getMastraServer()', async () => {
     const mastra = new Mastra({
       logger: false,
     });
 
     await createHonoServer(mastra, { tools: {} });
 
-    const adapter = mastra.getServerAdapter();
+    const adapter = mastra.getMastraServer();
 
     expect(adapter).toBeDefined();
     expect(typeof adapter?.getApp).toBe('function');
@@ -83,7 +83,7 @@ describe('Server App Access via createHonoServer', () => {
     await createHonoServer(mastra, { tools: {} });
 
     const appFromMastra = mastra.getServerApp<Hono>();
-    const adapter = mastra.getServerAdapter();
+    const adapter = mastra.getMastraServer();
     const appFromAdapter = adapter?.getApp<Hono>();
 
     expect(appFromMastra).toBe(appFromAdapter);

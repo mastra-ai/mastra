@@ -1866,10 +1866,10 @@ export class Mastra<
    * ```typescript
    * const app = new Hono();
    * const adapter = new MastraServer({ app, mastra });
-   * mastra.setServerAdapter(adapter);
+   * mastra.setMastraServer(adapter);
    * ```
    */
-  public setServerAdapter(adapter: MastraServerAdapterBase): void {
+  public setMastraServer(adapter: MastraServerAdapterBase): void {
     this.#serverAdapter = adapter;
     // Inject the logger into the adapter
     if (this.#logger) {
@@ -1884,20 +1884,20 @@ export class Mastra<
    *
    * @example
    * ```typescript
-   * const adapter = mastra.getServerAdapter();
+   * const adapter = mastra.getMastraServer();
    * if (adapter) {
    *   const app = adapter.getApp<Hono>();
    * }
    * ```
    */
-  public getServerAdapter(): MastraServerAdapterBase | undefined {
+  public getMastraServer(): MastraServerAdapterBase | undefined {
     return this.#serverAdapter;
   }
 
   /**
    * Gets the server app from the server adapter.
    *
-   * This is a convenience method that calls `getServerAdapter()?.getApp<T>()`.
+   * This is a convenience method that calls `getMastraServer()?.getApp<T>()`.
    * Use this to access the underlying server framework's app instance (e.g., Hono, Express)
    * for direct operations like calling routes via `app.fetch()`.
    *

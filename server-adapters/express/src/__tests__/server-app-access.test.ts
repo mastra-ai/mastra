@@ -65,7 +65,7 @@ describe('MastraServer (Express) - Server App Access', () => {
 
       const appFromAdapter = adapter.getApp<Application>();
       const appFromMastra = mastra.getServerApp<Application>();
-      const adapterFromMastra = mastra.getServerAdapter();
+      const adapterFromMastra = mastra.getMastraServer();
       const appFromRetrievedAdapter = adapterFromMastra?.getApp<Application>();
 
       expect(appFromAdapter).toBe(app);
