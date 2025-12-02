@@ -41,6 +41,11 @@ const sidebars = {
           id: "getting-started/mcp-docs-server",
           label: "MCP Docs Server",
         },
+        {
+          type: "doc",
+          id: "getting-started/manual-install",
+          label: "Manual Install",
+        },
       ],
     },
     {
@@ -480,6 +485,11 @@ const sidebars = {
                   type: "doc",
                   id: "observability/tracing/exporters/otel",
                   label: "OpenTelemetry",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/posthog",
+                  label: "PostHog",
                 },
               ],
             },

@@ -53,15 +53,15 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.perPage !== null && params?.perPage !== undefined) {
-      if (params.perPage === false) {
-        searchParams.set('perPage', 'false');
-      } else if (typeof params.perPage === 'number' && params.perPage > 0 && Number.isInteger(params.perPage)) {
-        searchParams.set('perPage', String(params.perPage));
+    if (params?.limit !== null && params?.limit !== undefined) {
+      if (params.limit === false) {
+        searchParams.set('limit', 'false');
+      } else if (typeof params.limit === 'number' && params.limit > 0 && Number.isInteger(params.limit)) {
+        searchParams.set('limit', String(params.limit));
       }
     }
-    if (params?.page !== null && params?.page !== undefined && !isNaN(Number(params?.page))) {
-      searchParams.set('page', String(params.page));
+    if (params?.offset !== null && params?.offset !== undefined && !isNaN(Number(params?.offset))) {
+      searchParams.set('offset', String(params.offset));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);

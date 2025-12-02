@@ -135,6 +135,7 @@
     "eslint": "^9.37.0",
     "fetch-to-node": "^2.1.0",
     "hono-openapi": "^1.1.1",
+    "stacktrace-parser": "^0.1.11",
     "tsup": "^8.5.0",
     "type-fest": "^5.2.0",
     "typescript": "^5.8.3",

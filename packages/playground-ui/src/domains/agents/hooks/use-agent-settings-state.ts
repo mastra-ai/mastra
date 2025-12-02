@@ -40,8 +40,6 @@ export function useAgentSettingsState({ agentId, defaultSettings: defaultSetting
       // ignore
       console.error(e);
     }
-
-    // Only run on mount or when initialSettings changes
   }, [LOCAL_STORAGE_KEY]);
 
   const setSettings = (settingsValue: AgentSettings) => {
