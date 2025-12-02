@@ -270,23 +270,13 @@ const sidebars = {
             },
             {
               type: "doc",
-              id: "streaming/workflows/streamVNext",
-              label: ".streamVNext()",
-            },
-            {
-              type: "doc",
-              id: "streaming/workflows/resumeStreamVNext",
-              label: ".resumeStreamVNext()",
+              id: "streaming/workflows/resumeStream",
+              label: ".resumeStream()",
             },
             {
               type: "doc",
               id: "streaming/workflows/observeStream",
               label: ".observeStream()",
-            },
-            {
-              type: "doc",
-              id: "streaming/workflows/observeStreamVNext",
-              label: ".observeStreamVNext()",
             },
           ],
         },
@@ -554,6 +544,11 @@ const sidebars = {
                   type: "doc",
                   id: "observability/tracing/exporters/otel",
                   label: "OtelExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/posthog",
+                  label: "PostHogExporter",
                 },
               ],
             },
