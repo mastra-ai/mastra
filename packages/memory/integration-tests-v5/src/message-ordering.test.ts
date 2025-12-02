@@ -92,6 +92,39 @@ function compareOrders(
   return { streamVsRaw, streamVsRecall, rawVsRecall };
 }
 
+// Helper to verify no duplicate text-start or text-end IDs
+function verifyNoTextIdDuplicates(textBlockIds: { id: string; type: string; idx: number }[]): {
+  textStartDuplicates: string[];
+  textEndDuplicates: string[];
+} {
+  const textStartIds = textBlockIds.filter(t => t.type === 'text-start').map(t => t.id);
+  const textEndIds = textBlockIds.filter(t => t.type === 'text-end').map(t => t.id);
+
+  const findDuplicates = (arr: string[]) => {
+    const seen = new Set<string>();
+    const duplicates: string[] = [];
+    for (const id of arr) {
+      if (seen.has(id)) {
+        if (!duplicates.includes(id)) duplicates.push(id);
+      }
+      seen.add(id);
+    }
+    return duplicates;
+  };
+
+  const textStartDuplicates = findDuplicates(textStartIds);
+  const textEndDuplicates = findDuplicates(textEndIds);
+
+  if (textStartDuplicates.length > 0) {
+    console.log(`❌ DUPLICATE text-start IDs found: ${textStartDuplicates.join(', ')}`);
+  }
+  if (textEndDuplicates.length > 0) {
+    console.log(`❌ DUPLICATE text-end IDs found: ${textEndDuplicates.join(', ')}`);
+  }
+
+  return { textStartDuplicates, textEndDuplicates };
+}
+
 // Helper to check text-before-tool ordering
 function verifyTextBeforeTool(order: OrderEntry[], source: string): boolean {
   const firstText = order.findIndex(o => o.type === 'TEXT');
@@ -184,7 +217,7 @@ for (const modelConfig of MODEL_CONFIGS) {
       return false;
     };
 
-    it('should preserve text ordering: stream -> raw storage -> recall', async () => {
+    it.only('should preserve text ordering: stream -> raw storage -> recall', async () => {
       if (skipIfNoApiKey()) return;
 
       const memory = createMemory();
@@ -216,24 +249,39 @@ for (const modelConfig of MODEL_CONFIGS) {
         maxSteps: 5,
       });
 
-      console.log('\n=== STREAMING OUTPUT ===');
+      let chunkIndex = 0;
+      const textBlockIds: { id: string; type: string; idx: number }[] = [];
+
       for await (const chunk of stream.fullStream) {
+        const idx = chunkIndex++;
+
+        // Track text-start and text-end IDs
+        if ('payload' in chunk && chunk.payload) {
+          const payload = chunk.payload as Record<string, unknown>;
+          if ((chunk.type === 'text-start' || chunk.type === 'text-end') && payload.id) {
+            textBlockIds.push({ id: payload.id as string, type: chunk.type, idx });
+          }
+        }
+
         if (chunk.type === 'text-delta') {
           textAccumulator += chunk.payload?.text || '';
-          process.stdout.write(chunk.payload?.text || '');
         } else if (chunk.type === 'text-end' && textAccumulator.trim()) {
           streamOrder.push({ type: 'TEXT', content: textAccumulator.substring(0, 50) });
           textAccumulator = '';
         } else if (chunk.type === 'tool-call') {
-          console.log(`\n[TOOL: ${chunk.payload?.toolName}]`);
           streamOrder.push({ type: 'TOOL', content: chunk.payload?.toolName });
         } else if (chunk.type === 'step-start') {
           streamOrder.push({ type: 'STEP' });
-        } else if (chunk.type === 'step-finish') {
-          console.log('\n[STEP FINISH]\n');
         }
       }
-      console.log('\n');
+
+      // Analyze text block IDs for duplicates
+      console.log('\n--- TEXT BLOCK ID ANALYSIS ---');
+      console.log('Text IDs:', textBlockIds);
+
+      const { textStartDuplicates, textEndDuplicates } = verifyNoTextIdDuplicates(textBlockIds);
+      expect(textStartDuplicates, 'Duplicate text-start IDs detected').toHaveLength(0);
+      expect(textEndDuplicates, 'Duplicate text-end IDs detected').toHaveLength(0);
 
       await delay(500);
 
@@ -344,21 +392,39 @@ for (const modelConfig of MODEL_CONFIGS) {
         maxSteps: 10,
       });
 
+      let chunkIndex = 0;
+      const textBlockIds: { id: string; type: string; idx: number }[] = [];
+
       for await (const chunk of stream.fullStream) {
+        const idx = chunkIndex++;
+
+        // Track text-start and text-end IDs
+        if ('payload' in chunk && chunk.payload) {
+          const payload = chunk.payload as Record<string, unknown>;
+          if ((chunk.type === 'text-start' || chunk.type === 'text-end') && payload.id) {
+            textBlockIds.push({ id: payload.id as string, type: chunk.type, idx });
+          }
+        }
+
         if (chunk.type === 'text-delta') {
           textAccumulator += chunk.payload?.text || '';
-          process.stdout.write(chunk.payload?.text || '');
         } else if (chunk.type === 'text-end' && textAccumulator.trim()) {
           streamOrder.push({ type: 'TEXT', content: textAccumulator.substring(0, 50) });
           textAccumulator = '';
         } else if (chunk.type === 'tool-call') {
-          console.log(`\n[TOOL: ${chunk.payload?.toolName}]`);
           streamOrder.push({ type: 'TOOL', content: chunk.payload?.toolName });
         } else if (chunk.type === 'step-start') {
           streamOrder.push({ type: 'STEP' });
         }
       }
-      console.log('\n');
+
+      // Analyze text block IDs for duplicates
+      console.log('\n--- TEXT BLOCK ID ANALYSIS ---');
+      console.log('Text IDs:', textBlockIds);
+
+      const { textStartDuplicates, textEndDuplicates } = verifyNoTextIdDuplicates(textBlockIds);
+      expect(textStartDuplicates, 'Duplicate text-start IDs detected').toHaveLength(0);
+      expect(textEndDuplicates, 'Duplicate text-end IDs detected').toHaveLength(0);
 
       await delay(500);
 
@@ -421,7 +487,20 @@ for (const modelConfig of MODEL_CONFIGS) {
         maxSteps: 5,
       });
 
+      let chunkIndex = 0;
+      const textBlockIds: { id: string; type: string; idx: number }[] = [];
+
       for await (const chunk of stream.fullStream) {
+        const idx = chunkIndex++;
+
+        // Track text-start and text-end IDs
+        if ('payload' in chunk && chunk.payload) {
+          const payload = chunk.payload as Record<string, unknown>;
+          if ((chunk.type === 'text-start' || chunk.type === 'text-end') && payload.id) {
+            textBlockIds.push({ id: payload.id as string, type: chunk.type, idx });
+          }
+        }
+
         if (chunk.type === 'text-delta') {
           textAccumulator += chunk.payload?.text || '';
         } else if (chunk.type === 'text-end' && textAccumulator.trim()) {
@@ -433,6 +512,14 @@ for (const modelConfig of MODEL_CONFIGS) {
           streamOrder.push({ type: 'STEP' });
         }
       }
+
+      // Analyze text block IDs for duplicates
+      console.log('\n--- TEXT BLOCK ID ANALYSIS ---');
+      console.log('Text IDs:', textBlockIds);
+
+      const { textStartDuplicates, textEndDuplicates } = verifyNoTextIdDuplicates(textBlockIds);
+      expect(textStartDuplicates, 'Duplicate text-start IDs detected').toHaveLength(0);
+      expect(textEndDuplicates, 'Duplicate text-end IDs detected').toHaveLength(0);
 
       await delay(500);
 

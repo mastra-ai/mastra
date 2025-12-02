@@ -12,6 +12,7 @@
     "test:processors": "vitest run ./src/processors.test.ts",
     "test:fastembed": "vitest run ./src/fastembed.test.ts",
     "test:ordering": "vitest run ./src/message-ordering.test.ts",
+    "test:ai-sdk-ids": "vitest run ./src/ai-sdk-duplicate-ids.test.ts",
     "dev": "mastra dev"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@ai-sdk/anthropic": "latest",
     "@ai-sdk/google": "^2.0.6",
     "@ai-sdk/openai": "^2.0.15",
     "@ai-sdk/provider": "^2.0.0",
