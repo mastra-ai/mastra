@@ -45,6 +45,11 @@ const MODEL_CONFIGS: ModelConfig[] = [
     model: 'anthropic/claude-sonnet-4-5',
     envVar: 'ANTHROPIC_API_KEY',
   },
+  {
+    name: 'Google Gemini 2.5 Flash',
+    model: 'poe/google/gemini-3.0-pro',
+    envVar: 'GOOGLE_GENERATIVE_AI_API_KEY',
+  },
 ];
 
 // Helper to add delay
