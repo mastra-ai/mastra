@@ -840,7 +840,7 @@ export class Workflow<
       TOutput,
       z.ZodObject<
         {
-          [K in keyof StepsRecord<ExtractedSteps[]>]: StepsRecord<ExtractedSteps[]>[K]['outputSchema'];
+          [K in keyof StepsRecord<ExtractedSteps[]>]: z.ZodOptional<StepsRecord<ExtractedSteps[]>[K]['outputSchema']>;
         },
         any,
         z.ZodTypeAny

@@ -158,6 +158,25 @@ Step `suspendPayload` is now validated for steps that have a `suspendSchema` def
   });
 ```
 
+### Branch result fields are now optional
+
+The `.branch()` method now returns a schema where all branch output fields are optional. This reflects the runtime behavior where each branch only executes if its condition is truthy, so outputs from any branch may be undefined.
+
+To migrate, update any code that consumes branch outputs to handle optional values.
+
+```diff
+  const workflow = createWorkflow({...})
+    .branch([
+      [condition1, stepA],  // outputSchema: { result: z.string() }
+      [condition2, stepB],  // outputSchema: { data: z.number() }
+    ])
+-   // Previously: stepA.result typed as string, stepB.data typed as number
++   // Now: stepA.result typed as string | undefined, stepB.data typed as number | undefined
+    .then(nextStep);
+```
+
+If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
+
 ## Removed
 
 ### Legacy workflows export
