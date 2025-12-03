@@ -17,5 +17,8 @@
     "!create-mastra",
     "!@mastra/*",
     "@internal/*"
-  ]
+  ],
+  "snapshot": {
+    "prereleaseTemplate": "{tag}-{commit}"
+  }
 }
