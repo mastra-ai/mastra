@@ -215,6 +215,202 @@ describe('LangfuseExporter', () => {
       // Should not create trace for child spans
       expect(mockLangfuseClient.trace).not.toHaveBeenCalled();
     });
+
+    it('should reuse existing trace when multiple root spans share the same traceId', async () => {
+      const sharedTraceId = 'shared-trace-123';
+
+      // First root span (e.g., first agent.stream call)
+      const firstRootSpan = createMockSpan({
+        id: 'root-span-1',
+        name: 'agent-call-1',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        traceId: sharedTraceId,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+
+      // Child span of first root (e.g., tool call from first agent call)
+      const firstChildSpan = createMockSpan({
+        id: 'child-span-1',
+        name: 'tool-call-1',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        traceId: sharedTraceId,
+        parentSpanId: 'root-span-1',
+        attributes: { toolId: 'calculator' },
+      });
+
+      // Second root span with same traceId (e.g., second agent.stream call after client-side tool)
+      const secondRootSpan = createMockSpan({
+        id: 'root-span-2',
+        name: 'agent-call-2',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        traceId: sharedTraceId,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+
+      // Child span of second root (e.g., tool call from second agent call)
+      const secondChildSpan = createMockSpan({
+        id: 'child-span-2',
+        name: 'tool-call-2',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        traceId: sharedTraceId,
+        parentSpanId: 'root-span-2',
+        attributes: { toolId: 'search' },
+      });
+
+      // Process all spans
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstChildSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondChildSpan,
+      });
+
+      // Should create trace only once (for the shared traceId)
+      expect(mockLangfuseClient.trace).toHaveBeenCalledTimes(1);
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: sharedTraceId,
+        name: 'agent-call-1',
+        userId: 'user-456',
+        sessionId: 'session-789',
+        metadata: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+      });
+
+      // Both root spans and their children should be added to the same trace
+      // First root span creates a span under the trace
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'root-span-1',
+          name: 'agent-call-1',
+        }),
+      );
+
+      // Second root span should also create a span under the same trace (not a new trace)
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'root-span-2',
+          name: 'agent-call-2',
+        }),
+      );
+
+      // Child spans should be created
+      expect(mockSpan.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'child-span-1',
+        }),
+      );
+
+      expect(mockSpan.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'child-span-2',
+        }),
+      );
+    });
+
+    it('should handle trace that exists in Langfuse but not in local traceMap (e.g., after server restart)', async () => {
+      // Scenario: Server restarts, traceMap is cleared, but traces exist in Langfuse
+      // When new spans arrive with the same traceId, we should create a new local reference
+      // The Langfuse SDK handles this gracefully - it's idempotent and will update the existing trace
+
+      const traceId = 'persisted-trace-id';
+
+      // Simulate a span arriving after server restart
+      const rootSpan = createMockSpan({
+        id: 'new-root-span',
+        name: 'agent-call-after-restart',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        traceId: traceId,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+
+      // Process the span
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Should call client.trace() to create/update the trace in Langfuse
+      // The Langfuse SDK is idempotent - if the trace exists, it will update it
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: traceId,
+        name: 'agent-call-after-restart',
+        userId: 'user-456',
+        sessionId: 'session-789',
+        metadata: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+      });
+
+      // The root span itself also creates a span under the trace
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'new-root-span',
+          name: 'agent-call-after-restart',
+        }),
+      );
+
+      // Add a child span to verify the trace is now in our local map
+      const childSpan = createMockSpan({
+        id: 'child-span',
+        name: 'tool-call',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        traceId: traceId,
+        parentSpanId: 'new-root-span',
+        attributes: { toolId: 'calculator' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: childSpan,
+      });
+
+      // Child span should be created under the root span
+      expect(mockSpan.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'child-span',
+          name: 'tool-call',
+        }),
+      );
+    });
   });
 
   describe('LLM Generation Mapping', () => {
@@ -1737,6 +1933,8 @@ function createMockSpan({
   output,
   errorInfo,
   tags,
+  traceId,
+  parentSpanId,
 }: {
   id: string;
   name: string;
@@ -1748,6 +1946,8 @@ function createMockSpan({
   output?: any;
   errorInfo?: any;
   tags?: string[];
+  traceId?: string;
+  parentSpanId?: string;
 }): AnyExportedSpan {
   return {
     id,
@@ -1761,9 +1961,9 @@ function createMockSpan({
     tags,
     startTime: new Date(),
     endTime: undefined,
-    traceId: isRoot ? id : 'parent-trace-id',
+    traceId: traceId ?? (isRoot ? id : 'parent-trace-id'),
     isRootSpan: isRoot,
-    parentSpanId: isRoot ? undefined : 'parent-id',
+    parentSpanId: parentSpanId ?? (isRoot ? undefined : 'parent-id'),
     isEvent: false,
   };
 }
