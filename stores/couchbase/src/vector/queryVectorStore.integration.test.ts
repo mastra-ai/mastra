@@ -811,7 +811,7 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
         await new Promise(resolve => setTimeout(resolve, 5000));
 
         // Verify dimension is reset
-        expect((couchbase_client as any).vector_dimension).toBeNull();
+        expect((couchbase_client as any).vector_dimension).toBeUndefined();
 
         // Also verify the index is gone using cluster directly
         const indexes = await couchbase_client.listIndexes();

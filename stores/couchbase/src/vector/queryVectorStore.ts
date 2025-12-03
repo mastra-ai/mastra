@@ -438,7 +438,7 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
         collectionName: this.collectionName,
         ignoreIfNotExists: true,
       });
-      this.vector_dimension = null as unknown as number;
+      this.vector_dimension = undefined;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
