@@ -2072,9 +2072,9 @@ describe('Workflow', () => {
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Paris' },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Paris' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'finish',
                   id: '2',
@@ -2097,9 +2097,9 @@ describe('Workflow', () => {
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'London' },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'London' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'finish',
                   id: '2',
@@ -2679,8 +2679,8 @@ describe('Workflow', () => {
         return {
           stream: simulateReadableStream({
             chunks: [
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Response' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Response' },
               {
                 type: 'finish',
                 id: '2',
