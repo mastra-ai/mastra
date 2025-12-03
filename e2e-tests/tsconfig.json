@@ -14,17 +14,5 @@
     }
   },
   "include": ["./*.ts", "./_shared/**/*.ts", "./suites/**/*.ts"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "templates",
-    "**/template/**",
-    "commonjs",
-    "create-mastra",
-    "deployers",
-    "kitchen-sink",
-    "monorepo",
-    "pkg-outputs",
-    "_local-registry-setup"
-  ]
+  "exclude": ["node_modules", "dist", "templates", "**/template/**", "kitchen-sink"]
 }

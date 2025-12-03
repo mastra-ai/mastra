@@ -1,6 +1,6 @@
 {
   "name": "@internal/e2e-tests",
-  "version": "0.0.1",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251203072747",
   "private": true,
   "type": "module",
   "scripts": {

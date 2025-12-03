@@ -23,58 +23,55 @@ let isSetupOwner = false;
 let signalHandlersRegistered = false;
 
 /**
- * All packages that might be needed by any e2e test.
- * This ensures we publish everything once, rather than per-test-suite.
+ * Core packages needed by e2e tests.
+ * Only these packages get versioned in the changeset.
+ * This is much faster than versioning all 100+ packages.
+ *
+ * Include both the packages tests use AND their workspace dependencies.
  */
-const PACKAGES_TO_PUBLISH = [
-  // Core packages (dependencies of everything)
-  '--filter="@mastra/core^..."',
-  '--filter="@mastra/core"',
+const E2E_PACKAGES = [
+  // Core and its deps
+  '@mastra/core',
+  '@mastra/schema-compat',
 
-  // CLI and tools
-  '--filter="mastra^..."',
-  '--filter="mastra"',
-  '--filter="create-mastra^..."',
-  '--filter="create-mastra"',
+  // CLI and its deps
+  'mastra',
+  'create-mastra',
+  '@mastra/deployer',
+  '@mastra/server',
+  '@mastra/hono',
 
-  // Loggers (many things depend on this)
-  '--filter="@mastra/loggers^..."',
-  '--filter="@mastra/loggers"',
+  // Loggers
+  '@mastra/loggers',
 
   // Storage
-  '--filter="@mastra/libsql^..."',
-  '--filter="@mastra/libsql"',
-  '--filter="@mastra/pg^..."',
-  '--filter="@mastra/pg"',
+  '@mastra/libsql',
+  '@mastra/pg',
 
   // Memory
-  '--filter="@mastra/memory^..."',
-  '--filter="@mastra/memory"',
+  '@mastra/memory',
 
   // Deployers
-  '--filter="@mastra/deployer-cloudflare^..."',
-  '--filter="@mastra/deployer-cloudflare"',
-  '--filter="@mastra/deployer-vercel^..."',
-  '--filter="@mastra/deployer-vercel"',
-  '--filter="@mastra/deployer-netlify^..."',
-  '--filter="@mastra/deployer-netlify"',
+  '@mastra/deployer-cloudflare',
+  '@mastra/deployer-vercel',
+  '@mastra/deployer-netlify',
 
   // Playground and UI
-  '--filter="@mastra/playground-ui^..."',
-  '--filter="@mastra/playground-ui"',
+  '@mastra/playground-ui',
 
   // MCP
-  '--filter="@mastra/mcp^..."',
-  '--filter="@mastra/mcp"',
+  '@mastra/mcp',
 
-  // Evals
-  '--filter="@mastra/evals^..."',
-  '--filter="@mastra/evals"',
-
-  // Observability
-  '--filter="@mastra/observability^..."',
-  '--filter="@mastra/observability"',
+  // Evals and Observability
+  '@mastra/evals',
+  '@mastra/observability',
 ];
+
+/**
+ * pnpm filter arguments for publishing.
+ * Uses ^... to include dependencies.
+ */
+const PUBLISH_FILTERS = E2E_PACKAGES.flatMap(pkg => [`--filter="${pkg}^..."`, `--filter="${pkg}"`]);
 
 const E2E_TAG = 'e2e-test';
 
@@ -159,12 +156,12 @@ async function doSetup(): Promise<string> {
 
   // 2. Prepare snapshot versions
   console.log('[E2E Global Setup] Preparing snapshot versions...');
-  const result = await prepareSnapshotVersions({ rootDir: ROOT_DIR, tag: E2E_TAG }, PACKAGES_TO_PUBLISH);
+  const result = await prepareSnapshotVersions({ rootDir: ROOT_DIR, tag: E2E_TAG }, E2E_PACKAGES);
   cleanupSnapshot = result.cleanup;
 
   // 3. Publish packages
   console.log('[E2E Global Setup] Publishing packages to local registry...');
-  publishPackages(PACKAGES_TO_PUBLISH, E2E_TAG, ROOT_DIR, registry.url);
+  publishPackages(PUBLISH_FILTERS, E2E_TAG, ROOT_DIR, registry.url);
   console.log('[E2E Global Setup] All packages published successfully');
 
   // Write lock file for other projects to find

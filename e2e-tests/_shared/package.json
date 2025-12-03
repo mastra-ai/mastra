@@ -1,6 +1,6 @@
 {
   "name": "@internal/e2e-shared",
-  "version": "0.0.0-e2e-test-20251203043548",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251203072747",
   "private": true,
   "type": "module",
   "exports": {

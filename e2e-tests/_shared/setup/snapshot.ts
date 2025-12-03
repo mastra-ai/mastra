@@ -187,18 +187,22 @@ export async function createMonorepoCopy(rootDir: string, packagesToInclude: str
 
 /**
  * Prepare packages for publishing with snapshot versions.
- * This modifies package.json files in a temporary directory to use snapshot versions.
- *
- * IMPORTANT: This does NOT modify the actual git repository.
+ * This modifies package.json files to use snapshot versions.
  *
  * @param options - Snapshot options including rootDir and tag
- * @param packageFilters - pnpm filter arguments for packages to publish
- * @returns Cleanup function to remove temporary files
+ * @param packageNames - Array of package names to include in the changeset
+ * @returns Cleanup function to restore files
  */
 export async function prepareSnapshotVersions(
   options: SnapshotOptions,
-  packageFilters: string[],
+  packageNames: string[],
 ): Promise<{ cleanup: () => Promise<void> }> {
+  if (!options || !options.rootDir || !options.tag) {
+    throw new Error(
+      `[Snapshot] Invalid options: rootDir=${options?.rootDir}, tag=${options?.tag}. ` +
+        `Expected { rootDir: string, tag: string }`,
+    );
+  }
   const { rootDir, tag } = options;
 
   // Find all package.json files
@@ -245,12 +249,17 @@ export async function prepareSnapshotVersions(
     // Changeset config might not exist
   }
 
-  // Create a changeset for snapshot
+  // Create a changeset ONLY for the specified packages (not all 100+)
   const changesetFile = join(rootDir, `.changeset/e2e-test-${Date.now()}.md`);
   const allPackages = await getPublishablePackages(rootDir);
+  const packageSet = new Set(packageNames);
+
+  // Filter to only the packages we need
+  const packagesToVersion = allPackages.filter(pkg => packageSet.has(pkg.name));
+  console.log(`[Snapshot] Creating changeset for ${packagesToVersion.length} packages (not all ${allPackages.length})`);
 
   let changeset = `---\n`;
-  for (const pkg of allPackages) {
+  for (const pkg of packagesToVersion) {
     changeset += `"${pkg.name}": patch\n`;
   }
   changeset += `---\n\nE2E test snapshot`;
