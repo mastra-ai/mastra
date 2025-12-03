@@ -384,7 +384,8 @@ describe('BraintrustExporter', () => {
         type: SpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'Hello' }] },
-        output: { content: 'Hi there!' },
+        // Note: LLM output uses 'text' field, not 'content'
+        output: { text: 'Hi there!' },
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -420,8 +421,8 @@ describe('BraintrustExporter', () => {
         },
         // Input is transformed: { messages: [...] } -> [...] for Braintrust Thread view
         input: [{ role: 'user', content: 'Hello' }],
-        // Output is transformed: { content: '...' } -> '...' for Braintrust Thread view
-        output: 'Hi there!',
+        // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
+        output: { role: 'assistant', content: 'Hi there!' },
         metrics: {
           prompt_tokens: 10,
           completion_tokens: 5,
@@ -501,7 +502,8 @@ describe('BraintrustExporter', () => {
         type: SpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'What is the weather?' }] },
-        output: { content: 'The weather is sunny.' },
+        // Note: LLM output uses 'text' field, not 'content'
+        output: { text: 'The weather is sunny.' },
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -513,13 +515,14 @@ describe('BraintrustExporter', () => {
         exportedSpan: llmSpan,
       });
 
-      // Braintrust Thread view expects input to be a direct array of messages
-      // in OpenAI format, NOT wrapped in { messages: [...] }
+      // Braintrust Thread view expects:
+      // - input to be a direct array of messages in OpenAI format
+      // - output to be { role: 'assistant', content: '...' } format
       expect(mockLogger.startSpan).toHaveBeenCalledWith(
         expect.objectContaining({
           // Thread view requires direct array format for messages to display
           input: [{ role: 'user', content: 'What is the weather?' }],
-          output: 'The weather is sunny.',
+          output: { role: 'assistant', content: 'The weather is sunny.' },
         }),
       );
     });
@@ -582,7 +585,8 @@ describe('BraintrustExporter', () => {
         ...llmSpan.attributes,
         usage: { totalTokens: 150 },
       } as ModelGenerationAttributes;
-      llmSpan.output = { content: 'Updated response' };
+      // Note: LLM output uses 'text' field, not 'content'
+      llmSpan.output = { text: 'Updated response' };
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_UPDATED,
@@ -590,8 +594,8 @@ describe('BraintrustExporter', () => {
       });
 
       expect(mockSpan.log).toHaveBeenCalledWith({
-        // Output is transformed: { content: '...' } -> '...' for Braintrust Thread view
-        output: 'Updated response',
+        // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
+        output: { role: 'assistant', content: 'Updated response' },
         metrics: { tokens: 150 },
         metadata: {
           spanType: 'model_generation',
