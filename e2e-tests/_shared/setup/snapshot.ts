@@ -260,19 +260,35 @@ export async function prepareSnapshotVersions(
 
   // Run changeset commands
   // IMPORTANT: Use 'changeset-cli' not 'changeset' - the latter runs the custom interactive CLI
+  // Set CI=true to ensure no interactive prompts
+  const ciEnv = { ...process.env, CI: 'true' };
+
   try {
     execSync('pnpm changeset-cli pre exit', {
       cwd: rootDir,
       stdio: 'pipe',
+      env: ciEnv,
     });
   } catch {
     // pre exit might fail if not in pre mode, that's ok
   }
 
-  execSync(`pnpm changeset-cli version --snapshot ${tag}`, {
-    cwd: rootDir,
-    stdio: 'inherit',
-  });
+  console.log('[Snapshot] Running changeset version...');
+  try {
+    const result = execSync(`pnpm changeset-cli version --snapshot ${tag}`, {
+      cwd: rootDir,
+      stdio: 'pipe',
+      env: ciEnv,
+      timeout: 120000, // 2 minute timeout
+    });
+    console.log('[Snapshot] Changeset version output:', result.toString());
+  } catch (error: unknown) {
+    const execError = error as { stdout?: Buffer; stderr?: Buffer; message?: string };
+    console.error('[Snapshot] Changeset version failed');
+    if (execError.stdout) console.error('[Snapshot] stdout:', execError.stdout.toString());
+    if (execError.stderr) console.error('[Snapshot] stderr:', execError.stderr.toString());
+    throw error;
+  }
 
   // Cleanup function restores all files using git (more robust than memory-based)
   const cleanup = async () => {
