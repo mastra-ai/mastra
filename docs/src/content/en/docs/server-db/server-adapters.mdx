@@ -193,8 +193,53 @@ const app = server.getApp();
 const app = mastra.getServerApp();
 ```
 
+## Server config vs adapter options
+
+When using server adapters, configuration comes from two places: the Mastra `server` config and the adapter constructor.
+
+### Used by adapters
+
+The adapter reads these from `mastra.getServer()`:
+
+| Option | Description |
+|--------|-------------|
+| `auth` | Authentication config, used by `registerAuthMiddleware()`. See [Authentication](/docs/auth/index). |
+
+### Adapter constructor only
+
+These options are passed directly to the adapter constructor and are not read from Mastra config:
+
+| Option | Description |
+|--------|-------------|
+| `prefix` | Route path prefix |
+| `openapiPath` | OpenAPI spec endpoint |
+| `bodyLimitOptions` | Body size limit with custom error handler |
+| `streamOptions` | Stream redaction settings |
+| `customRouteAuthConfig` | Per-route auth overrides |
+
+### Not used by adapters
+
+These `server` config options are only used by `mastra build` and have no effect when using adapters directly:
+
+| Option | Used by |
+|--------|---------|
+| `port`, `host` | `mastra dev`, `mastra build` |
+| `cors` | `mastra build` adds CORS middleware |
+| `timeout` | `mastra build` |
+| `apiRoutes` | `registerApiRoute()` for `mastra build` |
+| `middleware` | Middleware config for `mastra build` |
+
+When using adapters, configure these features directly with your framework instead.
+
+## MCP support
+
+Server adapters automatically register MCP (Model Context Protocol) routes when MCP servers are configured in your Mastra instance. The routes handle both HTTP and SSE transports.
+
+See [MCP](/docs/mcp/overview) for configuration details.
+
 ## Related
 
 - [Hono Adapter](/docs/server-db/hono-adapter) - Hono-specific setup
 - [Express Adapter](/docs/server-db/express-adapter) - Express-specific setup
 - [Mastra Server](/docs/server-db/mastra-server) - Using `mastra build` instead
+- [Authentication](/docs/auth/index) - Configuring auth for your server

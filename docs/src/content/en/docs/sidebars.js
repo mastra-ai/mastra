@@ -303,6 +303,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "server-db/custom-adapters",
+          label: "Custom Adapters",
+        },
+        {
+          type: "doc",
           id: "server-db/middleware",
           label: "Middleware",
         },
