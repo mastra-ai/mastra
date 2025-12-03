@@ -112,6 +112,13 @@ export class SpanConverter {
       }
     }
 
+    // Add tags for root spans (only root spans can have tags)
+    // Tags are JSON-stringified for maximum backend compatibility
+    // While OTEL spec supports arrays, many backends (Jaeger, Zipkin, Tempo) don't fully support them
+    if (span.isRootSpan && span.tags?.length) {
+      attributes['mastra.tags'] = JSON.stringify(span.tags);
+    }
+
     const startTime = dateToHrTime(span.startTime);
     const endTime = span.endTime ? dateToHrTime(span.endTime) : startTime;
     const duration = computeDuration(span.startTime, span.endTime);

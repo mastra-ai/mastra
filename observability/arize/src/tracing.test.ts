@@ -189,6 +189,7 @@ describe('ArizeExporter', () => {
         "llm.token_count.completion": 5,
         "llm.token_count.prompt": 10,
         "llm.token_count.total": 15,
+        "mastra.span.type": "model_generation",
         "openinference.span.kind": "LLM",
         "output.mime_type": "application/json",
         "output.value": "[{"role":"assistant","parts":[{"type":"text","content":"The weather in Tokyo is sunny."}]}]",
@@ -255,10 +256,7 @@ describe('ArizeExporter', () => {
         companyId: 'acme-co',
         featureFlag: 'beta',
         correlation_id: 'corr-123',
-        // reserved fields should not be present in metadata blob
-        input: 'raw-input',
-        output: 'raw-output',
-        sessionId: 'should-not-appear',
+        threadId: 'should-not-appear',
       },
     } as unknown as AnyExportedSpan;
 
@@ -276,9 +274,7 @@ describe('ArizeExporter', () => {
       featureFlag: 'beta',
       correlation_id: 'corr-123',
     });
-    expect(parsed.input).toBeUndefined();
-    expect(parsed.output).toBeUndefined();
-    expect(parsed.sessionId).toBeUndefined();
+    expect(parsed.threadId).toBeUndefined();
   });
 
   describe('Tags Support', () => {
@@ -320,6 +316,7 @@ describe('ArizeExporter', () => {
       expect(exportedAttributes[SemanticConventions.TAG_TAGS]).toBe(
         JSON.stringify(['production', 'experiment-v2', 'user-request']),
       );
+      expect(exportedAttributes['mastra.tags']).toBeUndefined();
     });
 
     it('does not include tags for child spans', async () => {

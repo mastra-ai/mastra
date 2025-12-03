@@ -320,7 +320,7 @@ const PROVIDER_ALIASES: Record<string, string[]> = {
   cohere: ['cohere'],
   deepseek: ['deepseek'],
   'gcp.gemini': ['gcpgemini', 'gemini'],
-  'gcp.gen_ai': ['gcpgenai', 'googlegenai', 'googlegenai', 'googleai'],
+  'gcp.gen_ai': ['gcpgenai', 'googlegenai', 'googleai'],
   'gcp.vertex_ai': ['gcpvertexai', 'vertexai'],
   groq: ['groq'],
   'ibm.watsonx.ai': ['ibmwatsonxai', 'watsonx', 'watsonxai'],

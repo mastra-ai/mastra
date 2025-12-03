@@ -18,109 +18,89 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
 } from '@opentelemetry/semantic-conventions/incubating';
 
-const RESERVED_PREFIXES = [
-  'gen_ai.',
-  'llm.',
-  'input.',
-  'output.',
-  'span.',
-  'mastra.',
-  'agent.',
-  'workflow.',
-  'mcp.',
-  'openinference.',
-  'retrieval.',
-  'reranker.',
-  'embedding.',
-  'document.',
-  'tool.',
-  'error.',
-  'http.',
-  'db.',
-];
+const MASTRA_GENERAL_PREFIX = 'mastra.';
+const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
 
-const RESERVED_EXACT = new Set<string>([
-  'input',
-  'output',
-  'metadata',
-  'sessionId',
-  'threadId',
-  'userId',
-  SESSION_ID,
-  USER_ID,
-])
+/**
+ * Splits Mastra span attributes into two groups:
+ * - `metadata`: keys starting with "mastra.metadata." (prefix removed)
+ * - `other`: all remaining keys starting with "mastra."
+ *
+ * Any attributes not starting with "mastra." are ignored entirely.
+ */
+function splitMastraAttributes(attributes: Record<string, any>): {
+  mastraMetadata: Record<string, any>;
+  mastraOther: Record<string, any>;
+} {
+  return Object.entries(attributes).reduce(
+    (acc, [key, value]) => {
+      if (key.startsWith(MASTRA_GENERAL_PREFIX)) {
+        if (key.startsWith(MASTRA_METADATA_PREFIX)) {
+          const strippedKey = key.slice(MASTRA_METADATA_PREFIX.length);
+          acc.mastraMetadata[strippedKey] = value;
+        } else {
+          acc.mastraOther[key] = value;
+        }
+      }
+      return acc;
+    },
+    {
+      mastraMetadata: {} as Record<string, any>,
+      mastraOther: {} as Record<string, any>,
+    },
+  );
+}
 
 export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void) {
     const processedSpans = spans.map(span => {
       const attributes = { ...(span.attributes ?? {}) };
       const mutableSpan = span as Mutable<ReadableSpan>;
-      const metadataEntries: Record<string, unknown> = {};
 
-      // Gather custom attributes into OpenInference metadata (flat best-effort)
-      for (const [key, value] of Object.entries(attributes)) {
-        const isReserved =
-          RESERVED_EXACT.has(key) ||
-          RESERVED_PREFIXES.some(prefix => key.startsWith(prefix))
-        if (!isReserved) {
-          metadataEntries[key] = value;
-        }
-      }
-
-      let metadataPayload: string | undefined;
-      if (Object.keys(metadataEntries).length > 0) {
-        try {
-          metadataPayload = JSON.stringify(metadataEntries);
-          attributes[METADATA] = metadataPayload;
-        } catch {
-          // best-effort only
-        }
-      }
-
-      const sessionId = typeof attributes['threadId'] === 'string' ? (attributes['threadId'] as string) : undefined;
-      const userId = typeof attributes['userId'] === 'string' ? (attributes['userId'] as string) : undefined;
-
-      if (sessionId) {
-        attributes[SESSION_ID] = sessionId;
-        delete attributes['threadId'];
-      }
-
-      if (userId) {
-        attributes[USER_ID] = userId;
-        delete attributes['userId'];
-      }
-
+      const { mastraMetadata, mastraOther } = splitMastraAttributes(attributes);
       const processedAttributes = convertGenAISpanAttributesToOpenInferenceSpanAttributes(attributes);
 
       // only add processed attributes if conversion was successful
       if (processedAttributes) {
-        if (sessionId) {
-          processedAttributes[SESSION_ID] = sessionId;
-        }
-        if (userId) {
-          processedAttributes[USER_ID] = userId;
-        }
-        if (metadataPayload) {
-          processedAttributes[METADATA] = metadataPayload;
+        const threadId = mastraMetadata['threadId'];
+        if (threadId) {
+          delete mastraMetadata['threadId'];
+          processedAttributes[SESSION_ID] = threadId;
         }
 
         // Map mastra.tags to OpenInference native tag.tags convention (tags are only on root spans)
-        if (attributes['mastra.tags']) {
-          processedAttributes[TAG_TAGS] = attributes['mastra.tags'];
+        if (mastraOther['mastra.tags']) {
+          processedAttributes[TAG_TAGS] = mastraOther['mastra.tags'];
+          delete mastraOther['mastra.tags'];
         }
 
-        const inputMessages = span.attributes[ATTR_GEN_AI_INPUT_MESSAGES];
+        const userId = mastraMetadata['userId'];
+        if (userId) {
+          delete mastraMetadata['userId'];
+          processedAttributes[USER_ID] = userId;
+        }
+
+        // Gather custom metadata into OpenInference metadata (flat best-effort)
+        if (Object.keys(mastraMetadata).length > 0) {
+          try {
+            processedAttributes[METADATA] = JSON.stringify(mastraMetadata);
+          } catch {
+            // best-effort only
+          }
+        }
+
+        const inputMessages = attributes[ATTR_GEN_AI_INPUT_MESSAGES];
         if (inputMessages) {
           processedAttributes[INPUT_MIME_TYPE] = 'application/json';
           processedAttributes[INPUT_VALUE] = inputMessages;
         }
-        const outputMessages = span.attributes[ATTR_GEN_AI_OUTPUT_MESSAGES];
+        const outputMessages = attributes[ATTR_GEN_AI_OUTPUT_MESSAGES];
         if (outputMessages) {
           processedAttributes[OUTPUT_MIME_TYPE] = 'application/json';
           processedAttributes[OUTPUT_VALUE] = outputMessages;
         }
 
-        mutableSpan.attributes = processedAttributes;
+        mutableSpan.attributes = { ...processedAttributes, ...mastraOther };
       }
 
       return mutableSpan;
