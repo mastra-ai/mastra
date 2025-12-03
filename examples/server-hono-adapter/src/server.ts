@@ -11,19 +11,18 @@
 
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { MastraServer } from '@mastra/hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
 import { mastra } from './mastra';
 
-const app = new Hono();
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 const server = new MastraServer({ app: app as any, mastra });
 
 await server.init();
 
 // Custom route with access to Mastra context
-// Note: c.get() typing requires assertion due to Hono's generic context
 app.get('/health', c => {
-  const mastraInstance = c.get('mastra' as never) as typeof mastra;
+  const mastraInstance = c.get('mastra');
   const agents = Object.keys(mastraInstance.listAgents());
   return c.json({ status: 'ok', agents });
 });

@@ -36,10 +36,10 @@ Create your server file:
 
 ```typescript title="server.ts" copy showLineNumbers
 import { Hono } from 'hono';
-import { MastraServer } from '@mastra/hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
 
-const app = new Hono();
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 const server = new MastraServer({ app, mastra });
 
 await server.init();
@@ -55,10 +55,10 @@ export default app;
 
 ```typescript title="server.ts" copy showLineNumbers
 import { Hono } from 'hono';
-import { MastraServer } from '@mastra/hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
 
-const app = new Hono();
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
 const server = new MastraServer({
   app,
@@ -82,7 +82,10 @@ export default app;
 Add routes directly to the Hono app:
 
 ```typescript title="server.ts" copy showLineNumbers
-const app = new Hono();
+import { Hono } from 'hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 const server = new MastraServer({ app, mastra });
 
 // Before init - runs before Mastra middleware
@@ -133,7 +136,10 @@ Available context keys:
 Add Hono middleware before or after `init()`:
 
 ```typescript title="server.ts" copy showLineNumbers
-const app = new Hono();
+import { Hono } from 'hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
 // Middleware before init
 app.use('*', async (c, next) => {
