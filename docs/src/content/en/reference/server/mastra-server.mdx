@@ -11,13 +11,13 @@ The `MastraServer` abstract class is the base for all server adapters. Extend th
 
 ## Import
 
-```typescript
+```typescript copy
 import { MastraServer } from '@mastra/server';
 ```
 
 ## Type parameters
 
-```typescript
+```typescript copy
 MastraServer<TApp, TRequest, TResponse>
 ```
 
@@ -29,7 +29,7 @@ MastraServer<TApp, TRequest, TResponse>
 
 ## Constructor
 
-```typescript
+```typescript copy
 constructor(options: MastraServerOptions<TApp>)
 ```
 
@@ -92,7 +92,7 @@ These methods must be implemented by adapters:
 
 Attach Mastra context to every request.
 
-```typescript
+```typescript copy
 abstract registerContextMiddleware(): void
 ```
 
@@ -106,7 +106,7 @@ abstract registerContextMiddleware(): void
 
 Register authentication and authorization middleware.
 
-```typescript
+```typescript copy
 abstract registerAuthMiddleware(): void
 ```
 
@@ -114,7 +114,7 @@ abstract registerAuthMiddleware(): void
 
 Register a single route with the framework.
 
-```typescript
+```typescript copy
 abstract registerRoute(
   app: TApp,
   route: ServerRoute,
@@ -126,7 +126,7 @@ abstract registerRoute(
 
 Extract parameters from the request.
 
-```typescript
+```typescript copy
 abstract getParams(
   route: ServerRoute,
   request: TRequest
@@ -141,7 +141,7 @@ abstract getParams(
 
 Send response based on route type.
 
-```typescript
+```typescript copy
 abstract sendResponse(
   route: ServerRoute,
   response: TResponse,
@@ -153,7 +153,7 @@ abstract sendResponse(
 
 Handle streaming responses.
 
-```typescript
+```typescript copy
 abstract stream(
   route: ServerRoute,
   response: TResponse,
@@ -167,7 +167,7 @@ abstract stream(
 
 Initialize the server by registering all middleware and routes.
 
-```typescript
+```typescript copy
 async init(): Promise<void>
 ```
 
@@ -180,7 +180,7 @@ Calls in order:
 
 Register all Mastra routes.
 
-```typescript
+```typescript copy
 async registerRoutes(): Promise<void>
 ```
 
@@ -188,7 +188,7 @@ async registerRoutes(): Promise<void>
 
 Get the framework app instance.
 
-```typescript
+```typescript copy
 getApp<T = TApp>(): T
 ```
 
@@ -196,7 +196,7 @@ getApp<T = TApp>(): T
 
 Validate query params with Zod schema.
 
-```typescript
+```typescript copy
 async parseQueryParams(
   route: ServerRoute,
   params: Record<string, string>
@@ -207,7 +207,7 @@ async parseQueryParams(
 
 Validate body with Zod schema.
 
-```typescript
+```typescript copy
 async parseBody(
   route: ServerRoute,
   body: unknown
@@ -218,7 +218,7 @@ async parseBody(
 
 ### BodyLimitOptions
 
-```typescript
+```typescript copy
 interface BodyLimitOptions {
   maxSize: number;
   onError: (error: unknown) => unknown;
@@ -227,7 +227,7 @@ interface BodyLimitOptions {
 
 ### StreamOptions
 
-```typescript
+```typescript copy
 interface StreamOptions {
   redact?: boolean;
 }
@@ -235,7 +235,7 @@ interface StreamOptions {
 
 ## Example
 
-```typescript
+```typescript copy showLineNumbers
 import { MastraServer, ServerRoute } from '@mastra/server';
 import type { Mastra } from '@mastra/core';
 
@@ -279,3 +279,4 @@ export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
 
 - [Server Adapters](/docs/server-db/server-adapters) - Using adapters
 - [Custom Adapters](/docs/server-db/custom-adapters) - Creating custom adapters
+- [createRoute()](/reference/server/create-route) - Creating custom routes

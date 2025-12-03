@@ -3,19 +3,36 @@ title: "Express Adapter | Server & DB"
 description: "Express-specific setup for Mastra server adapters."
 ---
 
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
 # Express Adapter
 
 The `@mastra/express` package provides a server adapter for running Mastra with [Express](https://expressjs.com).
 
+:::info
+
 For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/server-db/server-adapters).
 
+:::
+
 ## Installation
+
+<Steps>
+
+<StepItem>
+
+Install the Express adapter and Express framework:
 
 ```bash copy
 npm install @mastra/express express
 ```
 
-## Basic setup
+</StepItem>
+
+<StepItem>
+
+Create your server file:
 
 ```typescript title="server.ts" copy showLineNumbers
 import express from 'express';
@@ -33,7 +50,15 @@ app.listen(4111, () => {
 });
 ```
 
-> Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`.
+</StepItem>
+
+</Steps>
+
+:::note
+
+Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`.
+
+:::
 
 ## Full example
 
@@ -76,7 +101,7 @@ app.listen(4111);
 
 Add routes directly to the Express app:
 
-```typescript copy showLineNumbers
+```typescript title="server.ts" copy showLineNumbers
 const app = express();
 app.use(express.json());
 
@@ -96,11 +121,17 @@ app.get('/custom', (req, res) => {
 app.listen(4111);
 ```
 
+:::tip
+
+Routes added before `init()` run without Mastra context. Add routes after `init()` to access the Mastra instance and request context.
+
+:::
+
 ## Accessing context
 
 In Express middleware and routes, access Mastra context via `res.locals`:
 
-```typescript copy
+```typescript copy showLineNumbers
 app.get('/custom', (req, res) => {
   const mastra = res.locals.mastra;
   const requestContext = res.locals.requestContext;
@@ -112,17 +143,20 @@ app.get('/custom', (req, res) => {
 ```
 
 Available properties on `res.locals`:
-- `mastra` - Mastra instance
-- `requestContext` - Request context map
-- `abortSignal` - Request cancellation signal
-- `tools` - Available tools
-- `user` - Authenticated user (if auth configured)
+
+| Key | Description |
+|-----|-------------|
+| `mastra` | Mastra instance |
+| `requestContext` | Request context map |
+| `abortSignal` | Request cancellation signal |
+| `tools` | Available tools |
+| `user` | Authenticated user (if auth configured) |
 
 ## Adding middleware
 
 Add Express middleware before or after `init()`:
 
-```typescript copy showLineNumbers
+```typescript title="server.ts" copy showLineNumbers
 const app = express();
 app.use(express.json());
 

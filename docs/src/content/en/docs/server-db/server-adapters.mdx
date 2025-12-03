@@ -4,6 +4,8 @@ description: "Manually configure a Mastra server using Hono or Express adapters.
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Server Adapters
 
@@ -13,6 +15,12 @@ Server adapters let you run Mastra with your own HTTP server instead of using `m
 - Control middleware ordering
 - Deploy to platforms requiring specific server setup
 - Use Express instead of Hono
+
+:::info
+
+For simple deployments without custom server requirements, use `mastra build` instead. See [Mastra Server](/docs/server-db/mastra-server).
+
+:::
 
 ## Available adapters
 
@@ -94,7 +102,7 @@ Calling `init()` runs three steps in order:
 
 For custom middleware ordering, call each method separately instead of `init()`:
 
-```typescript copy
+```typescript title="server.ts" copy showLineNumbers
 const server = new MastraServer({ app, mastra });
 
 // Your middleware first
@@ -112,6 +120,12 @@ await server.registerRoutes();
 app.get('/health', ...);
 ```
 
+:::tip
+
+Use manual initialization when you need middleware that runs before Mastra's context is available, or when you need to insert middleware between the context and auth steps.
+
+:::
+
 ## Adding custom routes
 
 Routes added to the app after `init()` have access to Mastra context. See framework-specific docs for syntax:
@@ -122,7 +136,7 @@ Routes added to the app after `init()` have access to Mastra context. See framew
 
 Apply a prefix to all Mastra routes:
 
-```typescript copy
+```typescript copy showLineNumbers
 const server = new MastraServer({
   app,
   mastra,
@@ -136,7 +150,7 @@ Mastra routes are now at `/api/v2/agents`, `/api/v2/workflows`, etc. Custom rout
 
 Enable OpenAPI spec generation:
 
-```typescript copy
+```typescript copy showLineNumbers
 const server = new MastraServer({
   app,
   mastra,
@@ -150,7 +164,7 @@ The spec is generated from route schemas and served at the specified path.
 
 By default, sensitive data (system prompts, tool definitions, API keys) is redacted from stream responses. Configure via `streamOptions`:
 
-```typescript copy
+```typescript copy showLineNumbers
 const server = new MastraServer({
   app,
   mastra,
@@ -160,13 +174,17 @@ const server = new MastraServer({
 });
 ```
 
+:::note
+
 Set `redact: false` only for internal services or debugging.
+
+:::
 
 ## Per-route auth overrides
 
 Override the default auth behavior for specific routes:
 
-```typescript copy
+```typescript copy showLineNumbers
 const server = new MastraServer({
   app,
   mastra,
@@ -185,7 +203,7 @@ Keys follow the format `METHOD:PATH` where method is `GET`, `POST`, `PUT`, `DELE
 
 After creating the adapter, access the framework app:
 
-```typescript copy
+```typescript copy showLineNumbers
 // Via adapter
 const app = server.getApp();
 

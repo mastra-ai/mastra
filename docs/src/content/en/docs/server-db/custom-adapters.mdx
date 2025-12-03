@@ -7,25 +7,21 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Custom Adapters
 
-If you need to run Mastra with a framework other than Hono or Express, you can create a custom adapter by extending the abstract `MastraServer` class.
+Create a custom adapter when your framework isn't Hono or Express, or when you need custom request/response handling patterns.
 
-## When to create a custom adapter
-
-Create a custom adapter when:
-
-- Your framework isn't Hono or Express (e.g., Fastify, Koa, native Node.js)
-- You need custom request/response handling
-- You're integrating with a serverless platform that requires specific patterns
+:::info
 
 For Hono or Express, use the built-in adapters instead:
 - [@mastra/hono](/docs/server-db/hono-adapter)
 - [@mastra/express](/docs/server-db/express-adapter)
 
+:::
+
 ## Abstract class
 
 Extend `MastraServer` from `@mastra/server`:
 
-```typescript copy
+```typescript title="my-framework-adapter.ts" copy showLineNumbers
 import { MastraServer } from '@mastra/server';
 
 export class MyFrameworkServer extends MastraServer<
@@ -45,7 +41,7 @@ You must implement these six abstract methods:
 
 Attach Mastra context to every request. This makes the Mastra instance, request context, tools, and abort signal available to route handlers.
 
-```typescript copy
+```typescript copy showLineNumbers
 registerContextMiddleware(): void {
   this.app.use('*', (req, res, next) => {
     // Attach context to your framework's request/response
@@ -58,7 +54,7 @@ registerContextMiddleware(): void {
 }
 ```
 
-**Context to attach:**
+Context to attach:
 
 | Key | Type | Description |
 |-----|------|-------------|
@@ -72,7 +68,7 @@ registerContextMiddleware(): void {
 
 Register authentication and authorization middleware. Only register if auth is configured.
 
-```typescript copy
+```typescript copy showLineNumbers
 registerAuthMiddleware(): void {
   const authConfig = this.mastra.getServer()?.auth;
   if (!authConfig) return;
@@ -108,7 +104,7 @@ registerAuthMiddleware(): void {
 
 Register a single route with your framework.
 
-```typescript copy
+```typescript copy showLineNumbers
 async registerRoute(
   app: MyApp,
   route: ServerRoute,
@@ -155,7 +151,7 @@ async registerRoute(
 
 Extract URL parameters, query parameters, and request body.
 
-```typescript copy
+```typescript copy showLineNumbers
 async getParams(
   route: ServerRoute,
   request: MyRequest
@@ -176,7 +172,7 @@ async getParams(
 
 Send the response based on the route's response type.
 
-```typescript copy
+```typescript copy showLineNumbers
 async sendResponse(
   route: ServerRoute,
   response: MyResponse,
@@ -211,7 +207,7 @@ async sendResponse(
 
 Handle streaming responses for agent generation.
 
-```typescript copy
+```typescript copy showLineNumbers
 async stream(
   route: ServerRoute,
   response: MyResponse,
@@ -267,7 +263,7 @@ The base class provides these helper methods:
 
 Call `super()` with the required options:
 
-```typescript copy
+```typescript copy showLineNumbers
 constructor(options: {
   app: MyApp;
   mastra: Mastra;
@@ -281,9 +277,11 @@ constructor(options: {
 }
 ```
 
+> See [Server Adapters](/docs/server-db/server-adapters#constructor-options) for full options documentation.
+
 ## Full example
 
-```typescript copy title="my-framework-adapter.ts"
+```typescript title="my-framework-adapter.ts" copy showLineNumbers
 import { MastraServer, ServerRoute } from '@mastra/server';
 import type { Mastra } from '@mastra/core';
 
@@ -338,7 +336,7 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
 
 ## Usage
 
-```typescript copy
+```typescript title="server.ts" copy showLineNumbers
 import { MyFrameworkServer } from './my-framework-adapter';
 import { mastra } from './mastra';
 
@@ -350,8 +348,15 @@ await server.init();
 app.listen(4111);
 ```
 
+:::tip
+
+Use the existing [@mastra/hono](https://github.com/mastra-ai/mastra/blob/main/packages/hono/src/index.ts) or [@mastra/express](https://github.com/mastra-ai/mastra/blob/main/packages/express/src/index.ts) implementations as reference when building your custom adapter.
+
+:::
+
 ## Related
 
 - [Server Adapters](/docs/server-db/server-adapters) - Overview and shared concepts
 - [Hono Adapter](/docs/server-db/hono-adapter) - Reference implementation
 - [Express Adapter](/docs/server-db/express-adapter) - Reference implementation
+- [MastraServer Reference](/reference/server/mastra-server) - Full API reference
