@@ -368,13 +368,10 @@ export class BraintrustExporter extends BaseExporter {
   /**
    * Transforms MODEL_GENERATION input to Braintrust Thread view format.
    */
-  private transformLlmInput(input: any, spanType: SpanType): any {
+  private transformInput(input: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
       if (input && Array.isArray(input.messages)) {
-        return input.messages.map((message: any) => {
-          const { role, content, ...rest } = message;
-          return { role, content, ...rest };
-        });
+        return input.messages;
       } else if (input && typeof input === 'object' && 'content' in input) {
         return [{ role: input.role, content: input.content }];
       }
@@ -386,7 +383,7 @@ export class BraintrustExporter extends BaseExporter {
   /**
    * Transforms MODEL_GENERATION output to Braintrust Thread view format.
    */
-  private transformLlmOutput(output: any, spanType: SpanType): any {
+  private transformOutput(output: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
       const { text, ...rest } = output;
       return { role: 'assistant', content: text, ...rest };
@@ -398,13 +395,12 @@ export class BraintrustExporter extends BaseExporter {
   private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
     const payload: Record<string, any> = {};
 
-    // Core span data - transform for LLM spans to match Braintrust Thread view format
     if (span.input !== undefined) {
-      payload.input = this.transformLlmInput(span.input, span.type);
+      payload.input = this.transformInput(span.input, span.type);
     }
 
     if (span.output !== undefined) {
-      payload.output = this.transformLlmOutput(span.output, span.type);
+      payload.output = this.transformOutput(span.output, span.type);
     }
 
     // Initialize metrics and metadata objects
