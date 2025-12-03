@@ -1,6 +1,6 @@
 {
   "name": "@mastra/posthog",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "PostHog observability provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
