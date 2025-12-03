@@ -17,7 +17,9 @@ export async function getCreateVersionTag(): Promise<string | undefined> {
     const pkgPath = fileURLToPath(import.meta.resolve('create-mastra/package.json'));
     const json = await fsExtra.readJSON(pkgPath);
 
-    const { stdout } = await execa('npm', ['dist-tag', 'create-mastra']);
+    // Use custom registry if set via npm_config_registry env var
+    const registryArgs = process.env.npm_config_registry ? ['--registry', process.env.npm_config_registry] : [];
+    const { stdout } = await execa('npm', ['dist-tag', 'create-mastra', ...registryArgs]);
     const tagLine = stdout.split('\n').find(distLine => distLine.endsWith(`: ${json.version}`));
     const tag = tagLine ? tagLine.split(':')[0].trim() : 'latest';
 
