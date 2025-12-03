@@ -23,24 +23,6 @@ export interface VercelWorkflowConfig<
 }
 
 /**
- * Serialized step context that can be passed to the runStep function.
- * All fields must be JSON-serializable.
- */
-export interface SerializedStepContext {
-  runId: string;
-  workflowId: string;
-  resourceId?: string;
-  state: Record<string, any>;
-  stepResults: Record<string, StepResult<any, any, any, any>>;
-  executionPath: number[];
-  retryCount: number;
-  requestContext: Record<string, any>;
-  resumeData?: unknown;
-  suspendData?: unknown;
-  format?: 'legacy' | 'vnext';
-}
-
-/**
  * Parameters for the mainWorkflow function.
  * All fields must be JSON-serializable for Vercel's durable execution.
  */
@@ -72,20 +54,4 @@ export interface MainWorkflowParams {
   validateInputs?: boolean;
   format?: 'legacy' | 'vnext';
   outputOptions?: { includeState?: boolean; includeResumeLabels?: boolean };
-}
-
-/**
- * Result from step execution that includes context mutations.
- * Used to track state changes that need to be persisted.
- */
-export interface StepExecutionOutput {
-  output: unknown;
-  suspended?: { payload: unknown };
-  bailed?: { payload: unknown };
-  contextMutations: {
-    suspendedPaths: Record<string, number[]>;
-    resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
-    stateUpdate: unknown | null;
-    requestContextUpdate: Record<string, unknown> | null;
-  };
 }

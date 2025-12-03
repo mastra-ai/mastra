@@ -1,4 +1,5 @@
 .nitro
 .swc
 .output
+.mastra
 node_modules

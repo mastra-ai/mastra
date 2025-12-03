@@ -4,74 +4,46 @@
  * This file contains module-level functions with Vercel's "use workflow" and "use step" directives.
  * These are the ONLY places where these directives should appear.
  *
- * Dynamic imports are used to avoid static analysis detecting Node.js modules.
+ * The functions are statically analyzable by Vercel's compiler at build time.
  */
 
-import type { StepResult, WorkflowResult, TimeTravelExecutionParams } from '@mastra/core/workflows';
+import type { WorkflowResult, StepResult, TimeTravelExecutionParams } from '@mastra/core/workflows';
+import { RequestContext } from '@mastra/core/di';
+import { getMastra } from './singleton';
+import { VercelExecutionEngine } from './execution-engine';
 import type { VercelWorkflow } from './workflow';
-import type { MainWorkflowParams, SerializedStepContext, StepExecutionOutput } from './types';
+import type { VercelRun } from './run';
+import type { MainWorkflowParams } from './types';
 
 /**
- * Execute a single step with Vercel durability.
+ * Execute a durable operation with Vercel's "use step" directive.
  *
- * This function has the "use step" directive and is statically analyzable.
- * It receives only serializable arguments and looks up the actual step
- * via the registered Mastra singleton.
+ * This function retrieves the pending operation from the VercelRun instance
+ * and executes it. The closure already has all the context it needs.
  *
- * @param workflowId - The workflow ID to look up
- * @param stepId - The step ID within the workflow
- * @param input - The input data for the step (must be serializable)
- * @param serializedContext - Serialized execution context
- * @returns The step execution output including any context mutations
+ * @param operationId - The unique operation identifier
+ * @param runId - The workflow run ID
+ * @param workflowId - The workflow ID
+ * @returns The operation result
  */
-export async function runStep(
-  workflowId: string,
-  stepId: string,
-  input: unknown,
-  serializedContext: SerializedStepContext,
-): Promise<StepExecutionOutput> {
+export async function runStep(operationId: string, runId: string, workflowId: string): Promise<unknown> {
   'use step';
 
-  const { getMastra } = await import('./singleton');
-  const { buildExecutionParams } = await import('./context');
-
   const mastra = getMastra();
-  const workflow = mastra.getWorkflowById(workflowId);
-  const step = workflow.steps[stepId];
+  const workflow = mastra.getWorkflowById(workflowId) as VercelWorkflow;
+  const run = workflow.runs.get(runId) as VercelRun | undefined;
 
-  if (!step) {
-    throw new Error(`Step "${stepId}" not found in workflow "${workflowId}"`);
+  if (!run) {
+    throw new Error(`No run found for runId ${runId} in workflow ${workflowId}`);
   }
 
-  // Create a no-op emitter for now (event publishing can be added later)
-  const emitter = {
-    emit: async (_event: string, _data: any) => {
-      // TODO: Implement Vercel event publishing if supported
-    },
-  };
+  const operationFn = run.pendingOperations.get(operationId);
 
-  const abortController = new AbortController();
+  if (!operationFn) {
+    throw new Error(`No pending operation for ${operationId} in run ${runId}`);
+  }
 
-  // Build execution params from serialized context
-  const { execParams, getContextMutations, getSuspended, getBailed } = buildExecutionParams({
-    input,
-    serializedContext,
-    mastra,
-    step,
-    emitter,
-    abortController,
-  });
-
-  // Execute the step
-  const output = await step.execute(execParams);
-
-  // Return output along with any context mutations
-  return {
-    output,
-    suspended: getSuspended(),
-    bailed: getBailed(),
-    contextMutations: getContextMutations(),
-  };
+  return await operationFn();
 }
 
 /**
@@ -85,10 +57,6 @@ export async function runStep(
  */
 export async function mainWorkflow(params: MainWorkflowParams): Promise<WorkflowResult<any, any, any, any>> {
   'use workflow';
-
-  const { getMastra } = await import('./singleton');
-  const { VercelExecutionEngine } = await import('./execution-engine');
-  const { RequestContext } = await import('@mastra/core/di');
 
   const mastra = getMastra();
   const workflow = mastra.getWorkflowById(params.workflowId) as VercelWorkflow;
@@ -108,6 +76,9 @@ export async function mainWorkflow(params: MainWorkflowParams): Promise<Workflow
     validateInputs: params.validateInputs ?? true,
     shouldPersistSnapshot: () => true,
   });
+
+  // Set the run context so wrapDurableOperation can access it
+  engine.setRunContext(params.runId, params.workflowId);
 
   // Reconstruct RequestContext from serialized form
   const requestContext = new RequestContext(Object.entries(params.requestContext ?? {}));

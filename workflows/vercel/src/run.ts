@@ -31,6 +31,13 @@ export class VercelRun<
   #mastra?: Mastra;
   serializedStepGraph: SerializedStepFlowEntry[];
 
+  /**
+   * Pending operations for durable execution.
+   * Maps operationId -> closure that executes the operation.
+   * Used by wrapDurableOperation to pass closures to runStep.
+   */
+  pendingOperations: Map<string, () => Promise<any>> = new Map();
+
   constructor(params: {
     workflowId: string;
     runId: string;

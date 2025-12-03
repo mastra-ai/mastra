@@ -43,14 +43,5 @@ export { VercelRun } from './run';
 // Runtime functions (with Vercel directives)
 export { mainWorkflow, runStep } from './runtime.workflow';
 
-// Context utilities
-export { serializeStepContext, deserializeRequestContext, buildExecutionParams } from './context';
-
 // Types
-export type {
-  VercelEngineType,
-  VercelWorkflowConfig,
-  SerializedStepContext,
-  MainWorkflowParams,
-  StepExecutionOutput,
-} from './types';
+export type { VercelEngineType, VercelWorkflowConfig, MainWorkflowParams } from './types';
