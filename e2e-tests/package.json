@@ -10,7 +10,7 @@
     "test:create-mastra": "vitest run --project create-mastra",
     "test:commonjs": "vitest run --project commonjs",
     "test:pkg-outputs": "vitest run --project pkg-outputs",
-    "test:kitchen-sink": "playwright test --config=./suites/kitchen-sink/playwright.config.ts",
+    "test:kitchen-sink": "playwright test --config=./kitchen-sink/playwright.config.ts",
     "cleanup": "cd .. && git diff --name-only | grep -E '(package.json|CHANGELOG.md)$' | grep -v '^e2e-tests/' | xargs -I {} git checkout HEAD -- {} && echo 'Restored e2e-modified files from HEAD'"
   },
   "devDependencies": {
