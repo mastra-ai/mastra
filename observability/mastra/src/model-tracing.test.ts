@@ -149,6 +149,10 @@ describe('ModelSpanTracker', () => {
       const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
       expect(toolResultSpans).toHaveLength(1);
 
+      // Should NOT have any individual tool-output spans (they should be consolidated)
+      const toolOutputSpans = testExporter.getSpansByName("chunk: 'tool-output'");
+      expect(toolOutputSpans).toHaveLength(0);
+
       // The span should have accumulated text
       const span = toolResultSpans[0]!;
       expect(span.output).toEqual({
@@ -477,6 +481,10 @@ describe('ModelSpanTracker', () => {
 
       const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
       expect(toolResultSpans).toHaveLength(2);
+
+      // Should NOT have any individual tool-output spans (6 chunks consolidated into 2 spans)
+      const toolOutputSpans = testExporter.getSpansByName("chunk: 'tool-output'");
+      expect(toolOutputSpans).toHaveLength(0);
 
       // Find spans by toolCallId
       const agent1Span = toolResultSpans.find(s => (s.output as any)?.toolCallId === 'call_agent1');
