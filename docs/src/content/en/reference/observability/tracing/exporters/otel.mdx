@@ -368,6 +368,35 @@ The exporter preserves span hierarchy from Mastra's Tracing:
 - Maintains correct nesting for agents, workflows, LLM calls, and tools
 - Exports complete traces with all relationships intact
 
+## Tags Support
+
+The OtelExporter supports trace tagging for categorization and filtering. Tags are only applied to root spans and are stored as the `mastra.tags` attribute.
+
+### Usage
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+### How Tags Are Stored
+
+Tags are stored as a JSON-stringified array in the `mastra.tags` span attribute for maximum backend compatibility:
+
+```json
+{
+  "mastra.tags": "[\"production\",\"experiment-v2\",\"user-request\"]"
+}
+```
+
+:::note
+While the OpenTelemetry specification supports native array attributes, many backends (Jaeger, Zipkin, Tempo) have limited array support. JSON strings ensure consistent behavior across all observability platforms.
+:::
+
 ## Related
 
 - [OtelExporter Guide](/docs/v1/observability/tracing/exporters/otel) - Setup guide with provider configurations

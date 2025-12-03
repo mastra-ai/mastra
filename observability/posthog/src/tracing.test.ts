@@ -760,6 +760,173 @@ describe('PosthogExporter', () => {
       expect(traceMap.size).toBe(0); // Both cleaned up
     });
   });
+
+  // --- Tags Support Tests (Issue #10772) ---
+  // Note: Tags are spread as individual boolean properties (e.g., { "tag-name": true })
+  // rather than as an array under $ai_tags
+  describe('Tags Support', () => {
+    beforeEach(() => {
+      exporter = new PosthogExporter(validConfig);
+    });
+
+    it('should include tags as individual boolean properties for root spans', async () => {
+      const rootSpan = createSpan({
+        id: 'root-span',
+        traceId: 'trace-with-tags',
+        type: SpanType.AGENT_RUN,
+        isRootSpan: true,
+        tags: ['production', 'experiment-v2'],
+      });
+
+      await exportSpanLifecycle(exporter, rootSpan);
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            production: true,
+            'experiment-v2': true,
+          }),
+        }),
+      );
+    });
+
+    it('should not include any tag properties when tags array is empty', async () => {
+      const rootSpan = createSpan({
+        id: 'root-span',
+        traceId: 'trace-no-tags',
+        type: SpanType.AGENT_RUN,
+        isRootSpan: true,
+        tags: [],
+      });
+
+      await exportSpanLifecycle(exporter, rootSpan);
+
+      // Just verify the call succeeds - no tag properties to check
+      expect(mockCapture).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not include any tag properties when tags is undefined', async () => {
+      const rootSpan = createSpan({
+        id: 'root-span',
+        traceId: 'trace-undefined-tags',
+        type: SpanType.AGENT_RUN,
+        isRootSpan: true,
+      });
+
+      await exportSpanLifecycle(exporter, rootSpan);
+
+      // Just verify the call succeeds - no tag properties to check
+      expect(mockCapture).toHaveBeenCalledTimes(1);
+    });
+
+    it('should include tags as boolean properties for root MODEL_GENERATION spans', async () => {
+      const rootGeneration = createSpan({
+        id: 'root-gen',
+        traceId: 'trace-gen-tags',
+        type: SpanType.MODEL_GENERATION,
+        isRootSpan: true,
+        tags: ['llm-test', 'gpt-4'],
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+      });
+
+      await exportSpanLifecycle(exporter, rootGeneration);
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: '$ai_generation',
+          properties: expect.objectContaining({
+            'llm-test': true,
+            'gpt-4': true,
+            $ai_model: 'gpt-4',
+          }),
+        }),
+      );
+    });
+
+    it('should include tags as boolean properties in event spans for root spans', async () => {
+      const eventSpan = createSpan({
+        id: 'event-with-tags',
+        traceId: 'trace-event-tags',
+        type: SpanType.GENERIC,
+        isEvent: true,
+        isRootSpan: true,
+        tags: ['user-feedback', 'positive'],
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: eventSpan as any,
+      });
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            'user-feedback': true,
+            positive: true,
+          }),
+        }),
+      );
+    });
+
+    it('should include tags as boolean properties for root WORKFLOW_RUN spans', async () => {
+      const workflowSpan = createSpan({
+        id: 'workflow-with-tags',
+        traceId: 'trace-workflow-tags',
+        type: SpanType.WORKFLOW_RUN,
+        isRootSpan: true,
+        tags: ['batch-processing', 'priority-high'],
+        attributes: { workflowId: 'wf-123' },
+      });
+
+      await exportSpanLifecycle(exporter, workflowSpan);
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            'batch-processing': true,
+            'priority-high': true,
+          }),
+        }),
+      );
+    });
+
+    it('should not include tags for child spans (only root spans get tags)', async () => {
+      const rootSpan = createSpan({
+        id: 'root-span',
+        traceId: 'trace-parent-child',
+        type: SpanType.AGENT_RUN,
+        isRootSpan: true,
+        tags: ['root-tag'],
+      });
+
+      // Start and end root span
+      await exportSpanLifecycle(exporter, rootSpan);
+
+      // Clear mock to check child span call
+      mockCapture.mockClear();
+
+      // Create child span - even if tags are accidentally set, they should not appear
+      const childSpan = createSpan({
+        id: 'child-span',
+        traceId: 'trace-parent-child',
+        parentSpanId: 'root-span',
+        type: SpanType.TOOL_CALL,
+        isRootSpan: false,
+        tags: ['should-not-appear'],
+        attributes: { toolId: 'calculator' },
+      });
+
+      await exportSpanLifecycle(exporter, childSpan);
+
+      // Child span should be captured but without tag properties
+      expect(mockCapture).toHaveBeenCalledTimes(1);
+      const props = mockCapture.mock.calls[0][0].properties;
+      expect(props).not.toHaveProperty('should-not-appear');
+    });
+  });
 });
 
 // --- Test Helper Functions ---
