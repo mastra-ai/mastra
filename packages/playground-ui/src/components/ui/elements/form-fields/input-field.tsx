@@ -51,7 +51,7 @@ export function InputField({
           className={cn('text-[0.8125rem] text-icon3 flex justify-between items-center')}
         >
           {label}
-          {required && <i className="text-icon2">(required)</i>}
+          {required && <i className="text-icon2 text-xs">(required)</i>}
         </label>
       </LabelWrapper>
       <input

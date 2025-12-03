@@ -445,6 +445,12 @@ export class LangfuseExporter extends BaseExporter {
         payload.modelParameters = modelAttr.parameters;
         attributesToOmit.push('parameters');
       }
+
+      // completionStartTime is used by Langfuse to calculate time-to-first-token (TTFT)
+      if (modelAttr.completionStartTime !== undefined) {
+        payload.completionStartTime = modelAttr.completionStartTime;
+        attributesToOmit.push('completionStartTime');
+      }
     }
 
     payload.metadata = {
