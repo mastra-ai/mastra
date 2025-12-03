@@ -41,7 +41,7 @@ export class ToolStream<T> extends WritableStream<T> {
     this.writeFn = writeFn;
   }
 
-  async _write(data: any) {
+  private async _write(data: any) {
     if (this.writeFn) {
       await this.writeFn({
         type: `${this.prefix}-output`,
