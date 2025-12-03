@@ -372,10 +372,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               },
             });
           }
-          if (lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels) {
-            return { ...result, resumeLabels: lastOutput.executionContext?.resumeLabels };
-          }
-          return result;
+
+          return {
+            ...result,
+            ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels
+              ? { resumeLabels: lastOutput.executionContext?.resumeLabels }
+              : {}),
+            ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+          };
         }
 
         // if error occurred during step execution, stop and return
@@ -783,7 +787,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     serializedStepGraph: SerializedStepFlowEntry[];
     tracingContext: TracingContext;
     iterationCount?: number;
-  }): Promise<StepResult<any, any, any, any>> {
+  }): Promise<{ result: StepResult<any, any, any, any>; executionContextState: ExecutionContext['state'] }> {
     const stepCallId = randomUUID();
 
     const { inputData, validationError } = await validateStepInput({
@@ -908,6 +912,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const retries = step.retries ?? executionContext.retryConfig.attempts ?? 0;
     const delay = executionContext.retryConfig.delay ?? 0;
 
+    let executionContextState = executionContext.state;
+
     // +1 for the initial attempt
     for (let i = 0; i < retries + 1; i++) {
       if (i > 0 && delay) {
@@ -936,6 +942,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           state: executionContext.state,
           setState: (state: any) => {
             executionContext.state = state;
+            executionContextState = state;
           },
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resumeDataToUse,
@@ -1124,7 +1131,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
-    return { ...stepInfo, ...execResults };
+    return { result: { ...stepInfo, ...execResults }, executionContextState };
   }
 
   protected async runScorers({
@@ -1319,8 +1326,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           writableStream,
           disableScorers,
         });
-        stepResults[step.step.id] = result;
-        return result;
+        stepResults[step.step.id] = result.result;
+        executionContext.state = result.executionContextState;
+        return result.result;
       }),
     );
     const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
@@ -1557,8 +1565,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           disableScorers,
         });
 
-        stepResults[step.step.id] = result;
-        return result;
+        stepResults[step.step.id] = result.result;
+        executionContext.state = result.executionContextState;
+        return result.result;
       }),
     );
 
@@ -1667,7 +1676,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let currentTimeTravel = timeTravel;
 
     do {
-      result = await this.executeStep({
+      const { result: stepResult, executionContextState } = await this.executeStep({
         workflowId,
         runId,
         resourceId,
@@ -1690,6 +1699,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         iterationCount: iteration + 1,
       });
 
+      result = stepResult;
+      executionContext.state = executionContextState;
       //Clear restart & time travel for next iteration
       currentRestart = undefined;
       currentTimeTravel = undefined;
@@ -1894,7 +1905,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     for (let i = 0; i < prevOutput.length; i += concurrency) {
       const items = prevOutput.slice(i, i + concurrency);
       const itemsResults = await Promise.all(
-        items.map((item: any, j: number) => {
+        items.map(async (item: any, j: number) => {
           const k = i + j;
           const prevItemResult = prevForeachOutput[k];
           if (
@@ -1913,7 +1924,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             }
           }
 
-          return this.executeStep({
+          const stepResult = await this.executeStep({
             workflowId,
             runId,
             resourceId,
@@ -1933,6 +1944,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             disableScorers,
             serializedStepGraph,
           });
+
+          stepResults[step.id] = stepResult.result;
+          executionContext.state = stepResult.executionContextState;
+          return stepResult.result;
         }),
       );
 
@@ -1984,6 +1999,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 metadata: {},
               },
             });
+
+            console.log(`${workflowId}-${step.id}-result`, result);
 
             return result;
           }
@@ -2201,7 +2218,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (entry.type === 'step') {
       const { step } = entry;
-      execResults = await this.executeStep({
+      const { result, executionContextState } = await this.executeStep({
         workflowId,
         runId,
         resourceId,
@@ -2220,6 +2237,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         disableScorers,
         serializedStepGraph,
       });
+      execResults = result;
+      executionContext.state = executionContextState;
     } else if (resume?.resumePath?.length && entry.type === 'parallel') {
       const idx = resume.resumePath.shift();
       const resumedStepResult = await this.executeEntry({
@@ -2731,7 +2750,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         });
 
         const { step } = entry;
-        execResults = await this.executeStep({
+        const { result, executionContextState } = await this.executeStep({
           workflowId,
           runId,
           resourceId,
@@ -2751,6 +2770,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           disableScorers,
           serializedStepGraph,
         });
+        execResults = result;
+        executionContext.state = executionContextState;
       } catch (error) {
         execResults = {
           status: 'failed',
