@@ -120,6 +120,12 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   streaming?: boolean;
   /** Reason the generation finished */
   finishReason?: string;
+  /**
+   * When the first token/chunk of the completion was received.
+   * Used to calculate time-to-first-token (TTFT) metrics.
+   * Only applicable for streaming responses.
+   */
+  completionStartTime?: Date;
 }
 
 /**

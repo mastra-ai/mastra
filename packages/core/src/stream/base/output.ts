@@ -624,7 +624,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
               self.#delayedPromises.response.resolve(response as LLMStepResult<OUTPUT>['response']);
               self.#delayedPromises.request.resolve(self.#request || {});
-              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+              // Note: text is already resolved in the try-catch block above (lines 586, 600, 608, 614)
+              // for all cases: processor, non-processor, and error handling
               const reasoningText =
                 self.#bufferedReasoning.length > 0
                   ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')

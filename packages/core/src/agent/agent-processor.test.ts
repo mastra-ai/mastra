@@ -621,6 +621,65 @@ describe('Input and Output Processors', () => {
       await testWithFormat('mastra');
     });
 
+    it('should return processed text in result.text property', async () => {
+      class TextTransformProcessor implements Processor {
+        readonly id = 'text-transform-processor';
+        readonly name = 'Text Transform Processor';
+
+        async processOutputResult({ messages }) {
+          return messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part =>
+                part.type === 'text' ? { ...part, text: part.text.toUpperCase() } : part,
+              ),
+            },
+          }));
+        }
+      }
+
+      const agent = new Agent({
+        id: 'result-text-processor-test-agent',
+        name: 'Result Text Processor Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            content: [
+              {
+                type: 'text',
+                text: 'hello world',
+              },
+            ],
+            finishReason: 'stop',
+            usage: { inputTokens: 2, outputTokens: 5, totalTokens: 7 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'hello world' },
+              { type: 'text-end', id: '1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 2, outputTokens: 5, totalTokens: 7 } },
+            ]),
+          }),
+        }),
+        outputProcessors: [new TextTransformProcessor()],
+      });
+
+      const result = await agent.generate('Test');
+
+      // The result.text property should contain the processed text (uppercase)
+      // not the original unprocessed text
+      expect(result.text).toBe('HELLO WORLD');
+
+      // Also verify the response messages are processed correctly
+      expect((result.response.messages[0].content[0] as any).text).toBe('HELLO WORLD');
+    });
+
     it('should process messages through multiple output processors in sequence', async () => {
       let finalProcessedText = '';
 

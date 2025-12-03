@@ -11,6 +11,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   size?: 'md' | 'lg';
   variant?: 'default' | 'light';
   target?: string;
+  type?: 'button' | 'submit' | 'reset';
 }
 
 const sizeClasses = {
