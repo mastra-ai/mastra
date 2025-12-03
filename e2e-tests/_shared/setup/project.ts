@@ -110,7 +110,19 @@ export async function createProject(options: CreateProjectOptions): Promise<Test
   return {
     path: projectPath,
     cleanup: async () => {
-      await rm(projectPath, { recursive: true, force: true });
+      // Retry cleanup a few times - sometimes processes are still writing
+      for (let i = 0; i < 3; i++) {
+        try {
+          await rm(projectPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+          return;
+        } catch (err) {
+          if (i === 2) {
+            console.warn(`[createProject] Failed to cleanup ${projectPath}:`, err);
+          } else {
+            await new Promise(r => setTimeout(r, 500));
+          }
+        }
+      }
     },
     run: (command, args = [], runOptions = {}) => {
       return spawnSync(command, args, {
