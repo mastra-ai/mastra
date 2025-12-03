@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Give select options maximum height in dynamic-form
+Fix select options overflow when list is long by adding maximum height
