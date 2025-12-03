@@ -32,15 +32,39 @@ export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
 
 /**
  * PostgreSQL configuration for PostgresStore (uses pg-promise with ISSLConfig)
- * Users can provide their own pg-promise client via the `client` option.
+ * Users can provide their own pg.Pool or pg-promise client via the `pool` or `client` options.
  */
 export type PostgresStoreConfig = PostgresConfig<ISSLConfig> & {
+  /**
+   * Bring your own pg.Pool.
+   * When provided, the store will wrap it with pg-promise and use it instead of creating its own connection.
+   * The pool will NOT be closed when the store is closed - you are responsible for managing its lifecycle.
+   * This is the recommended option for portability (e.g., Cloudflare, Neon serverless).
+   */
+  pool?: pg.Pool;
   /**
    * Bring your own pg-promise client.
    * When provided, the store will use this client instead of creating its own.
    * The client will NOT be closed when the store is closed - you are responsible for managing its lifecycle.
    */
   client?: pgPromise.IDatabase<{}>;
+};
+
+/**
+ * Simplified config for BYOC with pg.Pool only (no connection details needed)
+ */
+export type PostgresStorePoolConfig = {
+  /** Unique identifier for this store instance */
+  id: string;
+  /** Custom PostgreSQL schema name (default: 'public') */
+  schemaName?: string;
+  /**
+   * Bring your own pg.Pool.
+   * When provided, the store will wrap it with pg-promise and use it instead of creating its own connection.
+   * The pool will NOT be closed when the store is closed - you are responsible for managing its lifecycle.
+   * This is the recommended option for portability (e.g., Cloudflare, Neon serverless).
+   */
+  pool: pg.Pool;
 };
 
 /**
@@ -90,16 +114,25 @@ export type PgVectorPoolConfig = {
 };
 
 /**
- * Check if config has a user-provided pg-promise client
+ * Check if config has a user-provided pg-promise client (for PostgresStore)
  */
 export const hasUserProvidedClient = (
-  cfg: PostgresStoreConfig | PostgresStoreClientConfig,
+  cfg: PostgresStoreConfig | PostgresStoreClientConfig | PostgresStorePoolConfig,
 ): cfg is PostgresStoreClientConfig => {
   return 'client' in cfg && cfg.client !== undefined;
 };
 
 /**
- * Check if config has a user-provided pg.Pool
+ * Check if config has a user-provided pg.Pool (for PostgresStore)
+ */
+export const hasUserProvidedStorePool = (
+  cfg: PostgresStoreConfig | PostgresStoreClientConfig | PostgresStorePoolConfig,
+): cfg is PostgresStorePoolConfig => {
+  return 'pool' in cfg && cfg.pool !== undefined;
+};
+
+/**
+ * Check if config has a user-provided pg.Pool (for PgVector)
  */
 export const hasUserProvidedPool = (cfg: PgVectorConfig | PgVectorPoolConfig): cfg is PgVectorPoolConfig => {
   return 'pool' in cfg && cfg.pool !== undefined;
@@ -181,15 +214,17 @@ export const validatePgVectorConfig = (config: PgVectorConfig | PgVectorPoolConf
 };
 
 /**
- * Validate config for PostgresStore, including BYOC client option
+ * Validate config for PostgresStore, including BYOC client/pool options
  */
-export const validatePostgresStoreConfig = (config: PostgresStoreConfig | PostgresStoreClientConfig) => {
+export const validatePostgresStoreConfig = (
+  config: PostgresStoreConfig | PostgresStoreClientConfig | PostgresStorePoolConfig,
+) => {
   if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
     throw new Error(`PostgresStore: id must be provided and cannot be empty.`);
   }
 
-  if (hasUserProvidedClient(config)) {
-    // User provided their own client, no further validation needed
+  if (hasUserProvidedClient(config) || hasUserProvidedStorePool(config)) {
+    // User provided their own client or pool, no further validation needed
     return;
   }
 

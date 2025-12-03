@@ -19,8 +19,8 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
-import { validatePostgresStoreConfig, hasUserProvidedClient } from '../shared/config';
-import type { PostgresStoreConfig, PostgresStoreClientConfig } from '../shared/config';
+import { validatePostgresStoreConfig, hasUserProvidedClient, hasUserProvidedStorePool } from '../shared/config';
+import type { PostgresStoreConfig, PostgresStoreClientConfig, PostgresStorePoolConfig } from '../shared/config';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { StoreOperationsPG } from './domains/operations';
@@ -33,6 +33,7 @@ export class PostgresStore extends MastraStorage {
   #db?: pgPromise.IDatabase<{}>;
   #pgp?: pgPromise.IMain;
   #config?: any; // pg-promise accepts various config formats
+  #userProvidedPool?: import('pg').Pool; // User-provided pg.Pool to wrap with pg-promise
   private schema: string;
   private isConnected: boolean = false;
   /** Whether this instance owns the client (true) or it was provided by the user (false) */
@@ -40,18 +41,24 @@ export class PostgresStore extends MastraStorage {
 
   stores: StorageDomains;
 
-  constructor(config: PostgresStoreConfig | PostgresStoreClientConfig) {
+  constructor(config: PostgresStoreConfig | PostgresStoreClientConfig | PostgresStorePoolConfig) {
     // Validation: connectionString or host/database/user/password must not be empty
     try {
       validatePostgresStoreConfig(config);
       super({ id: config.id, name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
 
-      // Check if user provided their own client
+      // Check if user provided their own pg-promise client
       if (hasUserProvidedClient(config)) {
         this.#db = config.client;
         this.ownsClient = false;
         // No config needed when using provided client
+        this.#config = undefined;
+      } else if (hasUserProvidedStorePool(config)) {
+        // User provided a pg.Pool - we'll wrap it with pg-promise in init()
+        // Store the pool reference for later wrapping
+        this.#userProvidedPool = config.pool;
+        this.ownsClient = false;
         this.#config = undefined;
       } else {
         // Use the config directly for pg-promise initialization
