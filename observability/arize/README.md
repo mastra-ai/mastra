@@ -135,6 +135,20 @@ const mastra = new Mastra({
 });
 ```
 
+### Custom metadata
+
+Any custom span attributes that are not part of the standard Mastra/OpenInference fields are serialized into the OpenInference `metadata` payload and shown in Arize/Phoenix. An easy way to add them is through `tracingOptions.metadata`:
+
+```ts
+await agent.generate(input, {
+  tracingOptions: {
+    metadata: {
+      companyId: 'acme-co',
+    },
+  },
+});
+```
+
 ## OpenInference Semantic Conventions
 
 This exporter follows the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications.

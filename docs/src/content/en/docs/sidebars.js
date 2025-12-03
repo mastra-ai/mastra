@@ -76,6 +76,9 @@ const sidebars = {
           type: "doc",
           id: "agents/networks",
           label: "Networks",
+          customProps: {
+            tags: ["advanced"],
+          },
         },
         {
           type: "doc",
@@ -153,6 +156,9 @@ const sidebars = {
           type: "doc",
           id: "streaming/overview",
           label: "Overview",
+          customProps: {
+            tags: ["new"],
+          },
         },
         {
           type: "doc",
@@ -460,6 +466,11 @@ const sidebars = {
                   id: "observability/tracing/exporters/otel",
                   label: "OpenTelemetry",
                 },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/posthog",
+                  label: "PostHog",
+                },
               ],
             },
             {
@@ -552,6 +563,9 @@ const sidebars = {
           type: "doc",
           id: "voice/overview",
           label: "Overview",
+          customProps: {
+            tags: ["new"],
+          },
         },
         {
           type: "doc",

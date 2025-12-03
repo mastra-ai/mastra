@@ -286,6 +286,21 @@
       "permanent": true
     },
     {
+      "source": "/reference/v1/streaming/workflows/streamVNext",
+      "destination": "/reference/v1/streaming/workflows/stream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/streaming/workflows/observeStreamVNext",
+      "destination": "/reference/v1/streaming/workflows/observeStream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/streaming/workflows/resumeStreamVNext",
+      "destination": "/reference/v1/streaming/workflows/resumeStream",
+      "permanent": true
+    },
+        {
       "source": "/docs/deployment/mastra-cloud/overview",
       "destination": "/docs/mastra-cloud/overview",
       "permanent": true

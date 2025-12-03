@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { MastraServerBase } from '@mastra/core/server';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { generateOpenAPIDocument } from './openapi-utils';
@@ -36,11 +37,24 @@ export interface StreamOptions {
   redact?: boolean;
 }
 
-export abstract class MastraServerBase<TApp, TRequest, TResponse> {
+/**
+ * Abstract base class for server adapters that handle HTTP requests.
+ *
+ * This class extends `MastraServerBase` to inherit app storage functionality
+ * and provides the framework for registering routes, middleware, and handling requests.
+ *
+ * Framework-specific adapters in @mastra/hono and @mastra/express extend this class
+ * (both named `MastraServer` in their respective packages) and implement the abstract
+ * methods for their specific framework.
+ *
+ * @template TApp - The type of the server app (e.g., Hono, Express Application)
+ * @template TRequest - The type of the request object
+ * @template TResponse - The type of the response object
+ */
+export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServerBase<TApp> {
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
   protected tools?: Record<string, Tool>;
-  protected app: TApp;
   protected prefix?: string;
   protected openapiPath?: string;
   protected taskStore?: InMemoryTaskStore;
@@ -74,10 +88,10 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     customRouteAuthConfig?: Map<string, boolean>;
     streamOptions?: StreamOptions;
   }) {
+    super({ app, name: 'MastraServer' });
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
-    this.app = app;
     this.prefix = prefix;
     this.openapiPath = openapiPath;
     this.taskStore = taskStore;
@@ -85,6 +99,9 @@ export abstract class MastraServerBase<TApp, TRequest, TResponse> {
     this.isDev = isDev;
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
+
+    // Automatically register this adapter with Mastra so getServerApp() works
+    mastra.setMastraServer(this);
   }
 
   protected mergeRequestContext({

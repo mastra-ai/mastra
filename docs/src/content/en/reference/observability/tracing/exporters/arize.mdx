@@ -38,6 +38,10 @@ Inherits from `OtelExporterConfig` (excluding `provider`), which includes:
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: WARN)
 - `resourceAttributes?: Record<string, any>` - Custom resource attributes
 
+### Metadata passthrough
+
+Non-reserved span attributes are serialized into the OpenInference `metadata` payload. Add them via `tracingOptions.metadata` (e.g., `companyId`, `tier`). Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and OpenInference IDs are excluded automatically.
+
 <PropertiesTable
   props={[
     {
