@@ -63,6 +63,9 @@ export type {
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 
+// Per MCP spec, only fallback to SSE for these status codes
+const SSE_FALLBACK_STATUS_CODES = [400, 404, 405];
+
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
  */
@@ -319,8 +322,15 @@ export class InternalMastraMCPClient extends MastraBase {
         });
         this.transport = streamableTransport;
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
-      } catch (error) {
+      } catch (error: any) {
         this.log('debug', `Streamable HTTP transport failed: ${error}`);
+
+        // @modelcontextprotocol/sdk 1.24.0+ throws StreamableHTTPError with 'code' property
+        // Older @modelcontextprotocol/sdk: fallback to SSE (legacy behavior)
+        const status = error?.code;
+        if (status !== undefined && !SSE_FALLBACK_STATUS_CODES.includes(status)) {
+          throw error;
+        }
         shouldTrySSE = true;
       }
     }

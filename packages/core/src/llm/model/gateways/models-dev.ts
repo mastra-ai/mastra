@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createDeepSeek } from '@ai-sdk/deepseek-v5';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createMistral } from '@ai-sdk/mistral-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
@@ -202,6 +203,10 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createOpenRouter({ apiKey, headers })(modelId);
       case 'xai':
         return createXai({
+          apiKey,
+        })(modelId);
+      case 'deepseek':
+        return createDeepSeek({
           apiKey,
         })(modelId);
       default:

@@ -64,26 +64,33 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "agents/agent-approval",
-          label: "Agent Approval",
-        },
-        {
-          type: "doc",
           id: "agents/agent-memory",
           label: "Memory",
         },
         {
           type: "doc",
+          id: "agents/structured-output",
+          label: "Structured Output",
+        },
+        {
+          type: "doc",
           id: "agents/networks",
           label: "Networks",
-          customProps: {
-            tags: ["advanced"],
-          },
+        },
+        {
+          type: "doc",
+          id: "agents/processors",
+          label: "Processors",
         },
         {
           type: "doc",
           id: "agents/guardrails",
           label: "Guardrails",
+        },
+        {
+          type: "doc",
+          id: "agents/agent-approval",
+          label: "Agent Approval",
         },
         {
           type: "doc",
@@ -156,9 +163,6 @@ const sidebars = {
           type: "doc",
           id: "streaming/overview",
           label: "Overview",
-          customProps: {
-            tags: ["new"],
-          },
         },
         {
           type: "doc",
@@ -589,9 +593,6 @@ const sidebars = {
           type: "doc",
           id: "voice/overview",
           label: "Overview",
-          customProps: {
-            tags: ["new"],
-          },
         },
         {
           type: "doc",
