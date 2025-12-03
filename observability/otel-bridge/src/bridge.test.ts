@@ -159,7 +159,6 @@ describe('OtelBridge', () => {
     it('should include tags as mastra.tags attribute for root spans with tags', async () => {
       // This test verifies that tags are included in the OTEL span attributes
       // OtelBridge uses SpanConverter which should set mastra.tags on root spans
-      // See GitHub issue #10771
       const { SpanConverter } = await import('@mastra/otel-exporter');
       const converter = new SpanConverter();
 

@@ -398,7 +398,6 @@ describe('OtelExporter', () => {
   describe('Tags Support', () => {
     it('should include tags as mastra.tags attribute for root spans with tags', async () => {
       // This test captures the expected behavior: tags should be included as span attributes
-      // See GitHub issue #10771
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter();
 

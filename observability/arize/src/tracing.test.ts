@@ -284,7 +284,6 @@ describe('ArizeExporter', () => {
     it('includes tags in the exported span attributes for root spans with tags', async () => {
       // This test verifies that tags are included in the exported data for Arize
       // using the native OpenInference tag.tags convention
-      // See GitHub issue #10771
       exporter = new ArizeExporter({
         endpoint: 'http://localhost:4318/v1/traces',
         projectName: 'test-project',
