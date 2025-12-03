@@ -7,7 +7,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Custom Adapters
 
-Create a custom adapter when your framework isn't Hono or Express, or when you need custom request/response handling patterns.
+Create a custom adapter when you need to run Mastra with a framework other than Hono or Express. This might be necessary if you have specific request/response handling requirements that the built-in adapters don't support.
+
+A custom adapter translates between Mastra's route definitions and your framework's routing system. You'll implement methods that register middleware, handle requests, and send responses using your framework's APIs.
 
 :::info
 
@@ -19,27 +21,31 @@ For Hono or Express, use the built-in adapters instead:
 
 ## Abstract class
 
-Extend `MastraServer` from `@mastra/server`:
+The `MastraServer` abstract class from `@mastra/server` provides the foundation for all adapters. It handles route registration logic, parameter validation, and other shared functionality. Your custom adapter extends this class and implements the framework-specific parts.
+
+The class takes three type parameters that represent your framework's types:
 
 ```typescript title="my-framework-adapter.ts" copy showLineNumbers
 import { MastraServer } from '@mastra/server';
 
 export class MyFrameworkServer extends MastraServer<
-  MyApp,      // Your framework's app type
-  MyRequest,  // Your framework's request type
-  MyResponse  // Your framework's response type
+  MyApp,      // Your framework's app type (e.g., FastifyInstance)
+  MyRequest,  // Your framework's request type (e.g., FastifyRequest)
+  MyResponse  // Your framework's response type (e.g., FastifyReply)
 > {
   // Implement abstract methods
 }
 ```
 
+These type parameters ensure type safety throughout your adapter implementation and enable proper typing when accessing framework-specific APIs.
+
 ## Required methods
 
-You must implement these six abstract methods:
+You must implement these six abstract methods. Each handles a specific part of the request lifecycle, from attaching context to sending responses.
 
 ### registerContextMiddleware()
 
-Attach Mastra context to every request. This makes the Mastra instance, request context, tools, and abort signal available to route handlers.
+This method runs first and attaches Mastra context to every incoming request. Route handlers need access to the Mastra instance, tools, and other context to function. How you attach this context depends on your framework—Express uses `res.locals`, Hono uses `c.set()`, and other frameworks have their own patterns.
 
 ```typescript copy showLineNumbers
 registerContextMiddleware(): void {
@@ -66,7 +72,7 @@ Context to attach:
 
 ### registerAuthMiddleware()
 
-Register authentication and authorization middleware. Only register if auth is configured.
+Register authentication and authorization middleware. This method should check if authentication is configured on the Mastra instance and skip registration entirely if not. When auth is configured, you'll typically register two middleware functions: one for authentication (validating tokens and setting the user) and one for authorization (checking if the user can access the requested resource).
 
 ```typescript copy showLineNumbers
 registerAuthMiddleware(): void {
@@ -102,7 +108,7 @@ registerAuthMiddleware(): void {
 
 ### registerRoute()
 
-Register a single route with your framework.
+Register a single route with your framework. This method is called once for each Mastra route during initialization. It receives a `ServerRoute` object containing the path, HTTP method, handler function, and Zod schemas for validation. Your implementation should wire this up to your framework's routing system.
 
 ```typescript copy showLineNumbers
 async registerRoute(
@@ -149,7 +155,7 @@ async registerRoute(
 
 ### getParams()
 
-Extract URL parameters, query parameters, and request body.
+Extract URL parameters, query parameters, and request body from the incoming request. Different frameworks expose these values in different ways—Express uses `req.params`, `req.query`, and `req.body`, while other frameworks may use different property names or require method calls. This method normalizes the extraction for your framework.
 
 ```typescript copy showLineNumbers
 async getParams(
@@ -170,7 +176,7 @@ async getParams(
 
 ### sendResponse()
 
-Send the response based on the route's response type.
+Send the response back to the client based on the route's response type. Mastra routes can return different response types: JSON for most API responses, streams for agent generation, and special types for MCP transports. Your implementation should handle each type appropriately for your framework.
 
 ```typescript copy showLineNumbers
 async sendResponse(
@@ -205,7 +211,7 @@ async sendResponse(
 
 ### stream()
 
-Handle streaming responses for agent generation.
+Handle streaming responses for agent generation. When an agent generates a response, it produces a stream of chunks that should be sent to the client as they become available. This method reads from the stream, optionally applies redaction to hide sensitive data, and writes chunks to the response in the appropriate format (SSE or newline-delimited JSON).
 
 ```typescript copy showLineNumbers
 async stream(
@@ -248,7 +254,7 @@ async stream(
 
 ## Helper methods
 
-The base class provides these helper methods:
+The base class provides helper methods you can use in your implementation. These handle common tasks like parameter validation and route registration, so you don't need to reimplement them:
 
 | Method | Description |
 |--------|-------------|
@@ -259,9 +265,11 @@ The base class provides these helper methods:
 | `registerRoutes()` | Register all Mastra routes (calls `registerRoute` for each) |
 | `registerOpenAPIRoute(app, config, { prefix })` | Register OpenAPI spec endpoint |
 
+The `parse*` methods use Zod schemas defined on each route to validate input and return typed results. If validation fails, they throw an error with details about what went wrong.
+
 ## Constructor
 
-Call `super()` with the required options:
+Your adapter's constructor should accept the same options as the base class and pass them to `super()`. You can add additional framework-specific options if needed:
 
 ```typescript copy showLineNumbers
 constructor(options: {
@@ -277,9 +285,11 @@ constructor(options: {
 }
 ```
 
-> See [Server Adapters](/docs/v1/server-db/server-adapters#constructor-options) for full options documentation.
+See [Server Adapters](/docs/v1/server-db/server-adapters#constructor-options) for full documentation on each option.
 
 ## Full example
+
+Here's a complete skeleton showing all the required methods. This uses pseudocode for framework-specific parts—replace with your framework's actual APIs:
 
 ```typescript title="my-framework-adapter.ts" copy showLineNumbers
 import { MastraServer, ServerRoute } from '@mastra/server';
@@ -336,6 +346,8 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
 
 ## Usage
 
+Once your adapter is implemented, use it the same way as the built-in adapters:
+
 ```typescript title="server.ts" copy showLineNumbers
 import { MyFrameworkServer } from './my-framework-adapter';
 import { mastra } from './mastra';
@@ -350,7 +362,7 @@ app.listen(4111);
 
 :::tip
 
-Use the existing [@mastra/hono](https://github.com/mastra-ai/mastra/blob/main/packages/hono/src/index.ts) or [@mastra/express](https://github.com/mastra-ai/mastra/blob/main/packages/express/src/index.ts) implementations as reference when building your custom adapter.
+The existing [@mastra/hono](https://github.com/mastra-ai/mastra/blob/main/server-adapters/hono/src/index.ts) and [@mastra/express](https://github.com/mastra-ai/mastra/blob/main/server-adapters/express/src/index.ts) implementations are good references when building your custom adapter. They show how to handle framework-specific patterns for context storage, middleware registration, and response handling.
 
 :::
 
