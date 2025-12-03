@@ -102,7 +102,8 @@ async function captureDependenciesToOptimize(
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
-    if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency)) {
+    // Skip Node builtins, ignored deps, and subpath imports (virtual modules like #polyfills, #tools, etc.)
+    if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency) || dependency.startsWith('#')) {
       continue;
     }
 
