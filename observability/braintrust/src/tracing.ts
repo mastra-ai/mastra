@@ -365,16 +365,58 @@ export class BraintrustExporter extends BaseExporter {
     });
   }
 
+  /**
+   * Transforms LLM input to Braintrust Thread view format.
+   * Braintrust expects messages as a direct array in OpenAI format,
+   * not wrapped in { messages: [...] }.
+   *
+   * @see https://github.com/mastra-ai/mastra/issues/9848
+   * @see https://www.braintrust.dev/docs/guides/traces/customize
+   */
+  private transformLlmInput(input: any, spanType: SpanType): any {
+    if (spanType !== SpanType.MODEL_GENERATION) {
+      return input;
+    }
+
+    // Unwrap { messages: [...] } to just the messages array
+    if (input && typeof input === 'object' && Array.isArray(input.messages)) {
+      return input.messages;
+    }
+
+    return input;
+  }
+
+  /**
+   * Transforms LLM output to Braintrust Thread view format.
+   * Braintrust expects the output as a direct string or the assistant message content,
+   * not wrapped in { content: '...' }.
+   *
+   * @see https://github.com/mastra-ai/mastra/issues/9848
+   * @see https://www.braintrust.dev/docs/guides/traces/customize
+   */
+  private transformLlmOutput(output: any, spanType: SpanType): any {
+    if (spanType !== SpanType.MODEL_GENERATION) {
+      return output;
+    }
+
+    // Unwrap { content: '...' } to just the content string
+    if (output && typeof output === 'object' && 'content' in output && typeof output.content === 'string') {
+      return output.content;
+    }
+
+    return output;
+  }
+
   private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
     const payload: Record<string, any> = {};
 
-    // Core span data
+    // Core span data - transform for LLM spans to match Braintrust Thread view format
     if (span.input !== undefined) {
-      payload.input = span.input;
+      payload.input = this.transformLlmInput(span.input, span.type);
     }
 
     if (span.output !== undefined) {
-      payload.output = span.output;
+      payload.output = this.transformLlmOutput(span.output, span.type);
     }
 
     // Initialize metrics and metadata objects
