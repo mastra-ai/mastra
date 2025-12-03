@@ -1567,118 +1567,9 @@ for await (const chunk of stream.textStream) {
 
 ## Structured output
 
-Agents can return structured, type-safe data by defining the expected output using either [Zod](https://zod.dev/) or [JSON Schema](https://json-schema.org/). We recommend Zod for better TypeScript support and developer experience. The parsed result is available on `response.object`, allowing you to work directly with validated and typed data.
+Agents can return structured, type-safe data using Zod or JSON Schema. The parsed result is available on `response.object`.
 
-### Using Zod
-
-Define the `output` shape using [Zod](https://zod.dev/):
-
-```typescript showLineNumbers copy
-import { z } from "zod";
-
-const response = await testAgent.generate(
-  [
-    {
-      role: "system",
-      content: "Provide a summary and keywords for the following text:",
-    },
-    {
-      role: "user",
-      content: "Monkey, Ice Cream, Boat",
-    },
-  ],
-  {
-    structuredOutput: {
-      schema: z.object({
-        summary: z.string(),
-        keywords: z.array(z.string()),
-      }),
-    },
-  },
-);
-
-console.log(response.object);
-```
-
-### Structuring sub agent
-
-Use the `model` property to have a separate agent generate the structured output for you.
-
-```typescript showLineNumbers copy
-import { z } from "zod";
-
-const response = await testAgentWithTools.generate(
-  [
-    {
-      role: "system",
-      content: "Provide a summary and keywords for the following text:",
-    },
-    {
-      role: "user",
-      content: "Please use your test tool and let me know the results",
-    },
-  ],
-  {
-    structuredOutput: {
-      schema: z.object({
-        summary: z.string(),
-        keywords: z.array(z.string()),
-      }),
-      model: "openai/gpt-5.1",
-    },
-  },
-);
-
-console.log(response.object);
-console.log(response.toolResults);
-```
-
-### Response format
-
-By default `structuredOutput` will use `response_format` to pass the schema to the model provider. If the model provider does not natively support `response_format` it's possible that this will error or not give the desired results. To keep using the same model use `jsonPromptInjection` to bypass response format and inject a system prompt message to coerce the model to return structured output.
-
-```typescript showLineNumbers copy
-import { z } from "zod";
-
-const response = await testAgentThatDoesntSupportStructuredOutput.generate(
-  [
-    {
-      role: "system",
-      content: "Provide a summary and keywords for the following text:",
-    },
-    {
-      role: "user",
-      content: "Monkey, Ice Cream, Boat",
-    },
-  ],
-  {
-    structuredOutput: {
-      schema: z.object({
-        summary: z.string(),
-        keywords: z.array(z.string()),
-      }),
-      jsonPromptInjection: true,
-    },
-  },
-);
-
-console.log(response.object);
-```
-
-:::info[Gemini 2.5 with tools]
-
-Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
-
-```typescript
-const response = await agentWithTools.generate("Your prompt", {
-  structuredOutput: {
-    schema: yourSchema,
-    jsonPromptInjection: true, // Required for Gemini 2.5 when tools are present
-  },
-});
-```
-
-:::
+> See [Structured Output](/docs/v1/agents/structured-output) for more information.
 
 ## Analyzing images
 
@@ -2063,6 +1954,234 @@ const agent = new Agent({
 
 - [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
 - [Memory Processors](/docs/v1/memory/memory-processors) - Memory-specific processors and automatic integration
+
+
+---
+title: "Structured Output | Agents"
+description: "Learn how to generate structured data from agents using schemas and validation."
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Structured Output
+[EN] Source: https://mastra.ai/en/docs/agents/structured-output
+
+Structured output lets an agent return an object that matches the shape defined by a schema instead of returning text. The schema tells the model what fields to produce, and the model ensures the final result fits that shape.
+
+## When to use structured output
+
+Use structured output when you need an agent to return a data object rather than text. Having well defined fields can make it simpler to pull out the values you need for API calls, UI rendering, or application logic.
+
+## Defining schemas
+
+Agents can return structured data by defining the expected output with either [Zod](https://zod.dev/) or [JSON Schema](https://json-schema.org/). Zod is recommended because it provides TypeScript type inference and runtime validation, while JSON Schema is useful when you need a language agnostic format.
+
+<Tabs>
+  <TabItem value="zod" label="Zod">
+
+Define the `output` shape using [Zod](https://zod.dev/):
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+
+const response = await testAgent.generate("Help me plan my day.", {
+  structuredOutput: {
+    schema: z.array(
+      z.object({
+        name: z.string(),
+        activities: z.array(z.string()),
+      }),
+    ),
+  },
+});
+
+console.log(response.object);
+```
+
+  </TabItem>
+  <TabItem value="json-schema" label="JSON Schema">
+
+You can also use JSON Schema to define your output structure:
+
+```typescript showLineNumbers copy
+const response = await testAgent.generate("Help me plan my day.", {
+  structuredOutput: {
+    schema: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          activities: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+        required: ["name", "activities"],
+      },
+    },
+  },
+});
+
+console.log(response.object);
+```
+
+  </TabItem>
+</Tabs>
+
+
+> See [.generate()](/reference/v1/agents/generate#structuredoutput) for a full list of configuration options.
+
+### Example output
+
+The `response.object` will contain the structured data as defined by the schema.
+
+```json
+[
+  {
+    "name": "Morning Routine",
+    "activities": ["Wake up at 7am", "Exercise", "Shower", "Breakfast"]
+  },
+  {
+    "name": "Work",
+    "activities": ["Check emails", "Team meeting", "Lunch break"]
+  },
+  {
+    "name": "Evening",
+    "activities": ["Dinner", "Relax", "Read a book", "Sleep by 10pm"]
+  }
+]
+```
+
+## Streaming
+
+Streaming also supports structured output. The final structured object is available on `stream.fullStream` and after the stream completes on `stream.object`. Text stream chunks are still emitted, but they contain natural language text rather than structured data.
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+
+const stream = await testAgent.stream("Help me plan my day.", {
+  structuredOutput: {
+    schema: z.array(
+      z.object({
+        name: z.string(),
+        activities: z.array(z.string())
+      })
+    ),
+  },
+});
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "object-result") {
+    console.log("\n", JSON.stringify(chunk, null, 2));
+  }
+  process.stdout.write(JSON.stringify(chunk));
+}
+
+console.log(await stream.object)
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Structuring agent
+
+When your main agent isn't proficient at creating structured output you can provide a `model` to `structuredOutput`. In this case, Mastra uses a second agent under the hood to extract structured data from the main agent's natural language response. This makes two LLM calls, one to generate the response and another to turn that response into the structured object, which adds some latency and cost but can improve accuracy for complex structuring tasks.
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+
+const response = await testAgent.generate("Analyze the TypeScript programming language.", {
+  structuredOutput: {
+    schema: z.object({
+      overview: z.string(),
+      strengths: z.array(z.string()),
+      weaknesses: z.array(z.string()),
+      useCases: z.array(z.object({
+        scenario: z.string(),
+        reasoning: z.string(),
+      })),
+      comparison: z.object({
+        similarTo: z.array(z.string()),
+        differentiators: z.array(z.string()),
+      }),
+    }),
+    model: "openai/gpt-4o",
+  },
+});
+
+console.log(response.object);
+```
+
+## Response format
+
+By default, Mastra passes the schema to the model provider using the `response_format` API parameter. Most model providers have built-in support for this, which reliably enforces the schema.
+
+If your model provider doesn't support `response_format`, you'll get an error from the API. When this happens, set `jsonPromptInjection: true`. This adds the schema to the system prompt instead, instructing the model to output JSON. This is less reliable than the API parameter approach.
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+
+const response = await testAgent.generate("Help me plan my day.", {
+  structuredOutput: {
+    schema: z.array(
+      z.object({
+        name: z.string(),
+        activities: z.array(z.string()),
+      }),
+    ),
+    jsonPromptInjection: true,
+  },
+});
+
+console.log(response.object);
+```
+
+:::info[Gemini 2.5 with tools]
+
+Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
+
+```typescript
+const response = await agentWithTools.generate("Your prompt", {
+  structuredOutput: {
+    schema: yourSchema,
+    jsonPromptInjection: true,  // Required for Gemini 2.5 when tools are present
+  },
+});
+```
+:::
+
+## Error handling
+
+When schema validation fails, you can control how errors are handled using `errorStrategy`. The default `strict` strategy throws an error, while `warn` logs a warning and continues. The `fallback` strategy returns the values provided using `fallbackValue`.
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+
+const response = await testAgent.generate("Tell me about TypeScript.", {
+  structuredOutput: {
+    schema: z.object({
+      summary: z.string(),
+      keyFeatures: z.array(z.string())
+    }),
+    errorStrategy: "fallback",
+    fallbackValue: {
+      summary: "TypeScript is a typed superset of JavaScript",
+      keyFeatures: ["Static typing", "Compiles to JavaScript", "Better tooling"]
+    }
+  }
+});
+
+console.log(response.object);
+```
+
+## Related
+
+- [Using Tools](/docs/v1/agents/using-tools)
+- [Agent Memory](/docs/v1/agents/agent-memory)
+
 
 ---
 title: "Using Tools | Agents"
@@ -9113,6 +9232,7 @@ Resource-scoped working memory requires specific storage adapters that support t
 - **LibSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)
 - **Upstash** (`@mastra/upstash`)
+- **MongoDB** (`@mastra/mongodb`)
 
 ## Custom Templates
 
@@ -10420,6 +10540,35 @@ new LangfuseExporter({
 });
 ```
 
+## Prompt Linking
+
+You can link LLM generations to prompts stored in [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management). This enables version tracking and metrics for your prompts.
+
+### Using the Helper (Recommended)
+
+Use `withLangfusePrompt` with `buildTracingOptions` for the cleanest API:
+
+```typescript title="src/agents/support-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangfusePrompt } from "@mastra/langfuse";
+import { Langfuse } from "langfuse";
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+});
+
+// Fetch the prompt from Langfuse Prompt Management
+const prompt = await langfuse.getPrompt("customer-support");
+
+export const supportAgent = new Agent({
+  name: "support-agent",
+  instructions: prompt.prompt, // Use the prompt text from Langfuse
+  model: openai("gpt-4o"),
+  defaultGenerateOptions: {
+    tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
 ## Using Tags
 
 Tags help you categorize and filter traces in the Langfuse dashboard. Add tags when executing agents or workflows:
@@ -10433,6 +10582,39 @@ const result = await agent.generate({
 });
 ```
 
+The `withLangfusePrompt` helper automatically extracts `name`, `version`, and `id` from the Langfuse prompt object.
+
+### Manual Fields
+
+You can also pass manual fields if you're not using the Langfuse SDK:
+
+```typescript
+const tracingOptions = buildTracingOptions(
+  withLangfusePrompt({ name: "my-prompt", version: 1 }),
+);
+
+// Or with just an ID
+const tracingOptions = buildTracingOptions(
+  withLangfusePrompt({ id: "prompt-uuid-12345" }),
+);
+```
+
+### Prompt Object Fields
+
+The prompt object supports these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | The prompt name in Langfuse |
+| `version` | number | The prompt version number |
+| `id` | string | The prompt UUID for direct linking |
+
+You can link prompts using either:
+- `id` alone (the UUID uniquely identifies a prompt version)
+- `name` + `version` together
+- All three fields
+
+When set on a `MODEL_GENERATION` span, the Langfuse exporter automatically links the generation to the corresponding prompt.
 Tags appear in Langfuse's trace view and can be used to filter and search traces. Common use cases include:
 
 - Environment labels: `"production"`, `"staging"`
@@ -10444,6 +10626,7 @@ Tags appear in Langfuse's trace view and can be used to filter and search traces
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [Langfuse Documentation](https://langfuse.com/docs)
+- [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management)
 
 
 ---
@@ -32257,8 +32440,6 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
-See [Run.resumeStream()](/reference/v1/streaming/workflows/resumeStream) for details.
-
 ## Removed
 
 ### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
@@ -32268,6 +32449,16 @@ The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext
 To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
 
 See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-stream-vnext .
+```
+
+:::
 
 ### Legacy workflows export
 
@@ -34043,7 +34234,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 59+ AI providers and 1160+ models through Mastra's model router."
+description: "Access 59+ AI providers and 1164+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34056,7 +34247,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1160 models from 59 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1164 models from 59 providers through a single API.
 
 ## Features
 
@@ -40516,7 +40707,7 @@ const agent = new Agent({
 
 ---
 title: "iFlow | Models | Mastra"
-description: "Use iFlow models with Mastra. 18 models available."
+description: "Use iFlow models with Mastra. 20 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -40526,7 +40717,7 @@ description: "Use iFlow models with Mastra. 18 models available."
 # <img src="https://models.dev/logos/iflowcn.svg" alt="iFlow logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />iFlow
 [EN] Source: https://mastra.ai/en/models/providers/iflowcn
 
-Access 18 iFlow models through Mastra's model router. Authentication is handled automatically using the `IFLOW_API_KEY` environment variable.
+Access 20 iFlow models through Mastra's model router. Authentication is handled automatically using the `IFLOW_API_KEY` environment variable.
 
 Learn more in the [iFlow documentation](https://platform.iflow.cn/en/docs).
 
@@ -40613,6 +40804,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "iflowcn/deepseek-v3.2-chat",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "iflowcn/glm-4.6",
     "imageInput": false,
     "audioInput": false,
@@ -40644,6 +40847,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
     "maxOutput": 64000,
     "inputCost": null,
     "outputCost": null
@@ -41051,7 +41266,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/huggingface.svg"
     />    <CardGridItem
       title="iFlow"
-      description="18 models"
+      description="20 models"
       href="/models/v1/providers/iflowcn"
       logo="https://models.dev/logos/iflowcn.svg"
     />    <CardGridItem
@@ -41186,7 +41401,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="14 models"
+      description="16 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -49380,7 +49595,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 14 models available."
+description: "Use Venice AI models with Mastra. 16 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -49390,7 +49605,7 @@ description: "Use Venice AI models with Mastra. 14 models available."
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 14 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 16 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -49463,6 +49678,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.7,
     "outputCost": 2.8
+  },
+  {
+    "model": "venice/gemini-3-pro-preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 8192,
+    "inputCost": 2.5,
+    "outputCost": 15
+  },
+  {
+    "model": "venice/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.75,
+    "outputCost": 3.2
   },
   {
     "model": "venice/llama-3.1-405b",
@@ -67035,6 +67274,49 @@ const exporter = new LangfuseExporter({
 - All other spans → Langfuse spans
 - Event spans → Langfuse events
 
+## Prompt Linking
+
+Link LLM generations to [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management) using the `withLangfusePrompt` helper:
+
+```typescript
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangfusePrompt } from "@mastra/langfuse";
+import { Langfuse } from "langfuse";
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+});
+
+const prompt = await langfuse.getPrompt("customer-support");
+
+const agent = new Agent({
+  name: "support-agent",
+  instructions: prompt.prompt,
+  model: openai("gpt-4o"),
+  defaultGenerateOptions: {
+    tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
+  },
+});
+```
+
+### Helper Functions
+
+#### `withLangfusePrompt(prompt)`
+
+Adds Langfuse prompt metadata to tracing options.
+
+```typescript
+// With Langfuse SDK prompt object
+withLangfusePrompt(prompt)
+
+// With manual fields
+withLangfusePrompt({ name: "my-prompt", version: 1 })
+withLangfusePrompt({ id: "prompt-uuid" })
+```
+
+When `metadata.langfuse.prompt` is set on a `MODEL_GENERATION` span (with either `id` alone, or `name` + `version`), the exporter automatically links the generation to the prompt in Langfuse.
+
 
 ---
 title: "Reference: LangSmithExporter | Observability"
@@ -80532,6 +80814,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
         "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
     },
     {
+      name: "fetch",
+      type: "FetchLike",
+      isOptional: true,
+      description:
+        "For HTTP servers: Custom fetch implementation used for all network requests. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers (e.g., refreshing bearer tokens), customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.",
+    },
+    {
       name: "logger",
       type: "LogHandler",
       isOptional: true,
@@ -81286,11 +81575,40 @@ MCPClient handles server connections gracefully:
 2. Graceful server shutdown to prevent error messages during development
 3. Proper cleanup of resources when disconnecting
 
+## Using Custom Fetch for Dynamic Authentication
+
+For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or customize request behavior.
+
+When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    apiServer: {
+      url: new URL("https://api.example.com/mcp"),
+      fetch: async (url, init) => {
+        // Refresh token on each request
+        const token = await getAuthToken(); // Your token refresh logic
+        
+        return fetch(url, {
+          ...init,
+          headers: {
+            ...init?.headers,
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      },
+    },
+  },
+});
+```
+
 ## Using SSE Request Headers
 
-When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK:
+When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK. Alternatively, you can use a custom `fetch` function which will be automatically used for both POST requests and SSE connections:
 
 ```ts
+// Option 1: Using requestInit and eventSourceInit (required for SSE)
 const sseClient = new MCPClient({
   servers: {
     exampleServer: {
@@ -81311,6 +81629,23 @@ const sseClient = new MCPClient({
             headers,
           });
         },
+      },
+    },
+  },
+});
+
+// Option 2: Using custom fetch (simpler, works for both Streamable HTTP and SSE)
+const sseClientWithFetch = new MCPClient({
+  servers: {
+    exampleServer: {
+      url: new URL("https://your-mcp-server.com/sse"),
+      fetch: async (url, init) => {
+        const headers = new Headers(init?.headers || {});
+        headers.set("Authorization", "Bearer your-token");
+        return fetch(url, {
+          ...init,
+          headers,
+        });
       },
     },
   },
