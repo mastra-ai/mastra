@@ -276,8 +276,12 @@ export class PosthogExporter extends BaseExporter {
     }
 
     // Include tags for root spans (tags are only set on root spans by design)
+    // PostHog doesn't allow setting tags directly, so we iterate through each tag
+    // and set it as a property with value true
     if (span.isRootSpan && span.tags?.length) {
-      baseProperties.$ai_tags = span.tags;
+      for (const tag of span.tags) {
+        baseProperties[tag] = true;
+      }
     }
 
     if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_STEP) {

@@ -114,7 +114,7 @@ const result = await agent.generate({
 });
 ```
 
-Tags are included as `$ai_tags` in PostHog events and can be used for filtering and segmentation. Common use cases include:
+Tags are added as event properties where the tag name is the key and the value is set to `true`. In PostHog's trace view, filter by a tag using the `is set` filter (e.g., "production is set" shows all traces with the production tag). Common use cases include:
 
 - Environment labels: `"production"`, `"staging"`
 - Experiment tracking: `"experiment-v1"`, `"control-group"`
