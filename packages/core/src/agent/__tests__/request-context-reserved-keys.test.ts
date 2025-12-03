@@ -11,7 +11,7 @@
  *
  * @see https://github.com/mastra-ai/mastra/issues/4296
  */
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk/v4';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 

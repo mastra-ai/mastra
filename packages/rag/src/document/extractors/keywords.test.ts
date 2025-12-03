@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk/v4/test';
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { TextNode } from '../schema';
 import { KeywordExtractor } from './keywords';

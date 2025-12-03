@@ -1,3 +1,4 @@
+// V4 Message types from ai@4.x
 export type {
   CoreMessage,
   CoreSystemMessage,

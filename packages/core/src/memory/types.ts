@@ -1,5 +1,5 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel, AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
+import type { EmbeddingModel, AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk/v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodObject } from 'zod';
 
@@ -12,7 +12,7 @@ import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
-export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
+export type { Message as AiMessageType } from '@internal/ai-sdk/v4';
 export type { MastraLanguageModel };
 
 // Types for the memory system

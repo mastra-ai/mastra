@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Agent } from '../agent';
+import { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
@@ -11,7 +11,7 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import type { MastraModelGateway } from '../llm/model/gateways';
-import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
+import { LogLevel, noopLogger, ConsoleLogger, RegisteredLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { ObservabilityEntrypoint } from '../observability';
@@ -28,6 +28,7 @@ import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { createOnScorerHook } from './hooks';
+import { MastraBase } from '../base';
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -544,7 +545,29 @@ export class Mastra<
     if (config?.agents) {
       Object.entries(config.agents).forEach(([key, agent]) => {
         if (agent != null) {
-          this.addAgent(agent, key);
+          if ('version' in agent && agent.version === 'agent-v1') {
+            class SDKtoAgent extends Agent {
+              agent: any;
+              constructor(agent: any) {
+                super({
+                  id: agent.id,
+                  name: agent.id,
+                  model: agent.settings.model,
+                  instructions: agent.settings.instructions,
+                  tools: agent.settings.tools,
+                });
+                this.agent = agent;
+              }
+            }
+
+            console.log('adding agent', key, agent);
+
+            const sdktoAgent = new SDKtoAgent(agent);
+
+            this.addAgent(sdktoAgent as any, key);
+          } else {
+            this.addAgent(agent, key);
+          }
         }
       });
     }

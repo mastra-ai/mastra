@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
   "mainEntryPointFilePath": "./dist/llm/model/model.d.ts",
-  "bundledPackages": ["@internal/ai-sdk-v4", "@internal/external-types"],
+  "bundledPackages": ["@internal/ai-sdk", "@internal/external-types"],
   "dtsRollup": {
     "enabled": true,
     "publicTrimmedFilePath": "./dist/llm/model/model.d.ts"

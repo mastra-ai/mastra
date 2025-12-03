@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
@@ -72,10 +73,7 @@ export const chefModelV2Agent = new Agent({
       `,
     role: 'system',
   },
-  model: wrapLanguageModel({
-    model: openai_v5('gpt-4o-mini'),
-    middleware: logDataMiddleware,
-  }),
+  model: openai_v6('gpt-4o-mini'),
   tools: {
     weatherInfo,
     cookingTool,
