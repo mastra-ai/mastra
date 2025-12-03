@@ -1,0 +1,200 @@
+---
+title: "Server Adapters | Server & DB"
+description: "Manually configure a Mastra server using Hono or Express adapters."
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Server Adapters
+
+Server adapters let you run Mastra with your own HTTP server instead of using `mastra build`. Use adapters when you need to:
+
+- Integrate Mastra into an existing application
+- Control middleware ordering
+- Deploy to platforms requiring specific server setup
+- Use Express instead of Hono
+
+## Available adapters
+
+- **[@mastra/hono](/docs/server-db/hono-adapter)** - Hono framework adapter
+- **[@mastra/express](/docs/server-db/express-adapter)** - Express framework adapter
+
+## Basic setup
+
+Both adapters follow the same pattern:
+
+1. Create your framework's app instance
+2. Create a `MastraServer` with the app and Mastra instance
+3. Call `init()` to register routes and middleware
+
+See the [Hono Adapter](/docs/server-db/hono-adapter) or [Express Adapter](/docs/server-db/express-adapter) docs for framework-specific setup.
+
+## Constructor options
+
+Both adapters accept the same options:
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "Hono | Application",
+      description: "Framework app instance",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+      isOptional: true,
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "{ maxSize: number, onError: (err) => unknown }",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "{ redact?: boolean }",
+      description: "Stream redaction config. When true, redacts sensitive data from streams.",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Initialization flow
+
+Calling `init()` runs three steps in order:
+
+1. **`registerContextMiddleware()`** - Attaches Mastra instance and request context to every request
+2. **`registerAuthMiddleware()`** - Adds authentication/authorization (if `server.auth` is configured in Mastra)
+3. **`registerRoutes()`** - Registers all Mastra API routes
+
+### Manual initialization
+
+For custom middleware ordering, call each method separately instead of `init()`:
+
+```typescript copy
+const server = new MastraServer({ app, mastra });
+
+// Your middleware first
+app.use(loggingMiddleware);
+
+server.registerContextMiddleware();
+
+// Middleware that needs Mastra context
+app.use(customMiddleware);
+
+server.registerAuthMiddleware();
+await server.registerRoutes();
+
+// Routes after Mastra
+app.get('/health', ...);
+```
+
+## Adding custom routes
+
+Routes added to the app after `init()` have access to Mastra context. See framework-specific docs for syntax:
+- [Hono: Adding custom routes](/docs/server-db/hono-adapter#adding-custom-routes)
+- [Express: Adding custom routes](/docs/server-db/express-adapter#adding-custom-routes)
+
+## Route prefixes
+
+Apply a prefix to all Mastra routes:
+
+```typescript copy
+const server = new MastraServer({
+  app,
+  mastra,
+  prefix: '/api/v2',
+});
+```
+
+Mastra routes are now at `/api/v2/agents`, `/api/v2/workflows`, etc. Custom routes added directly to the app are not affected.
+
+## OpenAPI spec
+
+Enable OpenAPI spec generation:
+
+```typescript copy
+const server = new MastraServer({
+  app,
+  mastra,
+  openapiPath: '/openapi.json',
+});
+```
+
+The spec is generated from route schemas and served at the specified path.
+
+## Stream redaction
+
+By default, sensitive data (system prompts, tool definitions, API keys) is redacted from stream responses. Configure via `streamOptions`:
+
+```typescript copy
+const server = new MastraServer({
+  app,
+  mastra,
+  streamOptions: {
+    redact: true, // Default
+  },
+});
+```
+
+Set `redact: false` only for internal services or debugging.
+
+## Per-route auth overrides
+
+Override the default auth behavior for specific routes:
+
+```typescript copy
+const server = new MastraServer({
+  app,
+  mastra,
+  customRouteAuthConfig: new Map([
+    ['GET:/api/health', false],       // Public
+    ['GET:/api/openapi.json', false], // Public
+    ['POST:/api/admin/reset', true],  // Protected
+    ['ALL:/api/internal/*', true],    // All methods protected
+  ]),
+});
+```
+
+Keys follow the format `METHOD:PATH` where method is `GET`, `POST`, `PUT`, `DELETE`, or `ALL`.
+
+## Accessing the app
+
+After creating the adapter, access the framework app:
+
+```typescript copy
+// Via adapter
+const app = server.getApp();
+
+// Via Mastra instance (after adapter construction)
+const app = mastra.getServerApp();
+```
+
+## Related
+
+- [Hono Adapter](/docs/server-db/hono-adapter) - Hono-specific setup
+- [Express Adapter](/docs/server-db/express-adapter) - Express-specific setup
+- [Mastra Server](/docs/server-db/mastra-server) - Using `mastra build` instead

@@ -288,6 +288,21 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "server-db/server-adapters",
+          label: "Server Adapters",
+        },
+        {
+          type: "doc",
+          id: "server-db/hono-adapter",
+          label: "Hono Adapter",
+        },
+        {
+          type: "doc",
+          id: "server-db/express-adapter",
+          label: "Express Adapter",
+        },
+        {
+          type: "doc",
           id: "server-db/middleware",
           label: "Middleware",
         },
