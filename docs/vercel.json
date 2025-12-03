@@ -299,6 +299,11 @@
       "source": "/examples/v1/agents/request-context",
       "destination": "/docs/v1/server-db/request-context",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/agents/processors",
+      "destination": "/docs/v1/agents/guardrails",
+      "permanent": true
     }
   ]
 }
