@@ -1,6 +1,5 @@
 import type { GlobalSetupContext } from 'vitest/node';
 
-import { type Registry } from './_shared/setup/registry.js';
 import {
   cleanupActiveLock,
   doSetup,
@@ -12,9 +11,6 @@ import {
 } from './setup.utils.js';
 
 // In-memory state for this process
-let registry: Registry | null = null;
-let cleanupSnapshot: (() => Promise<void>) | null = null;
-let isSetupOwner = false;
 
 // Register signal handlers immediately when this module is loaded
 registerCleanupHandlers();
@@ -52,10 +48,10 @@ export default async function globalSetup(context: GlobalSetupContext) {
   }
 
   // We're the first - do the actual setup
-  isSetupOwner = true;
-  const registryUrl = await doSetup();
+  const isSetupOwner = true;
+  const { registry, cleanup } = await doSetup();
 
-  context.provide('registryUrl', registryUrl);
+  context.provide('registryUrl', registry.url);
   context.provide('e2eTag', getE2ETag());
 
   // Return teardown - only the owner cleans up
@@ -63,13 +59,9 @@ export default async function globalSetup(context: GlobalSetupContext) {
     if (isSetupOwner) {
       console.log('\n[E2E Global Teardown] Cleaning up...');
       registry?.shutdown();
-      await cleanupSnapshot?.();
+      await cleanup();
       removeLock();
       console.log('[E2E Global Teardown] Complete!\n');
-
-      registry = null;
-      cleanupSnapshot = null;
-      isSetupOwner = false;
     }
   };
 }

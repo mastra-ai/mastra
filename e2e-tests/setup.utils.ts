@@ -72,11 +72,14 @@ const PACKAGES_TO_PUBLISH = [
 
 // In-memory state for this process
 let registry: Registry | null = null;
-let cleanupSnapshot: (() => Promise<void>) | null = null;
-let isSetupOwner = false;
 let signalHandlersRegistered = false;
 
-export async function doSetup(): Promise<string> {
+export type DoSetupResult = {
+  registry: Registry;
+  cleanup: () => Promise<void>;
+};
+
+export async function doSetup(): Promise<DoSetupResult> {
   const ROOT_DIR = getRootDir();
   const E2E_TAG = getE2ETag();
   console.log('\n[E2E Global Setup] Starting...\n');
@@ -96,7 +99,7 @@ export async function doSetup(): Promise<string> {
   // 2. Prepare snapshot versions
   console.log('[E2E Global Setup] Preparing snapshot versions...');
   const result = await prepareSnapshotVersions({ rootDir: ROOT_DIR, tag: E2E_TAG }, PACKAGES_TO_PUBLISH);
-  cleanupSnapshot = result.cleanup;
+  const cleanup = result.cleanup;
 
   // 3. Publish packages
   console.log('[E2E Global Setup] Publishing packages to local registry...');
@@ -111,7 +114,7 @@ export async function doSetup(): Promise<string> {
   });
 
   console.log('\n[E2E Global Setup] Complete!\n');
-  return registry.url;
+  return { registry, cleanup };
 }
 
 // Root directory for git operations - set early so signal handlers can use it
