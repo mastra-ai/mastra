@@ -111,7 +111,7 @@ export default function VersionControl({
             >
               <a
                 href={href}
-                className="flex w-full items-center justify-between"
+                className="flex w-full items-center no-underline! justify-between"
               >
                 <span className="inline-flex dark:text-white text-black items-center gap-2">
                   {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
