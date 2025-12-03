@@ -35,13 +35,18 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
 
 type LangfusePromptData = { name?: string; version?: number; id?: string };
 
+type SpanMetadata = {
+  parentSpanId?: string;
+  langfusePrompt?: LangfusePromptData;
+};
+
 type TraceData = {
   trace: LangfuseTraceClient; // Langfuse trace object
   spans: Map<string, LangfuseSpanClient | LangfuseGenerationClient>; // Maps span.id to Langfuse span/generation
+  spanMetadata: Map<string, SpanMetadata>; // Maps span.id to span metadata for prompt inheritance
   events: Map<string, LangfuseEventClient>; // Maps span.id to Langfuse event
   activeSpans: Set<string>; // Tracks which spans haven't ended yet
   rootSpanId?: string; // Track the root span ID
-  langfusePrompt?: LangfusePromptData; // Langfuse prompt data from root span (for prompt linking)
 };
 
 type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
@@ -172,12 +177,21 @@ export class LangfuseExporter extends BaseExporter {
       return;
     }
 
+    // Store span metadata for prompt inheritance lookup (for non-root spans)
+    if (!span.isRootSpan) {
+      const langfuseData = span.metadata?.langfuse as { prompt?: LangfusePromptData } | undefined;
+      traceData.spanMetadata.set(span.id, {
+        parentSpanId: span.parentSpanId,
+        langfusePrompt: langfuseData?.prompt,
+      });
+    }
+
     const langfuseParent = this.getLangfuseParent({ traceData, span, method });
     if (!langfuseParent) {
       return;
     }
 
-    const payload = this.buildSpanPayload(span, true);
+    const payload = this.buildSpanPayload(span, true, traceData);
 
     const langfuseSpan =
       span.type === SpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
@@ -220,7 +234,7 @@ export class LangfuseExporter extends BaseExporter {
 
     // use update for both update & end, so that we can use the
     // end time we set when ending the span.
-    langfuseSpan.update(this.buildSpanPayload(span, false));
+    langfuseSpan.update(this.buildSpanPayload(span, false, traceData));
 
     if (isEnd) {
       // Remove from active spans
@@ -259,7 +273,7 @@ export class LangfuseExporter extends BaseExporter {
       return;
     }
 
-    const payload = this.buildSpanPayload(span, true);
+    const payload = this.buildSpanPayload(span, true, traceData);
 
     const langfuseEvent = langfuseParent.event(payload);
 
@@ -274,16 +288,23 @@ export class LangfuseExporter extends BaseExporter {
   private initTrace(span: AnyExportedSpan): void {
     const trace = this.client.trace(this.buildTracePayload(span));
 
-    // Extract langfuse prompt data from root span for inheritance by child spans
+    // Extract langfuse prompt data from root span
     const langfuseData = span.metadata?.langfuse as { prompt?: LangfusePromptData } | undefined;
+    const spanMetadata = new Map<string, SpanMetadata>();
+
+    // Store root span metadata for prompt inheritance
+    spanMetadata.set(span.id, {
+      parentSpanId: undefined,
+      langfusePrompt: langfuseData?.prompt,
+    });
 
     this.traceMap.set(span.traceId, {
       trace,
       spans: new Map(),
+      spanMetadata,
       events: new Map(),
       activeSpans: new Set(),
       rootSpanId: span.id,
-      langfusePrompt: langfuseData?.prompt,
     });
   }
 
@@ -414,7 +435,26 @@ export class LangfuseExporter extends BaseExporter {
     return Object.keys(normalized).length > 0 ? normalized : undefined;
   }
 
-  private buildSpanPayload(span: AnyExportedSpan, isCreate: boolean): Record<string, any> {
+  /**
+   * Look up the Langfuse prompt from the closest parent span that has one.
+   * This enables prompt inheritance for MODEL_GENERATION spans when the prompt
+   * is set on a parent span (e.g., AGENT_RUN) rather than directly on the generation.
+   */
+  private findParentLangfusePrompt(traceData: TraceData, span: AnyExportedSpan): LangfusePromptData | undefined {
+    let currentSpanId = span.parentSpanId;
+
+    while (currentSpanId) {
+      const parentMetadata = traceData.spanMetadata.get(currentSpanId);
+      if (parentMetadata?.langfusePrompt) {
+        return parentMetadata.langfusePrompt;
+      }
+      currentSpanId = parentMetadata?.parentSpanId;
+    }
+
+    return undefined;
+  }
+
+  private buildSpanPayload(span: AnyExportedSpan, isCreate: boolean, traceData?: TraceData): Record<string, any> {
     const payload: Record<string, any> = {};
 
     if (isCreate) {
@@ -429,15 +469,21 @@ export class LangfuseExporter extends BaseExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    // Merge trace-level langfuse data into metadata if not already present on span
-    // This enables prompt linking for child spans (e.g., MODEL_GENERATION) when
-    // tracingOptions.metadata.langfuse is set on the root span (e.g., AGENT_RUN)
-    const traceData = this.traceMap.get(span.traceId);
+    // For MODEL_GENERATION spans without langfuse metadata, look up the closest
+    // parent span that has langfuse prompt data. This enables prompt linking when:
+    // - A workflow calls multiple agents, each with different prompts
+    // - Nested agents have different prompts
+    // - The prompt is set on AGENT_RUN but MODEL_GENERATION inherits it
+    const resolvedTraceData = traceData ?? this.traceMap.get(span.traceId);
+    let inheritedLangfusePrompt: LangfusePromptData | undefined;
+
+    if (span.type === SpanType.MODEL_GENERATION && !span.metadata?.langfuse && resolvedTraceData) {
+      inheritedLangfusePrompt = this.findParentLangfusePrompt(resolvedTraceData, span);
+    }
+
     const metadata: Record<string, any> = {
       ...span.metadata,
-      ...(traceData?.langfusePrompt && !span.metadata?.langfuse
-        ? { langfuse: { prompt: traceData.langfusePrompt } }
-        : {}),
+      ...(inheritedLangfusePrompt ? { langfuse: { prompt: inheritedLangfusePrompt } } : {}),
     };
 
     // Strip special fields from metadata if used in top-level keys
