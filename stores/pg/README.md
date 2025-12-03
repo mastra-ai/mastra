@@ -192,7 +192,7 @@ Both `PgVector` and `PostgresStore` support bringing your own PostgreSQL client/
 - **Memory optimization** by sharing a single pool across vector and storage
 - **Custom drivers** like `@neondatabase/serverless` or `postgres-js`
 
-#### Using with Neon Serverless (Recommended for Serverless)
+#### Using with Serverless
 
 The Neon serverless driver uses HTTP connections instead of TCP, making it ideal for serverless environments like Cloudflare Workers, Vercel Edge, etc.
 
@@ -256,17 +256,7 @@ await store.init();
 await pool.end();
 ```
 
-#### Using with postgres-js
-
-```typescript
-import postgres from 'postgres';
-import { PostgresStore } from '@mastra/pg';
-
-// Note: postgres-js has a different API, so you may need an adapter
-// For direct pool support, use @neondatabase/serverless or pg
-```
-
-#### Advanced: Using pg-promise Client Directly
+#### Using pg-promise Client Directly
 
 If you're already using pg-promise in your application, you can pass its client directly:
 

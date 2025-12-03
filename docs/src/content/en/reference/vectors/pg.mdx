@@ -79,6 +79,12 @@ It provides robust vector similarity search capabilities within your existing Po
       description: "Additional pg pool configuration options",
       isOptional: true,
     },
+    {
+      name: "pool",
+      type: "Pool",
+      description: "Bring your own PostgreSQL pool instance (e.g., from @neondatabase/serverless or pg). When provided, connection options are ignored.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -124,10 +130,99 @@ const vectorStore = new PgVector({
 });
 ```
 
+## Bring Your Own Client (BYOC)
+
+PgVector supports bringing your own PostgreSQL pool. This is especially useful for:
+
+- **Serverless environments** where you need HTTP-based connections (Neon serverless, PlanetScale)
+- **Memory optimization** by sharing a single pool across vector and storage
+- **Custom drivers**
+
+### Using with Serverless
+
+The Neon serverless driver uses HTTP connections instead of TCP, making it ideal for serverless environments like Cloudflare Workers, Vercel Edge, etc.
+
+```ts
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import { PgVector } from '@mastra/pg';
+
+// Create Neon pool - this uses HTTP connections, not TCP
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Use with PgVector
+const vectorStore = new PgVector({
+  id: 'neon-vectors',
+  pool,
+});
+
+// When you're done, YOU are responsible for closing the pool
+await pool.end();
+```
+
+### Shared Pool
+
+```ts
+import { Pool } from 'pg';
+import { PgVector, PostgresStore } from '@mastra/pg';
+
+// Create a shared pool
+const pool = new Pool({
+  connectionString: 'postgresql://user:pass@localhost:5432/db',
+  max: 20,
+});
+
+// Use the same pool for both vector and storage operations
+const vectorStore = new PgVector({
+  id: 'my-vector-store',
+  pool,
+});
+
+const store = new PostgresStore({
+  id: 'my-store',
+  pool, // Same pool!
+});
+
+await store.init();
+
+// When you're done, YOU are responsible for closing the pool
+await pool.end();
+```
+
+#### Important Notes for BYOC
+
+1. **Lifecycle Management**: When you provide your own pool, you are responsible for closing it. The stores will NOT close user-provided connections.
+
+2. **Schema Configuration**: You can still specify `schemaName` when using BYOC:
+
+   ```ts
+   const vectorStore = new PgVector({
+     id: 'my-vectors',
+     pool: myPool,
+     schemaName: 'custom_schema',
+   });
+   ```
+
+## Direct Pool Access
+
+The `PgVector` class exposes its underlying PostgreSQL connection pool as a public field:
+
+```typescript
+pgVector.pool; // instance of pg.Pool
+```
+
+This enables advanced usage such as running direct SQL queries, managing transactions, or monitoring pool state. When using the pool directly:
+
+- You are responsible for releasing clients (`client.release()`) after use.
+- The pool remains accessible after calling `disconnect()`, but new queries will fail.
+- Direct access bypasses any validation or transaction logic provided by PgVector methods.
+
+This design supports advanced use cases but requires careful resource management by the user.
+
 ## Methods
 
 ### createIndex()
-
 <PropertiesTable
   content={[
     {
@@ -165,7 +260,6 @@ const vectorStore = new PgVector({
 />
 
 #### IndexConfig
-
 <PropertiesTable
   content={[
     {
@@ -624,22 +718,6 @@ The system automatically detects configuration changes and only rebuilds indexes
 - Adjust parameters like `lists` and `m` based on dataset size and query requirements.
 - **Monitor index performance** using `describeIndex()` to track usage
 - Rebuild indexes periodically to maintain efficiency, especially after significant data changes
-
-## Direct Pool Access
-
-The `PgVector` class exposes its underlying PostgreSQL connection pool as a public field:
-
-```typescript
-pgVector.pool; // instance of pg.Pool
-```
-
-This enables advanced usage such as running direct SQL queries, managing transactions, or monitoring pool state. When using the pool directly:
-
-- You are responsible for releasing clients (`client.release()`) after use.
-- The pool remains accessible after calling `disconnect()`, but new queries will fail.
-- Direct access bypasses any validation or transaction logic provided by PgVector methods.
-
-This design supports advanced use cases but requires careful resource management by the user.
 
 ## Related
 

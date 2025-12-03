@@ -42,6 +42,20 @@ const storage = new PostgresStore({
         "The name of the schema you want the storage to use. Will use the default schema if not provided.",
       isOptional: true,
     },
+    {
+      name: "pool",
+      type: "Pool",
+      description:
+        "Bring your own pg.Pool instance (e.g., from @neondatabase/serverless or pg). When provided, connection options are ignored.",
+      isOptional: true,
+    },
+    {
+      name: "client",
+      type: "IDatabase",
+      description:
+        "Bring your own pg-promise IDatabase instance. When provided, connection options are ignored.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -87,9 +101,126 @@ const store5 = new PostgresStore({
 });
 ```
 
-## Additional Notes
+## Bring Your Own Client (BYOC)
 
-### Schema Management
+PostgresStore supports bringing your own PostgreSQL pool or client. This is especially useful for:
+
+- **Serverless environments** where you need HTTP-based connections (Neon serverless, PlanetScale)
+- **Memory optimization** by sharing a single pool across vector and storage
+- **Custom drivers**
+
+### Using with Serverless
+
+The Neon serverless driver uses HTTP connections instead of TCP, making it ideal for serverless environments like Cloudflare Workers, Vercel Edge, etc.
+
+```ts
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import { PostgresStore } from '@mastra/pg';
+
+// Create Neon pool - this uses HTTP connections, not TCP
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Use with PostgresStore - just pass the pool directly!
+const store = new PostgresStore({
+  id: 'neon-store',
+  pool,
+});
+
+await store.init();
+
+// When you're done, YOU are responsible for closing the pool
+await pool.end();
+```
+
+### Shared Pool
+
+```ts
+import { Pool } from 'pg';
+import { PgVector, PostgresStore } from '@mastra/pg';
+
+// Create a shared pool
+const pool = new Pool({
+  connectionString: 'postgresql://user:pass@localhost:5432/db',
+  max: 20,
+});
+
+// Use the same pool for both vector and storage operations
+const vectorStore = new PgVector({
+  id: 'my-vector-store',
+  pool,
+});
+
+const store = new PostgresStore({
+  id: 'my-store',
+  pool, // Same pool!
+});
+
+await store.init();
+
+// When you're done, YOU are responsible for closing the pool
+await pool.end();
+```
+
+### Using pg-promise directly
+
+If you're already using pg-promise in your application, you can pass its client directly:
+
+```ts
+import pgPromise from 'pg-promise';
+import { PostgresStore } from '@mastra/pg';
+
+const pgp = pgPromise();
+const db = pgp('postgresql://user:pass@localhost:5432/db');
+
+const store = new PostgresStore({
+  id: 'my-store',
+  client: db, // Pass pg-promise client directly
+});
+
+await store.init();
+```
+
+#### Important Notes for BYOC
+
+1. **Lifecycle Management**: When you provide your own pool or client, you are responsible for closing it. The stores will NOT close user-provided connections.
+
+2. **Schema Configuration**: You can still specify `schemaName` when using BYOC:
+
+   ```ts
+   const store = new PostgresStore({
+     id: 'my-store',
+     pool: myPool,
+     schemaName: 'custom_schema',
+   });
+   ```
+
+3. **Initialization**: `PostgresStore.init()` must still be called to set up tables, even when using BYOC.
+
+4. **Pool vs Client**:
+   - `pool`: Pass a `pg.Pool` or compatible pool (recommended for most cases)
+   - `client`: Pass a pg-promise `IDatabase` instance (for existing pg-promise users)
+
+## Direct Database and Pool Access
+
+`PostgresStore` exposes both the underlying database object and the pg-promise instance as public fields:
+
+```typescript
+store.db; // pg-promise database instance
+store.pgp; // pg-promise main instance
+```
+
+This enables direct queries and custom transaction management. When using these fields:
+
+- You are responsible for proper connection and transaction handling.
+- Closing the store (`store.close()`) will destroy the associated connection pool.
+- Direct access bypasses any additional logic or validation provided by PostgresStore methods.
+
+This approach is intended for advanced scenarios where low-level access is required.
+
+
+## Schema Management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
@@ -137,23 +268,6 @@ await storage.getThread({ threadId: "..." });
 :::warning
 If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
 :::
-
-### Direct Database and Pool Access
-
-`PostgresStore` exposes both the underlying database object and the pg-promise instance as public fields:
-
-```typescript
-store.db; // pg-promise database instance
-store.pgp; // pg-promise main instance
-```
-
-This enables direct queries and custom transaction management. When using these fields:
-
-- You are responsible for proper connection and transaction handling.
-- Closing the store (`store.close()`) will destroy the associated connection pool.
-- Direct access bypasses any additional logic or validation provided by PostgresStore methods.
-
-This approach is intended for advanced scenarios where low-level access is required.
 
 ## Index Management
 

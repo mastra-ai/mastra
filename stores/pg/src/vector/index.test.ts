@@ -3706,23 +3706,20 @@ describe('PgVector Metadata Filtering', () => {
 // BYOC Pool tests - verify that user-provided pools work correctly
 describe('PgVector with BYOC pool', () => {
   const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
-  let sharedPool: pg.Pool;
-  let byocVectorDB: PgVector;
 
-  beforeAll(() => {
-    // Create a shared pool that we'll provide to PgVector
-    sharedPool = new pg.Pool({
-      connectionString,
-      max: 5,
-      idleTimeoutMillis: 10000,
-    });
+  // Create a shared pool that we'll provide to PgVector
+  // Initialized at describe block level so it's available when createVectorTestSuite runs
+  const sharedPool = new pg.Pool({
+    connectionString,
+    max: 5,
+    idleTimeoutMillis: 10000,
+  });
 
-    // Create PgVector with BYOC pool
-    byocVectorDB = new PgVector({
-      id: 'pg-byoc-pool-test',
-      pool: sharedPool,
-      schemaName: 'byoc_vector_schema',
-    });
+  // Create PgVector with BYOC pool at describe block level
+  const byocVectorDB = new PgVector({
+    id: 'pg-byoc-pool-test',
+    pool: sharedPool,
+    schemaName: 'byoc_vector_schema',
   });
 
   afterAll(async () => {
