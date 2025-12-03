@@ -10,7 +10,10 @@
   "author": "",
   "license": "Apache-2.0",
   "pnpm": {
-    "neverBuiltDependencies": []
+    "neverBuiltDependencies": [],
+    "overrides": {
+      "@mastra/client-js": "monorepo-test"
+    }
   },
   "packageManager": "pnpm@10.18.2"
 }
