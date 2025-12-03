@@ -1872,6 +1872,9 @@ importers:
       xxhash-wasm:
         specifier: ^1.1.0
         version: 1.1.0
+      zod4:
+        specifier: npm:zod@^4.1.12
+        version: zod@4.1.12
     devDependencies:
       '@ai-sdk/anthropic-v5':
         specifier: npm:@ai-sdk/anthropic@2.0.45
@@ -3165,6 +3168,9 @@ importers:
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+      zod4:
+        specifier: npm:zod@^4.1.12
+        version: zod@4.1.12
 
   pubsub/google-cloud-pubsub:
     dependencies:

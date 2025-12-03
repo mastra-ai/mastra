@@ -22,12 +22,6 @@ This document describes the different search and filtering scenarios we want to 
 | `entityId`   | string? | ID/name of entity (e.g., 'weatherAgent', 'orderWorkflow') |
 | `entityName` | string? | Human-readable display name                               |
 
-#### Tags
-
-| Field  | Type      | Description                             |
-| ------ | --------- | --------------------------------------- |
-| `tags` | string[]? | Labels for categorization and filtering |
-
 #### Identity & Tenancy
 
 | Field            | Type    | Description                                            |
@@ -63,23 +57,26 @@ This document describes the different search and filtering scenarios we want to 
 | `createdAt` | timestamp  | Database record creation time    |
 | `updatedAt` | timestamp? | Database record last update time |
 
-### JSONB Fields (Key-Value Filtering)
+### Span Data Fields (JSONB)
 
-| Field         | Type    | Description                                                  |
-| ------------- | ------- | ------------------------------------------------------------ |
-| `scope`       | object? | Mastra package versions {"core": "1.0.0", "memory": "1.0.0"} |
-| `versionInfo` | object? | App version info {"app": "1.0.0", "gitSha": "abc123"}        |
-| `attributes`  | object? | Span-type specific attributes                                |
-| `metadata`    | object? | User-defined metadata                                        |
-| `input`       | any?    | Input data                                                   |
-| `output`      | any?    | Output data                                                  |
-| `error`       | object? | Error information (presence indicates failure)               |
+| Field         | Type      | Description                                                  |
+| ------------- | --------- | ------------------------------------------------------------ |
+| `attributes`  | object?   | Span-type specific attributes (e.g., model, tokens, tools)   |
+| `metadata`    | object?   | User-defined metadata for custom filtering                   |
+| `tags`        | string[]? | Labels for categorization and filtering                      |
+| `links`       | object?   | References to related spans in other traces                  |
+| `input`       | any?      | Input data passed to the span                                |
+| `output`      | any?      | Output data returned from the span                           |
+| `error`       | object?   | Error information (presence indicates failure)               |
+| `scope`       | object?   | Mastra package versions {"core": "1.0.0", "memory": "1.0.0"} |
+| `versionInfo` | object?   | App version info {"app": "1.0.0", "gitSha": "abc123"}        |
 
 ### Derived Fields (Not Stored)
 
-| Field    | Derived From        | Values                                                                     |
-| -------- | ------------------- | -------------------------------------------------------------------------- |
-| `status` | `error` + `endedAt` | 'error' (has error), 'running' (no endedAt), 'success' (endedAt, no error) |
+| Field           | Derived From             | Values                                                                     |
+| --------------- | ------------------------ | -------------------------------------------------------------------------- |
+| `status`        | `error` + `endedAt`      | 'error' (has error), 'running' (no endedAt), 'success' (endedAt, no error) |
+| `hasChildError` | child spans with `error` | true if any child span in the trace has an error (even if root succeeded)  |
 
 ---
 
@@ -100,10 +97,17 @@ getTraces({
   },
 });
 
-// Find all failed traces
+// Find all failed traces (root span has error)
 getTraces({
   filters: {
     status: 'error',
+  },
+});
+
+// Find traces where any child span had an error (even if root succeeded)
+getTraces({
+  filters: {
+    hasChildError: true,
   },
 });
 
@@ -247,6 +251,9 @@ getTraces({
 
 **Goal:** Find traces that contain a child span matching specific criteria.
 
+> **Note:** The `hasChildError` filter is already supported (see Basic Root Span Filters above).
+> The more general `containsSpan` filter below is planned for future implementation.
+
 **Examples:**
 
 ```typescript
@@ -266,15 +273,6 @@ getTraces({
     containsSpan: {
       entityType: 'agent',
       entityName: 'Research Agent',
-    },
-  },
-});
-
-// Find traces with any errored child span
-getTraces({
-  filters: {
-    containsSpan: {
-      status: 'error',
     },
   },
 });
@@ -358,8 +356,8 @@ For more expressive filtering, support operators beyond equality:
 
 ## Priority Order
 
-1. **P0 (Current):** Basic filters on all first-class columns
-2. **P1 (Next):** Contains child span filter
+1. **P0 (Current):** Basic filters on all first-class columns, `hasChildError` filter
+2. **P1 (Next):** General `containsSpan` filter (find traces containing specific child spans)
 3. **P2:** Scorer/evaluation filters (JOIN with scorers table)
 4. **P3:** Performance filters (duration, tokens)
 5. **P4:** Filter operators (gt, lt, in, etc.)

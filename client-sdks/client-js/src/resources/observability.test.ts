@@ -114,8 +114,11 @@ describe('Observability Methods', () => {
         },
       });
 
+      // Check URL contains expected params (order may vary)
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?entityId=entity-123&entityType=agent`,
+        expect.stringMatching(
+          /\/api\/observability\/traces\?.*entityId=entity-123.*entityType=agent|.*entityType=agent.*entityId=entity-123/,
+        ),
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -129,7 +132,7 @@ describe('Observability Methods', () => {
       const endDate = new Date('2024-01-31T23:59:59Z');
 
       await client.getTraces({
-        pagination: {
+        filters: {
           dateRange: {
             start: startDate,
             end: endDate,
@@ -137,41 +140,31 @@ describe('Observability Methods', () => {
         },
       });
 
-      const expectedDateRange = JSON.stringify({
-        start: startDate.toISOString(),
-        end: endDate.toISOString(),
-      });
-
+      // New format uses dot notation for nested objects
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?dateRange=${encodeURIComponent(expectedDateRange)}`,
+        `${clientOptions.baseUrl}/api/observability/traces?dateRange.start=${encodeURIComponent(startDate.toISOString())}&dateRange.end=${encodeURIComponent(endDate.toISOString())}`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
       );
     });
 
-    it('should fetch traces with date range filter using string dates', async () => {
+    it('should fetch traces with partial date range filter', async () => {
       mockSuccessfulResponse();
 
       const startDate = new Date('2024-01-01T00:00:00Z');
-      const endDate = new Date('2024-01-31T23:59:59Z');
 
       await client.getTraces({
-        pagination: {
+        filters: {
           dateRange: {
             start: startDate,
-            end: endDate,
           },
         },
       });
 
-      const expectedDateRange = JSON.stringify({
-        start: startDate.toISOString(),
-        end: endDate.toISOString(),
-      });
-
+      // Only start date, no end date
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?dateRange=${encodeURIComponent(expectedDateRange)}`,
+        `${clientOptions.baseUrl}/api/observability/traces?dateRange.start=${encodeURIComponent(startDate.toISOString())}`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -188,25 +181,21 @@ describe('Observability Methods', () => {
         pagination: {
           page: 1,
           perPage: 5,
-          dateRange: {
-            start: startDate,
-            end: endDate,
-          },
         },
         filters: {
           spanType: 'agent_run' as SpanType,
           entityId: 'entity-123',
           entityType: 'agent',
+          dateRange: {
+            start: startDate,
+            end: endDate,
+          },
         },
       });
 
-      const expectedDateRange = JSON.stringify({
-        start: startDate.toISOString(),
-        end: endDate.toISOString(),
-      });
-
+      // New format: dot notation for dateRange, all filters in query string
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?page=1&perPage=5&spanType=agent_run&entityId=entity-123&entityType=agent&dateRange=${encodeURIComponent(expectedDateRange)}`,
+        `${clientOptions.baseUrl}/api/observability/traces?page=1&perPage=5&dateRange.start=${encodeURIComponent(startDate.toISOString())}&dateRange.end=${encodeURIComponent(endDate.toISOString())}&spanType=agent_run&entityType=agent&entityId=entity-123`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
