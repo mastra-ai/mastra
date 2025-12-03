@@ -20,7 +20,13 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 
 import { McpServerPage } from './pages/mcps/[serverId]';
 
-import { LinkComponentProvider, LinkComponentProviderProps, PlaygroundQueryClient } from '@mastra/playground-ui';
+import {
+  LinkComponentProvider,
+  LinkComponentProviderProps,
+  PlaygroundQueryClient,
+  StudioConfigProvider,
+  useStudioConfig,
+} from '@mastra/playground-ui';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
@@ -63,8 +69,16 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  const { baseUrl, headers, isLoading } = useStudioConfig();
+
+  if (isLoading) {
+    // Config is loaded from localStorage. However, there might be a race condition
+    // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
+    return null;
+  }
+
   return (
-    <MastraReactProvider>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers}>
       <PlaygroundQueryClient>
         <PostHogProvider>
           <BrowserRouter>
@@ -155,4 +169,10 @@ function App() {
   );
 }
 
-export default App;
+export default function AppWrapper() {
+  return (
+    <StudioConfigProvider>
+      <App />
+    </StudioConfigProvider>
+  );
+}
