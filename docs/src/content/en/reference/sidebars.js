@@ -426,7 +426,11 @@ const sidebars = {
       label: "Server",
       collapsed: true,
       items: [
-        { type: "doc", id: "server/mastra-server", label: "MastraServer" },
+        {
+          type: "doc",
+          id: "server/mastra-server",
+          label: "MastraServer Class",
+        },
         { type: "doc", id: "server/create-route", label: "createRoute()" },
         { type: "doc", id: "server/routes", label: "Built-in Routes" },
       ],

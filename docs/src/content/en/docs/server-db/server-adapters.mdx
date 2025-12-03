@@ -18,14 +18,14 @@ Server adapters let you run Mastra with your own HTTP server instead of using `m
 
 :::info
 
-For simple deployments without custom server requirements, use `mastra build` instead. See [Mastra Server](/docs/server-db/mastra-server).
+For simple deployments without custom server requirements, use `mastra build` instead. See [Server Configuration](/docs/v1/server-db/mastra-server).
 
 :::
 
 ## Available adapters
 
-- **[@mastra/hono](/docs/server-db/hono-adapter)** - Hono framework adapter
-- **[@mastra/express](/docs/server-db/express-adapter)** - Express framework adapter
+- **[@mastra/hono](/docs/v1/server-db/hono-adapter)** - Hono framework adapter
+- **[@mastra/express](/docs/v1/server-db/express-adapter)** - Express framework adapter
 
 ## Basic setup
 
@@ -35,7 +35,7 @@ Both adapters follow the same pattern:
 2. Create a `MastraServer` with the app and Mastra instance
 3. Call `init()` to register routes and middleware
 
-See the [Hono Adapter](/docs/server-db/hono-adapter) or [Express Adapter](/docs/server-db/express-adapter) docs for framework-specific setup.
+See the [Hono Adapter](/docs/v1/server-db/hono-adapter) or [Express Adapter](/docs/v1/server-db/express-adapter) docs for framework-specific setup.
 
 ## Constructor options
 
@@ -129,8 +129,8 @@ Use manual initialization when you need middleware that runs before Mastra's con
 ## Adding custom routes
 
 Routes added to the app after `init()` have access to Mastra context. See framework-specific docs for syntax:
-- [Hono: Adding custom routes](/docs/server-db/hono-adapter#adding-custom-routes)
-- [Express: Adding custom routes](/docs/server-db/express-adapter#adding-custom-routes)
+- [Hono: Adding custom routes](/docs/v1/server-db/hono-adapter#adding-custom-routes)
+- [Express: Adding custom routes](/docs/v1/server-db/express-adapter#adding-custom-routes)
 
 ## Route prefixes
 
@@ -221,7 +221,7 @@ The adapter reads these from `mastra.getServer()`:
 
 | Option | Description |
 |--------|-------------|
-| `auth` | Authentication config, used by `registerAuthMiddleware()`. See [Authentication](/docs/auth/index). |
+| `auth` | Authentication config, used by `registerAuthMiddleware()`. See [Authentication](/docs/v1/auth/index). |
 | `bodySizeLimit` | Default body size limit in bytes. Can be overridden per-adapter via `bodyLimitOptions`. |
 
 ### Adapter constructor only
@@ -254,11 +254,11 @@ When using adapters, configure these features directly with your framework inste
 
 Server adapters automatically register MCP (Model Context Protocol) routes when MCP servers are configured in your Mastra instance. The routes handle both HTTP and SSE transports.
 
-See [MCP](/docs/mcp/overview) for configuration details.
+See [MCP](/docs/v1/mcp/overview) for configuration details.
 
 ## Related
 
-- [Hono Adapter](/docs/server-db/hono-adapter) - Hono-specific setup
-- [Express Adapter](/docs/server-db/express-adapter) - Express-specific setup
-- [Mastra Server](/docs/server-db/mastra-server) - Using `mastra build` instead
-- [Authentication](/docs/auth/index) - Configuring auth for your server
+- [Hono Adapter](/docs/v1/server-db/hono-adapter) - Hono-specific setup
+- [Express Adapter](/docs/v1/server-db/express-adapter) - Express-specific setup
+- [Server Configuration](/docs/v1/server-db/mastra-server) - Using `mastra build` instead
+- [Authentication](/docs/v1/auth/index) - Configuring auth for your server

@@ -1,13 +1,19 @@
 ---
-title: "Reference: MastraServer | Server"
+title: "Reference: MastraServer Class | Server"
 description: "API reference for the MastraServer abstract class used to create server adapters."
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# MastraServer
+# MastraServer Class
 
 The `MastraServer` abstract class is the base for all server adapters. Extend this class to create adapters for frameworks other than Hono or Express.
+
+:::info
+
+This is the API reference for the abstract class used by server adapters. For configuring the Mastra `server` options (port, timeout, CORS), see [Server Configuration](/docs/v1/server-db/mastra-server).
+
+:::
 
 ## Import
 
@@ -277,6 +283,6 @@ export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
 
 ## Related
 
-- [Server Adapters](/docs/server-db/server-adapters) - Using adapters
-- [Custom Adapters](/docs/server-db/custom-adapters) - Creating custom adapters
-- [createRoute()](/reference/server/create-route) - Creating custom routes
+- [Server Adapters](/docs/v1/server-db/server-adapters) - Using adapters
+- [Custom Adapters](/docs/v1/server-db/custom-adapters) - Creating custom adapters
+- [createRoute()](/reference/v1/server/create-route) - Creating custom routes
