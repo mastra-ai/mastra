@@ -22,19 +22,19 @@ describe('BatchPartsProcessor', () => {
 
       const chunk1: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
       const chunk2: ChunkType = {
         type: 'text-delta',
-        payload: { text: ' ', id: '1' },
+        payload: { text: ' ', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
       const chunk3: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'world', id: '1' },
+        payload: { text: 'world', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -73,7 +73,7 @@ describe('BatchPartsProcessor', () => {
         type: 'text-delta',
         runId: '1',
         from: ChunkFrom.AGENT,
-        payload: { text: 'Hello world', id: '1' },
+        payload: { text: 'Hello world', id: 'text-1' },
       });
     });
 
@@ -81,11 +81,11 @@ describe('BatchPartsProcessor', () => {
       processor = new BatchPartsProcessor();
 
       const chunks = [
-        { type: 'text-delta', payload: { text: 'A', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
-        { type: 'text-delta', payload: { text: 'B', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
-        { type: 'text-delta', payload: { text: 'C', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
-        { type: 'text-delta', payload: { text: 'D', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
-        { type: 'text-delta', payload: { text: 'E', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'A', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'B', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'C', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'D', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'E', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
       ] as ChunkType[];
 
       // Use shared state object
@@ -117,7 +117,7 @@ describe('BatchPartsProcessor', () => {
         type: 'text-delta',
         runId: '1',
         from: ChunkFrom.AGENT,
-        payload: { text: 'ABCDE', id: '1' },
+        payload: { text: 'ABCDE', id: 'text-1' },
       });
     });
   });
@@ -129,13 +129,13 @@ describe('BatchPartsProcessor', () => {
       // Add some text chunks first
       const textChunk1: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
       const textChunk2: ChunkType = {
         type: 'text-delta',
-        payload: { text: ' world', id: '1' },
+        payload: { text: ' world', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -176,7 +176,7 @@ describe('BatchPartsProcessor', () => {
         type: 'text-delta',
         runId: '1',
         from: ChunkFrom.AGENT,
-        payload: { text: 'Hello world', id: '1' },
+        payload: { text: 'Hello world', id: 'text-1' },
       });
     });
 
@@ -186,7 +186,7 @@ describe('BatchPartsProcessor', () => {
       // Add some text chunks first
       const textChunk: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -218,10 +218,10 @@ describe('BatchPartsProcessor', () => {
       processor = new BatchPartsProcessor({ batchSize: 3 });
 
       const chunks: ChunkType[] = [
-        { type: 'text-delta', payload: { text: 'Hello', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'Hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         { type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT },
-        { type: 'text-delta', payload: { text: ' world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
-        { type: 'text-delta', payload: { text: '!', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: '!', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
       ];
 
       // Use shared state object
@@ -251,7 +251,7 @@ describe('BatchPartsProcessor', () => {
         type: 'text-delta',
         runId: '1',
         from: ChunkFrom.AGENT,
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
       });
 
       // Third and fourth chunks - should batch together
@@ -283,13 +283,13 @@ describe('BatchPartsProcessor', () => {
 
       const chunk1: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
       const chunk2: ChunkType = {
         type: 'text-delta',
-        payload: { text: ' world', id: '1' },
+        payload: { text: ' world', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -322,7 +322,7 @@ describe('BatchPartsProcessor', () => {
       // We need to process another part to see the result
       const chunk3: ChunkType = {
         type: 'text-delta',
-        payload: { text: '!', id: '1' },
+        payload: { text: '!', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -340,7 +340,7 @@ describe('BatchPartsProcessor', () => {
         type: 'text-delta',
         runId: '1',
         from: ChunkFrom.AGENT,
-        payload: { text: 'Hello world!', id: '1' },
+        payload: { text: 'Hello world!', id: 'text-1' },
       });
     });
 
@@ -349,7 +349,7 @@ describe('BatchPartsProcessor', () => {
 
       const part: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -368,7 +368,7 @@ describe('BatchPartsProcessor', () => {
       // Should still not emit until batch size is reached
       const chunk2: ChunkType = {
         type: 'text-delta',
-        payload: { text: ' world', id: '1' },
+        payload: { text: ' world', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -389,8 +389,8 @@ describe('BatchPartsProcessor', () => {
       processor = new BatchPartsProcessor({ batchSize: 5 });
 
       const chunks = [
-        { type: 'text-delta', payload: { text: 'Hello', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
-        { type: 'text-delta', payload: { text: ' world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'Hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
       ] as ChunkType[];
 
       // Use shared state object
@@ -420,7 +420,7 @@ describe('BatchPartsProcessor', () => {
         type: 'text-delta',
         runId: '1',
         from: ChunkFrom.AGENT,
-        payload: { text: 'Hello world', id: '1' },
+        payload: { text: 'Hello world', id: 'text-1' },
       });
     });
 
@@ -437,7 +437,7 @@ describe('BatchPartsProcessor', () => {
 
       const part: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -459,13 +459,13 @@ describe('BatchPartsProcessor', () => {
 
       const chunk1: ChunkType = {
         type: 'text-delta',
-        payload: { text: '', id: '1' },
+        payload: { text: '', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
       const chunk2: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -495,7 +495,7 @@ describe('BatchPartsProcessor', () => {
         type: 'text-delta',
         runId: '1',
         from: ChunkFrom.AGENT,
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
       });
     });
 
@@ -539,19 +539,19 @@ describe('BatchPartsProcessor', () => {
       // Add text chunks first
       const textChunk1: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'Hello', id: '1' },
+        payload: { text: 'Hello', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
       const textChunk2: ChunkType = {
         type: 'text-delta',
-        payload: { text: ' world', id: '1' },
+        payload: { text: ' world', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
       const textChunk3: ChunkType = {
         type: 'text-delta',
-        payload: { text: '!', id: '1' },
+        payload: { text: '!', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -588,7 +588,7 @@ describe('BatchPartsProcessor', () => {
         type: 'text-delta',
         runId: '1',
         from: ChunkFrom.AGENT,
-        payload: { text: 'Hello world!', id: '1' },
+        payload: { text: 'Hello world!', id: 'text-1' },
       });
 
       // Now add a non-text part - it should be emitted immediately and not accumulated

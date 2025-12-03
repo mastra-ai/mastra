@@ -594,10 +594,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
           });
         }
-        if (lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels) {
-          return { ...result, resumeLabels: lastOutput.mutableContext.resumeLabels };
-        }
-        return result;
+        return {
+          ...result,
+          ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels
+            ? { resumeLabels: lastOutput.mutableContext.resumeLabels }
+            : {}),
+          ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+        };
       }
     }
 

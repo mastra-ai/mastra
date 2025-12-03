@@ -32,9 +32,28 @@ export class ModelSpanTracker {
   #accumulator: Record<string, any> = {};
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
+  /** Tracks whether completionStartTime has been captured for this generation */
+  #completionStartTimeCaptured: boolean = false;
 
   constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
     this.#modelSpan = modelSpan;
+  }
+
+  /**
+   * Capture the completion start time (time to first token) when the first content chunk arrives.
+   * This is used by observability providers like Langfuse to calculate TTFT metrics.
+   */
+  #captureCompletionStartTime(): void {
+    if (this.#completionStartTimeCaptured || !this.#modelSpan) {
+      return;
+    }
+
+    this.#completionStartTimeCaptured = true;
+    this.#modelSpan.update({
+      attributes: {
+        completionStartTime: new Date(),
+      },
+    });
   }
 
   /**
@@ -317,6 +336,10 @@ export class ModelSpanTracker {
             case 'text-start':
             case 'text-delta':
             case 'text-end':
+              // Capture completion start time on first text content
+              if (chunk.type === 'text-delta') {
+                this.#captureCompletionStartTime();
+              }
               this.#handleTextChunk(chunk);
               break;
 
@@ -324,17 +347,29 @@ export class ModelSpanTracker {
             case 'tool-call-delta':
             case 'tool-call-input-streaming-end':
             case 'tool-call':
+              // Capture completion start time on first tool call content
+              if (chunk.type === 'tool-call-delta') {
+                this.#captureCompletionStartTime();
+              }
               this.#handleToolCallChunk(chunk);
               break;
 
             case 'reasoning-start':
             case 'reasoning-delta':
             case 'reasoning-end':
+              // Capture completion start time on first reasoning content
+              if (chunk.type === 'reasoning-delta') {
+                this.#captureCompletionStartTime();
+              }
               this.#handleReasoningChunk(chunk);
               break;
 
             case 'object':
             case 'object-result':
+              // Capture completion start time on first object content
+              if (chunk.type === 'object') {
+                this.#captureCompletionStartTime();
+              }
               this.#handleObjectChunk(chunk);
               break;
 
