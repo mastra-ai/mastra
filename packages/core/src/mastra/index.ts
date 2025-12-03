@@ -678,6 +678,9 @@ do:
           tts: this.#tts,
           vectors: this.#vectors,
         });
+        if (!workflow.committed) {
+          workflow.commit();
+        }
         // @ts-ignore
         this.#workflows[key] = workflow;
       });
