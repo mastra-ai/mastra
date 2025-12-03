@@ -4,6 +4,7 @@ import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
 import { checkAndInstallCoreDeps, checkForPkgJson, interactivePrompt } from '../init/utils';
 import type { Component, LLMProvider } from '../init/utils';
+import { getVersionTag } from '../utils';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
@@ -23,7 +24,11 @@ export const initProject = async (args: InitArgs) => {
     args: { ...args },
     execution: async () => {
       await checkForPkgJson();
-      await checkAndInstallCoreDeps(Boolean(args?.example || args?.default));
+
+      // Detect the version tag (e.g., 'beta', 'latest') from the running CLI
+      const versionTag = await getVersionTag();
+
+      await checkAndInstallCoreDeps(Boolean(args?.example || args?.default), versionTag);
 
       if (!Object.keys(args).length) {
         const result = await interactivePrompt();
@@ -32,6 +37,7 @@ export const initProject = async (args: InitArgs) => {
           llmApiKey: result?.llmApiKey as string,
           components: ['agents', 'tools', 'workflows'],
           addExample: true,
+          versionTag,
         });
         return;
       }
@@ -43,6 +49,7 @@ export const initProject = async (args: InitArgs) => {
           llmProvider: 'openai',
           addExample: true,
           configureEditorWithDocsMCP: args.mcp,
+          versionTag,
         });
         return;
       }
@@ -54,6 +61,7 @@ export const initProject = async (args: InitArgs) => {
         addExample: args.example,
         llmApiKey: args.llmApiKey,
         configureEditorWithDocsMCP: args.mcp,
+        versionTag,
       });
       return;
     },

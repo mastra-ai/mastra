@@ -1589,6 +1589,110 @@ describe('LangfuseExporter', () => {
     });
   });
 
+  describe('Time to First Token (TTFT) Support', () => {
+    it('should include completionStartTime in generation payload for streaming responses', async () => {
+      // Create a streaming MODEL_GENERATION span with completionStartTime
+      const requestStartTime = new Date('2024-01-15T10:00:00.000Z');
+      const firstTokenTime = new Date('2024-01-15T10:00:00.150Z'); // 150ms later
+
+      const llmSpan = createMockSpan({
+        id: 'llm-streaming-ttft',
+        name: 'gpt-4-streaming',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+          streaming: true,
+          completionStartTime: firstTokenTime, // When first token was received
+        },
+      });
+      llmSpan.startTime = requestStartTime;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Verify completionStartTime is passed to Langfuse for TTFT calculation
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-streaming-ttft',
+          name: 'gpt-4-streaming',
+          startTime: requestStartTime,
+          completionStartTime: firstTokenTime,
+          model: 'gpt-4',
+        }),
+      );
+    });
+
+    it('should not include completionStartTime when not provided (non-streaming)', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-non-streaming',
+        name: 'gpt-4-generate',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+          streaming: false,
+          // No completionStartTime for non-streaming requests
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      const generationCall = mockTrace.generation.mock.calls[0][0];
+      expect(generationCall.completionStartTime).toBeUndefined();
+    });
+
+    it('should include completionStartTime when updating generation span with first token timing', async () => {
+      const requestStartTime = new Date('2024-01-15T10:00:00.000Z');
+      const firstTokenTime = new Date('2024-01-15T10:00:00.200Z'); // 200ms TTFT
+
+      // First, start the span without completionStartTime
+      const llmSpan = createMockSpan({
+        id: 'llm-update-ttft',
+        name: 'claude-streaming',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'claude-3-sonnet',
+          provider: 'anthropic',
+          streaming: true,
+        },
+      });
+      llmSpan.startTime = requestStartTime;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Then update with completionStartTime when first token arrives
+      llmSpan.attributes = {
+        ...llmSpan.attributes,
+        completionStartTime: firstTokenTime,
+      } as any;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: llmSpan,
+      });
+
+      // Verify the update includes completionStartTime
+      expect(mockGeneration.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          completionStartTime: firstTokenTime,
+        }),
+      );
+    });
+  });
+
   describe('Shutdown', () => {
     it('should shutdown Langfuse client and clear maps', async () => {
       // Add some data to internal maps
