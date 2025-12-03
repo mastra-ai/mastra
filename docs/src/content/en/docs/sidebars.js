@@ -97,11 +97,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "agents/networks",
-          label: "Networks",
-        },
-        {
-          type: "doc",
           id: "agents/adding-voice",
           label: "Adding Voice",
         },
