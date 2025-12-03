@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@site/src/components/ui/dropdown";
 import { Check } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "../lib/utils";
 import { BetaIcon, StableIcon, TriggerIcon, VersionLabel } from "./icons/icon";
 
@@ -15,6 +15,29 @@ const versions = [
   { value: "beta", label: "Beta" },
 ];
 
+type Version = "beta" | "stable";
+
+const getVersionFromPath = (pathname: string): Version => {
+  const pathChunks = pathname.split("/");
+  return pathChunks?.[2] === "v1" ? "beta" : "stable";
+};
+
+const getPathForVersion = (pathname: string, nextVersion: Version): string => {
+  const pathChunks = pathname.split("/");
+
+  if (nextVersion === "beta") {
+    if (pathChunks?.[2] !== "v1") {
+      pathChunks.splice(2, 0, "v1");
+    }
+  } else {
+    if (pathChunks?.[2] === "v1") {
+      pathChunks.splice(2, 1);
+    }
+  }
+
+  return pathChunks.join("/");
+};
+
 export default function VersionControl({
   className,
   size = "default",
@@ -22,36 +45,24 @@ export default function VersionControl({
   className?: string;
   size?: "sm" | "default";
 }) {
-  // Initialize to stable to match SSR output and prevent hydration mismatch
-  // Stable = 0.x (default /docs), Beta = v1 (/docs/v1)
-  const [currentVersion, setCurrentVersion] = useState<"beta" | "stable">(
-    "beta",
-  );
+  const [currentVersion, setCurrentVersion] = useState<Version>("beta");
+  const [versionPaths, setVersionPaths] = useState<
+    Partial<Record<Version, string>>
+  >({});
   const [open, setOpen] = useState(false);
 
-  const onChange = (nextVersion: string) => {
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     const currentPath = window.location.pathname;
-    let pathChunks = currentPath.split("/");
-    let newPath: string;
+    const detectedVersion = getVersionFromPath(currentPath);
 
-    if (nextVersion === "beta") {
-      if (pathChunks?.[2] !== "v1") {
-        pathChunks.splice(2, 0, "v1");
-        newPath = pathChunks.join("/");
-      }
-    } else {
-      if (pathChunks?.[2] === "v1") {
-        pathChunks.splice(2, 1);
-        newPath = pathChunks.join("/");
-      }
-    }
-
-    if (newPath) {
-      window.location.href = newPath;
-    }
-  };
+    setCurrentVersion(detectedVersion);
+    setVersionPaths({
+      beta: getPathForVersion(currentPath, "beta"),
+      stable: getPathForVersion(currentPath, "stable"),
+    });
+  }, []);
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -82,22 +93,29 @@ export default function VersionControl({
       >
         {versions.map((version) => {
           const isActive = version.value === currentVersion;
+          const href =
+            versionPaths[version.value as Version] ?? window.location.pathname;
           return (
             <DropdownMenuItem
               key={version.value}
-              onClick={() => onChange(version.value)}
+              asChild
               className={cn(
                 "flex items-center text-(--mastra-text-secondary) justify-between w-full",
                 isActive && " font-medium",
               )}
             >
-              <span className="inline-flex dark:text-white text-black items-center gap-2">
-                {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
-                <span>{version.label}</span>
-              </span>
-              {isActive && (
-                <Check className="size-4 text-(--mastra-green-accent-2)" />
-              )}
+              <a
+                href={href}
+                className="flex w-full items-center justify-between"
+              >
+                <span className="inline-flex dark:text-white text-black items-center gap-2">
+                  {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
+                  <span>{version.label}</span>
+                </span>
+                {isActive && (
+                  <Check className="size-4 text-(--mastra-green-accent-2)" />
+                )}
+              </a>
             </DropdownMenuItem>
           );
         })}
