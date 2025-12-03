@@ -46,7 +46,6 @@ export default function Layout(props: Props): ReactNode {
         <link rel="canonical" href={canonicalUrl} />
         <link rel="alternate" hrefLang="en" href={canonicalUrl} />
         <link rel="alternate" hrefLang="x-default" href={canonicalUrl} />
-        <meta name="algolia-site-verification"  content="8BE6FD6A85A0A0D2" />
       </Head>
 
       <SkipToContent />
