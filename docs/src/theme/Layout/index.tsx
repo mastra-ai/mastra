@@ -46,8 +46,6 @@ export default function Layout(props: Props): ReactNode {
         <link rel="canonical" href={canonicalUrl} />
         <link rel="alternate" hrefLang="en" href={canonicalUrl} />
         <link rel="alternate" hrefLang="x-default" href={canonicalUrl} />
-        {/* IMPORTANT: Remove the next line when v1 gets stable and docs are moved to the url without `v1` prefix */}
-        <meta name="robots" content="noindex, follow" />
       </Head>
 
       <SkipToContent />
