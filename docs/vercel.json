@@ -300,7 +300,7 @@
       "destination": "/reference/v1/streaming/workflows/resumeStream",
       "permanent": true
     },
-        {
+    {
       "source": "/docs/deployment/mastra-cloud/overview",
       "destination": "/docs/mastra-cloud/overview",
       "permanent": true
