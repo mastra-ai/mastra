@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/mastra/*"],
+      "@custom-lodash/*": ["../../packages/lodash-test/src/*"]
+    }
+  }
+}

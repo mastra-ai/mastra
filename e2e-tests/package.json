@@ -1,0 +1,34 @@
+{
+  "name": "@internal/e2e-tests",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:monorepo": "vitest run --project monorepo",
+    "test:deployers": "vitest run --project deployers",
+    "test:create-mastra": "vitest run --project create-mastra",
+    "test:commonjs": "vitest run --project commonjs",
+    "test:pkg-outputs": "vitest run --project pkg-outputs",
+    "test:kitchen-sink": "playwright test --config=./suites/kitchen-sink/playwright.config.ts",
+    "cleanup": "cd .. && git fetch origin main && git diff --name-only | grep -E '(package.json|CHANGELOG.md)$' | xargs -I {} git checkout origin/main -- {} && echo 'Restored e2e-modified files (package.json + CHANGELOG.md)'"
+  },
+  "devDependencies": {
+    "@internal/e2e-shared": "workspace:*",
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.13.17",
+    "execa": "^9.6.0",
+    "get-port": "^7.1.0",
+    "globby": "^14.1.0",
+    "resolve.exports": "^2.0.3",
+    "typescript": "^5.8.3",
+    "verdaccio": "^6.2.0",
+    "verdaccio-auth-memory": "^10.3.1",
+    "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

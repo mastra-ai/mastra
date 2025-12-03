@@ -106,7 +106,7 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
   return {
     name: PLUGIN_NAME,
     async resolveId(request, importer, options) {
-      if (!importer || request.startsWith('\0')) {
+      if (!importer || request.startsWith('\0') || importer.startsWith('\0')) {
         return null;
       }
 
