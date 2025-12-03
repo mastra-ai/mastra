@@ -2041,11 +2041,9 @@ export class Run<
           tracingOptions,
           initialState,
           outputOptions,
-          writableStream: new WritableStream<WorkflowStreamEvent>({
-            write(chunk) {
-              controller.enqueue(chunk);
-            },
-          }),
+          writableStream: (chunk) => {
+            void self.emitter.emit('watch', chunk);
+          },
         });
         let executionResults;
         try {
