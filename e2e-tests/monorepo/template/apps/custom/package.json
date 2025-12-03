@@ -30,6 +30,9 @@
   "devDependencies": {
     "mastra": "monorepo-test"
   },
+  "resolutions": {
+    "@mastra/client-js": "monorepo-test"
+  },
   "pnpm": {
     "overrides": {
       "@mastra/client-js": "monorepo-test"

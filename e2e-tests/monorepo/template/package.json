@@ -9,6 +9,9 @@
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
+  "resolutions": {
+    "@mastra/client-js": "monorepo-test"
+  },
   "pnpm": {
     "neverBuiltDependencies": [],
     "overrides": {
