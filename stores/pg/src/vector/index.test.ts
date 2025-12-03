@@ -3702,3 +3702,86 @@ describe('PgVector Metadata Filtering', () => {
     },
   });
 });
+
+// BYOC Pool tests - verify that user-provided pools work correctly
+describe('PgVector with BYOC pool', () => {
+  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+  let sharedPool: pg.Pool;
+  let byocVectorDB: PgVector;
+
+  beforeAll(() => {
+    // Create a shared pool that we'll provide to PgVector
+    sharedPool = new pg.Pool({
+      connectionString,
+      max: 5,
+      idleTimeoutMillis: 10000,
+    });
+
+    // Create PgVector with BYOC pool
+    byocVectorDB = new PgVector({
+      id: 'pg-byoc-pool-test',
+      pool: sharedPool,
+      schemaName: 'byoc_vector_schema',
+    });
+  });
+
+  afterAll(async () => {
+    // Disconnect PgVector first (should NOT close the pool since we provided it)
+    await byocVectorDB.disconnect();
+
+    // Verify pool is still usable after PgVector disconnect
+    const client = await sharedPool.connect();
+    await client.query('SELECT 1');
+    client.release();
+
+    // Now we close the pool ourselves
+    await sharedPool.end();
+  });
+
+  it('should use the provided pool', () => {
+    expect(byocVectorDB.pool).toBe(sharedPool);
+  });
+
+  it('should work with basic vector operations', async () => {
+    const testIndex = 'byoc_pool_test_index';
+
+    try {
+      await byocVectorDB.createIndex({
+        indexName: testIndex,
+        dimension: 3,
+        metric: 'cosine',
+      });
+
+      await byocVectorDB.upsert({
+        indexName: testIndex,
+        vectors: [[1, 2, 3]],
+        metadata: [{ source: 'byoc_test' }],
+      });
+
+      const results = await byocVectorDB.query({
+        indexName: testIndex,
+        queryVector: [1, 2, 3],
+        topK: 1,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].metadata).toEqual({ source: 'byoc_test' });
+    } finally {
+      await byocVectorDB.deleteIndex({ indexName: testIndex });
+    }
+  });
+
+  // Run the full metadata filtering test suite with BYOC pool
+  createVectorTestSuite({
+    vector: byocVectorDB,
+    createIndex: async (indexName: string) => {
+      await byocVectorDB.createIndex({ indexName, dimension: 1536 });
+    },
+    deleteIndex: async (indexName: string) => {
+      await byocVectorDB.deleteIndex({ indexName });
+    },
+    waitForIndexing: async () => {
+      // PG doesn't need to wait for indexing
+    },
+  });
+});
