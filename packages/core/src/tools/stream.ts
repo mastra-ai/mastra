@@ -1,12 +1,13 @@
 import { WritableStream } from 'node:stream/web';
 import type { DataChunkType } from '../stream/types';
+import type { OutputWriter } from '../workflows';
 
 export class ToolStream<T> extends WritableStream<T> {
   private prefix: string;
   private callId: string;
   private name: string;
   private runId: string;
-  private writeFn: (chunk: any) => Promise<void>;
+  private writeFn?: OutputWriter;
 
   constructor(
     {
@@ -20,11 +21,11 @@ export class ToolStream<T> extends WritableStream<T> {
       name: string;
       runId: string;
     },
-    writeFn: (chunk: any) => Promise<void>,
+    writeFn?: OutputWriter,
   ) {
     super({
       async write(chunk: any) {
-        await getInstance()._write(chunk)
+        await getInstance()._write(chunk);
       },
     });
 
@@ -32,7 +33,7 @@ export class ToolStream<T> extends WritableStream<T> {
     function getInstance() {
       return self;
     }
-    
+
     this.prefix = prefix;
     this.callId = callId;
     this.name = name;
@@ -41,30 +42,34 @@ export class ToolStream<T> extends WritableStream<T> {
   }
 
   async _write(data: any) {
-    await this.writeFn({
-      type: `${this.prefix}-output`,
-      runId: this.runId,
-      from: 'USER',
-      payload: {
-        output: data,
-        ...(this.prefix === 'workflow-step'
-          ? {
-              runId: this.runId,
-              stepName: this.name,
-            }
-          : {
-              [`${this.prefix}CallId`]: this.callId,
-              [`${this.prefix}Name`]: this.name,
-            }),
-      },
-    });
+    if (this.writeFn) {
+      await this.writeFn({
+        type: `${this.prefix}-output`,
+        runId: this.runId,
+        from: 'USER',
+        payload: {
+          output: data,
+          ...(this.prefix === 'workflow-step'
+            ? {
+                runId: this.runId,
+                stepName: this.name,
+              }
+            : {
+                [`${this.prefix}CallId`]: this.callId,
+                [`${this.prefix}Name`]: this.name,
+              }),
+        },
+      });
+    }
   }
 
   async write(data: any) {
-    await this._write(data)
+    await this._write(data);
   }
 
   async custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T) {
-    await this.writeFn(data)
+    if (this.writeFn) {
+      await this.writeFn(data);
+    }
   }
 }
