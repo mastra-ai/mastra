@@ -369,7 +369,6 @@
     "deepseek": {
       "url": "https://api.deepseek.com",
       "apiKeyEnvVar": "DEEPSEEK_API_KEY",
-      "apiKeyHeader": "Authorization",
       "name": "DeepSeek",
       "models": ["deepseek-chat", "deepseek-reasoner"],
       "docUrl": "https://platform.deepseek.com/api-docs/pricing",
