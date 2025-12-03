@@ -47,10 +47,6 @@ export const mastra = new Mastra({
 });
 ```
 
-The `method` option can be one of `"GET"`, `"POST"`, `"PUT"`,
-`"DELETE"` or `"ALL"`. Using `"ALL"` will cause the handler to be
-invoked for any HTTP method that matches the path.
-
 ## TypeScript configuration
 
 Mastra requires `module` and `moduleResolution` values that support modern Node.js versions. Older settings like `CommonJS` or `node` are incompatible with Mastra’s packages and will cause resolution errors.
@@ -96,6 +92,6 @@ export const mastra = new Mastra({
 
 ## Stream data redaction
 
-When streaming agent responses, Mastra automatically redacts sensitive information (system prompts, tool definitions, API keys) from stream chunks before sending them to clients. This is enabled by default.
+When streaming agent responses, the HTTP streaming layer redacts system prompts, tool definitions, API keys, and similar data from each chunk before sending it to clients. This is enabled by default.
 
 If you're using server adapters directly, you can configure redaction behavior. See [Stream data redaction](/docs/v1/server-db/server-adapters#stream-data-redaction) in the Server Adapters docs.

@@ -7,7 +7,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # createRoute()
 
-The `createRoute()` function creates type-safe routes with Zod validation and automatic OpenAPI spec generation.
+The `createRoute()` function creates type-safe routes with Zod validation. When an `openapiPath` is configured on the server adapter, it generates OpenAPI schema entries from the supplied Zod schemas.
 
 ## Import
 
@@ -42,7 +42,7 @@ function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
     {
       name: "responseType",
       type: "'json' | 'stream'",
-      description: "Response format",
+      description: "Response format. Internal routes may use additional types (`datastream-response`, `mcp-http`, `mcp-sse`).",
       isOptional: false,
     },
     {
@@ -309,6 +309,6 @@ Common status codes:
 
 ## Related
 
-- [Built-in Routes](/reference/v1/server/routes) - Default Mastra routes
+- [Server Routes](/reference/v1/server/routes) - Default Mastra routes
 - [MastraServer](/reference/v1/server/mastra-server) - Server adapter class
 - [Server Adapters](/docs/v1/server-db/server-adapters) - Using adapters

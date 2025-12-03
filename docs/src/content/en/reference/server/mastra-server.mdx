@@ -192,9 +192,20 @@ Get the framework app instance.
 getApp<T = TApp>(): T
 ```
 
+### parsePathParams()
+
+Validate path parameters with the route's Zod schema.
+
+```typescript copy
+async parsePathParams(
+  route: ServerRoute,
+  params: Record<string, string>
+): Promise<Record<string, unknown>>
+```
+
 ### parseQueryParams()
 
-Validate query params with Zod schema.
+Validate query parameters with the route's Zod schema.
 
 ```typescript copy
 async parseQueryParams(
@@ -205,13 +216,36 @@ async parseQueryParams(
 
 ### parseBody()
 
-Validate body with Zod schema.
+Validate request body with the route's Zod schema.
 
 ```typescript copy
 async parseBody(
   route: ServerRoute,
   body: unknown
 ): Promise<unknown>
+```
+
+### mergeRequestContext()
+
+Merge request context from multiple sources (query params and body).
+
+```typescript copy
+mergeRequestContext(options: {
+  paramsRequestContext?: Record<string, any>;
+  bodyRequestContext?: Record<string, any>;
+}): RequestContext
+```
+
+### registerOpenAPIRoute()
+
+Register an endpoint that serves the OpenAPI specification.
+
+```typescript copy
+async registerOpenAPIRoute(
+  app: TApp,
+  config: OpenAPIConfig,
+  options: { prefix?: string }
+): Promise<void>
 ```
 
 ## Types

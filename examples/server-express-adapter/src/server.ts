@@ -18,7 +18,7 @@ import { mastra } from './mastra';
 const app = express();
 app.use(express.json()); // Required for body parsing
 
-const server = new MastraServer({ app: app as any, mastra });
+const server = new MastraServer({ app, mastra });
 
 await server.init();
 
