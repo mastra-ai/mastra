@@ -64,13 +64,13 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "agents/agent-approval",
-          label: "Agent Approval",
+          id: "agents/agent-memory",
+          label: "Memory",
         },
         {
           type: "doc",
-          id: "agents/agent-memory",
-          label: "Memory",
+          id: "agents/structured-output",
+          label: "Structured Output",
         },
         {
           type: "doc",
@@ -79,8 +79,18 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/processors",
+          label: "Processors",
+        },
+        {
+          type: "doc",
           id: "agents/guardrails",
           label: "Guardrails",
+        },
+        {
+          type: "doc",
+          id: "agents/agent-approval",
+          label: "Agent Approval",
         },
         {
           type: "doc",
