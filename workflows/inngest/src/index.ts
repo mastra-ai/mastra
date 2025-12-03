@@ -1712,7 +1712,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
-  }): Promise<StepResult<any, any, any, any>> {
+  }): Promise<{ result: StepResult<any, any, any, any>; executionContextState: ExecutionContext['state'] }> {
     const stepAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: AISpanType.WORKFLOW_STEP,
@@ -2023,7 +2023,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       );
 
       Object.assign(executionContext, res.executionContext);
-      return {
+      const stepResult = {
         ...res.result,
         startedAt,
         endedAt: Date.now(),
@@ -2031,6 +2031,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
         resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
       } as StepResult<any, any, any, any>;
+
+      return { result: stepResult, executionContextState: executionContext.state };
     }
 
     let stepRes: {
@@ -2300,8 +2302,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     executionContext.state = stepRes.executionContext.state;
 
-    // @ts-ignore
-    return stepRes.result;
+    return {
+      result: stepRes.result as StepResult<any, any, any, any>,
+      executionContextState: stepRes.executionContext.state,
+    };
   }
 
   async persistStepUpdate({
@@ -2532,8 +2536,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
         });
 
-        stepResults[step.step.id] = result;
-        return result;
+        stepResults[step.step.id] = result.result;
+        executionContext.state = result.executionContextState;
+        return result.result;
       }),
     );
     const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
