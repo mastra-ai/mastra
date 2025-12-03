@@ -15,7 +15,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/core": "monorepo-test",
+    "@mastra/core": "e2e-test",
     "round-to": "^6.0.0",
     "tinyrainbow": "^3.0.3"
   }

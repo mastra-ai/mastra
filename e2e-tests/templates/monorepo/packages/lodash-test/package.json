@@ -11,7 +11,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/core": "monorepo-test",
+    "@mastra/core": "e2e-test",
     "lodash": "^4.17.21"
   }
 }
