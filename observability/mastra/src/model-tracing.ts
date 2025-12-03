@@ -326,9 +326,15 @@ export class ModelSpanTracker {
    * create MODEL_STEP and MODEL_CHUNK spans for each semantic unit in the stream.
    */
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T {
+    let captureCompletionStartTime = false;
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
+          if (!captureCompletionStartTime) {
+            captureCompletionStartTime = true;
+            this.#captureCompletionStartTime();
+          }
+
           controller.enqueue(chunk);
 
           // Handle chunk span tracking based on chunk type
@@ -336,10 +342,6 @@ export class ModelSpanTracker {
             case 'text-start':
             case 'text-delta':
             case 'text-end':
-              // Capture completion start time on first text content
-              if (chunk.type === 'text-delta') {
-                this.#captureCompletionStartTime();
-              }
               this.#handleTextChunk(chunk);
               break;
 
@@ -347,29 +349,17 @@ export class ModelSpanTracker {
             case 'tool-call-delta':
             case 'tool-call-input-streaming-end':
             case 'tool-call':
-              // Capture completion start time on first tool call content
-              if (chunk.type === 'tool-call-delta') {
-                this.#captureCompletionStartTime();
-              }
               this.#handleToolCallChunk(chunk);
               break;
 
             case 'reasoning-start':
             case 'reasoning-delta':
             case 'reasoning-end':
-              // Capture completion start time on first reasoning content
-              if (chunk.type === 'reasoning-delta') {
-                this.#captureCompletionStartTime();
-              }
               this.#handleReasoningChunk(chunk);
               break;
 
             case 'object':
             case 'object-result':
-              // Capture completion start time on first object content
-              if (chunk.type === 'object') {
-                this.#captureCompletionStartTime();
-              }
               this.#handleObjectChunk(chunk);
               break;
 

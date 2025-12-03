@@ -1,5 +1,6 @@
 ---
 '@mastra/braintrust': patch
+'@mastra/observability': patch
 ---
 
 Add time-to-first-token (TTFT) support for Braintrust integration
