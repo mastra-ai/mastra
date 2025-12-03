@@ -18,11 +18,11 @@ export function SpanDetails({ span }: SpanDetailsProps) {
     <>
       {/* Show prominent warning when token limit is exceeded */}
       {tokenLimitExceeded && (
-        <div className="bg-warning/10 border border-warning rounded-lg p-4 mb-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangleIcon className="text-warning mt-0.5 flex-shrink-0" size={20} />
+        <div className="bg-yellow-900/20 border-sm border-yellow-200 rounded-md p-2 mb-4">
+          <div className="flex items-start gap-2">
+            <AlertTriangleIcon className="text-yellow-200 mt-0.5 flex-shrink-0" size={20} />
             <div className="flex-1">
-              <h4 className="font-semibold text-warning mb-1">Token Limit Exceeded</h4>
+              <h4 className="font-semibold text-yellow-200 mb-1 text-sm">Token Limit Exceeded</h4>
               <p className="text-sm text-mastra-el-3 whitespace-pre-line">{getTokenLimitMessage(span)}</p>
             </div>
           </div>
