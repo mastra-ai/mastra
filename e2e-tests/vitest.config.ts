@@ -17,7 +17,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   test: {
     // Global setup runs once for all test suites
-    globalSetup: join(__dirname, 'setup.global.ts'),
+    globalSetup: join(__dirname, 'vitest.setup.global.ts'),
 
     // Node environment for all e2e tests
     environment: 'node',
