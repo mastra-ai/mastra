@@ -2000,8 +2000,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               },
             });
 
-            console.log(`${workflowId}-${step.id}-result`, result);
-
             return result;
           }
         } else {
