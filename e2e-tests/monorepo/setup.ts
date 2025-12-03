@@ -26,7 +26,18 @@ export default async function setup(project: TestProject) {
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 
-  await publishPackages(['--filter="mastra^..."', '--filter="mastra"'], tag, rootDir, registry);
+  await publishPackages(
+    [
+      '--filter="mastra^..."',
+      '--filter="mastra"',
+      // monorepo template uses @ag-ui/mastra which depends on @mastra/client-js
+      '--filter="@mastra/client-js"',
+      '--filter="@mastra/loggers"',
+    ],
+    tag,
+    rootDir,
+    registry,
+  );
 
   return () => {
     teardown();
