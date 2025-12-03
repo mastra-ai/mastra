@@ -35,7 +35,10 @@ export abstract class Bundler extends MastraBundler {
   async writePackageJson(
     outputDirectory: string,
     dependencies: Map<string, string>,
-    resolutions?: Record<string, string>,
+    options?: {
+      resolutions?: Record<string, string>;
+      pnpmOverrides?: Record<string, string>;
+    },
   ) {
     this.logger.debug(`Writing project's package.json`);
 
@@ -55,6 +58,10 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    const { resolutions, pnpmOverrides } = options ?? {};
+    const hasResolutions = Object.keys(resolutions ?? {}).length > 0;
+    const hasPnpmOverrides = Object.keys(pnpmOverrides ?? {}).length > 0;
+
     await writeFile(
       pkgPath,
       JSON.stringify(
@@ -70,9 +77,12 @@ export abstract class Bundler extends MastraBundler {
           author: 'Mastra',
           license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
-          ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
+          // resolutions for yarn/npm
+          ...(hasResolutions && { resolutions }),
+          // pnpm uses pnpm.overrides instead of resolutions
           pnpm: {
             neverBuiltDependencies: [],
+            ...(hasPnpmOverrides && { overrides: pnpmOverrides }),
           },
         },
         null,
@@ -313,8 +323,46 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    // Read pnpm.overrides and resolutions from source package.json
+    // In monorepos, also check workspace root since pnpm.overrides are typically defined there
+    let resolutions: Record<string, string> | undefined;
+    let pnpmOverrides: Record<string, string> | undefined;
+
+    const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
+
+    // First, try workspace root (if in a monorepo)
+    if (workspaceRoot && workspaceRoot !== projectRoot) {
+      try {
+        const workspacePkg = await readJSON(join(workspaceRoot, 'package.json'));
+        if (workspacePkg.resolutions && Object.keys(workspacePkg.resolutions).length > 0) {
+          resolutions = workspacePkg.resolutions;
+        }
+        if (workspacePkg.pnpm?.overrides && Object.keys(workspacePkg.pnpm.overrides).length > 0) {
+          pnpmOverrides = workspacePkg.pnpm.overrides;
+        }
+      } catch {
+        // Workspace root package.json not found or invalid
+      }
+    }
+
+    // Then, check project root (app-level overrides take precedence)
     try {
-      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+      const sourcePkg = await readJSON(join(projectRoot, 'package.json'));
+      if (sourcePkg.resolutions && Object.keys(sourcePkg.resolutions).length > 0) {
+        resolutions = { ...resolutions, ...sourcePkg.resolutions };
+      }
+      if (sourcePkg.pnpm?.overrides && Object.keys(sourcePkg.pnpm.overrides).length > 0) {
+        pnpmOverrides = { ...pnpmOverrides, ...sourcePkg.pnpm.overrides };
+      }
+    } catch {
+      // Source package.json not found or invalid, continue without resolutions
+    }
+
+    try {
+      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, {
+        resolutions,
+        pnpmOverrides,
+      });
 
       this.logger.info('Bundling Mastra application');
       const inputOptions: InputOptions = await this.getBundlerOptions(
