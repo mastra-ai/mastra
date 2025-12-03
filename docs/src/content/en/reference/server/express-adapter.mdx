@@ -91,7 +91,7 @@ app.listen(4111);
 
 | Aspect | Express | Hono |
 |--------|---------|------|
-| Body parsing | Requires `express.json()` | Built-in |
+| Body parsing | Requires `express.json()` | Handled by framework |
 | Context storage | `res.locals` | `c.get()` / `c.set()` |
 | Middleware signature | `(req, res, next)` | `(c, next)` |
 | Streaming | `res.write()` / `res.end()` | `stream()` helper |

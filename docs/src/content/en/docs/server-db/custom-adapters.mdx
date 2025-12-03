@@ -7,13 +7,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Custom Adapters
 
-Create a custom adapter when you need to run Mastra with a framework other than Hono or Express. This might be necessary if you have specific request/response handling requirements that the built-in adapters don't support.
+Create a custom adapter when you need to run Mastra with a framework other than Hono or Express. This might be necessary if you have specific request/response handling requirements that `@mastra/hono` and `@mastra/express` don't support.
 
 A custom adapter translates between Mastra's route definitions and your framework's routing system. You'll implement methods that register middleware, handle requests, and send responses using your framework's APIs.
 
 :::info
 
-For Hono or Express, use the built-in adapters instead:
+For Hono or Express, use the provided adapters instead:
 - [@mastra/hono](/reference/v1/server/hono-adapter)
 - [@mastra/express](/reference/v1/server/express-adapter)
 
@@ -219,8 +219,10 @@ async stream(
   response: MyResponse,
   result: unknown
 ): Promise<unknown> {
-  // Set streaming headers
-  response.setHeader('Content-Type', 'text/plain');
+  const isSSE = route.streamFormat === 'sse';
+
+  // Set streaming headers based on format
+  response.setHeader('Content-Type', isSSE ? 'text/event-stream' : 'text/plain');
   response.setHeader('Transfer-Encoding', 'chunked');
 
   const reader = result.fullStream.getReader();
@@ -236,14 +238,17 @@ async stream(
         : value;
 
       // Format based on stream format
-      if (route.streamFormat === 'sse') {
+      if (isSSE) {
         response.write(`data: ${JSON.stringify(chunk)}\n\n`);
       } else {
         response.write(JSON.stringify(chunk) + '\x1E');
       }
     }
 
-    response.write('data: [DONE]\n\n');
+    // Send completion marker (SSE uses data: [DONE], other formats use record separator)
+    if (isSSE) {
+      response.write('data: [DONE]\n\n');
+    }
     response.end();
   } catch (error) {
     reader.cancel();
@@ -289,7 +294,7 @@ See [Server Adapters](/docs/v1/server-db/server-adapters#constructor-options) fo
 
 ## Full example
 
-Here's a complete skeleton showing all the required methods. This uses pseudocode for framework-specific parts—replace with your framework's actual APIs:
+Here's a skeleton implementation showing all the required methods. This uses pseudocode for framework-specific parts—replace with your framework's actual APIs:
 
 ```typescript title="my-framework-adapter.ts" copy showLineNumbers
 import { MastraServer, ServerRoute } from '@mastra/server';
@@ -346,7 +351,7 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
 
 ## Usage
 
-Once your adapter is implemented, use it the same way as the built-in adapters:
+Once your adapter is implemented, use it the same way as the provided adapters:
 
 ```typescript title="server.ts" copy showLineNumbers
 import { MyFrameworkServer } from './my-framework-adapter';

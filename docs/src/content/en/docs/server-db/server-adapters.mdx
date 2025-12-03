@@ -20,7 +20,7 @@ Use adapters when you need to:
 
 :::info
 
-For simple deployments without custom server requirements, use `mastra build` instead. It handles server setup, middleware, and deployment configuration automatically. See [Server Configuration](/docs/v1/server-db/mastra-server).
+For simple deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/v1/server-db/mastra-server).
 
 :::
 
@@ -169,7 +169,7 @@ The spec is generated from the Zod schemas defined on each route and served at t
 
 ## Stream data redaction
 
-When streaming agent responses over HTTP, Mastra automatically redacts sensitive information from stream chunks before sending them to clients. This prevents accidental exposure of:
+When streaming agent responses over HTTP, the HTTP streaming layer redacts sensitive information from stream chunks before sending them to clients. This prevents accidental exposure of:
 
 - System prompts and agent instructions
 - Tool definitions and their parameters
@@ -269,9 +269,9 @@ When using adapters, configure these features directly with your framework. For 
 
 ## MCP support
 
-Server adapters automatically register MCP (Model Context Protocol) routes when MCP servers are configured in your Mastra instance. MCP allows external tools and services to connect to your Mastra server and interact with your agents.
+Server adapters register MCP (Model Context Protocol) routes during `registerRoutes()` when MCP servers are configured in your Mastra instance. MCP allows external tools and services to connect to your Mastra server and interact with your agents.
 
-The adapter registers routes for both HTTP and SSE (Server-Sent Events) transports, enabling different client connection patterns. These routes are registered during `registerRoutes()` if MCP servers are detected in your Mastra configuration.
+The adapter registers routes for both HTTP and SSE (Server-Sent Events) transports, enabling different client connection patterns.
 
 See [MCP](/docs/v1/mcp/overview) for configuration details and how to set up MCP servers.
 
