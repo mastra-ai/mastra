@@ -6,7 +6,7 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,
-  splitting: true,
+  splitting: false, // Don't split - keep runtime.workflow isolated
   treeshake: {
     preset: 'smallest',
   },

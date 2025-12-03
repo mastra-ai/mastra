@@ -4,15 +4,11 @@
  * This file contains module-level functions with Vercel's "use workflow" and "use step" directives.
  * These are the ONLY places where these directives should appear.
  *
- * The functions are statically analyzable by Vercel's compiler at build time.
+ * IMPORTANT: This file uses ONLY dynamic imports to avoid Vercel's static analysis
+ * blocking Node.js modules. All imports happen inside function bodies.
  */
 
 import type { WorkflowResult, StepResult, TimeTravelExecutionParams } from '@mastra/core/workflows';
-import { RequestContext } from '@mastra/core/di';
-import { getMastra } from './singleton';
-import { VercelExecutionEngine } from './execution-engine';
-import type { VercelWorkflow } from './workflow';
-import type { VercelRun } from './run';
 import type { MainWorkflowParams } from './types';
 
 /**
@@ -29,9 +25,12 @@ import type { MainWorkflowParams } from './types';
 export async function runStep(operationId: string, runId: string, workflowId: string): Promise<unknown> {
   'use step';
 
+  // Dynamic imports to avoid Vercel's static Node.js module blocking
+  const { getMastra } = await import('./singleton');
+
   const mastra = getMastra();
-  const workflow = mastra.getWorkflowById(workflowId) as VercelWorkflow;
-  const run = workflow.runs.get(runId) as VercelRun | undefined;
+  const workflow = mastra.getWorkflowById(workflowId) as import('./workflow').VercelWorkflow;
+  const run = workflow.runs.get(runId) as import('./run').VercelRun | undefined;
 
   if (!run) {
     throw new Error(`No run found for runId ${runId} in workflow ${workflowId}`);
@@ -58,8 +57,13 @@ export async function runStep(operationId: string, runId: string, workflowId: st
 export async function mainWorkflow(params: MainWorkflowParams): Promise<WorkflowResult<any, any, any, any>> {
   'use workflow';
 
+  // Dynamic imports to avoid Vercel's static Node.js module blocking
+  const { getMastra } = await import('./singleton');
+  const { VercelExecutionEngine } = await import('./execution-engine');
+  const { RequestContext } = await import('@mastra/core/di');
+
   const mastra = getMastra();
-  const workflow = mastra.getWorkflowById(params.workflowId) as VercelWorkflow;
+  const workflow = mastra.getWorkflowById(params.workflowId) as import('./workflow').VercelWorkflow;
 
   // Create emitter for workflow events
   const emitter = {
