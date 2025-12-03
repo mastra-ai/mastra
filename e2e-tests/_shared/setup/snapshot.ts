@@ -273,20 +273,27 @@ export async function prepareSnapshotVersions(
     // pre exit might fail if not in pre mode, that's ok
   }
 
-  console.log('[Snapshot] Running changeset version...');
+  console.log('[Snapshot] Running changeset version (this may take a few minutes)...');
+  const startTime = Date.now();
   try {
     const result = execSync(`pnpm changeset-cli version --snapshot ${tag}`, {
       cwd: rootDir,
       stdio: 'pipe',
       env: ciEnv,
-      timeout: 120000, // 2 minute timeout
+      timeout: 300000, // 5 minute timeout
     });
-    console.log('[Snapshot] Changeset version output:', result.toString());
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[Snapshot] Changeset version completed in ${elapsed}s`);
+    if (result.length > 0) {
+      console.log('[Snapshot] Output:', result.toString().slice(0, 500));
+    }
   } catch (error: unknown) {
-    const execError = error as { stdout?: Buffer; stderr?: Buffer; message?: string };
-    console.error('[Snapshot] Changeset version failed');
-    if (execError.stdout) console.error('[Snapshot] stdout:', execError.stdout.toString());
-    if (execError.stderr) console.error('[Snapshot] stderr:', execError.stderr.toString());
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    const execError = error as { stdout?: Buffer; stderr?: Buffer; message?: string; code?: string };
+    console.error(`[Snapshot] Changeset version failed after ${elapsed}s`);
+    console.error(`[Snapshot] Error code: ${execError.code}`);
+    if (execError.stdout) console.error('[Snapshot] stdout:', execError.stdout.toString().slice(0, 1000));
+    if (execError.stderr) console.error('[Snapshot] stderr:', execError.stderr.toString().slice(0, 1000));
     throw error;
   }
 
