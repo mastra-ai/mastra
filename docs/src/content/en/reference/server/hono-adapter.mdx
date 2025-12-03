@@ -1,14 +1,14 @@
 ---
-title: "Express Adapter | Server & DB"
-description: "Express-specific setup for Mastra server adapters."
+title: "Reference: Hono Adapter | Server"
+description: "API reference for the @mastra/hono server adapter."
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Express Adapter
+# Hono Adapter
 
-The `@mastra/express` package provides a server adapter for running Mastra with [Express](https://expressjs.com).
+The `@mastra/hono` package provides a server adapter for running Mastra with [Hono](https://hono.dev).
 
 :::info
 
@@ -22,10 +22,10 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 
 <StepItem>
 
-Install the Express adapter and Express framework:
+Install the Hono adapter and Hono framework:
 
 ```bash copy
-npm install @mastra/express express
+npm install @mastra/hono hono
 ```
 
 </StepItem>
@@ -35,40 +35,30 @@ npm install @mastra/express express
 Create your server file:
 
 ```typescript title="server.ts" copy showLineNumbers
-import express from 'express';
-import { MastraServer } from '@mastra/express';
+import { Hono } from 'hono';
+import { MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
 
-const app = express();
-app.use(express.json()); // Required for body parsing
-
+const app = new Hono();
 const server = new MastraServer({ app, mastra });
+
 await server.init();
 
-app.listen(4111, () => {
-  console.log('Server running on port 4111');
-});
+export default app;
 ```
 
 </StepItem>
 
 </Steps>
 
-:::note
-
-Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`.
-
-:::
-
 ## Full example
 
 ```typescript title="server.ts" copy showLineNumbers
-import express from 'express';
-import { MastraServer } from '@mastra/express';
+import { Hono } from 'hono';
+import { MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
 
-const app = express();
-app.use(express.json());
+const app = new Hono();
 
 const server = new MastraServer({
   app,
@@ -84,41 +74,27 @@ const server = new MastraServer({
 
 await server.init();
 
-app.listen(4111);
+export default app;
 ```
-
-## Differences from Hono
-
-| Aspect | Express | Hono |
-|--------|---------|------|
-| Body parsing | Requires `express.json()` | Built-in |
-| Context storage | `res.locals` | `c.get()` / `c.set()` |
-| Middleware signature | `(req, res, next)` | `(c, next)` |
-| Streaming | `res.write()` / `res.end()` | `stream()` helper |
-| AbortSignal | Created from `req.on('close')` | `c.req.raw.signal` |
 
 ## Adding custom routes
 
-Add routes directly to the Express app:
+Add routes directly to the Hono app:
 
 ```typescript title="server.ts" copy showLineNumbers
-const app = express();
-app.use(express.json());
-
+const app = new Hono();
 const server = new MastraServer({ app, mastra });
 
 // Before init - runs before Mastra middleware
-app.get('/early-health', (req, res) => res.json({ status: 'ok' }));
+app.get('/early-health', (c) => c.json({ status: 'ok' }));
 
 await server.init();
 
 // After init - has access to Mastra context
-app.get('/custom', (req, res) => {
-  const mastraInstance = res.locals.mastra;
-  res.json({ agents: Object.keys(mastraInstance.getAgents()) });
+app.get('/custom', (c) => {
+  const mastraInstance = c.get('mastra');
+  return c.json({ agents: Object.keys(mastraInstance.listAgents()) });
 });
-
-app.listen(4111);
 ```
 
 :::tip
@@ -129,20 +105,20 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 ## Accessing context
 
-In Express middleware and routes, access Mastra context via `res.locals`:
+In Hono middleware and route handlers, access Mastra context via `c.get()`:
 
 ```typescript copy showLineNumbers
-app.get('/custom', (req, res) => {
-  const mastra = res.locals.mastra;
-  const requestContext = res.locals.requestContext;
-  const abortSignal = res.locals.abortSignal;
+app.get('/custom', async (c) => {
+  const mastra = c.get('mastra');
+  const requestContext = c.get('requestContext');
+  const abortSignal = c.get('abortSignal');
 
   const agent = mastra.getAgent('myAgent');
-  res.json({ agent: agent.name });
+  return c.json({ agent: agent.name });
 });
 ```
 
-Available properties on `res.locals`:
+Available context keys:
 
 | Key | Description |
 |-----|-------------|
@@ -154,26 +130,25 @@ Available properties on `res.locals`:
 
 ## Adding middleware
 
-Add Express middleware before or after `init()`:
+Add Hono middleware before or after `init()`:
 
 ```typescript title="server.ts" copy showLineNumbers
-const app = express();
-app.use(express.json());
+const app = new Hono();
 
 // Middleware before init
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
+app.use('*', async (c, next) => {
+  console.log(`${c.req.method} ${c.req.url}`);
+  await next();
 });
 
 const server = new MastraServer({ app, mastra });
 await server.init();
 
 // Middleware after init has access to Mastra context
-app.use((req, res, next) => {
-  const mastra = res.locals.mastra;
+app.use('*', async (c, next) => {
+  const mastra = c.get('mastra');
   // ...
-  next();
+  await next();
 });
 ```
 
@@ -183,11 +158,11 @@ For custom middleware ordering, call each method separately instead of `init()`.
 
 ## Examples
 
-- [Express Adapter](https://github.com/mastra-ai/mastra/tree/main/examples/server-express-adapter) - Basic Express server setup
+- [Hono Adapter](https://github.com/mastra-ai/mastra/tree/main/examples/server-hono-adapter) - Basic Hono server setup
 
 ## Related
 
 - [Server Adapters](/docs/v1/server-db/server-adapters) - Shared adapter concepts
-- [Hono Adapter](/docs/v1/server-db/hono-adapter) - Alternative adapter
+- [Express Adapter](/reference/v1/server/express-adapter) - Alternative adapter
 - [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
 - [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes

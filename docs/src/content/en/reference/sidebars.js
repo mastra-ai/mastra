@@ -429,8 +429,10 @@ const sidebars = {
         {
           type: "doc",
           id: "server/mastra-server",
-          label: "MastraServer Class",
+          label: "MastraServer",
         },
+        { type: "doc", id: "server/hono-adapter", label: "Hono Adapter" },
+        { type: "doc", id: "server/express-adapter", label: "Express Adapter" },
         { type: "doc", id: "server/create-route", label: "createRoute()" },
         { type: "doc", id: "server/routes", label: "Built-in Routes" },
       ],

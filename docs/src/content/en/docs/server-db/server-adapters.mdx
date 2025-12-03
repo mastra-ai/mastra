@@ -24,8 +24,8 @@ For simple deployments without custom server requirements, use `mastra build` in
 
 ## Available adapters
 
-- **[@mastra/hono](/docs/v1/server-db/hono-adapter)** - Hono framework adapter
-- **[@mastra/express](/docs/v1/server-db/express-adapter)** - Express framework adapter
+- **[@mastra/hono](/reference/v1/server/hono-adapter)** - Hono framework adapter
+- **[@mastra/express](/reference/v1/server/express-adapter)** - Express framework adapter
 
 ## Basic setup
 
@@ -35,7 +35,7 @@ Both adapters follow the same pattern:
 2. Create a `MastraServer` with the app and Mastra instance
 3. Call `init()` to register routes and middleware
 
-See the [Hono Adapter](/docs/v1/server-db/hono-adapter) or [Express Adapter](/docs/v1/server-db/express-adapter) docs for framework-specific setup.
+See the [Hono Adapter](/reference/v1/server/hono-adapter) or [Express Adapter](/reference/v1/server/express-adapter) docs for framework-specific setup.
 
 ## Constructor options
 
@@ -129,8 +129,8 @@ Use manual initialization when you need middleware that runs before Mastra's con
 ## Adding custom routes
 
 Routes added to the app after `init()` have access to Mastra context. See framework-specific docs for syntax:
-- [Hono: Adding custom routes](/docs/v1/server-db/hono-adapter#adding-custom-routes)
-- [Express: Adding custom routes](/docs/v1/server-db/express-adapter#adding-custom-routes)
+- [Hono: Adding custom routes](/reference/v1/server/hono-adapter#adding-custom-routes)
+- [Express: Adding custom routes](/reference/v1/server/express-adapter#adding-custom-routes)
 
 ## Route prefixes
 
@@ -258,8 +258,8 @@ See [MCP](/docs/v1/mcp/overview) for configuration details.
 
 ## Related
 
-- [Hono Adapter](/docs/v1/server-db/hono-adapter) - Hono-specific setup
-- [Express Adapter](/docs/v1/server-db/express-adapter) - Express-specific setup
+- [Hono Adapter](/reference/v1/server/hono-adapter) - Hono-specific setup
+- [Express Adapter](/reference/v1/server/express-adapter) - Express-specific setup
 - [Custom Adapters](/docs/v1/server-db/custom-adapters) - Building adapters for other frameworks
 - [Server Configuration](/docs/v1/server-db/mastra-server) - Using `mastra build` instead
 - [Authentication](/docs/v1/auth) - Configuring auth for your server
