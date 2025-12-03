@@ -510,7 +510,9 @@
         "deepseek-ai/DeepSeek-V3-0324",
         "deepseek-ai/DeepSeek-V3.1",
         "deepseek-ai/DeepSeek-V3.1-Terminus",
+        "deepseek-ai/DeepSeek-V3.2",
         "deepseek-ai/DeepSeek-V3.2-Exp",
+        "deepseek-ai/DeepSeek-V3.2-Speciale",
         "meituan-longcat/LongCat-Flash-Chat-FP8",
         "microsoft/MAI-DS-R1-FP8",
         "moonshotai/Kimi-K2-Instruct-0905",
@@ -560,6 +562,15 @@
         "kimi-k2-thinking"
       ],
       "docUrl": "https://docs.agentrouter.org",
+      "gateway": "models.dev"
+    },
+    "kimi-for-coding": {
+      "url": "https://api.kimi.com/coding/v1",
+      "apiKeyEnvVar": "KIMI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Kimi For Coding",
+      "models": ["kimi-k2-thinking"],
+      "docUrl": "https://www.kimi.com/coding/docs/en/third-party-agents.html",
       "gateway": "models.dev"
     },
     "cortecs": {
@@ -2029,7 +2040,9 @@
       "deepseek-ai/DeepSeek-V3-0324",
       "deepseek-ai/DeepSeek-V3.1",
       "deepseek-ai/DeepSeek-V3.1-Terminus",
+      "deepseek-ai/DeepSeek-V3.2",
       "deepseek-ai/DeepSeek-V3.2-Exp",
+      "deepseek-ai/DeepSeek-V3.2-Speciale",
       "meituan-longcat/LongCat-Flash-Chat-FP8",
       "microsoft/MAI-DS-R1-FP8",
       "moonshotai/Kimi-K2-Instruct-0905",
@@ -2070,6 +2083,7 @@
       "gpt-5.1",
       "kimi-k2-thinking"
     ],
+    "kimi-for-coding": ["kimi-k2-thinking"],
     "cortecs": [
       "claude-4-5-sonnet",
       "claude-sonnet-4",

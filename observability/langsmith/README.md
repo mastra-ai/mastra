@@ -25,6 +25,7 @@ const mastra = new Mastra({
         exporters: [
           new LangSmithExporter({
             apiKey: process.env.LANGSMITH_API_KEY, // Defaults to process.env.LANGSMITH_API_KEY
+            projectName: 'my-custom-project', // Optional: specify which LangSmith project to send traces to
           }),
         ],
       },
@@ -32,6 +33,15 @@ const mastra = new Mastra({
   },
 });
 ```
+
+### Configuration Options
+
+| Option        | Type     | Description                                                                                |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `apiKey`      | `string` | LangSmith API key. Defaults to `process.env.LANGSMITH_API_KEY`                             |
+| `projectName` | `string` | The name of the LangSmith project to send traces to. Overrides `LANGCHAIN_PROJECT` env var |
+| `apiUrl`      | `string` | Custom LangSmith API URL (for self-hosted instances)                                       |
+| `client`      | `Client` | Custom LangSmith client instance                                                           |
 
 ## Features
 

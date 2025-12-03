@@ -299,6 +299,26 @@
       "source": "/examples/v1/agents/request-context",
       "destination": "/docs/v1/server-db/request-context",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/agents/supervisor-agent",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/supervisor-agent",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/streaming/workflows/streamVNext",
+      "destination": "/reference/v1/streaming/workflows/stream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/streaming/workflows/observeStreamVNext",
+      "destination": "/reference/v1/streaming/workflows/observeStream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/streaming/workflows/resumeStreamVNext",
+      "destination": "/reference/v1/streaming/workflows/resumeStream",
+      "permanent": true
     }
   ]
 }

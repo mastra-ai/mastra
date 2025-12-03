@@ -835,6 +835,214 @@ describe('BraintrustExporter', () => {
     });
   });
 
+  describe('Tags Support', () => {
+    it('should include tags in span.log() for root spans with tags', async () => {
+      const rootSpanWithTags = createMockSpan({
+        id: 'root-with-tags',
+        name: 'tagged-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+        tags: ['production', 'experiment-v2', 'user-request'],
+      });
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanWithTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should log tags via span.log()
+      expect(mockSpan.log).toHaveBeenCalledWith({
+        metadata: {
+          'mastra-trace-id': rootSpanWithTags.traceId,
+        },
+        tags: ['production', 'experiment-v2', 'user-request'],
+      });
+    });
+
+    it('should not include tags in span.log() when tags array is empty', async () => {
+      const rootSpanEmptyTags = createMockSpan({
+        id: 'root-empty-tags',
+        name: 'agent-no-tags',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+        tags: [],
+      });
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanEmptyTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should log without tags property
+      expect(mockSpan.log).toHaveBeenCalledWith({
+        metadata: {
+          'mastra-trace-id': rootSpanEmptyTags.traceId,
+        },
+      });
+      // Verify tags is not in the call
+      const logCall = mockSpan.log.mock.calls[0][0];
+      expect(logCall.tags).toBeUndefined();
+    });
+
+    it('should not include tags in span.log() when tags is undefined', async () => {
+      const rootSpanNoTags = createMockSpan({
+        id: 'root-no-tags',
+        name: 'agent-undefined-tags',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+      });
+      // tags is undefined by default
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanNoTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should log without tags property
+      const logCall = mockSpan.log.mock.calls[0][0];
+      expect(logCall.tags).toBeUndefined();
+    });
+
+    it('should include tags with workflow spans', async () => {
+      const workflowSpanWithTags = createMockSpan({
+        id: 'workflow-with-tags',
+        name: 'data-processing-workflow',
+        type: SpanType.WORKFLOW_RUN,
+        isRoot: true,
+        attributes: { workflowId: 'wf-123' },
+        tags: ['batch-processing', 'priority-high'],
+      });
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: workflowSpanWithTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should log tags via span.log()
+      expect(mockSpan.log).toHaveBeenCalledWith({
+        metadata: {
+          'mastra-trace-id': workflowSpanWithTags.traceId,
+        },
+        tags: ['batch-processing', 'priority-high'],
+      });
+    });
+
+    it('should not include tags for child spans (only root spans get tags)', async () => {
+      // First create a root span with tags
+      const rootSpan = createMockSpan({
+        id: 'root-span-tags',
+        name: 'root-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        tags: ['root-tag'],
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Clear mock to check child span log calls
+      mockSpan.log.mockClear();
+
+      // Create child span (should not have tags even if we set them)
+      // Child spans should not have tags set by the system
+      // but let's verify the exporter handles it correctly even if accidentally set
+      const childSpan = createMockSpan({
+        id: 'child-span-tags',
+        name: 'child-tool',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'calculator' },
+        tags: ['should-not-appear'],
+      });
+      childSpan.traceId = rootSpan.traceId;
+      childSpan.parentSpanId = 'root-span-tags';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: childSpan,
+      });
+
+      // Check that the log call for child span does not include tags
+      // Child spans log mastra-trace-id but NOT tags
+      expect(mockSpan.log).toHaveBeenCalledWith({
+        metadata: {
+          'mastra-trace-id': rootSpan.traceId,
+        },
+      });
+      // Verify tags is not in the child span log call
+      const logCall = mockSpan.log.mock.calls[0][0];
+      expect(logCall.tags).toBeUndefined();
+    });
+
+    it('should include tags only on initial log, not on updates or end', async () => {
+      const rootSpanWithTags = createMockSpan({
+        id: 'root-lifecycle-tags',
+        name: 'lifecycle-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+        tags: ['lifecycle-tag'],
+      });
+
+      // Start span - should include tags
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanWithTags,
+      });
+
+      // Verify initial log has tags
+      expect(mockSpan.log).toHaveBeenCalledWith({
+        metadata: {
+          'mastra-trace-id': rootSpanWithTags.traceId,
+        },
+        tags: ['lifecycle-tag'],
+      });
+
+      // Clear mock for update
+      mockSpan.log.mockClear();
+
+      // Update span
+      rootSpanWithTags.output = { result: 'updated' };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: rootSpanWithTags,
+      });
+
+      // Update log should NOT include tags (tags are only sent once on start)
+      const updateLogCall = mockSpan.log.mock.calls[0][0];
+      expect(updateLogCall.tags).toBeUndefined();
+      expect(updateLogCall.output).toEqual({ result: 'updated' });
+
+      // Clear mock for end
+      mockSpan.log.mockClear();
+
+      // End span
+      rootSpanWithTags.endTime = new Date();
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: rootSpanWithTags,
+      });
+
+      // End log should NOT include tags
+      const endLogCall = mockSpan.log.mock.calls[0][0];
+      expect(endLogCall.tags).toBeUndefined();
+    });
+  });
+
   describe('Shutdown', () => {
     it('should end all spans and clear traceMap', async () => {
       // Create some spans
@@ -1223,6 +1431,7 @@ function createMockSpan({
   input,
   output,
   errorInfo,
+  tags,
 }: {
   id: string;
   name: string;
@@ -1233,6 +1442,7 @@ function createMockSpan({
   input?: any;
   output?: any;
   errorInfo?: any;
+  tags?: string[];
 }): AnyExportedSpan {
   const mockSpan = {
     id,
@@ -1243,6 +1453,7 @@ function createMockSpan({
     input,
     output,
     errorInfo,
+    tags,
     startTime: new Date(),
     endTime: undefined,
     traceId: isRoot ? `${id}-trace` : 'parent-trace-id',

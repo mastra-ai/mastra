@@ -1,22 +1,18 @@
 ---
-title: "Reference: Run.resumeStreamVNext() (Experimental) | Streaming"
-description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
+title: "Reference: Run.resumeStream() | Streaming"
+description: Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 ---
 
-# Run.resumeStreamVNext() (Experimental)
+# Run.resumeStream()
 
-:::caution Experimental Feature
-This is an experimental API that may change in future versions. The `resumeStreamVNext()` method is part of the enhanced streaming system that will eventually replace the current streaming methods. Use with caution in production environments.
-:::
-
-The `.resumeStreamVNext()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
+The `.resumeStream()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const stream = run.streamVNext({
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
@@ -25,7 +21,7 @@ const stream = run.streamVNext({
 const result = await stream.result;
 
 if (result!.status === "suspended") {
-  const resumedStream = await run.resumeStreamVNext({
+  const resumedStream = await run.resumeStream({
     resumeData: {
       value: "resume data",
     },
@@ -69,6 +65,50 @@ if (result!.status === "suspended") {
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -119,4 +159,4 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](/docs/v1/workflows/overview#running-workflows)
 - [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-- [Run.streamVNext()](./streamVNext)
+- [Run.stream()](./stream)
