@@ -296,7 +296,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch } = this.serverConfig;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -311,6 +311,7 @@ export class InternalMastraMCPClient extends MastraBase {
           requestInit,
           reconnectionOptions: this.serverConfig.reconnectionOptions,
           authProvider: authProvider,
+          fetch
         });
         await this.client.connect(streamableTransport, {
           timeout:
@@ -328,7 +329,18 @@ export class InternalMastraMCPClient extends MastraBase {
       this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
       try {
         // Fallback to SSE transport
-        const sseTransport = new SSEClientTransport(url, { requestInit, eventSourceInit, authProvider });
+        // If fetch is provided, ensure it's also in eventSourceInit for the EventSource connection
+        // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream
+        const sseEventSourceInit = fetch 
+          ? { ...eventSourceInit, fetch }
+          : eventSourceInit;
+        
+        const sseTransport = new SSEClientTransport(url, { 
+          requestInit, 
+          eventSourceInit: sseEventSourceInit, 
+          authProvider, 
+          fetch 
+        });
         await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
         this.transport = sseTransport;
         this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');
