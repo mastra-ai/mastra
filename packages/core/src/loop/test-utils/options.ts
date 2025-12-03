@@ -138,7 +138,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     { type: 'text-start', id: 'text-1' },
                     {
                       type: 'text-delta',
-                      id: '1',
+                      id: 'text-1',
                       delta: 'provider metadata test',
                     },
                     { type: 'text-end', id: 'text-1' },
