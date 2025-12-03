@@ -11,7 +11,7 @@
     "test:commonjs": "vitest run --project commonjs",
     "test:pkg-outputs": "vitest run --project pkg-outputs",
     "test:kitchen-sink": "playwright test --config=./suites/kitchen-sink/playwright.config.ts",
-    "cleanup": "cd .. && git fetch origin main && git diff --name-only | grep -E '(package.json|CHANGELOG.md)$' | xargs -I {} git checkout origin/main -- {} && echo 'Restored e2e-modified files (package.json + CHANGELOG.md)'"
+    "cleanup": "cd .. && git diff --name-only | grep -E '(package.json|CHANGELOG.md)$' | grep -v '^e2e-tests/' | xargs -I {} git checkout HEAD -- {} && echo 'Restored e2e-modified files from HEAD'"
   },
   "devDependencies": {
     "@internal/e2e-shared": "workspace:*",

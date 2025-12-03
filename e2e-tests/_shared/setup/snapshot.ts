@@ -10,26 +10,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Restore ONLY the files that e2e tests modify (package.json and CHANGELOG.md files).
- * This is surgical - it won't touch any other files the user might be working on.
+ * Uses HEAD to restore - this preserves any branch-specific changes while undoing
+ * only the snapshot version modifications made by the e2e test setup.
  *
  * @param rootDir - Root directory of the monorepo
  */
 export function restoreGitFiles(rootDir: string): void {
-  console.log('[Snapshot] Restoring e2e-modified files only...');
+  console.log('[Snapshot] Restoring e2e-modified files from HEAD...');
   try {
-    // First fetch to make sure origin/main is up to date
-    try {
-      execSync('git fetch origin main', {
-        cwd: rootDir,
-        stdio: 'pipe',
-        timeout: 30000,
-      });
-    } catch {
-      console.warn('[Snapshot] Warning: Could not fetch, using cached origin/main');
-    }
-
-    // Find files that have snapshot version changes (e2e test artifacts)
-    // These are package.json and CHANGELOG.md files with e2e-test version strings
+    // Find files that have been modified (unstaged changes)
     const modifiedFiles = execSync('git diff --name-only', {
       cwd: rootDir,
       encoding: 'utf8',
@@ -38,37 +27,31 @@ export function restoreGitFiles(rootDir: string): void {
       .split('\n')
       .filter(Boolean);
 
-    // Only restore package.json and CHANGELOG.md files (what e2e tests modify)
-    // Skip e2e-tests/ directory - those are our new files, not snapshot modifications
+    // Only restore package.json and CHANGELOG.md files (what e2e snapshot versioning modifies)
+    // Skip e2e-tests/ directory - those are our infrastructure files, not snapshot artifacts
     const filesToRestore = modifiedFiles.filter(
       f => (f.endsWith('package.json') || f.endsWith('CHANGELOG.md')) && !f.startsWith('e2e-tests/'),
     );
 
     if (filesToRestore.length > 0) {
-      console.log(`[Snapshot] Restoring ${filesToRestore.length} modified files...`);
-      // Restore each file from origin/main
+      console.log(`[Snapshot] Restoring ${filesToRestore.length} modified files from HEAD...`);
+      // Restore each file from HEAD (current commit)
       for (const file of filesToRestore) {
         try {
-          execSync(`git checkout origin/main -- "${file}"`, {
+          execSync(`git checkout HEAD -- "${file}"`, {
             cwd: rootDir,
             stdio: 'pipe',
           });
         } catch {
-          // File might not exist in origin/main, try HEAD
-          try {
-            execSync(`git checkout HEAD -- "${file}"`, {
-              cwd: rootDir,
-              stdio: 'pipe',
-            });
-          } catch {
-            console.warn(`[Snapshot] Could not restore: ${file}`);
-          }
+          console.warn(`[Snapshot] Could not restore: ${file}`);
         }
       }
+    } else {
+      console.log('[Snapshot] No e2e-modified files to restore');
     }
 
     // Clean up any untracked changeset files created for e2e tests
-    // Only remove changesets that look like e2e test artifacts
+    // Only remove changesets that look like e2e test artifacts (contain timestamp patterns)
     try {
       const untrackedChangesets = execSync('git ls-files --others --exclude-standard .changeset/', {
         cwd: rootDir,
@@ -79,9 +62,11 @@ export function restoreGitFiles(rootDir: string): void {
         .filter(Boolean);
 
       for (const file of untrackedChangesets) {
-        if (file.includes('e2e-test') || file.includes('test-')) {
+        // Only delete files that look like e2e test artifacts
+        if (file.includes('e2e-test') || file.match(/test-\d{13}/)) {
           try {
-            execSync(`rm -f "${file}"`, { cwd: rootDir, stdio: 'pipe' });
+            execSync(`rm -f "${rootDir}/${file}"`, { cwd: rootDir, stdio: 'pipe' });
+            console.log(`[Snapshot] Removed e2e changeset: ${file}`);
           } catch {}
         }
       }
@@ -89,7 +74,7 @@ export function restoreGitFiles(rootDir: string): void {
       // No untracked changesets, that's fine
     }
 
-    console.log('[Snapshot] E2E-modified files restored successfully');
+    console.log('[Snapshot] Restore complete');
   } catch (error) {
     console.warn('[Snapshot] Warning: Could not restore files:', error);
   }
