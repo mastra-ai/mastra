@@ -6,7 +6,8 @@ import {
   DropdownMenuTrigger,
 } from "@site/src/components/ui/dropdown";
 import { Check } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useLocation } from "@docusaurus/router";
 import { cn } from "../lib/utils";
 import { BetaIcon, StableIcon, TriggerIcon, VersionLabel } from "./icons/icon";
 
@@ -49,24 +50,10 @@ export default function VersionControl({
   className?: string;
   size?: "sm" | "default";
 }) {
-  const [currentVersion, setCurrentVersion] = useState<Version>("beta");
-  const [versionPaths, setVersionPaths] = useState<
-    Partial<Record<Version, string>>
-  >({});
+  const location = useLocation();
+  const pathname = location.pathname;
+  const currentVersion = getVersionFromPath(pathname);
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const currentPath = window.location.pathname;
-    const detectedVersion = getVersionFromPath(currentPath);
-
-    setCurrentVersion(detectedVersion);
-    setVersionPaths({
-      beta: getPathForVersion(currentPath, "beta"),
-      stable: getPathForVersion(currentPath, "stable"),
-    });
-  }, []);
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -97,9 +84,7 @@ export default function VersionControl({
       >
         {versions.map((version) => {
           const isActive = version.value === currentVersion;
-          const href =
-            versionPaths[version.value as Version] ??
-            (typeof window !== "undefined" ? window.location.pathname : "");
+          const href = getPathForVersion(pathname, version.value as Version);
           return (
             <DropdownMenuItem
               key={version.value}
