@@ -221,7 +221,7 @@ The adapter reads these from `mastra.getServer()`:
 
 | Option | Description |
 |--------|-------------|
-| `auth` | Authentication config, used by `registerAuthMiddleware()`. See [Authentication](/docs/v1/auth/index). |
+| `auth` | Authentication config, used by `registerAuthMiddleware()`. |
 | `bodySizeLimit` | Default body size limit in bytes. Can be overridden per-adapter via `bodyLimitOptions`. |
 
 ### Adapter constructor only
@@ -260,5 +260,8 @@ See [MCP](/docs/v1/mcp/overview) for configuration details.
 
 - [Hono Adapter](/docs/v1/server-db/hono-adapter) - Hono-specific setup
 - [Express Adapter](/docs/v1/server-db/express-adapter) - Express-specific setup
+- [Custom Adapters](/docs/v1/server-db/custom-adapters) - Building adapters for other frameworks
 - [Server Configuration](/docs/v1/server-db/mastra-server) - Using `mastra build` instead
-- [Authentication](/docs/v1/auth/index) - Configuring auth for your server
+- [Authentication](/docs/v1/auth) - Configuring auth for your server
+- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
+- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
