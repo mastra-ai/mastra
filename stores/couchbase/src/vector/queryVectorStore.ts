@@ -150,7 +150,10 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
 
       // Get the index definition
       const sqlpp_query = `SELECT idx.* FROM system:indexes AS idx WHERE idx.bucket_id = "${this.bucketName}" AND idx.scope_id = "${this.scopeName}" AND idx.keyspace_id = "${this.collectionName}" AND idx.name = "${indexName}";`;
-      const results = await this.cluster?.query(sqlpp_query);
+      if (!this.cluster) {
+        throw new Error('Cluster not connected');
+      }
+      const results = await this.cluster.query(sqlpp_query);
       results?.rows?.forEach((row: any) => {
         if (row.name === indexName) {
           index = row;
@@ -185,12 +188,27 @@ export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> 
       const retain_deleted_xattr = index.with.retain_deleted_xattr;
 
       // Return the index statistics
+      const mastraMetricKey = (Object.keys(QUERY_VECTOR_INDEX_DISTANCE_MAPPING) as MastraMetric[]).find(
+        key => QUERY_VECTOR_INDEX_DISTANCE_MAPPING[key] === metric,
+      );
+      if (!mastraMetricKey) {
+        throw new MastraError(
+          {
+            id: 'COUCHBASE_QUERY_VECTOR_DESCRIBE_INDEX_UNSUPPORTED_SIMILARITY_METRIC',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+              similarity: metric,
+            },
+          },
+          new Error(`Unsupported similarity metric reported by Couchbase index: ${metric}`),
+        );
+      }
       return {
         dimension: dimensions,
         count: count,
-        metric: Object.keys(QUERY_VECTOR_INDEX_DISTANCE_MAPPING).find(
-          key => QUERY_VECTOR_INDEX_DISTANCE_MAPPING[key as MastraMetric] === metric,
-        ) as MastraMetric,
+        metric: mastraMetricKey,
         index_metadata: {
           description: description,
           scan_nprobes: scan_nprobes,
