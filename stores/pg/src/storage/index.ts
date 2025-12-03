@@ -19,8 +19,8 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
-import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
-import type { PostgresStoreConfig } from '../shared/config';
+import { validatePostgresStoreConfig, hasUserProvidedClient } from '../shared/config';
+import type { PostgresStoreConfig, PostgresStoreClientConfig } from '../shared/config';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { StoreOperationsPG } from './domains/operations';
@@ -32,51 +32,31 @@ export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
 export class PostgresStore extends MastraStorage {
   #db?: pgPromise.IDatabase<{}>;
   #pgp?: pgPromise.IMain;
-  #config: PostgresStoreConfig;
+  #config?: any; // pg-promise accepts various config formats
   private schema: string;
   private isConnected: boolean = false;
+  /** Whether this instance owns the client (true) or it was provided by the user (false) */
+  private ownsClient: boolean = true;
 
   stores: StorageDomains;
 
-  constructor(config: PostgresStoreConfig) {
+  constructor(config: PostgresStoreConfig | PostgresStoreClientConfig) {
     // Validation: connectionString or host/database/user/password must not be empty
     try {
-      validateConfig('PostgresStore', config);
+      validatePostgresStoreConfig(config);
       super({ id: config.id, name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
-      if (isConnectionStringConfig(config)) {
-        this.#config = {
-          id: config.id,
-          connectionString: config.connectionString,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-          ssl: config.ssl,
-        };
-      } else if (isCloudSqlConfig(config)) {
-        // Cloud SQL connector config
-        this.#config = {
-          ...config,
-          id: config.id,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-        };
-      } else if (isHostConfig(config)) {
-        this.#config = {
-          id: config.id,
-          host: config.host,
-          port: config.port,
-          database: config.database,
-          user: config.user,
-          password: config.password,
-          ssl: config.ssl,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-        };
+
+      // Check if user provided their own client
+      if (hasUserProvidedClient(config)) {
+        this.#db = config.client;
+        this.ownsClient = false;
+        // No config needed when using provided client
+        this.#config = undefined;
       } else {
-        // This should never happen due to validation above, but included for completeness
-        throw new Error(
-          'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
-        );
+        // Use the config directly for pg-promise initialization
+        this.#config = config;
+        this.ownsClient = true;
       }
       this.stores = {} as StorageDomains;
     } catch (e) {
@@ -98,8 +78,12 @@ export class PostgresStore extends MastraStorage {
 
     try {
       this.isConnected = true;
-      this.#pgp = pgPromise();
-      this.#db = this.#pgp(this.#config as any);
+
+      // Only create pgp and db if we don't already have a user-provided client
+      if (!this.#db) {
+        this.#pgp = pgPromise();
+        this.#db = this.#pgp(this.#config as any);
+      }
 
       const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
       const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
@@ -358,7 +342,11 @@ export class PostgresStore extends MastraStorage {
   }
 
   async close(): Promise<void> {
-    this.pgp.end();
+    // Only close the connection if we created it ourselves
+    // If the user provided their own client, they are responsible for closing it
+    if (this.ownsClient && this.#pgp) {
+      this.#pgp.end();
+    }
   }
 
   /**

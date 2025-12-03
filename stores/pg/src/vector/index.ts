@@ -17,8 +17,14 @@ import { Mutex } from 'async-mutex';
 import * as pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
-import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
-import type { PgVectorConfig } from '../shared/config';
+import {
+  validatePgVectorConfig,
+  isCloudSqlConfig,
+  isConnectionStringConfig,
+  isHostConfig,
+  hasUserProvidedPool,
+} from '../shared/config';
+import type { PgVectorConfig, PgVectorPoolConfig } from '../shared/config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
@@ -71,51 +77,60 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private vectorExtensionSchema: string | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
+  /** Whether this instance owns the pool (true) or it was provided by the user (false) */
+  private ownsPool: boolean = true;
 
-  constructor(config: PgVectorConfig & { id: string }) {
+  constructor(config: PgVectorConfig | PgVectorPoolConfig) {
     try {
-      validateConfig('PgVector', config);
+      validatePgVectorConfig(config);
       super({ id: config.id });
 
       this.schema = config.schemaName;
 
-      let poolConfig: pg.PoolConfig;
-
-      if (isConnectionStringConfig(config)) {
-        poolConfig = {
-          connectionString: config.connectionString,
-          ssl: config.ssl,
-          max: config.max ?? 20,
-          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
-          connectionTimeoutMillis: 2000,
-          ...config.pgPoolOptions,
-        };
-      } else if (isCloudSqlConfig(config)) {
-        poolConfig = {
-          ...config,
-          max: config.max ?? 20,
-          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
-          connectionTimeoutMillis: 2000,
-          ...config.pgPoolOptions,
-        } as pg.PoolConfig;
-      } else if (isHostConfig(config)) {
-        poolConfig = {
-          host: config.host,
-          port: config.port,
-          database: config.database,
-          user: config.user,
-          password: config.password,
-          ssl: config.ssl,
-          max: config.max ?? 20,
-          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
-          connectionTimeoutMillis: 2000,
-          ...config.pgPoolOptions,
-        };
+      // Check if user provided their own pool
+      if (hasUserProvidedPool(config)) {
+        this.pool = config.pool;
+        this.ownsPool = false;
       } else {
-        throw new Error('PgVector: invalid configuration provided');
-      }
+        let poolConfig: pg.PoolConfig;
 
-      this.pool = new pg.Pool(poolConfig);
+        if (isConnectionStringConfig(config)) {
+          poolConfig = {
+            connectionString: config.connectionString,
+            ssl: config.ssl,
+            max: config.max ?? 20,
+            idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+            connectionTimeoutMillis: 2000,
+            ...config.pgPoolOptions,
+          };
+        } else if (isCloudSqlConfig(config)) {
+          poolConfig = {
+            ...config,
+            max: config.max ?? 20,
+            idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+            connectionTimeoutMillis: 2000,
+            ...config.pgPoolOptions,
+          } as pg.PoolConfig;
+        } else if (isHostConfig(config)) {
+          poolConfig = {
+            host: config.host,
+            port: config.port,
+            database: config.database,
+            user: config.user,
+            password: config.password,
+            ssl: config.ssl,
+            max: config.max ?? 20,
+            idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+            connectionTimeoutMillis: 2000,
+            ...config.pgPoolOptions,
+          };
+        } else {
+          throw new Error('PgVector: invalid configuration provided');
+        }
+
+        this.pool = new pg.Pool(poolConfig);
+        this.ownsPool = true;
+      }
 
       // Warm the created indexes cache in background so we don't need to check if indexes exist every time
       // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
@@ -1061,7 +1076,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
     }
 
-    await this.pool.end();
+    // Only close the pool if we created it ourselves
+    // If the user provided their own pool, they are responsible for closing it
+    if (this.ownsPool) {
+      await this.pool.end();
+    }
   }
 
   /**

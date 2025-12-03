@@ -184,6 +184,103 @@ Both `PgVector` and `PostgresStore` support multiple connection methods:
 - Idle timeout: 30 seconds
 - Connection timeout: 2 seconds
 
+### Bring Your Own Client (BYOC)
+
+Both `PgVector` and `PostgresStore` support bringing your own PostgreSQL client. This is useful when you want to:
+
+- Use a custom client configuration (e.g., Neon serverless adapter)
+- Share a connection pool between vector and storage operations
+- Use an existing connection pool from your application
+
+#### Sharing a Pool Between Vector and Storage
+
+```typescript
+import { Pool } from 'pg';
+import pgPromise from 'pg-promise';
+import { PgVector, PostgresStore } from '@mastra/pg';
+
+// Create a shared pool
+const pool = new Pool({
+  connectionString: 'postgresql://user:pass@localhost:5432/db',
+  max: 20,
+});
+
+// Use the pool for vector operations
+const vectorStore = new PgVector({
+  id: 'my-vector-store',
+  pool, // Bring your own pool
+});
+
+// Create pg-promise instance from the same pool
+const pgp = pgPromise();
+const db = pgp({ pool }); // pg-promise can use an existing pool
+
+// Use the same connection for storage operations
+const store = new PostgresStore({
+  id: 'my-store',
+  client: db, // Bring your own pg-promise client
+});
+
+// When you're done, YOU are responsible for closing the pool
+// The stores will NOT close it for you
+await pool.end();
+```
+
+#### Using with Neon Serverless
+
+```typescript
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import ws from 'ws';
+import { PgVector, PostgresStore } from '@mastra/pg';
+
+// Configure Neon for serverless environments
+neonConfig.webSocketConstructor = ws;
+
+// Create Neon pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Use with PgVector
+const vectorStore = new PgVector({
+  id: 'neon-vectors',
+  pool,
+});
+
+// Use with PostgresStore (via pg-promise)
+import pgPromise from 'pg-promise';
+const pgp = pgPromise();
+const db = pgp({ pool });
+
+const store = new PostgresStore({
+  id: 'neon-store',
+  client: db,
+});
+```
+
+#### Important Notes for BYOC
+
+1. **Lifecycle Management**: When you provide your own pool or client, you are responsible for closing it. The stores will NOT close user-provided connections.
+
+2. **Schema Configuration**: You can still specify `schemaName` when using BYOC:
+
+   ```typescript
+   const vectorStore = new PgVector({
+     id: 'my-vectors',
+     pool: myPool,
+     schemaName: 'custom_schema',
+   });
+   ```
+
+3. **Initialization**: `PostgresStore.init()` must still be called to set up tables, even when using BYOC.
+
+4. **pg-promise for PostgresStore**: The `client` option for `PostgresStore` expects a pg-promise `IDatabase` instance, not a raw `pg.Pool`. You can create one from a pool like this:
+   ```typescript
+   import pgPromise from 'pg-promise';
+   const pgp = pgPromise();
+   const db = pgp({ pool: myPool }); // Creates IDatabase from Pool
+   ```
+
 ## Features
 
 ### Vector Store Features
