@@ -366,42 +366,30 @@ export class BraintrustExporter extends BaseExporter {
   }
 
   /**
-   * Transforms LLM input to Braintrust Thread view format.
-   * Braintrust expects messages as a direct array in OpenAI format,
-   * not wrapped in { messages: [...] }.
-   *
-   * @see https://github.com/mastra-ai/mastra/issues/9848
-   * @see https://www.braintrust.dev/docs/guides/traces/customize
+   * Transforms MODEL_GENERATION input to Braintrust Thread view format.
    */
   private transformLlmInput(input: any, spanType: SpanType): any {
-    if (spanType !== SpanType.MODEL_GENERATION) {
-      return input;
-    }
-
-    // Unwrap { messages: [...] } to just the messages array
-    if (input && typeof input === 'object' && Array.isArray(input.messages)) {
-      return input.messages;
+    if (spanType === SpanType.MODEL_GENERATION) {
+      if (input && Array.isArray(input.messages)) {
+        return input.messages.map((message: any) => {
+          const { role, content, ...rest } = message;
+          return { role, content, ...rest };
+        });
+      } else if (input && typeof input === 'object' && 'content' in input) {
+        return [{ role: input.role, content: input.content }];
+      }
     }
 
     return input;
   }
 
   /**
-   * Transforms LLM output to Braintrust Thread view format.
-   * Braintrust expects the output as a direct string or the assistant message content,
-   * not wrapped in { content: '...' }.
-   *
-   * @see https://github.com/mastra-ai/mastra/issues/9848
-   * @see https://www.braintrust.dev/docs/guides/traces/customize
+   * Transforms MODEL_GENERATION output to Braintrust Thread view format.
    */
   private transformLlmOutput(output: any, spanType: SpanType): any {
-    if (spanType !== SpanType.MODEL_GENERATION) {
-      return output;
-    }
-
-    // Unwrap { content: '...' } to just the content string
-    if (output && typeof output === 'object' && 'content' in output && typeof output.content === 'string') {
-      return output.content;
+    if (spanType === SpanType.MODEL_GENERATION) {
+      const { text, ...rest } = output;
+      return { role: 'assistant', content: text, ...rest };
     }
 
     return output;
