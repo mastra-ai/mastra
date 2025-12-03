@@ -14,6 +14,8 @@ export interface MastraClientProviderProps {
 export const MastraClientProvider = ({ children, baseUrl, headers }: MastraClientProviderProps) => {
   const client = createMastraClient(baseUrl, headers);
 
+  console.log('HEADERS', headers);
+
   return <MastraClientContext.Provider value={client}>{children}</MastraClientContext.Provider>;
 };
 
@@ -23,6 +25,6 @@ const createMastraClient = (baseUrl?: string, mastraClientHeaders: Record<string
   return new MastraClient({
     baseUrl: baseUrl || '',
     // only add the header if the baseUrl is not provided i.e it's a local dev environment
-    headers: !baseUrl ? { ...mastraClientHeaders, 'x-mastra-dev-playground': 'true' } : mastraClientHeaders,
+    headers: baseUrl ? mastraClientHeaders : { ...mastraClientHeaders, 'x-mastra-dev-playground': 'true' },
   });
 };
