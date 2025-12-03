@@ -9,8 +9,6 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
-  Link2,
-  Cog,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -24,13 +22,8 @@ import {
   useMainSidebar,
   type NavSection,
   LogoWithoutText,
-  Tooltip,
-  Icon,
-  TooltipTrigger,
-  TooltipContent,
-  StudioConfigDialog,
+  SettingsIcon,
 } from '@mastra/playground-ui';
-import { useState } from 'react';
 
 const mainNavigation: NavSection[] = [
   {
@@ -91,6 +84,18 @@ const mainNavigation: NavSection[] = [
       },
     ],
   },
+
+  {
+    key: 'Settings',
+    separator: true,
+    links: [
+      {
+        name: 'Settings',
+        url: '/settings',
+        icon: <SettingsIcon />,
+      },
+    ],
+  },
 ];
 
 const secondNavigation: NavSection = {
@@ -128,86 +133,72 @@ declare global {
 
 export function AppSidebar() {
   const { state } = useMainSidebar();
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+
   const location = useLocation();
   const pathname = location.pathname;
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
 
   return (
-    <>
-      <MainSidebar>
-        <div className="pt-[.75rem] mb-[1rem] -ml-[.2rem] sticky top-0 bg-surface1 z-10">
-          {state === 'collapsed' ? (
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
-          ) : (
-            <span className="flex items-center gap-2 pl-3">
-              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-serif text-sm">Mastra Studio</span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button onClick={() => setConfigDialogOpen(true)} className="text-icon3 hover:text-icon6 ml-auto">
-                    <Icon>
-                      <Cog />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Change Studio Configuration</TooltipContent>
-              </Tooltip>
-            </span>
-          )}
-        </div>
+    <MainSidebar>
+      <div className="pt-[.75rem] mb-[1rem] -ml-[.2rem] sticky top-0 bg-surface1 z-10">
+        {state === 'collapsed' ? (
+          <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+        ) : (
+          <span className="flex items-center gap-2 pl-3">
+            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+            <span className="font-serif text-sm">Mastra Studio</span>
+          </span>
+        )}
+      </div>
 
-        <MainSidebar.Nav>
-          {mainNavigation.map(section => {
-            return (
-              <MainSidebar.NavSection key={section.key}>
-                {section?.title ? (
-                  <MainSidebar.NavHeader state={state}>{section.title}</MainSidebar.NavHeader>
-                ) : (
-                  <>{section?.separator && <MainSidebar.NavSeparator />}</>
-                )}
-                <MainSidebar.NavList>
-                  {section.links.map(link => {
-                    const [_, pagePath] = pathname.split('/');
-                    const lowercasedPagePath = link.name.toLowerCase();
-                    const isActive = link.url === pathname || link.name === pathname || pagePath === lowercasedPagePath;
-
-                    return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
-                  })}
-                </MainSidebar.NavList>
-              </MainSidebar.NavSection>
-            );
-          })}
-        </MainSidebar.Nav>
-
-        <MainSidebar.Bottom>
-          <MainSidebar.Nav>
-            <MainSidebar.NavSection>
-              <MainSidebar.NavSeparator />
+      <MainSidebar.Nav>
+        {mainNavigation.map(section => {
+          return (
+            <MainSidebar.NavSection key={section.key}>
+              {section?.title ? (
+                <MainSidebar.NavHeader state={state}>{section.title}</MainSidebar.NavHeader>
+              ) : (
+                <>{section?.separator && <MainSidebar.NavSeparator />}</>
+              )}
               <MainSidebar.NavList>
-                {secondNavigation.links.map(link => {
-                  return <MainSidebar.NavLink key={link.name} link={link} state={state} />;
+                {section.links.map(link => {
+                  const [_, pagePath] = pathname.split('/');
+                  const lowercasedPagePath = link.name.toLowerCase();
+                  const isActive = link.url === pathname || link.name === pathname || pagePath === lowercasedPagePath;
+
+                  return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
                 })}
-                {!hideCloudCta && (
-                  <MainSidebar.NavLink
-                    link={{
-                      name: 'Share',
-                      url: 'https://mastra.ai/cloud',
-                      icon: <CloudUploadIcon />,
-                      variant: 'featured',
-                      tooltipMsg: 'You’re running Mastra Studio locally. Want your team to collaborate?',
-                    }}
-                    state={state}
-                  />
-                )}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>
-          </MainSidebar.Nav>
-        </MainSidebar.Bottom>
-      </MainSidebar>
+          );
+        })}
+      </MainSidebar.Nav>
 
-      <StudioConfigDialog open={configDialogOpen} onOpenChange={setConfigDialogOpen} />
-    </>
+      <MainSidebar.Bottom>
+        <MainSidebar.Nav>
+          <MainSidebar.NavSection>
+            <MainSidebar.NavSeparator />
+            <MainSidebar.NavList>
+              {secondNavigation.links.map(link => {
+                return <MainSidebar.NavLink key={link.name} link={link} state={state} />;
+              })}
+              {!hideCloudCta && (
+                <MainSidebar.NavLink
+                  link={{
+                    name: 'Share',
+                    url: 'https://mastra.ai/cloud',
+                    icon: <CloudUploadIcon />,
+                    variant: 'featured',
+                    tooltipMsg: 'You’re running Mastra Studio locally. Want your team to collaborate?',
+                  }}
+                  state={state}
+                />
+              )}
+            </MainSidebar.NavList>
+          </MainSidebar.NavSection>
+        </MainSidebar.Nav>
+      </MainSidebar.Bottom>
+    </MainSidebar>
   );
 }

@@ -35,6 +35,7 @@ import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
+import { StudioSettingsPage } from './pages/settings';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -84,6 +85,15 @@ function App() {
           <BrowserRouter>
             <LinkComponentWrapper>
               <Routes>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/settings" element={<StudioSettingsPage />} />
+                </Route>
                 <Route
                   element={
                     <Layout>
