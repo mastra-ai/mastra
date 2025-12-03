@@ -17,19 +17,19 @@ import type {
   StorageIndexStats,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import type { IDatabase } from 'pg-promise';
+import type { IPgPromiseCompatible } from '../../../shared/pg-pool-adapter';
 import { getSchemaName, getTableName } from '../utils';
 
 // Re-export the types for convenience
 export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
 
 export class StoreOperationsPG extends StoreOperations {
-  public client: IDatabase<{}>;
+  public client: IPgPromiseCompatible;
   public schemaName?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
-  constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
+  constructor({ client, schemaName }: { client: IPgPromiseCompatible; schemaName?: string }) {
     super();
     this.client = client;
     this.schemaName = schemaName;

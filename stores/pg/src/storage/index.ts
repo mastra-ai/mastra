@@ -18,10 +18,16 @@ import type {
   StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { Pool as PgPool } from 'pg';
-import pgPromise from 'pg-promise';
-import { validatePostgresStoreConfig, hasUserProvidedClient, hasUserProvidedStorePool } from '../shared/config';
-import type { PostgresStoreConfig, PostgresStoreClientConfig, PostgresStorePoolConfig } from '../shared/config';
+import * as pg from 'pg';
+import {
+  validatePostgresStoreConfig,
+  hasUserProvidedStorePool,
+  isConnectionStringConfig,
+  isHostConfig,
+} from '../shared/config';
+import type { PostgresStoreConfig, PostgresStorePoolConfig } from '../shared/config';
+import type { IPgPromiseCompatible } from '../shared/pg-pool-adapter';
+import { PgPoolAdapter } from '../shared/pg-pool-adapter';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { StoreOperationsPG } from './domains/operations';
@@ -31,40 +37,34 @@ import { WorkflowsPG } from './domains/workflows';
 export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
 
 export class PostgresStore extends MastraStorage {
-  #db?: pgPromise.IDatabase<{}>;
-  #pgp?: pgPromise.IMain;
-  #config?: any; // pg-promise accepts various config formats
-  #userProvidedPool?: PgPool; // User-provided pg.Pool to wrap with pg-promise
+  /** The underlying pg.Pool instance */
+  #pool?: pg.Pool;
+  /** The query adapter that wraps the pool with helper methods */
+  #client?: IPgPromiseCompatible;
+  #config?: PostgresStoreConfig;
   private schema: string;
   private isConnected: boolean = false;
-  /** Whether this instance owns the client (true) or it was provided by the user (false) */
-  private ownsClient: boolean = true;
+  /** Whether this instance owns the pool (true) or it was provided by the user (false) */
+  private ownsPool: boolean = true;
 
   stores: StorageDomains;
 
-  constructor(config: PostgresStoreConfig | PostgresStoreClientConfig | PostgresStorePoolConfig) {
+  constructor(config: PostgresStoreConfig | PostgresStorePoolConfig) {
     // Validation: connectionString or host/database/user/password must not be empty
     try {
       validatePostgresStoreConfig(config);
       super({ id: config.id, name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
 
-      // Check if user provided their own pg-promise client
-      if (hasUserProvidedClient(config)) {
-        this.#db = config.client;
-        this.ownsClient = false;
-        // No config needed when using provided client
-        this.#config = undefined;
-      } else if (hasUserProvidedStorePool(config)) {
-        // User provided a pg.Pool - we'll wrap it with pg-promise in init()
-        // Store the pool reference for later wrapping
-        this.#userProvidedPool = config.pool;
-        this.ownsClient = false;
-        this.#config = undefined;
+      // Check if user provided their own pool
+      if (hasUserProvidedStorePool(config)) {
+        // User provided a pg.Pool (e.g., from @neondatabase/serverless, pg, etc.)
+        this.#pool = config.pool;
+        this.ownsPool = false;
       } else {
-        // Use the config directly for pg-promise initialization
-        this.#config = config;
-        this.ownsClient = true;
+        // Store config for pool creation in init()
+        this.#config = config as PostgresStoreConfig;
+        this.ownsPool = true;
       }
       this.stores = {} as StorageDomains;
     } catch (e) {
@@ -87,25 +87,49 @@ export class PostgresStore extends MastraStorage {
     try {
       this.isConnected = true;
 
-      // Only create pgp and db if we don't already have a user-provided client
-      if (!this.#db) {
-        this.#pgp = pgPromise();
+      // Create pool if not provided by user
+      if (!this.#pool && this.#config) {
+        let poolConfig: pg.PoolConfig;
 
-        if (this.#userProvidedPool) {
-          // User provided a pg.Pool (e.g., from @neondatabase/serverless, postgres-js, etc.)
-          // Wrap it with pg-promise to get the query interface while using their pool for connections
-          // This allows users to use lightweight HTTP-based drivers in serverless environments
-          this.#db = this.#pgp({ pool: this.#userProvidedPool } as any);
+        if (isConnectionStringConfig(this.#config)) {
+          poolConfig = {
+            connectionString: this.#config.connectionString,
+            ssl: this.#config.ssl,
+            // High defaults to match pg-promise behavior
+            max: this.#config.max ?? 20,
+            idleTimeoutMillis: this.#config.idleTimeoutMillis ?? 30000,
+            connectionTimeoutMillis: 2000,
+            allowExitOnIdle: true,
+          };
+        } else if (isHostConfig(this.#config)) {
+          poolConfig = {
+            host: this.#config.host,
+            port: this.#config.port,
+            database: this.#config.database,
+            user: this.#config.user,
+            password: this.#config.password,
+            ssl: this.#config.ssl,
+            // High defaults to match pg-promise behavior
+            max: this.#config.max ?? 20,
+            idleTimeoutMillis: this.#config.idleTimeoutMillis ?? 30000,
+            connectionTimeoutMillis: 2000,
+            allowExitOnIdle: true,
+          };
         } else {
-          this.#db = this.#pgp(this.#config as any);
+          throw new Error('PostgresStore: invalid configuration provided');
         }
+
+        this.#pool = new pg.Pool(poolConfig);
       }
 
-      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
-      const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
-      const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
-      const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
-      const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema });
+      // Create the query adapter
+      this.#client = new PgPoolAdapter(this.#pool!);
+
+      const operations = new StoreOperationsPG({ client: this.#client, schemaName: this.schema });
+      const scores = new ScoresPG({ client: this.#client, operations, schema: this.schema });
+      const workflows = new WorkflowsPG({ client: this.#client, operations, schema: this.schema });
+      const memory = new MemoryPG({ client: this.#client, schema: this.schema, operations });
+      const observability = new ObservabilityPG({ client: this.#client, operations, schema: this.schema });
 
       this.stores = {
         operations,
@@ -139,18 +163,26 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  public get db() {
-    if (!this.#db) {
+  /**
+   * The underlying pg.Pool instance.
+   * Can be used for direct queries or sharing with other stores.
+   */
+  public get pool(): pg.Pool {
+    if (!this.#pool) {
       throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
     }
-    return this.#db;
+    return this.#pool;
   }
 
-  public get pgp() {
-    if (!this.#pgp) {
+  /**
+   * The query client with helper methods (one, oneOrNone, any, tx, etc.)
+   * @deprecated Use `pool` for direct access. This is kept for backwards compatibility.
+   */
+  public get db(): IPgPromiseCompatible {
+    if (!this.#client) {
       throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
     }
-    return this.#pgp;
+    return this.#client;
   }
 
   public get supports() {
@@ -358,10 +390,10 @@ export class PostgresStore extends MastraStorage {
   }
 
   async close(): Promise<void> {
-    // Only close the connection if we created it ourselves
-    // If the user provided their own client, they are responsible for closing it
-    if (this.ownsClient && this.#pgp) {
-      this.#pgp.end();
+    // Only close the pool if we created it ourselves
+    // If the user provided their own pool, they are responsible for closing it
+    if (this.ownsPool && this.#pool) {
+      await this.#pool.end();
     }
   }
 

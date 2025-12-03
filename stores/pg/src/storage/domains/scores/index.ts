@@ -9,7 +9,7 @@ import {
   TABLE_SCORERS,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
+import type { IPgPromiseCompatible } from '../../../shared/pg-pool-adapter';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
@@ -27,7 +27,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 }
 
 export class ScoresPG extends ScoresStorage {
-  public client: IDatabase<{}>;
+  public client: IPgPromiseCompatible;
   private operations: StoreOperationsPG;
   private schema?: string;
 
@@ -36,7 +36,7 @@ export class ScoresPG extends ScoresStorage {
     operations,
     schema,
   }: {
-    client: IDatabase<{}>;
+    client: IPgPromiseCompatible;
     operations: StoreOperationsPG;
     schema?: string;
   }) {

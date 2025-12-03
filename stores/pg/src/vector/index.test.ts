@@ -3688,6 +3688,10 @@ describe('PgVector Metadata Filtering', () => {
   const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
   const metadataVectorDB = new PgVector({ connectionString, id: 'pg-metadata-test' });
 
+  afterAll(async () => {
+    await metadataVectorDB.disconnect();
+  });
+
   createVectorTestSuite({
     vector: metadataVectorDB,
     createIndex: async (indexName: string) => {
@@ -3713,6 +3717,7 @@ describe('PgVector with BYOC pool', () => {
     connectionString,
     max: 5,
     idleTimeoutMillis: 10000,
+    allowExitOnIdle: true,
   });
 
   // Create PgVector with BYOC pool at describe block level

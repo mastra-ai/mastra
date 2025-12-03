@@ -101,6 +101,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             max: config.max ?? 20,
             idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
             connectionTimeoutMillis: 2000,
+            allowExitOnIdle: true,
             ...config.pgPoolOptions,
           };
         } else if (isCloudSqlConfig(config)) {
@@ -109,6 +110,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             max: config.max ?? 20,
             idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
             connectionTimeoutMillis: 2000,
+            allowExitOnIdle: true,
             ...config.pgPoolOptions,
           } as pg.PoolConfig;
         } else if (isHostConfig(config)) {
@@ -122,6 +124,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             max: config.max ?? 20,
             idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
             connectionTimeoutMillis: 2000,
+            allowExitOnIdle: true,
             ...config.pgPoolOptions,
           };
         } else {

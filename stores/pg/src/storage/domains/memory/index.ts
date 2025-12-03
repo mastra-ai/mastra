@@ -17,7 +17,7 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
+import type { IPgPromiseCompatible } from '../../../shared/pg-pool-adapter';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -34,7 +34,7 @@ type MessageRowFromDB = {
 };
 
 export class MemoryPG extends MemoryStorage {
-  private client: IDatabase<{}>;
+  private client: IPgPromiseCompatible;
   private schema: string;
   private operations: StoreOperationsPG;
 
@@ -43,7 +43,7 @@ export class MemoryPG extends MemoryStorage {
     schema,
     operations,
   }: {
-    client: IDatabase<{}>;
+    client: IPgPromiseCompatible;
     schema: string;
     operations: StoreOperationsPG;
   }) {
@@ -270,17 +270,18 @@ export class MemoryPG extends MemoryStorage {
     };
 
     try {
+      const nowIso = new Date().toISOString();
       const thread = await this.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
                     SET 
                         title = $1,
                         metadata = $2,
                         "updatedAt" = $3,
-                        "updatedAtZ" = $3
-                    WHERE id = $4
+                        "updatedAtZ" = $4
+                    WHERE id = $5
                     RETURNING *
                 `,
-        [title, mergedMetadata, new Date().toISOString(), id],
+        [title, mergedMetadata, nowIso, nowIso, id],
       );
 
       return {
@@ -527,12 +528,18 @@ export class MemoryPG extends MemoryStorage {
 
       if (filter?.dateRange?.start) {
         conditions.push(`"createdAt" >= $${paramIndex++}`);
-        queryParams.push(filter.dateRange.start);
+        // Convert Date to ISO string for raw pg compatibility
+        const startDate =
+          filter.dateRange.start instanceof Date ? filter.dateRange.start.toISOString() : filter.dateRange.start;
+        queryParams.push(startDate);
       }
 
       if (filter?.dateRange?.end) {
         conditions.push(`"createdAt" <= $${paramIndex++}`);
-        queryParams.push(filter.dateRange.end);
+        // Convert Date to ISO string for raw pg compatibility
+        const endDate =
+          filter.dateRange.end instanceof Date ? filter.dateRange.end.toISOString() : filter.dateRange.end;
+        queryParams.push(endDate);
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -688,6 +695,12 @@ export class MemoryPG extends MemoryStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
+          // Ensure createdAt is always an ISO string for consistent parameter types
+          const createdAtStr =
+            message.createdAt instanceof Date
+              ? message.createdAt.toISOString()
+              : message.createdAt || new Date().toISOString();
+
           return t.none(
             `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId") 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -701,8 +714,8 @@ export class MemoryPG extends MemoryStorage {
               message.id,
               message.threadId,
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-              message.createdAt || new Date().toISOString(),
-              message.createdAt || new Date().toISOString(),
+              createdAtStr,
+              createdAtStr,
               message.role,
               message.type || 'v2',
               message.resourceId,
@@ -711,14 +724,15 @@ export class MemoryPG extends MemoryStorage {
         });
 
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+        const nowIso = new Date().toISOString();
         const threadUpdate = t.none(
           `UPDATE ${threadTableName} 
                         SET 
                             "updatedAt" = $1,
-                            "updatedAtZ" = $1
-                        WHERE id = $2
+                            "updatedAtZ" = $2
+                        WHERE id = $3
                     `,
-          [new Date().toISOString(), threadId],
+          [nowIso, nowIso, threadId],
         );
 
         await Promise.all([...messageInserts, threadUpdate]);
@@ -771,7 +785,7 @@ export class MemoryPG extends MemoryStorage {
 
     const messageIds = messages.map(m => m.id);
 
-    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE id IN ($1:list)`;
+    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE id = ANY($1::text[])`;
 
     const existingMessagesDb = await this.client.manyOrNone(selectQuery, [messageIds]);
 
@@ -855,7 +869,7 @@ export class MemoryPG extends MemoryStorage {
       if (threadIdsToUpdate.size > 0) {
         queries.push(
           t.none(
-            `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN ($1:list)`,
+            `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = ANY($1::text[])`,
             [Array.from(threadIdsToUpdate)],
           ),
         );
@@ -1010,11 +1024,13 @@ export class MemoryPG extends MemoryStorage {
       paramIndex++;
     }
 
+    const isoTimestamp = updatedResource.updatedAt.toISOString();
     updates.push(`"updatedAt" = $${paramIndex}`);
-    values.push(updatedResource.updatedAt.toISOString());
-    updates.push(`"updatedAtZ" = $${paramIndex++}`);
-    values.push(updatedResource.updatedAt.toISOString());
+    values.push(isoTimestamp);
+    paramIndex++;
 
+    updates.push(`"updatedAtZ" = $${paramIndex}`);
+    values.push(isoTimestamp);
     paramIndex++;
 
     values.push(resourceId);

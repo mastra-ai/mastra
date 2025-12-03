@@ -31,45 +31,45 @@ export function pgTests() {
     });
 
     describe('Public Fields Access', () => {
-      it('should expose db field as public', () => {
+      it('should expose pool field as public', () => {
+        expect(store.pool).toBeDefined();
+        expect(typeof store.pool).toBe('object');
+        expect(store.pool.query).toBeDefined();
+        expect(typeof store.pool.query).toBe('function');
+      });
+
+      it('should expose db field as public (query adapter)', () => {
         expect(store.db).toBeDefined();
         expect(typeof store.db).toBe('object');
-        expect(store.db.query).toBeDefined();
-        expect(typeof store.db.query).toBe('function');
+        expect(store.db.one).toBeDefined();
+        expect(typeof store.db.one).toBe('function');
       });
 
-      it('should expose pgp field as public', () => {
-        expect(store.pgp).toBeDefined();
-        expect(typeof store.pgp).toBe('function');
-        expect(store.pgp.end).toBeDefined();
-        expect(typeof store.pgp.end).toBe('function');
+      it('should allow direct database queries via public pool field', async () => {
+        const result = await store.pool.query('SELECT 1 as test');
+        expect(result.rows[0].test).toBe(1);
       });
 
-      it('should allow direct database queries via public db field', async () => {
+      it('should allow queries via db adapter', async () => {
         const result = await store.db.one('SELECT 1 as test');
         expect(result.test).toBe(1);
       });
 
-      it('should allow access to pgp utilities via public pgp field', () => {
-        const helpers = store.pgp.helpers;
-        expect(helpers).toBeDefined();
-        expect(helpers.insert).toBeDefined();
-        expect(helpers.update).toBeDefined();
-      });
-
-      it('should maintain connection state through public db field', async () => {
+      it('should maintain connection state through public pool field', async () => {
         // Test multiple queries to ensure connection state
-        const result1 = await store.db.one('SELECT NOW() as timestamp1');
-        const result2 = await store.db.one('SELECT NOW() as timestamp2');
+        const result1 = await store.pool.query('SELECT NOW() as timestamp1');
+        const result2 = await store.pool.query('SELECT NOW() as timestamp2');
 
-        expect(result1.timestamp1).toBeDefined();
-        expect(result2.timestamp2).toBeDefined();
-        expect(new Date(result2.timestamp2).getTime()).toBeGreaterThanOrEqual(new Date(result1.timestamp1).getTime());
+        expect(result1.rows[0].timestamp1).toBeDefined();
+        expect(result2.rows[0].timestamp2).toBeDefined();
+        expect(new Date(result2.rows[0].timestamp2).getTime()).toBeGreaterThanOrEqual(
+          new Date(result1.rows[0].timestamp1).getTime(),
+        );
       });
 
       it('should throw error when pool is used after disconnect', async () => {
         await store.close();
-        await expect(store.db.connect()).rejects.toThrow();
+        await expect(store.pool.query('SELECT 1')).rejects.toThrow();
         store = new PostgresStore(TEST_CONFIG);
         await store.init();
       });
@@ -773,7 +773,7 @@ export function pgTests() {
           expect(() => new PostgresStore(validConfig).db.any('SELECT 1')).toThrow(
             /PostgresStore: Store is not initialized/,
           );
-          expect(() => new PostgresStore(validConfig).pgp).toThrow(/PostgresStore: Store is not initialized/);
+          expect(() => new PostgresStore(validConfig).pool).toThrow(/PostgresStore: Store is not initialized/);
         });
       });
     });

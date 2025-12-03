@@ -9,12 +9,12 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
+import type { IPgPromiseCompatible } from '../../../shared/pg-pool-adapter';
 import type { StoreOperationsPG } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorage {
-  public client: IDatabase<{}>;
+  public client: IPgPromiseCompatible;
   private operations: StoreOperationsPG;
   private schema?: string;
 
@@ -23,7 +23,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     operations,
     schema,
   }: {
-    client: IDatabase<{}>;
+    client: IPgPromiseCompatible;
     operations: StoreOperationsPG;
     schema?: string;
   }) {

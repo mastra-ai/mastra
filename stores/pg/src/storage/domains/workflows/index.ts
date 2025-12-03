@@ -2,7 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { IDatabase } from 'pg-promise';
+import type { IPgPromiseCompatible } from '../../../shared/pg-pool-adapter';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
@@ -27,7 +27,7 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
-  public client: IDatabase<{}>;
+  public client: IPgPromiseCompatible;
   private operations: StoreOperationsPG;
   private schema: string;
 
@@ -36,7 +36,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     operations,
     schema,
   }: {
-    client: IDatabase<{}>;
+    client: IPgPromiseCompatible;
     operations: StoreOperationsPG;
     schema: string;
   }) {
