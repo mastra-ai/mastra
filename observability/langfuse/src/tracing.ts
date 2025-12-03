@@ -336,6 +336,8 @@ export class LangfuseExporter extends BaseExporter {
     if (userId) payload.userId = userId;
     if (sessionId) payload.sessionId = sessionId;
     if (span.input) payload.input = span.input;
+    // Include tags if present (only for root spans, which is always the case here)
+    if (span.tags?.length) payload.tags = span.tags;
 
     payload.metadata = {
       spanType: span.type,
@@ -442,6 +444,12 @@ export class LangfuseExporter extends BaseExporter {
       if (modelAttr.parameters !== undefined) {
         payload.modelParameters = modelAttr.parameters;
         attributesToOmit.push('parameters');
+      }
+
+      // completionStartTime is used by Langfuse to calculate time-to-first-token (TTFT)
+      if (modelAttr.completionStartTime !== undefined) {
+        payload.completionStartTime = modelAttr.completionStartTime;
+        attributesToOmit.push('completionStartTime');
       }
     }
 

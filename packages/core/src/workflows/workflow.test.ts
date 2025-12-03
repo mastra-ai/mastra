@@ -13,7 +13,7 @@ import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StreamEvent, WorkflowStreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -3933,6 +3933,128 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+    });
+
+    it('should update state after each concurrent batch in foreach step', async () => {
+      const subWorkflow1 = createWorkflow({
+        id: 's1',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .then(
+          createStep({
+            id: 's1s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              expect(ctx.state.output).toBe(2);
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const subWorkflow2 = createWorkflow({
+        id: 's2',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .then(
+          createStep({
+            id: 's2s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              ctx.setState({ ...ctx.state, output: 2 });
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const routing = createWorkflow({
+        id: 'routing',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .branch([
+          [async s => s.inputData === 1, subWorkflow1],
+          [async s => s.inputData === 2, subWorkflow2],
+        ])
+        .map(async ({ inputData }) => {
+          return (inputData.s1 ?? 0) + (inputData.s2 ?? 0);
+        })
+        .commit();
+
+      const workflows = createWorkflow({
+        id: 'root',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .foreach(routing)
+        .commit();
+
+      const run = await workflows.createRun();
+      const result = await run.start({
+        inputData: [2, 1],
+        initialState: { output: 0 },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ output: 2 });
+    });
+
+    it('should bail foreach execution when called in a concurrent batch', async () => {
+      const bailResult = [15];
+
+      const workflows = createWorkflow({
+        id: 'root',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .foreach(
+          createStep({
+            id: 's1s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              console.log('running step 111');
+              console.log('state===', ctx.state);
+              if (ctx.state.output > 1) {
+                return ctx.bail(bailResult);
+              }
+              ctx.setState({ ...ctx.state, output: ctx.inputData });
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const run = await workflows.createRun();
+      const result = await run.start({
+        inputData: [1, 2, 3, 4],
+        initialState: { output: 0 },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state?.output).toBe(2);
+      if (result.status === 'success') {
+        expect(result.result).toEqual(bailResult);
+      }
     });
 
     it('should have runId in the step execute function - bug #4260', async () => {
@@ -8110,6 +8232,265 @@ describe('Workflow', () => {
       });
 
       expect(result.steps['last-step']).toBeUndefined();
+    });
+
+    it('should allow a steps input schema to be a subset of the previous step output schema', async () => {
+      const prevStep = createStep({
+        id: 'prev-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ a: z.string(), b: z.string().optional() }),
+        execute: async () => {
+          return { a: 'a', b: 'b' };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      const sharedStepAttrs = {
+        outputSchema: z.boolean(),
+        execute: async () => true,
+      } satisfies Partial<Parameters<typeof createStep>[0]>;
+
+      const equalStep = createStep({
+        id: 'equal-step',
+        inputSchema: prevStep.outputSchema,
+        ...sharedStepAttrs,
+      });
+      // this is ok
+      workflow.then(prevStep).then(equalStep).commit();
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result.status).toBe('success');
+      expect(result.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'equal-step': {
+          status: 'success',
+          payload: {
+            a: 'a',
+            b: 'b',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const missingRequiredKeyStep = createStep({
+        id: 'missing-required-key-step',
+        inputSchema: prevStep.outputSchema.omit({ a: true }),
+        ...sharedStepAttrs,
+      });
+      const missingRequiredKeyWorkflow = createWorkflow({
+        id: 'missing-required-key-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      missingRequiredKeyWorkflow.then(prevStep).then(missingRequiredKeyStep).commit();
+      const run2 = await missingRequiredKeyWorkflow.createRun();
+      const result2 = await run2.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result2.status).toBe('success');
+      expect(result2.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'missing-required-key-step': {
+          status: 'success',
+          payload: {
+            b: 'b',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const missingOptionalKeyStep = createStep({
+        id: 'missing-optional-key-step',
+        inputSchema: prevStep.outputSchema.omit({ b: true }),
+        ...sharedStepAttrs,
+      });
+
+      const missingOptionalKeyWorkflow = createWorkflow({
+        id: 'missing-optional-key-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      missingOptionalKeyWorkflow.then(prevStep).then(missingOptionalKeyStep).commit();
+      const run3 = await missingOptionalKeyWorkflow.createRun();
+      const result3 = await run3.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result3.status).toBe('success');
+      expect(result3.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'missing-optional-key-step': {
+          status: 'success',
+          payload: {
+            a: 'a',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const extraOptionalKeyStep = createStep({
+        id: 'extra-optional-key-step',
+        inputSchema: prevStep.outputSchema.extend({ c: z.string().optional() }),
+        ...sharedStepAttrs,
+      });
+
+      const extraOptionalKeyWorkflow = createWorkflow({
+        id: 'extra-optional-key-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      extraOptionalKeyWorkflow.then(prevStep).then(extraOptionalKeyStep).commit();
+      const run4 = await extraOptionalKeyWorkflow.createRun();
+      const result4 = await run4.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result4.status).toBe('success');
+      expect(result4.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'extra-optional-key-step': {
+          status: 'success',
+          payload: {
+            a: 'a',
+            b: 'b',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const extraRequiredKeyStep = createStep({
+        id: 'extra-required-key-step',
+        inputSchema: prevStep.outputSchema.extend({ c: z.string() }),
+        ...sharedStepAttrs,
+      });
+
+      const errWorkflow = createWorkflow({
+        id: 'error-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      //@ts-expect-error -- extra-required-step should not be allowed
+      errWorkflow.then(prevStep).then(extraRequiredKeyStep).commit();
+
+      const errorRun = await errWorkflow.createRun();
+      const errorResult = await errorRun.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(errorResult.status).toBe('failed');
+      expect(errorResult.steps['extra-required-key-step'].status).toBe('failed');
+      expect((errorResult.steps['extra-required-key-step'] as StepFailure<any, any, any, any>).error).toBe(
+        'Error: Step input validation failed: \n- c: Required',
+      );
+
+      const distinctTypeStep = createStep({
+        id: 'distinct-type-step',
+        inputSchema: z.string(),
+        ...sharedStepAttrs,
+      });
+
+      const errWorkflow2 = createWorkflow({
+        id: 'error-workflow-2',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      //@ts-expect-error -- distinct-type-step should not be allowed
+      errWorkflow2.then(prevStep).then(distinctTypeStep).commit();
+
+      const errorRun2 = await errWorkflow2.createRun();
+      const errorResult2 = await errorRun2.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(errorResult2.status).toBe('failed');
+      expect(errorResult2.steps['distinct-type-step'].status).toBe('failed');
+      expect((errorResult2.steps['distinct-type-step'] as StepFailure<any, any, any, any>).error).toBe(
+        'Error: Step input validation failed: \n- : Expected string, received object',
+      );
     });
   });
 
@@ -14575,7 +14956,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
         outputSchema: z.object({ success: z.boolean() }),
         execute: final,
       });
@@ -14833,7 +15214,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
         outputSchema: z.object({ finalValue: z.number() }),
         execute: final,
       });
@@ -14967,7 +15348,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({ finalValue: z.number() }),
           execute: final,
         });
@@ -15115,7 +15496,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({ finalValue: z.number() }),
           execute: final,
         });
@@ -15260,7 +15641,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({ finalValue: z.number() }),
           execute: final,
         });
@@ -15446,7 +15827,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({
             finalValue: z.number(),
           }),
@@ -15922,7 +16303,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({
             finalValue: z.number(),
           }),
@@ -16042,7 +16423,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
         outputSchema: z.object({
           finalValue: z.number(),
         }),
@@ -16493,7 +16874,7 @@ describe('Workflow', () => {
       const step = createStep({
         id: 'step1',
         execute,
-        inputSchema: z.object({ human: z.boolean() }),
+        inputSchema: z.object({ human: z.boolean().optional() }),
         outputSchema: z.object({}),
       });
       const workflow = createWorkflow({

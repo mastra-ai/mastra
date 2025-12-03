@@ -380,7 +380,8 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3-0324',
     'deepseek-ai/DeepSeek-V3.1',
     'deepseek-ai/DeepSeek-V3.1-Terminus',
-    'deepseek-ai/DeepSeek-V3.2-Exp',
+    'deepseek-ai/DeepSeek-V3.2',
+    'deepseek-ai/DeepSeek-V3.2-Speciale',
     'meituan-longcat/LongCat-Flash-Chat-FP8',
     'microsoft/MAI-DS-R1-FP8',
     'moonshotai/Kimi-K2-Instruct-0905',
@@ -390,6 +391,7 @@ export type ProviderModelsMap = {
     'rednote-hilab/dots.ocr',
     'tngtech/DeepSeek-R1T-Chimera',
     'tngtech/DeepSeek-TNG-R1T2-Chimera',
+    'tngtech/TNG-R1T-Chimera',
     'unsloth/Mistral-Nemo-Instruct-2407',
     'unsloth/Mistral-Small-24B-Instruct-2501',
     'unsloth/gemma-3-12b-it',
@@ -421,6 +423,7 @@ export type ProviderModelsMap = {
     'gpt-5.1',
     'kimi-k2-thinking',
   ];
+  readonly 'kimi-for-coding': readonly ['kimi-k2-thinking'];
   readonly cortecs: readonly [
     'claude-4-5-sonnet',
     'claude-sonnet-4',
@@ -736,6 +739,7 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v3-base:free',
     'deepseek/deepseek-v3.1-terminus',
     'deepseek/deepseek-v3.1-terminus:exacto',
+    'deepseek/deepseek-v3.2',
     'featherless/qwerky-72b',
     'google/gemini-2.0-flash-001',
     'google/gemini-2.0-flash-exp:free',

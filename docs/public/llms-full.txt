@@ -1349,6 +1349,7 @@ network-execution-event-step-finish
 - [Agent Memory](./agent-memory)
 - [Workflows Overview](../workflows/overview)
 - [Request Context](/docs/v1/server-db/request-context)
+- [Supervisor example](https://github.com/mastra-ai/mastra/tree/main/examples/supervisor-agent)
 
 
 ---
@@ -4618,7 +4619,6 @@ Standalone Mastra applications can be deployed to popular cloud providers, see o
 - [Netlify](/docs/v1/deployment/cloud-providers/netlify-deployer)
 - [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
 
-
 For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/v1/deployment/building-mastra) guide.
 
 ## Prerequisites
@@ -4633,35 +4633,29 @@ Before deploying to a cloud provider, ensure you have:
 
 ## LibSQLStore
 
-`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like **AWS Lambda**, **Azure App Services**, or **Digital Ocean App Platform**, you **must remove** all usage of `LibSQLStore`.
+`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of `LibSQLStore`.
 
-Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/mastra/agents/weather-agent.ts`:
+Specifically, ensure you've removed it from all Mastra files, including configuration on the main Mastra instance and any agents using it, e.g. for memory storage.
 
-```typescript title="src/mastra/index.ts" showLineNumbers
-export const mastra = new Mastra({
-  // ...
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    // [!code --]
-    // stores telemetry, scorer results, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
-    url: ":memory:", // [!code --]
-  }), //[!code --]
-});
+```diff title="src/mastra/index.ts"
+ export const mastra = new Mastra({
+-  storage: new LibSQLStore({
+-    id: 'mastra-storage',
+-    url: ":memory:",
+-  }),
+ });
 ```
 
-```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
-export const weatherAgent = new Agent({
-  id: "weather-agent",
-  // ..
-  memory: new Memory({
-    // [!code --]
-    storage: new LibSQLStore({
-      id: 'mastra-storage',
-      // [!code --]
-      url: "file:../mastra.db", // path is relative to the .mastra/output directory // [!code --]
-    }), // [!code --]
-  }), //  [!code --]
-});
+```diff
+ export const weatherAgent = new Agent({
+   id: "weather-agent",
+   memory: new Memory({
+-    storage: new LibSQLStore({
+-      id: 'mastra-storage',
+-      url: "file:../mastra.db",
+-    }),
+   }),
+ });
 ```
 
 
@@ -4683,12 +4677,11 @@ npm install @mastra/deployer-netlify@beta
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new NetlifyDeployer(),
 });
 ```
@@ -4711,32 +4704,64 @@ Your project is now configured with automatic deployments which occur whenever y
 
 ## Manual deployment
 
-Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application.
+Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application. You can also run `netlify dev` from your project root to test your Mastra application locally.
 
 ```bash copy
 netlify deploy --prod
 ```
 
-> You can also run `netlify dev` from your project root to test your Mastra application locally.
+:::warning
+
+When using `netlify deploy` instead of continuous deployment, you need to create a `netlify.toml` file with these contents:
+
+```toml
+[build]
+  command = "npm run build"
+  publish = ".netlify/v1/functions"
+
+[functions]
+  directory = ".netlify/v1/functions"
+  node_bundler = "none"
+  included_files = [".netlify/v1/functions/**"]
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[build.environment]
+  NODE_VERSION = "22.13.0"
+```
+
+Adjust the `build.command` to your project.
+
+:::
 
 ## Build output
 
-The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Netlify.
+The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra-specific files required to run your application on Netlify.
 
-```
-.netlify/
-└── v1/
-    ├── functions/
-    │   └── api/
-    │       └── index.mjs
-    └── config.json
-package.json
+```bash
+your-project/
+└── .netlify/
+    └── v1/
+        ├── config.json
+        └── functions/
+            └── api/
+                ├── index.js
+                ├── package.json
+                └── node_modules/
 ```
 
 The `NetlifyDeployer` automatically generates a `config.json` configuration file in `.netlify/v1` with the following settings:
 
 ```json
 {
+  "functions": {
+    "directory": ".netlify/v1/functions",
+    "node_bundler": "none",
+    "included_files": [".netlify/v1/functions/**"]
+  },
   "redirects": [
     {
       "force": true,
@@ -6239,6 +6264,283 @@ describe('Weather Agent Tests', () => {
 
 
 ---
+title: "Manual Install | Getting Started"
+description: Set up a Mastra project manually without using the create mastra CLI.
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Manual Install
+[EN] Source: https://mastra.ai/en/docs/getting-started/manual-install
+
+:::info
+Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow a [getting-started guide](/docs/v1/getting-started/start), which achieves the same result using the [`mastra create`](/reference/v1/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+:::
+
+If you prefer not to use our automatic CLI tool, you can set up your project yourself by following the guide below.
+
+<Steps>
+
+<StepItem>
+
+Create a new project and change directory:
+
+```bash copy
+mkdir my-first-agent && cd my-first-agent
+```
+
+Initialize a TypeScript project and install the following dependencies:
+
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm init -y
+npm install -D typescript @types/node mastra@beta
+npm install @mastra/core@beta zod@^4
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm init
+pnpm add -D typescript @types/node mastra@beta
+pnpm add @mastra/core@beta zod@^4
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn init -y
+yarn add -D typescript @types/node mastra@beta
+yarn add @mastra/core@beta zod@^4
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun init -y
+bun add -d typescript @types/node mastra@beta
+bun add @mastra/core@beta zod@^4
+```
+
+</TabItem>
+</Tabs>
+
+Add `dev` and `build` scripts to your `package.json` file:
+
+```json title="package.json" copy /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
+{
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build"
+  }
+}
+```
+
+</StepItem>
+
+<StepItem>
+
+Create a `tsconfig.json` file:
+
+```bash copy
+touch tsconfig.json
+```
+
+Add the following configuration:
+
+```json title="tsconfig.json" copy
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"]
+}
+```
+
+:::info
+
+Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS` or `node` will cause resolution errors.
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+Create an `.env` file:
+
+```bash copy
+touch .env
+```
+
+Add your API key:
+
+```bash title=".env" copy
+GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
+```
+
+:::note
+
+This guide uses Google Gemini, but you can use any supported [model provider](/models/v1), including OpenAI, Anthropic, and more.
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+Create a `weather-tool.ts` file:
+
+```bash copy
+mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
+```
+
+Add the following code:
+
+```ts title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "Get current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("City name"),
+  }),
+  outputSchema: z.object({
+    output: z.string(),
+  }),
+  execute: async () => {
+    return {
+      output: "The weather is sunny",
+    };
+  },
+});
+```
+
+:::info
+
+We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/v1/agents/using-tools).
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+Create a `weather-agent.ts` file:
+
+```bash copy
+mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
+```
+
+Add the following code:
+
+```ts title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { weatherTool } from "../tools/weather-tool";
+
+export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "Weather Agent",
+  instructions: `
+      You are a helpful weather assistant that provides accurate weather information.
+
+      Your primary function is to help users get weather details for specific locations. When responding:
+      - Always ask for a location if none is provided
+      - If the location name isn't in English, please translate it
+      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+      - Include relevant details like humidity, wind conditions, and precipitation
+      - Keep responses concise but informative
+
+      Use the weatherTool to fetch current weather data.
+`,
+  model: "google/gemini-2.5-pro",
+  tools: { weatherTool },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+Create the Mastra entry point and register your agent:
+
+```bash copy
+touch src/mastra/index.ts
+```
+
+Add the following code:
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { weatherAgent } from "./agents/weather-agent";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+You can now launch [Studio](/docs/v1/getting-started/studio) and test your agent.
+
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm run dev
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm run dev
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn run dev
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun run dev
+```
+
+</TabItem>
+</Tabs>
+
+</StepItem>
+
+</Steps>
+
+
+---
 title: "Mastra Docs Server | Getting Started"
 description: "Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert."
 ---
@@ -6773,7 +7075,7 @@ Explore real-world examples in our [community showcase](/showcase).
 
 ## Get started
 
-Choose a [getting started guide](/docs/v1/getting-started/start) to get started, or see the [manual installation guide](/guides/v1/getting-started/manual-install) if you need more control over your setup.
+Choose a [getting started guide](/docs/v1/getting-started/start) to get started, or see the [manual installation guide](/docs/v1/getting-started/manual-install) if you need more control over your setup.
 
 If you're new to AI agents, check out our [templates](https://mastra.ai/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
 
@@ -9602,6 +9904,23 @@ new ArizeExporter({
 });
 ```
 
+### Custom metadata
+
+Non-reserved span attributes are serialized into the OpenInference `metadata` payload and surface in Arize/Phoenix. You can add them via `tracingOptions.metadata`:
+
+```ts
+await agent.generate(input, {
+  tracingOptions: {
+    metadata: {
+      companyId: "acme-co",
+      tier: "enterprise",
+    },
+  },
+});
+```
+
+Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and OpenInference IDs are excluded automatically.
+
 ## OpenInference Semantic Conventions
 
 This exporter implements the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
@@ -9681,6 +10000,25 @@ new BraintrustExporter({
   logLevel: "info", // Diagnostic logging: debug | info | warn | error
 });
 ```
+
+## Using Tags
+
+Tags help you categorize and filter traces in the Braintrust dashboard. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+Tags appear in Braintrust's trace view and can be used to filter and search traces. Common use cases include:
+
+- Environment labels: `"production"`, `"staging"`
+- Experiment tracking: `"experiment-v1"`, `"control-group"`
+- Priority levels: `"priority-high"`, `"batch-job"`
 
 ## Related
 
@@ -10082,6 +10420,26 @@ new LangfuseExporter({
 });
 ```
 
+## Using Tags
+
+Tags help you categorize and filter traces in the Langfuse dashboard. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+Tags appear in Langfuse's trace view and can be used to filter and search traces. Common use cases include:
+
+- Environment labels: `"production"`, `"staging"`
+- Experiment tracking: `"experiment-v1"`, `"control-group"`
+- Priority levels: `"priority-high"`, `"batch-job"`
+- User segments: `"beta-user"`, `"enterprise"`
+
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
@@ -10114,6 +10472,7 @@ npm install @mastra/langsmith@beta
 
 ```bash title=".env"
 LANGSMITH_API_KEY=ls-xxxxxxxxxxxx
+LANGCHAIN_PROJECT=my-project  # Optional: default project for traces
 LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
 ```
 
@@ -10151,6 +10510,7 @@ new LangSmithExporter({
 
   // Optional settings
   apiUrl: process.env.LANGSMITH_BASE_URL, // Default: https://api.smith.langchain.com
+  projectName: "my-project", // Project to send traces to (overrides LANGCHAIN_PROJECT env var)
   callerOptions: {
     // HTTP client options
     timeout: 30000, // Request timeout in ms
@@ -10163,6 +10523,16 @@ new LangSmithExporter({
   hideOutputs: false, // Hide output data in UI
 });
 ```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `LANGSMITH_API_KEY` | Your LangSmith API key (required) |
+| `LANGCHAIN_PROJECT` | Default project name for traces (optional, defaults to "default") |
+| `LANGSMITH_BASE_URL` | API URL for self-hosted instances (optional) |
+
+The `projectName` config option takes precedence over the `LANGCHAIN_PROJECT` environment variable, allowing you to programmatically route traces to different projects.
 
 ## Related
 
@@ -11022,6 +11392,55 @@ requestContext.set("session", { data: { experimentId: "exp-999" } });
 2. **Automatic Extraction**: Root spans (agent runs, workflow executions) automatically extract metadata from RequestContext
 3. **Child Span Extraction**: Child spans can also extract metadata if you pass `requestContext` when creating them
 4. **Metadata Precedence**: Explicit metadata passed to span options always takes precedence over extracted metadata
+
+### Adding Tags to Traces
+
+Tags are string labels that help you categorize and filter traces. Unlike metadata (which contains structured key-value data), tags are simple strings designed for quick filtering and organization.
+
+Use `tracingOptions.tags` to add tags when executing agents or workflows:
+
+```ts showLineNumbers copy
+// With agents
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+
+// With workflows
+const run = await mastra.getWorkflow("myWorkflow").createRun();
+const result = await run.start({
+  inputData: { data: "process this" },
+  tracingOptions: {
+    tags: ["batch-processing", "priority-high"],
+  },
+});
+```
+
+#### How Tags Work
+
+- **Root span only**: Tags are applied only to the root span of a trace (the agent run or workflow run span)
+- **Platform-specific**: Tags appear in Braintrust and Langfuse dashboards for filtering and searching
+- **Combinable with metadata**: You can use both `tags` and `metadata` in the same `tracingOptions`
+
+```ts showLineNumbers copy
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Analyze this" }],
+  tracingOptions: {
+    tags: ["production", "analytics"],
+    metadata: { userId: "user-123", experimentId: "exp-456" },
+  },
+});
+```
+
+#### Common Tag Patterns
+
+- **Environment**: `"production"`, `"staging"`, `"development"`
+- **Feature flags**: `"feature-x-enabled"`, `"beta-user"`
+- **Request types**: `"user-request"`, `"batch-job"`, `"scheduled-task"`
+- **Priority levels**: `"priority-high"`, `"priority-low"`
+- **Experiments**: `"experiment-v1"`, `"control-group"`, `"treatment-a"`
 
 #### Child Spans and Metadata Extraction
 
@@ -12788,6 +13207,27 @@ await store.upsert({
 ```
 
   </TabItem>
+
+  <TabItem value="elasticsearch" label="ElasticSearch">
+
+```ts title="vector-store.ts" showLineNumbers copy
+import { ElasticSearchVector } from "@mastra/elasticsearch";
+
+const store = new ElasticSearchVector({ url: process.env.ELASTICSEARCH_URL });
+
+await store.createIndex({
+  indexName: "my-collection",
+  dimension: 1536,
+});
+
+await store.upsert({
+  indexName: "my-collection",
+  vectors: embeddings,
+  metadata: chunks.map((chunk) => ({ text: chunk.text })),
+});
+```
+
+  </TabItem>
   <TabItem value="couchbase" label="Couchbase">
 
 ```ts title="vector-store.ts" showLineNumbers copy
@@ -12986,6 +13426,20 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my-index-123` is valid
     - Example: `My_Index` is not valid (contains uppercase letters)
     - Example: `_myindex` is not valid (begins with underscore)
+  </TabItem>
+  <TabItem value="elasticsearch" label="ElasticSearch">
+    Index names must:
+    - Use only lowercase letters
+    - Not exceed 255 bytes (counting multi-byte characters)
+    - Not begin with underscores, hyphens, or plus signs
+    - Not contain spaces, commas
+    - Not contain special characters (e.g. `:`, `"`, `*`, `+`, `/`, `\`, `|`, `?`, `#`, `>`, `<`)
+    - Not be "." or ".."
+    - Not start with "." (deprecated except for system/hidden indices)
+    - Example: `my-index-123` is valid
+    - Example: `My_Index` is not valid (contains uppercase letters)
+    - Example: `_myindex` is not valid (begins with underscore)
+    - Example: `.myindex` is not valid (begins with dot, deprecated)
   </TabItem>
   <TabItem value="s3vectors" label="S3 Vectors">
     Index names must:
@@ -14875,14 +15329,14 @@ console.log("Token usage:", await networkStream.usage);
 
 Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created using `.createRun()`.
 
-### Using `Run.streamVNext()`
+### Using `Run.stream()`
 
-This is the experimental API. It returns a `ReadableStream` of events directly.
+The `stream()` method returns a `ReadableStream` of events directly.
 
 ```typescript {3,9} showLineNumbers copy
 const run = await testWorkflow.createRun();
 
-const stream = await run.streamVNext({
+const stream = await run.stream({
   inputData: {
     value: "initial data",
   },
@@ -14893,16 +15347,16 @@ for await (const chunk of stream) {
 }
 ```
 
-> See Run.streamVNext() method documentation for more information.
+> See [Run.stream()](/reference/v1/streaming/workflows/stream) method documentation for more information.
 
 ### Output from `Run.stream()`
 
-The experimental API event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
+The event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
 
 ```typescript
 // ...
 {
-  type: 'step-start',
+  type: 'workflow-start',
   runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
   from: 'WORKFLOW',
   payload: {
@@ -15138,12 +15592,6 @@ By combining writable workflow streams with agent streaming, you gain fine-grain
 
 ### Using the `writer` argument
 
-:::warning
-
-The writer is only available when using `streamVNext`.
-
-:::
-
 The `writer` argument is passed to a workflow step's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables workflow steps to provide intermediate results or status updates while execution is still in progress.
 
 :::warning
@@ -15188,7 +15636,7 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 const run = await testWorkflow.createRun();
 
-const stream = await run.streamVNext({
+const stream = await run.stream({
   inputData: {
     value: "initial data",
   },
@@ -15199,8 +15647,8 @@ for await (const chunk of stream) {
 }
 
 if (result!.status === "suspended") {
-  // if the workflow is suspended, we can resume it with the resumeStreamVNext method
-  const resumedStream = await run.resumeStreamVNext({
+  // if the workflow is suspended, we can resume it with the resumeStream method
+  const resumedStream = await run.resumeStream({
     resumeData: { value: "resume data" },
   });
 
@@ -15212,10 +15660,10 @@ if (result!.status === "suspended") {
 
 ### Resuming an interrupted workflow stream
 
-If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStreamVNext` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
+If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStream` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
 
 ```typescript showLineNumbers copy
-const newStream = await run.resumeStreamVNext();
+const newStream = await run.resumeStream();
 
 for await (const chunk of newStream) {
   console.log(chunk);
@@ -18083,7 +18531,7 @@ When a workflow is suspended, you can access the payload returned by `suspend()`
 
 ```typescript {12} title="src/test-workflow.ts" showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -18114,7 +18562,7 @@ As with [restarting a workflow](/docs/v1/workflows/suspend-and-resume#restarting
 
 ```typescript {13} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.start({
   inputData: {
@@ -19400,13 +19848,15 @@ export const testWorkflow = createWorkflow({
 
 ## Restarting a workflow with `resume()`
 
-Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from the suspended step.
+Use `resume()` to restart a suspended workflow from the step where it paused. Pass `resumeData` matching the step's `resumeSchema` to satisfy the suspend condition and continue execution.
 
 ![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
-```typescript {13} showLineNumbers copy
+```typescript showLineNumbers copy
+import { step1 } from "./workflows/test-workflow";
+
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.start({
   inputData: {
@@ -19416,25 +19866,46 @@ await run.start({
 
 const handleResume = async () => {
   const result = await run.resume({
-    step: 'step-1',
+    step: step1,
     resumeData: { approved: true }
   });
 };
 ```
 
-You can resume a suspended workflow using different triggers, including [human input](/docs/v1/workflows/human-in-the-loop), external events from your application, or time-based conditions.
+Passing the `step` object provides full type-safety for `resumeData`. Alternatively, you can pass a step ID for more flexibility when the ID comes from user input or a database.
 
-```typescript {10} showLineNumbers copy
-const handleResume = async () => {
-  const result = await run.resume({
-    step: 'step-1',
-    resumeData: { approved: true }
-  });
-};
+```typescript showLineNumbers copy
+const result = await run.resume({
+  step: "step-1",
+  resumeData: { approved: true }
+});
+```
 
+If only one step is suspended, you can omit the step argument entirely and Mastra will resume the last suspended step in the workflow.
+
+When resuming with only a `runId`, create a run instance first using `createRunAsync()`.
+
+```typescript showLineNumbers copy
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync({ runId: "123" });
+
+const stream = run.resume({
+  resumeData: { approved: true }
+});
+```
+
+You can call `resume()` from anywhere in your application, including HTTP endpoints, event handlers, in response to [human input](/docs/v1/workflows/human-in-the-loop), or timers.
+
+```typescript showLineNumbers copy
 const midnight = new Date();
 midnight.setUTCHours(24, 0, 0, 0);
-setTimeout(handleResume, midnight.getTime() - Date.now());
+
+setTimeout(async () => {
+  await run.resume({
+    step: "step-1",
+    resumeData: { approved: true }
+  });
+}, midnight.getTime() - Date.now());
 ```
 
 ## Accessing suspend data with `suspendData`
@@ -19487,7 +19958,7 @@ When a workflow is suspended, it restarts from the step where it paused. You can
 
 ```typescript {11} showLineNumbers copy
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -20042,186 +20513,6 @@ const parentWorkflow = createWorkflow({
 
 
 ---
-title: "Example: Supervisor Agent | Agents"
-description: Example of creating a supervisor agent using Mastra, where agents interact through tool functions.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Supervisor Agent
-[EN] Source: https://mastra.ai/en/examples/agents/supervisor-agent
-
-When building complex AI applications, you often need multiple specialized agents to collaborate on different aspects of a task. A supervisor agent enables one agent to act as a supervisor, coordinating the work of other agents, each focused on their own area of expertise. This structure allows agents to delegate, collaborate, and produce more advanced outputs than any single agent alone.
-
-In this example, this system consists of three agents:
-
-1. A [**Copywriter agent**](#copywriter-agent) that writes the initial content.
-2. A [**Editor agent**](#editor-agent) that refines the content.
-3. A [**Publisher agent**](#publisher-agent) that supervises and coordinates the other agents.
-
-## Prerequisites
-
-This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
-
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-```
-
-## Copywriter agent
-
-This `copywriterAgent` is responsible for writing the initial blog post content based on a given topic.
-
-```typescript title="src/mastra/agents/example-copywriter-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-
-export const copywriterAgent = new Agent({
-  id: "copywriter-agent",
-  name: "Copywriter Agent",
-  instructions: "You are a copywriter agent that writes blog post copy.",
-  model: "openai/gpt-5.1",
-});
-```
-
-## Copywriter tool
-
-The `copywriterTool` provides an interface to call the `copywriterAgent` and passes in the `topic`.
-
-```typescript title="src/mastra/tools/example-copywriter-tool.ts"
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-
-export const copywriterTool = createTool({
-  id: "copywriter-agent",
-  description: "Calls the copywriter agent to write blog post copy.",
-  inputSchema: z.object({
-    topic: z.string(),
-  }),
-  outputSchema: z.object({
-    copy: z.string(),
-  }),
-  execute: async ({ context, mastra }) => {
-    const { topic } = context;
-
-    const agent = mastra!.getAgent("copywriterAgent");
-    const result = await agent!.generate(`Create a blog post about ${topic}`);
-
-    return {
-      copy: result.text,
-    };
-  },
-});
-```
-
-## Editor agent
-
-This `editorAgent` takes the initial copy and refines it to improve quality and readability.
-
-```typescript title="src/mastra/agents/example-editor-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-
-export const editorAgent = new Agent({
-  id: "editor-agent",
-  name: "Editor Agent",
-  instructions: "You are an editor agent that edits blog post copy.",
-  model: "openai/gpt-5.1",
-});
-```
-
-## Editor tool
-
-The `editorTool` provides an interface to call the `editorAgent` and passes in the `copy`.
-
-```typescript title="src/mastra/tools/example-editor-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-
-export const editorTool = createTool({
-  id: "editor-agent",
-  description: "Calls the editor agent to edit blog post copy.",
-  inputSchema: z.object({
-    copy: z.string(),
-  }),
-  outputSchema: z.object({
-    copy: z.string(),
-  }),
-  execute: async ({ context, mastra }) => {
-    const { copy } = context;
-
-    const agent = mastra!.getAgent("editorAgent");
-    const result = await agent.generate(
-      `Edit the following blog post only returning the edited copy: ${copy}`,
-    );
-
-    return {
-      copy: result.text,
-    };
-  },
-});
-```
-
-## Publisher agent
-
-This `publisherAgent` coordinates the entire process by calling the `copywriterTool` first, then the `editorTool`.
-
-```typescript title="src/mastra/agents/example-publisher-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-
-import { copywriterTool } from "../tools/example-copywriter-tool";
-import { editorTool } from "../tools/example-editor-tool";
-
-export const publisherAgent = new Agent({
-  id: "publisher-agent",
-  name: "Publisher Agent",
-  instructions:
-    "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
-  model: "openai/gpt-5.1",
-  tools: { copywriterTool, editorTool },
-});
-```
-
-## Registering the agents
-
-All three agents are registered in the main Mastra instance so they can be accessed by each other.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-
-import { publisherAgent } from "./agents/example-publisher-agent";
-import { copywriterAgent } from "./agents/example-copywriter-agent";
-import { editorAgent } from "./agents/example-editor-agent";
-
-export const mastra = new Mastra({
-  agents: { copywriterAgent, editorAgent, publisherAgent },
-});
-```
-
-## Example usage
-
-Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
-
-```typescript title="src/test-publisher-agent.ts" showLineNumbers copy
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const agent = mastra.getAgent("publisherAgent");
-
-const response = await agent.generate(
-  "Write a blog post about React JavaScript frameworks. Only return the final edited copy.",
-);
-
-console.log(response.text);
-```
-
-<GithubLink
-  outdated={true}
-  marginTop="mt-16"
-  href="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
-/>
-
-
-
----
 title: "Examples List: Workflows, Agents, RAG"
 description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
 ---
@@ -20235,47 +20526,15 @@ The Examples section is a short list of example projects demonstrating basic AI 
 
 <CardItems
   titles={[
-    "Agent",
     "Workflow",
-    "Processors",
-    "Memory",
     "RAG",
     "Voice",
   ]}
   items={{
-    Agent: [
-      { title: "Supervisor Agent", href: "/examples/v1/agents/supervisor-agent" },
-      {
-        title: "Image Analysis Agent",
-        href: "/docs/v1/agents/overview#analyzing-images",
-      },
-      {
-        title: "Deploying an MCP Server",
-        href: "/docs/v1/mcp/publishing-mcp-server",
-      },
-      {
-        title: "WhatsApp Chat Bot",
-        href: "/guides/v1/guide/whatsapp-chat-bot",
-      },
-    ],
     Workflow: [
       {
         title: "Inngest Workflow",
         href: "/examples/v1/workflows/inngest-workflow",
-      },
-    ],
-    Processors: [
-      {
-        title: "Message Length Limiter",
-        href: "https://github.com/mastra-ai/mastra/tree/main/examples/processors-message-length-limiter",
-      },
-      {
-        title: "Response Length Limiter",
-        href: "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-length-limiter",
-      },
-      {
-        title: "Response Validator",
-        href: "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator",
       },
     ],
     RAG: [
@@ -25607,283 +25866,6 @@ npm run mastra:dev
 
 
 ---
-title: "Manual Install | Guides"
-description: Set up a Mastra project manually without using the create mastra CLI.
----
-
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-
-# Manual Install
-[EN] Source: https://mastra.ai/en/guides/getting-started/manual-install
-
-:::info
-Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow the [Standalone Server Quickstart](/guides/v1/getting-started/quickstart), which achieves the same result using the [`mastra create`](/reference/v1/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init).
-:::
-
-If you prefer not to use our automatic CLI tool, you can set up your project yourself by following the guide below.
-
-<Steps>
-
-<StepItem>
-
-Create a new project and change directory:
-
-```bash copy
-mkdir my-first-agent && cd my-first-agent
-```
-
-Initialize a TypeScript project and install the following dependencies:
-
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash copy
-npm init -y
-npm install -D typescript @types/node mastra@beta
-npm install @mastra/core@beta zod@^4
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash copy
-pnpm init
-pnpm add -D typescript @types/node mastra@beta
-pnpm add @mastra/core@beta zod@^4
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash copy
-yarn init -y
-yarn add -D typescript @types/node mastra@beta
-yarn add @mastra/core@beta zod@^4
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash copy
-bun init -y
-bun add -d typescript @types/node mastra@beta
-bun add @mastra/core@beta zod@^4
-```
-
-</TabItem>
-</Tabs>
-
-Add `dev` and `build` scripts to your `package.json` file:
-
-```json title="package.json" copy /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
-{
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev",
-    "build": "mastra build"
-  }
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a `tsconfig.json` file:
-
-```bash copy
-touch tsconfig.json
-```
-
-Add the following configuration:
-
-```json title="tsconfig.json" copy
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "outDir": "dist"
-  },
-  "include": ["src/**/*"]
-}
-```
-
-:::info
-
-Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS` or `node` will cause resolution errors.
-
-:::
-
-</StepItem>
-
-<StepItem>
-
-Create an `.env` file:
-
-```bash copy
-touch .env
-```
-
-Add your API key:
-
-```bash title=".env" copy
-GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
-```
-
-:::note
-
-This guide uses Google Gemini, but you can use any supported [model provider](/models/v1), including OpenAI, Anthropic, and more.
-
-:::
-
-</StepItem>
-
-<StepItem>
-
-Create a `weather-tool.ts` file:
-
-```bash copy
-mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
-```
-
-Add the following code:
-
-```ts title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-
-export const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get current weather for a location",
-  inputSchema: z.object({
-    location: z.string().describe("City name"),
-  }),
-  outputSchema: z.object({
-    output: z.string(),
-  }),
-  execute: async () => {
-    return {
-      output: "The weather is sunny",
-    };
-  },
-});
-```
-
-:::info
-
-We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/v1/agents/using-tools).
-
-:::
-
-</StepItem>
-
-<StepItem>
-
-Create a `weather-agent.ts` file:
-
-```bash copy
-mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
-```
-
-Add the following code:
-
-```ts title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { weatherTool } from "../tools/weather-tool";
-
-export const weatherAgent = new Agent({
-  id: "weather-agent",
-  name: "Weather Agent",
-  instructions: `
-      You are a helpful weather assistant that provides accurate weather information.
-
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn't in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
-
-      Use the weatherTool to fetch current weather data.
-`,
-  model: "google/gemini-2.5-pro",
-  tools: { weatherTool },
-});
-```
-
-</StepItem>
-
-<StepItem>
-
-Create the Mastra entry point and register your agent:
-
-```bash copy
-touch src/mastra/index.ts
-```
-
-Add the following code:
-
-```ts title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { weatherAgent } from "./agents/weather-agent";
-
-export const mastra = new Mastra({
-  agents: { weatherAgent },
-});
-```
-
-</StepItem>
-
-<StepItem>
-
-You can now launch [Studio](/docs/v1/getting-started/studio) and test your agent.
-
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash copy
-npm run dev
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash copy
-pnpm run dev
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash copy
-yarn run dev
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash copy
-bun run dev
-```
-
-</TabItem>
-</Tabs>
-
-</StepItem>
-
-</Steps>
-
-
----
 title: "Next.js | Frameworks"
 description: "Get started with Mastra and Next.js"
 ---
@@ -26178,7 +26160,7 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 The `create mastra` CLI command is the quickest way to get started. It walks you through setup and creates example agents, workflows, and tools for you to run locally or adapt
 
-If you need more control over the setup, see the [manual installation guide](/guides/v1/getting-started/manual-install). You can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init) for existing projects.
+If you need more control over the setup, see the [manual installation guide](/docs/v1/getting-started/manual-install). You can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init) for existing projects.
 
 ## Before you begin
 
@@ -32256,7 +32238,36 @@ Step `suspendPayload` is now validated for steps that have a `suspendSchema` def
   });
 ```
 
+### Branch result fields are now optional
+
+The `.branch()` method now returns a schema where all branch output fields are optional. This reflects the runtime behavior where each branch only executes if its condition is truthy, so outputs from any branch may be undefined.
+
+To migrate, update any code that consumes branch outputs to handle optional values.
+
+```diff
+  const workflow = createWorkflow({...})
+    .branch([
+      [condition1, stepA],  // outputSchema: { result: z.string() }
+      [condition2, stepB],  // outputSchema: { data: z.number() }
+    ])
+-   // Previously: stepA.result typed as string, stepB.data typed as number
++   // Now: stepA.result typed as string | undefined, stepB.data typed as number | undefined
+    .then(nextStep);
+```
+
+If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
+
+See [Run.resumeStream()](/reference/v1/streaming/workflows/resumeStream) for details.
+
 ## Removed
+
+### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
+
+The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()` methods have been removed. These methods are now the standard implementation with updated event structures and return types.
+
+To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
+
+See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
 
 ### Legacy workflows export
 
@@ -33600,7 +33611,7 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="125 models"
+      description="126 models"
       href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -33722,7 +33733,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 125 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 126 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -33781,6 +33792,7 @@ ANTHROPIC_API_KEY=ant-...
 | `deepseek/deepseek-v3-base:free` |
 | `deepseek/deepseek-v3.1-terminus` |
 | `deepseek/deepseek-v3.1-terminus:exacto` |
+| `deepseek/deepseek-v3.2` |
 | `featherless/qwerky-72b` |
 | `google/gemini-2.0-flash-001` |
 | `google/gemini-2.0-flash-exp:free` |
@@ -34031,7 +34043,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 58+ AI providers and 1156+ models through Mastra's model router."
+description: "Access 59+ AI providers and 1160+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34044,7 +34056,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1156 models from 58 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1160 models from 59 providers through a single API.
 
 ## Features
 
@@ -34172,7 +34184,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 51 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 52 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -36908,7 +36920,7 @@ For detailed provider-specific documentation, see the [AI SDK Cerebras provider 
 
 ---
 title: "Chutes | Models | Mastra"
-description: "Use Chutes models with Mastra. 52 models available."
+description: "Use Chutes models with Mastra. 54 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36918,7 +36930,7 @@ description: "Use Chutes models with Mastra. 52 models available."
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
 [EN] Source: https://mastra.ai/en/models/providers/chutes
 
-Access 52 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
+Access 54 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
 
 Learn more in the [Chutes documentation](https://llm.chutes.ai).
 
@@ -36989,8 +37001,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.05,
-    "outputCost": 0.22
+    "inputCost": 0.03,
+    "outputCost": 0.11
   },
   {
     "model": "chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506",
@@ -37101,16 +37113,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.9
   },
   {
-    "model": "chutes/deepseek-ai/DeepSeek-V3.2-Exp",
+    "model": "chutes/deepseek-ai/DeepSeek-V3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.27,
+    "outputCost": 0.41
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3.2-Speciale",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
     "contextWindow": 163840,
-    "maxOutput": 163840,
-    "inputCost": 0.25,
-    "outputCost": 0.35
+    "maxOutput": 32768,
+    "inputCost": 0.27,
+    "outputCost": 0.41
   },
   {
     "model": "chutes/meituan-longcat/LongCat-Flash-Chat-FP8",
@@ -37169,8 +37193,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 16384,
-    "inputCost": 0.55,
-    "outputCost": 2.25
+    "inputCost": 0.45,
+    "outputCost": 2.35
   },
   {
     "model": "chutes/NousResearch/DeepHermes-3-Mistral-24B-Preview",
@@ -37181,8 +37205,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 32768,
-    "inputCost": 0.15,
-    "outputCost": 0.59
+    "inputCost": 0.05,
+    "outputCost": 0.2
   },
   {
     "model": "chutes/NousResearch/Hermes-4-14B",
@@ -37193,8 +37217,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 40960,
     "maxOutput": 40960,
-    "inputCost": 0.03,
-    "outputCost": 0.11
+    "inputCost": 0.01,
+    "outputCost": 0.05
   },
   {
     "model": "chutes/NousResearch/Hermes-4-405B-FP8",
@@ -37277,8 +37301,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 32768,
-    "inputCost": 0.04,
-    "outputCost": 0.16
+    "inputCost": 0.03,
+    "outputCost": 0.11
   },
   {
     "model": "chutes/Qwen/Qwen2.5-VL-32B-Instruct",
@@ -37301,8 +37325,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 32768,
-    "inputCost": 0.08,
-    "outputCost": 0.33
+    "inputCost": 0.03,
+    "outputCost": 0.13
   },
   {
     "model": "chutes/Qwen/Qwen3-14B",
@@ -37385,8 +37409,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 40960,
     "maxOutput": 40960,
-    "inputCost": 0.05,
-    "outputCost": 0.2
+    "inputCost": 0.08,
+    "outputCost": 0.24
   },
   {
     "model": "chutes/Qwen/Qwen3-Coder-30B-A3B-Instruct",
@@ -37485,6 +37509,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "chutes/tngtech/TNG-R1T-Chimera",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "chutes/unsloth/gemma-3-12b-it",
     "imageInput": true,
     "audioInput": false,
@@ -37529,8 +37565,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.03,
-    "outputCost": 0.11
+    "inputCost": 0.02,
+    "outputCost": 0.04
   },
   {
     "model": "chutes/unsloth/Mistral-Small-24B-Instruct-2501",
@@ -40980,7 +41016,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
       title="Chutes"
-      description="52 models"
+      description="54 models"
       href="/models/v1/providers/chutes"
       logo="https://models.dev/logos/chutes.svg"
     />    <CardGridItem
@@ -41033,6 +41069,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="17 models"
       href="/models/v1/providers/io-net"
       logo="https://models.dev/logos/io-net.svg"
+    />    <CardGridItem
+      title="Kimi For Coding"
+      description="1 models"
+      href="/models/v1/providers/kimi-for-coding"
+      logo="https://models.dev/logos/kimi-for-coding.svg"
     />    <CardGridItem
       title="Llama"
       description="7 models"
@@ -41969,6 +42010,118 @@ const agent = new Agent({
 });
 ```
 
+
+
+
+---
+title: "Kimi For Coding | Models | Mastra"
+description: "Use Kimi For Coding models with Mastra. 1 model available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# <img src="https://models.dev/logos/kimi-for-coding.svg" alt="Kimi For Coding logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kimi For Coding
+[EN] Source: https://mastra.ai/en/models/providers/kimi-for-coding
+
+Access 1 Kimi For Coding model through Mastra's model router. Authentication is handled automatically using the `KIMI_API_KEY` environment variable.
+
+Learn more in the [Kimi For Coding documentation](https://www.kimi.com/coding/docs/en/third-party-agents.html).
+
+```bash
+KIMI_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "kimi-for-coding/kimi-k2-thinking"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Kimi For Coding documentation](https://www.kimi.com/coding/docs/en/third-party-agents.html) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "kimi-for-coding/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.kimi.com/coding/v1",
+    id: "kimi-for-coding/kimi-k2-thinking",
+    apiKey: process.env.KIMI_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "kimi-for-coding/kimi-k2-thinking"
+      : "kimi-for-coding/kimi-k2-thinking";
+  }
+});
+```
+
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/anthropic) for more details.
+
+```bash npm2yarn copy
+npm install @ai-sdk/anthropic
+```
 
 
 
@@ -51557,12 +51710,6 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
       ],
     },
     {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description: "Tracing context for span hierarchy and metadata.",
-    },
-    {
       name: "returnScorerData",
       type: "boolean",
       isOptional: true,
@@ -52016,6 +52163,50 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -53808,6 +53999,50 @@ await agent.network(`
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -58204,12 +58439,11 @@ The `NetlifyDeployer` class handles deployment of standalone Mastra applications
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new NetlifyDeployer(),
 });
 ```
@@ -65851,6 +66085,10 @@ Inherits from `OtelExporterConfig` (excluding `provider`), which includes:
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: WARN)
 - `resourceAttributes?: Record<string, any>` - Custom resource attributes
 
+### Metadata passthrough
+
+Non-reserved span attributes are serialized into the OpenInference `metadata` payload. Add them via `tracingOptions.metadata` (e.g., `companyId`, `tier`). Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and OpenInference IDs are excluded automatically.
+
 <PropertiesTable
   props={[
     {
@@ -66821,6 +67059,7 @@ new LangSmithExporter(config: LangSmithExporterConfig)
 ```typescript
 interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   client?: Client;
+  projectName?: string;
 }
 ```
 
@@ -66833,7 +67072,13 @@ Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
     {
       name: "apiKey",
       type: "string",
-      description: "LangSmith API key",
+      description: "LangSmith API key. Defaults to LANGSMITH_API_KEY env var.",
+      required: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "The LangSmith project to send traces to. Overrides LANGCHAIN_PROJECT env var. Defaults to 'default'.",
       required: false,
     },
     {
@@ -66900,10 +67145,19 @@ import { LangSmithExporter } from "@mastra/langsmith";
 
 const exporter = new LangSmithExporter({
   apiKey: process.env.LANGSMITH_API_KEY,
+  projectName: "my-project", // Optional: specify which project to send traces to
   apiUrl: "https://api.smith.langchain.com",
   logLevel: "info",
 });
 ```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `LANGSMITH_API_KEY` | Your LangSmith API key |
+| `LANGCHAIN_PROJECT` | Default project name for traces (used if `projectName` not specified) |
+| `LANGSMITH_BASE_URL` | API URL for self-hosted instances |
 
 ## Span Type Mapping
 
@@ -67689,6 +67943,9 @@ interface Span<TType extends SpanType> {
   output?: any;
   errorInfo?: any;
 
+  /** Tags for categorizing traces (only present on root spans) */
+  tags?: string[];
+
   /** End the span */
   end(options?: EndSpanOptions<TType>): void;
 
@@ -68148,6 +68405,32 @@ Options passed when starting a new agent or workflow execution.
 interface TracingOptions {
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
+
+  /**
+   * Additional RequestContext keys to extract as metadata for this trace.
+   * These keys are added to the requestContextKeys config.
+   * Supports dot notation for nested values (e.g., 'user.id', 'session.data.experimentId').
+   */
+  requestContextKeys?: string[];
+
+  /**
+   * Trace ID to use for this execution (1-32 hexadecimal characters).
+   * If provided, this trace will be part of the specified trace rather than starting a new one.
+   */
+  traceId?: string;
+
+  /**
+   * Parent span ID to use for this execution (1-16 hexadecimal characters).
+   * If provided, the root span will be created as a child of this span.
+   */
+  parentSpanId?: string;
+
+  /**
+   * Tags to apply to this trace.
+   * Tags are string labels that can be used to categorize and filter traces
+   * Note: Tags are only applied to the root span of a trace.
+   */
+  tags?: string[];
 }
 ```
 
@@ -69166,6 +69449,140 @@ export const agent = new Agent({
   ]
 });
 ```
+
+## Related
+
+- [Guardrails](/docs/v1/agents/guardrails)
+
+
+---
+title: "Reference: Message History Processor | Processors"
+description: "Documentation for the MessageHistory processor in Mastra, which handles retrieval and persistence of conversation history."
+---
+
+# MessageHistory
+[EN] Source: https://mastra.ai/en/reference/processors/message-history-processor
+
+The `MessageHistory` is a **hybrid processor** that handles both retrieval and persistence of message history. On input, it fetches historical messages from storage and prepends them to the conversation. On output, it persists new messages to storage.
+
+## Usage example
+
+```typescript copy
+import { MessageHistory } from "@mastra/core/processors";
+
+const processor = new MessageHistory({
+  storage: memoryStorage,
+  lastMessages: 50,
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "MessageHistoryOptions",
+      description: "Configuration options for the message history processor",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MemoryStorage",
+      description: "Storage instance for retrieving and persisting messages",
+      isOptional: false,
+    },
+    {
+      name: "lastMessages",
+      type: "number",
+      description: "Maximum number of historical messages to retrieve. If not specified, retrieves all messages",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'message-history'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Processor display name set to 'MessageHistory'",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "Fetches historical messages from storage and adds them to the message list",
+      isOptional: false,
+    },
+    {
+      name: "processOutputResult",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList>",
+      description: "Persists new messages (user input and assistant response) to storage, excluding system messages",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript title="src/mastra/agents/memory-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { MessageHistory } from "@mastra/core/processors";
+import { PostgresStorage } from "@mastra/pg";
+
+const storage = new PostgresStorage({
+  connectionString: process.env.DATABASE_URL,
+});
+
+export const agent = new Agent({
+  name: "memory-agent",
+  instructions: "You are a helpful assistant with conversation memory",
+  model: "openai:gpt-4o",
+  inputProcessors: [
+    new MessageHistory({
+      storage,
+      lastMessages: 100,
+    }),
+  ],
+  outputProcessors: [
+    new MessageHistory({
+      storage,
+    }),
+  ],
+});
+```
+
+## Behavior
+
+### Input processing
+1. Retrieves `threadId` from the request context
+2. Fetches historical messages from storage (ordered by creation date, descending)
+3. Filters out system messages (they should not be stored in the database)
+4. Merges historical messages with incoming messages, avoiding duplicates by ID
+5. Adds historical messages with `source: 'memory'` tag
+
+### Output processing
+1. Retrieves `threadId` from the request context
+2. Skips persistence if `readOnly` is set in memory config
+3. Filters out incomplete tool calls from messages
+4. Persists new user input and assistant response messages to storage
+5. Updates the thread's `updatedAt` timestamp
 
 ## Related
 
@@ -70202,6 +70619,206 @@ export const agent = new Agent({
 
 
 ---
+title: "Reference: Semantic Recall Processor | Processors"
+description: "Documentation for the SemanticRecall processor in Mastra, which enables semantic search over conversation history using vector embeddings."
+---
+
+# SemanticRecall
+[EN] Source: https://mastra.ai/en/reference/processors/semantic-recall-processor
+
+The `SemanticRecall` is a **hybrid processor** that enables semantic search over conversation history using vector embeddings. On input, it performs semantic search to find relevant historical messages. On output, it creates embeddings for new messages to enable future semantic retrieval.
+
+## Usage example
+
+```typescript copy
+import { SemanticRecall } from "@mastra/core/processors";
+import { openai } from "@ai-sdk/openai";
+
+const processor = new SemanticRecall({
+  storage: memoryStorage,
+  vector: vectorStore,
+  embedder: openai.embedding("text-embedding-3-small"),
+  topK: 5,
+  messageRange: 2,
+  scope: "resource",
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "SemanticRecallOptions",
+      description: "Configuration options for the semantic recall processor",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MemoryStorage",
+      description: "Storage instance for retrieving messages",
+      isOptional: false,
+    },
+    {
+      name: "vector",
+      type: "MastraVector",
+      description: "Vector store for semantic search",
+      isOptional: false,
+    },
+    {
+      name: "embedder",
+      type: "MastraEmbeddingModel<string>",
+      description: "Embedder for generating query embeddings",
+      isOptional: false,
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "Number of most similar messages to retrieve",
+      isOptional: true,
+      default: "4",
+    },
+    {
+      name: "messageRange",
+      type: "number | { before: number; after: number }",
+      description: "Number of context messages to include before/after each match. Can be a single number (same for both) or an object with separate values",
+      isOptional: true,
+      default: "1",
+    },
+    {
+      name: "scope",
+      type: "'thread' | 'resource'",
+      description: "Scope of semantic search. 'thread' searches within the current thread only. 'resource' searches across all threads for the resource",
+      isOptional: true,
+      default: "'resource'",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "Minimum similarity score threshold (0-1). Messages below this threshold are filtered out",
+      isOptional: true,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description: "Index name for the vector store. If not provided, auto-generated based on embedder model",
+      isOptional: true,
+    },
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "Optional logger instance for structured logging",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'semantic-recall'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Processor display name set to 'SemanticRecall'",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "Performs semantic search on historical messages and adds relevant context to the message list",
+      isOptional: false,
+    },
+    {
+      name: "processOutputResult",
+      type: "(args: { messages: MastraDBMessage[]; messageList?: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "Creates embeddings for new messages to enable future semantic search",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript title="src/mastra/agents/semantic-memory-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { SemanticRecall, MessageHistory } from "@mastra/core/processors";
+import { PostgresStorage } from "@mastra/pg";
+import { PgVector } from "@mastra/pg";
+import { openai } from "@ai-sdk/openai";
+
+const storage = new PostgresStorage({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const vector = new PgVector({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const semanticRecall = new SemanticRecall({
+  storage,
+  vector,
+  embedder: openai.embedding("text-embedding-3-small"),
+  topK: 5,
+  messageRange: { before: 2, after: 1 },
+  scope: "resource",
+  threshold: 0.7,
+});
+
+export const agent = new Agent({
+  name: "semantic-memory-agent",
+  instructions: "You are a helpful assistant with semantic memory recall",
+  model: "openai:gpt-4o",
+  inputProcessors: [
+    semanticRecall,
+    new MessageHistory({ storage, lastMessages: 50 }),
+  ],
+  outputProcessors: [
+    semanticRecall,
+    new MessageHistory({ storage }),
+  ],
+});
+```
+
+## Behavior
+
+### Input processing
+1. Extracts the user query from the last user message
+2. Generates embeddings for the query
+3. Performs vector search to find semantically similar messages
+4. Retrieves matched messages along with surrounding context (based on `messageRange`)
+5. For `scope: 'resource'`, formats cross-thread messages as a system message with timestamps
+6. Adds recalled messages with `source: 'memory'` tag
+
+### Output processing
+1. Extracts text content from new user and assistant messages
+2. Generates embeddings for each message
+3. Stores embeddings in the vector store with metadata (message ID, thread ID, resource ID, role, content, timestamp)
+4. Uses LRU caching for embeddings to avoid redundant API calls
+
+### Cross-thread recall
+When `scope` is set to `'resource'`, the processor can recall messages from other threads. These cross-thread messages are formatted as a system message with timestamps and conversation labels to provide context about when and where the conversation occurred.
+
+## Related
+
+- [Guardrails](/docs/v1/agents/guardrails)
+
+
+---
 title: "Reference: System Prompt Scrubber | Processors"
 description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
 ---
@@ -70502,6 +71119,134 @@ export const agent = new Agent({
 
 
 ---
+title: "Reference: Tool Call Filter | Processors"
+description: "Documentation for the ToolCallFilter processor in Mastra, which filters out tool calls and results from messages."
+---
+
+# ToolCallFilter
+[EN] Source: https://mastra.ai/en/reference/processors/tool-call-filter
+
+The `ToolCallFilter` is an **input processor** that filters out tool calls and their results from the message history before sending to the model. This is useful when you want to exclude specific tool interactions from context or remove all tool calls entirely.
+
+## Usage example
+
+```typescript copy
+import { ToolCallFilter } from "@mastra/core/processors";
+
+// Exclude all tool calls
+const filterAll = new ToolCallFilter();
+
+// Exclude specific tools by name
+const filterSpecific = new ToolCallFilter({
+  exclude: ["searchDatabase", "sendEmail"],
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "Configuration options for the tool call filter",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "exclude",
+      type: "string[]",
+      description: "List of specific tool names to exclude. If not provided or undefined, all tool calls are excluded",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'tool-call-filter'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Processor display name set to 'ToolCallFilter'",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "Processes input messages to filter out tool calls and their results based on configuration",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript title="src/mastra/agents/filtered-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ToolCallFilter } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "filtered-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai:gpt-4o",
+  tools: {
+    searchDatabase,
+    sendEmail,
+    getWeather,
+  },
+  inputProcessors: [
+    // Filter out database search tool calls from context
+    // to reduce token usage while keeping other tool interactions
+    new ToolCallFilter({
+      exclude: ["searchDatabase"],
+    }),
+  ],
+});
+```
+
+## Filtering all tool calls
+
+```typescript copy
+import { Agent } from "@mastra/core/agent";
+import { ToolCallFilter } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "no-tools-context-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai:gpt-4o",
+  tools: {
+    searchDatabase,
+    sendEmail,
+  },
+  inputProcessors: [
+    // Remove all tool calls from the message history
+    // The agent can still use tools, but previous tool interactions
+    // won't be included in the context
+    new ToolCallFilter(),
+  ],
+});
+```
+
+## Related
+
+- [Guardrails](/docs/v1/agents/guardrails)
+
+
+---
 title: "Reference: Unicode Normalizer | Processors"
 description: "Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters."
 ---
@@ -70617,6 +71362,230 @@ export const agent = new Agent({
 });
 ```
 
+
+## Related
+
+- [Guardrails](/docs/v1/agents/guardrails)
+
+
+---
+title: "Reference: Working Memory Processor | Processors"
+description: "Documentation for the WorkingMemory processor in Mastra, which injects persistent user/context data as system instructions."
+---
+
+# WorkingMemory
+[EN] Source: https://mastra.ai/en/reference/processors/working-memory-processor
+
+The `WorkingMemory` is an **input processor** that injects working memory data as a system message. It retrieves persistent information from storage and formats it as instructions for the LLM, enabling the agent to maintain context about users across conversations.
+
+## Usage example
+
+```typescript copy
+import { WorkingMemory } from "@mastra/core/processors";
+
+const processor = new WorkingMemory({
+  storage: memoryStorage,
+  scope: "resource",
+  template: {
+    format: "markdown",
+    content: `# User Profile
+- **Name**:
+- **Preferences**:
+- **Goals**:
+`,
+  },
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "Configuration options for the working memory processor",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MemoryStorage",
+      description: "Storage instance for retrieving working memory data",
+      isOptional: false,
+    },
+    {
+      name: "template",
+      type: "WorkingMemoryTemplate",
+      description: "Template defining the format and structure of working memory",
+      isOptional: true,
+    },
+    {
+      name: "scope",
+      type: "'thread' | 'resource'",
+      description: "Scope of working memory. 'thread' scopes to current thread, 'resource' shares across all threads for the resource",
+      isOptional: true,
+      default: "'resource'",
+    },
+    {
+      name: "useVNext",
+      type: "boolean",
+      description: "Use the next-generation instruction format with improved guidelines",
+      isOptional: true,
+    },
+    {
+      name: "templateProvider",
+      type: "{ getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null> }",
+      description: "Dynamic template provider for runtime template resolution",
+      isOptional: true,
+    },
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "Optional logger instance for structured logging",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### WorkingMemoryTemplate
+
+<PropertiesTable
+  content={[
+    {
+      name: "format",
+      type: "'markdown' | 'json'",
+      description: "Format of the working memory content",
+      isOptional: false,
+    },
+    {
+      name: "content",
+      type: "string",
+      description: "Template content defining the structure of working memory data",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'working-memory'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Processor display name set to 'WorkingMemory'",
+      isOptional: false,
+    },
+    {
+      name: "defaultWorkingMemoryTemplate",
+      type: "string",
+      description: "The default markdown template used when no custom template is provided",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "Retrieves working memory and adds it as a system message to the message list",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript title="src/mastra/agents/personalized-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { WorkingMemory, MessageHistory } from "@mastra/core/processors";
+import { PostgresStorage } from "@mastra/pg";
+
+const storage = new PostgresStorage({
+  connectionString: process.env.DATABASE_URL,
+});
+
+export const agent = new Agent({
+  name: "personalized-agent",
+  instructions: "You are a helpful assistant that remembers user preferences",
+  model: "openai:gpt-4o",
+  inputProcessors: [
+    new WorkingMemory({
+      storage,
+      scope: "resource",
+      template: {
+        format: "markdown",
+        content: `# User Information
+- **Name**:
+- **Location**:
+- **Preferences**:
+- **Communication Style**:
+- **Current Projects**:
+`,
+      },
+    }),
+    new MessageHistory({ storage, lastMessages: 50 }),
+  ],
+  outputProcessors: [
+    new MessageHistory({ storage }),
+  ],
+});
+```
+
+## JSON format example
+
+```typescript copy
+import { WorkingMemory } from "@mastra/core/processors";
+
+const processor = new WorkingMemory({
+  storage: memoryStorage,
+  scope: "resource",
+  template: {
+    format: "json",
+    content: JSON.stringify({
+      user: {
+        name: { type: "string" },
+        preferences: { type: "object" },
+        goals: { type: "array" },
+      },
+    }),
+  },
+});
+```
+
+## Behavior
+
+### Input processing
+1. Retrieves `threadId` and `resourceId` from the request context
+2. Based on scope, fetches working memory from either:
+   - Thread metadata (`scope: 'thread'`)
+   - Resource record (`scope: 'resource'`)
+3. Resolves the template (from provider, options, or default)
+4. Generates system instructions that include:
+   - Guidelines for the LLM on storing and updating information
+   - The template structure
+   - Current working memory data
+5. Adds the instruction as a system message with `source: 'memory'` tag
+
+### Working memory updates
+Working memory updates happen through the `updateWorkingMemory` tool provided by the Memory class, not through this processor. The processor only handles injecting the current working memory state into conversations.
+
+### Default template
+If no template is provided, the processor uses a default markdown template with fields for:
+- First Name, Last Name
+- Location, Occupation
+- Interests, Goals
+- Events, Facts, Projects
 
 ## Related
 
@@ -75951,7 +76920,7 @@ for await (const chunk of stream.fullStream) {
 
 - [.stream()](./agents/stream) - Method that returns streams emitting these chunks
 - [MastraModelOutput](./agents/MastraModelOutput) - The stream object that emits these chunks
-- [workflow.streamVNext()](./workflows/streamVNext) - Method that returns streams emitting these chunks for workflows
+- [workflow.stream()](./workflows/stream) - Method that returns streams emitting these chunks for workflows
 
 
 ---
@@ -77032,6 +78001,50 @@ const aiSdkStream = await agent.stream("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
   ]}
@@ -77783,59 +78796,7 @@ run.stream({
   },
 });
 
-const { stream } = await run.observeStream();
-
-for await (const chunk of stream) {
-  console.log(chunk);
-}
-```
-
-## Returns
-
-`ReadableStream<ChunkType>`
-
-## Stream Events
-
-The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
-
-- **`start`**: Workflow execution begins
-- **`step-start`**: A step begins execution
-- **`tool-call`**: A tool call is initiated
-- **`tool-call-streaming-start`**: Tool call streaming begins
-- **`tool-call-delta`**: Incremental tool output updates
-- **`step-result`**: A step completes with results
-- **`step-finish`**: A step finishes execution
-- **`finish`**: Workflow execution completes
-
-## Related
-
-- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
-- [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-- [Run.stream()](./stream)
-
-
----
-title: "Reference: Run.observeStreamVNext() (Experimental) | Streaming"
-description: Documentation for the `Run.observeStreamVNext()` method in workflows, which enables reopening the stream of an already active workflow run.
----
-
-# Run.observeStreamVNext() (Experimental)
-[EN] Source: https://mastra.ai/en/reference/streaming/workflows/observeStreamVNext
-
-The `.observeStreamVNext()` method opens a new `ReadableStream` to a workflow run that is currently running, allowing you to observe the stream of events if the original stream is no longer available.
-
-## Usage example
-
-```typescript showLineNumbers copy
-const run = await workflow.createRun();
-
-run.streamVNext({
-  inputData: {
-    value: "initial data",
-  },
-});
-
-const stream = await run.observeStreamVNext();
+const stream = await run.observeStream();
 
 for await (const chunk of stream) {
   console.log(chunk);
@@ -77860,30 +78821,26 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](/docs/v1/workflows/overview#running-workflows)
 - [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-- [Run.streamVNext()](./streamVNext)
-- [Run.resumeStreamVNext()](./resumeStreamVNext)
+- [Run.stream()](./stream)
+- [Run.resumeStream()](./resumeStream)
 
 
 ---
-title: "Reference: Run.resumeStreamVNext() (Experimental) | Streaming"
-description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
+title: "Reference: Run.resumeStream() | Streaming"
+description: Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 ---
 
-# Run.resumeStreamVNext() (Experimental)
-[EN] Source: https://mastra.ai/en/reference/streaming/workflows/resumeStreamVNext
+# Run.resumeStream()
+[EN] Source: https://mastra.ai/en/reference/streaming/workflows/resumeStream
 
-:::caution Experimental Feature
-This is an experimental API that may change in future versions. The `resumeStreamVNext()` method is part of the enhanced streaming system that will eventually replace the current streaming methods. Use with caution in production environments.
-:::
-
-The `.resumeStreamVNext()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
+The `.resumeStream()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const stream = run.streamVNext({
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
@@ -77892,7 +78849,7 @@ const stream = run.streamVNext({
 const result = await stream.result;
 
 if (result!.status === "suspended") {
-  const resumedStream = await run.resumeStreamVNext({
+  const resumedStream = await run.resumeStream({
     resumeData: {
       value: "resume data",
     },
@@ -77936,6 +78893,50 @@ if (result!.status === "suspended") {
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -77986,166 +78987,25 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](/docs/v1/workflows/overview#running-workflows)
 - [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-- [Run.streamVNext()](./streamVNext)
+- [Run.stream()](./stream)
 
 
 ---
 title: "Reference: Run.stream() | Streaming"
-description: Documentation for the `Run.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
+description: Documentation for the `Run.stream()` method in workflows, which enables real-time streaming of responses.
 ---
 
 # Run.stream()
 [EN] Source: https://mastra.ai/en/reference/streaming/workflows/stream
 
-The `.stream()` method allows you to monitor the execution of a workflow run, providing real-time updates on the status of steps.
+The `.stream()` method enables real-time streaming of responses from a workflow.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const { stream } = await run.stream({
-  inputData: {
-    value: "initial data",
-  },
-});
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "inputData",
-      type: "z.infer<TInput>",
-      description: "Input data that matches the workflow's input schema",
-      isOptional: true,
-    },
-    {
-      name: "requestContext",
-      type: "RequestContext",
-      description: "Request Context data to use during workflow execution",
-      isOptional: true,
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description:
-        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "currentSpan",
-              type: "Span",
-              isOptional: true,
-              description:
-                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for Tracing configuration.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "metadata",
-              type: "Record<string, any>",
-              isOptional: true,
-              description:
-                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "stream",
-      type: "ReadableStream<StreamEvent>",
-      description:
-        "A readable stream that emits workflow execution events in real-time",
-    },
-    {
-      name: "getWorkflowState",
-      type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description:
-        "A function that returns a promise resolving to the final workflow result",
-    },
-    {
-      name: "traceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
-    },
-  ]}
-/>
-
-## Extended usage example
-
-```typescript showLineNumbers copy
-const { getWorkflowState } = await run.stream({
-  inputData: {
-    value: "initial data",
-  },
-});
-
-const result = await getWorkflowState();
-```
-
-## Stream Events
-
-The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
-
-- **`start`**: Workflow execution begins
-- **`step-start`**: A step begins execution
-- **`tool-call`**: A tool call is initiated
-- **`tool-call-streaming-start`**: Tool call streaming begins
-- **`tool-call-delta`**: Incremental tool output updates
-- **`step-result`**: A step completes with results
-- **`step-finish`**: A step finishes execution
-- **`finish`**: Workflow execution completes
-
-## Related
-
-- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
-- [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-
-
----
-title: "Reference: Run.streamVNext() (Experimental) | Streaming"
-description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
----
-
-# Run.streamVNext() (Experimental)
-[EN] Source: https://mastra.ai/en/reference/streaming/workflows/streamVNext
-
-:::caution Experimental Feature
-This is an experimental API that may change in future versions. The `streamVNext()` method will eventually replace the current `stream()` method. Use with caution in production environments.
-:::
-
-The `.streamVNext()` method enables real-time streaming of responses from a workflow. This enhanced streaming capability will eventually replace the current `stream()` method.
-
-## Usage example
-
-```typescript showLineNumbers copy
-const run = await workflow.createRun();
-
-const stream = run.streamVNext({
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
@@ -78204,6 +79064,50 @@ const stream = run.streamVNext({
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
     {
@@ -78256,7 +79160,7 @@ const stream = run.streamVNext({
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const stream = run.streamVNext({
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
@@ -78279,7 +79183,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](/docs/v1/workflows/overview#running-workflows)
 - [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
-- [Run.resumeStreamVNext()](./resumeStreamVNext)
+- [Run.resumeStream()](./resumeStream)
 
 
 ---
@@ -83822,6 +84726,784 @@ try {
 - Index creation delays may impact immediate querying after creation.
 - No hard enforcement of vector dimension at ingest time (dimension mismatches will error at query time).
 - Vector insertion and index updates are eventually consistent; strong consistency is not guaranteed immediately after writes.
+
+## Related
+
+- [Metadata Filters](../rag/metadata-filters)
+
+
+---
+title: "Reference: DuckDBVector Store | Vectors"
+description: Documentation for the DuckDBVector class in Mastra, which provides embedded high-performance vector search using DuckDB with HNSW indexing.
+---
+
+# DuckDBVector Store
+[EN] Source: https://mastra.ai/en/reference/vectors/duckdb
+
+The DuckDB storage implementation provides an embedded high-performance vector search solution using [DuckDB](https://duckdb.org/), an in-process analytical database. It uses the VSS extension for vector similarity search with HNSW indexing, offering a lightweight and efficient vector database that requires no external server.
+
+It's part of the `@mastra/duckdb` package and offers efficient vector similarity search with metadata filtering.
+
+## Installation
+
+```bash copy
+npm install @mastra/duckdb@beta
+```
+
+## Usage
+
+```typescript copy showLineNumbers
+import { DuckDBVector } from "@mastra/duckdb";
+
+// Create a new vector store instance
+const store = new DuckDBVector({
+  id: "duckdb-vector",
+  path: ":memory:", // or './vectors.duckdb' for file persistence
+});
+
+// Create an index
+await store.createIndex({
+  indexName: "myCollection",
+  dimension: 1536,
+  metric: "cosine",
+});
+
+// Add vectors with metadata
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const metadata = [
+  { text: "first document", category: "A" },
+  { text: "second document", category: "B" },
+];
+await store.upsert({
+  indexName: "myCollection",
+  vectors,
+  metadata,
+});
+
+// Query similar vectors
+const queryVector = [0.1, 0.2, ...];
+const results = await store.query({
+  indexName: "myCollection",
+  queryVector,
+  topK: 10,
+  filter: { category: "A" },
+});
+
+// Clean up
+await store.close();
+```
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the vector store instance",
+    },
+    {
+      name: "path",
+      type: "string",
+      isOptional: true,
+      defaultValue: "':memory:'",
+      description:
+        "Database file path. Use ':memory:' for in-memory database, or a file path like './vectors.duckdb' for persistence.",
+    },
+    {
+      name: "dimensions",
+      type: "number",
+      isOptional: true,
+      defaultValue: "1536",
+      description: "Default dimension for vector embeddings",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Default distance metric for similarity search",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+Creates a new vector collection with optional HNSW index for fast approximate nearest neighbor search.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension size (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
+  ]}
+/>
+
+### upsert()
+
+Adds or updates vectors and their metadata in the index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to insert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated UUIDs if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+Searches for similar vectors with optional metadata filtering.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to search in",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors for",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Filter",
+      isOptional: true,
+      description: "Metadata filters using MongoDB-like query syntax",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vector data in results",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+Gets information about an index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+Deletes an index and all its data.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Lists all vector indexes in the database.
+
+Returns: `Promise<string[]>`
+
+### updateVector()
+
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description:
+        "ID of the vector entry to update (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description:
+        "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update data containing vector and/or metadata",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "New vector data to update",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "New metadata to update",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+Deletes a specific vector entry from an index by its ID.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector entry to delete",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vectors to delete",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description:
+        "Array of vector IDs to delete (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description:
+        "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+    },
+  ]}
+/>
+
+### close()
+
+Closes the database connection and releases resources.
+
+```typescript copy
+await store.close();
+```
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## Filter Operators
+
+DuckDB vector store supports MongoDB-like filter operators:
+
+| Category   | Operators                            |
+| ---------- | ------------------------------------ |
+| Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` |
+| Logical    | `$and`, `$or`, `$not`, `$nor`        |
+| Array      | `$in`, `$nin`                        |
+| Element    | `$exists`                            |
+| Text       | `$contains`                          |
+
+### Filter Examples
+
+```typescript copy
+// Allegato operators
+const results = await store.query({
+  indexName: "docs",
+  queryVector: [...],
+  filter: {
+    $and: [
+      { category: "electronics" },
+      { price: { $gte: 100, $lte: 500 } },
+    ],
+  },
+});
+
+// Nested field access
+const results = await store.query({
+  indexName: "docs",
+  queryVector: [...],
+  filter: { "user.profile.tier": "premium" },
+});
+```
+
+## Distance Metrics
+
+| Metric       | Description       | Score Interpretation         | Best For                              |
+| ------------ | ----------------- | ---------------------------- | ------------------------------------- |
+| `cosine`     | Cosine similarity | 0-1 (1 = most similar)       | Text embeddings, normalized vectors   |
+| `euclidean`  | L2 distance       | 0-∞ (0 = most similar)       | Image embeddings, spatial data        |
+| `dotproduct` | Inner product     | Higher = more similar        | When vector magnitude matters         |
+
+## Error Handling
+
+The store throws specific errors for different failure cases:
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "my-collection",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error.message.includes("not found")) {
+    console.error("The specified index does not exist");
+  } else if (error.message.includes("Invalid identifier")) {
+    console.error("Index name contains invalid characters");
+  } else {
+    console.error("Vector store error:", error.message);
+  }
+}
+```
+
+Common error cases include:
+
+- Invalid index name format
+- Index/table not found
+- Dimension mismatch between query vector and index
+- Empty filter or ids array in delete/update operations
+- Mutual exclusivity violations (providing both `id` and `filter`)
+
+## Use Cases
+
+### Embedded Semantic Search
+
+Build offline-capable AI applications with semantic search that runs entirely in-process:
+
+```typescript copy
+const store = new DuckDBVector({
+  id: "offline-search",
+  path: "./search.duckdb",
+});
+```
+
+### Local RAG Pipelines
+
+Process sensitive documents locally without sending data to cloud vector databases:
+
+```typescript copy
+const store = new DuckDBVector({
+  id: "private-rag",
+  path: "./confidential.duckdb",
+  dimensions: 1536,
+});
+```
+
+### Development and Testing
+
+Rapidly prototype vector search features with zero infrastructure:
+
+```typescript copy
+const store = new DuckDBVector({
+  id: "dev-store",
+  path: ":memory:", // Fast in-memory for tests
+});
+```
+
+## Related
+
+- [Metadata Filters](../rag/metadata-filters)
+- [DuckDB Documentation](https://duckdb.org/docs/)
+
+
+
+---
+title: "Reference: ElasticSearch Vector Store | Vectors"
+description: Documentation for the ElasticSearchVector class in Mastra, which provides vector search using ElasticSearch.
+---
+
+# ElasticSearch Vector Store
+[EN] Source: https://mastra.ai/en/reference/vectors/elasticsearch
+
+The ElasticSearchVector class provides vector search using [ElasticSearch](https://www.elastic.co/elasticsearch/) with its `dense_vector` field type and k-NN search capabilities.
+It's part of the `@mastra/elasticsearch` package.
+
+## Installation
+
+```bash copy
+npm install @mastra/elasticsearch@beta
+```
+
+## Usage
+
+```typescript copy showLineNumbers
+import { ElasticSearchVector } from "@mastra/elasticsearch";
+
+const store = new ElasticSearchVector({
+  url: process.env.ELASTICSEARCH_URL,
+});
+
+// Create an index
+await store.createIndex({
+  indexName: "my-collection",
+  dimension: 1536,
+});
+
+// Add vectors with metadata
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const metadata = [
+  { text: "first document", category: "A" },
+  { text: "second document", category: "B" }
+];
+await store.upsert({
+  indexName: "my-collection",
+  vectors,
+  metadata,
+});
+
+// Query similar vectors
+const results = await store.query({
+  indexName: "my-collection",
+  queryVector: [0.1, 0.2, ...],
+  topK: 10,
+  filter: { category: "A" },
+});
+```
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description: "ElasticSearch connection URL (e.g., 'http://localhost:9200')",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+Creates a new index with the specified configuration.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
+  ]}
+/>
+
+### upsert()
+
+Adds or updates vectors and their metadata in the index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to insert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+Searches for similar vectors with optional metadata filtering.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to search in",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors for",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vector data in results",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+Gets information about an index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+Deletes an index and all its data.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Lists all vector indexes.
+
+Returns: `Promise<string[]>`
+
+### updateVector()
+
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "ID of the vector to update (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update data containing vector and/or metadata",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "New vector data",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "New metadata",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+Deletes a single vector by its ID.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vectors to delete",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Array of vector IDs to delete (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+    },
+  ]}
+/>
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
 
 ## Related
 
@@ -93490,6 +95172,50 @@ const restartedResult = await run.restart();
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
   ]}
@@ -93609,6 +95335,50 @@ if (result.status === "suspended") {
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -93758,6 +95528,50 @@ const result = await run.start({
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
     {
@@ -93870,14 +95684,14 @@ if (result.status === "suspended") {
     },
     {
       name: "stream",
-      type: "(options?: StreamOptions) => Promise<StreamResult>",
-      description: "Monitors workflow execution as a stream of events",
+      type: "(options?: StreamOptions) => MastraWorkflowStream",
+      description: "Monitors workflow execution as a stream of events with enhanced streaming features",
       required: true,
     },
     {
-      name: "streamVNext",
-      type: "(options?: StreamOptions) => MastraWorkflowStream",
-      description: "Enables real-time streaming with enhanced features",
+      name: "resumeStream",
+      type: "(options?: ResumeStreamOptions) => MastraWorkflowStream",
+      description: "Resumes a suspended workflow with streaming support",
       required: true,
     },
     {
@@ -93928,6 +95742,7 @@ A workflow run's `status` indicates its current execution state. The possible va
 - [Run.resume()](./run-methods/resume)
 - [Run.cancel()](./run-methods/cancel)
 - [Run.restart()](./run-methods/restart)
+- [Run.stream()](/docs/v1/streaming/workflow-streaming)
 
 
 ---

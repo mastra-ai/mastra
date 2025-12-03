@@ -9,6 +9,7 @@ import { formatDate } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/ds/components/Badge';
 import Spinner from '@/components/ui/spinner';
+import { useInView } from '@/hooks';
 
 export interface WorkflowRunListProps {
   workflowId: string;
@@ -17,9 +18,9 @@ export interface WorkflowRunListProps {
 
 export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => {
   const { Link, paths } = useLinkComponent();
-  const { isLoading, data: runs } = useWorkflowRuns(workflowId);
+  const { isLoading, data: runs, setEndOfListElement, isFetchingNextPage } = useWorkflowRuns(workflowId);
 
-  const actualRuns = runs?.runs || [];
+  const actualRuns = runs || [];
 
   if (isLoading) {
     return (
@@ -71,6 +72,15 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
           ))}
         </ThreadList>
       </Threads>
+
+      {isFetchingNextPage && (
+        <div className="flex justify-center items-center">
+          <Icon>
+            <Spinner />
+          </Icon>
+        </div>
+      )}
+      <div ref={setEndOfListElement} />
     </div>
   );
 };

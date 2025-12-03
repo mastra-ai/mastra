@@ -179,6 +179,24 @@ If your code depends on non-optional types, add runtime checks or provide defaul
 
 ## Removed
 
+### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
+
+The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()` methods have been removed. These methods are now the standard implementation with updated event structures and return types.
+
+To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
+
+See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-stream-vnext .
+```
+
+:::
+
 ### Legacy workflows export
 
 The `./workflows/legacy` export path has been removed from `@mastra/core`. Legacy workflows are no longer supported.

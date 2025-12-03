@@ -1422,6 +1422,277 @@ describe('LangfuseExporter', () => {
     });
   });
 
+  describe('Tags Support', () => {
+    it('should include tags in trace payload for root spans with tags', async () => {
+      const rootSpanWithTags = createMockSpan({
+        id: 'root-with-tags',
+        name: 'tagged-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+        metadata: { userId: 'user-456' },
+        tags: ['production', 'experiment-v2', 'user-request'],
+      });
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanWithTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should create Langfuse trace with tags
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: 'root-with-tags',
+        name: 'tagged-agent',
+        userId: 'user-456',
+        metadata: {
+          agentId: 'agent-123',
+          spanType: 'agent_run',
+        },
+        tags: ['production', 'experiment-v2', 'user-request'],
+      });
+    });
+
+    it('should not include tags in trace payload when tags array is empty', async () => {
+      const rootSpanEmptyTags = createMockSpan({
+        id: 'root-empty-tags',
+        name: 'agent-no-tags',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+        tags: [],
+      });
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanEmptyTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should create Langfuse trace without tags property
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: 'root-empty-tags',
+        name: 'agent-no-tags',
+        metadata: {
+          agentId: 'agent-123',
+          spanType: 'agent_run',
+        },
+      });
+      // Verify tags is not in the call
+      const traceCall = mockLangfuseClient.trace.mock.calls[0][0];
+      expect(traceCall.tags).toBeUndefined();
+    });
+
+    it('should not include tags in trace payload when tags is undefined', async () => {
+      const rootSpanNoTags = createMockSpan({
+        id: 'root-no-tags',
+        name: 'agent-undefined-tags',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123' },
+      });
+      // tags is undefined by default
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpanNoTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should create Langfuse trace without tags property
+      const traceCall = mockLangfuseClient.trace.mock.calls[0][0];
+      expect(traceCall.tags).toBeUndefined();
+    });
+
+    it('should include tags with workflow spans', async () => {
+      const workflowSpanWithTags = createMockSpan({
+        id: 'workflow-with-tags',
+        name: 'data-processing-workflow',
+        type: SpanType.WORKFLOW_RUN,
+        isRoot: true,
+        attributes: { workflowId: 'wf-123' },
+        tags: ['batch-processing', 'priority-high'],
+      });
+
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: workflowSpanWithTags,
+      };
+
+      await exporter.exportTracingEvent(event);
+
+      // Should create Langfuse trace with tags
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'workflow-with-tags',
+          name: 'data-processing-workflow',
+          tags: ['batch-processing', 'priority-high'],
+        }),
+      );
+    });
+
+    it('should not include tags for child spans (only root spans get tags)', async () => {
+      // First create a root span with tags
+      const rootSpan = createMockSpan({
+        id: 'root-span-id',
+        name: 'root-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        tags: ['root-tag'],
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Clear mock to check child span call
+      mockLangfuseClient.trace.mockClear();
+      mockSpan.span.mockClear();
+
+      // Create child span (should not have tags even if we set them)
+      // Child spans should not have tags set by the system
+      // but let's verify the exporter handles it correctly even if accidentally set
+      const childSpan = createMockSpan({
+        id: 'child-span-id',
+        name: 'child-tool',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'calculator' },
+        tags: ['should-not-appear'],
+      });
+      childSpan.traceId = 'root-span-id';
+      childSpan.parentSpanId = 'root-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: childSpan,
+      });
+
+      // Should not create new trace for child spans
+      expect(mockLangfuseClient.trace).not.toHaveBeenCalled();
+
+      // Span should be created on the parent span, not the trace
+      expect(mockSpan.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'child-span-id',
+          name: 'child-tool',
+        }),
+      );
+      // The span call should not include tags (tags are only in trace payload)
+      const spanCall = mockSpan.span.mock.calls[0][0];
+      expect(spanCall.tags).toBeUndefined();
+    });
+  });
+
+  describe('Time to First Token (TTFT) Support', () => {
+    it('should include completionStartTime in generation payload for streaming responses', async () => {
+      // Create a streaming MODEL_GENERATION span with completionStartTime
+      const requestStartTime = new Date('2024-01-15T10:00:00.000Z');
+      const firstTokenTime = new Date('2024-01-15T10:00:00.150Z'); // 150ms later
+
+      const llmSpan = createMockSpan({
+        id: 'llm-streaming-ttft',
+        name: 'gpt-4-streaming',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+          streaming: true,
+          completionStartTime: firstTokenTime, // When first token was received
+        },
+      });
+      llmSpan.startTime = requestStartTime;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Verify completionStartTime is passed to Langfuse for TTFT calculation
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-streaming-ttft',
+          name: 'gpt-4-streaming',
+          startTime: requestStartTime,
+          completionStartTime: firstTokenTime,
+          model: 'gpt-4',
+        }),
+      );
+    });
+
+    it('should not include completionStartTime when not provided (non-streaming)', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-non-streaming',
+        name: 'gpt-4-generate',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+          streaming: false,
+          // No completionStartTime for non-streaming requests
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      const generationCall = mockTrace.generation.mock.calls[0][0];
+      expect(generationCall.completionStartTime).toBeUndefined();
+    });
+
+    it('should include completionStartTime when updating generation span with first token timing', async () => {
+      const requestStartTime = new Date('2024-01-15T10:00:00.000Z');
+      const firstTokenTime = new Date('2024-01-15T10:00:00.200Z'); // 200ms TTFT
+
+      // First, start the span without completionStartTime
+      const llmSpan = createMockSpan({
+        id: 'llm-update-ttft',
+        name: 'claude-streaming',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'claude-3-sonnet',
+          provider: 'anthropic',
+          streaming: true,
+        },
+      });
+      llmSpan.startTime = requestStartTime;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Then update with completionStartTime when first token arrives
+      llmSpan.attributes = {
+        ...llmSpan.attributes,
+        completionStartTime: firstTokenTime,
+      } as any;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: llmSpan,
+      });
+
+      // Verify the update includes completionStartTime
+      expect(mockGeneration.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          completionStartTime: firstTokenTime,
+        }),
+      );
+    });
+  });
+
   describe('Shutdown', () => {
     it('should shutdown Langfuse client and clear maps', async () => {
       // Add some data to internal maps
@@ -1465,6 +1736,7 @@ function createMockSpan({
   input,
   output,
   errorInfo,
+  tags,
 }: {
   id: string;
   name: string;
@@ -1475,6 +1747,7 @@ function createMockSpan({
   input?: any;
   output?: any;
   errorInfo?: any;
+  tags?: string[];
 }): AnyExportedSpan {
   return {
     id,
@@ -1485,6 +1758,7 @@ function createMockSpan({
     input,
     output,
     errorInfo,
+    tags,
     startTime: new Date(),
     endTime: undefined,
     traceId: isRoot ? id : 'parent-trace-id',

@@ -510,7 +510,8 @@
         "deepseek-ai/DeepSeek-V3-0324",
         "deepseek-ai/DeepSeek-V3.1",
         "deepseek-ai/DeepSeek-V3.1-Terminus",
-        "deepseek-ai/DeepSeek-V3.2-Exp",
+        "deepseek-ai/DeepSeek-V3.2",
+        "deepseek-ai/DeepSeek-V3.2-Speciale",
         "meituan-longcat/LongCat-Flash-Chat-FP8",
         "microsoft/MAI-DS-R1-FP8",
         "moonshotai/Kimi-K2-Instruct-0905",
@@ -520,6 +521,7 @@
         "rednote-hilab/dots.ocr",
         "tngtech/DeepSeek-R1T-Chimera",
         "tngtech/DeepSeek-TNG-R1T2-Chimera",
+        "tngtech/TNG-R1T-Chimera",
         "unsloth/Mistral-Nemo-Instruct-2407",
         "unsloth/Mistral-Small-24B-Instruct-2501",
         "unsloth/gemma-3-12b-it",
@@ -560,6 +562,15 @@
         "kimi-k2-thinking"
       ],
       "docUrl": "https://docs.agentrouter.org",
+      "gateway": "models.dev"
+    },
+    "kimi-for-coding": {
+      "url": "https://api.kimi.com/coding/v1",
+      "apiKeyEnvVar": "KIMI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Kimi For Coding",
+      "models": ["kimi-k2-thinking"],
+      "docUrl": "https://www.kimi.com/coding/docs/en/third-party-agents.html",
       "gateway": "models.dev"
     },
     "cortecs": {
@@ -1005,6 +1016,7 @@
         "deepseek/deepseek-v3-base:free",
         "deepseek/deepseek-v3.1-terminus",
         "deepseek/deepseek-v3.1-terminus:exacto",
+        "deepseek/deepseek-v3.2",
         "featherless/qwerky-72b",
         "google/gemini-2.0-flash-001",
         "google/gemini-2.0-flash-exp:free",
@@ -2029,7 +2041,8 @@
       "deepseek-ai/DeepSeek-V3-0324",
       "deepseek-ai/DeepSeek-V3.1",
       "deepseek-ai/DeepSeek-V3.1-Terminus",
-      "deepseek-ai/DeepSeek-V3.2-Exp",
+      "deepseek-ai/DeepSeek-V3.2",
+      "deepseek-ai/DeepSeek-V3.2-Speciale",
       "meituan-longcat/LongCat-Flash-Chat-FP8",
       "microsoft/MAI-DS-R1-FP8",
       "moonshotai/Kimi-K2-Instruct-0905",
@@ -2039,6 +2052,7 @@
       "rednote-hilab/dots.ocr",
       "tngtech/DeepSeek-R1T-Chimera",
       "tngtech/DeepSeek-TNG-R1T2-Chimera",
+      "tngtech/TNG-R1T-Chimera",
       "unsloth/Mistral-Nemo-Instruct-2407",
       "unsloth/Mistral-Small-24B-Instruct-2501",
       "unsloth/gemma-3-12b-it",
@@ -2070,6 +2084,7 @@
       "gpt-5.1",
       "kimi-k2-thinking"
     ],
+    "kimi-for-coding": ["kimi-k2-thinking"],
     "cortecs": [
       "claude-4-5-sonnet",
       "claude-sonnet-4",
@@ -2385,6 +2400,7 @@
       "deepseek/deepseek-v3-base:free",
       "deepseek/deepseek-v3.1-terminus",
       "deepseek/deepseek-v3.1-terminus:exacto",
+      "deepseek/deepseek-v3.2",
       "featherless/qwerky-72b",
       "google/gemini-2.0-flash-001",
       "google/gemini-2.0-flash-exp:free",
