@@ -120,8 +120,8 @@ describe('Base64 Images with Threads - Issue #10480', () => {
     const streamModel = new MockLanguageModelV2({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
-          { type: 'text-delta', id: '1', delta: 'I see ' },
-          { type: 'text-delta', id: '2', delta: 'the image' },
+          { type: 'text-delta', id: 'text-1', delta: 'I see ' },
+          { type: 'text-delta', id: 'text-2', delta: 'the image' },
           {
             type: 'finish',
             id: '3',

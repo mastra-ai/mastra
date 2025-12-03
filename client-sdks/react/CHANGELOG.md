@@ -1,5 +1,14 @@
 # @mastra/react-hooks
 
+## 0.1.0-beta.6
+
+### Patch Changes
+
+- Adjust the types to accept tracingOptions ([#10742](https://github.com/mastra-ai/mastra/pull/10742))
+
+- Updated dependencies [[`6edf340`](https://github.com/mastra-ai/mastra/commit/6edf3402f6a46ee8def2f42a2287785251fbffd6), [`ad7e8f1`](https://github.com/mastra-ai/mastra/commit/ad7e8f16ac843cbd16687ad47b66ba96bcffe111), [`e1b7118`](https://github.com/mastra-ai/mastra/commit/e1b7118f42ca0a97247afc75e57dcd5fdf987752), [`441c7b6`](https://github.com/mastra-ai/mastra/commit/441c7b6665915cfa7fd625fded8c0f518530bf10), [`e849603`](https://github.com/mastra-ai/mastra/commit/e849603a596269069f58a438b98449ea2770493d)]:
+  - @mastra/client-js@1.0.0-beta.6
+
 ## 0.1.0-beta.5
 
 ### Patch Changes
