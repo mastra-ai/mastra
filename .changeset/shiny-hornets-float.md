@@ -13,6 +13,11 @@ This change adds support for the `tracingOptions.tags` feature to the OpenTeleme
 - **OtelBridge**: Tags flow through the SpanConverter and are included in native OTEL spans as `mastra.tags`
 - **ArizeExporter**: Tags are mapped to the native OpenInference `tag.tags` semantic convention
 
+**Implementation Details:**
+- Tags are only included on root spans (by design)
+- Tags are stored as JSON-stringified arrays for maximum backend compatibility (many OTEL backends have limited native array support)
+- Empty or undefined tag arrays are not included in span attributes
+
 **Usage:**
 ```typescript
 const result = await agent.generate({
