@@ -1,0 +1,21 @@
+{
+  "name": "@internal/e2e-shared",
+  "version": "0.0.0-e2e-test-20251203043548",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./setup": "./setup/index.ts",
+    "./utils": "./utils/index.ts"
+  },
+  "dependencies": {
+    "get-port": "^7.1.0",
+    "globby": "^14.1.0",
+    "verdaccio": "^6.2.0",
+    "verdaccio-auth-memory": "^10.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.17",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,8 +1,0 @@
-{
-  "name": "local-registry-setup",
-  "version": "0.0.1",
-  "private": true,
-  "main": "index.js",
-  "type": "module",
-  "dependencies": {}
-}
