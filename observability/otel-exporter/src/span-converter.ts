@@ -148,6 +148,13 @@ export class SpanConverter {
       attributes['mastra.parent_span_id'] = Span.parentSpanId;
     }
 
+    // Add tags for root spans (only root spans can have tags)
+    // Tags are JSON-stringified for maximum backend compatibility
+    // While OTEL spec supports arrays, many backends (Jaeger, Zipkin, Tempo) don't fully support them
+    if (Span.isRootSpan && Span.tags?.length) {
+      attributes['mastra.tags'] = JSON.stringify(Span.tags);
+    }
+
     // Handle input/output based on span type
     // Always add input/output for Laminar compatibility
     if (Span.input !== undefined) {

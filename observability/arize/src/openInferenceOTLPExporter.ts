@@ -91,6 +91,10 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
         if (metadataPayload) {
           processedAttributes[SemanticConventions.METADATA] = metadataPayload;
         }
+        // Map mastra.tags to OpenInference native tag.tags convention (tags are only on root spans)
+        if (attributes['mastra.tags']) {
+          processedAttributes[SemanticConventions.TAG_TAGS] = attributes['mastra.tags'];
+        }
         mutableSpan.attributes = processedAttributes;
       }
 

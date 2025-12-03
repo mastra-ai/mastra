@@ -492,7 +492,12 @@ const result = await run.start({
 #### How Tags Work
 
 - **Root span only**: Tags are applied only to the root span of a trace (the agent run or workflow run span)
-- **Platform-specific**: Tags appear in Braintrust and Langfuse dashboards for filtering and searching
+- **Widely supported**: Tags are supported by most exporters for filtering and searching traces:
+  - **Braintrust** - Native `tags` field
+  - **Langfuse** - Native `tags` field on traces
+  - **ArizeExporter** - `tag.tags` OpenInference attribute
+  - **OtelExporter** - `mastra.tags` span attribute
+  - **OtelBridge** - `mastra.tags` span attribute
 - **Combinable with metadata**: You can use both `tags` and `metadata` in the same `tracingOptions`
 
 ```ts showLineNumbers copy
