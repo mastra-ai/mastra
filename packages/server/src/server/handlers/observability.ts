@@ -50,20 +50,20 @@ export async function listScoresBySpan({
 /**
  * GET /api/observability/traces
  *
- * Query parameter format:
- * - Simple strings: ?entityId=abc&userId=user_123
+ * Query parameter format (flattened for readability):
  * - Pagination: ?page=0&perPage=20
- * - Date range: ?dateRange.start=2024-01-01T00:00:00Z&dateRange.end=2024-12-31T23:59:59Z
- * - Tags (comma-separated): ?tags=prod,v2
- * - Nested objects (dot notation): ?metadata.key1=val1&metadata.key2=val2
+ * - Simple filters: ?entityType=agent&entityId=abc&status=success
+ * - Date range: ?dateRange[start]=2024-01-01T00:00:00Z&dateRange[end]=...
+ * - Arrays: ?tags[0]=prod&tags[1]=v2
+ * - Nested objects: ?metadata[key1]=val1&metadata[key2]=val2
  * - Booleans: ?hasChildError=true
  */
 export const GET_TRACES_PAGINATED_ROUTE = createRoute({
   method: 'GET',
   path: '/api/observability/traces',
   responseType: 'json',
-  // No queryParamSchema - raw params are passed through and parsed manually
-  // to support dot notation for nested objects and comma-separated tags
+  // No queryParamSchema - raw params are parsed with qs.parse + Zod
+  // to handle bracket notation for nested objects and arrays
   responseSchema: getAITracesPaginatedResponseSchema,
   summary: 'Get AI traces',
   description:

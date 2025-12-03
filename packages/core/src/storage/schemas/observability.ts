@@ -1,3 +1,4 @@
+import qs from 'qs';
 import { z } from 'zod';
 
 import { SpanType } from '../../observability';
@@ -31,21 +32,23 @@ export const spanTypeSchema = z.nativeEnum(SpanType).describe('Span type classif
 
 /**
  * Pagination arguments for list queries (page and perPage only)
+ * Uses z.coerce to handle string → number conversion from query params
  */
 export const paginationArgsSchema = z
   .object({
-    page: z.number().int().min(0).optional().describe('Zero-indexed page number'),
-    perPage: z.number().int().min(1).optional().describe('Number of items per page'),
+    page: z.coerce.number().int().min(0).optional().describe('Zero-indexed page number'),
+    perPage: z.coerce.number().int().min(1).optional().describe('Number of items per page'),
   })
   .describe('Pagination options for list queries');
 
 /**
  * Date range for filtering by time
+ * Uses z.coerce to handle ISO string → Date conversion from query params
  */
 export const dateRangeSchema = z
   .object({
-    start: z.date().optional().describe('Start of date range (inclusive)'),
-    end: z.date().optional().describe('End of date range (inclusive)'),
+    start: z.coerce.date().optional().describe('Start of date range (inclusive)'),
+    end: z.coerce.date().optional().describe('End of date range (inclusive)'),
   })
   .describe('Date range filter for timestamps');
 
@@ -84,15 +87,19 @@ export const tracesFilterSchema = z
 
     // Span data filters
     metadata: z.record(z.unknown()).optional().describe('Key-value matching on user-defined metadata'),
-    tags: z.array(z.string()).optional().describe('Match traces with any of these tags'),
+    tags: z
+      .preprocess(
+        val => (typeof val === 'string' ? val.split(',').filter(t => t.trim() !== '') : val),
+        z.array(z.string()).optional(),
+      )
+      .describe('Match traces with any of these tags'),
     scope: z.record(z.unknown()).optional().describe('Key-value matching on Mastra package versions'),
     versionInfo: z.record(z.unknown()).optional().describe('Key-value matching on app version info'),
 
     // Derived status filters
     status: spanStatusSchema.optional().describe('Filter by root span status'),
     hasChildError: z
-      .boolean()
-      .optional()
+      .preprocess(val => (val === 'true' ? true : val === 'false' ? false : val), z.boolean().optional())
       .describe('True = any child span in the trace has an error (even if root succeeded)'),
   })
   .describe('Filters for querying traces');
@@ -123,14 +130,16 @@ export type TracesPaginatedArg = z.infer<typeof tracesPaginatedArgSchema>;
 // ============================================================================
 
 /**
- * Query parameter format (URL):
+ * Query parameter format (URL) - using qs bracket notation:
  *
- * Simple strings:     ?entityId=abc&userId=user_123
- * Pagination:         ?page=0&perPage=20
- * Date range:         ?dateRange.start=2024-01-01T00:00:00Z&dateRange.end=2024-12-31T23:59:59Z
- * Arrays:             ?tag=prod&tag=v2 (repeated params)
- * Nested objects:     ?metadata.key1=val1&metadata.key2=val2 (dot notation)
- * Booleans:           ?hasChildError=true
+ * Simple strings:     ?filters[entityId]=abc&filters[userId]=user_123
+ * Pagination:         ?pagination[page]=0&pagination[perPage]=20
+ * Date range:         ?filters[dateRange][start]=2024-01-01T00:00:00Z
+ * Arrays:             ?filters[tags][0]=prod&filters[tags][1]=v2
+ * Nested objects:     ?filters[metadata][key1]=val1&filters[metadata][key2]=val2
+ * Booleans:           ?filters[hasChildError]=true
+ *
+ * The qs library handles the bracket notation bidirectionally.
  */
 
 interface ValidationError {
@@ -149,28 +158,120 @@ interface ParseErrorResult {
 }
 
 /**
- * Transforms raw query parameters into the shape expected by tracesPaginatedArgSchema,
- * then validates using Zod.
+ * Simple scalar filter keys that go at root level (not nested)
+ */
+const SCALAR_FILTER_KEYS = [
+  'spanType',
+  'entityType',
+  'entityId',
+  'entityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'source',
+  'serviceName',
+  'deploymentId',
+  'status',
+  'hasChildError',
+] as const;
+
+/**
+ * Parses query params into TracesPaginatedArg using qs + Zod validation.
  *
- * Handles:
- * - Dot notation for nested objects: metadata.key=val → { filters: { metadata: { key: "val" } } }
- * - Comma-separated tags: tags=a,b → { filters: { tags: ["a", "b"] } }
- * - Type coercion: page/perPage strings → numbers, date strings → Date objects, etc.
+ * Accepts either:
+ * - A query string: "page=0&perPage=20&entityType=agent&dateRange[start]=..."
+ * - A Record from Hono/Express: { 'page': '0', 'entityType': 'agent', 'dateRange[start]': '...' }
  *
- * @param params - Raw query parameters from URL (Record<string, string>)
+ * Query format (flattened):
+ * - page, perPage: Simple scalars at root level
+ * - entityType, entityId, status, etc.: Simple scalars at root level
+ * - dateRange[start], dateRange[end]: Bracket notation for nested object
+ * - tags[0], tags[1]: Bracket notation for arrays
+ * - metadata[key]: Bracket notation for key-value objects
+ *
+ * @param input - Query string or Record<string, string> from request
  * @returns ParseResult with validated data or ParseErrorResult with all Zod errors
  */
 export function parseTracesQueryParams(
-  params: Record<string, string | string[] | undefined>,
+  input: string | Record<string, string | string[] | undefined>,
 ): ParseResult | ParseErrorResult {
-  // Step 1: Transform raw string params into structured object
-  const transformed = transformQueryParams(params);
+  // Step 1: Convert input to query string if needed
+  let queryString: string;
+  if (typeof input === 'string') {
+    queryString = input;
+  } else {
+    // Convert Record to query string (Hono/Express give us { 'page': '0', 'entityType': 'agent' })
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== undefined) {
+        if (Array.isArray(value)) {
+          value.forEach(v => params.append(key, v));
+        } else {
+          params.append(key, value);
+        }
+      }
+    }
+    queryString = params.toString();
+  }
 
-  // Step 2: Validate with Zod schema
-  const result = tracesPaginatedArgSchema.safeParse(transformed);
+  // Step 2: Parse query string with qs (handles bracket notation for nested objects)
+  const parsed = qs.parse(queryString, {
+    ignoreQueryPrefix: true, // Handles leading ? if present
+    allowDots: false, // We use bracket notation, not dots
+    depth: 2, // dateRange[start], metadata[key], tags[0]
+  }) as Record<string, unknown>;
+
+  // Step 3: Restructure - move params into proper schema structure
+  const restructured: Record<string, unknown> = {};
+
+  // Pagination
+  if (parsed.page !== undefined || parsed.perPage !== undefined) {
+    restructured.pagination = {
+      ...(parsed.page !== undefined && { page: parsed.page }),
+      ...(parsed.perPage !== undefined && { perPage: parsed.perPage }),
+    };
+  }
+
+  // Filters - collect all filter fields
+  const filters: Record<string, unknown> = {};
+
+  // Simple scalar filters (at root level in query string)
+  for (const key of SCALAR_FILTER_KEYS) {
+    if (parsed[key] !== undefined) {
+      filters[key] = parsed[key];
+    }
+  }
+
+  // Nested filters (already parsed by qs into objects/arrays)
+  if (parsed.dateRange !== undefined) {
+    filters.dateRange = parsed.dateRange;
+  }
+  if (parsed.tags !== undefined) {
+    filters.tags = parsed.tags;
+  }
+  if (parsed.metadata !== undefined) {
+    filters.metadata = parsed.metadata;
+  }
+  if (parsed.scope !== undefined) {
+    filters.scope = parsed.scope;
+  }
+  if (parsed.versionInfo !== undefined) {
+    filters.versionInfo = parsed.versionInfo;
+  }
+
+  if (Object.keys(filters).length > 0) {
+    restructured.filters = filters;
+  }
+
+  // Step 4: Validate with Zod schema (handles type coercion)
+  const result = tracesPaginatedArgSchema.safeParse(restructured);
 
   if (!result.success) {
-    // Convert Zod errors to our ValidationError format
     const errors: ValidationError[] = result.error.issues.map(issue => ({
       field: issue.path.join('.'),
       message: issue.message,
@@ -181,176 +282,91 @@ export function parseTracesQueryParams(
   return { success: true, data: result.data };
 }
 
-/**
- * Transforms raw query params into the structure expected by tracesPaginatedArgSchema.
- * Handles dot notation, comma-separated arrays, and type coercion.
- */
-function transformQueryParams(params: Record<string, string | string[] | undefined>): Record<string, unknown> {
-  const filters: Record<string, unknown> = {};
-  const pagination: Record<string, unknown> = {};
-  const nestedObjects: Record<string, Record<string, string>> = {};
-
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === '') continue;
-    const val = Array.isArray(value) ? value[0] : value;
-    if (val === undefined) continue;
-
-    // Pagination fields
-    if (key === 'page') {
-      const num = parseInt(val, 10);
-      if (!isNaN(num)) pagination.page = num;
-      continue;
-    }
-    if (key === 'perPage') {
-      const num = parseInt(val, 10);
-      if (!isNaN(num)) pagination.perPage = num;
-      continue;
-    }
-
-    // Tags - comma-separated: tags=a,b → ["a", "b"]
-    if (key === 'tags') {
-      filters.tags = val
-        .split(',')
-        .map(t => t.trim())
-        .filter(t => t !== '');
-      continue;
-    }
-
-    // Boolean: hasChildError
-    if (key === 'hasChildError') {
-      if (val === 'true') filters.hasChildError = true;
-      else if (val === 'false') filters.hasChildError = false;
-      continue;
-    }
-
-    // Dot notation: dateRange.start, metadata.key, etc.
-    if (key.includes('.')) {
-      const parts = key.split('.');
-      const prefix = parts[0]!;
-      const nestedKey = parts.slice(1).join('.');
-
-      // Special handling for dateRange - convert to Date
-      if (prefix === 'dateRange') {
-        if (!filters.dateRange) filters.dateRange = {};
-        const date = new Date(val);
-        if (!isNaN(date.getTime())) {
-          (filters.dateRange as Record<string, Date>)[nestedKey] = date;
-        }
-        continue;
-      }
-
-      // Other nested objects (metadata, scope, versionInfo)
-      if (!nestedObjects[prefix]) nestedObjects[prefix] = {};
-      nestedObjects[prefix][nestedKey] = val;
-      continue;
-    }
-
-    // All other fields go into filters
-    filters[key] = val;
-  }
-
-  // Merge nested objects into filters
-  for (const [prefix, nested] of Object.entries(nestedObjects)) {
-    filters[prefix] = nested;
-  }
-
-  // Build the final structure
-  const result: Record<string, unknown> = {};
-  if (Object.keys(pagination).length > 0) result.pagination = pagination;
-  if (Object.keys(filters).length > 0) result.filters = filters;
-
-  return result;
-}
-
 // ============================================================================
 // Query Parameter Serialization (Client-Side)
 // ============================================================================
 
 /**
- * Serializes TracesPaginatedArg to URLSearchParams for HTTP requests.
+ * Serializes TracesPaginatedArg to a query string using qs.stringify.
  *
- * Handles:
- * - Flattening nested objects with dot notation: { metadata: { key: "val" } } → metadata.key=val
- * - Expanding arrays to repeated params: { tags: ["a", "b"] } → tag=a&tag=b
- * - Converting dates to ISO strings
- * - Converting booleans to "true"/"false"
+ * Query format (flattened for readability):
+ * - page, perPage: Simple scalars at root level
+ * - entityType, entityId, status, etc.: Simple scalars at root level
+ * - dateRange[start], dateRange[end]: Bracket notation for nested object
+ * - tags[0], tags[1]: Bracket notation for arrays
+ * - metadata[key]: Bracket notation for key-value objects
+ *
+ * Examples:
+ * - { pagination: { page: 0 } } → page=0
+ * - { filters: { entityType: "agent" } } → entityType=agent
+ * - { filters: { tags: ["a", "b"] } } → tags[0]=a&tags[1]=b
+ * - { filters: { dateRange: { start: Date } } } → dateRange[start]=2024-01-01T00:00:00.000Z
  *
  * @param args - The TracesPaginatedArg to serialize
- * @returns URLSearchParams ready to append to URL
+ * @returns Query string (without leading ?)
  */
-export function serializeTracesParams(args: TracesPaginatedArg): URLSearchParams {
-  const searchParams = new URLSearchParams();
-  const { pagination, filters } = args;
+export function serializeTracesParams(args: TracesPaginatedArg): string {
+  const flattened = prepareForSerialization(args);
 
-  // Pagination
-  if (pagination?.page !== undefined) {
-    searchParams.set('page', String(pagination.page));
+  return qs.stringify(flattened, {
+    encode: true, // URL-encode values
+    skipNulls: true, // Don't include null/undefined values
+    arrayFormat: 'indices', // tags[0]=a&tags[1]=b
+  });
+}
+
+/**
+ * Prepares TracesPaginatedArg for qs.stringify:
+ * - Flattens pagination to root level (page, perPage)
+ * - Flattens simple scalar filters to root level
+ * - Keeps nested structures (dateRange, tags, metadata, etc.) for bracket notation
+ * - Converts Date objects to ISO strings
+ */
+function prepareForSerialization(args: TracesPaginatedArg): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  // Flatten pagination to root level
+  if (args.pagination?.page !== undefined) {
+    result.page = args.pagination.page;
   }
-  if (pagination?.perPage !== undefined) {
-    searchParams.set('perPage', String(pagination.perPage));
-  }
-
-  if (!filters) return searchParams;
-
-  // Date range - use dot notation
-  if (filters.dateRange) {
-    if (filters.dateRange.start) {
-      searchParams.set('dateRange.start', filters.dateRange.start.toISOString());
-    }
-    if (filters.dateRange.end) {
-      searchParams.set('dateRange.end', filters.dateRange.end.toISOString());
-    }
-  }
-
-  // Simple string filters
-  const stringFilters = [
-    'spanType',
-    'entityType',
-    'entityId',
-    'entityName',
-    'userId',
-    'organizationId',
-    'resourceId',
-    'runId',
-    'sessionId',
-    'threadId',
-    'requestId',
-    'environment',
-    'source',
-    'serviceName',
-    'deploymentId',
-    'status',
-  ] as const;
-
-  for (const key of stringFilters) {
-    const value = filters[key];
-    if (value !== undefined) {
-      searchParams.set(key, String(value));
-    }
+  if (args.pagination?.perPage !== undefined) {
+    result.perPage = args.pagination.perPage;
   }
 
-  // Tags - comma-separated (tags=a,b,c)
-  if (filters.tags && filters.tags.length > 0) {
-    searchParams.set('tags', filters.tags.join(','));
-  }
-
-  // Nested objects - dot notation (metadata.key=val)
-  const nestedFilters = ['metadata', 'scope', 'versionInfo'] as const;
-  for (const prefix of nestedFilters) {
-    const obj = filters[prefix];
-    if (obj) {
-      for (const [key, value] of Object.entries(obj)) {
-        if (value !== undefined) {
-          searchParams.set(`${prefix}.${key}`, String(value));
-        }
+  if (args.filters) {
+    // Flatten simple scalar filters to root level
+    for (const key of SCALAR_FILTER_KEYS) {
+      const value = args.filters[key];
+      if (value !== undefined) {
+        result[key] = value;
       }
     }
+
+    // Keep nested structures (qs will use bracket notation)
+    // dateRange - convert Date to ISO string
+    if (args.filters.dateRange) {
+      result.dateRange = {
+        ...(args.filters.dateRange.start && { start: args.filters.dateRange.start.toISOString() }),
+        ...(args.filters.dateRange.end && { end: args.filters.dateRange.end.toISOString() }),
+      };
+    }
+
+    // tags - keep as array
+    if (args.filters.tags && args.filters.tags.length > 0) {
+      result.tags = args.filters.tags;
+    }
+
+    // metadata, scope, versionInfo - keep as objects
+    if (args.filters.metadata && Object.keys(args.filters.metadata).length > 0) {
+      result.metadata = args.filters.metadata;
+    }
+    if (args.filters.scope && Object.keys(args.filters.scope).length > 0) {
+      result.scope = args.filters.scope;
+    }
+    if (args.filters.versionInfo && Object.keys(args.filters.versionInfo).length > 0) {
+      result.versionInfo = args.filters.versionInfo;
+    }
   }
 
-  // Boolean
-  if (filters.hasChildError !== undefined) {
-    searchParams.set('hasChildError', String(filters.hasChildError));
-  }
-
-  return searchParams;
+  return result;
 }

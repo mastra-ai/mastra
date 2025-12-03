@@ -6,16 +6,27 @@ This document describes the query parameter format for the `GET /api/observabili
 
 ## Design Goals
 
-1. **Human-readable URLs** - Easy to construct, debug, and share
-2. **Standard conventions** - Follow established patterns used by major APIs
-3. **No JSON in query params** - Avoid URL-encoded JSON blobs
-4. **Simple parsing** - No complex codecs, just standard transforms
+1. **Human-readable URLs** - Simple params as plain scalars, no unnecessary nesting
+2. **Bidirectional serialization** - `qs` library handles stringify and parse
+3. **Bracket notation only when needed** - For genuinely nested structures (dateRange, arrays, maps)
+4. **No JSON in query params** - Avoid URL-encoded JSON blobs
 
 ## Query Parameter Format
 
+Flattened approach:
+
+- **Simple scalars**: At root level (page, perPage, entityType, status, etc.)
+- **Nested objects**: Bracket notation (dateRange, metadata, tags)
+
+### Pagination
+
+```
+?page=0&perPage=20
+```
+
 ### Simple String Filters
 
-Pass directly as query params:
+All simple string filters are at root level:
 
 ```
 ?entityType=agent
@@ -36,200 +47,186 @@ Pass directly as query params:
 &spanType=AGENT_EXECUTOR_RUN
 ```
 
-### Pagination
-
-Numbers are coerced from strings:
-
-```
-?page=0
-&perPage=20
-```
-
 ### Boolean Filters
-
-Use string `true` or `false`:
 
 ```
 ?hasChildError=true
 ```
 
-### Date Range
+### Date Range (nested)
 
-Use dot notation with ISO 8601 datetime strings:
+Uses bracket notation since it has nested start/end:
 
 ```
-?dateRange.start=2024-01-01T00:00:00.000Z
-&dateRange.end=2024-12-31T23:59:59.999Z
+?dateRange[start]=2024-01-01T00:00:00.000Z
+&dateRange[end]=2024-12-31T23:59:59.999Z
 ```
 
 Either `start` or `end` can be omitted for open-ended ranges.
 
-### Array Filters (tags)
+### Array Filters - tags (nested)
 
-Use comma-separated values:
-
-```
-?tags=production,v2,critical
-```
-
-Parsed as: `["production", "v2", "critical"]`
-
-### Nested Object Filters (metadata, scope, versionInfo)
-
-Use dot notation for key-value pairs:
+Uses bracket notation with indices:
 
 ```
-?metadata.customerId=abc123
-&metadata.region=us-east
-&metadata.priority=high
+?tags[0]=production
+&tags[1]=v2
+&tags[2]=critical
 ```
 
-Parsed as: `{ customerId: "abc123", region: "us-east", priority: "high" }`
+Parsed as: `{ tags: ["production", "v2", "critical"] }`
+
+### Key-Value Filters - metadata, scope, versionInfo (nested)
+
+Uses bracket notation for dynamic keys:
+
+```
+?metadata[customerId]=abc123
+&metadata[region]=us-east
+&metadata[priority]=high
+```
+
+Parsed as: `{ metadata: { customerId: "abc123", region: "us-east", priority: "high" } }`
 
 Same pattern for `scope` and `versionInfo`:
 
 ```
-?scope.core=1.0.0
-&scope.memory=1.0.0
-&versionInfo.app=2.0.0
-&versionInfo.gitSha=abc123
+?scope[core]=1.0.0
+&versionInfo[app]=2.0.0
+&versionInfo[gitSha]=abc123
 ```
 
 ## Complete Example
 
 ```
-GET /api/observability/traces?page=0&perPage=20&dateRange.start=2024-01-01T00:00:00.000Z&entityType=agent&entityId=weatherAgent&status=success&tags=production,v2&metadata.customerId=abc123&metadata.region=us-east
+GET /api/observability/traces?page=0&perPage=20&entityType=agent&entityId=weatherAgent&status=success&dateRange[start]=2024-01-01T00:00:00.000Z&tags[0]=production&tags[1]=v2&metadata[customerId]=abc123
 ```
 
+## Parameter Summary
+
+| Parameter       | Type    | Format  | Example                                   |
+| --------------- | ------- | ------- | ----------------------------------------- |
+| `page`          | number  | scalar  | `page=0`                                  |
+| `perPage`       | number  | scalar  | `perPage=20`                              |
+| `entityType`    | string  | scalar  | `entityType=agent`                        |
+| `entityId`      | string  | scalar  | `entityId=weatherAgent`                   |
+| `spanType`      | string  | scalar  | `spanType=AGENT_EXECUTOR_RUN`             |
+| `status`        | string  | scalar  | `status=success`                          |
+| `userId`        | string  | scalar  | `userId=user_123`                         |
+| `hasChildError` | boolean | scalar  | `hasChildError=true`                      |
+| `dateRange`     | object  | bracket | `dateRange[start]=...&dateRange[end]=...` |
+| `tags`          | array   | bracket | `tags[0]=a&tags[1]=b`                     |
+| `metadata`      | object  | bracket | `metadata[key]=value`                     |
+| `scope`         | object  | bracket | `scope[key]=value`                        |
+| `versionInfo`   | object  | bracket | `versionInfo[key]=value`                  |
+
 ## Implementation
+
+### Using the `qs` Library
+
+Both client and server use the `qs` library for consistent handling of nested structures.
 
 ### Server-Side Parsing
 
 The server uses `parseTracesQueryParams()` from `@mastra/core/storage`:
 
-1. **Transform raw params** into the structure expected by `tracesPaginatedArgSchema`:
-   - Split comma-separated tags: `tags=a,b` → `{ filters: { tags: ["a", "b"] } }`
-   - Group dot-notation params: `metadata.key=val` → `{ filters: { metadata: { key: "val" } } }`
-   - Coerce types: strings → numbers, dates, booleans
-2. **Validate with Zod** using the existing `tracesPaginatedArgSchema`
-3. **Return all errors** if validation fails (Zod collects all issues)
+1. **Parse with qs** - Convert bracket notation to nested objects
+2. **Restructure** - Move scalar params into `filters` object, pagination into `pagination`
+3. **Validate with Zod** - Coerce types (strings → numbers, dates, booleans)
+
+```typescript
+export function parseTracesQueryParams(input: string | Record<string, string>): ParseResult {
+  // Parse with qs (handles bracket notation for nested objects)
+  const parsed = qs.parse(queryString, { ignoreQueryPrefix: true, depth: 2 });
+
+  // Restructure: scalar filters at root → filters object
+  // page/perPage → pagination object
+  const restructured = {
+    pagination: { page: parsed.page, perPage: parsed.perPage },
+    filters: {
+      entityType: parsed.entityType,
+      entityId: parsed.entityId,
+      // ... other scalar filters
+      dateRange: parsed.dateRange, // already nested from qs
+      tags: parsed.tags, // already array from qs
+      metadata: parsed.metadata, // already nested from qs
+    },
+  };
+
+  // Validate with Zod (handles type coercion)
+  return tracesPaginatedArgSchema.safeParse(restructured);
+}
+```
 
 ### Client-Side Serialization
 
 The client uses `serializeTracesParams()` from `@mastra/core/storage`:
 
-1. **Flatten nested objects** - `{ filters: { metadata: { key: "val" } } }` → `metadata.key=val`
-2. **Join arrays** - `{ filters: { tags: ["a", "b"] } }` → `tags=a,b`
-3. **Convert types to strings** - Dates to ISO strings, booleans to `"true"`/`"false"`
+```typescript
+export function serializeTracesParams(args: TracesPaginatedArg): string {
+  // Flatten: pagination and scalar filters to root level
+  // Keep nested: dateRange, tags, metadata, scope, versionInfo
+  const flattened = {
+    page: args.pagination?.page,
+    perPage: args.pagination?.perPage,
+    entityType: args.filters?.entityType,
+    entityId: args.filters?.entityId,
+    // ... other scalar filters
+    dateRange: args.filters?.dateRange, // stays nested
+    tags: args.filters?.tags, // stays nested
+    metadata: args.filters?.metadata, // stays nested
+  };
+
+  return qs.stringify(flattened, {
+    encode: true,
+    skipNulls: true,
+    arrayFormat: 'indices', // tags[0]=a&tags[1]=b
+  });
+}
+```
 
 ### Schema
 
-The source of truth is `tracesPaginatedArgSchema` in `@mastra/core/storage/schemas/observability`:
-
-```typescript
-// Core schemas - single source of truth
-export const tracesFilterSchema = z.object({
-  dateRange: dateRangeSchema.optional(),
-  spanType: spanTypeSchema.optional(),
-  entityType: spanEntityTypeSchema.optional(),
-  entityId: z.string().optional(),
-  // ... all other filter fields with proper types
-  tags: z.array(z.string()).optional(),
-  metadata: z.record(z.unknown()).optional(),
-  hasChildError: z.boolean().optional(),
-});
-
-export const tracesPaginatedArgSchema = z.object({
-  filters: tracesFilterSchema.optional(),
-  pagination: paginationArgsSchema.optional(),
-});
-```
+The source of truth is `tracesPaginatedArgSchema` in `@mastra/core/storage/schemas/observability`.
+Uses `z.coerce` for automatic string → type conversion from query params.
 
 ## Error Handling
 
-### Validation Error Collection
-
-When parsing query parameters, **collect all validation errors** before returning a response. Do not fail on the first error - gather all issues so the client can fix them in one iteration.
-
 ### 400 Bad Request Response
 
-If any validation errors occur, return a `400 Bad Request` with all errors combined:
+If validation errors occur, return all errors:
 
 ```json
 {
   "error": "Validation failed",
   "details": [
     {
-      "field": "page",
+      "field": "pagination.page",
       "message": "Expected number, received 'abc'"
     },
     {
-      "field": "dateRange.start",
+      "field": "filters.dateRange.start",
       "message": "Invalid datetime format"
-    },
-    {
-      "field": "status",
-      "message": "Invalid enum value. Expected 'success' | 'error' | 'running', received 'pending'"
     }
   ]
 }
 ```
 
-### Implementation
+## Migration from Dot Notation
 
-Use Zod's built-in error collection - it automatically gathers all validation issues:
+This replaces the previous dot notation format:
 
-```typescript
-const result = tracesQuerySchema.safeParse(preprocessedParams);
+| Old Format            | New Format                       |
+| --------------------- | -------------------------------- |
+| `page=0`              | `page=0` (unchanged)             |
+| `perPage=20`          | `perPage=20` (unchanged)         |
+| `entityType=agent`    | `entityType=agent` (unchanged)   |
+| `entityId=abc`        | `entityId=abc` (unchanged)       |
+| `status=success`      | `status=success` (unchanged)     |
+| `hasChildError=true`  | `hasChildError=true` (unchanged) |
+| `dateRange.start=...` | `dateRange[start]=...`           |
+| `tags=a,b`            | `tags[0]=a&tags[1]=b`            |
+| `metadata.key=val`    | `metadata[key]=val`              |
 
-if (!result.success) {
-  const details = result.error.issues.map(issue => ({
-    field: issue.path.join('.'),
-    message: issue.message,
-  }));
-
-  throw new HTTPException(400, {
-    message: 'Validation failed',
-    details,
-  });
-}
-
-// Proceed with query using result.data
-return storage.getTracesPaginated(result.data);
-```
-
-### Success Response
-
-On successful validation, execute the query and return paginated results:
-
-```json
-{
-  "spans": [...],
-  "pagination": {
-    "page": 0,
-    "perPage": 20,
-    "total": 150,
-    "hasMore": true
-  }
-}
-```
-
-## Migration
-
-### Changes Completed
-
-1. **Reverted zod4 dependency** - Using zod v3 only
-2. **Added `parseTracesQueryParams()`** - Transforms raw query params and validates with Zod
-3. **Added `serializeTracesParams()`** - Serializes `TracesPaginatedArg` to `URLSearchParams`
-4. **Updated server handler** - Uses `parseTracesQueryParams()` with proper error handling
-5. **JS client** - Should use `serializeTracesParams()` for building query strings
-
-### Backward Compatibility
-
-This is a breaking change for the query param format. The previous format used:
-
-- `tags=tag1,tag2` (comma-separated)
-- `metadata={"key":"value"}` (JSON string)
-- `dateRange={"start":"...","end":"..."}` (JSON string)
-
-Clients will need to update to the new format.
+The qs library handles bracket notation for nested structures.
+Simple scalars remain at root level for maximum readability.

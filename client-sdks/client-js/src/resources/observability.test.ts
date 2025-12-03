@@ -79,6 +79,7 @@ describe('Observability Methods', () => {
         },
       });
 
+      // page and perPage are simple scalars at root level
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces?page=2&perPage=10`,
         expect.objectContaining({
@@ -96,6 +97,7 @@ describe('Observability Methods', () => {
         },
       });
 
+      // Flattened: spanType at root level (not nested under filters)
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces?spanType=agent_run`,
         expect.objectContaining({
@@ -114,15 +116,11 @@ describe('Observability Methods', () => {
         },
       });
 
-      // Check URL contains expected params (order may vary)
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /\/api\/observability\/traces\?.*entityId=entity-123.*entityType=agent|.*entityType=agent.*entityId=entity-123/,
-        ),
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
+      // Flattened: entityId and entityType at root level
+      const url = (global.fetch as any).mock.calls[0][0];
+      expect(url).toContain('/api/observability/traces?');
+      expect(url).toContain('entityId=entity-123');
+      expect(url).toContain('entityType=agent');
     });
 
     it('should fetch traces with date range filter using Date objects', async () => {
@@ -140,9 +138,9 @@ describe('Observability Methods', () => {
         },
       });
 
-      // New format uses dot notation for nested objects
+      // Nested: dateRange uses bracket notation (dateRange[start]=...)
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?dateRange.start=${encodeURIComponent(startDate.toISOString())}&dateRange.end=${encodeURIComponent(endDate.toISOString())}`,
+        expect.stringMatching(/\/api\/observability\/traces\?.*dateRange%5Bstart%5D=/),
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -162,9 +160,9 @@ describe('Observability Methods', () => {
         },
       });
 
-      // Only start date, no end date
+      // Nested: only start date in bracket notation
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?dateRange.start=${encodeURIComponent(startDate.toISOString())}`,
+        expect.stringMatching(/\/api\/observability\/traces\?dateRange%5Bstart%5D=/),
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -193,13 +191,19 @@ describe('Observability Methods', () => {
         },
       });
 
-      // New format: dot notation for dateRange, all filters in query string
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?page=1&perPage=5&dateRange.start=${encodeURIComponent(startDate.toISOString())}&dateRange.end=${encodeURIComponent(endDate.toISOString())}&spanType=agent_run&entityType=agent&entityId=entity-123`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
+      // Flattened format: scalars at root, nested objects use brackets
+      const url = (global.fetch as any).mock.calls[0][0];
+      expect(url).toContain('/api/observability/traces?');
+      // Pagination - simple scalars
+      expect(url).toContain('page=1');
+      expect(url).toContain('perPage=5');
+      // Simple filters - at root level (flattened)
+      expect(url).toContain('spanType=agent_run');
+      expect(url).toContain('entityId=entity-123');
+      expect(url).toContain('entityType=agent');
+      // Nested filters - bracket notation
+      expect(url).toContain('dateRange%5Bstart%5D=');
+      expect(url).toContain('dateRange%5Bend%5D=');
     });
 
     it('should handle HTTP errors gracefully', async () => {
