@@ -970,8 +970,8 @@ function runStreamTest(version: 'v1' | 'v2') {
           finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
           stream: convertArrayToReadableStream([
-            { type: 'text-delta', id: '1', delta: 'Hello! ' },
-            { type: 'text-delta', id: '2', delta: 'Nice to meet you!' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+            { type: 'text-delta', id: 'text-2', delta: 'Nice to meet you!' },
             {
               type: 'finish',
               id: '3',
