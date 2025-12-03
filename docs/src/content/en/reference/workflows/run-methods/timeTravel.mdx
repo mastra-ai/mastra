@@ -26,7 +26,7 @@ const result = await run.timeTravel({
       name: "step",
       type: "Step<string, any, TInputSchema, any, any, any, TEngineType> | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, TInputSchema, any, any, any, TEngineType>] | string | string[]",
       description:
-        "The target step to start execution from. Can be a Step instance, array of Steps (for nested workflows), step ID string, or array of step ID strings. Use dot notation or arrays for nested workflow steps (e.g., 'nestedWorkflow.step3' or ['nestedWorkflow', 'step3'])",
+        "The target step to start execution from. It can be a Step instance, array of Steps (for nested workflows), step ID string, or array of step ID strings. Use dot notation or arrays for nested workflow steps (e.g., 'nestedWorkflow.step3' or ['nestedWorkflow', 'step3'])",
       isOptional: false,
     },
     {
