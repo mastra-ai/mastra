@@ -18,6 +18,7 @@ import type {
   StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { Pool as PgPool } from 'pg';
 import pgPromise from 'pg-promise';
 import { validatePostgresStoreConfig, hasUserProvidedClient, hasUserProvidedStorePool } from '../shared/config';
 import type { PostgresStoreConfig, PostgresStoreClientConfig, PostgresStorePoolConfig } from '../shared/config';
@@ -33,7 +34,7 @@ export class PostgresStore extends MastraStorage {
   #db?: pgPromise.IDatabase<{}>;
   #pgp?: pgPromise.IMain;
   #config?: any; // pg-promise accepts various config formats
-  #userProvidedPool?: import('pg').Pool; // User-provided pg.Pool to wrap with pg-promise
+  #userProvidedPool?: PgPool; // User-provided pg.Pool to wrap with pg-promise
   private schema: string;
   private isConnected: boolean = false;
   /** Whether this instance owns the client (true) or it was provided by the user (false) */
@@ -89,7 +90,15 @@ export class PostgresStore extends MastraStorage {
       // Only create pgp and db if we don't already have a user-provided client
       if (!this.#db) {
         this.#pgp = pgPromise();
-        this.#db = this.#pgp(this.#config as any);
+
+        if (this.#userProvidedPool) {
+          // User provided a pg.Pool (e.g., from @neondatabase/serverless, postgres-js, etc.)
+          // Wrap it with pg-promise to get the query interface while using their pool for connections
+          // This allows users to use lightweight HTTP-based drivers in serverless environments
+          this.#db = this.#pgp({ pool: this.#userProvidedPool } as any);
+        } else {
+          this.#db = this.#pgp(this.#config as any);
+        }
       }
 
       const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });

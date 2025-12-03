@@ -186,47 +186,15 @@ Both `PgVector` and `PostgresStore` support multiple connection methods:
 
 ### Bring Your Own Client (BYOC)
 
-Both `PgVector` and `PostgresStore` support bringing your own PostgreSQL client. This is useful when you want to:
+Both `PgVector` and `PostgresStore` support bringing your own PostgreSQL client/pool. This is especially useful for:
 
-- Use a custom client configuration (e.g., Neon serverless adapter)
-- Share a connection pool between vector and storage operations
-- Use an existing connection pool from your application
+- **Serverless environments** where you need HTTP-based connections (Neon serverless, PlanetScale)
+- **Memory optimization** by sharing a single pool across vector and storage
+- **Custom drivers** like `@neondatabase/serverless` or `postgres-js`
 
-#### Sharing a Pool Between Vector and Storage
+#### Using with Neon Serverless (Recommended for Serverless)
 
-```typescript
-import { Pool } from 'pg';
-import pgPromise from 'pg-promise';
-import { PgVector, PostgresStore } from '@mastra/pg';
-
-// Create a shared pool
-const pool = new Pool({
-  connectionString: 'postgresql://user:pass@localhost:5432/db',
-  max: 20,
-});
-
-// Use the pool for vector operations
-const vectorStore = new PgVector({
-  id: 'my-vector-store',
-  pool, // Bring your own pool
-});
-
-// Create pg-promise instance from the same pool
-const pgp = pgPromise();
-const db = pgp({ pool }); // pg-promise can use an existing pool
-
-// Use the same connection for storage operations
-const store = new PostgresStore({
-  id: 'my-store',
-  client: db, // Bring your own pg-promise client
-});
-
-// When you're done, YOU are responsible for closing the pool
-// The stores will NOT close it for you
-await pool.end();
-```
-
-#### Using with Neon Serverless
+The Neon serverless driver uses HTTP connections instead of TCP, making it ideal for serverless environments like Cloudflare Workers, Vercel Edge, etc.
 
 ```typescript
 import { Pool, neonConfig } from '@neondatabase/serverless';
@@ -234,9 +202,9 @@ import ws from 'ws';
 import { PgVector, PostgresStore } from '@mastra/pg';
 
 // Configure Neon for serverless environments
-neonConfig.webSocketConstructor = ws;
+neonConfig.webSocketConstructor = ws; // Required for Node.js, not needed in browsers/workers
 
-// Create Neon pool
+// Create Neon pool - this uses HTTP connections, not TCP
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
@@ -247,15 +215,74 @@ const vectorStore = new PgVector({
   pool,
 });
 
-// Use with PostgresStore (via pg-promise)
-import pgPromise from 'pg-promise';
-const pgp = pgPromise();
-const db = pgp({ pool });
-
+// Use with PostgresStore - just pass the pool directly!
 const store = new PostgresStore({
   id: 'neon-store',
-  client: db,
+  pool, // Pass the Neon pool directly
 });
+
+await store.init();
+
+// When you're done, YOU are responsible for closing the pool
+await pool.end();
+```
+
+#### Sharing a Pool Between Vector and Storage
+
+```typescript
+import { Pool } from 'pg';
+import { PgVector, PostgresStore } from '@mastra/pg';
+
+// Create a shared pool
+const pool = new Pool({
+  connectionString: 'postgresql://user:pass@localhost:5432/db',
+  max: 20,
+});
+
+// Use the same pool for both vector and storage operations
+const vectorStore = new PgVector({
+  id: 'my-vector-store',
+  pool,
+});
+
+const store = new PostgresStore({
+  id: 'my-store',
+  pool, // Same pool!
+});
+
+await store.init();
+
+// When you're done, YOU are responsible for closing the pool
+await pool.end();
+```
+
+#### Using with postgres-js
+
+```typescript
+import postgres from 'postgres';
+import { PostgresStore } from '@mastra/pg';
+
+// Note: postgres-js has a different API, so you may need an adapter
+// For direct pool support, use @neondatabase/serverless or pg
+```
+
+#### Advanced: Using pg-promise Client Directly
+
+If you're already using pg-promise in your application, you can pass its client directly:
+
+```typescript
+import pgPromise from 'pg-promise';
+import { PostgresStore } from '@mastra/pg';
+
+const pgp = pgPromise();
+const db = pgp('postgresql://user:pass@localhost:5432/db');
+
+const store = new PostgresStore({
+  id: 'my-store',
+  client: db, // Pass pg-promise client directly
+});
+
+await store.init();
 ```
 
 #### Important Notes for BYOC
@@ -274,12 +301,9 @@ const store = new PostgresStore({
 
 3. **Initialization**: `PostgresStore.init()` must still be called to set up tables, even when using BYOC.
 
-4. **pg-promise for PostgresStore**: The `client` option for `PostgresStore` expects a pg-promise `IDatabase` instance, not a raw `pg.Pool`. You can create one from a pool like this:
-   ```typescript
-   import pgPromise from 'pg-promise';
-   const pgp = pgPromise();
-   const db = pgp({ pool: myPool }); // Creates IDatabase from Pool
-   ```
+4. **Pool vs Client for PostgresStore**:
+   - `pool`: Pass a `pg.Pool` or compatible pool (recommended for most cases)
+   - `client`: Pass a pg-promise `IDatabase` instance (for existing pg-promise users)
 
 ## Features
 
