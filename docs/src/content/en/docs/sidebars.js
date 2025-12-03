@@ -294,7 +294,17 @@ const sidebars = {
         {
           type: "doc",
           id: "server-db/mastra-server",
-          label: "Mastra Server",
+          label: "Server Configuration",
+        },
+        {
+          type: "doc",
+          id: "server-db/server-adapters",
+          label: "Server Adapters",
+        },
+        {
+          type: "doc",
+          id: "server-db/custom-adapters",
+          label: "Custom Adapters",
         },
         {
           type: "doc",
