@@ -374,21 +374,9 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           });
         });
 
-        it('should filter by name', async () => {
-          const result = await storage.getTracesPaginated({
-            filters: { name: 'workflow-trace-1' },
-            pagination: { page: 0, perPage: 10 },
-          });
-
-          // Should find the specific trace
-          expect(result.spans.length).toBeGreaterThan(0);
-          const foundSpan = result.spans.find(span => span.name === 'workflow-trace-1');
-          expect(foundSpan).toBeDefined();
-        });
-
         it('should return empty results for non-matching filters', async () => {
           const result = await storage.getTracesPaginated({
-            filters: { name: 'non-existent-trace' },
+            filters: { spanType: 'non_existent_type' as any },
             pagination: { page: 0, perPage: 10 },
           });
 

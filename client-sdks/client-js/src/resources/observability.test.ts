@@ -87,23 +87,6 @@ describe('Observability Methods', () => {
       );
     });
 
-    it('should fetch traces with name filter', async () => {
-      mockSuccessfulResponse();
-
-      await client.getTraces({
-        filters: {
-          name: 'test-trace',
-        },
-      });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?name=test-trace`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
-    });
-
     it('should fetch traces with spanType filter', async () => {
       mockSuccessfulResponse();
 
@@ -211,7 +194,6 @@ describe('Observability Methods', () => {
           },
         },
         filters: {
-          name: 'test-trace',
           spanType: 'agent_run' as SpanType,
           entityId: 'entity-123',
           entityType: 'agent',
@@ -224,7 +206,7 @@ describe('Observability Methods', () => {
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?page=1&perPage=5&name=test-trace&spanType=agent_run&entityId=entity-123&entityType=agent&dateRange=${encodeURIComponent(expectedDateRange)}`,
+        `${clientOptions.baseUrl}/api/observability/traces?page=1&perPage=5&spanType=agent_run&entityId=entity-123&entityType=agent&dateRange=${encodeURIComponent(expectedDateRange)}`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),

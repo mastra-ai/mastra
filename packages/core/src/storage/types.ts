@@ -163,23 +163,72 @@ export type ThreadOrderBy = 'createdAt' | 'updatedAt';
 
 export type ThreadSortDirection = 'ASC' | 'DESC';
 
+export type SpanEntityType = 'agent' | 'workflow' | 'tool' | 'network' | 'step';
+
+// Derived status helpers (status is computed from error/endedAt, not stored)
+export type SpanStatus = 'success' | 'error' | 'running';
+export function getSpanStatus(span: { error: any; endedAt: Date | null }): SpanStatus {
+  if (span.error) return 'error';
+  if (span.endedAt === null) return 'running';
+  return 'success';
+}
+
+export interface VersionInfo {
+  app?: string;
+  gitSha?: string;
+  branch?: string;
+  buildId?: string;
+  [key: string]: string | undefined;
+}
+
 export interface SpanRecord {
   traceId: string;
   spanId: string;
   parentSpanId: string | null;
   name: string;
-  scope: Record<string, any> | null;
+  scope: Record<string, any> | null; // Mastra package versions {"core": "1.0.0", "memory": "1.0.0"}
   spanType: SpanType;
+
+  // Entity identification - first-class fields for filtering
+  entityType: SpanEntityType | null;
+  entityId: string | null;
+  entityName: string | null;
+
+  // Tags for flexible categorization
+  tags: string[] | null;
+
+  // Identity & Tenancy
+  userId: string | null;
+  organizationId: string | null;
+  resourceId: string | null; // Broader resource context (Mastra memory compatibility)
+
+  // Correlation IDs
+  runId: string | null;
+  sessionId: string | null;
+  threadId: string | null;
+  requestId: string | null;
+
+  // Deployment context
+  environment: string | null; // 'production' | 'staging' | 'development'
+  source: string | null; // 'local' | 'cloud' | 'ci'
+  serviceName: string | null;
+  deploymentId: string | null;
+  versionInfo: VersionInfo | null;
+
+  // Span data
   attributes: Record<string, any> | null;
   metadata: Record<string, any> | null;
   links: any;
-  startedAt: Date;
-  endedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date | null;
   input: any;
   output: any;
-  error: any;
+  error: any; // Presence indicates failure (status derived from this)
+
+  // Timestamps
+  startedAt: Date;
+  endedAt: Date | null; // null = running (status derived from this)
+  createdAt: Date;
+  updatedAt: Date | null;
+
   isEvent: boolean;
 }
 
@@ -193,10 +242,41 @@ export interface TraceRecord {
 
 export interface TracesPaginatedArg {
   filters?: {
-    name?: string;
+    // Span type filter
     spanType?: SpanType;
+
+    // Entity filters
+    entityType?: SpanEntityType;
     entityId?: string;
-    entityType?: 'agent' | 'workflow';
+    entityName?: string;
+
+    // Status filter (derived: 'error' = has error, 'running' = no endedAt, 'success' = endedAt and no error)
+    status?: SpanStatus;
+
+    // Tag filter (match any of these tags)
+    tags?: string[];
+
+    // Identity & Tenancy filters
+    userId?: string;
+    organizationId?: string;
+    resourceId?: string;
+
+    // Correlation ID filters
+    runId?: string;
+    sessionId?: string;
+    threadId?: string;
+    requestId?: string;
+
+    // Deployment context filters
+    environment?: string;
+    source?: string;
+    serviceName?: string;
+    deploymentId?: string;
+
+    // JSONB filters (key-value matching)
+    metadata?: Record<string, unknown>;
+    scope?: Record<string, unknown>;
+    versionInfo?: Record<string, unknown>;
   };
   pagination?: PaginationArgs;
 }

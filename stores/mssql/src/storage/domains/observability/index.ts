@@ -182,33 +182,27 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     const params = { ...whereClause.params };
     let currentParamIndex = Object.keys(params).length + 1;
 
-    // Handle entity filtering
-    if (entityId && entityType) {
-      let name = '';
-      if (entityType === 'workflow') {
-        name = `workflow run: '${entityId}'`;
-      } else if (entityType === 'agent') {
-        name = `agent run: '${entityId}'`;
-      } else {
-        const error = new MastraError({
-          id: 'MSSQL_STORE_GET_TRACES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            entityType,
-          },
-          text: `Cannot filter by entity type: ${entityType}`,
-        });
-        throw error;
-      }
-
-      const entityParam = `p${currentParamIndex++}`;
+    // Entity filtering now uses first-class columns
+    if (entityId) {
+      const entityIdParam = `p${currentParamIndex++}`;
+      const statement = `[entityId] = @${entityIdParam}`;
       if (actualWhereClause) {
-        actualWhereClause += ` AND [name] = @${entityParam}`;
+        actualWhereClause += ` AND ${statement}`;
       } else {
-        actualWhereClause = ` WHERE [name] = @${entityParam}`;
+        actualWhereClause = ` WHERE ${statement}`;
       }
-      params[entityParam] = name;
+      params[entityIdParam] = entityId;
+    }
+
+    if (entityType) {
+      const entityTypeParam = `p${currentParamIndex++}`;
+      const statement = `[entityType] = @${entityTypeParam}`;
+      if (actualWhereClause) {
+        actualWhereClause += ` AND ${statement}`;
+      } else {
+        actualWhereClause = ` WHERE ${statement}`;
+      }
+      params[entityTypeParam] = entityType;
     }
 
     const tableName = getTableName({

@@ -24,7 +24,28 @@ export class Observability extends BaseResource {
   getTraces(params: TracesPaginatedArg): Promise<GetTracesResponse> {
     const { pagination, filters } = params;
     const { page, perPage, dateRange } = pagination || {};
-    const { name, spanType, entityId, entityType } = filters || {};
+    const {
+      spanType,
+      entityId,
+      entityType,
+      entityName,
+      status,
+      tags,
+      userId,
+      organizationId,
+      resourceId,
+      runId,
+      sessionId,
+      threadId,
+      requestId,
+      environment,
+      source,
+      serviceName,
+      deploymentId,
+      metadata,
+      scope,
+      versionInfo,
+    } = filters || {};
     const searchParams = new URLSearchParams();
 
     if (page !== undefined) {
@@ -33,15 +54,69 @@ export class Observability extends BaseResource {
     if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
-    if (name) {
-      searchParams.set('name', name);
-    }
     if (spanType !== undefined) {
       searchParams.set('spanType', String(spanType));
     }
-    if (entityId && entityType) {
+    if (entityId) {
       searchParams.set('entityId', entityId);
+    }
+    if (entityType) {
       searchParams.set('entityType', entityType);
+    }
+    if (entityName) {
+      searchParams.set('entityName', entityName);
+    }
+    if (status) {
+      searchParams.set('status', status);
+    }
+    if (tags && tags.length > 0) {
+      searchParams.set('tags', tags.join(','));
+    }
+    // Identity & Tenancy
+    if (userId) {
+      searchParams.set('userId', userId);
+    }
+    if (organizationId) {
+      searchParams.set('organizationId', organizationId);
+    }
+    if (resourceId) {
+      searchParams.set('resourceId', resourceId);
+    }
+    // Correlation IDs
+    if (runId) {
+      searchParams.set('runId', runId);
+    }
+    if (sessionId) {
+      searchParams.set('sessionId', sessionId);
+    }
+    if (threadId) {
+      searchParams.set('threadId', threadId);
+    }
+    if (requestId) {
+      searchParams.set('requestId', requestId);
+    }
+    // Deployment context
+    if (environment) {
+      searchParams.set('environment', environment);
+    }
+    if (source) {
+      searchParams.set('source', source);
+    }
+    if (serviceName) {
+      searchParams.set('serviceName', serviceName);
+    }
+    if (deploymentId) {
+      searchParams.set('deploymentId', deploymentId);
+    }
+    // JSONB filters
+    if (metadata) {
+      searchParams.set('metadata', JSON.stringify(metadata));
+    }
+    if (scope) {
+      searchParams.set('scope', JSON.stringify(scope));
+    }
+    if (versionInfo) {
+      searchParams.set('versionInfo', JSON.stringify(versionInfo));
     }
 
     if (dateRange) {

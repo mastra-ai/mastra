@@ -182,30 +182,20 @@ export class ObservabilityPG extends ObservabilityStorage {
     let actualWhereClause = whereClause.sql;
     let currentParamIndex = whereClause.args.length + 1;
 
-    // Handle entity filtering
-    if (entityId && entityType) {
-      let name = '';
-      if (entityType === 'workflow') {
-        name = `workflow run: '${entityId}'`;
-      } else if (entityType === 'agent') {
-        name = `agent run: '${entityId}'`;
+    // Entity filtering now uses first-class columns
+    if (entityId) {
+      whereClause.args.push(entityId);
+      const statement = `"entityId" = $${currentParamIndex++}`;
+      if (actualWhereClause) {
+        actualWhereClause += ` AND ${statement}`;
       } else {
-        const error = new MastraError({
-          id: 'PG_STORE_GET_TRACES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            entityType,
-          },
-          text: `Cannot filter by entity type: ${entityType}`,
-        });
-        this.logger?.trackException(error);
-        throw error;
+        actualWhereClause = ` WHERE ${statement}`;
       }
+    }
 
-      whereClause.args.push(name);
-      const statement = `"name" = $${currentParamIndex++}`;
-
+    if (entityType) {
+      whereClause.args.push(entityType);
+      const statement = `"entityType" = $${currentParamIndex++}`;
       if (actualWhereClause) {
         actualWhereClause += ` AND ${statement}`;
       } else {

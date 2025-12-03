@@ -182,16 +182,39 @@ export const GET_TRACES_PAGINATED_ROUTE = createRoute({
   queryParamSchema: z.object({
     page: z.coerce.number().optional().default(0),
     perPage: z.coerce.number().optional().default(10),
-    name: z.string().optional(),
     spanType: z.string().optional(),
     dateRange: z.string().optional(),
+    // Entity filters
     entityId: z.string().optional(),
     entityType: z.string().optional(),
+    entityName: z.string().optional(),
+    // Status filter (derived: 'error' | 'running' | 'success')
+    status: z.string().optional(),
+    // Tags filter (comma-separated)
+    tags: z.string().optional(),
+    // Identity & Tenancy filters
+    userId: z.string().optional(),
+    organizationId: z.string().optional(),
+    resourceId: z.string().optional(),
+    // Correlation ID filters
+    runId: z.string().optional(),
+    sessionId: z.string().optional(),
+    threadId: z.string().optional(),
+    requestId: z.string().optional(),
+    // Deployment context filters
+    environment: z.string().optional(),
+    source: z.string().optional(),
+    serviceName: z.string().optional(),
+    deploymentId: z.string().optional(),
+    // JSONB filters (JSON strings)
+    metadata: z.string().optional(),
+    scope: z.string().optional(),
+    versionInfo: z.string().optional(),
   }),
   responseSchema: getAITracesPaginatedResponseSchema,
   summary: 'Get AI traces',
   description:
-    'Returns a paginated list of AI execution traces with optional filtering by name, type, date range, and entity',
+    'Returns a paginated list of AI execution traces with optional filtering by type, date range, entity, status, tags, and more',
   tags: ['Observability'],
   handler: async ({ mastra, ...params }) => {
     try {
@@ -200,7 +223,31 @@ export const GET_TRACES_PAGINATED_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Storage is not available' });
       }
 
-      const { page, perPage, name, spanType, dateRange, entityId, entityType } = params;
+      const {
+        page,
+        perPage,
+        spanType,
+        dateRange,
+        entityId,
+        entityType,
+        entityName,
+        status,
+        tags,
+        userId,
+        organizationId,
+        resourceId,
+        runId,
+        sessionId,
+        threadId,
+        requestId,
+        environment,
+        source,
+        serviceName,
+        deploymentId,
+        metadata,
+        scope,
+        versionInfo,
+      } = params;
 
       // Parse and convert dateRange to Date objects
       const rawDateRange = dateRange ? JSON.parse(dateRange) : undefined;
@@ -215,9 +262,40 @@ export const GET_TRACES_PAGINATED_ROUTE = createRoute({
           : undefined,
       };
 
-      const filters = Object.fromEntries(
-        Object.entries({ name, spanType, entityId, entityType }).filter(([_, v]) => v !== undefined),
-      );
+      // Build filters object
+      const filters: Record<string, unknown> = {};
+
+      // Entity filters
+      if (spanType) filters.spanType = spanType;
+      if (entityId) filters.entityId = entityId;
+      if (entityType) filters.entityType = entityType;
+      if (entityName) filters.entityName = entityName;
+      if (status) filters.status = status;
+
+      // Identity & Tenancy filters
+      if (userId) filters.userId = userId;
+      if (organizationId) filters.organizationId = organizationId;
+      if (resourceId) filters.resourceId = resourceId;
+
+      // Correlation ID filters
+      if (runId) filters.runId = runId;
+      if (sessionId) filters.sessionId = sessionId;
+      if (threadId) filters.threadId = threadId;
+      if (requestId) filters.requestId = requestId;
+
+      // Deployment context filters
+      if (environment) filters.environment = environment;
+      if (source) filters.source = source;
+      if (serviceName) filters.serviceName = serviceName;
+      if (deploymentId) filters.deploymentId = deploymentId;
+
+      // Tags filter (comma-separated string to array)
+      if (tags) filters.tags = tags.split(',').map(t => t.trim());
+
+      // JSONB filters (JSON string to object)
+      if (metadata) filters.metadata = JSON.parse(metadata);
+      if (scope) filters.scope = JSON.parse(scope);
+      if (versionInfo) filters.versionInfo = JSON.parse(versionInfo);
 
       if (pagination?.page && pagination.page < 0) {
         throw new HTTPException(400, { message: 'Page must be a non-negative integer' });

@@ -57,23 +57,52 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
 
 export const SPAN_SCHEMA: Record<string, StorageColumn> = {
   // Composite primary key of traceId and spanId
-  traceId: { type: 'text', nullable: false },
-  spanId: { type: 'text', nullable: false },
-  parentSpanId: { type: 'text', nullable: true },
-  name: { type: 'text', nullable: false },
-  scope: { type: 'jsonb', nullable: true }, // Mastra package info {"core-version": "0.1.0"}
+  traceId: { type: 'text', nullable: false }, // Unique trace identifier
+  spanId: { type: 'text', nullable: false }, // Unique span identifier within the trace
+  parentSpanId: { type: 'text', nullable: true }, // Parent span reference (null = root span)
+  name: { type: 'text', nullable: false }, // Human-readable span name
+  scope: { type: 'jsonb', nullable: true }, // Mastra package versions {"core": "1.0.0", "memory": "1.0.0"}
   spanType: { type: 'text', nullable: false }, // WORKFLOW_RUN, WORKFLOW_STEP, AGENT_RUN, AGENT_STEP, TOOL_RUN, TOOL_STEP, etc.
-  attributes: { type: 'jsonb', nullable: true },
-  metadata: { type: 'jsonb', nullable: true },
-  links: { type: 'jsonb', nullable: true },
-  input: { type: 'jsonb', nullable: true },
-  output: { type: 'jsonb', nullable: true },
-  error: { type: 'jsonb', nullable: true },
+
+  // Entity identification - first-class fields for filtering
+  entityType: { type: 'text', nullable: true }, // 'agent' | 'workflow' | 'tool' | 'network' | 'step'
+  entityId: { type: 'text', nullable: true }, // ID/name of the entity (e.g., 'weatherAgent', 'orderWorkflow')
+  entityName: { type: 'text', nullable: true }, // Human-readable display name
+
+  // Identity & Tenancy
+  userId: { type: 'text', nullable: true }, // Human end-user who triggered the trace
+  organizationId: { type: 'text', nullable: true }, // Multi-tenant organization/account
+  resourceId: { type: 'text', nullable: true }, // Broader resource context (Mastra memory compatibility)
+
+  // Correlation IDs
+  runId: { type: 'text', nullable: true }, // Unique execution run identifier
+  sessionId: { type: 'text', nullable: true }, // Session identifier for grouping traces
+  threadId: { type: 'text', nullable: true }, // Conversation thread identifier
+  requestId: { type: 'text', nullable: true }, // HTTP request ID for log correlation
+
+  // Deployment context
+  environment: { type: 'text', nullable: true }, // 'production' | 'staging' | 'development'
+  source: { type: 'text', nullable: true }, // 'local' | 'cloud' | 'ci'
+  serviceName: { type: 'text', nullable: true }, // Name of the service
+  deploymentId: { type: 'text', nullable: true }, // Specific deployment/release identifier
+  versionInfo: { type: 'jsonb', nullable: true }, // App version info {"app": "1.0.0", "gitSha": "abc123"}
+
+  // Span data
+  attributes: { type: 'jsonb', nullable: true }, // Span-type specific attributes (e.g., model, tokens, tools)
+  metadata: { type: 'jsonb', nullable: true }, // User-defined metadata for custom filtering
+  tags: { type: 'jsonb', nullable: true }, // string[] - labels for filtering traces
+  links: { type: 'jsonb', nullable: true }, // References to related spans in other traces
+  input: { type: 'jsonb', nullable: true }, // Input data passed to the span
+  output: { type: 'jsonb', nullable: true }, // Output data returned from the span
+  error: { type: 'jsonb', nullable: true }, // Error info - presence indicates failure
+
+  // Timestamps
   startedAt: { type: 'timestamp', nullable: false }, // When the span started
-  endedAt: { type: 'timestamp', nullable: true }, // When the span ended
-  createdAt: { type: 'timestamp', nullable: false }, // The time the database record was created
-  updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
-  isEvent: { type: 'boolean', nullable: false },
+  endedAt: { type: 'timestamp', nullable: true }, // When the span ended (null = running)
+  createdAt: { type: 'timestamp', nullable: false }, // Database record creation time
+  updatedAt: { type: 'timestamp', nullable: true }, // Database record last update time
+
+  isEvent: { type: 'boolean', nullable: false }, // Whether this is an event (point-in-time) vs a span (duration)
 };
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
