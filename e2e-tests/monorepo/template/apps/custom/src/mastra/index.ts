@@ -13,7 +13,7 @@ export const mastra = new Mastra({
     apiRoutes: [testRoute, allRoute, streamingRoute],
   },
   bundler: {
-    externals: ['bcrypt', '@ag-ui/langgraph', '@ag-ui/client', '@ag-ui/core', '@ag-ui/mastra', '@copilotkit/runtime'],
+    externals: ['bcrypt'],
   },
   logger: new ConsoleLogger({ level: 'info' }),
 });
