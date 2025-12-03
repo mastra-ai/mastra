@@ -27,31 +27,31 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"nam' },
+          payload: { id: 'text-1', text: '{"nam' },
         },
         {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: 'e":"Jo",' },
+          payload: { id: 'text-1', text: 'e":"Jo",' },
         },
         {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '"age":-5,' },
+          payload: { id: 'text-1', text: '"age":-5,' },
         },
         {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '"email":"invalid"}' },
+          payload: { id: 'text-1', text: '"email":"invalid"}' },
         },
         {
           type: 'text-end',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1' },
+          payload: { id: 'text-1' },
         },
       ];
       // @ts-expect-error - web/stream readable stream type error
@@ -100,7 +100,7 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"name":"John","age":30}' },
+          payload: { id: 'text-1', text: '{"name":"John","age":30}' },
         },
         {
           type: 'finish',
@@ -138,13 +138,13 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"name":"John"}' },
+          payload: { id: 'text-1', text: '{"name":"John"}' },
         },
         {
           type: 'text-end',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1' },
+          payload: { id: 'text-1' },
         },
       ];
 
@@ -183,7 +183,7 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"name":"john"}' },
+          payload: { id: 'text-1', text: '{"name":"john"}' },
         },
         {
           type: 'finish',
@@ -226,7 +226,7 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"elements":[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]}' },
+          payload: { id: 'text-1', text: '{"elements":[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]}' },
         },
         {
           type: 'finish',
@@ -266,7 +266,7 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"result":"green"}' },
+          payload: { id: 'text-1', text: '{"result":"green"}' },
         },
         {
           type: 'finish',
@@ -302,13 +302,13 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"result":"yellow"}' },
+          payload: { id: 'text-1', text: '{"result":"yellow"}' },
         },
         {
           type: 'text-end',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1' },
+          payload: { id: 'text-1' },
         },
         {
           type: 'finish',
@@ -349,13 +349,13 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+          payload: { id: 'text-1', text: '{"name":"Jo","age":-5}' },
         },
         {
           type: 'text-end',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1' },
+          payload: { id: 'text-1' },
         },
         {
           type: 'finish',
@@ -395,7 +395,7 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"name":"Alice","count":5}' },
+          payload: { id: 'text-1', text: '{"name":"Alice","count":5}' },
         },
         {
           type: 'finish',
@@ -436,13 +436,13 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+          payload: { id: 'text-1', text: '{"name":"Jo","age":-5}' },
         },
         {
           type: 'text-end',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1' },
+          payload: { id: 'text-1' },
         },
         {
           type: 'finish',
@@ -481,7 +481,7 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"username":"bob","active":true}' },
+          payload: { id: 'text-1', text: '{"username":"bob","active":true}' },
         },
         {
           type: 'finish',
@@ -524,7 +524,7 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"id":"abc","value":42}' },
+          payload: { id: 'text-1', text: '{"id":"abc","value":42}' },
         },
         {
           type: 'finish',
@@ -569,7 +569,7 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"title":"Product","price":29.99}' },
+          payload: { id: 'text-1', text: '{"title":"Product","price":29.99}' },
         },
         {
           type: 'finish',
@@ -612,7 +612,7 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"id":123}' },
+          payload: { id: 'text-1', text: '{"id":123}' },
         },
         {
           type: 'finish',
@@ -786,13 +786,13 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+          payload: { id: 'text-1', text: '{"name":"Jo","age":-5}' },
         },
         {
           type: 'text-end',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1' },
+          payload: { id: 'text-1' },
         },
         {
           type: 'finish',
@@ -842,13 +842,13 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+          payload: { id: 'text-1', text: '{"name":"Jo","age":-5}' },
         },
         {
           type: 'text-end',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1' },
+          payload: { id: 'text-1' },
         },
         {
           type: 'finish',
@@ -900,13 +900,13 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+          payload: { id: 'text-1', text: '{"name":"Jo","age":-5}' },
         },
         {
           type: 'text-end',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1' },
+          payload: { id: 'text-1' },
         },
         {
           type: 'finish',

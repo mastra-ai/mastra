@@ -399,6 +399,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "vectors/duckdb",
+          label: "DuckDB Vector Store",
+        },
+        {
+          type: "doc",
           id: "vectors/elasticsearch",
           label: "ElasticSearch Vector Store",
         },

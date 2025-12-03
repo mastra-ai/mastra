@@ -4,7 +4,6 @@ import {
   GaugeIcon,
   EyeIcon,
   PackageIcon,
-  HomeIcon,
   GlobeIcon,
   BookIcon,
   EarthIcon,
@@ -23,6 +22,7 @@ import {
   useMainSidebar,
   type NavSection,
   LogoWithoutText,
+  SettingsIcon,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -84,6 +84,18 @@ const mainNavigation: NavSection[] = [
       },
     ],
   },
+
+  {
+    key: 'Settings',
+    separator: true,
+    links: [
+      {
+        name: 'Settings',
+        url: '/settings',
+        icon: <SettingsIcon />,
+      },
+    ],
+  },
 ];
 
 const secondNavigation: NavSection = {
@@ -121,6 +133,7 @@ declare global {
 
 export function AppSidebar() {
   const { state } = useMainSidebar();
+
   const location = useLocation();
   const pathname = location.pathname;
 

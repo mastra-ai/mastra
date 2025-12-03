@@ -157,7 +157,7 @@ export function Combobox({
             ref={listRef}
             id="combobox-options"
             role="listbox"
-            className="max-h-[300px] overflow-y-auto overflow-x-hidden p-1"
+            className="max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1"
           >
             {filteredOptions.length === 0 ? (
               <div className="py-6 text-center text-sm">{emptyText}</div>
