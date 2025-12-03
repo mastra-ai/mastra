@@ -18,7 +18,7 @@ export function SpanDetails({ span }: SpanDetailsProps) {
     <>
       {/* Show prominent warning when token limit is exceeded */}
       {tokenLimitExceeded && (
-        <div className="bg-yellow-900/20 border-sm border-yellow-200 rounded-md p-2 mb-4">
+        <div className="bg-yellow-900/20 border border-yellow-200 rounded-md p-2 mb-4">
           <div className="flex items-start gap-2">
             <AlertTriangleIcon className="text-yellow-200 mt-0.5 flex-shrink-0" size={20} />
             <div className="flex-1">
