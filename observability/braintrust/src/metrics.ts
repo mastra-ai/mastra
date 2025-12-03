@@ -10,6 +10,7 @@ import type { ModelGenerationAttributes } from '@mastra/core/observability';
  * - completion_reasoning_tokens: reasoning tokens, when available
  * - prompt_cached_tokens: tokens served from cache (provider-specific)
  * - prompt_cache_creation_tokens: tokens used to create cache (provider-specific)
+ * - time_to_first_token: timestamp (ms since epoch) when first token arrived (streaming only)
  */
 export interface BraintrustUsageMetrics {
   prompt_tokens?: number;
@@ -18,6 +19,7 @@ export interface BraintrustUsageMetrics {
   completion_reasoning_tokens?: number;
   prompt_cached_tokens?: number;
   prompt_cache_creation_tokens?: number;
+  time_to_first_token?: number;
   [key: string]: number | undefined;
 }
 
@@ -47,6 +49,11 @@ export function normalizeUsageMetrics(modelAttr: ModelGenerationAttributes): Bra
   }
   if (modelAttr.usage?.promptCacheMissTokens !== undefined) {
     metrics.prompt_cache_creation_tokens = modelAttr.usage?.promptCacheMissTokens;
+  }
+
+  // Time to first token (TTFT) for streaming responses
+  if (modelAttr.completionStartTime) {
+    metrics.time_to_first_token = modelAttr.completionStartTime.getTime();
   }
 
   return metrics;

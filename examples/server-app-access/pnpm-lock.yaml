@@ -7,15 +7,11 @@ settings:
 overrides:
   '@mastra/core': link:../../packages/core
   '@mastra/hono': link:../../server-adapters/hono
-  mastra: link:../../packages/cli
 
 importers:
 
   .:
     dependencies:
-      '@hono/node-server':
-        specifier: ^1.19.6
-        version: 1.19.6(hono@4.10.7)
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
@@ -25,9 +21,6 @@ importers:
       hono:
         specifier: ^4.10.4
         version: 4.10.7
-      mastra:
-        specifier: link:../../packages/cli
-        version: link:../../packages/cli
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -200,12 +193,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@hono/node-server@1.19.6':
-    resolution: {integrity: sha512-Shz/KjlIeAhfiuE93NDKVdZ7HdBVLQAfdbaXEaoAVO3ic9ibRSLGIQGkcBbFyuLr+7/1D5ZCINM8B+6IvXeMtw==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      hono: ^4
-
   '@types/node@22.13.17':
     resolution: {integrity: sha512-nAJuQXoyPj04uLgu+obZcSmsfOenUg6DxPKogeUy6yNCFwWaj5sBF8/G/pNo8EtBJjAfSVgfIlugR/BCOleO+g==}
 
@@ -324,10 +311,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.0':
     optional: true
-
-  '@hono/node-server@1.19.6(hono@4.10.7)':
-    dependencies:
-      hono: 4.10.7
 
   '@types/node@22.13.17':
     dependencies:
