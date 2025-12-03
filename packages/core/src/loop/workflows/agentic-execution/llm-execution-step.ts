@@ -556,13 +556,23 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                       Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
                     ) as typeof tools;
                   }
-                  if (prepareStepResult.messages) {
-                    const newMessages = prepareStepResult.messages;
+                  if (prepareStepResult.messages || prepareStepResult.system !== undefined) {
+                    const newMessages = prepareStepResult.messages ?? messageList.get.all.aiV5.model();
                     const newMessageList = new MessageList();
+
+                    if (prepareStepResult.system !== undefined) {
+                      if (prepareStepResult.system) {
+                        newMessageList.addSystem(prepareStepResult.system);
+                      }
+                    } else {
+                      for (const sysMsg of messageList.getAllSystemMessages()) {
+                        newMessageList.addSystem(sysMsg);
+                      }
+                    }
 
                     for (const message of newMessages) {
                       if (message.role === 'system') {
-                        newMessageList.addSystem(message);
+                        continue;
                       } else if (message.role === 'user') {
                         newMessageList.add(message, 'input');
                       } else if (message.role === 'assistant' || message.role === 'tool') {
