@@ -19,33 +19,35 @@ export interface HeaderListFormProps {
 
 export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderListFormProps) => {
   return (
-    <div className="space-y-4 rounded-lg border border-border1 p-4 bg-surface2">
+    <div className="space-y-4">
       <Txt as="h2" variant="header-md" className="text-icon6">
         Headers
       </Txt>
 
-      {headers.length > 0 && (
-        <ul>
-          {headers.map((header, index) => (
-            <li key={index}>
-              <HeaderListFormItem index={index} header={header} onRemove={() => onRemoveHeader(index)} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="bg-surface4 rounded-lg p-4 border-sm border-border2 space-y-4">
+        {headers.length > 0 && (
+          <ul className="space-y-4">
+            {headers.map((header, index) => (
+              <li key={index}>
+                <HeaderListFormItem index={index} header={header} onRemove={() => onRemoveHeader(index)} />
+              </li>
+            ))}
+          </ul>
+        )}
 
-      <Button
-        type="button"
-        variant="light"
-        className="w-full border-dashed"
-        size="lg"
-        onClick={() => onAddHeader({ name: '', value: '' })}
-      >
-        <Icon>
-          <Plus />
-        </Icon>
-        Add Header
-      </Button>
+        <Button
+          type="button"
+          variant="light"
+          className="w-full border-dashed !bg-surface4 !border-border2 hover:!bg-surface5"
+          size="lg"
+          onClick={() => onAddHeader({ name: '', value: '' })}
+        >
+          <Icon>
+            <Plus />
+          </Icon>
+          Add Header
+        </Button>
+      </div>
     </div>
   );
 };
@@ -80,7 +82,13 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
         defaultValue={header.value}
       />
 
-      <Button type="button" variant="light" className="w-full" size="lg" onClick={onRemove}>
+      <Button
+        type="button"
+        variant="light"
+        className="w-full !bg-surface4 !border-border2 hover:!bg-surface5"
+        size="lg"
+        onClick={onRemove}
+      >
         <Icon>
           <Trash aria-label="Remove header" />
         </Icon>
