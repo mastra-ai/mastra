@@ -2072,9 +2072,9 @@ describe('Workflow', () => {
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Paris' },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Paris' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'finish',
                   id: '2',
@@ -2097,9 +2097,9 @@ describe('Workflow', () => {
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'London' },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'London' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'finish',
                   id: '2',
@@ -2679,8 +2679,8 @@ describe('Workflow', () => {
         return {
           stream: simulateReadableStream({
             chunks: [
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Response' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Response' },
               {
                 type: 'finish',
                 id: '2',
@@ -3933,6 +3933,128 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+    });
+
+    it('should update state after each concurrent batch in foreach step', async () => {
+      const subWorkflow1 = createWorkflow({
+        id: 's1',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .then(
+          createStep({
+            id: 's1s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              expect(ctx.state.output).toBe(2);
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const subWorkflow2 = createWorkflow({
+        id: 's2',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .then(
+          createStep({
+            id: 's2s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              ctx.setState({ ...ctx.state, output: 2 });
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const routing = createWorkflow({
+        id: 'routing',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .branch([
+          [async s => s.inputData === 1, subWorkflow1],
+          [async s => s.inputData === 2, subWorkflow2],
+        ])
+        .map(async ({ inputData }) => {
+          return (inputData.s1 ?? 0) + (inputData.s2 ?? 0);
+        })
+        .commit();
+
+      const workflows = createWorkflow({
+        id: 'root',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .foreach(routing)
+        .commit();
+
+      const run = await workflows.createRun();
+      const result = await run.start({
+        inputData: [2, 1],
+        initialState: { output: 0 },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ output: 2 });
+    });
+
+    it('should bail foreach execution when called in a concurrent batch', async () => {
+      const bailResult = [15];
+
+      const workflows = createWorkflow({
+        id: 'root',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .foreach(
+          createStep({
+            id: 's1s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              console.log('running step 111');
+              console.log('state===', ctx.state);
+              if (ctx.state.output > 1) {
+                return ctx.bail(bailResult);
+              }
+              ctx.setState({ ...ctx.state, output: ctx.inputData });
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const run = await workflows.createRun();
+      const result = await run.start({
+        inputData: [1, 2, 3, 4],
+        initialState: { output: 0 },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state?.output).toBe(2);
+      if (result.status === 'success') {
+        expect(result.result).toEqual(bailResult);
+      }
     });
 
     it('should have runId in the step execute function - bug #4260', async () => {

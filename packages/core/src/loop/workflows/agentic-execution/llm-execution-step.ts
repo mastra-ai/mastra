@@ -575,6 +575,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                   structuredOutput,
                   headers,
                   methodType,
+                  generateId: _internal?.generateId,
                   onResult: ({
                     warnings: warningsFromStream,
                     request: requestFromStream,

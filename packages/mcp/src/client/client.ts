@@ -63,6 +63,9 @@ export type {
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 
+// Per MCP spec, only fallback to SSE for these status codes
+const SSE_FALLBACK_STATUS_CODES = [400, 404, 405];
+
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
  */
@@ -296,7 +299,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch } = this.serverConfig;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -311,6 +314,7 @@ export class InternalMastraMCPClient extends MastraBase {
           requestInit,
           reconnectionOptions: this.serverConfig.reconnectionOptions,
           authProvider: authProvider,
+          fetch
         });
         await this.client.connect(streamableTransport, {
           timeout:
@@ -318,8 +322,15 @@ export class InternalMastraMCPClient extends MastraBase {
         });
         this.transport = streamableTransport;
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
-      } catch (error) {
+      } catch (error: any) {
         this.log('debug', `Streamable HTTP transport failed: ${error}`);
+
+        // @modelcontextprotocol/sdk 1.24.0+ throws StreamableHTTPError with 'code' property
+        // Older @modelcontextprotocol/sdk: fallback to SSE (legacy behavior)
+        const status = error?.code;
+        if (status !== undefined && !SSE_FALLBACK_STATUS_CODES.includes(status)) {
+          throw error;
+        }
         shouldTrySSE = true;
       }
     }
@@ -328,7 +339,18 @@ export class InternalMastraMCPClient extends MastraBase {
       this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
       try {
         // Fallback to SSE transport
-        const sseTransport = new SSEClientTransport(url, { requestInit, eventSourceInit, authProvider });
+        // If fetch is provided, ensure it's also in eventSourceInit for the EventSource connection
+        // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream
+        const sseEventSourceInit = fetch 
+          ? { ...eventSourceInit, fetch }
+          : eventSourceInit;
+        
+        const sseTransport = new SSEClientTransport(url, { 
+          requestInit, 
+          eventSourceInit: sseEventSourceInit, 
+          authProvider, 
+          fetch 
+        });
         await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
         this.transport = sseTransport;
         this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');

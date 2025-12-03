@@ -37,12 +37,6 @@ for await (const chunk of stream) {
 }
 ```
 
-:::info
-
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [DeepSeek documentation](https://platform.deepseek.com) for details.
-
-:::
-
 ## Models
 
 <ProviderModelsTable
@@ -107,5 +101,32 @@ const agent = new Agent({
   }
 });
 ```
+
+## Provider Options
+
+DeepSeek supports the following provider-specific options via the `providerOptions` parameter:
+
+```typescript
+const response = await agent.generate("Hello!", {
+  providerOptions: {
+    deepseek: {
+      // See available options in the table below
+    }
+  }
+});
+```
+
+### Available Options
+
+<PropertiesTable
+  content={[
+    {
+        "name": "thinking",
+        "type": "{ type?: \"enabled\" | \"disabled\" | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    }
+]}
+/>
 
 

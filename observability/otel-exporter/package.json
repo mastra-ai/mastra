@@ -1,6 +1,6 @@
 {
   "name": "@mastra/otel-exporter",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "OpenTelemetry observability exporter for Mastra - supports OTLP, Zipkin, and multiple cloud providers",
   "type": "module",
   "main": "dist/index.js",
