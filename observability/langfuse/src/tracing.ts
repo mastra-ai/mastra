@@ -286,6 +286,23 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   private initTrace(span: AnyExportedSpan): void {
+    // Check if trace already exists in our local traceMap
+    // This allows multiple root spans (e.g., from multiple agent.stream calls)
+    // to be grouped under the same Langfuse trace
+    if (this.traceMap.has(span.traceId)) {
+      this.logger.debug('Langfuse exporter: Reusing existing trace from local map', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+      });
+      return; // Reuse existing trace
+    }
+
+    // Note: If the traceId already exists in Langfuse (e.g., from a previous server instance
+    // or session), the Langfuse SDK handles this gracefully. Calling client.trace() with
+    // an existing ID is idempotent - it will update/continue the existing trace rather than
+    // failing or creating a duplicate. This is by design for distributed tracing scenarios.
+    // See: https://langfuse.com/docs/tracing-features/trace-ids
     const trace = this.client.trace(this.buildTracePayload(span));
 
     // Extract langfuse prompt data from root span
