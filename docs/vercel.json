@@ -41,26 +41,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/mastra-cloud/dashboard",
-      "destination": "/docs/deployment/mastra-cloud/dashboard",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/observability",
-      "destination": "/docs/deployment/mastra-cloud/observability",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/overview",
-      "destination": "/docs/deployment/mastra-cloud/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/setting-up",
-      "destination": "/docs/deployment/mastra-cloud/setting-up",
-      "permanent": true
-    },
-    {
       "source": "/docs/server-db/production-server",
       "destination": "/docs/server-db/mastra-server",
       "permanent": true
@@ -303,6 +283,26 @@
     {
       "source": "/examples/v1/agents/supervisor-agent",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/supervisor-agent",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/overview",
+      "destination": "/docs/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/setting-up",
+      "destination": "/docs/mastra-cloud/setting-up",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/dashboard",
+      "destination": "/docs/mastra-cloud/dashboard",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/observability",
+      "destination": "/docs/mastra-cloud/observability",
       "permanent": true
     }
   ]
