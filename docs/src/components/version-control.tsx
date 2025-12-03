@@ -25,6 +25,10 @@ const getVersionFromPath = (pathname: string): Version => {
 const getPathForVersion = (pathname: string, nextVersion: Version): string => {
   const pathChunks = pathname.split("/");
 
+  if (pathChunks.length < 3) {
+    return pathname;
+  }
+
   if (nextVersion === "beta") {
     if (pathChunks?.[2] !== "v1") {
       pathChunks.splice(2, 0, "v1");
@@ -94,7 +98,8 @@ export default function VersionControl({
         {versions.map((version) => {
           const isActive = version.value === currentVersion;
           const href =
-            versionPaths[version.value as Version] ?? window.location.pathname;
+            versionPaths[version.value as Version] ??
+            (typeof window !== "undefined" ? window.location.pathname : "");
           return (
             <DropdownMenuItem
               key={version.value}
