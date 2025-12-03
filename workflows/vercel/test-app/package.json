@@ -1,0 +1,17 @@
+{
+  "name": "vercel-workflow-test-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx nitropack dev",
+    "build": "npx nitropack build"
+  },
+  "dependencies": {
+    "workflow": "^4.0.1-beta.24",
+    "@mastra/core": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "nitropack": "^2.10.4"
+  }
+}

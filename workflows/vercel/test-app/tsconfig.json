@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.node.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext"
+  },
+  "include": ["**/*.ts", "nitro.config.ts"],
+  "exclude": ["node_modules"]
+}

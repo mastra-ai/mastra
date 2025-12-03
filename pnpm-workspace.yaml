@@ -4,6 +4,7 @@ packages:
   - stores/*
   - voice/*
   - workflows/*
+  - workflows/vercel/test-app
   - server-adapters/*
   - pubsub/*
   - client-sdks/*
