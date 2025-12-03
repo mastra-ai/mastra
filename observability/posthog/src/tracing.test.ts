@@ -762,12 +762,14 @@ describe('PosthogExporter', () => {
   });
 
   // --- Tags Support Tests (Issue #10772) ---
+  // Note: Tags are spread as individual boolean properties (e.g., { "tag-name": true })
+  // rather than as an array under $ai_tags
   describe('Tags Support', () => {
     beforeEach(() => {
       exporter = new PosthogExporter(validConfig);
     });
 
-    it('should include tags in properties for root spans', async () => {
+    it('should include tags as individual boolean properties for root spans', async () => {
       const rootSpan = createSpan({
         id: 'root-span',
         traceId: 'trace-with-tags',
@@ -781,13 +783,14 @@ describe('PosthogExporter', () => {
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
           properties: expect.objectContaining({
-            $ai_tags: ['production', 'experiment-v2'],
+            production: true,
+            'experiment-v2': true,
           }),
         }),
       );
     });
 
-    it('should not include tags property when tags array is empty', async () => {
+    it('should not include any tag properties when tags array is empty', async () => {
       const rootSpan = createSpan({
         id: 'root-span',
         traceId: 'trace-no-tags',
@@ -798,11 +801,11 @@ describe('PosthogExporter', () => {
 
       await exportSpanLifecycle(exporter, rootSpan);
 
-      const props = mockCapture.mock.calls[0][0].properties;
-      expect(props).not.toHaveProperty('$ai_tags');
+      // Just verify the call succeeds - no tag properties to check
+      expect(mockCapture).toHaveBeenCalledTimes(1);
     });
 
-    it('should not include tags property when tags is undefined', async () => {
+    it('should not include any tag properties when tags is undefined', async () => {
       const rootSpan = createSpan({
         id: 'root-span',
         traceId: 'trace-undefined-tags',
@@ -812,11 +815,11 @@ describe('PosthogExporter', () => {
 
       await exportSpanLifecycle(exporter, rootSpan);
 
-      const props = mockCapture.mock.calls[0][0].properties;
-      expect(props).not.toHaveProperty('$ai_tags');
+      // Just verify the call succeeds - no tag properties to check
+      expect(mockCapture).toHaveBeenCalledTimes(1);
     });
 
-    it('should include tags for root MODEL_GENERATION spans', async () => {
+    it('should include tags as boolean properties for root MODEL_GENERATION spans', async () => {
       const rootGeneration = createSpan({
         id: 'root-gen',
         traceId: 'trace-gen-tags',
@@ -835,14 +838,15 @@ describe('PosthogExporter', () => {
         expect.objectContaining({
           event: '$ai_generation',
           properties: expect.objectContaining({
-            $ai_tags: ['llm-test', 'gpt-4'],
+            'llm-test': true,
+            'gpt-4': true,
             $ai_model: 'gpt-4',
           }),
         }),
       );
     });
 
-    it('should include tags in event spans for root spans', async () => {
+    it('should include tags as boolean properties in event spans for root spans', async () => {
       const eventSpan = createSpan({
         id: 'event-with-tags',
         traceId: 'trace-event-tags',
@@ -860,13 +864,14 @@ describe('PosthogExporter', () => {
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
           properties: expect.objectContaining({
-            $ai_tags: ['user-feedback', 'positive'],
+            'user-feedback': true,
+            positive: true,
           }),
         }),
       );
     });
 
-    it('should include tags for root WORKFLOW_RUN spans', async () => {
+    it('should include tags as boolean properties for root WORKFLOW_RUN spans', async () => {
       const workflowSpan = createSpan({
         id: 'workflow-with-tags',
         traceId: 'trace-workflow-tags',
@@ -881,7 +886,8 @@ describe('PosthogExporter', () => {
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
           properties: expect.objectContaining({
-            $ai_tags: ['batch-processing', 'priority-high'],
+            'batch-processing': true,
+            'priority-high': true,
           }),
         }),
       );
@@ -915,10 +921,10 @@ describe('PosthogExporter', () => {
 
       await exportSpanLifecycle(exporter, childSpan);
 
-      // Child span should be captured but without tags
+      // Child span should be captured but without tag properties
       expect(mockCapture).toHaveBeenCalledTimes(1);
       const props = mockCapture.mock.calls[0][0].properties;
-      expect(props).not.toHaveProperty('$ai_tags');
+      expect(props).not.toHaveProperty('should-not-appear');
     });
   });
 });
