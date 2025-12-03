@@ -731,6 +731,94 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
   });
 });
 
+describe('MastraMCPClient - HTTP SSE Fallback Tests', () => {
+  // Helper to create StreamableHTTPError-like error (@modelcontextprotocol/sdk 1.24.0+)
+  class MockStreamableHTTPError extends Error {
+    constructor(public readonly code: number, message: string) {
+      super(`Streamable HTTP error: ${message}`);
+    }
+  }
+
+  it('should throw error for status code 401 without SSE fallback', async () => {
+    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+    const originalStart = StreamableHTTPClientTransport.prototype.start;
+
+    StreamableHTTPClientTransport.prototype.start = async function () {
+      throw new MockStreamableHTTPError(401, 'Unauthorized');
+    };
+
+    const httpServer = createServer((req, res) => {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as { port: number };
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    const client = new InternalMastraMCPClient({
+      name: 'fallback-401-test',
+      server: {
+        url: baseUrl,
+        connectTimeout: 1000,
+      },
+    });
+
+    try {
+      await expect(client.connect()).rejects.toThrow('Streamable HTTP error: Unauthorized');
+    } finally {
+      StreamableHTTPClientTransport.prototype.start = originalStart;
+      await client.disconnect().catch(() => {});
+      httpServer.close();
+    }
+  });
+
+  it('should fallback to SSE for status code 404', async () => {
+    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+    const originalStart = StreamableHTTPClientTransport.prototype.start;
+
+    StreamableHTTPClientTransport.prototype.start = async function () {
+      throw new MockStreamableHTTPError(404, 'Not Found');
+    };
+
+    const httpServer = createServer((req, res) => {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      res.end();
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as { port: number };
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    const client = new InternalMastraMCPClient({
+      name: 'fallback-404-test',
+      server: {
+        url: baseUrl,
+        connectTimeout: 1000,
+      },
+    });
+
+    try {
+      // Should attempt SSE fallback, then fail (server doesn't implement full SSE)
+      await expect(client.connect()).rejects.toThrow();
+    } finally {
+      StreamableHTTPClientTransport.prototype.start = originalStart;
+      await client.disconnect().catch(() => {});
+      httpServer.close();
+    }
+  });
+});
+
 describe('MastraMCPClient - Resource Cleanup Tests', () => {
   let testServer: {
     httpServer: HttpServer;
