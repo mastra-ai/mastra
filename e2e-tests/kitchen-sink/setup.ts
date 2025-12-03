@@ -1,63 +1,39 @@
-import { prepareMonorepo } from '../_local-registry-setup/prepare.js';
-import { globby } from 'globby';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
-import { copyFile, mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { createRequire } from 'module';
-import { startRegistry } from '../_local-registry-setup/index.js';
-import { publishPackages } from '../_local-registry-setup/publish.js';
-
-const require = createRequire(import.meta.url);
+import { startRegistry, type Registry } from '../_shared/setup/registry.js';
+import { prepareSnapshotVersions, publishPackages, restoreGitFiles } from '../_shared/setup/snapshot.js';
 
 export default async function setup() {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
   const tag = 'kitchen-sink-e2e-test';
-  const teardown = await prepareMonorepo(rootDir, globby, tag);
 
-  const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
+  // Prepare snapshot versions
+  console.log('[Kitchen Sink Setup] Preparing snapshot versions...');
+  const { cleanup: snapshotCleanup } = await prepareSnapshotVersions(rootDir, tag);
+
+  // Start registry
   const port = await getPort();
-  const registryLocation = await mkdtemp(join(tmpdir(), 'kitchen-sink-test-registry'));
+  console.log('[Kitchen Sink Setup] Starting registry on port', port);
+  const registry = await startRegistry(port);
+  console.log('[Kitchen Sink Setup] Registry started at', registry.url);
 
-  await copyFile(join(__dirname, '../_local-registry-setup/verdaccio.yaml'), join(registryLocation, 'verdaccio.yaml'));
-  const registry = await startRegistry(verdaccioPath, port, registryLocation);
+  // Publish packages
+  console.log('[Kitchen Sink Setup] Publishing packages...');
+  await publishPackages(rootDir, tag, registry.url);
+  console.log('[Kitchen Sink Setup] Packages published');
 
-  console.log('[Setup] Registry started at ', registry.toString());
-
-  console.log('[Setup] Publishing packages');
-
-  const packages = [
-    'mastra',
-    '@mastra/loggers',
-    '@mastra/playground-ui',
-    '@mastra/memory',
-    '@mastra/libsql',
-    '@mastra/mcp',
-  ];
-  const publishFilterArgs = packages.map(p => [`--filter="${p}^..."`, `--filter="${p}"`]).flat();
-
-  publishPackages(publishFilterArgs, tag, rootDir, registry);
-
-  console.log('[Setup] Published packages', { publishFilterArgs, tag, rootDir });
-
-  const shutdown = () => {
-    teardown();
-
+  const shutdown = async () => {
+    console.log('[Kitchen Sink Setup] Shutting down...');
     try {
-      registry.kill();
+      registry.stop();
     } catch {
       // ignore
     }
+    await snapshotCleanup();
+    restoreGitFiles(rootDir);
   };
 
-  return { shutdown, registryUrl: registry.toString() };
-}
-
-declare module 'vitest' {
-  export interface ProvidedContext {
-    tag: string;
-    registry: string;
-  }
+  return { shutdown, registryUrl: registry.url };
 }
