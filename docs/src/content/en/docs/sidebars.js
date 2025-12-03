@@ -82,6 +82,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/processors",
+          label: "Processors",
+        },
+        {
+          type: "doc",
           id: "agents/guardrails",
           label: "Guardrails",
         },

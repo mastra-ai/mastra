@@ -301,11 +301,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/v1/agents/processors",
-      "destination": "/docs/v1/agents/guardrails",
-      "permanent": true
-    },
-    {
       "source": "/examples/v1/agents/supervisor-agent",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/supervisor-agent",
       "permanent": true
