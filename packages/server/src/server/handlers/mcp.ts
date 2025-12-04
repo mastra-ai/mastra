@@ -29,7 +29,13 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
   summary: 'List MCP servers',
   description: 'Returns a list of registered MCP servers with pagination support',
   tags: ['MCP'],
-  handler: async ({ mastra, limit, offset }: RuntimeContext & { limit?: number; offset?: number }) => {
+  handler: async ({
+    mastra,
+    page,
+    perPage,
+    limit,
+    offset,
+  }: RuntimeContext & { page?: number; perPage?: number; limit?: number; offset?: number }) => {
     if (!mastra || typeof mastra.listMCPServers !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or listMCPServers method not available' });
     }
@@ -43,19 +49,39 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     const serverList = Object.values(servers) as MastraMCPServerImplementation[];
     const totalCount = serverList.length;
 
-    const actualOffset = offset ?? 0;
+    // Support both page/perPage and limit/offset for backwards compatibility
+    // Detect which format user is using - prefer page/perPage if both provided
+    const useLegacyFormat =
+      (limit !== undefined || offset !== undefined) && page === undefined && perPage === undefined;
+
+    // If perPage provided, use it; otherwise fall back to limit
+    const finalPerPage = perPage ?? limit;
+    // If page provided, use it; otherwise convert from offset
+    let finalPage = page;
+    if (finalPage === undefined && offset !== undefined && finalPerPage !== undefined && finalPerPage > 0) {
+      finalPage = Math.floor(offset / finalPerPage);
+    }
+
+    // Calculate offset from page/perPage
+    const actualOffset = finalPage !== undefined && finalPerPage !== undefined ? finalPage * finalPerPage : 0;
 
     // Apply pagination
     let paginatedServers = serverList;
     let nextUrl: string | null = null;
 
-    if (limit !== undefined) {
-      paginatedServers = serverList.slice(actualOffset, actualOffset + limit);
+    if (finalPerPage !== undefined) {
+      paginatedServers = serverList.slice(actualOffset, actualOffset + finalPerPage);
 
       // Calculate next URL if there are more results
-      if (actualOffset + limit < totalCount) {
-        // Note: Full URL construction would need request context
-        nextUrl = `/api/mcp/v0/servers?limit=${limit}&offset=${actualOffset + limit}`;
+      if (actualOffset + finalPerPage < totalCount) {
+        const nextPage = (finalPage ?? 0) + 1;
+        // Return next URL in same format as request (legacy limit/offset or page/perPage)
+        if (useLegacyFormat) {
+          const nextOffset = actualOffset + finalPerPage;
+          nextUrl = `/api/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
+        } else {
+          nextUrl = `/api/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
+        }
       }
     }
 
