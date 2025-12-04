@@ -2,7 +2,7 @@ import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 
 export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 import type {
@@ -128,7 +128,7 @@ export class MSSQLStore extends MastraStorage {
     } catch (e) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_INITIALIZATION_FAILED',
+          id: createStorageErrorId('MSSQL', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -158,7 +158,7 @@ export class MSSQLStore extends MastraStorage {
       this.isConnected = null;
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_INIT_FAILED',
+          id: createStorageErrorId('MSSQL', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -418,7 +418,7 @@ export class MSSQLStore extends MastraStorage {
   private getObservabilityStore(): ObservabilityMSSQL {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MSSQL', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
