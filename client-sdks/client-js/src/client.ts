@@ -39,6 +39,8 @@ import type {
   GetTracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
+  GetMemoryThreadByIdParams,
+  GetMemoryThreadByIdResponse,
   ListMemoryThreadMessagesResponse,
   MemorySearchResponse,
   ListAgentsModelProvidersResponse,
@@ -149,6 +151,18 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryThread({ threadId, agentId }: { threadId: string; agentId: string }) {
     return new MemoryThread(this.options, threadId, agentId);
+  }
+
+  /**
+   * Gets a memory thread by ID using direct storage access (no agentId required)
+   * @param params - Parameters containing threadId and resourceId
+   * @returns Promise containing the memory thread
+   */
+  public getMemoryThreadById(params: GetMemoryThreadByIdParams): Promise<GetMemoryThreadByIdResponse> {
+    const queryParams = new URLSearchParams({
+      resourceId: params.resourceId,
+    });
+    return this.request(`/api/memory/threads/${params.threadId}/direct?${queryParams.toString()}`);
   }
 
   public listThreadMessages(
