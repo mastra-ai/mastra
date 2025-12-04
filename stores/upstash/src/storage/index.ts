@@ -25,6 +25,26 @@ export interface UpstashConfig {
   id: string;
   url: string;
   token: string;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new UpstashStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new UpstashStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
 }
 
 export class UpstashStore extends MastraStorage {
@@ -32,7 +52,7 @@ export class UpstashStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: UpstashConfig) {
-    super({ id: config.id, name: 'Upstash' });
+    super({ id: config.id, name: 'Upstash', disableInit: config.disableInit });
     this.redis = new Redis({
       url: config.url,
       token: config.token,
