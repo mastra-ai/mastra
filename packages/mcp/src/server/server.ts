@@ -20,6 +20,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -284,8 +285,8 @@ export class MCPServer extends MCPServerBase {
     });
 
     this.elicitation = {
-      sendRequest: async request => {
-        return this.handleElicitationRequest(request);
+      sendRequest: async (request, options) => {
+        return this.handleElicitationRequest(request, undefined, options);
       },
     };
   }
@@ -296,16 +297,18 @@ export class MCPServer extends MCPServerBase {
    *
    * @param request - The elicitation request containing message and schema
    * @param serverInstance - Optional server instance to use; defaults to main server for backward compatibility
+   * @param options - Optional request options (timeout, signal, etc.)
    * @returns Promise that resolves to the client's response
    */
   private async handleElicitationRequest(
     request: ElicitRequest['params'],
     serverInstance?: Server,
+    options?: RequestOptions,
   ): Promise<ElicitResult> {
     this.logger.debug(`Sending elicitation request: ${request.message}`);
 
     const server = serverInstance || this.server;
-    const response = await server.elicitInput(request);
+    const response = await server.elicitInput(request, options);
 
     this.logger.debug(`Received elicitation response: ${JSON.stringify(response)}`);
 
@@ -454,9 +457,9 @@ export class MCPServer extends MCPServerBase {
         }
 
         // Create session-aware elicitation for this tool execution
-        const sessionElicitation = {
-          sendRequest: async (request: ElicitRequest['params']) => {
-            return this.handleElicitationRequest(request, serverInstance);
+        const sessionElicitation: ElicitationActions = {
+          sendRequest: async (request: ElicitRequest['params'], options?: RequestOptions) => {
+            return this.handleElicitationRequest(request, serverInstance, options);
           },
         };
 
