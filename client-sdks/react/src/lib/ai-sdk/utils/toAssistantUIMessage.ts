@@ -1,4 +1,4 @@
-import { ThreadMessageLike, MessageStatus } from '@assistant-ui/react';
+import { ThreadMessageLike, MessageStatus, DataMessagePart } from '@assistant-ui/react';
 import { ExtendedMastraUIMessage, MastraUIMessage } from '../types';
 import { ReadonlyJSONObject } from '@mastra/core/stream';
 
@@ -160,6 +160,17 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
         argsText: 'input' in part ? JSON.stringify(part.input) : '{}',
         args: ('input' in part ? part.input : {}) as ReadonlyJSONObject,
         metadata: extendedMessage.metadata,
+      };
+    }
+
+    // Handle data parts (persisted from data-* chunks via writer.custom())
+    // These parts have type: 'data-*' (e.g., 'data-progress') and contain data field
+    // Convert to DataMessagePart format: { type: 'data', name: 'progress', data: ... }
+    if (part.type.startsWith('data-')) {
+      return {
+        type: 'data',
+        name: part.type.substring(5), // Extract name from 'data-{name}'
+        data: (part as any).data,
       };
     }
 

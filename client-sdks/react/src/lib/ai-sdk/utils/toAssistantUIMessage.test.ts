@@ -1424,8 +1424,7 @@ describe('toAssistantUIMessage', () => {
             state: 'done',
           },
           {
-            type: 'data',
-            dataType: 'data-progress',
+            type: 'data-progress',
             data: {
               taskName: 'test-task',
               progress: 50,
@@ -1433,8 +1432,7 @@ describe('toAssistantUIMessage', () => {
             },
           } as any,
           {
-            type: 'data',
-            dataType: 'data-progress',
+            type: 'data-progress',
             data: {
               taskName: 'test-task',
               progress: 100,
@@ -1447,7 +1445,6 @@ describe('toAssistantUIMessage', () => {
       const result = toAssistantUIMessage(message);
 
       // Data parts should be converted to a format @assistant-ui can handle
-      // Currently they fall through to empty text parts - this test verifies proper handling
       expect(result.content).toHaveLength(3);
 
       // First part should be text
@@ -1456,11 +1453,9 @@ describe('toAssistantUIMessage', () => {
         text: 'Processing your request...',
       });
 
-      // Data parts should be converted to a proper format (not empty text)
-      // This assertion will FAIL until we implement data part handling
+      // Data parts should preserve the data-* type format
       const dataPart1 = result.content[1] as any;
-      expect(dataPart1.type).toBe('data');
-      expect(dataPart1.dataType).toBe('data-progress');
+      expect(dataPart1.type).toBe('data-progress');
       expect(dataPart1.data).toEqual({
         taskName: 'test-task',
         progress: 50,
@@ -1468,8 +1463,7 @@ describe('toAssistantUIMessage', () => {
       });
 
       const dataPart2 = result.content[2] as any;
-      expect(dataPart2.type).toBe('data');
-      expect(dataPart2.dataType).toBe('data-progress');
+      expect(dataPart2.type).toBe('data-progress');
       expect(dataPart2.data).toEqual({
         taskName: 'test-task',
         progress: 100,
@@ -1477,14 +1471,13 @@ describe('toAssistantUIMessage', () => {
       });
     });
 
-    it('should handle data parts with different dataTypes', () => {
+    it('should handle data parts with different types', () => {
       const message: MastraUIMessage = {
         id: 'msg-data-2',
         role: 'assistant',
         parts: [
           {
-            type: 'data',
-            dataType: 'data-workflow-step',
+            type: 'data-workflow-step',
             data: {
               stepId: 'step-1',
               stepName: 'validation',
@@ -1492,8 +1485,7 @@ describe('toAssistantUIMessage', () => {
             },
           } as any,
           {
-            type: 'data',
-            dataType: 'data-custom-event',
+            type: 'data-custom-event',
             data: {
               eventType: 'user-action',
               payload: { action: 'click' },
@@ -1504,16 +1496,14 @@ describe('toAssistantUIMessage', () => {
 
       const result = toAssistantUIMessage(message);
 
-      // This test verifies data parts with different dataTypes are handled correctly
+      // This test verifies data parts with different types are handled correctly
       expect(result.content).toHaveLength(2);
 
       const part1 = result.content[0] as any;
-      expect(part1.type).toBe('data');
-      expect(part1.dataType).toBe('data-workflow-step');
+      expect(part1.type).toBe('data-workflow-step');
 
       const part2 = result.content[1] as any;
-      expect(part2.type).toBe('data');
-      expect(part2.dataType).toBe('data-custom-event');
+      expect(part2.type).toBe('data-custom-event');
     });
 
     it('should preserve data part metadata', () => {
@@ -1522,8 +1512,7 @@ describe('toAssistantUIMessage', () => {
         role: 'assistant',
         parts: [
           {
-            type: 'data',
-            dataType: 'data-progress',
+            type: 'data-progress',
             data: { progress: 100 },
           } as any,
         ],
