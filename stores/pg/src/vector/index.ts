@@ -98,7 +98,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           poolConfig = {
             connectionString: config.connectionString,
             ssl: config.ssl,
-            max: config.max ?? 20,
+            max: config.max ?? 10,
             idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
             connectionTimeoutMillis: 2000,
             allowExitOnIdle: true,
@@ -107,7 +107,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         } else if (isCloudSqlConfig(config)) {
           poolConfig = {
             ...config,
-            max: config.max ?? 20,
+            max: config.max ?? 10,
             idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
             connectionTimeoutMillis: 2000,
             allowExitOnIdle: true,
@@ -121,7 +121,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             user: config.user,
             password: config.password,
             ssl: config.ssl,
-            max: config.max ?? 20,
+            max: config.max ?? 10,
             idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
             connectionTimeoutMillis: 2000,
             allowExitOnIdle: true,

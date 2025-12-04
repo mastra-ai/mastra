@@ -1,6 +1,6 @@
 import { createSampleThread } from '@internal/storage-test-utils';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
-import pgPromise from 'pg-promise';
+import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PostgresStoreConfig } from '../shared/config';
 import { PostgresStore } from '.';
@@ -154,43 +154,38 @@ export function pgTests() {
       const schemaRestrictedUser = 'mastra_schema_restricted_storage';
       const restrictedPassword = 'test123';
       const testSchema = 'testSchema';
-      let adminDb: pgPromise.IDatabase<{}>;
-      let pgpAdmin: pgPromise.IMain;
+      let adminPool: Pool;
 
       beforeAll(async () => {
         // Re-initialize the main store for subsequent tests
-
         await store.init();
 
-        // Create a separate pg-promise instance for admin operations
-        pgpAdmin = pgPromise();
-        adminDb = pgpAdmin(connectionString);
+        // Create a shared pool for admin operations (small pool size to avoid connection exhaustion)
+        adminPool = new Pool({ connectionString, max: 2 });
         try {
-          await adminDb.tx(async t => {
-            // Drop the test schema if it exists from previous runs
-            await t.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          // Drop the test schema if it exists from previous runs
+          await adminPool.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
 
-            // Create schema restricted user with minimal permissions
-            await t.none(`          
-                DO $$
-                BEGIN
-                  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
-                    CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB;
-                  END IF;
-                END
-                $$;`);
+          // Create schema restricted user with minimal permissions
+          await adminPool.query(`          
+              DO $$
+              BEGIN
+                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
+                  CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB;
+                END IF;
+              END
+              $$;`);
 
-            // Grant only connect and usage to schema restricted user
-            await t.none(`
-                  REVOKE ALL ON DATABASE ${(TEST_CONFIG as any).database} FROM ${schemaRestrictedUser};
-                  GRANT CONNECT ON DATABASE ${(TEST_CONFIG as any).database} TO ${schemaRestrictedUser};
-                  REVOKE ALL ON SCHEMA public FROM ${schemaRestrictedUser};
-                  GRANT USAGE ON SCHEMA public TO ${schemaRestrictedUser};
-                `);
-          });
+          // Grant only connect and usage to schema restricted user
+          await adminPool.query(`
+                REVOKE ALL ON DATABASE ${(TEST_CONFIG as any).database} FROM ${schemaRestrictedUser};
+                GRANT CONNECT ON DATABASE ${(TEST_CONFIG as any).database} TO ${schemaRestrictedUser};
+                REVOKE ALL ON SCHEMA public FROM ${schemaRestrictedUser};
+                GRANT USAGE ON SCHEMA public TO ${schemaRestrictedUser};
+              `);
         } catch (error) {
           // Clean up the database connection on error
-          pgpAdmin.end();
+          await adminPool.end();
           throw error;
         }
       });
@@ -198,53 +193,35 @@ export function pgTests() {
       afterAll(async () => {
         try {
           // Then clean up test user in admin connection
-          await adminDb.tx(async t => {
-            await t.none(`
-                  REASSIGN OWNED BY ${schemaRestrictedUser} TO postgres;
-                  DROP OWNED BY ${schemaRestrictedUser};
-                  DROP USER IF EXISTS ${schemaRestrictedUser};
-                `);
-          });
-
-          // Finally clean up admin connection
-          if (pgpAdmin) {
-            pgpAdmin.end();
-          }
+          await adminPool.query(`
+                REASSIGN OWNED BY ${schemaRestrictedUser} TO postgres;
+                DROP OWNED BY ${schemaRestrictedUser};
+                DROP USER IF EXISTS ${schemaRestrictedUser};
+              `);
         } catch (error) {
           console.error('Error cleaning up test user:', error);
-          if (pgpAdmin) pgpAdmin.end();
+        } finally {
+          await adminPool.end();
         }
       });
 
       describe('Schema Creation', () => {
         beforeEach(async () => {
-          // Create a fresh connection for each test
-          const tempPgp = pgPromise();
-          const tempDb = tempPgp(connectionString);
+          // Ensure schema doesn't exist before each test
+          await adminPool.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
 
-          try {
-            // Ensure schema doesn't exist before each test
-            await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
-
-            // Ensure no active connections from restricted user
-            await tempDb.none(`
-                  SELECT pg_terminate_backend(pid) 
-                  FROM pg_stat_activity 
-                  WHERE usename = '${schemaRestrictedUser}'
-                `);
-          } finally {
-            tempPgp.end(); // Always clean up the connection
-          }
+          // Ensure no active connections from restricted user
+          await adminPool.query(`
+                SELECT pg_terminate_backend(pid) 
+                FROM pg_stat_activity 
+                WHERE usename = '${schemaRestrictedUser}'
+              `);
         });
 
         afterEach(async () => {
-          // Create a fresh connection for cleanup
-          const tempPgp = pgPromise();
-          const tempDb = tempPgp(connectionString);
-
           try {
             // Clean up any connections from the restricted user and drop schema
-            await tempDb.none(`
+            await adminPool.query(`
                   DO $$
                   BEGIN
                     -- Terminate connections
@@ -258,8 +235,6 @@ export function pgTests() {
                 `);
           } catch (error) {
             console.error('Error in afterEach cleanup:', error);
-          } finally {
-            tempPgp.end(); // Always clean up the connection
           }
         });
 
@@ -272,10 +247,6 @@ export function pgTests() {
             schemaName: testSchema,
           });
 
-          // Create a fresh connection for verification
-          const tempPgp = pgPromise();
-          const tempDb = tempPgp(connectionString);
-
           try {
             // Test schema creation by initializing the store
             await expect(async () => {
@@ -285,14 +256,13 @@ export function pgTests() {
             );
 
             // Verify schema was not created
-            const exists = await tempDb.oneOrNone(
+            const result = await adminPool.query(
               `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
               [testSchema],
             );
-            expect(exists?.exists).toBe(false);
+            expect(result.rows[0]?.exists).toBe(false);
           } finally {
             await restrictedDB.close();
-            tempPgp.end(); // Clean up the verification connection
           }
         });
 
@@ -305,10 +275,6 @@ export function pgTests() {
             schemaName: testSchema,
           });
 
-          // Create a fresh connection for verification
-          const tempPgp = pgPromise();
-          const tempDb = tempPgp(connectionString);
-
           try {
             await expect(async () => {
               await restrictedDB.init();
@@ -319,14 +285,13 @@ export function pgTests() {
             );
 
             // Verify schema was not created
-            const exists = await tempDb.oneOrNone(
+            const result = await adminPool.query(
               `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
               [testSchema],
             );
-            expect(exists?.exists).toBe(false);
+            expect(result.rows[0]?.exists).toBe(false);
           } finally {
             await restrictedDB.close();
-            tempPgp.end(); // Clean up the verification connection
           }
         });
       });
@@ -335,20 +300,16 @@ export function pgTests() {
     describe('Function Namespace in Schema', () => {
       const testSchema = 'schema_fn_test';
       let testStore: PostgresStore;
+      let fnTestPool: Pool;
 
       beforeAll(async () => {
-        // Use a temp connection to set up schema
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        // Use a shared pool for setup/cleanup (small pool size)
+        fnTestPool = new Pool({ connectionString, max: 2 });
 
-        try {
-          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
-          await tempDb.none(`CREATE SCHEMA ${testSchema}`);
-          // Drop the function from public schema if it exists from other tests
-          await tempDb.none(`DROP FUNCTION IF EXISTS public.trigger_set_timestamps() CASCADE`);
-        } finally {
-          tempPgp.end();
-        }
+        await fnTestPool.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+        await fnTestPool.query(`CREATE SCHEMA ${testSchema}`);
+        // Drop the function from public schema if it exists from other tests
+        await fnTestPool.query(`DROP FUNCTION IF EXISTS public.trigger_set_timestamps() CASCADE`);
 
         testStore = new PostgresStore({
           ...TEST_CONFIG,
@@ -361,14 +322,10 @@ export function pgTests() {
       afterAll(async () => {
         await testStore?.close();
 
-        // Use a temp connection to clean up
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
-
         try {
-          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          await fnTestPool.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
         } finally {
-          tempPgp.end();
+          await fnTestPool.end();
         }
       });
 

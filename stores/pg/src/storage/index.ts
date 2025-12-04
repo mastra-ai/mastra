@@ -95,8 +95,8 @@ export class PostgresStore extends MastraStorage {
           poolConfig = {
             connectionString: this.#config.connectionString,
             ssl: this.#config.ssl,
-            // High defaults to match pg-promise behavior
-            max: this.#config.max ?? 20,
+            // Default pool size of 10 (balanced for most use cases)
+            max: this.#config.max ?? 10,
             idleTimeoutMillis: this.#config.idleTimeoutMillis ?? 30000,
             connectionTimeoutMillis: 2000,
             allowExitOnIdle: true,
@@ -109,8 +109,8 @@ export class PostgresStore extends MastraStorage {
             user: this.#config.user,
             password: this.#config.password,
             ssl: this.#config.ssl,
-            // High defaults to match pg-promise behavior
-            max: this.#config.max ?? 20,
+            // Default pool size of 10 (balanced for most use cases)
+            max: this.#config.max ?? 10,
             idleTimeoutMillis: this.#config.idleTimeoutMillis ?? 30000,
             connectionTimeoutMillis: 2000,
             allowExitOnIdle: true,
