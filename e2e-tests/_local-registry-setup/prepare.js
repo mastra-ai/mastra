@@ -5,9 +5,11 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
-const defaultTimeout = 3 * 60 * 1000;
+// 10 minutes timeout for changeset operations - CI can be slow
+const defaultTimeout = 10 * 60 * 1000;
 
-let maxRetries = 5;
+// Reduced retries since we now properly kill processes on timeout
+let maxRetries = 2;
 
 /**
  * Execute a command with proper timeout handling that kills the child process on timeout.
@@ -19,7 +21,9 @@ function execWithTimeout(command, options, timeout) {
     const child = spawn(command, {
       cwd: options.cwd,
       shell: true,
-      stdio: ['inherit', 'inherit', 'inherit'],
+      // Use 'ignore' for stdin to prevent interactive prompts from hanging
+      // Use 'inherit' for stdout/stderr so we see the output
+      stdio: ['ignore', 'inherit', 'inherit'],
       // Create a new process group so we can kill all child processes
       detached: process.platform !== 'win32',
     });
@@ -166,6 +170,18 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       parsed.changelog = '@changesets/cli/changelog';
       writeFileSync(join(monorepoDir, '.changeset/config.json'), JSON.stringify(parsed, null, 2));
     })();
+
+    // Clear existing changesets to speed up version command
+    // We only need our test changeset, not the 400+ existing ones
+    console.log('Clearing existing changeset files for faster versioning');
+    const existingChangesets = await glob('*.md', {
+      cwd: join(monorepoDir, '.changeset'),
+      ignore: ['README.md'],
+    });
+    for (const file of existingChangesets) {
+      const { unlinkSync } = await import('node:fs');
+      unlinkSync(join(monorepoDir, '.changeset', file));
+    }
 
     // update all packages so they are on the snapshot version
     const allPackages = await execAsync('pnpm ls -r --depth -1 --json', {
