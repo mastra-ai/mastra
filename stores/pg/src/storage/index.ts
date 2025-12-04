@@ -1,5 +1,6 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { createStorageErrorId } from '@mastra/core/storage';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
@@ -82,7 +83,7 @@ export class PostgresStore extends MastraStorage {
     } catch (e) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_INITIALIZATION_FAILED',
+          id: createStorageErrorId('PG', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -130,7 +131,7 @@ export class PostgresStore extends MastraStorage {
       this.isConnected = false;
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_POSTGRES_STORE_INIT_FAILED',
+          id: createStorageErrorId('PG', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -367,7 +368,7 @@ export class PostgresStore extends MastraStorage {
   async createSpan(span: SpanRecord): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -387,7 +388,7 @@ export class PostgresStore extends MastraStorage {
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -399,7 +400,7 @@ export class PostgresStore extends MastraStorage {
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -411,7 +412,7 @@ export class PostgresStore extends MastraStorage {
   async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -423,7 +424,7 @@ export class PostgresStore extends MastraStorage {
   async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -441,7 +442,7 @@ export class PostgresStore extends MastraStorage {
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -453,7 +454,7 @@ export class PostgresStore extends MastraStorage {
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',

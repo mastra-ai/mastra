@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { MastraVector } from '@mastra/core/vector';
 import type {
@@ -143,7 +144,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_INITIALIZATION_FAILED',
+          id: createVectorErrorId('PG', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -253,7 +254,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_QUERY_INVALID_INPUT',
+          id: createVectorErrorId('PG', 'QUERY', 'INVALID_INPUT'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
           details: {
@@ -321,7 +322,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('PG', 'QUERY', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -407,7 +408,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           const [, expected, actual] = match;
           const mastraError = new MastraError(
             {
-              id: 'MASTRA_STORAGE_PG_VECTOR_UPSERT_INVALID_INPUT',
+              id: createVectorErrorId('PG', 'UPSERT', 'INVALID_INPUT'),
               domain: ErrorDomain.MASTRA_VECTOR,
               category: ErrorCategory.USER,
               text:
@@ -428,7 +429,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('PG', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -529,7 +530,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_CREATE_INDEX_INVALID_INPUT',
+          id: createVectorErrorId('PG', 'CREATE_INDEX', 'INVALID_INPUT'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
           details: {
@@ -602,7 +603,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       .catch(error => {
         const mastraError = new MastraError(
           {
-            id: 'MASTRA_STORAGE_PG_VECTOR_CREATE_INDEX_FAILED',
+            id: createVectorErrorId('PG', 'CREATE_INDEX', 'FAILED'),
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.THIRD_PARTY,
             details: {
@@ -623,7 +624,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_BUILD_INDEX_FAILED',
+          id: createVectorErrorId('PG', 'BUILD_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -871,7 +872,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (e) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('PG', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -982,7 +983,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('PG', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1009,7 +1010,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('PG', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1034,7 +1035,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_TRUNCATE_INDEX_FAILED',
+          id: createVectorErrorId('PG', 'TRUNCATE_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1084,7 +1085,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Validate that exactly one of id or filter is provided
       if (!id && !filter) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_MISSING_PARAMS',
+          id: createVectorErrorId('PG', 'UPDATE', 'MISSING_PARAMS'),
           text: 'Either id or filter must be provided',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1094,7 +1095,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       if (id && filter) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_CONFLICTING_PARAMS',
+          id: createVectorErrorId('PG', 'UPDATE', 'CONFLICTING_PARAMS'),
           text: 'Cannot provide both id and filter - they are mutually exclusive',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1138,7 +1139,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Update by filter
         if (!filter || Object.keys(filter).length === 0) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_EMPTY_FILTER',
+            id: createVectorErrorId('PG', 'UPDATE', 'EMPTY_FILTER'),
             text: 'Cannot update with empty filter',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1154,7 +1155,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         if (!whereClause) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_INVALID_FILTER',
+            id: createVectorErrorId('PG', 'UPDATE', 'INVALID_FILTER'),
             text: 'Filter produced empty WHERE clause',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1191,7 +1192,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1229,7 +1230,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('PG', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1262,7 +1263,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Validate that exactly one of filter or ids is provided
       if (!filter && !ids) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_MISSING_PARAMS',
+          id: createVectorErrorId('PG', 'DELETE', 'MISSING_PARAMS'),
           text: 'Either filter or ids must be provided',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1272,7 +1273,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       if (filter && ids) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_CONFLICTING_PARAMS',
+          id: createVectorErrorId('PG', 'DELETE', 'CONFLICTING_PARAMS'),
           text: 'Cannot provide both filter and ids - they are mutually exclusive',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1287,7 +1288,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Delete by IDs
         if (ids.length === 0) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_EMPTY_IDS',
+            id: createVectorErrorId('PG', 'DELETE', 'EMPTY_IDS'),
             text: 'Cannot delete with empty ids array',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1303,7 +1304,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
         if (!filter || Object.keys(filter).length === 0) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_EMPTY_FILTER',
+            id: createVectorErrorId('PG', 'DELETE', 'EMPTY_FILTER'),
             text: 'Cannot delete with empty filter. Use deleteIndex to delete all vectors.',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1320,7 +1321,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         if (!whereClause) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_INVALID_FILTER',
+            id: createVectorErrorId('PG', 'DELETE', 'INVALID_FILTER'),
             text: 'Filter produced empty WHERE clause',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1350,7 +1351,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Wrap other errors
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
