@@ -177,7 +177,6 @@ export function workflowLoopStream<
           });
 
           if (rest.options?.onError) {
-            // Call onError callback if provided
             await rest.options?.onError?.({ error });
           }
         }
