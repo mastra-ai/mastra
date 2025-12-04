@@ -11,11 +11,12 @@ import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
+import { ModelRouterLanguageModel } from '../llm';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraDBMessage, StorageThreadType } from '../memory';
 import { MockMemory } from '../memory/mock';
-
+import type { ProcessInputStepArgs } from '../processors';
 import { RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -23,9 +24,6 @@ import { delay } from '../utils';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
-import { ModelRouterLanguageModel } from '../llm';
-import { PrepareStepFunction } from '../loop/types';
-import { ProcessInputStepArgs } from '../processors';
 
 config();
 
@@ -6163,17 +6161,16 @@ describe('Agent Tests', () => {
       expect(prepareStepCallArgs).toMatchObject({
         model: expect.any(ModelRouterLanguageModel),
         toolChoice: 'auto',
-        activeTools: ['tool1'],
+        activeTools: ['tool1', 'tool2'],
         stepNumber: 0,
       });
 
-      console.log('result', result.request.body);
-      // expect((result?.request?.body as any)?.model).toBe('gpt-4o-mini');
-      // expect(result?.response?.modelMetadata).toMatchObject({
-      //   modelId: 'gpt-4o-mini',
-      //   modelProvider: 'openai',
-      //   modelVersion: 'v2',
-      // });
+      expect((result.request.body as any).tools).toMatchObject([
+        {
+          type: 'function',
+          name: 'tool1',
+        },
+      ]);
     });
 
     it('should use mastra model config openai compatible object when set in prepareStep', async () => {
