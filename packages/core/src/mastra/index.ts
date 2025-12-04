@@ -17,6 +17,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ObservabilityEntrypoint } from '../observability';
 import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
+import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -27,6 +28,27 @@ import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { createOnScorerHook } from './hooks';
+
+/**
+ * Creates an error for when a null/undefined value is passed to an add* method.
+ * This commonly occurs when config is spread ({ ...config }) and the original
+ * object had getters or non-enumerable properties.
+ */
+function createUndefinedPrimitiveError(
+  type: 'agent' | 'tool' | 'processor' | 'vector' | 'scorer' | 'workflow' | 'mcp-server' | 'gateway',
+  value: null | undefined,
+  key?: string,
+): MastraError {
+  const typeLabel = type === 'mcp-server' ? 'MCP server' : type;
+  const errorId = `MASTRA_ADD_${type.toUpperCase().replace('-', '_')}_UNDEFINED` as Uppercase<string>;
+  return new MastraError({
+    id: errorId,
+    domain: ErrorDomain.MASTRA,
+    category: ErrorCategory.USER,
+    text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`,
+    details: { status: 400, ...(key && { key }) },
+  });
+}
 
 /**
  * Configuration interface for initializing a Mastra instance.
@@ -68,10 +90,13 @@ export interface Config<
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
-  TProcessors extends Record<string, Processor> = Record<string, Processor>,
+  TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
+    string,
+    ToolAction<any, any, any, any, any, any>
+  >,
+  TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -231,10 +256,13 @@ export class Mastra<
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-  TTools extends Record<string, ToolAction<any, any, any, any>> = Record<string, ToolAction<any, any, any, any>>,
-  TProcessors extends Record<string, Processor> = Record<string, Processor>,
+  TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
+    string,
+    ToolAction<any, any, any, any, any, any>
+  >,
+  TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -253,6 +281,7 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #server?: ServerConfig;
+  #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
@@ -453,58 +482,78 @@ export class Mastra<
 
     // Now add primitives - order matters for auto-registration
     // Tools and processors should be added before agents and MCP servers that might use them
+    // Note: We validate each entry to handle cases where config was spread ({ ...config })
+    // which can cause undefined values if the source object had getters or non-enumerable properties
     if (config?.tools) {
       Object.entries(config.tools).forEach(([key, tool]) => {
-        this.addTool(tool, key);
+        if (tool != null) {
+          this.addTool(tool, key);
+        }
       });
     }
 
     if (config?.processors) {
       Object.entries(config.processors).forEach(([key, processor]) => {
-        this.addProcessor(processor, key);
+        if (processor != null) {
+          this.addProcessor(processor, key);
+        }
       });
     }
 
     if (config?.vectors) {
       Object.entries(config.vectors).forEach(([key, vector]) => {
-        this.addVector(vector, key);
+        if (vector != null) {
+          this.addVector(vector, key);
+        }
       });
     }
 
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
-        this.addScorer(scorer, key);
+        if (scorer != null) {
+          this.addScorer(scorer, key);
+        }
       });
     }
 
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
-        this.addWorkflow(workflow, key);
+        if (workflow != null) {
+          this.addWorkflow(workflow, key);
+        }
       });
     }
 
     if (config?.gateways) {
       Object.entries(config.gateways).forEach(([key, gateway]) => {
-        this.addGateway(gateway, key);
+        if (gateway != null) {
+          this.addGateway(gateway, key);
+        }
       });
     }
 
     // Add MCP servers and agents last since they might reference other primitives
     if (config?.mcpServers) {
       Object.entries(config.mcpServers).forEach(([key, server]) => {
-        this.addMCPServer(server, key);
+        if (server != null) {
+          this.addMCPServer(server, key);
+        }
       });
     }
 
     if (config?.agents) {
       Object.entries(config.agents).forEach(([key, agent]) => {
-        this.addAgent(agent, key);
+        if (agent != null) {
+          this.addAgent(agent, key);
+        }
       });
     }
 
     if (config?.tts) {
       Object.entries(config.tts).forEach(([key, tts]) => {
-        (this.#tts as Record<string, MastraTTS>)[key] = tts;
+        if (tts != null) {
+          (this.#tts as Record<string, MastraTTS>)[key] = tts;
+        }
       });
     }
 
@@ -590,7 +639,7 @@ export class Mastra<
    * const sameAgent = mastra.getAgentById(assistant.id);
    * ```
    */
-  public getAgentById(id: string): Agent {
+  public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName] {
     let agent = Object.values(this.#agents).find(a => a.id === id);
 
     if (!agent) {
@@ -617,7 +666,7 @@ export class Mastra<
       throw error;
     }
 
-    return agent;
+    return agent as TAgents[TAgentName];
   }
 
   /**
@@ -665,6 +714,9 @@ export class Mastra<
    * ```
    */
   public addAgent<A extends Agent<any>>(agent: A, key?: string): void {
+    if (!agent) {
+      throw createUndefinedPrimitiveError('agent', agent, key);
+    }
     const agentKey = key || agent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
@@ -763,20 +815,20 @@ export class Mastra<
    * const vectorStore = mastra.getVectorById('chroma-123');
    * ```
    */
-  public getVectorById(id: string): MastraVector {
+  public getVectorById<TVectorName extends keyof TVectors>(id: TVectors[TVectorName]['id']): TVectors[TVectorName] {
     const allVectors = this.#vectors ?? ({} as Record<string, MastraVector>);
 
     // First try to find by internal ID
     for (const vector of Object.values(allVectors)) {
       if (vector.id === id) {
-        return vector as MastraVector;
+        return vector as TVectors[TVectorName];
       }
     }
 
     // Fallback to searching by registration key
     const vectorByKey = allVectors[id];
     if (vectorByKey) {
-      return vectorByKey;
+      return vectorByKey as TVectors[TVectorName];
     }
 
     const error = new MastraError({
@@ -838,6 +890,9 @@ export class Mastra<
    * ```
    */
   public addVector<V extends MastraVector>(vector: V, key?: string): void {
+    if (!vector) {
+      throw createUndefinedPrimitiveError('vector', vector, key);
+    }
     const vectorKey = key || vector.id;
     const vectors = this.#vectors as Record<string, MastraVector>;
     if (vectors[vectorKey]) {
@@ -998,7 +1053,9 @@ export class Mastra<
    * console.log(sameWorkflow.name); // "process-data"
    * ```
    */
-  public getWorkflowById(id: string): Workflow {
+  public getWorkflowById<TWorkflowName extends keyof TWorkflows>(
+    id: TWorkflows[TWorkflowName]['id'],
+  ): TWorkflows[TWorkflowName] {
     let workflow = Object.values(this.#workflows).find(a => a.id === id);
 
     if (!workflow) {
@@ -1025,7 +1082,7 @@ export class Mastra<
       throw error;
     }
 
-    return workflow;
+    return workflow as TWorkflows[TWorkflowName];
   }
 
   public async listActiveWorkflowRuns(): Promise<WorkflowRuns> {
@@ -1124,6 +1181,9 @@ export class Mastra<
    * ```
    */
   public addScorer<S extends MastraScorer<any, any, any, any>>(scorer: S, key?: string): void {
+    if (!scorer) {
+      throw createUndefinedPrimitiveError('scorer', scorer, key);
+    }
     const scorerKey = key || scorer.id;
     const scorers = this.#scorers as Record<string, MastraScorer<any, any, any, any>>;
     if (scorers[scorerKey]) {
@@ -1131,6 +1191,9 @@ export class Mastra<
       logger.debug(`Scorer with key ${scorerKey} already exists. Skipping addition.`);
       return;
     }
+
+    // Register Mastra instance with scorer to enable custom gateway access
+    scorer.__registerMastra(this);
 
     scorers[scorerKey] = scorer;
   }
@@ -1213,10 +1276,10 @@ export class Mastra<
    * });
    * ```
    */
-  public getScorerById(id: string): MastraScorer<any, any, any, any> {
+  public getScorerById<TScorerName extends keyof TScorers>(id: TScorers[TScorerName]['id']): TScorers[TScorerName] {
     for (const [_key, value] of Object.entries(this.#scorers ?? {})) {
       if (value.id === id || value?.name === id) {
-        return value;
+        return value as TScorers[TScorerName];
       }
     }
 
@@ -1282,7 +1345,7 @@ export class Mastra<
    * const tool = mastra.getToolById('calculator-tool-id');
    * ```
    */
-  public getToolById(id: string): ToolAction<any, any, any, any> {
+  public getToolById<TToolName extends keyof TTools>(id: TTools[TToolName]['id']): TTools[TToolName] {
     const allTools = this.#tools;
 
     if (!allTools) {
@@ -1296,14 +1359,14 @@ export class Mastra<
     // First try to find by internal ID
     for (const tool of Object.values(allTools)) {
       if (tool.id === id) {
-        return tool as ToolAction<any, any, any, any>;
+        return tool as TTools[TToolName];
       }
     }
 
     // Fallback to searching by registration key
     const toolByKey = allTools[id];
     if (toolByKey) {
-      return toolByKey;
+      return toolByKey as TTools[TToolName];
     }
 
     const error = new MastraError({
@@ -1364,6 +1427,9 @@ export class Mastra<
    * ```
    */
   public addTool<T extends ToolAction<any, any, any, any>>(tool: T, key?: string): void {
+    if (!tool) {
+      throw createUndefinedPrimitiveError('tool', tool, key);
+    }
     const toolKey = key || tool.id;
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
     if (tools[toolKey]) {
@@ -1427,7 +1493,9 @@ export class Mastra<
    * const processor = mastra.getProcessorById('validator-processor-id');
    * ```
    */
-  public getProcessorById(id: string): Processor {
+  public getProcessorById<TProcessorName extends keyof TProcessors>(
+    id: TProcessors[TProcessorName]['id'],
+  ): TProcessors[TProcessorName] {
     const allProcessors = this.#processors;
 
     if (!allProcessors) {
@@ -1442,14 +1510,14 @@ export class Mastra<
     // First try to find by internal ID
     for (const processor of Object.values(allProcessors)) {
       if (processor.id === id) {
-        return processor as Processor;
+        return processor as TProcessors[TProcessorName];
       }
     }
 
     // Fallback to searching by registration key
     const processorByKey = allProcessors[id];
     if (processorByKey) {
-      return processorByKey;
+      return processorByKey as TProcessors[TProcessorName];
     }
 
     const error = new MastraError({
@@ -1510,6 +1578,9 @@ export class Mastra<
    * ```
    */
   public addProcessor<P extends Processor>(processor: P, key?: string): void {
+    if (!processor) {
+      throw createUndefinedPrimitiveError('processor', processor, key);
+    }
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
@@ -1577,6 +1648,9 @@ export class Mastra<
    * ```
    */
   public addWorkflow<W extends Workflow<any, any, any, any, any, any>>(workflow: W, key?: string): void {
+    if (!workflow) {
+      throw createUndefinedPrimitiveError('workflow', workflow, key);
+    }
     const workflowKey = key || workflow.id;
     const workflows = this.#workflows as Record<string, Workflow<any, any, any, any, any, any>>;
     if (workflows[workflowKey]) {
@@ -1654,6 +1728,10 @@ export class Mastra<
       Object.keys(this.#mcpServers).forEach(key => {
         this.#mcpServers?.[key]?.__setLogger(this.#logger);
       });
+    }
+
+    if (this.#serverAdapter) {
+      this.#serverAdapter.__setLogger(this.#logger);
     }
 
     this.#observability.setLogger({ logger: this.#logger });
@@ -1778,6 +1856,78 @@ export class Mastra<
 
   public getServer() {
     return this.#server;
+  }
+
+  /**
+   * Sets the server adapter for this Mastra instance.
+   *
+   * The server adapter provides access to the underlying server app (e.g., Hono, Express)
+   * and allows users to call routes directly via `app.fetch()` instead of making HTTP requests.
+   *
+   * This is typically called by `createHonoServer` or similar factory functions during
+   * server initialization.
+   *
+   * @param adapter - The server adapter instance (e.g., MastraServer from @mastra/hono or @mastra/express)
+   *
+   * @example
+   * ```typescript
+   * const app = new Hono();
+   * const adapter = new MastraServer({ app, mastra });
+   * mastra.setMastraServer(adapter);
+   * ```
+   */
+  public setMastraServer(adapter: MastraServerBase): void {
+    if (this.#serverAdapter) {
+      this.#logger?.debug(
+        'Replacing existing server adapter. Only one adapter should be registered per Mastra instance.',
+      );
+    }
+    this.#serverAdapter = adapter;
+    // Inject the logger into the adapter
+    if (this.#logger) {
+      adapter.__setLogger(this.#logger);
+    }
+  }
+
+  /**
+   * Gets the server adapter for this Mastra instance.
+   *
+   * @returns The server adapter, or undefined if not set
+   *
+   * @example
+   * ```typescript
+   * const adapter = mastra.getMastraServer();
+   * if (adapter) {
+   *   const app = adapter.getApp<Hono>();
+   * }
+   * ```
+   */
+  public getMastraServer(): MastraServerBase | undefined {
+    return this.#serverAdapter;
+  }
+
+  /**
+   * Gets the server app from the server adapter.
+   *
+   * This is a convenience method that calls `getMastraServer()?.getApp<T>()`.
+   * Use this to access the underlying server framework's app instance (e.g., Hono, Express)
+   * for direct operations like calling routes via `app.fetch()`.
+   *
+   * @template T - The expected type of the app (e.g., Hono, Express Application)
+   * @returns The server app, or undefined if no adapter is set
+   *
+   * @example
+   * ```typescript
+   * // After createHonoServer() is called:
+   * const app = mastra.getServerApp<Hono>();
+   *
+   * // Call routes directly without HTTP overhead
+   * const response = await app?.fetch(new Request('http://localhost/health'));
+   * const data = await response?.json();
+   * ```
+   */
+  public getServerApp<T = unknown>(): T | undefined {
+    return this.#serverAdapter?.getApp<T>();
   }
 
   public getBundlerConfig() {
@@ -1930,6 +2080,9 @@ export class Mastra<
    * ```
    */
   public addMCPServer<M extends MCPServerBase>(server: M, key?: string): void {
+    if (!server) {
+      throw createUndefinedPrimitiveError('mcp-server', server, key);
+    }
     // If a key is provided, try to set it as the ID
     // The setId method will only update if the ID wasn't explicitly set by the user
     if (key) {
@@ -2016,7 +2169,10 @@ export class Mastra<
    * }
    * ```
    */
-  public getMCPServerById(serverId: string, version?: string): MCPServerBase | undefined {
+  public getMCPServerById<TMCPServerName extends keyof TMCPServers>(
+    serverId: TMCPServers[TMCPServerName]['id'],
+    version?: string,
+  ): TMCPServers[TMCPServerName] | undefined {
     if (!this.#mcpServers) {
       return undefined;
     }
@@ -2035,11 +2191,11 @@ export class Mastra<
       if (!specificVersionServer) {
         this.#logger?.debug(`MCP server with logical ID '${serverId}' found, but not version '${version}'.`);
       }
-      return specificVersionServer;
+      return specificVersionServer as TMCPServers[TMCPServerName] | undefined;
     } else {
       // No version specified, find the one with the most recent releaseDate
       if (matchingLogicalIdServers.length === 1) {
-        return matchingLogicalIdServers[0];
+        return matchingLogicalIdServers[0] as TMCPServers[TMCPServerName];
       }
 
       matchingLogicalIdServers.sort((a, b) => {
@@ -2063,7 +2219,7 @@ export class Mastra<
           typeof latestServer.releaseDate === 'string' &&
           !isNaN(new Date(latestServer.releaseDate).getTime())
         ) {
-          return latestServer;
+          return latestServer as TMCPServers[TMCPServerName];
         }
       }
       this.#logger?.warn(
@@ -2271,6 +2427,9 @@ export class Mastra<
    * ```
    */
   public addGateway(gateway: MastraModelGateway, key?: string): void {
+    if (!gateway) {
+      throw createUndefinedPrimitiveError('gateway', gateway, key);
+    }
     const gatewayKey = key || gateway.getId();
     const gateways = this.#gateways as Record<string, MastraModelGateway>;
     if (gateways[gatewayKey]) {

@@ -379,12 +379,6 @@ article a:hover {
   color: var(--mastra-green-accent-2);
 }
 
-/* Pre with title above - remove top border radius */
-div[class*="codeBlockTitle"] + div[class*="codeBlockContent"] pre {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-}
-
 #docs-search-results {
   scrollbar-width: none;
 }
@@ -529,14 +523,27 @@ video {
   background: none;
 }
 
-pre {
+pre,
+.copilotKitCodeBlock div {
   --prism-background-color: var(--mastra-surface-2);
   background: var(--mastra-surface-2);
-  border: 0.5px solid var(--border);
-  border-radius: 12px;
+  border: 0.5px solid var(--border) !important;
+  border-radius: 12px !important;
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  font-family: var(--ifm-font-family-monospace) !important;
+}
+
+/* Pre with title above - remove top border radius */
+div[class*="codeBlockTitle"] + div[class*="codeBlockContent"] pre {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+
+.copilotKitCodeBlock div * {
+  font-family: var(--ifm-font-family-monospace) !important;
+  font-size: 13px;
 }
 
 pre * {
@@ -998,6 +1005,7 @@ ol {
     padding-inline: 0.38rem;
     padding-block: 0.2rem;
     display: flex;
+    font-size: 10px;
   }
 
   [data-theme="dark"] kbd {
@@ -1282,4 +1290,8 @@ ol {
       right: 20.4%;
     }
   }
+}
+
+.copilotKitCodeBlockToolbar {
+  display: none !important;
 }

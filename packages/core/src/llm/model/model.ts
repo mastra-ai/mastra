@@ -25,6 +25,7 @@ import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import { SpanType } from '../../observability';
+import { executeWithContext, executeWithContextSync } from '../../observability/utils';
 import { delay, isZodType } from '../../utils';
 
 import type {
@@ -235,10 +236,8 @@ export class MastraLLMV1 extends MastraBase {
           runId,
         });
 
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
+        const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
+        if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
           this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
@@ -251,7 +250,10 @@ export class MastraLLMV1 extends MastraBase {
     };
 
     try {
-      const result: GenerateTextResult<Tools, Z> = await generateText(argsForExecute);
+      const result: GenerateTextResult<Tools, Z> = await executeWithContext({
+        span: llmSpan,
+        fn: () => generateText(argsForExecute),
+      });
 
       if (schema && result.finishReason === 'stop') {
         result.object = (result as any).experimental_output;
@@ -531,10 +533,8 @@ export class MastraLLMV1 extends MastraBase {
           runId,
         });
 
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
+        const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
+        if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
           this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
@@ -605,7 +605,7 @@ export class MastraLLMV1 extends MastraBase {
     };
 
     try {
-      return streamText(argsForExecute);
+      return executeWithContextSync({ span: llmSpan, fn: () => streamText(argsForExecute) });
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {

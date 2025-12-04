@@ -1,5 +1,25 @@
 # create-mastra
 
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10500](https://github.com/mastra-ai/mastra/pull/10500))
+
+- Hide time travel on map steps in Studio ([#10631](https://github.com/mastra-ai/mastra/pull/10631))
+
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Add timeTravel APIs and add timeTravel feature to studio ([#10361](https://github.com/mastra-ai/mastra/pull/10361))
+
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- fix: detect bun runtime and cleanup on failure ([#10242](https://github.com/mastra-ai/mastra/pull/10242))
+
 ## 1.0.0-beta.2
 
 ### Patch Changes

@@ -76,7 +76,7 @@ export class CloudflareStore extends MastraStorage {
   }
 
   constructor(config: CloudflareStoreConfig) {
-    super({ id: config.id, name: 'Cloudflare' });
+    super({ id: config.id, name: 'Cloudflare', disableInit: config.disableInit });
 
     try {
       if (isWorkersConfig(config)) {

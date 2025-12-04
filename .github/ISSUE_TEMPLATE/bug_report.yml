@@ -50,6 +50,7 @@ body:
     attributes:
       label: Environment Information
       description: Run "npx envinfo --system --browsers --binaries --npmPackages --npmGlobalPackages" in your project directory and paste the output here.
+      render: block
       placeholder: |
         In addition to the "npx envinfo" output, please also include:
 

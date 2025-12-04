@@ -223,6 +223,16 @@ const sidebars = {
               id: "workflows/run-methods/cancel",
               label: ".cancel()",
             },
+            {
+              type: "doc",
+              id: "workflows/run-methods/restart",
+              label: ".restart()",
+            },
+            {
+              type: "doc",
+              id: "workflows/run-methods/timeTravel",
+              label: ".timeTravel()",
+            },
           ],
         },
       ],
@@ -265,13 +275,8 @@ const sidebars = {
             },
             {
               type: "doc",
-              id: "streaming/workflows/streamVNext",
-              label: ".streamVNext()",
-            },
-            {
-              type: "doc",
-              id: "streaming/workflows/resumeStreamVNext",
-              label: ".resumeStreamVNext()",
+              id: "streaming/workflows/resumeStream",
+              label: ".resumeStream()",
             },
             {
               type: "doc",
@@ -280,8 +285,8 @@ const sidebars = {
             },
             {
               type: "doc",
-              id: "streaming/workflows/observeStreamVNext",
-              label: ".observeStreamVNext()",
+              id: "streaming/workflows/timeTravelStream",
+              label: ".timeTravelStream()",
             },
           ],
         },
@@ -359,23 +364,24 @@ const sidebars = {
       label: "Storage",
       collapsed: true,
       items: [
-        { type: "doc", id: "storage/libsql", label: "LibSQL Storage" },
-        { type: "doc", id: "storage/postgresql", label: "PostgreSQL Storage" },
-        { type: "doc", id: "storage/upstash", label: "Upstash Storage" },
         {
           type: "doc",
           id: "storage/cloudflare",
           label: "Cloudflare KV Storage",
         },
-        { type: "doc", id: "storage/dynamodb", label: "DynamoDB Storage" },
-        { type: "doc", id: "storage/mssql", label: "MSSQL Storage" },
         {
           type: "doc",
           id: "storage/cloudflare-d1",
           label: "Cloudflare D1 Storage",
         },
+        { type: "doc", id: "storage/convex", label: "Convex Storage" },
+        { type: "doc", id: "storage/dynamodb", label: "DynamoDB Storage" },
         { type: "doc", id: "storage/lance", label: "LanceDB Storage" },
+        { type: "doc", id: "storage/libsql", label: "LibSQL Storage" },
         { type: "doc", id: "storage/mongodb", label: "MongoDB Storage" },
+        { type: "doc", id: "storage/mssql", label: "MSSQL Storage" },
+        { type: "doc", id: "storage/postgresql", label: "PostgreSQL Storage" },
+        { type: "doc", id: "storage/upstash", label: "Upstash Storage" },
       ],
     },
     {
@@ -383,40 +389,67 @@ const sidebars = {
       label: "Vectors",
       collapsed: true,
       items: [
-        { type: "doc", id: "vectors/astra", label: "Astra Vector Store" },
-        { type: "doc", id: "vectors/lance", label: "Lance Vector Store" },
-        {
-          type: "doc",
-          id: "vectors/vectorize",
-          label: "Cloudflare Vector Store",
-        },
-        { type: "doc", id: "vectors/libsql", label: "LibSQLVector Store" },
-        { type: "doc", id: "vectors/qdrant", label: "Qdrant Vector Store" },
-        {
-          type: "doc",
-          id: "vectors/opensearch",
-          label: "OpenSearch Vector Store",
-        },
-        { type: "doc", id: "vectors/pinecone", label: "Pinecone Vector Store" },
-        { type: "doc", id: "vectors/mongodb", label: "MongoDB Vector Store" },
         {
           type: "doc",
           id: "vectors/s3vectors",
           label: "Amazon S3 Vectors Store",
         },
+        { type: "doc", id: "vectors/astra", label: "Astra Vector Store" },
+        { type: "doc", id: "vectors/chroma", label: "Chroma Vector Store" },
+        {
+          type: "doc",
+          id: "vectors/vectorize",
+          label: "Cloudflare Vector Store",
+        },
+        { type: "doc", id: "vectors/convex", label: "Convex Vector Store" },
+        {
+          type: "doc",
+          id: "vectors/couchbase",
+          label: "Couchbase Vector Store",
+        },
+        {
+          type: "doc",
+          id: "vectors/duckdb",
+          label: "DuckDB Vector Store",
+        },
+        {
+          type: "doc",
+          id: "vectors/elasticsearch",
+          label: "ElasticSearch Vector Store",
+        },
+        { type: "doc", id: "vectors/lance", label: "Lance Vector Store" },
+        { type: "doc", id: "vectors/libsql", label: "LibSQL Vector Store" },
+        { type: "doc", id: "vectors/mongodb", label: "MongoDB Vector Store" },
+        {
+          type: "doc",
+          id: "vectors/opensearch",
+          label: "OpenSearch Vector Store",
+        },
+        { type: "doc", id: "vectors/pg", label: "PG Vector Store" },
+        { type: "doc", id: "vectors/pinecone", label: "Pinecone Vector Store" },
+        { type: "doc", id: "vectors/qdrant", label: "Qdrant Vector Store" },
         {
           type: "doc",
           id: "vectors/turbopuffer",
           label: "Turbopuffer Vector Store",
         },
         { type: "doc", id: "vectors/upstash", label: "Upstash Vector Store" },
+      ],
+    },
+    {
+      type: "category",
+      label: "Server",
+      collapsed: true,
+      items: [
         {
           type: "doc",
-          id: "vectors/couchbase",
-          label: "Couchbase Vector Store",
+          id: "server/mastra-server",
+          label: "MastraServer",
         },
-        { type: "doc", id: "vectors/chroma", label: "Chroma Vector Store" },
-        { type: "doc", id: "vectors/pg", label: "PG Vector Store" },
+        { type: "doc", id: "server/hono-adapter", label: "Hono Adapter" },
+        { type: "doc", id: "server/express-adapter", label: "Express Adapter" },
+        { type: "doc", id: "server/create-route", label: "createRoute()" },
+        { type: "doc", id: "server/routes", label: "Server Routes" },
       ],
     },
     {
@@ -490,6 +523,17 @@ const sidebars = {
             },
             {
               type: "category",
+              label: "Bridges",
+              items: [
+                {
+                  type: "doc",
+                  id: "observability/tracing/bridges/otel",
+                  label: "OtelBridge",
+                },
+              ],
+            },
+            {
+              type: "category",
               label: "Exporters",
               items: [
                 {
@@ -532,6 +576,11 @@ const sidebars = {
                   id: "observability/tracing/exporters/otel",
                   label: "OtelExporter",
                 },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/posthog",
+                  label: "PostHogExporter",
+                },
               ],
             },
             {
@@ -567,6 +616,7 @@ const sidebars = {
       items: [
         { type: "doc", id: "evals/mastra-scorer", label: "MastraScorer" },
         { type: "doc", id: "evals/create-scorer", label: "createScorer" },
+        { type: "doc", id: "evals/scorer-utils", label: "Scorer Utils" },
         { type: "doc", id: "evals/run-evals", label: "runEvals" },
         { type: "doc", id: "evals/bias", label: "Bias" },
         { type: "doc", id: "evals/completeness", label: "Completeness" },

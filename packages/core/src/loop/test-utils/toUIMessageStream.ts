@@ -13,8 +13,11 @@ import {
   createTestModels,
   defaultSettings,
   modelWithDocumentSources,
+  modelWithReasoning,
   testUsage,
   createMessageListWithUserMessage,
+  modelWithFiles,
+  modelWithSources,
 } from './utils';
 
 export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
@@ -42,26 +45,26 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -197,7 +200,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "reasoning-end",
           },
           {
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "1",
@@ -207,7 +210,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "2",
@@ -217,7 +220,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "3",
@@ -227,7 +230,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "4",
@@ -236,7 +239,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "5",
@@ -335,7 +338,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "message-metadata",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
@@ -346,7 +349,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
@@ -357,7 +360,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
@@ -368,7 +371,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
@@ -378,7 +381,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "message-metadata",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -457,9 +460,9 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello, World!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello, World!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -482,16 +485,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello, World!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -510,9 +513,9 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello, World!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello, World!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -531,16 +534,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello, World!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -559,7 +562,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         methodType: 'stream',
         runId,
         messageList,
-        models: createTestModels(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
       });
 
@@ -700,21 +703,21 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "reasoning-end",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hi",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": " there!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -733,7 +736,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         methodType: 'stream',
         runId,
         messageList,
-        models: createTestModels(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
 
@@ -760,16 +763,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "url": "https://example.com",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -827,16 +830,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "source-document",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello from document!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -867,7 +870,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         methodType: 'stream',
         runId,
         messageList,
-        models: createTestModels(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
 
@@ -888,16 +891,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "url": "data:text/plain;base64,Hello World",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -940,26 +943,26 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -997,26 +1000,26 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -1063,19 +1066,19 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           "data: {"type":"start-step"}
 
         ",
-          "data: {"type":"text-start","id":"1"}
+          "data: {"type":"text-start","id":"text-1"}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":"Hello"}
+          "data: {"type":"text-delta","id":"text-1","delta":"Hello"}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":", "}
+          "data: {"type":"text-delta","id":"text-1","delta":", "}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":"world!"}
+          "data: {"type":"text-delta","id":"text-1","delta":"world!"}
 
         ",
-          "data: {"type":"text-end","id":"1"}
+          "data: {"type":"text-end","id":"text-1"}
 
         ",
           "data: {"type":"finish-step"}
@@ -1133,19 +1136,19 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           "data: {"type":"start-step"}
 
         ",
-          "data: {"type":"text-start","id":"1"}
+          "data: {"type":"text-start","id":"text-1"}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":"Hello"}
+          "data: {"type":"text-delta","id":"text-1","delta":"Hello"}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":", "}
+          "data: {"type":"text-delta","id":"text-1","delta":", "}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":"world!"}
+          "data: {"type":"text-delta","id":"text-1","delta":"world!"}
 
         ",
-          "data: {"type":"text-end","id":"1"}
+          "data: {"type":"text-end","id":"text-1"}
 
         ",
           "data: {"type":"finish-step"}
@@ -1244,7 +1247,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
-              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
               controller.enqueue({
                 type: 'text-delta',
                 id: '1',
@@ -1276,7 +1279,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
-              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
               controller.enqueue({
                 type: 'text-delta',
                 id: '1',
@@ -1308,7 +1311,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
-              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
               controller.enqueue({
                 type: 'text-delta',
                 id: '1',
@@ -1337,7 +1340,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
-              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
               controller.enqueue({
                 type: 'text-delta',
                 id: '1',
@@ -1374,11 +1377,11 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
               modelId: 'mock-model-id',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-delta', id: '1', delta: ', ' },
-            { type: 'text-delta', id: '1', delta: 'world!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-delta', id: 'text-1', delta: ', ' },
+            { type: 'text-delta', id: 'text-1', delta: 'world!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -1408,30 +1411,30 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
               "warnings": [],
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "type": "text-start",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "Hello",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": ", ",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "world!",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "type": "text-end",
             },
@@ -1480,26 +1483,26 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
               "type": "start-step",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "type": "text-start",
             },
             {
               "delta": "Hello",
-              "id": "1",
+              "id": "text-1",
               "type": "text-delta",
             },
             {
               "delta": ", ",
-              "id": "1",
+              "id": "text-1",
               "type": "text-delta",
             },
             {
               "delta": "world!",
-              "id": "1",
+              "id": "text-1",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "type": "text-end",
             },
             {

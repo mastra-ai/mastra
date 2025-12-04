@@ -127,6 +127,28 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
         toolName: chunk.payload.toolName,
         input: chunk.payload.args,
       };
+    case 'tool-call-approval':
+      return {
+        type: 'data-tool-call-approval',
+        id: chunk.payload.toolCallId,
+        data: {
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args,
+        },
+      } satisfies DataChunkType;
+    case 'tool-call-suspended':
+      return {
+        type: 'data-tool-call-suspended',
+        id: chunk.payload.toolCallId,
+        data: {
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          suspendPayload: chunk.payload.suspendPayload,
+        },
+      } satisfies DataChunkType;
     case 'tool-call-input-streaming-start':
       return {
         type: 'tool-input-start',
@@ -489,6 +511,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         }
         return part;
       }
+
       return;
     }
   }

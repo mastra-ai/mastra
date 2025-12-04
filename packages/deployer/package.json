@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0-beta.6",
   "description": "",
   "type": "module",
   "files": [
@@ -119,10 +119,12 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.6",
+    "@hono/standard-validator": "^0.2.0",
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/hono": "workspace:*",
     "@mastra/mcp": "workspace:^",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/babel__core": "^7.20.5",
@@ -132,7 +134,8 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "fetch-to-node": "^2.1.0",
-    "hono-openapi": "^0.4.8",
+    "hono-openapi": "^1.1.1",
+    "stacktrace-parser": "^0.1.11",
     "tsup": "^8.5.0",
     "type-fest": "^5.2.0",
     "typescript": "^5.8.3",

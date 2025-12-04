@@ -1,6 +1,6 @@
-import EventEmitter from 'events';
 import { randomUUID } from 'node:crypto';
-import { WritableStream, ReadableStream, TransformStream } from 'stream/web';
+import EventEmitter from 'node:events';
+import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
@@ -150,7 +150,7 @@ export function createStep<
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
   if (params instanceof Agent) {
     return {
-      id: params.name,
+      id: params.id,
       description: params.getDescription(),
       // @ts-ignore
       inputSchema: z.object({
@@ -266,6 +266,8 @@ export function createStep<
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
+      resumeSchema: params.resumeSchema,
+      suspendSchema: params.suspendSchema,
       execute: async ({
         inputData,
         mastra,
@@ -283,10 +285,11 @@ export function createStep<
           mastra,
           requestContext,
           tracingContext,
-          suspend,
           resumeData,
           workflow: {
             runId,
+            suspend,
+            resumeData,
             workflowId,
             state,
             setState,
@@ -505,8 +508,21 @@ export class Workflow<
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
    */
-  then<TStepId extends string, TStepState extends z.ZodObject<any>, TSchemaOut extends z.ZodType<any>>(
-    step: Step<TStepId, SubsetOf<TStepState, TState>, TPrevSchema, TSchemaOut, any, any, TEngineType>,
+  then<
+    TStepId extends string,
+    TStepState extends z.ZodObject<any>,
+    TStepInputSchema extends z.ZodType<any>,
+    TSchemaOut extends z.ZodType<any>,
+  >(
+    step: Step<
+      TStepId,
+      SubsetOf<TStepState, TState>,
+      z.TypeOf<TPrevSchema> extends z.TypeOf<TStepInputSchema> ? TStepInputSchema : never,
+      TSchemaOut,
+      any,
+      any,
+      TEngineType
+    >,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
     this.serializedStepFlow.push({
@@ -744,11 +760,11 @@ export class Workflow<
         infer S extends z.ZodObject<any>,
         TPrevSchema,
         infer O,
-        infer R,
-        infer E,
+        any, // Don't infer TResumeSchema - causes issues with heterogeneous tuples
+        any, // Don't infer TSuspendSchema - causes issues with heterogeneous tuples
         TEngineType
       >
-        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, R, E, TEngineType>
+        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, any, any, TEngineType>
         : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
   ) {
@@ -837,7 +853,7 @@ export class Workflow<
       TOutput,
       z.ZodObject<
         {
-          [K in keyof StepsRecord<ExtractedSteps[]>]: StepsRecord<ExtractedSteps[]>[K]['outputSchema'];
+          [K in keyof StepsRecord<ExtractedSteps[]>]: z.ZodOptional<StepsRecord<ExtractedSteps[]>[K]['outputSchema']>;
         },
         any,
         z.ZodTypeAny
@@ -1009,6 +1025,7 @@ export class Workflow<
       new Run({
         workflowId: this.id,
         stateSchema: this.stateSchema,
+        inputSchema: this.inputSchema,
         runId: runIdToUse,
         resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
@@ -1032,6 +1049,12 @@ export class Workflow<
     });
 
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+
+    // If a snapshot exists in storage, update the run's status to reflect the actual state
+    // This fixes the issue where createRun checks storage but doesn't use the snapshot data
+    if (workflowSnapshotInStorage && workflowSnapshotInStorage.status) {
+      run.workflowRunStatus = workflowSnapshotInStorage.status as WorkflowRunStatus;
+    }
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -1213,6 +1236,7 @@ export class Workflow<
         step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
         requestContext,
         tracingContext,
+        writableStream: writer,
         outputOptions: { includeState: true, includeResumeLabels: true },
         label: resume.label,
       });
@@ -1491,7 +1515,7 @@ export class Run<
 
   readonly workflowSteps: Record<string, StepWithComponent>;
 
-  readonly workflowRunStatus: WorkflowRunStatus;
+  workflowRunStatus: WorkflowRunStatus;
 
   readonly workflowEngineType: WorkflowEngineType;
 
@@ -1510,6 +1534,7 @@ export class Run<
   protected closeStreamAction?: () => Promise<void>;
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected stateSchema?: z.ZodObject<any>;
+  protected inputSchema?: z.ZodType<any>;
 
   protected cleanup?: () => void;
 
@@ -1523,6 +1548,7 @@ export class Run<
     runId: string;
     resourceId?: string;
     stateSchema?: z.ZodObject<any>;
+    inputSchema?: z.ZodType<any>;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -1553,6 +1579,7 @@ export class Run<
     this.workflowSteps = params.workflowSteps;
     this.validateInputs = params.validateInputs;
     this.stateSchema = params.stateSchema;
+    this.inputSchema = params.inputSchema;
     this.workflowRunStatus = 'pending';
     this.workflowEngineType = params.workflowEngineType;
   }
@@ -1573,34 +1600,19 @@ export class Run<
   }
 
   protected async _validateInput(inputData: z.input<TInput>) {
-    const firstEntry = this.executionGraph.steps[0];
     let inputDataToUse = inputData;
 
-    if (firstEntry && this.validateInputs) {
-      let inputSchema: z.ZodType<any> | undefined;
+    if (this.validateInputs && this.inputSchema) {
+      const validatedInputData = await this.inputSchema.safeParseAsync(inputData);
 
-      if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
-        const step = firstEntry.step;
-        inputSchema = step.inputSchema;
-      } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-        const firstStep = firstEntry.steps[0];
-        if (firstStep && firstStep.type === 'step') {
-          inputSchema = firstStep.step.inputSchema;
-        }
+      if (!validatedInputData.success) {
+        const errors = getZodErrors(validatedInputData.error);
+        throw new Error(
+          'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+        );
       }
 
-      if (inputSchema) {
-        const validatedInputData = await inputSchema.safeParseAsync(inputData);
-
-        if (!validatedInputData.success) {
-          const errors = getZodErrors(validatedInputData.error);
-          throw new Error(
-            'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-          );
-        }
-
-        inputDataToUse = validatedInputData.data;
-      }
+      inputDataToUse = validatedInputData.data;
     }
 
     return inputDataToUse;

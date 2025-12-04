@@ -104,6 +104,12 @@ const step1 = createStep({
         "The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.",
     },
     {
+      name: "suspendData",
+      type: "z.infer<TSuspendSchema>",
+      description:
+        "The suspend data that was originally passed to suspend() when the step was suspended. Only exists if the step is being resumed and was previously suspended with data.",
+    },
+    {
       name: "mastra",
       type: "Mastra",
       description: "Access to Mastra services (agents, tools, etc.)",
@@ -123,6 +129,12 @@ const step1 = createStep({
       name: "suspend",
       type: "(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>",
       description: "Function to pause workflow execution",
+    },
+    {
+      name: "state",
+      type: "z.infer<TState>",
+      description:
+        "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema.",
     },
     {
       name: "setState",
@@ -154,5 +166,6 @@ const step1 = createStep({
 
 ## Related
 
+- [Workflow state](/docs/v1/workflows/workflow-state)
 - [Control flow](/docs/v1/workflows/control-flow)
 - [Using agents and tools](/docs/v1/workflows/agents-and-tools)

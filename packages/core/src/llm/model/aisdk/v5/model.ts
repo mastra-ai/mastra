@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import type { MastraLanguageModelV2 } from '../../shared.types';
 
@@ -71,6 +71,9 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
                 id: toolCall.toolCallId,
               });
               controller.enqueue(toolCall);
+            } else if (message.type === 'tool-result') {
+              const toolResult = message;
+              controller.enqueue(toolResult);
             } else if (message.type === 'text') {
               const text = message;
               const id = `msg_${randomUUID()}`;
@@ -117,13 +120,26 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
               });
             } else if (message.type === 'source') {
               const source = message;
-              controller.enqueue({
-                type: 'source',
-                id: source.id,
-                sourceType: source.sourceType,
-                title: source.title,
-                providerMetadata: source.providerMetadata,
-              });
+              if (source.sourceType === 'url') {
+                controller.enqueue({
+                  type: 'source',
+                  id: source.id,
+                  sourceType: 'url',
+                  url: source.url,
+                  title: source.title,
+                  providerMetadata: source.providerMetadata,
+                });
+              } else {
+                controller.enqueue({
+                  type: 'source',
+                  id: source.id,
+                  sourceType: 'document',
+                  mediaType: source.mediaType,
+                  filename: source.filename,
+                  title: source.title,
+                  providerMetadata: source.providerMetadata,
+                });
+              }
             }
           }
 

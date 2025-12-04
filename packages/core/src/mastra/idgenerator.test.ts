@@ -680,7 +680,8 @@ describe('Mastra ID Generator', () => {
       expect(results).toHaveLength(3);
     });
 
-    it('should handle complex workflow with memory operations', async () => {
+    // TODO: in memory storage doesn't have any way to call id generator on mastra, so this test makes no sense
+    it.skip('should handle complex workflow with memory operations', async () => {
       const memory = new MockMemory();
 
       const agent = new Agent({

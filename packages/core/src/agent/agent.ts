@@ -1,6 +1,8 @@
-import { randomUUID } from 'crypto';
-import type { WritableStream } from 'stream/web';
+import { randomUUID } from 'node:crypto';
+import type { WritableStream } from 'node:stream/web';
 import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
+import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
+import type { ModelInformation } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
@@ -30,18 +32,18 @@ import type { TracingContext, TracingProperties } from '../observability';
 import { SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
-import { RequestContext } from '../request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from '../utils';
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import type { Workflow } from '../workflows';
+import type { Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -104,7 +106,7 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
  */
 export class Agent<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> extends MastraBase {
   public id: TAgentId;
-  public name: TAgentId;
+  public name: string;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
@@ -115,7 +117,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
-  #defaultOptions: DynamicArgument<AgentExecutionOptions>;
+  #defaultOptions: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
@@ -304,22 +306,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     inputProcessorOverrides?: InputProcessor[];
     outputProcessorOverrides?: OutputProcessor[];
   }): Promise<ProcessorRunner> {
-    // Use overrides if provided, otherwise fall back to agent's default processors
-    const inputProcessors =
-      inputProcessorOverrides ??
-      (this.#inputProcessors
-        ? typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext })
-          : this.#inputProcessors
-        : []);
+    // Use overrides if provided, otherwise resolve from agent config + memory
+    const inputProcessors = inputProcessorOverrides ?? (await this.listResolvedInputProcessors(requestContext));
 
-    const outputProcessors =
-      outputProcessorOverrides ??
-      (this.#outputProcessors
-        ? typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext })
-          : this.#outputProcessors
-        : []);
+    const outputProcessors = outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
 
     this.logger.debug('outputProcessors', outputProcessors);
 
@@ -336,15 +326,21 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
-    if (!this.#outputProcessors) {
-      return [];
-    }
+    // Get configured output processors
+    const configuredProcessors = this.#outputProcessors
+      ? typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#outputProcessors
+      : [];
 
-    if (typeof this.#outputProcessors === 'function') {
-      return await this.#outputProcessors({ requestContext: requestContext || new RequestContext() });
-    }
+    // Get memory output processors (with deduplication)
+    // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
+    const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    return this.#outputProcessors;
+    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+
+    // Memory processors should run last (to persist messages after other processing)
+    return [...configuredProcessors, ...memoryProcessors];
   }
 
   /**
@@ -352,15 +348,21 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async listResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
-    if (!this.#inputProcessors) {
-      return [];
-    }
+    // Get configured input processors
+    const configuredProcessors = this.#inputProcessors
+      ? typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#inputProcessors
+      : [];
 
-    if (typeof this.#inputProcessors === 'function') {
-      return await this.#inputProcessors({ requestContext: requestContext || new RequestContext() });
-    }
+    // Get memory input processors (with deduplication)
+    // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
+    const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    return this.#inputProcessors;
+    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
+
+    // Memory processors should run first (to fetch history, semantic recall, working memory)
+    return [...memoryProcessors, ...configuredProcessors];
   }
 
   /**
@@ -1136,7 +1138,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     message: string | MessageInput;
     requestContext?: RequestContext;
     tracingContext: TracingContext;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
@@ -1231,7 +1233,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     userMessage: string | MessageInput | undefined,
     requestContext: RequestContext,
     tracingContext: TracingContext,
-    model?: DynamicArgument<MastraLanguageModel>,
+    model?: DynamicArgument<MastraModelConfig>,
     instructions?: DynamicArgument<string>,
   ) {
     try {
@@ -1271,6 +1273,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     mastraProxy,
+    memoryConfig,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1278,6 +1281,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
+    memoryConfig?: MemoryConfig;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
 
@@ -1288,7 +1292,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     // Get memory tools if available
     const memory = await this.getMemory({ requestContext });
-    const memoryTools = memory?.listTools?.();
+    const memoryTools = memory?.listTools?.(memoryConfig);
 
     if (memoryTools) {
       this.logger.debug(
@@ -1312,6 +1316,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (toolObj as any).requireApproval,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options);
         convertedMemoryTools[toolName] = convertedToCoreTool;
@@ -1342,13 +1347,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors) {
+    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
       });
       try {
-        messageList = await runner.runInputProcessors(messageList, tracingContext);
+        messageList = await runner.runInputProcessors(messageList, tracingContext, requestContext);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;
@@ -1396,14 +1401,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (outputProcessorOverrides?.length || this.#outputProcessors) {
+    if (outputProcessorOverrides?.length || this.#outputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,
       });
 
       try {
-        messageList = await runner.runOutputProcessors(messageList, tracingContext);
+        messageList = await runner.runOutputProcessors(messageList, tracingContext, requestContext);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwireTriggered = true;
@@ -1575,6 +1580,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             tracingContext,
             model: await this.getModel({ requestContext }),
             tracingPolicy: this.#options?.tracingPolicy,
+            requireApproval: (toolObj as any).requireApproval,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
           toolsForRequest[toolName] = convertedToCoreTool;
@@ -1629,6 +1635,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingContext,
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (tool as any).requireApproval,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
         toolsForRequest[toolName] = convertedToCoreTool;
@@ -1664,6 +1671,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       for (const [agentName, agent] of Object.entries(agents)) {
         const agentInputSchema = z.object({
           prompt: z.string().describe('The prompt to send to the agent'),
+          threadId: z.string().optional().describe('Thread ID for conversation continuity for memory messages'),
+          resourceId: z.string().optional().describe('Resource/user identifier for memory messages'),
+          instructions: z.string().optional().describe('Custom instructions to override agent defaults'),
+          maxSteps: z.number().min(3).optional().describe('Maximum number of execution steps for the sub-agent'),
+          // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
+          // to return a proper llm response
         });
 
         const agentOutputSchema = z.object({
@@ -1672,15 +1685,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
         });
 
-        const modelVersion = (await agent.getModel()).specificationVersion;
+        const modelVersion = (await agent.getModel({ requestContext })).specificationVersion;
 
         const toolObj = createTool({
           id: `agent-${agentName}`,
-          description: `Agent: ${agentName}`,
+          description: agent.getDescription() || `Agent: ${agentName}`,
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
-          // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
@@ -1694,17 +1706,21 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               });
 
               let result: any;
+              const slugify = await import(`@sindresorhus/slugify`);
+              const subAgentThreadId = inputData.threadId || context?.mastra?.generateId() || randomUUID();
+              const subAgentResourceId =
+                inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
-                const subAgentThreadId = randomUUID();
-                const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
-                const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
+
                 const generateResult = await agent.generate(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
+                  ...(inputData.instructions && { instructions: inputData.instructions }),
+                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
                         memory: {
@@ -1725,13 +1741,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
-                const subAgentThreadId = randomUUID();
-                const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
-                const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
 
                 const streamResult = await agent.stream(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
+                  ...(inputData.instructions && { instructions: inputData.instructions }),
+                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
                         memory: {
@@ -1742,11 +1757,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                     : {}),
                 });
 
-                // Collect full text
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
-                    await context.writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      await context.writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1756,7 +1776,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
                 result = { text: fullText, subAgentThreadId, subAgentResourceId };
               } else {
-                // streamLegacy
                 const streamResult = await agent.streamLegacy(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
@@ -1765,7 +1784,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
-                    await context.writer.write(chunk);
+                    // Data chunks from writer.custom() should bubble up directly without wrapping
+                    if (chunk.type.startsWith('data-')) {
+                      // Write data chunks directly to original stream to bubble up
+                      await context.writer.custom(chunk as any);
+                    } else {
+                      await context.writer.write(chunk);
+                    }
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1847,13 +1872,26 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const workflows = await this.listWorkflows({ requestContext });
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
+        const extendedInputSchema = z.object({
+          inputData: workflow.inputSchema,
+          ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
+        });
+
         const toolObj = createTool({
           id: `workflow-${workflowName}`,
           description: workflow.description || `Workflow: ${workflowName}`,
-          inputSchema: workflow.inputSchema,
-          outputSchema: z.object({ result: workflow.outputSchema, runId: z.string() }),
+          inputSchema: extendedInputSchema,
+          outputSchema: z.union([
+            z.object({
+              result: workflow.outputSchema,
+              runId: z.string().describe('Unique identifier for the workflow run'),
+            }),
+            z.object({
+              runId: z.string().describe('Unique identifier for the workflow run'),
+              error: z.string().describe('Error message if workflow execution failed'),
+            }),
+          ]),
           mastra: this.#mastra,
-          // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
@@ -1869,16 +1907,20 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
               const run = await workflow.createRun();
 
-              let result: any;
+              const { initialState, inputData: workflowInputData } = inputData;
+
+              let result: WorkflowResult<any, any, any, any> | undefined = undefined;
+
               if (methodType === 'generate' || methodType === 'generateLegacy') {
                 result = await run.start({
-                  inputData: inputData,
+                  inputData: workflowInputData,
                   requestContext,
                   tracingContext: context?.tracingContext,
+                  ...(initialState && { initialState }),
                 });
               } else if (methodType === 'streamLegacy') {
                 const streamResult = run.streamLegacy({
-                  inputData: inputData,
+                  inputData: workflowInputData,
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
@@ -1893,11 +1935,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
-                // TODO: add support for format
                 const streamResult = run.stream({
-                  inputData: inputData,
+                  inputData: workflowInputData,
                   requestContext,
                   tracingContext: context?.tracingContext,
+                  ...(initialState && { initialState }),
                 });
 
                 if (context?.writer) {
@@ -1907,11 +1949,27 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 result = await streamResult.result;
               }
 
-              // Extract the actual result from the workflow execution
-              // Workflow returns { status, steps, result: actualOutput }
-              const workflowOutput = result?.result || result;
-
-              return { result: workflowOutput, runId: run.runId };
+              if (result?.status === 'success') {
+                const workflowOutput = result?.result || result;
+                return { result: workflowOutput, runId: run.runId };
+              } else if (result?.status === 'failed') {
+                const workflowOutputError = result?.error;
+                return {
+                  error: workflowOutputError?.message || String(workflowOutputError) || 'Workflow execution failed',
+                  runId: run.runId,
+                };
+              } else if (result?.status === 'suspended') {
+                return {
+                  error: `Workflow ended with status: "suspended". This is not currently handled in the basic agent workflow tool transformation. To achieve this you'll need to write your own tool that uses a workflow internally.`,
+                  runId: run.runId,
+                };
+              } else {
+                // This is to satisfy the execute fn's return value for typescript
+                return {
+                  error: `Workflow should never reach this path, workflow returned no status`,
+                  runId: run.runId,
+                };
+              }
             } catch (err) {
               const mastraError = new MastraError(
                 {
@@ -1971,6 +2029,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     writableStream,
     methodType,
+    memoryConfig,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -1981,6 +2040,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     methodType: AgentMethodType;
+    memoryConfig?: MemoryConfig;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -2006,6 +2066,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       tracingContext,
       mastraProxy,
+      memoryConfig,
     });
 
     const toolsetTools = await this.listToolsets({
@@ -2109,26 +2170,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async saveStepMessages({
-    saveQueueManager,
     result,
     messageList,
-    threadId,
-    memoryConfig,
     runId,
   }: {
-    saveQueueManager: SaveQueueManager;
     result: any;
     messageList: MessageList;
-    threadId?: string;
-    memoryConfig?: MemoryConfig;
     runId?: string;
   }) {
     try {
       messageList.add(result.response.messages, 'response');
-      await saveQueueManager.batchMessages(messageList, threadId, memoryConfig);
+      // Message saving is now handled by MessageHistory output processor
     } catch (e) {
-      await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
-      this.logger.error('Error saving memory on step finish', {
+      this.logger.error('Error adding messages on step finish', {
         error: e,
         runId,
       });
@@ -2349,12 +2403,22 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
     const requestContext = options.requestContext || new RequestContext();
-    const threadFromArgs = resolveThreadIdFromArgs({
-      threadId: options.threadId || snapshotMemoryInfo?.threadId,
-      memory: options.memory,
-    });
 
-    const resourceId = options.memory?.resource || options.resourceId || snapshotMemoryInfo?.resourceId;
+    // Reserved keys from requestContext take precedence for security.
+    // This allows middleware to securely set resourceId/threadId based on authenticated user,
+    // preventing attackers from hijacking another user's memory by passing different values in the body.
+    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+
+    const threadFromArgs = threadIdFromContext
+      ? { id: threadIdFromContext }
+      : resolveThreadIdFromArgs({
+          threadId: options.threadId || snapshotMemoryInfo?.threadId,
+          memory: options.memory,
+        });
+
+    const resourceId =
+      resourceIdFromContext || options.memory?.resource || options.resourceId || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
 
     if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
@@ -2364,6 +2428,44 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     const llm = (await this.getLLM({ requestContext, model: options.model })) as MastraLLMVNext;
+
+    // Apply OpenAI schema compatibility layer automatically for OpenAI models
+    // In direct mode, use the main model; in processor mode, use structuredOutput.model
+    if ('structuredOutput' in options && options.structuredOutput && options.structuredOutput.schema) {
+      let structuredOutputModel = llm.getModel();
+      if (options.structuredOutput?.model) {
+        structuredOutputModel = (await this.resolveModelConfig(
+          options.structuredOutput?.model,
+          requestContext,
+        )) as MastraLanguageModelV2;
+      }
+
+      const targetProvider = structuredOutputModel.provider;
+      const targetModelId = structuredOutputModel.modelId;
+      // Only transform Zod schemas for OpenAI models, OpenAI is the most common and there is a huge issue that so many users run into
+      // We transform all .optional() to .nullable().transform(v => v === null ? undefined : v)
+      // OpenAI can't handle optional fields, we turn them to nullable and then transform the data received back so the types match the users schema
+      if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
+        if (isZodType(options.structuredOutput.schema) && targetModelId) {
+          const modelInfo: ModelInformation = {
+            provider: targetProvider,
+            modelId: targetModelId,
+            supportsStructuredOutputs: false, // Set to false to enable transform
+          };
+
+          const isReasoningModel = /^o[1-5]/.test(targetModelId);
+          const compatLayer = isReasoningModel
+            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+            : new OpenAISchemaCompatLayer(modelInfo);
+
+          if (compatLayer.shouldApply() && options.structuredOutput.schema) {
+            options.structuredOutput.schema = compatLayer.processZodType(
+              options.structuredOutput.schema,
+            ) as OUTPUT extends OutputSchema ? OUTPUT : never;
+          }
+        }
+      }
+    }
 
     const runId = options.runId || this.#mastra?.generateId() || randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
@@ -2376,6 +2478,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       input: options.messages,
       attributes: {
         agentId: this.id,
+        agentName: this.name,
+        conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
       },
       metadata: {
@@ -2417,7 +2521,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
       executeOnFinish: this.#executeOnFinish.bind(this),
-      outputProcessors: this.#outputProcessors,
+      outputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
+        this.listResolvedOutputProcessors(requestContext),
       llm,
     };
 
@@ -2466,7 +2571,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     messageList,
     threadExists,
     structuredOutput = false,
-    saveQueueManager,
     overrideScorers,
   }: AgentExecuteOnFinishOptions) {
     const resToLog = {
@@ -2534,10 +2638,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           });
         }
 
-        // Parallelize title generation and message saving
-        const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
-
-        // Add title generation to promises if needed
+        // Generate title if needed
+        // Note: Message saving is now handled by MessageHistory output processor
         if (thread.title?.startsWith('New Thread')) {
           const config = memory.getMergedThreadConfig(memoryConfig);
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
@@ -2549,31 +2651,25 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           } = this.resolveTitleGenerationConfig(config.generateTitle);
 
           if (shouldGenerate && userMessage) {
-            promises.push(
-              this.genTitle(
-                userMessage,
-                requestContext,
-                { currentSpan: agentSpan },
-                titleModel,
-                titleInstructions,
-              ).then(title => {
-                if (title) {
-                  return memory.createThread({
-                    threadId: thread.id,
-                    resourceId,
-                    memoryConfig,
-                    title,
-                    metadata: thread.metadata,
-                  });
-                }
-              }),
+            const title = await this.genTitle(
+              userMessage,
+              requestContext,
+              { currentSpan: agentSpan },
+              titleModel,
+              titleInstructions,
             );
+            if (title) {
+              await memory.createThread({
+                threadId: thread.id,
+                resourceId,
+                memoryConfig,
+                title,
+                metadata: thread.metadata,
+              });
+            }
           }
         }
-
-        await Promise.all(promises);
       } catch (e) {
-        await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         if (e instanceof MastraError) {
           throw e;
         }
@@ -3041,11 +3137,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
       | undefined,
   ): {
     shouldGenerate: boolean;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
   } {
     if (typeof generateTitleConfig === 'boolean') {

@@ -2,13 +2,19 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
-import esmShim from '@rollup/plugin-esm-shim';
+import { esmShim } from '../plugins/esm-shim';
 import { basename } from 'node:path/posix';
 import * as path from 'node:path';
 import { rollup, type OutputChunk, type OutputAsset, type Plugin } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
 import { aliasHono } from '../plugins/hono-alias';
-import { getCompiledDepCachePath, getPackageRootPath, rollupSafeName, slash } from '../utils';
+import {
+  getCompiledDepCachePath,
+  getPackageRootPath,
+  isDependencyPartOfPackage,
+  rollupSafeName,
+  slash,
+} from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
@@ -17,6 +23,9 @@ import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { readFile } from 'node:fs/promises';
 import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
+import { nodeGypDetector } from '../plugins/node-gyp-detector';
+import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
+import { moduleResolveMap } from '../plugins/module-resolve-map';
 
 type VirtualDependency = {
   name: string;
@@ -119,11 +128,13 @@ async function getInputPlugins(
     workspaceMap,
     bundlerOptions,
     rootDir,
+    externals,
   }: {
     transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     bundlerOptions: { enableEsmShim: boolean; isDev: boolean };
     rootDir: string;
+    externals: string[];
   },
 ) {
   const transpilePackagesMap = new Map<string, string>();
@@ -147,6 +158,7 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
+    subpathExternalsResolver(externals),
     transpilePackagesMap.size
       ? esbuild({
           format: 'esm',
@@ -185,7 +197,8 @@ async function getInputPlugins(
               resolvedPath = pkgJson!.main ?? 'index.js';
             }
 
-            return await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
+            const resolved = await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
+            return resolved;
           },
         } satisfies Plugin)
       : null,
@@ -207,6 +220,8 @@ async function getInputPlugins(
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
+    nodeGypDetector(),
+    moduleResolveMap(externals, rootDir),
     {
       name: 'not-found-resolver',
       resolveId: {
@@ -277,6 +292,7 @@ async function buildExternalDependencies(
   if (virtualDependencies.size === 0) {
     return [] as unknown as [OutputChunk, ...(OutputAsset | OutputChunk)[]];
   }
+
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: Array.from(virtualDependencies.entries()).reduce(
@@ -287,12 +303,13 @@ async function buildExternalDependencies(
       {} as Record<string, string>,
     ),
     external: externals,
-    treeshake: 'safest',
+    treeshake: bundlerOptions.isDev ? false : 'safest',
     plugins: getInputPlugins(virtualDependencies, {
       transpilePackages: packagesToTranspile,
       workspaceMap,
       bundlerOptions,
       rootDir,
+      externals,
     }),
   });
 
@@ -302,6 +319,8 @@ async function buildExternalDependencies(
     format: 'esm',
     dir: rootDir,
     entryFileNames: '[name].mjs',
+    // used to get the filename of the actual error
+    sourcemap: true,
     /**
      * Rollup creates chunks for common dependencies, but these chunks are by default written to the root directory instead of respecting the entryFileNames structure.
      * So we want to write them to the `.mastra/output` folder as well.
@@ -347,6 +366,7 @@ async function buildExternalDependencies(
 
       return `${outputDirRelative}/[name].mjs`;
     },
+    assetFileNames: `${outputDirRelative}/[name][extname]`,
     hoistTransitiveImports: false,
   });
 
@@ -363,7 +383,7 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
   const capturedFiles = new Set();
 
   for (const id of module.imports) {
-    if (id === external) {
+    if (isDependencyPartOfPackage(id, external)) {
       return module;
     } else {
       if (id.endsWith('.mjs')) {

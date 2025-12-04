@@ -20,7 +20,13 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 
 import { McpServerPage } from './pages/mcps/[serverId]';
 
-import { LinkComponentProvider, LinkComponentProviderProps, PlaygroundQueryClient } from '@mastra/playground-ui';
+import {
+  LinkComponentProvider,
+  LinkComponentProviderProps,
+  PlaygroundQueryClient,
+  StudioConfigProvider,
+  useStudioConfig,
+} from '@mastra/playground-ui';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
@@ -29,12 +35,13 @@ import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
+import { StudioSettingsPage } from './pages/settings';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentsLink: () => `/agents`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}?new=true`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
     messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
   workflowsLink: () => `/workflows`,
@@ -63,13 +70,30 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  const { baseUrl, headers, isLoading } = useStudioConfig();
+
+  if (isLoading) {
+    // Config is loaded from localStorage. However, there might be a race condition
+    // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
+    return null;
+  }
+
   return (
-    <MastraReactProvider>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers}>
       <PlaygroundQueryClient>
         <PostHogProvider>
           <BrowserRouter>
             <LinkComponentWrapper>
               <Routes>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/settings" element={<StudioSettingsPage />} />
+                </Route>
                 <Route
                   element={
                     <Layout>
@@ -155,4 +179,10 @@ function App() {
   );
 }
 
-export default App;
+export default function AppWrapper() {
+  return (
+    <StudioConfigProvider>
+      <App />
+    </StudioConfigProvider>
+  );
+}

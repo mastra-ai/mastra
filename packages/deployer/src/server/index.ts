@@ -1,50 +1,32 @@
-import { readFile } from 'fs/promises';
+import { readFile } from 'node:fs/promises';
 import * as https from 'node:https';
-import { join } from 'path/posix';
+import { join } from 'node:path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
 import { Tool } from '@mastra/core/tools';
+import { MastraServer } from '@mastra/hono';
+import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
-import { describeRoute, openAPISpecs } from 'hono-openapi';
-import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2a';
-import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
+import { describeRoute } from 'hono-openapi';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
-import { rootHandler } from './handlers/root';
-import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
-import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
-import { logsRouter } from './handlers/routes/logs/router';
-import { mcpRouter } from './handlers/routes/mcp/router';
-import { memoryRoutes } from './handlers/routes/memory/router';
-import { observabilityRouter } from './handlers/routes/observability/router';
-import { scoresRouter } from './handlers/routes/scores/router';
-import { toolsRouter } from './handlers/routes/tools/router';
-import { vectorRouter } from './handlers/routes/vector/router';
-import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
-type Bindings = {};
+// Use adapter type definitions
+type Bindings = HonoBindings;
 
-type Variables = {
-  mastra: Mastra;
-  requestContext: RequestContext;
+type Variables = HonoVariables & {
   clients: Set<{ controller: ReadableStreamDefaultController }>;
-  tools: Record<string, Tool>;
-  taskStore: InMemoryTaskStore;
-  playground: boolean;
-  isDev: boolean;
-  customRouteAuthConfig?: Map<string, boolean>;
 };
 
 export function getToolExports(tools: Record<string, Function>[]) {
@@ -94,65 +76,28 @@ export async function createHonoServer(
 
   app.onError((err, c) => errorHandler(err, c, options.isDev));
 
-  // Configure hono context
-  // Configure hono context
-  app.use('*', async function setContext(c, next) {
-    // Parse request context from request body and add to context
-    let requestContext = new RequestContext();
-    // Parse request context from request body and add to context
-    if (c.req.method === 'POST' || c.req.method === 'PUT') {
-      const contentType = c.req.header('content-type');
-      if (contentType?.includes('application/json')) {
-        try {
-          const clonedReq = c.req.raw.clone();
-          const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
-          if (body.requestContext) {
-            requestContext = new RequestContext(Object.entries(body.requestContext));
-          }
-        } catch {
-          // Body parsing failed, continue without body
-        }
-      }
-    }
+  // Define body limit options
+  const bodyLimitOptions = {
+    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
+    onError: () => ({ error: 'Request body too large' }),
+  };
 
-    // Parse request context from query params and add to context
-    if (c.req.method === 'GET') {
-      try {
-        const encodedRequestContext = c.req.query('requestContext');
-        if (encodedRequestContext) {
-          let parsedRequestContext: Record<string, any> | undefined;
-          // Try JSON first
-          try {
-            parsedRequestContext = JSON.parse(encodedRequestContext);
-          } catch {
-            // Fallback to base64(JSON)
-            try {
-              const json = Buffer.from(encodedRequestContext, 'base64').toString('utf-8');
-              parsedRequestContext = JSON.parse(json);
-            } catch {
-              // ignore if still invalid
-            }
-          }
-
-          if (parsedRequestContext && typeof parsedRequestContext === 'object') {
-            requestContext = new RequestContext([...requestContext.entries(), ...Object.entries(parsedRequestContext)]);
-          }
-        }
-      } catch {
-        // ignore query parsing errors
-      }
-    }
-
-    // Add relevant contexts to hono context
-    c.set('requestContext', requestContext);
-    c.set('mastra', mastra);
-    c.set('tools', options.tools);
-    c.set('taskStore', a2aTaskStore);
-    c.set('playground', options.playground === true);
-    c.set('isDev', options.isDev === true);
-    c.set('customRouteAuthConfig', customRouteAuthConfig);
-    return next();
+  // Create server adapter with all configuration
+  const honoServerAdapter = new MastraServer({
+    app,
+    mastra,
+    tools: options.tools,
+    taskStore: a2aTaskStore,
+    playground: options.playground,
+    isDev: options.isDev,
+    bodyLimitOptions,
+    openapiPath: '/openapi.json',
+    customRouteAuthConfig,
   });
+
+  // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
+  // Cast needed due to Hono type variance - safe because registerContextMiddleware is generic
+  honoServerAdapter.registerContextMiddleware();
 
   // Apply custom server middleware from Mastra instance
   const serverMiddleware = mastra.getServerMiddleware?.();
@@ -194,14 +139,9 @@ export async function createHonoServer(
     healthHandler,
   );
 
-  // Run AUTH middlewares after CORS middleware
-  app.use('*', authenticationMiddleware);
-  app.use('*', authorizationMiddleware);
-
-  const bodyLimitOptions = {
-    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
-    onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
-  };
+  // Register auth middleware (authentication and authorization)
+  // This is handled by the server adapter now
+  honoServerAdapter.registerAuthMiddleware();
 
   if (server?.middleware) {
     const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];
@@ -254,202 +194,9 @@ export async function createHonoServer(
     app.use(logger());
   }
 
-  /**
-   * A2A
-   */
-
-  app.get(
-    '/.well-known/:agentId/agent-card.json',
-    describeRoute({
-      description: 'Get agent configuration',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'Agent configuration',
-        },
-      },
-    }),
-    getAgentCardByIdHandler,
-  );
-
-  app.post(
-    '/a2a/:agentId',
-    describeRoute({
-      description: 'Execute agent via A2A protocol',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                method: {
-                  type: 'string',
-                  enum: ['message/send', 'message/stream', 'tasks/get', 'tasks/cancel'],
-                  description: 'The A2A protocol method to execute',
-                },
-                params: {
-                  type: 'object',
-                  oneOf: [
-                    {
-                      // MessageSendParams
-                      type: 'object',
-                      properties: {
-                        id: {
-                          type: 'string',
-                          description: 'Unique identifier for the task being initiated or continued',
-                        },
-                        sessionId: {
-                          type: 'string',
-                          description: 'Optional identifier for the session this task belongs to',
-                        },
-                        message: {
-                          type: 'object',
-                          description: 'The message content to send to the agent for processing',
-                        },
-                        pushNotification: {
-                          type: 'object',
-                          nullable: true,
-                          description:
-                            'Optional pushNotification information for receiving notifications about this task',
-                        },
-                        historyLength: {
-                          type: 'integer',
-                          nullable: true,
-                          description:
-                            'Optional parameter to specify how much message history to include in the response',
-                        },
-                        metadata: {
-                          type: 'object',
-                          nullable: true,
-                          description: 'Optional metadata associated with sending this message',
-                        },
-                      },
-                      required: ['id', 'message'],
-                    },
-                    {
-                      // TaskQueryParams
-                      type: 'object',
-                      properties: {
-                        id: { type: 'string', description: 'The unique identifier of the task' },
-                        historyLength: {
-                          type: 'integer',
-                          nullable: true,
-                          description: 'Optional history length to retrieve for the task',
-                        },
-                        metadata: {
-                          type: 'object',
-                          nullable: true,
-                          description: 'Optional metadata to include with the operation',
-                        },
-                      },
-                      required: ['id'],
-                    },
-                    {
-                      // TaskIdParams
-                      type: 'object',
-                      properties: {
-                        id: { type: 'string', description: 'The unique identifier of the task' },
-                        metadata: {
-                          type: 'object',
-                          nullable: true,
-                          description: 'Optional metadata to include with the operation',
-                        },
-                      },
-                      required: ['id'],
-                    },
-                  ],
-                },
-              },
-              required: ['method', 'params'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'A2A response',
-        },
-        400: {
-          description: 'Missing or invalid request parameters',
-        },
-        404: {
-          description: 'Agent not found',
-        },
-      },
-    }),
-    getAgentExecutionHandler,
-  );
-
-  // API routes
-  app.get(
-    '/api',
-    describeRoute({
-      description: 'Get API status',
-      tags: ['system'],
-      responses: {
-        200: {
-          description: 'Success',
-        },
-      },
-    }),
-    rootHandler,
-  );
-
-  // Agents routes
-  app.route('/api/agents', agentsRouter(bodyLimitOptions));
-
-  if (options.isDev) {
-    app.route('/api/agents', agentsRouterDev(bodyLimitOptions));
-  }
-
-  // MCP server routes
-  app.route('/api/mcp', mcpRouter(bodyLimitOptions));
-  // Network Memory routes
-  app.route('/api/memory', memoryRoutes(bodyLimitOptions));
-  // Observability routes
-  app.route('/api/observability', observabilityRouter());
-  // Legacy Workflow routes
-  app.route('/api/workflows', workflowsRouter(bodyLimitOptions));
-  // Log routes
-  app.route('/api/logs', logsRouter());
-  // Scores routes
-  app.route('/api/scores', scoresRouter(bodyLimitOptions));
-  // Agent builder routes
-  app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
-  // Tool routes
-  app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
-  // Vector routes
-  app.route('/api/vector', vectorRouter(bodyLimitOptions));
-
-  if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
-    app.get(
-      '/openapi.json',
-      openAPISpecs(app, {
-        includeEmptyPaths: true,
-        documentation: {
-          info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-        },
-      }),
-    );
-  }
+  // Register adapter routes (adapter was created earlier with configuration)
+  // Cast needed due to Hono type variance - safe because registerRoutes is generic
+  await honoServerAdapter.registerRoutes();
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(
@@ -609,8 +356,8 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const logger = mastra.getLogger();
       logger.info(` Mastra API running on port ${protocol}://${host}:${port}/api`);
       if (options?.playground) {
-        const playgroundUrl = `${protocol}://${host}:${port}`;
-        logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
+        const studioUrl = `${protocol}://${host}:${port}`;
+        logger.info(`👨‍💻 Studio available at ${studioUrl}`);
       }
 
       if (process.send) {

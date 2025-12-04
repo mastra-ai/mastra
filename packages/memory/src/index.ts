@@ -25,7 +25,14 @@ import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
+import {
+  updateWorkingMemoryTool,
+  __experimental_updateWorkingMemoryToolVNext,
+  deepMergeWorkingMemory,
+} from './tools/working-memory';
+
+// Re-export for testing purposes
+export { deepMergeWorkingMemory };
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -103,6 +110,7 @@ export class Memory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
+      threadId: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
@@ -111,6 +119,15 @@ export class Memory extends MastraMemory {
 
     // Use perPage from args if provided, otherwise use threadConfig.lastMessages
     const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
+
+    // When limiting messages (perPage !== false) without explicit orderBy, we need to:
+    // 1. Query DESC to get the NEWEST messages (not oldest)
+    // 2. Reverse results to restore chronological order for the LLM
+    // Without this fix, "lastMessages: 64" returns the OLDEST 64 messages, not the last 64.
+    const shouldGetNewestAndReverse = !orderBy && perPage !== false;
+    const effectiveOrderBy = shouldGetNewestAndReverse
+      ? { field: 'createdAt' as const, direction: 'DESC' as const }
+      : orderBy;
 
     const vectorResults: {
       id: string;
@@ -123,7 +140,7 @@ export class Memory extends MastraMemory {
       threadId,
       perPage,
       page,
-      orderBy,
+      orderBy: effectiveOrderBy,
       threadConfig,
     });
 
@@ -191,7 +208,7 @@ export class Memory extends MastraMemory {
       resourceId,
       perPage,
       page,
-      orderBy,
+      orderBy: effectiveOrderBy,
       filter,
       ...(vectorResults?.length
         ? {
@@ -210,7 +227,8 @@ export class Memory extends MastraMemory {
           }
         : {}),
     });
-    const rawMessages = paginatedResult.messages;
+    // Reverse to restore chronological order if we queried DESC to get newest messages
+    const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
@@ -779,7 +797,7 @@ ${workingMemory}`;
   }: {
     memoryConfig?: MemoryConfig;
   }): Promise<WorkingMemoryTemplate | null> {
-    const config = this.getMergedThreadConfig(memoryConfig || {});
+    const config = this.getMergedThreadConfig(memoryConfig);
 
     if (!config.workingMemory?.enabled) {
       return null;
@@ -792,11 +810,9 @@ ${workingMemory}`;
         let convertedSchema: JSONSchema7;
 
         if (isZodObject(schema as ZodTypeAny)) {
-          // Convert ZodObject to JSON Schema
-          convertedSchema = zodToJsonSchema(schema as ZodTypeAny) as JSONSchema7;
+          convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
         } else {
-          // Already a JSON Schema
-          convertedSchema = schema as any as JSONSchema7;
+          convertedSchema = schema as JSONSchema7;
         }
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };
@@ -825,7 +841,7 @@ ${workingMemory}`;
       return null;
     }
 
-    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig: config });
+    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig });
     const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
 
     if (!workingMemoryTemplate) {
@@ -1035,3 +1051,6 @@ ${
     // and then querying the vector store to delete associated embeddings
   }
 }
+
+// Re-export memory processors from @mastra/core for backward compatibility
+export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/processors';

@@ -1,6 +1,6 @@
-import { spawn as nodeSpawn } from 'child_process';
-import { readFile, writeFile, mkdir, stat, readdir } from 'fs/promises';
-import { join, dirname, relative, isAbsolute, resolve } from 'path';
+import { spawn as nodeSpawn } from 'node:child_process';
+import { readFile, writeFile, mkdir, stat, readdir } from 'node:fs/promises';
+import { join, dirname, relative, isAbsolute, resolve } from 'node:path';
 import { createTool } from '@mastra/core/tools';
 import ignore from 'ignore';
 import { z } from 'zod';
