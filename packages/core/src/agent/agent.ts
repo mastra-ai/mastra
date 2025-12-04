@@ -1685,11 +1685,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
         });
 
-        const modelVersion = (await agent.getModel()).specificationVersion;
+        const modelVersion = (await agent.getModel({ requestContext })).specificationVersion;
 
         const toolObj = createTool({
           id: `agent-${agentName}`,
-          description: `Agent: ${agentName}`,
+          description: agent.getDescription() || `Agent: ${agentName}`,
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
@@ -2478,6 +2478,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       input: options.messages,
       attributes: {
         agentId: this.id,
+        agentName: this.name,
+        conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
       },
       metadata: {

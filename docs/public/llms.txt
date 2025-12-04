@@ -20,6 +20,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Agent Networks | Agents](https://mastra.ai/en/docs/agents/networks): Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 - [Using Agents | Agents](https://mastra.ai/en/docs/agents/overview): Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 - [Processors | Agents | Mastra Docs](https://mastra.ai/en/docs/agents/processors): Learn how to use input and output processors to transform, validate, and control messages in Mastra agents.
+- [Structured Output | Agents](https://mastra.ai/en/docs/agents/structured-output): Learn how to generate structured data from agents using schemas and validation.
 - [Using Tools | Agents](https://mastra.ai/en/docs/agents/using-tools): Learn how to create tools and add them to agents to extend capabilities beyond text generation.
 - [MastraAuthAuth0 Class | Auth](https://mastra.ai/en/docs/auth/auth0): Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.
 - [MastraAuthClerk Class | Auth](https://mastra.ai/en/docs/auth/clerk): Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.
@@ -86,11 +87,13 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [RAG (Retrieval-Augmented Generation) in Mastra | RAG](https://mastra.ai/en/docs/rag/overview): Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
 - [Retrieval, Semantic Search, Reranking | RAG](https://mastra.ai/en/docs/rag/retrieval): Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 - [Storing Embeddings in A Vector Database | RAG](https://mastra.ai/en/docs/rag/vector-databases): Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+- [Custom Adapters | Server & DB](https://mastra.ai/en/docs/server-db/custom-adapters): Create a custom server adapter for frameworks other than Hono or Express.
 - [Custom API Routes | Server & DB](https://mastra.ai/en/docs/server-db/custom-api-routes): Expose additional HTTP endpoints from your Mastra server.
 - [Mastra Client SDK | Server & DB](https://mastra.ai/en/docs/server-db/mastra-client): Learn how to set up and use the Mastra Client SDK
-- [Mastra Server | Server & DB](https://mastra.ai/en/docs/server-db/mastra-server): Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more
+- [Server Configuration | Server & DB](https://mastra.ai/en/docs/server-db/mastra-server): Configure the Mastra server with custom settings for port, timeout, CORS, and more.
 - [Middleware | Server & DB](https://mastra.ai/en/docs/server-db/middleware): Apply custom middleware functions to intercept requests.
 - [Request Context | Server & DB](https://mastra.ai/en/docs/server-db/request-context): Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
+- [Server Adapters | Server & DB](https://mastra.ai/en/docs/server-db/server-adapters): Manually configure a Mastra server using Hono or Express adapters.
 - [MastraStorage | Server & DB](https://mastra.ai/en/docs/server-db/storage): Overview of Mastra's storage system and data persistence capabilities.
 - [Streaming Events | Streaming](https://mastra.ai/en/docs/streaming/events): Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications.
 - [Streaming Overview | Streaming](https://mastra.ai/en/docs/streaming/overview): Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced.
@@ -177,7 +180,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1159+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1166+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -201,7 +204,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Google | Models | Mastra](https://mastra.ai/en/models/providers/google): Use Google models with Mastra. 25 models available.
 - [Groq | Models | Mastra](https://mastra.ai/en/models/providers/groq): Use Groq models with Mastra. 17 models available.
 - [Hugging Face | Models | Mastra](https://mastra.ai/en/models/providers/huggingface): Use Hugging Face models with Mastra. 14 models available.
-- [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 18 models available.
+- [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 20 models available.
 - [Inception | Models | Mastra](https://mastra.ai/en/models/providers/inception): Use Inception models with Mastra. 2 models available.
 - [Providers](https://mastra.ai/en/models/providers): Direct access to AI model providers.
 - [Inference | Models | Mastra](https://mastra.ai/en/models/providers/inference): Use Inference models with Mastra. 9 models available.
@@ -233,7 +236,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 23 models available.
 - [Together AI | Models | Mastra](https://mastra.ai/en/models/providers/togetherai): Use Together AI models with Mastra. 6 models available.
 - [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 2 models available.
-- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 14 models available.
+- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 17 models available.
 - [Vultr | Models | Mastra](https://mastra.ai/en/models/providers/vultr): Use Vultr models with Mastra. 5 models available.
 - [Weights & Biases | Models | Mastra](https://mastra.ai/en/models/providers/wandb): Use Weights & Biases models with Mastra. 10 models available.
 - [xAI | Models | Mastra](https://mastra.ai/en/models/providers/xai): Use xAI models with Mastra. 22 models available.
@@ -359,13 +362,17 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Spans | Observability](https://mastra.ai/en/reference/observability/tracing/spans): Span interfaces, methods, and lifecycle events
 - [Reference: Batch Parts Processor | Processors](https://mastra.ai/en/reference/processors/batch-parts-processor): Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions.
 - [Reference: Language Detector | Processors](https://mastra.ai/en/reference/processors/language-detector): Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses.
+- [Reference: Message History Processor | Processors](https://mastra.ai/en/reference/processors/message-history-processor): Documentation for the MessageHistory processor in Mastra, which handles retrieval and persistence of conversation history.
 - [Reference: Moderation Processor | Processors](https://mastra.ai/en/reference/processors/moderation-processor): Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories.
 - [Reference: PII Detector | Processors](https://mastra.ai/en/reference/processors/pii-detector): Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses.
 - [Reference: Processor Interface | Processors](https://mastra.ai/en/reference/processors/processor-interface): API reference for the Processor interface in Mastra, which defines the contract for transforming, validating, and controlling messages in agent pipelines.
 - [Reference: Prompt Injection Detector | Processors](https://mastra.ai/en/reference/processors/prompt-injection-detector): Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input.
+- [Reference: Semantic Recall Processor | Processors](https://mastra.ai/en/reference/processors/semantic-recall-processor): Documentation for the SemanticRecall processor in Mastra, which enables semantic search over conversation history using vector embeddings.
 - [Reference: System Prompt Scrubber | Processors](https://mastra.ai/en/reference/processors/system-prompt-scrubber): Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses.
 - [Reference: Token Limiter Processor | Processors](https://mastra.ai/en/reference/processors/token-limiter-processor): Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in AI responses.
+- [Reference: Tool Call Filter | Processors](https://mastra.ai/en/reference/processors/tool-call-filter): Documentation for the ToolCallFilter processor in Mastra, which filters out tool calls and results from messages.
 - [Reference: Unicode Normalizer | Processors](https://mastra.ai/en/reference/processors/unicode-normalizer): Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters.
+- [Reference: Working Memory Processor | Processors](https://mastra.ai/en/reference/processors/working-memory-processor): Documentation for the WorkingMemory processor in Mastra, which injects persistent user/context data as system instructions.
 - [Reference: Reference: .chunk() | RAG](https://mastra.ai/en/reference/rag/chunk): Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
 - [Reference: DatabaseConfig | RAG](https://mastra.ai/en/reference/rag/database-config): API reference for database-specific configuration types used with vector query tools in Mastra RAG systems.
 - [Reference: MDocument | Document Processing | RAG](https://mastra.ai/en/reference/rag/document): Documentation for the MDocument class in Mastra, which handles document processing and chunking.
@@ -375,6 +382,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Metadata Filters | RAG](https://mastra.ai/en/reference/rag/metadata-filters): Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 - [Reference: rerank() | RAG](https://mastra.ai/en/reference/rag/rerank): Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 - [Reference: rerankWithScorer() | RAG](https://mastra.ai/en/reference/rag/rerankWithScorer): Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
+- [Reference: createRoute() | Server](https://mastra.ai/en/reference/server/create-route): API reference for createRoute() function used to define type-safe routes with validation and OpenAPI generation.
+- [Reference: Express Adapter | Server](https://mastra.ai/en/reference/server/express-adapter): API reference for the @mastra/express server adapter.
+- [Reference: Hono Adapter | Server](https://mastra.ai/en/reference/server/hono-adapter): API reference for the @mastra/hono server adapter.
+- [Reference: MastraServer | Server](https://mastra.ai/en/reference/server/mastra-server): API reference for the MastraServer abstract class used to create server adapters.
+- [Reference: Server Routes | Server](https://mastra.ai/en/reference/server/routes): API reference for HTTP routes registered by Mastra server adapters.
 - [Reference: Cloudflare D1 Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare-d1): Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 - [Reference: Cloudflare Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare): Documentation for the Cloudflare KV storage implementation in Mastra.
 - [Reference: Convex Storage | Storage](https://mastra.ai/en/reference/storage/convex): Documentation for the Convex storage implementation in Mastra.
@@ -392,6 +404,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Run.observeStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/observeStream): Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
 - [Reference: Run.resumeStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/resumeStream): Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 - [Reference: Run.stream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/stream): Documentation for the `Run.stream()` method in workflows, which enables real-time streaming of responses.
+- [Reference: Run.timeTravelStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/timeTravelStream): Documentation for the `Run.timeTravelStream()` method for streaming workflow time travel execution.
 - [Reference: LLM provider API keys (choose one or more) | Templates](https://mastra.ai/en/reference/templates/overview): Complete guide to creating, using, and contributing Mastra templates
 - [Reference: MastraMCPClient (Deprecated) | Tools & MCP](https://mastra.ai/en/reference/tools/client): API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
 - [Reference: createTool() | Tools & MCP](https://mastra.ai/en/reference/tools/create-tool): Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
@@ -404,6 +417,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Chroma Vector Store | Vectors](https://mastra.ai/en/reference/vectors/chroma): Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
 - [Reference: Convex Vector Store | Vectors](https://mastra.ai/en/reference/vectors/convex): Documentation for the ConvexVector class in Mastra, which provides vector search using Convex.
 - [Reference: Couchbase Vector Store | Vectors](https://mastra.ai/en/reference/vectors/couchbase): Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
+- [Reference: DuckDBVector Store | Vectors](https://mastra.ai/en/reference/vectors/duckdb): Documentation for the DuckDBVector class in Mastra, which provides embedded high-performance vector search using DuckDB with HNSW indexing.
+- [Reference: ElasticSearch Vector Store | Vectors](https://mastra.ai/en/reference/vectors/elasticsearch): Documentation for the ElasticSearchVector class in Mastra, which provides vector search using ElasticSearch.
 - [Reference: Lance Vector Store | Vectors](https://mastra.ai/en/reference/vectors/lance): Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format.
 - [Reference: LibSQLVector Store | Vectors](https://mastra.ai/en/reference/vectors/libsql): Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
 - [Reference: MongoDB Vector Store | Vectors](https://mastra.ai/en/reference/vectors/mongodb): Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
@@ -446,6 +461,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Run.restart() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/restart): Documentation for the `Run.restart()` method in workflows, which restarts an active workflow run that lost connection to the server.
 - [Reference: Run.resume() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/resume): Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
 - [Reference: Run.start() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/start): Documentation for the `Run.start()` method in workflows, which starts a workflow run with input data.
+- [Reference: Run.timeTravel() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/timeTravel): Documentation for the `Run.timeTravel()` method in workflows, which re-executes a workflow from a specific step.
 - [Reference: Run Class | Workflows](https://mastra.ai/en/reference/workflows/run): Documentation for the Run class in Mastra, which represents a workflow execution instance.
 - [Reference: Step Class | Workflows](https://mastra.ai/en/reference/workflows/step): Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 - [Reference: Workflow.branch() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/branch): Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.

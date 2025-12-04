@@ -112,12 +112,19 @@ describe('LangSmithExporter', () => {
     });
 
     it('should disable exporter when apiKey is missing', async () => {
+      // Temporarily clear env var to test missing apiKey behavior
+      const originalEnvKey = process.env.LANGSMITH_API_KEY;
+      delete process.env.LANGSMITH_API_KEY;
+
       const invalidConfig = {
         // Missing apiKey
         apiUrl: 'https://test.com',
       };
 
       const disabledExporter = new LangSmithExporter(invalidConfig);
+
+      // Restore env var
+      process.env.LANGSMITH_API_KEY = originalEnvKey;
 
       // Should be disabled when apiKey is missing
       expect(disabledExporter['isDisabled']).toBe(true);

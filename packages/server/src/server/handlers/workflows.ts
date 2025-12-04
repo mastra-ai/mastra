@@ -136,17 +136,31 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
   summary: 'List workflow runs',
   description: 'Returns a paginated list of execution runs for the specified workflow',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, fromDate, toDate, limit, offset, resourceId, status }) => {
+  handler: async ({ mastra, workflowId, fromDate, toDate, page, perPage, limit, offset, resourceId, status }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
-      const perPage = limit;
-      const page = offset !== undefined && typeof limit === 'number' && limit !== 0 ? Math.floor(offset / limit) : 0;
-      if (perPage !== undefined && (typeof perPage !== 'number' || !Number.isInteger(perPage) || perPage <= 0)) {
-        throw new HTTPException(400, { message: 'limit must be a positive integer' });
+
+      // Support both page/perPage and limit/offset for backwards compatibility
+      // If page/perPage provided, use directly; otherwise convert from limit/offset
+      let finalPage = page;
+      let finalPerPage = perPage;
+
+      if (finalPerPage === undefined && limit !== undefined) {
+        finalPerPage = limit;
       }
-      if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
+      if (finalPage === undefined && offset !== undefined && finalPerPage !== undefined && finalPerPage > 0) {
+        finalPage = Math.floor(offset / finalPerPage);
+      }
+
+      if (
+        finalPerPage !== undefined &&
+        (typeof finalPerPage !== 'number' || !Number.isInteger(finalPerPage) || finalPerPage <= 0)
+      ) {
+        throw new HTTPException(400, { message: 'perPage must be a positive integer' });
+      }
+      if (finalPage !== undefined && (!Number.isInteger(finalPage) || finalPage < 0)) {
         throw new HTTPException(400, { message: 'page must be a non-negative integer' });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -156,8 +170,8 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
       const workflowRuns = (await workflow.listWorkflowRuns({
         fromDate: fromDate ? (typeof fromDate === 'string' ? new Date(fromDate) : fromDate) : undefined,
         toDate: toDate ? (typeof toDate === 'string' ? new Date(toDate) : toDate) : undefined,
-        perPage,
-        page,
+        perPage: finalPerPage,
+        page: finalPage,
         resourceId,
         status,
       })) || {

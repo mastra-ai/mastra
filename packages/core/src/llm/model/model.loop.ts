@@ -296,6 +296,8 @@ export class MastraLLMVNext extends MastraBase {
                   reasoningTokens: props?.totalUsage?.reasoningTokens,
                   cachedInputTokens: props?.totalUsage?.cachedInputTokens,
                 },
+                responseId: props?.response.id,
+                responseModel: props?.response.modelId,
               },
             });
 

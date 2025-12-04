@@ -1,10 +1,55 @@
 import { convertGenAISpanAttributesToOpenInferenceSpanAttributes } from '@arizeai/openinference-genai';
 import type { Mutable } from '@arizeai/openinference-genai/types';
-import { SemanticConventions } from '@arizeai/openinference-semantic-conventions';
+import {
+  INPUT_MIME_TYPE,
+  INPUT_VALUE,
+  METADATA,
+  OUTPUT_MIME_TYPE,
+  OUTPUT_VALUE,
+  SESSION_ID,
+  TAG_TAGS,
+  USER_ID,
+} from '@arizeai/openinference-semantic-conventions';
 import type { ExportResult } from '@opentelemetry/core';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
-import { convertMastraMessagesToGenAIMessages } from './gen-ai';
+import {
+  ATTR_GEN_AI_INPUT_MESSAGES,
+  ATTR_GEN_AI_OUTPUT_MESSAGES,
+} from '@opentelemetry/semantic-conventions/incubating';
+
+const MASTRA_GENERAL_PREFIX = 'mastra.';
+const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
+
+/**
+ * Splits Mastra span attributes into two groups:
+ * - `metadata`: keys starting with "mastra.metadata." (prefix removed)
+ * - `other`: all remaining keys starting with "mastra."
+ *
+ * Any attributes not starting with "mastra." are ignored entirely.
+ */
+function splitMastraAttributes(attributes: Record<string, any>): {
+  mastraMetadata: Record<string, any>;
+  mastraOther: Record<string, any>;
+} {
+  return Object.entries(attributes).reduce(
+    (acc, [key, value]) => {
+      if (key.startsWith(MASTRA_GENERAL_PREFIX)) {
+        if (key.startsWith(MASTRA_METADATA_PREFIX)) {
+          const strippedKey = key.slice(MASTRA_METADATA_PREFIX.length);
+          acc.mastraMetadata[strippedKey] = value;
+        } else {
+          acc.mastraOther[key] = value;
+        }
+      }
+      return acc;
+    },
+    {
+      mastraMetadata: {} as Record<string, any>,
+      mastraOther: {} as Record<string, any>,
+    },
+  );
+}
 
 export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void) {
@@ -12,86 +57,50 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
       const attributes = { ...(span.attributes ?? {}) };
       const mutableSpan = span as Mutable<ReadableSpan>;
 
-      if (attributes['gen_ai.prompt'] && typeof attributes['gen_ai.prompt'] === 'string') {
-        attributes['gen_ai.input.messages'] = convertMastraMessagesToGenAIMessages(attributes['gen_ai.prompt']);
-      }
-
-      if (attributes['gen_ai.completion'] && typeof attributes['gen_ai.completion'] === 'string') {
-        attributes['gen_ai.output.messages'] = convertMastraMessagesToGenAIMessages(attributes['gen_ai.completion']);
-      }
-
-      // Gather custom attributes into OpenInference metadata (flat best-effort)
-      const reservedPrefixes = [
-        'gen_ai.',
-        'llm.',
-        'input.',
-        'output.',
-        'span.',
-        'mastra',
-        'agent.',
-        'workflow.',
-        'mcp.',
-        'openinference.',
-        'retrieval.',
-        'reranker.',
-        'embedding.',
-        'document.',
-        'tool',
-        'error.',
-        'http.',
-        'db.',
-      ];
-      const metadataEntries: Record<string, unknown> = {};
-      const reservedExact = new Set<string>(['input', 'output', 'sessionId', 'metadata']);
-      for (const [key, value] of Object.entries(attributes)) {
-        const isReserved =
-          reservedPrefixes.some(prefix => key.startsWith(prefix)) ||
-          key === 'threadId' ||
-          key === 'userId' ||
-          key === SemanticConventions.SESSION_ID ||
-          key === SemanticConventions.USER_ID ||
-          reservedExact.has(key);
-        if (!isReserved) {
-          metadataEntries[key] = value;
-        }
-      }
-
-      let metadataPayload: string | undefined;
-      if (Object.keys(metadataEntries).length > 0) {
-        try {
-          metadataPayload = JSON.stringify(metadataEntries);
-          attributes[SemanticConventions.METADATA] = metadataPayload;
-        } catch {
-          // best-effort only
-        }
-      }
-
-      const sessionId = typeof attributes['threadId'] === 'string' ? (attributes['threadId'] as string) : undefined;
-      const userId = typeof attributes['userId'] === 'string' ? (attributes['userId'] as string) : undefined;
-
-      if (sessionId) {
-        attributes[SemanticConventions.SESSION_ID] = sessionId;
-        delete attributes['threadId'];
-      }
-
-      if (userId) {
-        attributes[SemanticConventions.USER_ID] = userId;
-        delete attributes['userId'];
-      }
-
+      const { mastraMetadata, mastraOther } = splitMastraAttributes(attributes);
       const processedAttributes = convertGenAISpanAttributesToOpenInferenceSpanAttributes(attributes);
 
+      // only add processed attributes if conversion was successful
       if (processedAttributes) {
-        if (sessionId) {
-          processedAttributes[SemanticConventions.SESSION_ID] = sessionId;
+        const threadId = mastraMetadata['threadId'];
+        if (threadId) {
+          delete mastraMetadata['threadId'];
+          processedAttributes[SESSION_ID] = threadId;
         }
+
+        // Map mastra.tags to OpenInference native tag.tags convention (tags are only on root spans)
+        if (mastraOther['mastra.tags']) {
+          processedAttributes[TAG_TAGS] = mastraOther['mastra.tags'];
+          delete mastraOther['mastra.tags'];
+        }
+
+        const userId = mastraMetadata['userId'];
         if (userId) {
-          processedAttributes[SemanticConventions.USER_ID] = userId;
+          delete mastraMetadata['userId'];
+          processedAttributes[USER_ID] = userId;
         }
-        if (metadataPayload) {
-          processedAttributes[SemanticConventions.METADATA] = metadataPayload;
+
+        // Gather custom metadata into OpenInference metadata (flat best-effort)
+        if (Object.keys(mastraMetadata).length > 0) {
+          try {
+            processedAttributes[METADATA] = JSON.stringify(mastraMetadata);
+          } catch {
+            // best-effort only
+          }
         }
-        mutableSpan.attributes = processedAttributes;
+
+        const inputMessages = attributes[ATTR_GEN_AI_INPUT_MESSAGES];
+        if (inputMessages) {
+          processedAttributes[INPUT_MIME_TYPE] = 'application/json';
+          processedAttributes[INPUT_VALUE] = inputMessages;
+        }
+        const outputMessages = attributes[ATTR_GEN_AI_OUTPUT_MESSAGES];
+        if (outputMessages) {
+          processedAttributes[OUTPUT_MIME_TYPE] = 'application/json';
+          processedAttributes[OUTPUT_VALUE] = outputMessages;
+        }
+
+        mutableSpan.attributes = { ...processedAttributes, ...mastraOther };
       }
 
       return mutableSpan;

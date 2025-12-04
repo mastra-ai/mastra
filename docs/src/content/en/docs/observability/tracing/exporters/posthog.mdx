@@ -101,6 +101,26 @@ new PosthogExporter({
 });
 ```
 
+## Using Tags
+
+Tags help you categorize and filter traces in PostHog's AI analytics. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+Tags are added as event properties where the tag name is the key and the value is set to `true`. In PostHog's trace view, filter by a tag using the `is set` filter (e.g., "production is set" shows all traces with the production tag). Common use cases include:
+
+- Environment labels: `"production"`, `"staging"`
+- Experiment tracking: `"experiment-v1"`, `"control-group"`
+- Priority levels: `"priority-high"`, `"batch-job"`
+- User segments: `"beta-user"`, `"enterprise"`
+
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)

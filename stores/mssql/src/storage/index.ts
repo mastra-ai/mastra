@@ -34,6 +34,26 @@ import { WorkflowsMSSQL } from './domains/workflows';
 export type MSSQLConfigType = {
   id: string;
   schemaName?: string;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new MSSQLStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new MSSQLStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
 } & (
   | {
       server: string;
@@ -60,7 +80,7 @@ export class MSSQLStore extends MastraStorage {
     if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error('MSSQLStore: id must be provided and cannot be empty.');
     }
-    super({ id: config.id, name: 'MSSQLStore' });
+    super({ id: config.id, name: 'MSSQLStore', disableInit: config.disableInit });
     try {
       if ('connectionString' in config) {
         if (
