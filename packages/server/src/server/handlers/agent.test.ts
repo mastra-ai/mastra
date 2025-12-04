@@ -196,6 +196,134 @@ describe('Agent Handlers', () => {
         ],
       });
     });
+
+    it('should return serialized agents with partial data when partial=true query param is provided', async () => {
+      const firstStep = createStep({
+        id: 'first',
+        description: 'First step',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        outputSchema: z.object({ name: z.string() }),
+        execute: async ({ inputData }) => ({
+          name: inputData.name,
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'hello-world',
+        description: 'A simple hello world workflow',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        outputSchema: z.object({
+          greeting: z.string(),
+        }),
+      });
+
+      workflow.then(firstStep);
+
+      const agentWithSchemas = makeMockAgent({
+        name: 'agent-with-schemas',
+        workflows: { hello: workflow },
+        tools: {
+          testTool: {
+            id: 'test-tool',
+            description: 'A test tool',
+            inputSchema: z.object({ input: z.string() }),
+            outputSchema: z.object({ output: z.string() }),
+          },
+        },
+      });
+
+      const mastraWithSchemas = makeMastraMock({
+        agents: { 'agent-with-schemas': agentWithSchemas },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mastraWithSchemas }),
+        requestContext,
+        partial: 'true',
+      });
+
+      // When partial=true, inputSchema, outputSchema, resumeSchema, suspendSchema should be pruned
+      const agent = result['agent-with-schemas'];
+      expect(agent).toBeDefined();
+      expect(agent.name).toBe('agent-with-schemas');
+      expect(agent.description).toBe('A test agent for unit testing');
+
+      // Verify tools have no schemas when partial=true
+      expect(agent.tools.testTool).toBeDefined();
+      expect(agent.tools.testTool.id).toBe('test-tool');
+      expect(agent.tools.testTool.description).toBe('A test tool');
+      expect(agent.tools.testTool.inputSchema).toBeUndefined();
+      expect(agent.tools.testTool.outputSchema).toBeUndefined();
+
+      // Verify workflows return stepCount instead of full steps when partial=true
+      expect(agent.workflows.hello).toBeDefined();
+      expect(agent.workflows.hello.name).toBe('hello-world');
+      expect(agent.workflows.hello.steps).toBeUndefined();
+    });
+
+    it('should return serialized agents with full schemas when partial param is not provided', async () => {
+      const firstStep = createStep({
+        id: 'first',
+        description: 'First step',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        outputSchema: z.object({ name: z.string() }),
+        execute: async ({ inputData }) => ({
+          name: inputData.name,
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'hello-world',
+        description: 'A simple hello world workflow',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        outputSchema: z.object({
+          greeting: z.string(),
+        }),
+      });
+
+      workflow.then(firstStep);
+
+      const agentWithSchemas = makeMockAgent({
+        name: 'agent-with-schemas',
+        workflows: { hello: workflow },
+        tools: {
+          testTool: {
+            id: 'test-tool',
+            description: 'A test tool',
+            inputSchema: z.object({ input: z.string() }),
+            outputSchema: z.object({ output: z.string() }),
+          },
+        },
+      });
+
+      const mastraWithSchemas = makeMastraMock({
+        agents: { 'agent-with-schemas': agentWithSchemas },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mastraWithSchemas }),
+        requestContext,
+        // No partial parameter provided
+      });
+
+      // When partial is not provided, schemas should be included
+      const agent = result['agent-with-schemas'];
+      expect(agent).toBeDefined();
+
+      // Verify tools have schemas when partial is not provided
+      expect(agent.tools.testTool.inputSchema).toBeDefined();
+      expect(agent.tools.testTool.outputSchema).toBeDefined();
+      expect(typeof agent.tools.testTool.inputSchema).toBe('string');
+      expect(typeof agent.tools.testTool.outputSchema).toBe('string');
+    });
   });
 
   describe('getAgentByIdHandler', () => {
