@@ -268,6 +268,11 @@ const sidebars = {
               id: "workflows/run-methods/restart",
               label: ".restart()",
             },
+            {
+              type: "doc",
+              id: "workflows/run-methods/timeTravel",
+              label: ".timeTravel()",
+            },
           ],
         },
       ],
@@ -389,6 +394,11 @@ const sidebars = {
               type: "doc",
               id: "streaming/workflows/observeStreamVNext",
               label: ".observeStreamVNext()",
+            },
+            {
+              type: "doc",
+              id: "streaming/workflows/timeTravelStream",
+              label: ".timeTravelStream()",
             },
           ],
         },
