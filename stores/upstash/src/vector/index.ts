@@ -238,7 +238,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     // Validate mutually exclusive parameters
     if ('id' in params && params.id && 'filter' in params && params.filter) {
       throw new MastraError({
-        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         text: 'Cannot specify both id and filter - they are mutually exclusive',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -248,7 +248,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
 
     if (!('id' in params && params.id) && !('filter' in params && params.filter)) {
       throw new MastraError({
-        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'NO_TARGET'),
         text: 'Either id or filter must be provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -258,7 +258,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
 
     if (!update.vector && !update.metadata && !sparseVector) {
       throw new MastraError({
-        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         text: 'No update data provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -269,7 +269,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     // Validate filter is not empty
     if ('filter' in params && params.filter && Object.keys(params.filter).length === 0) {
       throw new MastraError({
-        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
         text: 'Filter cannot be an empty filter object',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
