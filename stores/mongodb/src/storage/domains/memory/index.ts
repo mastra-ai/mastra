@@ -15,8 +15,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
 import { formatDateForMongoDB } from '../utils';
@@ -591,16 +591,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+      const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_MONGODB_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            id: 'STORAGE_MONGODB_LIST_THREADS_INVALID_PAGE',
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -614,7 +612,21 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy);
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
-      const query = { resourceId };
+      // Build query with optional filters
+      const query: Record<string, any> = {};
+
+      // Apply resourceId filter if provided
+      if (filter?.resourceId) {
+        query.resourceId = filter.resourceId;
+      }
+
+      // Apply metadata filter using MongoDB dot notation
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          query[`metadata.${key}`] = value;
+        }
+      }
+
       const total = await collection.countDocuments(query);
 
       if (perPage === 0) {
@@ -656,10 +668,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'MONGODB_STORE_LIST_THREADS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId: args.resourceId },
+          details: { filter: JSON.stringify(args.filter) },
         },
         error,
       );

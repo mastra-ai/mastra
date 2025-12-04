@@ -8,8 +8,8 @@ import type {
   ThreadSortDirection,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '../../types';
 import { safelyParseJSON } from '../../utils';
 import type { StoreOperations } from '../operations';
@@ -478,10 +478,8 @@ export class InMemoryMemory extends MemoryStorage {
     }
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
     const perPage = normalizePerPage(perPageInput, 100);
 
@@ -495,9 +493,24 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error('page value too large');
     }
 
-    this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
-    // Mock implementation - find threads by resourceId
-    const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
+    this.logger.debug(`MockStore: listThreads called with filter: ${JSON.stringify(filter)}`);
+
+    // Start with all threads
+    let threads = Array.from(this.collection.threads.values());
+
+    // Apply resourceId filter if provided
+    if (filter?.resourceId) {
+      threads = threads.filter((t: any) => t.resourceId === filter.resourceId);
+    }
+
+    // Apply metadata filter if provided
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      threads = threads.filter(thread => {
+        if (!thread.metadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
+      });
+    }
+
     const sortedThreads = this.sortThreads(threads, field, direction);
     const clonedThreads = sortedThreads.map(thread => ({
       ...thread,

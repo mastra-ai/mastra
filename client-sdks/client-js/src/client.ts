@@ -94,18 +94,18 @@ export class MastraClient extends BaseResource {
 
   /**
    * Lists memory threads for a resource with pagination support
-   * @param params - Parameters containing resource ID, pagination options, and optional request context
+   * @param params - Parameters containing resource ID, pagination options, filter, and optional request context
    * @returns Promise containing paginated array of memory threads with metadata
    */
   public async listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
     const queryParams = new URLSearchParams({
-      resourceId: params.resourceId,
-      resourceid: params.resourceId,
       agentId: params.agentId,
+      ...(params.resourceId && { resourceId: params.resourceId }),
       ...(params.page !== undefined && { page: params.page.toString() }),
       ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
       ...(params.orderBy && { orderBy: params.orderBy }),
       ...(params.sortDirection && { sortDirection: params.sortDirection }),
+      ...(params.filter && { filter: JSON.stringify(params.filter) }),
     });
 
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(

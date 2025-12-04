@@ -152,7 +152,7 @@ describe('Memory Handlers', () => {
 
       await mockMemory.createThread({ resourceId: 'test-resource' });
 
-      const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
+      const spy = vi.spyOn(mockMemory, 'listThreads');
 
       const result = await LIST_THREADS_ROUTE.handler({
         ...createTestRuntimeContext({ mastra }),
@@ -185,7 +185,7 @@ describe('Memory Handlers', () => {
         agents: { 'test-agent': mockAgent },
       });
 
-      const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
+      const spy = vi.spyOn(mockMemory, 'listThreads');
 
       const result = await LIST_THREADS_ROUTE.handler({
         ...createTestRuntimeContext({ mastra }),
@@ -215,7 +215,7 @@ describe('Memory Handlers', () => {
         agents: { 'test-agent': mockAgent },
       });
 
-      const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
+      const spy = vi.spyOn(mockMemory, 'listThreads');
 
       // Test updatedAt DESC sorting
       const result = await LIST_THREADS_ROUTE.handler({
@@ -243,7 +243,7 @@ describe('Memory Handlers', () => {
         agents: { 'test-agent': mockAgent },
       });
 
-      const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
+      const spy = vi.spyOn(mockMemory, 'listThreads');
 
       const result = await LIST_THREADS_ROUTE.handler({
         ...createTestRuntimeContext({ mastra }),

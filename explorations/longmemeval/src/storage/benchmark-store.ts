@@ -8,8 +8,8 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageListMessagesInput,
   StorageListMessagesOutput,
 } from '@mastra/core/storage';
@@ -320,24 +320,32 @@ export class BenchmarkStore extends MastraStorage {
     return parsedRun as WorkflowRun;
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const allThreads: StorageThreadType[] = [];
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    let allThreads: StorageThreadType[] = [];
     for (const thread of this.data.mastra_threads.values()) {
-      if (thread.resourceId === args.resourceId) {
-        allThreads.push(thread);
+      // Apply resourceId filter if provided
+      if (args.filter?.resourceId && thread.resourceId !== args.filter.resourceId) {
+        continue;
       }
+      // Apply metadata filter if provided
+      if (args.filter?.metadata && Object.keys(args.filter.metadata).length > 0) {
+        if (!thread.metadata) continue;
+        const matches = Object.entries(args.filter.metadata).every(([key, value]) => thread.metadata[key] === value);
+        if (!matches) continue;
+      }
+      allThreads.push(thread);
     }
-    const start = args.offset * args.limit;
-    const threads = allThreads.slice(start, start + args.limit);
+    const page = args.page ?? 0;
+    const perPage = args.perPage ?? 100;
+    const offset = page * perPage;
+    const threads = allThreads.slice(offset, offset + perPage);
 
     return {
       threads,
       total: allThreads.length,
-      page: args.offset,
-      perPage: args.limit,
-      hasMore: allThreads.length > (args.offset + 1) * args.limit,
+      page,
+      perPage,
+      hasMore: allThreads.length > offset + perPage,
     };
   }
 

@@ -36,8 +36,8 @@ import type {
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListWorkflowRunsInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from './types';
 
 export type StorageDomains = {
@@ -299,17 +299,15 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     if (this.stores?.memory) {
-      return this.stores.memory.listThreadsByResourceId(args);
+      return this.stores.memory.listThreads(args);
     }
     throw new MastraError({
-      id: 'MASTRA_STORAGE_LIST_THREADS_BY_RESOURCE_ID_PAGINATED_NOT_SUPPORTED',
+      id: 'MASTRA_STORAGE_LIST_THREADS_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      text: `Listing threads by resource ID paginated is not implemented by this storage adapter (${this.constructor.name})`,
+      text: `Listing threads is not implemented by this storage adapter (${this.constructor.name})`,
     });
   }
 

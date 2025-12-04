@@ -6,7 +6,7 @@ import {
   type MastraStorage,
 } from '@mastra/core/storage';
 import { createListMessagesTest } from './messages-paginated';
-import { createThreadsTest } from './threads';
+import { createThreadsTest, createThreadMetadataFilteringTest, createListThreadsTest } from './threads';
 import { createMessagesUpdateTest } from './messages-update';
 import { createMessagesBulkDeleteTest } from './messages-bulk-delete';
 import { createResourcesTest } from './resources';
@@ -28,6 +28,10 @@ export function createMemoryTest({ storage }: { storage: MastraStorage }) {
   });
 
   createThreadsTest({ storage });
+
+  createThreadMetadataFilteringTest({ storage });
+
+  createListThreadsTest({ storage });
 
   createMessagesListTest({ storage });
 

@@ -9,11 +9,7 @@ import type {
   WorkingMemoryTemplate,
   MessageDeleteInput,
 } from '@mastra/core/memory';
-import type {
-  StorageListThreadsByResourceIdOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListMessagesInput,
-} from '@mastra/core/storage';
+import type { StorageListThreadsInput, StorageListThreadsOutput, StorageListMessagesInput } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
@@ -242,10 +238,8 @@ export class Memory extends MastraMemory {
     return this.storage.getThreadById({ threadId });
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.storage.listThreadsByResourceId(args);
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    return this.storage.listThreads(args);
   }
 
   private async handleWorkingMemoryFromMetadata({

@@ -74,6 +74,28 @@ const filterSchema = z.preprocess(
 );
 
 /**
+ * Filter schema for thread listing - handles JSON parsing from query strings
+ */
+const threadFilterSchema = z.preprocess(
+  val => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return undefined;
+      }
+    }
+    return val;
+  },
+  z
+    .object({
+      resourceId: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+);
+
+/**
  * Memory config schema - handles JSON parsing from query strings
  */
 const memoryConfigSchema = z.preprocess(val => {
@@ -130,8 +152,9 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
  */
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string(),
-  resourceId: z.string(),
+  resourceId: z.string().optional(),
   orderBy: storageOrderBySchema.optional(),
+  filter: threadFilterSchema,
 });
 
 /**
@@ -173,8 +196,9 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
  */
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string(),
-  resourceId: z.string(),
+  resourceId: z.string().optional(),
   orderBy: storageOrderBySchema.optional(),
+  filter: threadFilterSchema,
 });
 
 /**

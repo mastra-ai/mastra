@@ -1,0 +1,143 @@
+---
+title: "Reference: Memory.listThreads() | Memory"
+description: "Documentation for the `Memory.listThreads()` method in Mastra, which retrieves threads with optional filtering by resource ID and metadata."
+---
+
+# Memory.listThreads()
+
+The `.listThreads()` method retrieves threads with optional filtering by resource ID and/or metadata, with pagination support.
+
+## Usage Example
+
+```typescript copy
+// Filter by resourceId
+await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  page: 0,
+  perPage: 10,
+});
+
+// Filter by metadata
+await memory.listThreads({
+  filter: { metadata: { category: "support" } },
+  page: 0,
+  perPage: 10,
+});
+
+// Filter by both resourceId and metadata
+await memory.listThreads({
+  filter: {
+    resourceId: "user-123",
+    metadata: { priority: "high" },
+  },
+  page: 0,
+  perPage: 10,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "filter",
+      type: "{ resourceId?: string; metadata?: Record<string, unknown> }",
+      description: "Optional filter criteria. resourceId filters by resource, metadata filters by key-value pairs (AND logic)",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "Page number (0-indexed) to retrieve",
+      isOptional: true,
+      defaultValue: "0",
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description: "Maximum number of threads to return per page. Set to false to fetch all records.",
+      isOptional: true,
+      defaultValue: "100",
+    },
+    {
+      name: "orderBy",
+      type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
+      description: "Sort configuration with field and direction",
+      isOptional: true,
+      defaultValue: "{ field: 'createdAt', direction: 'DESC' }",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<StorageListThreadsOutput>",
+      description:
+        "A promise that resolves to paginated thread results with metadata",
+    },
+  ]}
+/>
+
+The return object contains:
+- `threads`: Array of thread objects
+- `total`: Total number of threads matching the filter
+- `page`: Current page number (same as the input `page` parameter)
+- `perPage`: Items per page (same as the input `perPage` parameter)
+- `hasMore`: Boolean indicating if more results are available
+
+## Extended usage example
+
+```typescript title="src/test-memory.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+let currentPage = 0;
+const perPage = 25;
+let hasMorePages = true;
+
+// List all threads for a user with high priority
+while (hasMorePages) {
+  const result = await memory?.listThreads({
+    filter: {
+      resourceId: "user-123",
+      metadata: { priority: "high" },
+    },
+    page: currentPage,
+    perPage: perPage,
+    orderBy: { field: "createdAt", direction: "DESC" },
+  });
+
+  if (!result) {
+    console.log("No threads");
+    break;
+  }
+
+  result.threads.forEach((thread) => {
+    console.log(`Thread: ${thread.id}, Created: ${thread.createdAt}`);
+  });
+
+  hasMorePages = result.hasMore;
+  currentPage++;
+}
+
+// Search threads by metadata only (across all resources)
+const supportThreads = await memory?.listThreads({
+  filter: { metadata: { category: "support" } },
+  page: 0,
+  perPage: 50,
+});
+```
+
+## Related
+
+- [Memory Class Reference](/reference/v1/memory/memory-class)
+- [Getting Started with Memory](/docs/v1/memory/overview) (Covers threads/resources concept)
+- [createThread](/reference/v1/memory/createThread)
+- [getThreadById](/reference/v1/memory/getThreadById)
+

@@ -7,8 +7,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
@@ -542,16 +542,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const perPage = normalizePerPage(perPageInput, 100);
 
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: 'STORAGE_DYNAMODB_LIST_THREADS_INVALID_PAGE',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -560,33 +558,41 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       );
     }
 
-    // When perPage is false (get all), ignore page offset
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
-    this.logger.debug('Getting threads by resource ID with pagination', {
-      resourceId,
-      page,
-      perPage,
-      field,
-      direction,
-    });
+    this.logger.debug('Getting threads with filters', { filter, page, perPage, field, direction });
 
     try {
-      // Query threads by resource ID using the GSI
-      const query = this.service.entities.thread.query.byResource({ entity: 'thread', resourceId });
+      let results;
 
-      // Get all threads for this resource ID (DynamoDB doesn't support OFFSET/LIMIT)
-      const results = await query.go();
+      // If resourceId filter is provided, use the GSI for efficient query
+      if (filter?.resourceId) {
+        const query = this.service.entities.thread.query.byResource({
+          entity: 'thread',
+          resourceId: filter.resourceId,
+        });
+        results = await query.go();
+      } else {
+        // Otherwise, scan all threads (less efficient but needed for metadata-only queries)
+        results = await this.service.entities.thread.scan.go();
+      }
 
       // Use shared helper method for transformation and sorting
-      const allThreads = this.transformAndSortThreads(results.data, field, direction);
+      let allThreads = this.transformAndSortThreads(results.data, field, direction);
+
+      // Apply metadata filter in memory
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        allThreads = allThreads.filter(thread => {
+          if (!thread.metadata) return false;
+          return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
+        });
+      }
 
       // Apply pagination in memory
       const endIndex = offset + perPage;
       const paginatedThreads = allThreads.slice(offset, endIndex);
 
-      // Calculate pagination info
       const total = allThreads.length;
       const hasMore = offset + perPage < total;
 
@@ -600,10 +606,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'DYNAMODB_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'DYNAMODB_STORAGE_LIST_THREADS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page, perPage },
+          details: { filter: JSON.stringify(filter), page, perPage },
         },
         error,
       );

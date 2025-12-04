@@ -364,11 +364,11 @@ export class PostgresPerformanceTest {
     const results: PerformanceResult[] = [];
 
     const resourceId = 'resource_0';
-    // Test listThreadsByResourceId
+    // Test listThreads
     results.push(
       await this.measureOperation(
-        'listThreadsByResourceId',
-        () => this.store.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
+        'listThreads',
+        () => this.store.listThreads({ filter: { resourceId }, page: 0, perPage: 20 }),
         scenario,
       ),
     );
@@ -432,7 +432,7 @@ export class PostgresPerformanceTest {
     console.info('\n=== Query Execution Plans ===');
 
     try {
-      // Analyze listThreadsByResourceId query
+      // Analyze listThreads query
       const threadPlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt"
@@ -440,7 +440,7 @@ export class PostgresPerformanceTest {
         WHERE "resourceId" = 'resource_0'
         ORDER BY "createdAt" DESC
       `);
-      console.info('listThreadsByResourceId plan:');
+      console.info('listThreads plan:');
       threadPlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
 
       // Analyze listMessages query

@@ -6,8 +6,8 @@ import type {
   PaginationInfo,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageListWorkflowRunsInput,
   StoragePagination,
   WorkflowRun,
@@ -166,10 +166,8 @@ export class ConvexStore extends MastraStorage {
     await this.memory.deleteMessages(messageIds);
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.memory.listThreadsByResourceId(args);
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    return this.memory.listThreads(args);
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

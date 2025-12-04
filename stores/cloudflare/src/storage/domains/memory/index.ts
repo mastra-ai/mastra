@@ -6,8 +6,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import {
   ensureDate,
@@ -74,17 +74,15 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+      const { page = 0, perPage: perPageInput, orderBy, filter } = args;
       const perPage = normalizePerPage(perPageInput, 100);
 
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_CLOUDFLARE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            id: 'STORAGE_CLOUDFLARE_LIST_THREADS_INVALID_PAGE',
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -93,7 +91,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         );
       }
 
-      // When perPage is false (get all), ignore page offset
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -107,8 +104,15 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         const data = await this.operations.getKV(TABLE_THREADS, key);
         if (!data) continue;
 
-        // Filter by resourceId
-        if (data.resourceId !== resourceId) continue;
+        // Filter by resourceId if provided
+        if (filter?.resourceId && data.resourceId !== filter.resourceId) continue;
+
+        // Filter by metadata if provided
+        if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+          if (!data.metadata) continue;
+          const matches = Object.entries(filter.metadata).every(([key, value]) => data.metadata[key] === value);
+          if (!matches) continue;
+        }
 
         threads.push(data);
       }
@@ -134,10 +138,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'CLOUDFLARE_STORAGE_LIST_THREADS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to get threads by resource ID with pagination',
+          text: 'Failed to list threads',
         },
         error,
       );

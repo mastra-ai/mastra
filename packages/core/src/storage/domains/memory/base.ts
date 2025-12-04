@@ -7,8 +7,8 @@ import type {
   ThreadSortDirection,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageOrderBy,
 } from '../../types';
 
@@ -56,9 +56,7 @@ export abstract class MemoryStorage extends MastraBase {
     );
   }
 
-  abstract listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput>;
+  abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(

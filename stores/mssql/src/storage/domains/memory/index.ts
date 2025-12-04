@@ -15,8 +15,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import sql from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
@@ -103,10 +103,8 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
     if (page < 0) {
       throw new MastraError({
@@ -114,10 +112,7 @@ export class MemoryMSSQL extends MemoryStorage {
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
-        details: {
-          resourceId,
-          page,
-        },
+        details: { page },
       });
     }
 
@@ -125,11 +120,35 @@ export class MemoryMSSQL extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
     try {
-      const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
+      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+
+      // Build WHERE clause with optional filters
+      const conditions: string[] = [];
+      const params: Record<string, any> = {};
+
+      if (filter?.resourceId) {
+        conditions.push('[resourceId] = @resourceId');
+        params.resourceId = filter.resourceId;
+      }
+
+      // Apply metadata filter using JSON_VALUE
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        let paramIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metaVal${paramIndex++}`;
+          conditions.push(`JSON_VALUE(metadata, '$.${key}') = @${paramName}`);
+          params[paramName] = String(value);
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const baseQuery = `FROM ${tableName} ${whereClause}`;
 
       const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
       const countRequest = this.pool.request();
-      countRequest.input('resourceId', resourceId);
+      for (const [key, value] of Object.entries(params)) {
+        countRequest.input(key, value);
+      }
       const countResult = await countRequest.query(countQuery);
       const total = parseInt(countResult.recordset[0]?.count ?? '0', 10);
 
@@ -148,7 +167,9 @@ export class MemoryMSSQL extends MemoryStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
-      dataRequest.input('resourceId', resourceId);
+      for (const [key, value] of Object.entries(params)) {
+        dataRequest.input(key, value);
+      }
       dataRequest.input('offset', offset);
 
       if (limitValue > 2147483647) {
@@ -175,13 +196,10 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_THREADS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-            page,
-          },
+          details: { filter: JSON.stringify(filter), page },
         },
         error,
       );

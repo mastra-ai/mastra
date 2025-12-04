@@ -3,11 +3,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodTypeAny } from 'zod';
 import z, { ZodObject } from 'zod';
 import type { MastraDBMessage } from '../agent/message-list';
-import type {
-  StorageListMessagesInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
-} from '../storage';
+import type { StorageListMessagesInput, StorageListThreadsInput, StorageListThreadsOutput } from '../storage';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import type { ToolAction } from '../tools';
@@ -64,10 +60,8 @@ export class MockMemory extends MastraMemory {
     return this.storage.saveMessages({ messages });
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.storage.listThreadsByResourceId(args);
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    return this.storage.listThreads(args);
   }
 
   async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{

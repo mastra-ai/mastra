@@ -11,8 +11,8 @@ import type { RequestContext } from '../request-context';
 import type {
   MastraStorage,
   StorageListMessagesInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -304,9 +304,7 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to paginated thread results with metadata;
    *          resolves to an empty array if the resource has no threads
    */
-  abstract listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput>;
+  abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
 
   /**
    * Saves or updates a thread

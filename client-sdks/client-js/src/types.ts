@@ -269,12 +269,28 @@ export interface CreateMemoryThreadParams {
 export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface ListMemoryThreadsParams {
-  resourceId: string;
   agentId: string;
+  /**
+   * Filter by resource ID. Optional - can list threads by metadata alone.
+   */
+  resourceId?: string;
   page?: number;
   perPage?: number;
   orderBy?: 'createdAt' | 'updatedAt';
   sortDirection?: 'ASC' | 'DESC';
+  /**
+   * Filter threads by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   * @example
+   * ```ts
+   * filter: {
+   *   metadata: { category: 'support', priority: 'high' }
+   * }
+   * ```
+   */
+  filter?: {
+    metadata?: Record<string, unknown>;
+  };
   requestContext?: RequestContext | Record<string, any>;
 }
 
