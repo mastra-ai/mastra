@@ -1,6 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import type { Run } from '../workflows';
-import type { ChunkType } from './types';
+import type { ChunkType, NetworkAbortPayload } from './types';
+import { ChunkFrom } from './types';
 
 export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
   #usageCount = {
@@ -16,13 +17,20 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
     reject: (reason?: any) => void;
   };
   #run: Run;
+  #aborted = false;
 
   constructor({
     createStream,
     run,
+    abortSignal,
+    onAbort,
   }: {
     createStream: (writer: WritableStream<ChunkType>) => Promise<ReadableStream<any>> | ReadableStream<any>;
     run: Run;
+    /** Signal to abort the network execution */
+    abortSignal?: AbortSignal;
+    /** Callback fired when network execution is aborted */
+    onAbort?: (event: any) => Promise<void> | void;
   }) {
     const deferredPromise = {
       promise: null,
@@ -52,11 +60,51 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
       this.#usageCount.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
     };
 
+    // Track abort state for this instance
+    let aborted = false;
+
     super({
       start: async controller => {
+        // Wire abort signal to cancel the workflow run
+        if (abortSignal) {
+          const handleAbort = () => {
+            if (aborted) return;
+            aborted = true;
+            this.#aborted = true;
+
+            // Emit abort event before cancelling
+            const abortPayload: NetworkAbortPayload = {
+              reason: abortSignal.reason || 'Aborted',
+              usage: this.#usageCount,
+            };
+            controller.enqueue({
+              type: 'network-execution-event-abort',
+              payload: abortPayload,
+              from: ChunkFrom.NETWORK,
+              runId: run.runId,
+            });
+
+            // Cancel the workflow run
+            run.cancel();
+
+            // Call the onAbort callback if provided
+            onAbort?.({ reason: abortSignal.reason });
+          };
+
+          abortSignal.addEventListener('abort', handleAbort);
+
+          // If already aborted, handle immediately
+          if (abortSignal.aborted) {
+            handleAbort();
+          }
+        }
+
         try {
           const writer = new WritableStream<ChunkType>({
             write: chunk => {
+              // Don't write chunks after abort
+              if (aborted) return;
+
               if (
                 (chunk.type === 'step-output' &&
                   chunk.payload?.output?.from === 'AGENT' &&
@@ -93,6 +141,9 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
           };
 
           for await (const chunk of stream) {
+            // Stop processing if aborted
+            if (aborted) break;
+
             if (chunk.type === 'workflow-step-output') {
               const innerChunk = getInnerChunk(chunk);
               if (
@@ -119,8 +170,14 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
           controller.close();
           deferredPromise.resolve();
         } catch (error) {
-          controller.error(error);
-          deferredPromise.reject(error);
+          // Don't report error if we were aborted
+          if (aborted) {
+            controller.close();
+            deferredPromise.resolve();
+          } else {
+            controller.error(error);
+            deferredPromise.reject(error);
+          }
         }
       },
     });
@@ -139,5 +196,20 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
 
   get usage() {
     return this.#streamPromise.promise.then(() => this.#usageCount);
+  }
+
+  /**
+   * Whether the network execution was aborted
+   */
+  get aborted() {
+    return this.#aborted;
+  }
+
+  /**
+   * Cancel the network execution.
+   * This will abort all running sub-agents, workflows, and tools.
+   */
+  cancelNetwork() {
+    this.#run.cancel();
   }
 }

@@ -464,6 +464,17 @@ export type DataChunkType = {
   id?: string;
 };
 
+export type NetworkAbortPayload = {
+  reason?: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cachedInputTokens: number;
+    reasoningTokens: number;
+  };
+};
+
 export type NetworkChunkType =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
   | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
@@ -477,6 +488,7 @@ export type NetworkChunkType =
   | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
   | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload })
+  | (BaseChunkType & { type: 'network-execution-event-abort'; payload: NetworkAbortPayload })
   | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: AgentChunkType })
   | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent });
 
