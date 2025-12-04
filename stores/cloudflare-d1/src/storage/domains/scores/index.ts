@@ -73,7 +73,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_SCORE', 'INVALID_SCORE_PAYLOAD'),
+          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { scoreId: score.id },

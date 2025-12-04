@@ -58,7 +58,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('CLOUDFLARE', 'SAVE_SCORE', 'INVALID_SCORE_PAYLOAD'),
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { scoreId: score.id },

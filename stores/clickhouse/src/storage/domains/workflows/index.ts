@@ -35,7 +35,12 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_RESULTS', 'NOT_IMPLEMENTED'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'Method not implemented.',
+    });
   }
   updateWorkflowState(
     {
@@ -54,7 +59,12 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       };
     },
   ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_STATE', 'NOT_IMPLEMENTED'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'Method not implemented.',
+    });
   }
 
   async persistWorkflowSnapshot({

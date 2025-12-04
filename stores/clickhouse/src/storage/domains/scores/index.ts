@@ -76,7 +76,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('CLICKHOUSE', 'SAVE_SCORE', 'INVALID_SCORE_PAYLOAD'),
+          id: createStorageErrorId('CLICKHOUSE', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { scoreId: score.id },
