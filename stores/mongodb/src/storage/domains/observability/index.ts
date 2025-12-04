@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { createStorageErrorId, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
@@ -46,7 +46,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_CREATE_SPAN_FAILED',
+          id: createStorageErrorId('MONGODB', 'CREATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -78,7 +78,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_GET_TRACE_FAILED',
+          id: createStorageErrorId('MONGODB', 'GET_TRACE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -122,7 +122,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_UPDATE_SPAN_FAILED',
+          id: createStorageErrorId('MONGODB', 'UPDATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -181,7 +181,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
           name = `agent run: '${entityId}'`;
         } else {
           const error = new MastraError({
-            id: 'MONGODB_STORE_GET_TRACES_PAGINATED_FAILED',
+            id: createStorageErrorId('MONGODB', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: {
@@ -229,7 +229,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('MONGODB', 'GET_TRACES_PAGINATED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -260,7 +260,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_BATCH_CREATE_SPANS_FAILED',
+          id: createStorageErrorId('MONGODB', 'BATCH_CREATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -304,7 +304,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_BATCH_UPDATE_SPANS_FAILED',
+          id: createStorageErrorId('MONGODB', 'BATCH_UPDATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -323,7 +323,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_BATCH_DELETE_TRACES_FAILED',
+          id: createStorageErrorId('MONGODB', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },

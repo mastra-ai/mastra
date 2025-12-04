@@ -5,7 +5,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   WorkflowRun,
   WorkflowRuns,
@@ -114,7 +114,7 @@ export class DynamoDBStore extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_CONSTRUCTOR_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'CONSTRUCTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -161,7 +161,7 @@ export class DynamoDBStore extends MastraStorage {
       // For other errors (like permissions issues), we should throw
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_VALIDATE_TABLE_EXISTS_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'VALIDATE_TABLE_EXISTS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName: this.tableName },
@@ -196,7 +196,7 @@ export class DynamoDBStore extends MastraStorage {
       // the caller of init() is aware of the failure.
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_INIT_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName: this.tableName },
@@ -402,7 +402,7 @@ export class DynamoDBStore extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_CLOSE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'CLOSE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

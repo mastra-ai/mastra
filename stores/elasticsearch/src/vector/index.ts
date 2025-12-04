@@ -1,5 +1,6 @@
 import { Client as ElasticSearchClient } from '@elastic/elasticsearch';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -54,7 +55,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_CREATE_INDEX_INVALID_ARGS',
+        id: createVectorErrorId('ELASTICSEARCH', 'CREATE_INDEX', 'INVALID_ARGS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Dimension must be a positive integer',
@@ -87,7 +88,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       }
       throw new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, dimension, metric },
@@ -113,7 +114,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -133,7 +134,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     } catch (infoError) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_VALIDATE_INDEX_FETCH_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'VALIDATE_INDEX', 'FETCH_FAILED'),
           text: `Index "${indexName}" already exists, but failed to fetch index info for dimension check.`,
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.SYSTEM,
@@ -160,7 +161,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       }
     } else if (info) {
       const mastraError = new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_VALIDATE_INDEX_DIMENSION_MISMATCH',
+        id: createVectorErrorId('ELASTICSEARCH', 'VALIDATE_INDEX', 'DIMENSION_MISMATCH'),
         text: `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -217,7 +218,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       // For all other errors, wrap, log, track, and rethrow
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -315,7 +316,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
 
             const mastraError = new MastraError(
               {
-                id: 'STORAGE_ELASTICSEARCH_VECTOR_BULK_PARTIAL_FAILURE',
+                id: createVectorErrorId('ELASTICSEARCH', 'UPSERT', 'BULK_PARTIAL_FAILURE'),
                 text: `Bulk upsert partially failed: ${failedItems.length} of ${response.items.length} operations failed. Failed items: ${failedItemDetails}`,
                 domain: ErrorDomain.STORAGE,
                 category: ErrorCategory.THIRD_PARTY,
@@ -344,7 +345,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, vectorCount: vectors?.length || 0 },
@@ -400,7 +401,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, topK },
@@ -450,7 +451,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     // Validate mutually exclusive parameters
     if ('id' in params && 'filter' in params && params.id && params.filter) {
       throw new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_UPDATE_INVALID_ARGS',
+        id: createVectorErrorId('ELASTICSEARCH', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'id and filter are mutually exclusive',
@@ -460,7 +461,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_UPDATE_NO_UPDATES',
+        id: createVectorErrorId('ELASTICSEARCH', 'UPDATE_VECTOR', 'NO_UPDATES'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No updates provided',
@@ -471,7 +472,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     // Validate empty filter
     if ('filter' in params && params.filter && Object.keys(params.filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_UPDATE_INVALID_ARGS',
+        id: createVectorErrorId('ELASTICSEARCH', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Cannot update with empty filter',
@@ -488,7 +489,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       await this.updateVectorsByFilter(indexName, params.filter, update);
     } else {
       throw new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_UPDATE_MISSING_PARAMS',
+        id: createVectorErrorId('ELASTICSEARCH', 'UPDATE_VECTOR', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either id or filter must be provided',
@@ -524,7 +525,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -572,7 +573,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -625,7 +626,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_UPDATE_BY_FILTER_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'UPDATE_VECTOR_BY_FILTER', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -659,7 +660,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       }
       throw new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -676,7 +677,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     // Validate mutually exclusive parameters
     if (ids && filter) {
       throw new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('ELASTICSEARCH', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'ids and filter are mutually exclusive',
@@ -686,7 +687,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
 
     if (!ids && !filter) {
       throw new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('ELASTICSEARCH', 'DELETE_VECTORS', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either filter or ids must be provided',
@@ -697,7 +698,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     // Validate non-empty arrays and objects
     if (ids && ids.length === 0) {
       throw new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('ELASTICSEARCH', 'DELETE_VECTORS', 'EMPTY_IDS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Cannot delete with empty ids array',
@@ -707,7 +708,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
 
     if (filter && Object.keys(filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_ELASTICSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('ELASTICSEARCH', 'DELETE_VECTORS', 'EMPTY_FILTER'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Cannot delete with empty filter',
@@ -768,7 +769,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
 
             const mastraError = new MastraError(
               {
-                id: 'STORAGE_ELASTICSEARCH_VECTOR_BULK_DELETE_PARTIAL_FAILURE',
+                id: createVectorErrorId('ELASTICSEARCH', 'DELETE_VECTORS', 'BULK_PARTIAL_FAILURE'),
                 text: `Bulk delete partially failed: ${failedItems.length} of ${response.items.length} operations failed. Failed items: ${failedItemDetails}`,
                 domain: ErrorDomain.STORAGE,
                 category: ErrorCategory.THIRD_PARTY,
@@ -806,7 +807,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_ELASTICSEARCH_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('ELASTICSEARCH', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
