@@ -20,6 +20,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Agent Networks | Agents](https://mastra.ai/en/docs/agents/networks): Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 - [Using Agents | Agents](https://mastra.ai/en/docs/agents/overview): Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 - [Processors | Agents | Mastra Docs](https://mastra.ai/en/docs/agents/processors): Learn how to use input and output processors to transform, validate, and control messages in Mastra agents.
+- [Structured Output | Agents](https://mastra.ai/en/docs/agents/structured-output): Learn how to generate structured data from agents using schemas and validation.
 - [Using Tools | Agents](https://mastra.ai/en/docs/agents/using-tools): Learn how to create tools and add them to agents to extend capabilities beyond text generation.
 - [MastraAuthAuth0 Class | Auth](https://mastra.ai/en/docs/auth/auth0): Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.
 - [MastraAuthClerk Class | Auth](https://mastra.ai/en/docs/auth/clerk): Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.
@@ -86,11 +87,13 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [RAG (Retrieval-Augmented Generation) in Mastra | RAG](https://mastra.ai/en/docs/rag/overview): Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
 - [Retrieval, Semantic Search, Reranking | RAG](https://mastra.ai/en/docs/rag/retrieval): Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 - [Storing Embeddings in A Vector Database | RAG](https://mastra.ai/en/docs/rag/vector-databases): Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+- [Custom Adapters | Server & DB](https://mastra.ai/en/docs/server-db/custom-adapters): Create a custom server adapter for frameworks other than Hono or Express.
 - [Custom API Routes | Server & DB](https://mastra.ai/en/docs/server-db/custom-api-routes): Expose additional HTTP endpoints from your Mastra server.
 - [Mastra Client SDK | Server & DB](https://mastra.ai/en/docs/server-db/mastra-client): Learn how to set up and use the Mastra Client SDK
-- [Mastra Server | Server & DB](https://mastra.ai/en/docs/server-db/mastra-server): Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more
+- [Server Configuration | Server & DB](https://mastra.ai/en/docs/server-db/mastra-server): Configure the Mastra server with custom settings for port, timeout, CORS, and more.
 - [Middleware | Server & DB](https://mastra.ai/en/docs/server-db/middleware): Apply custom middleware functions to intercept requests.
 - [Request Context | Server & DB](https://mastra.ai/en/docs/server-db/request-context): Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
+- [Server Adapters | Server & DB](https://mastra.ai/en/docs/server-db/server-adapters): Manually configure a Mastra server using Hono or Express adapters.
 - [MastraStorage | Server & DB](https://mastra.ai/en/docs/server-db/storage): Overview of Mastra's storage system and data persistence capabilities.
 - [Streaming Events | Streaming](https://mastra.ai/en/docs/streaming/events): Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications.
 - [Streaming Overview | Streaming](https://mastra.ai/en/docs/streaming/overview): Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced.
@@ -177,7 +180,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1160+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1165+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -201,7 +204,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Google | Models | Mastra](https://mastra.ai/en/models/providers/google): Use Google models with Mastra. 25 models available.
 - [Groq | Models | Mastra](https://mastra.ai/en/models/providers/groq): Use Groq models with Mastra. 17 models available.
 - [Hugging Face | Models | Mastra](https://mastra.ai/en/models/providers/huggingface): Use Hugging Face models with Mastra. 14 models available.
-- [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 18 models available.
+- [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 20 models available.
 - [Inception | Models | Mastra](https://mastra.ai/en/models/providers/inception): Use Inception models with Mastra. 2 models available.
 - [Providers](https://mastra.ai/en/models/providers): Direct access to AI model providers.
 - [Inference | Models | Mastra](https://mastra.ai/en/models/providers/inference): Use Inference models with Mastra. 9 models available.
@@ -233,7 +236,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 23 models available.
 - [Together AI | Models | Mastra](https://mastra.ai/en/models/providers/togetherai): Use Together AI models with Mastra. 6 models available.
 - [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 2 models available.
-- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 14 models available.
+- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 16 models available.
 - [Vultr | Models | Mastra](https://mastra.ai/en/models/providers/vultr): Use Vultr models with Mastra. 5 models available.
 - [Weights & Biases | Models | Mastra](https://mastra.ai/en/models/providers/wandb): Use Weights & Biases models with Mastra. 10 models available.
 - [xAI | Models | Mastra](https://mastra.ai/en/models/providers/xai): Use xAI models with Mastra. 22 models available.
@@ -379,6 +382,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Metadata Filters | RAG](https://mastra.ai/en/reference/rag/metadata-filters): Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 - [Reference: rerank() | RAG](https://mastra.ai/en/reference/rag/rerank): Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 - [Reference: rerankWithScorer() | RAG](https://mastra.ai/en/reference/rag/rerankWithScorer): Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
+- [Reference: createRoute() | Server](https://mastra.ai/en/reference/server/create-route): API reference for createRoute() function used to define type-safe routes with validation and OpenAPI generation.
+- [Reference: Express Adapter | Server](https://mastra.ai/en/reference/server/express-adapter): API reference for the @mastra/express server adapter.
+- [Reference: Hono Adapter | Server](https://mastra.ai/en/reference/server/hono-adapter): API reference for the @mastra/hono server adapter.
+- [Reference: MastraServer | Server](https://mastra.ai/en/reference/server/mastra-server): API reference for the MastraServer abstract class used to create server adapters.
+- [Reference: Server Routes | Server](https://mastra.ai/en/reference/server/routes): API reference for HTTP routes registered by Mastra server adapters.
 - [Reference: Cloudflare D1 Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare-d1): Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 - [Reference: Cloudflare Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare): Documentation for the Cloudflare KV storage implementation in Mastra.
 - [Reference: Convex Storage | Storage](https://mastra.ai/en/reference/storage/convex): Documentation for the Convex storage implementation in Mastra.

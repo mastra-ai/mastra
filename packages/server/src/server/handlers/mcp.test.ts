@@ -122,7 +122,21 @@ describe('MCP Registry Handlers', () => {
       expect(result.servers[1]).toEqual(server2Info);
     });
 
-    it('should paginate servers when limit is provided', async () => {
+    it('should paginate servers when perPage is provided', async () => {
+      const result = await LIST_MCP_SERVERS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        perPage: 1,
+        page: 0,
+      });
+
+      expect(result.servers).toHaveLength(1);
+      expect(result.total_count).toBe(2);
+      expect(result.next).toContain('perPage=1');
+      expect(result.next).toContain('page=1');
+      expect(result.servers[0]).toEqual(server1Info);
+    });
+
+    it('should paginate servers when legacy limit/offset is provided', async () => {
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
         ...createTestRuntimeContext({ mastra: mockMastra }),
         limit: 1,
@@ -131,31 +145,45 @@ describe('MCP Registry Handlers', () => {
 
       expect(result.servers).toHaveLength(1);
       expect(result.total_count).toBe(2);
-      expect(result.next).toContain('limit=1&offset=1');
+      // Next URL mirrors request format (legacy limit/offset)
+      expect(result.next).toContain('limit=1');
+      expect(result.next).toContain('offset=1');
       expect(result.servers[0]).toEqual(server1Info);
     });
 
     it('should calculate next URL correctly', async () => {
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
         ...createTestRuntimeContext({ mastra: mockMastra }),
-        limit: 1,
-        offset: 0,
+        perPage: 1,
+        page: 0,
       });
 
-      expect(result.next).toBe('/api/mcp/v0/servers?limit=1&offset=1');
+      expect(result.next).toBe('/api/mcp/v0/servers?perPage=1&page=1');
     });
 
     it('should return null for next when no more results', async () => {
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
         ...createTestRuntimeContext({ mastra: mockMastra }),
-        limit: 10,
-        offset: 0,
+        perPage: 10,
+        page: 0,
       });
 
       expect(result.next).toBeNull();
     });
 
-    it('should handle offset correctly', async () => {
+    it('should handle page correctly', async () => {
+      const result = await LIST_MCP_SERVERS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        perPage: 1,
+        page: 1,
+      });
+
+      expect(result.servers).toHaveLength(1);
+      expect(result.servers[0]).toEqual(server2Info);
+      expect(result.next).toBeNull(); // No more results
+    });
+
+    it('should convert legacy offset to page', async () => {
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
         ...createTestRuntimeContext({ mastra: mockMastra }),
         limit: 1,

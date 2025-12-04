@@ -70,6 +70,7 @@ npx @mastra/codemod@beta v1/mastra-core-imports .
 | `v1/workflow-create-run-async`       | Renames `workflow.createRunAsync()` → `workflow.createRun()`                                                       |
 | `v1/workflow-list-runs`              | Renames `workflow.getWorkflowRuns()` → `workflow.listWorkflowRuns()`                                               |
 | `v1/workflow-run-count`              | Renames `context.runCount` → `context.retryCount` in step execution functions                                      |
+| `v1/workflow-stream-vnext`           | Renames `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()`                                         |
 
 ## CLI Options
 

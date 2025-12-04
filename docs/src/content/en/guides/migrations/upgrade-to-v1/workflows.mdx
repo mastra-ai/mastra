@@ -177,8 +177,6 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
-See [Run.resumeStream()](/reference/v1/streaming/workflows/resumeStream) for details.
-
 ## Removed
 
 ### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
@@ -188,6 +186,16 @@ The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext
 To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
 
 See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-stream-vnext .
+```
+
+:::
 
 ### Legacy workflows export
 

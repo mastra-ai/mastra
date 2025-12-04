@@ -198,7 +198,7 @@ export interface ToolExecutionContext<
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
-  writer?: ToolStream<any>;
+  writer?: ToolStream;
 
   // ============ Context-specific nested properties ============
 

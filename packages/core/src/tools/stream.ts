@@ -2,7 +2,7 @@ import { WritableStream } from 'node:stream/web';
 import type { DataChunkType } from '../stream/types';
 import type { OutputWriter } from '../workflows';
 
-export class ToolStream<T> extends WritableStream<T> {
+export class ToolStream extends WritableStream<unknown> {
   private prefix: string;
   private callId: string;
   private name: string;
