@@ -42,6 +42,7 @@ type SpanData = {
   spans: Map<string, Span>; // Maps span.id to Braintrust span
   activeIds: Set<string>; // Tracks started (non-event) spans not yet ended, including root
   isExternal: boolean; // True if logger is an external span from logger.traced() or Eval()
+  rootSpanId?: string; // The Braintrust root span ID for this trace (from the first span)
 };
 
 // Default span type for all spans
@@ -140,21 +141,17 @@ export class BraintrustExporter extends BaseExporter {
 
     const payload = this.buildSpanPayload(span);
 
-    // When attaching to an external parent (eval/logger span), don't pass Mastra's internal
-    // parentSpanIds. Let Braintrust auto-handle the parent-child relationship.
-    const shouldOmitParentIds = spanData.isExternal && !span.parentSpanId;
-
+    // parentSpanIds logic:
+    // - External contexts: Don't set parentSpanIds at all - the startSpan() chain handles relationships
+    // - Non-external root spans (no parentSpanId): Don't set parentSpanIds, let Braintrust auto-handle
+    // - Non-external child spans: Use the actual parent span ID and tracked root span ID
     const braintrustSpan = braintrustParent.startSpan({
       spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
-      ...(shouldOmitParentIds
-        ? {}
-        : {
-            parentSpanIds: span.parentSpanId
-              ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
-              : { spanId: span.traceId, rootSpanId: span.traceId },
-          }),
+      ...(span.parentSpanId && spanData.rootSpanId && !spanData.isExternal
+        ? { parentSpanIds: { spanId: span.parentSpanId, rootSpanId: spanData.rootSpanId } }
+        : {}),
       ...payload,
     });
 
@@ -247,18 +244,33 @@ export class BraintrustExporter extends BaseExporter {
     const payload = this.buildSpanPayload(span);
 
     // Create zero-duration span for event (convert milliseconds to seconds)
+    // parentSpanIds logic: same as handleSpanStarted
+    // - External contexts: Don't set parentSpanIds - startSpan() chain handles relationships
+    // - Non-external root spans: Don't set parentSpanIds
+    // - Non-external child spans: Use the actual parent span ID and tracked root span ID
     const braintrustSpan = braintrustParent.startSpan({
       spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
-      parentSpanIds: span.parentSpanId
-        ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
-        : { spanId: span.traceId, rootSpanId: span.traceId },
+      ...(span.parentSpanId && spanData.rootSpanId && !spanData.isExternal
+        ? { parentSpanIds: { spanId: span.parentSpanId, rootSpanId: spanData.rootSpanId } }
+        : {}),
       startTime: span.startTime.getTime() / 1000,
       ...payload,
     });
 
     braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
+  }
+
+  private initTraceMap(params: { span: AnyExportedSpan; isExternal: boolean; logger: Logger<true> | Span }): void {
+    const { span, isExternal, logger } = params;
+    this.traceMap.set(span.traceId, {
+      logger,
+      spans: new Map(),
+      activeIds: new Set(),
+      isExternal,
+      rootSpanId: span.id,
+    });
   }
 
   /**
@@ -272,12 +284,7 @@ export class BraintrustExporter extends BaseExporter {
       ...this.config.tuningParameters,
     });
 
-    this.traceMap.set(span.traceId, {
-      logger,
-      spans: new Map(),
-      activeIds: new Set(),
-      isExternal: false,
-    });
+    this.initTraceMap({ logger, isExternal: false, span });
   }
 
   /**
@@ -294,20 +301,10 @@ export class BraintrustExporter extends BaseExporter {
     // Check if it's a valid span (not the NOOP_SPAN)
     if (braintrustSpan && braintrustSpan.id) {
       // External span detected - attach Mastra traces to it
-      this.traceMap.set(span.traceId, {
-        logger: braintrustSpan,
-        spans: new Map(),
-        activeIds: new Set(),
-        isExternal: true,
-      });
+      this.initTraceMap({ logger: braintrustSpan, isExternal: true, span });
     } else {
       // No external span - use provided logger
-      this.traceMap.set(span.traceId, {
-        logger: this.providedLogger!,
-        spans: new Map(),
-        activeIds: new Set(),
-        isExternal: false,
-      });
+      this.initTraceMap({ logger: this.providedLogger!, isExternal: false, span });
     }
   }
 
