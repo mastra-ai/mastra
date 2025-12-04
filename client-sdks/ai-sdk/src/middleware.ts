@@ -234,7 +234,8 @@ export function withMastra(model: LanguageModelV2, options: WithMastraOptions = 
 }
 
 /**
- * Internal state stored in providerOptions to pass tripwire info between middleware methods
+ * Internal state stored in providerOptions to pass state between middleware methods.
+ * This ensures request isolation when middleware is reused across concurrent requests.
  */
 interface ProcessorMiddlewareState {
   tripwire?: boolean;
@@ -280,9 +281,6 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
     });
   }
 
-  // Store MessageList in closure to preserve source info (input vs memory) between middleware methods
-  let sharedMessageList: MessageList | undefined;
-
   return {
     middlewareVersion: 'v2',
 
@@ -311,7 +309,9 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       for (const processor of inputProcessors) {
         if (processor.processInput) {
           try {
-            const result = await processor.processInput({
+            // Processors modify messageList in place. Array returns are supported
+            // but the messageList reference takes precedence for preserving source info.
+            await processor.processInput({
               messages: messageList.get.input.db(),
               systemMessages: messageList.getAllSystemMessages(),
               messageList,
@@ -320,18 +320,8 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                 throw new TripWire(reason || 'Aborted by processor');
               },
             } as ProcessInputArgs);
-
-            // Handle array return - processor may return modified messages
-            // The messageList was passed by reference, so in-place modifications are already applied
-            // If it returns an array, we need to update the list (though this is less common)
-            if (Array.isArray(result) && result !== messageList.get.input.db()) {
-              // Clear and re-add messages - this is a simplified approach
-              // In practice, processors usually modify the messageList in place
-            }
           } catch (error) {
             if (error instanceof TripWire) {
-              // Store messageList for output processors even on tripwire
-              sharedMessageList = messageList;
               // Store tripwire in providerOptions for wrapGenerate/wrapStream to handle
               return {
                 ...params,
@@ -354,9 +344,6 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       const newPrompt: LanguageModelV2Prompt = messageList.get.all.aiV5
         .prompt()
         .map(MessageList.aiV5ModelMessageToV2PromptMessage);
-
-      // Store messageList for wrapGenerate/wrapStream to use
-      sharedMessageList = messageList;
 
       return {
         ...params,
@@ -384,14 +371,21 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
 
       if (!outputProcessors.length) return result;
 
-      // Use the MessageList from transformParams to preserve source info (input vs memory)
-      // This prevents memory messages from being re-saved as input messages
-      const messageList =
-        sharedMessageList ||
-        new MessageList({
-          threadId: memory?.threadId,
-          resourceId: memory?.resourceId,
-        });
+      // Create a fresh MessageList for output processing
+      // The transformed prompt from transformParams contains all input messages
+      const messageList = new MessageList({
+        threadId: memory?.threadId,
+        resourceId: memory?.resourceId,
+      });
+
+      // Add the transformed prompt messages to the list
+      for (const msg of params.prompt) {
+        if (msg.role === 'system') {
+          messageList.addSystem(msg.content);
+        } else {
+          messageList.add(msg, 'input');
+        }
+      }
 
       // Extract text from result and add as response
       const textContent = result.content
