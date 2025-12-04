@@ -85,6 +85,68 @@ function patchRecordSchemas(schema: any): any {
   return schema;
 }
 
+/**
+ * Recursively fix additionalProperties in JSON schemas.
+ * When Zod's .passthrough() is used, Zod v4 produces additionalProperties: {}
+ * which is invalid for many LLM providers (they require a 'type' key).
+ * This function converts empty additionalProperties objects to `true`,
+ * which is valid JSON Schema meaning "allow any additional properties".
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/9699
+ */
+function fixAdditionalProperties(schema: any): any {
+  if (!schema || typeof schema !== 'object') return schema;
+
+  // Fix additionalProperties if it's an empty object without a type key
+  if ('additionalProperties' in schema) {
+    const addlProps = schema.additionalProperties;
+
+    // If additionalProperties is an empty object {} (no type key, no other keys)
+    // Convert it to `true` for LLM provider compatibility
+    if (
+      addlProps &&
+      typeof addlProps === 'object' &&
+      !Array.isArray(addlProps) &&
+      Object.keys(addlProps).length === 0
+    ) {
+      schema.additionalProperties = true;
+    }
+  }
+
+  // Recursively fix nested schemas in properties
+  if (schema.properties && typeof schema.properties === 'object') {
+    for (const key of Object.keys(schema.properties)) {
+      fixAdditionalProperties(schema.properties[key]);
+    }
+  }
+
+  // Recursively fix array items
+  if (schema.items) {
+    if (Array.isArray(schema.items)) {
+      schema.items.forEach(fixAdditionalProperties);
+    } else {
+      fixAdditionalProperties(schema.items);
+    }
+  }
+
+  // Recursively fix anyOf schemas
+  if (schema.anyOf) {
+    schema.anyOf.forEach(fixAdditionalProperties);
+  }
+
+  // Recursively fix oneOf schemas
+  if (schema.oneOf) {
+    schema.oneOf.forEach(fixAdditionalProperties);
+  }
+
+  // Recursively fix allOf schemas
+  if (schema.allOf) {
+    schema.allOf.forEach(fixAdditionalProperties);
+  }
+
+  return schema;
+}
+
 export function zodToJsonSchema(
   zodSchema: ZodSchemaV3 | ZodSchemaV4,
   target: Targets = 'jsonSchema7',
@@ -96,7 +158,7 @@ export function zodToJsonSchema(
     // Zod v4 path - patch record schemas before converting
     patchRecordSchemas(zodSchema);
 
-    return (z as any)[fn](zodSchema, {
+    const jsonSchema = (z as any)[fn](zodSchema, {
       unrepresentable: 'any',
       override: (ctx: any) => {
         // Handle both Zod v4 structures: _def directly or nested in _zod
@@ -108,11 +170,17 @@ export function zodToJsonSchema(
         }
       },
     }) as JSONSchema7;
+
+    // Post-process to fix additionalProperties issues from .passthrough()
+    return fixAdditionalProperties(jsonSchema) as JSONSchema7;
   } else {
     // Zod v3 path - use the original converter
-    return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+    const jsonSchema = zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
       $refStrategy: strategy,
       target,
     }) as JSONSchema7;
+
+    // Post-process to fix additionalProperties issues from .passthrough()
+    return fixAdditionalProperties(jsonSchema) as JSONSchema7;
   }
 }

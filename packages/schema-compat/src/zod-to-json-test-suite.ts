@@ -541,6 +541,111 @@ export function runZodToJsonTestSuite() {
       });
     });
 
+    describe('passthrough schema handling (issue #9699)', () => {
+      it('should produce valid additionalProperties when using .passthrough()', () => {
+        // This is the schema pattern used by createVectorQueryTool
+        // When enableFilter is false, it uses z.object(baseSchema).passthrough()
+        const baseSchema = {
+          queryText: z.string(),
+          topK: z.number(),
+        };
+        const passthroughSchema = z.object(baseSchema).passthrough();
+
+        const result = zodToJsonSchema(passthroughSchema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+        expect(result.properties).toHaveProperty('queryText');
+        expect(result.properties).toHaveProperty('topK');
+
+        // The critical assertion: additionalProperties must be valid JSON Schema
+        // It should NOT be an empty object {} without a 'type' key
+        // Valid values are: true, false, or an object with a 'type' key
+        if ('additionalProperties' in result) {
+          const addlProps = result.additionalProperties;
+          if (typeof addlProps === 'object' && addlProps !== null) {
+            // If it's an object, it must have a 'type' key or be empty (which means allow any)
+            // An empty object {} is invalid for some LLM providers
+            const isEmpty = Object.keys(addlProps).length === 0;
+            const hasType = 'type' in addlProps;
+
+            // This assertion will FAIL until the bug is fixed
+            // Empty objects should be converted to `true` for compatibility
+            expect(isEmpty && !hasType, 'additionalProperties should not be an empty object without a type key').toBe(
+              false,
+            );
+          }
+        }
+      });
+
+      it('should handle nested .passthrough() schemas correctly', () => {
+        // Nested passthrough schemas in agent tool configurations
+        const innerSchema = z
+          .object({
+            data: z.string(),
+          })
+          .passthrough();
+
+        const outerSchema = z.object({
+          inner: innerSchema,
+          name: z.string(),
+        });
+
+        const result = zodToJsonSchema(outerSchema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+
+        // Check the inner schema's additionalProperties
+        const innerResult = result.properties?.inner as any;
+        if (innerResult && 'additionalProperties' in innerResult) {
+          const addlProps = innerResult.additionalProperties;
+          if (typeof addlProps === 'object' && addlProps !== null) {
+            const isEmpty = Object.keys(addlProps).length === 0;
+            const hasType = 'type' in addlProps;
+
+            expect(
+              isEmpty && !hasType,
+              'nested additionalProperties should not be an empty object without a type key',
+            ).toBe(false);
+          }
+        }
+      });
+
+      it('should produce LLM-provider compatible schema for vector tool pattern', () => {
+        // Exact pattern from createVectorQueryTool in packages/rag/src/tools/vector-query.ts
+        const vectorToolSchema = z
+          .object({
+            queryText: z.string().describe('The text to query against the vector store'),
+            topK: z.coerce.number().describe('Number of results to return'),
+          })
+          .passthrough();
+
+        const jsonSchema = zodToJsonSchema(vectorToolSchema);
+
+        // Simulate what LLM providers check:
+        // They validate that additionalProperties is either a boolean or a valid schema object
+        function isValidAdditionalProperties(addlProps: any): boolean {
+          if (typeof addlProps === 'boolean') return true;
+          if (addlProps === undefined) return true;
+          if (typeof addlProps === 'object' && addlProps !== null) {
+            // Empty object {} is NOT valid for many LLM providers
+            if (Object.keys(addlProps).length === 0) return false;
+            // Must have a 'type' key if it's a non-empty object
+            return 'type' in addlProps;
+          }
+          return false;
+        }
+
+        if ('additionalProperties' in jsonSchema) {
+          expect(
+            isValidAdditionalProperties(jsonSchema.additionalProperties),
+            `additionalProperties must be valid for LLM providers, got: ${JSON.stringify(jsonSchema.additionalProperties)}`,
+          ).toBe(true);
+        }
+      });
+    });
+
     describe('fallback behavior', () => {
       it('should successfully convert schemas that might fail in Zod v4', () => {
         // This schema structure is known to cause issues in Zod v4's toJSONSchema
