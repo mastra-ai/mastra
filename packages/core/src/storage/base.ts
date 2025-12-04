@@ -15,6 +15,7 @@ import {
   TABLE_SCORERS,
   TABLE_SCHEMAS,
   TABLE_SPANS,
+  TABLE_OBSERVATIONS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type { ScoresStorage, StoreOperations, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
@@ -391,6 +392,14 @@ export abstract class MastraStorage extends MastraBase {
         }),
       );
     }
+
+    // Create observations table for observational memory
+    tableCreationTasks.push(
+      this.createTable({
+        tableName: TABLE_OBSERVATIONS,
+        schema: TABLE_SCHEMAS[TABLE_OBSERVATIONS],
+      }),
+    );
 
     this.hasInitialized = Promise.all(tableCreationTasks).then(() => true);
 

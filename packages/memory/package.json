@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./observational": {
+      "import": {
+        "types": "./dist/observational/index.d.ts",
+        "default": "./dist/observational/index.js"
+      },
+      "require": {
+        "types": "./dist/observational/index.d.ts",
+        "default": "./dist/observational/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

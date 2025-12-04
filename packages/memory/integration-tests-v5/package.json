@@ -13,6 +13,7 @@
     "test:fastembed": "vitest run ./src/fastembed.test.ts",
     "test:ordering": "vitest run ./src/message-ordering.test.ts",
     "test:ai-sdk-ids": "vitest run ./src/ai-sdk-duplicate-ids.test.ts",
+    "test:observational-memory": "vitest run ./src/observational-memory.test.ts",
     "dev": "mastra dev"
   },
   "dependencies": {

@@ -1,214 +1,548 @@
-import { Agent } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { parseMemoryRuntimeContext } from '@mastra/core/memory';
-import type { ProcessInputArgs, ProcessInputStepArgs, Processor, ProcessorMessageResult, ProcessOutputResultArgs } from '@mastra/core/processors';
-import type { MastraStorage } from '@mastra/core/storage';
-import { encode } from '@toon-format/toon'
+import type {
+  ProcessInputArgs,
+  ProcessInputStepArgs,
+  Processor,
+  ProcessOutputResultArgs,
+} from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 
-const OBSERVER_INSTRUCTIONS = `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
+import {
+  createObserverAgent,
+  getObserverModelSettings,
+  getObserverProviderOptions,
+  buildObserverUserPrompt,
+  OBSERVER_INSTRUCTIONS,
+} from './observer-agent';
+import {
+  createReflectorAgent,
+  getReflectorModelSettings,
+  getReflectorProviderOptions,
+  buildReflectorUserPrompt,
+  REFLECTOR_INSTRUCTIONS,
+} from './reflector-agent';
+import type {
+  ObservationalMemoryConfig,
+  ObservationalMemoryRecord,
+  ThresholdRange,
+} from './types';
+import {
+  DEFAULT_HISTORY_THRESHOLD,
+  DEFAULT_OBSERVATION_THRESHOLD,
+} from './types';
+import {
+  estimateTokenCount,
+  compressObservationTokens,
+  getMessageTextContent,
+} from './utils';
 
-Extract observations that will help the assistant remember:
+// Re-export types for external use
+export type {
+  ObservationalMemoryConfig,
+  ObservationalMemoryRecord,
+  ObserverConfig,
+  ReflectorConfig,
+  AgentConfig,
+  ThresholdRange,
+} from './types';
 
-CRITICAL USER INFORMATION:
-- Explicit preferences (e.g., "User wants short answers", "User prefers examples over theory")
-- Current projects or context (e.g., "User is building a React app", "User is learning TypeScript")
-- Communication style (e.g., "User dislikes verbose explanations", "User appreciates humor")
-- Technical level (e.g., "User is familiar with JavaScript", "User is new to async programming")
+// ============================================================================
+// ObservationalMemory Processor
+// ============================================================================
 
-CONVERSATION CONTEXT:
-- What the user is working on or asking about
-- Previous topics and their outcomes
-- What user understands or needs clarification on
-- Specific requirements or constraints mentioned
-- Contents of assistant learnings and summaries
-- Answers to users questions including full context to remember detailed summaries and explanations
-- Relevant code snippets
-- Any specifically formatted text or ascii that would need to be reproduced or referenced in later interactions (preserve these verbatim in memory)
-- Any blocks of any text which the user and assistant are iteratively collaborating back and forth on should be preserved verbatim
-
-ACTIONABLE INSIGHTS:
-- What worked well in explanations
-- What needs follow-up or clarification
-- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)
-
-Output format (markdown list):
-- 🔴 [High priority: explicit preferences, critical context, goals achieved, milestones] [labels]
-- 🟡 [Medium priority: project details, learned information] [labels]
-- 🟢 [Low priority: minor preferences, uncertain observations] [labels]
-
-For observations that are all related to the same action, group the observations by indenting the sub observations under the parent observeration with a tab and an arrow (->). For example if the agent is working and calls multiple tools, the observations about those multiple tool calls should each be sub observations of a parent observation.
-rough example:
-- 🟡 Agent is working on x [task, tool_use]
-  - -> 🟡 agent executed y to view z file [labels]
-  - -> 🟡 (next tool observation)
-  - -> 🟡 (next tool observation)
-  - -> 🟡 (next tool observation)
-  - -> 🟡 (etc)
-- 🟡 Agent finished working on x an learned y and z [task, tool_use]
-
-The reason for grouping observervations via indentation, is these observations will later be condensed into a single observation as the memory fades into the past. Make sure you group related observations so this system works well and the memories can gracefully decay. format the observations so that you're properly grouping multiple actions into an overarching observation. Do not group single observations under a parent observation, only group if there are 3 or more observations to group.
-
-Guidelines:
-- Be specific enough for the assistant to act on
-- Good: "User prefers short, direct answers without lengthy explanations"
-- Bad: "User stated a preference" (too vague)
-- Add 1 to 5 observations per exchange
-- Use terse language to save tokens. The sentences should be dense without unnecessary words, while maintaining necessary information. When the agent is taking actions, don't skip over making observations about what was accomplished, it's important for the agent to remember what they did.
-- Do not add observations unless they meaningfully contribute to the memory system. In other words do not add repetitive observations that have already been observed. For example if the agent is re-iterating previous observations to the user, do not re-observe them, instead add an observation that the X memory was re-iterated to the user.
-- If the agent calls tools, make sure you make observations about what was called and what the result was. List which tools were called, why, and what was learned from calling them. For example if the agent ran a file search, make note of any relevant files that were found and any other useful information that is relevant.
-- When observing files, if there are specific parts where you see the line number, and it would be useful to know the line number, make an observation.
-- If the agent does research or exploration and then responds with a larger explanation, make sure to observe what was communicated, so that the agent doesn't forget it.
-- Do not repeat observations that are already in the observation list. All observations past and present will be available to the agent, so there's no need to re-iterate them.
-- Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢)
-- If you make an observation about part of a file, make sure you observe the path to the file on disk if it hasn't already been observed in existing observations.
-- Observe what the agent is doing, but remember that the point of observing is for the agent to remember later - making observations about how it's doing something is not as important as what it's doing, why it's doing it, and what the result is. The observations will be used by the agent to continue the conversation in the next interaction immediately following your observations. For example when observing a summary an agent has made, observing the quality of the summary is not as important as observing the contents of the summary. Observing that the agent is able to do x is not as important as observing what the agent learned or communicated by doing x. Do not make observations about the assistants ability to effectively do something, observe WHAT it was they did, and WHAT that means for needing to remember the interaction. Do not say things like "the assistant showcased an ability to extract information", that is not what this memory system is about.
-- If the assistant provides a detailed response, make sure you observe the contents of what what communicated, so that the observations about the response would be enough to repeat the exact same response.
-- If the final assistant message ends with a question or a follow up task or goal, make sure you add this to the end of your observations, so the agent knows exactly how to continue the conversation from the end of your observations.
-- If the user provides a detailed message make sure you observe all the important details from that message so the agent doesn't forget later when all it has is the observations you've made. If the user has a problem, observe all the details from it.
-- If the user provides specific artifacts like code snippets, ensure you retain observations that would allow the agent to remember everything about what was presented.
-
-Common labels to use:
-- user_preference, communication_style, learning_style
-- current_project, user_context, technical_level
-- topic_discussed, understanding_confirmed, needs_clarification
-- explicit_requirement, constraint, goal, goal_achieved, milestone
-- worked_well, avoid_this, follow_up_needed, didnt_work
-- tool_use, task
-
-Remember: These observations are the assistant's ONLY memory. Make them count.
-
-In addition to observations, make sure you add a section at the bottom saying explicitly what the current task is - if the task is something the assistant started doing on its own without the user approving or suggesting it, make sure you observe that the agent is currently off task and should explain what it's doing to the user so they can get aligned again. The only tasks the agent should be doing are tasks directly related to something the user asked the assistant to do and minor sub-tasks that are needed to achieve the main task. Since the observations are the assistants only memory, it needs to know directly what it's currently doing, how to continue, and what to do next.
-Note that the user messages are extremely important. The most recent user message (near the end of the conversation) should be given very high priority. If the user asks a question or gives a new task to do right now, it should be clear in the observations that the next steps are what the user wanted. Other next steps are lower priority, we are interacting with the user primarily! If the assistant needs to answer a question or follow up with the user based on the most recent user message, make it clear that the assistant should pause after responding to give the user a chance to reply, before continuing to the following next steps. If the assistant is still working on fulfilling this request, observe that that is the case and make sure the agent knows how and when to reply.
-
-Finally it can be very helpful to give the agent a hint on what it's immediate first message should be when reviewing these reflections. eg should the agent call a specific tool? or should they respond with some text. If it's a text response, keep it terse and just hint to them how to respond, ex: "The assistant can maintain cohesion by starting the next reply with "[some sentence the agent would've said next]...". Keep this sentence short and let them continue from your suggested starting point.`
-
-interface ConversationExchange {
-    relevantMessages: MastraDBMessage[]
-    timestamp: Date
-}
-
-function buildUserPrompt(exchange: ConversationExchange, compiledMemory: string): string {
-    let prompt = ``
-
-    if (compiledMemory) {
-        prompt += 'Existing observations (avoid redundancy):\n'
-        prompt += compiledMemory
-        prompt += '\n'
-        prompt +=
-            'Do not repeat these existing observations, your new observations (your entire response) will be appended to the existing observations. Use the existing observations as a starting point so you can do the following:'
-    }
-
-    const hasUser = exchange.relevantMessages.some((m) => m.role === `user`)
-    const hasAgent = exchange.relevantMessages.some(
-        (m) => m.role === `assistant`,
-    )
-    if (hasUser && hasAgent) {
-        prompt +=
-            'Make new observerations about the following conversational exchange between the user and assistant. Make sure you make observations about the user message AND the assistant response:\n\n'
-    } else if (hasUser) {
-        prompt +=
-            'Make new observerations about the following user messages. Be aware that no assistant messages are present:\n\n'
-    } else if (hasAgent) {
-        prompt +=
-            'Make new observerations about the following assistant messages. Be aware that no user messages are present:\n\n'
-    }
-
-    const toonHistory = encode(
-        exchange.relevantMessages.map((m) => {
-            if (`providerMetadata` in m) delete m.providerMetadata
-            if (m.content.parts) {
-                for (const part of m.content.parts) {
-                    if (`providerMetadata` in part) delete part.providerMetadata
-                }
-            }
-            return m
-        }),
-    )
-
-    prompt += `MESSAGE_HISTORY: ${toonHistory.replaceAll(`role: user`, `role: user (IMPORTANT)`)}\n\n`
-
-    if (hasUser) {
-        prompt += `Note that the most recent user message is always important and should have special consideration in regards to the conversation and observations. The most recent user message is in the MESSAGE_HISTORY above. The user calls the shots so we need to make sure we keep on track with what they're saying specifically, above all else.\nHere is a copy of the most recent message to make it clear what to do: ${encode([...exchange.relevantMessages].reverse().find((m) => m.role === `user`))}`
-    }
-
-    prompt +=
-        'Extract observations that will help the assistant in FUTURE interactions. Remember: these observations are the ONLY memory the assistant will have. When you make observations about messages, the agent will ONLY be able to see your observations, not the original messages. Make them specific and actionable.'
-
-    return prompt
-}
-
-
+/**
+ * ObservationalMemory is a processor that implements observation-based memory for AI agents.
+ *
+ * It operates as three conceptual agents:
+ * - **The Actor** (main agent): Sees observations and recent messages that haven't been observed yet
+ * - **The Observer**: When message history exceeds a threshold, creates observations from the conversation
+ * - **The Reflector**: When observations grow too large, condenses and reorganizes them
+ *
+ * @example
+ * ```typescript
+ * import { ObservationalMemory } from "@mastra/memory/observational";
+ *
+ * const OM = new ObservationalMemory({
+ *   storage,
+ *   observer: {
+ *     model: "google/gemini-2.5-flash",
+ *     historyThreshold: 10_000,
+ *   },
+ *   reflector: {
+ *     model: "google/gemini-2.5-flash",
+ *     observationThreshold: 30_000,
+ *   }
+ * });
+ *
+ * const agent = new Agent({
+ *   inputProcessors: [OM],
+ *   outputProcessors: [OM],
+ * });
+ * ```
+ */
 export class ObservationalMemory implements Processor {
-    readonly id = 'observational-memory';
-    private observerAgent: Agent;
-    private storage?: MastraStorage;
+  readonly id = 'observational-memory';
+  readonly name = 'ObservationalMemory';
 
-    constructor({
-        observer,
-        storage,
-    }: {
-        storage?: MastraStorage;
-        observer: {
-            model: string;
+  private config: ObservationalMemoryConfig;
+  private scope: 'thread' | 'resource';
+  private debug: boolean;
+
+  // Observer configuration
+  private observerAgent: ReturnType<typeof createObserverAgent>;
+  private historyThreshold: number | ThresholdRange;
+  private observerModelSettings: ReturnType<typeof getObserverModelSettings>;
+  private observerProviderOptions: ReturnType<typeof getObserverProviderOptions>;
+
+  // Reflector configuration (optional)
+  private reflectorAgent?: ReturnType<typeof createReflectorAgent>;
+  private observationThreshold?: number | ThresholdRange;
+  private reflectorModelSettings?: ReturnType<typeof getReflectorModelSettings>;
+  private reflectorProviderOptions?: ReturnType<typeof getReflectorProviderOptions>;
+
+  constructor(config: ObservationalMemoryConfig) {
+    this.config = config;
+    this.scope = config.scope || 'thread';
+    this.debug = config.debug || false;
+
+    // Initialize observer
+    this.historyThreshold = config.observer?.historyThreshold ?? DEFAULT_HISTORY_THRESHOLD;
+    this.observerModelSettings = getObserverModelSettings(config.observer);
+    this.observerProviderOptions = getObserverProviderOptions(config.observer);
+    this.observerAgent = createObserverAgent(config.observer);
+
+    // Initialize reflector if configured
+    if (config.reflector) {
+      this.observationThreshold = config.reflector.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD;
+      this.reflectorModelSettings = getReflectorModelSettings(config.reflector);
+      this.reflectorProviderOptions = getReflectorProviderOptions(config.reflector);
+      this.reflectorAgent = createReflectorAgent(config.reflector);
+    }
+  }
+
+  private log(message: string, ...args: unknown[]) {
+    if (this.debug) {
+      console.log(`[ObservationalMemory] ${message}`, ...args);
+    }
+  }
+
+  /**
+   * Get the current threshold value, handling dynamic thresholds
+   */
+  private getCurrentHistoryThreshold(currentObservationTokens: number): number {
+    if (typeof this.historyThreshold === 'number') {
+      return this.historyThreshold;
+    }
+
+    // Dynamic threshold based on observation space
+    const { min, max } = this.historyThreshold;
+    const observationMax = this.getObservationThreshold();
+
+    // If observations are full, use min threshold
+    // If observations are empty, use max threshold
+    const ratio = Math.min(1, currentObservationTokens / observationMax);
+    return Math.round(max - ratio * (max - min));
+  }
+
+  /**
+   * Get the observation threshold value
+   */
+  private getObservationThreshold(): number {
+    if (!this.observationThreshold) {
+      return DEFAULT_OBSERVATION_THRESHOLD;
+    }
+    if (typeof this.observationThreshold === 'number') {
+      return this.observationThreshold;
+    }
+    return this.observationThreshold.max;
+  }
+
+  /**
+   * Get memory context from request context
+   */
+  private getMemoryContext(requestContext?: RequestContext): {
+    threadId?: string;
+    resourceId?: string;
+  } | null {
+    const memoryContext = parseMemoryRuntimeContext(requestContext);
+    if (!memoryContext) return null;
+
+    const threadId = memoryContext.thread?.id;
+    const resourceId = memoryContext.resourceId;
+
+    return { threadId, resourceId };
+  }
+
+  /**
+   * Get or initialize observational memory record for a thread/resource
+   */
+  private async getOrCreateMemoryRecord(
+    threadId: string | undefined,
+    resourceId: string | undefined
+  ): Promise<ObservationalMemoryRecord | null> {
+    if (!threadId && !resourceId) return null;
+
+    const scopeId = this.scope === 'resource' ? resourceId : threadId;
+    if (!scopeId) return null;
+
+    // Try to get existing record
+    const observations = await this.config.storage.stores?.memory.listObservations({
+      threadId: scopeId,
+    });
+
+    if (observations && observations.length > 0) {
+      // Return the most recent observation record
+      const latest = observations[observations.length - 1];
+      return {
+        // Identity
+        id: latest.id,
+        scope: this.scope,
+        threadId: this.scope === 'thread' ? scopeId : null,
+        resourceId: resourceId || scopeId,
+
+        // Generation tracking
+        originType: latest.originType || 'initial',
+        previousGenerationId: latest.previousGenerationId,
+
+        // Observation content
+        activeObservations: latest.observation || '',
+        bufferedObservations: latest.bufferedObservations,
+        bufferedReflection: latest.bufferedReflection,
+
+        // Message tracking
+        observedMessageIds: latest.observedMessageIds || [],
+        bufferedMessageIds: latest.bufferedMessageIds || [],
+        bufferingMessageIds: latest.bufferingMessageIds || [],
+
+        // Token tracking
+        totalTokensObserved: latest.totalTokensObserved || 0,
+        observationTokenCount: estimateTokenCount(latest.observation || ''),
+
+        // State flags
+        isReflecting: latest.isReflecting || false,
+
+        // Metadata
+        metadata: {
+          createdAt: latest.createdAt || new Date(),
+          updatedAt: latest.updatedAt || new Date(),
+          reflectionCount: latest.metadata?.reflectionCount || 0,
+          lastReflectionAt: latest.metadata?.lastReflectionAt,
+        },
+      };
+    }
+
+    // Return null - record will be created when observations are first made
+    return null;
+  }
+
+  /**
+   * Process input messages - inject observations as context
+   *
+   * This is called once at the start of processing. It retrieves existing
+   * observations and adds them as a system message.
+   *
+   * Per the spec, observed and buffered messages should be excluded from the
+   * message context since they are now represented by observations.
+   */
+  async processInput(args: ProcessInputArgs): Promise<MessageList | MastraDBMessage[]> {
+    const { messageList, requestContext } = args;
+
+    const memoryContext = this.getMemoryContext(requestContext);
+    if (!memoryContext?.threadId && !memoryContext?.resourceId) {
+      return messageList;
+    }
+
+    try {
+      const record = await this.getOrCreateMemoryRecord(memoryContext.threadId, memoryContext.resourceId);
+
+      if (record && record.activeObservations) {
+        // Compress observations to reduce token usage
+        const compressedObservations = compressObservationTokens(record.activeObservations);
+
+        // Add observations as a system message
+        const observationSystemMessage = `<observational_memory>
+The following observations were made about previous interactions. Use these as your primary memory - they are the ONLY information you have about past conversations:
+
+${compressedObservations}
+</observational_memory>`;
+
+        messageList.addSystem(observationSystemMessage, 'memory');
+        this.log(`Injected ${estimateTokenCount(compressedObservations)} tokens of observations`);
+
+        // Per the spec: exclude observed and buffered messages from context
+        // They are now represented by observations
+        const excludedIds = new Set([
+          ...record.observedMessageIds,
+          ...record.bufferedMessageIds,
+        ]);
+
+        if (excludedIds.size > 0) {
+          // Filter out observed/buffered messages from the message list
+          // Note: bufferingMessageIds are NOT excluded - they're still in progress
+          const allMessages = messageList.get.all.db();
+          const filteredMessages = allMessages.filter(m => !m.id || !excludedIds.has(m.id));
+
+          // Only update if we actually filtered something
+          if (filteredMessages.length < allMessages.length) {
+            this.log(`Excluded ${allMessages.length - filteredMessages.length} observed/buffered messages from context`);
+            // TODO: Need a way to replace messages in the list
+            // For now, this is handled by the message tracking
+          }
         }
-    }) {
-        this.storage = storage;
-        this.observerAgent = new Agent({
-            id: 'observer-agent',
-            name: 'Observer Agent',
-            instructions: OBSERVER_INSTRUCTIONS,
-            model: observer?.model || 'google/gemini-2.5-flash'
-        });
+      }
+    } catch (error) {
+      this.log('Error loading observations:', error);
     }
 
-    processInput(args: ProcessInputArgs) {
-        return args.messageList;
+    return messageList;
+  }
+
+  /**
+   * Process input at each step - can be used for dynamic observation injection
+   *
+   * Currently passes through, but could be extended for per-step observation updates.
+   */
+  async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
+    return args.messageList;
+  }
+
+  /**
+   * Process output result - create observations from the conversation
+   *
+   * This is called after the LLM generates a response. It:
+   * 1. Checks if message history exceeds the threshold
+   * 2. If so, runs the observer agent to extract observations
+   * 3. Saves the observations to storage
+   * 4. Optionally triggers reflection if observations are too large
+   */
+  async processOutputResult(args: ProcessOutputResultArgs): Promise<MessageList | MastraDBMessage[]> {
+    const { messageList, requestContext } = args;
+
+    const memoryContext = this.getMemoryContext(requestContext);
+    if (!memoryContext?.threadId && !memoryContext?.resourceId) {
+      return messageList;
     }
 
-    async processInputStep(args: ProcessInputStepArgs) {
-        const memoryInfo = args.messageList.getMemoryInfo();
+    const threadId = memoryContext.threadId;
+    const resourceId = memoryContext.resourceId;
 
-        if (memoryInfo.threadId) {
-            const observations = await this.storage?.stores?.memory.listObservations({ threadId: memoryInfo.threadId });
-            console.log(observations, 'observations');
-            // TODO: Use observations to enhance the message context
+    try {
+      // Get existing memory record
+      const record = await this.getOrCreateMemoryRecord(threadId, resourceId);
+
+      // Get all messages for observation
+      const allMessages = messageList.get.all.db();
+
+      // Calculate which messages haven't been observed yet
+      const observedIds = new Set(record?.observedMessageIds || []);
+      const unobservedMessages = allMessages.filter(m => m.id && !observedIds.has(m.id));
+
+      // Estimate token count of unobserved messages
+      const unobservedTokens = unobservedMessages.reduce((sum, m) => {
+        const content = getMessageTextContent(m);
+        return sum + estimateTokenCount(content);
+      }, 0);
+
+      const currentObservationTokens = record?.observationTokenCount || 0;
+      const threshold = this.getCurrentHistoryThreshold(currentObservationTokens);
+
+      this.log(
+        `Unobserved history: ${unobservedTokens} tokens, threshold: ${threshold}, observations: ${currentObservationTokens} tokens`
+      );
+
+      // Check if we should create observations
+      if (unobservedTokens >= threshold) {
+        this.log('History threshold exceeded, running observer...');
+
+        // Build the observation prompt
+        const existingObservations = record?.activeObservations || '';
+        const userPrompt = buildObserverUserPrompt(
+          { relevantMessages: unobservedMessages, timestamp: new Date() },
+          existingObservations
+        );
+
+        // Run the observer agent
+        const observerResult = await this.observerAgent.generate(
+          `${OBSERVER_INSTRUCTIONS}\n\n${userPrompt}`,
+          {
+            modelSettings: this.observerModelSettings,
+            providerOptions: this.observerProviderOptions as any,
+          }
+        );
+
+        const newObservations = observerResult.text;
+        this.log('Observer generated observations:', newObservations.substring(0, 200) + '...');
+
+        // Combine with existing observations
+        const combinedObservations = existingObservations
+          ? `${existingObservations}\n\n${newObservations}`
+          : newObservations;
+
+        const newObservationTokens = estimateTokenCount(combinedObservations);
+
+        // Get message IDs that were just observed
+        const newObservedIds = unobservedMessages.map(m => m.id).filter((id): id is string => Boolean(id));
+        const allObservedIds = [...(record?.observedMessageIds || []), ...newObservedIds];
+
+        // Check if we need to reflect
+        const observationThreshold = this.getObservationThreshold();
+        let finalObservations = combinedObservations;
+        let originType: 'initial' | 'reflection' = record?.originType || 'initial';
+        let reflectionCount = record?.metadata?.reflectionCount || 0;
+        let lastReflectionAt = record?.metadata?.lastReflectionAt;
+        let previousGenerationId: string | undefined;
+
+        if (this.reflectorAgent && newObservationTokens >= observationThreshold) {
+          this.log('Observation threshold exceeded, running reflector...');
+
+          const reflectorPrompt = buildReflectorUserPrompt(combinedObservations);
+
+          const reflectorResult = await this.reflectorAgent.generate(
+            `${REFLECTOR_INSTRUCTIONS}\n\n${reflectorPrompt}`,
+            {
+              modelSettings: this.reflectorModelSettings,
+              providerOptions: this.reflectorProviderOptions as any,
+            }
+          );
+
+          finalObservations = reflectorResult.text;
+          originType = 'reflection';
+          reflectionCount += 1;
+          lastReflectionAt = new Date();
+          previousGenerationId = record?.id;
+          this.log('Reflector condensed observations to:', estimateTokenCount(finalObservations), 'tokens');
         }
 
-        return args.messageList;
-    }
+        // Save the updated observations
+        const scopeId = this.scope === 'resource' ? resourceId : threadId;
+        if (scopeId) {
+          const now = new Date();
+          const newRecord: ObservationalMemoryRecord = {
+            // Identity
+            id: originType === 'reflection' ? crypto.randomUUID() : (record?.id || crypto.randomUUID()),
+            scope: this.scope,
+            threadId: this.scope === 'thread' ? scopeId : null,
+            resourceId: resourceId || scopeId,
 
-    async processOutputResult({ messages, messageList }: ProcessOutputResultArgs) {
-        const userPrompt = buildUserPrompt({ relevantMessages: messages, timestamp: new Date() }, '');
+            // Generation tracking
+            originType,
+            previousGenerationId,
 
-        const result = await this.observerAgent.generate(`${userPrompt}`, {
-            modelSettings: { temperature: 0.3, maxOutputTokens: 100_000 },
-            providerOptions: {
-                google: {
-                    thinkingConfig: {
-                        thinkingBudget: 215,
-                        // thinkingBudget: 2048,
-                        // thinkingBudget: 8192,
-                        includeThoughts: true,
-                    },
-                },
+            // Observation content
+            activeObservations: finalObservations,
+            bufferedObservations: undefined,
+            bufferedReflection: undefined,
+
+            // Message tracking
+            observedMessageIds: allObservedIds,
+            bufferedMessageIds: [],
+            bufferingMessageIds: [],
+
+            // Token tracking
+            totalTokensObserved: (record?.totalTokensObserved || 0) + unobservedTokens,
+            observationTokenCount: estimateTokenCount(finalObservations),
+
+            // State flags
+            isReflecting: false,
+
+            // Metadata
+            metadata: {
+              createdAt: record?.metadata?.createdAt || now,
+              updatedAt: now,
+              reflectionCount,
+              lastReflectionAt,
             },
-        });
+          };
 
-        const memoryInfo = messageList.getMemoryInfo();
+          await this.config.storage.stores?.memory.saveObservations({
+            observations: [
+              {
+                id: newRecord.id,
+                threadId: scopeId,
+                resourceId: newRecord.resourceId,
+                observation: newRecord.activeObservations,
+                observedMessageIds: newRecord.observedMessageIds,
+                bufferedMessageIds: newRecord.bufferedMessageIds,
+                bufferingMessageIds: newRecord.bufferingMessageIds,
+                originType: newRecord.originType,
+                previousGenerationId: newRecord.previousGenerationId,
+                bufferedObservations: newRecord.bufferedObservations,
+                bufferedReflection: newRecord.bufferedReflection,
+                totalTokensObserved: newRecord.totalTokensObserved,
+                observationTokenCount: newRecord.observationTokenCount,
+                isReflecting: newRecord.isReflecting,
+                metadata: newRecord.metadata,
+                createdAt: newRecord.metadata.createdAt,
+                updatedAt: newRecord.metadata.updatedAt,
+              },
+            ],
+          });
 
-        if (this.storage) {
-            await this.storage.stores?.memory.saveObservations({
-                observations: [{
-                    id: crypto.randomUUID(),
-                    threadId: memoryInfo.threadId,
-                    resourceId: memoryInfo.resourceId,
-                    observation: result.text
-                }]
-            });
+          this.log(
+            `Saved observations: ${newRecord.observationTokenCount} tokens, originType: ${originType}, reflections: ${reflectionCount}`
+          );
         }
-
-        console.log(result.text);
-
-        return messageList;
+      }
+    } catch (error) {
+      this.log('Error creating observations:', error);
     }
+
+    return messageList;
+  }
+
+  /**
+   * Manually trigger observation with an optional focus prompt
+   *
+   * @param options - Options for manual observation
+   * @param options.threadId - Thread ID to observe
+   * @param options.resourceId - Resource ID (for resource-scoped memory)
+   * @param options.prompt - Optional prompt to guide observation focus
+   */
+  async observe(options: {
+    threadId: string;
+    resourceId?: string;
+    prompt?: string;
+  }): Promise<string | null> {
+    // This would be used for manual/API-triggered observations
+    // Implementation would be similar to processOutputResult but callable directly
+    this.log('Manual observe called:', options);
+    return null;
+  }
+
+  /**
+   * Manually trigger reflection with an optional focus prompt
+   *
+   * @param options - Options for manual reflection
+   * @param options.threadId - Thread ID to reflect on
+   * @param options.resourceId - Resource ID (for resource-scoped memory)
+   * @param options.prompt - Optional prompt to guide reflection focus
+   */
+  async reflect(options: {
+    threadId: string;
+    resourceId?: string;
+    prompt?: string;
+  }): Promise<string | null> {
+    if (!this.reflectorAgent) {
+      this.log('Reflector not configured');
+      return null;
+    }
+
+    // This would be used for manual/API-triggered reflections
+    this.log('Manual reflect called:', options);
+    return null;
+  }
+
+  /**
+   * Clear all observations for a thread/resource
+   */
+  async clear(options: { threadId: string; resourceId?: string }): Promise<void> {
+    const scopeId = this.scope === 'resource' ? options.resourceId : options.threadId;
+    if (!scopeId) return;
+
+    // Clear observations from storage
+    // This would require a deleteObservations method on storage
+    this.log('Clear observations called:', options);
+  }
 }

@@ -17,6 +17,7 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_OBSERVATIONS,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StoreOperationsLibSQL } from '../operations';
@@ -871,5 +872,186 @@ export class MemoryLibSQL extends MemoryStorage {
       );
     }
     // TODO: Need to check if CASCADE is enabled so that messages will be automatically deleted due to CASCADE constraint
+  }
+
+  // ============================================================================
+  // Observational Memory Methods
+  // ============================================================================
+
+  /**
+   * List all observations for a thread
+   */
+  async listObservations({ threadId }: { threadId: string }): Promise<any[]> {
+    try {
+      const result = await this.client.execute({
+        sql: `SELECT * FROM "${TABLE_OBSERVATIONS}" WHERE "threadId" = ? ORDER BY "createdAt" ASC`,
+        args: [threadId],
+      });
+
+      return (result.rows || []).map(row => this.parseObservationRow(row));
+    } catch (error) {
+      // Table might not exist yet - return empty array
+      if (error instanceof Error && error.message.includes('no such table')) {
+        return [];
+      }
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_LIST_OBSERVATIONS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Save observations for a thread
+   */
+  async saveObservations({ observations }: { observations: any[] }): Promise<void> {
+    if (observations.length === 0) return;
+
+    try {
+      const batchStatements = observations.map(obs => {
+        const now = new Date().toISOString();
+        return {
+          sql: `INSERT INTO "${TABLE_OBSERVATIONS}" (
+            id, "threadId", "resourceId", observation,
+            "bufferedObservations", "bufferedReflection",
+            "observedMessageIds", "bufferedMessageIds", "bufferingMessageIds",
+            "originType", "previousGenerationId",
+            "totalTokensObserved", "observationTokenCount",
+            "isReflecting", metadata, "createdAt", "updatedAt"
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            "threadId" = excluded."threadId",
+            "resourceId" = excluded."resourceId",
+            observation = excluded.observation,
+            "bufferedObservations" = excluded."bufferedObservations",
+            "bufferedReflection" = excluded."bufferedReflection",
+            "observedMessageIds" = excluded."observedMessageIds",
+            "bufferedMessageIds" = excluded."bufferedMessageIds",
+            "bufferingMessageIds" = excluded."bufferingMessageIds",
+            "originType" = excluded."originType",
+            "previousGenerationId" = excluded."previousGenerationId",
+            "totalTokensObserved" = excluded."totalTokensObserved",
+            "observationTokenCount" = excluded."observationTokenCount",
+            "isReflecting" = excluded."isReflecting",
+            metadata = excluded.metadata,
+            "updatedAt" = excluded."updatedAt"
+          `,
+          args: [
+            obs.id,
+            obs.threadId,
+            obs.resourceId || null,
+            obs.observation,
+            obs.bufferedObservations || null,
+            obs.bufferedReflection || null,
+            JSON.stringify(obs.observedMessageIds || []),
+            JSON.stringify(obs.bufferedMessageIds || []),
+            JSON.stringify(obs.bufferingMessageIds || []),
+            obs.originType || 'initial',
+            obs.previousGenerationId || null,
+            obs.totalTokensObserved || 0,
+            obs.observationTokenCount || 0,
+            obs.isReflecting ? 1 : 0,
+            JSON.stringify(obs.metadata || {}),
+            obs.createdAt instanceof Date ? obs.createdAt.toISOString() : (obs.createdAt || now),
+            obs.updatedAt instanceof Date ? obs.updatedAt.toISOString() : (obs.updatedAt || now),
+          ],
+        };
+      });
+
+      await this.client.batch(batchStatements, 'write');
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_SAVE_OBSERVATIONS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Delete observations for a thread
+   */
+  async deleteObservations({ threadId }: { threadId: string }): Promise<void> {
+    try {
+      await this.client.execute({
+        sql: `DELETE FROM "${TABLE_OBSERVATIONS}" WHERE "threadId" = ?`,
+        args: [threadId],
+      });
+    } catch (error) {
+      // Ignore if table doesn't exist
+      if (error instanceof Error && error.message.includes('no such table')) {
+        return;
+      }
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_DELETE_OBSERVATIONS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Parse a database row into an observation object
+   */
+  private parseObservationRow(row: any): any {
+    return {
+      id: row.id,
+      threadId: row.threadId,
+      resourceId: row.resourceId,
+      observation: row.observation,
+      bufferedObservations: row.bufferedObservations,
+      bufferedReflection: row.bufferedReflection,
+      observedMessageIds: this.parseJsonArray(row.observedMessageIds),
+      bufferedMessageIds: this.parseJsonArray(row.bufferedMessageIds),
+      bufferingMessageIds: this.parseJsonArray(row.bufferingMessageIds),
+      originType: row.originType || 'initial',
+      previousGenerationId: row.previousGenerationId,
+      totalTokensObserved: row.totalTokensObserved || 0,
+      observationTokenCount: row.observationTokenCount || 0,
+      isReflecting: Boolean(row.isReflecting),
+      metadata: this.parseJsonObject(row.metadata),
+      createdAt: row.createdAt ? new Date(row.createdAt as string) : new Date(),
+      updatedAt: row.updatedAt ? new Date(row.updatedAt as string) : new Date(),
+    };
+  }
+
+  /**
+   * Safely parse a JSON array from storage
+   */
+  private parseJsonArray(value: any): string[] {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Safely parse a JSON object from storage
+   */
+  private parseJsonObject(value: any): Record<string, any> {
+    if (!value) return {};
+    if (typeof value === 'object' && !Array.isArray(value)) return value;
+    try {
+      const parsed = JSON.parse(value);
+      return typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
   }
 }

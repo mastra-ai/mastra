@@ -79,6 +79,44 @@ export const SPAN_SCHEMA: Record<string, StorageColumn> = {
   isEvent: { type: 'boolean', nullable: false },
 };
 
+/**
+ * Observational Memory schema based on spec in observational-memory-spec/storage-schema.md
+ */
+export const OBSERVATIONS_SCHEMA: Record<string, StorageColumn> = {
+  // Identity
+  id: { type: 'text', nullable: false, primaryKey: true },
+  threadId: { type: 'text', nullable: false },
+  resourceId: { type: 'text', nullable: true },
+
+  // Observation content
+  observation: { type: 'text', nullable: false },
+  bufferedObservations: { type: 'text', nullable: true },
+  bufferedReflection: { type: 'text', nullable: true },
+
+  // Message tracking (stored as JSON arrays)
+  observedMessageIds: { type: 'jsonb', nullable: true },
+  bufferedMessageIds: { type: 'jsonb', nullable: true },
+  bufferingMessageIds: { type: 'jsonb', nullable: true },
+
+  // Generation tracking
+  originType: { type: 'text', nullable: true }, // 'initial' | 'reflection'
+  previousGenerationId: { type: 'text', nullable: true },
+
+  // Token tracking
+  totalTokensObserved: { type: 'integer', nullable: true },
+  observationTokenCount: { type: 'integer', nullable: true },
+
+  // State flags
+  isReflecting: { type: 'integer', nullable: true }, // SQLite doesn't have boolean, use integer 0/1
+
+  // Metadata (stored as JSON)
+  metadata: { type: 'jsonb', nullable: true },
+
+  // Timestamps
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -98,13 +136,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
       type: 'timestamp',
     },
   },
-  [TABLE_OBSERVATIONS]: {
-    id: { type: 'text', nullable: false, primaryKey: true },
-    threadId: { type: 'text', nullable: false },
-    observation: { type: 'text', nullable: false },
-    createdAt: { type: 'timestamp', nullable: false },
-    updatedAt: { type: 'timestamp', nullable: false },
-  },
+  [TABLE_OBSERVATIONS]: OBSERVATIONS_SCHEMA,
   [TABLE_SCORERS]: SCORERS_SCHEMA,
   [TABLE_THREADS]: {
     id: { type: 'text', nullable: false, primaryKey: true },
