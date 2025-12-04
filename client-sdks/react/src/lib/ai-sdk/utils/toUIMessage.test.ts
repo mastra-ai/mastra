@@ -2491,5 +2491,137 @@ describe('toUIMessage', () => {
       expect(dataPart).toBeDefined();
       expect((dataPart as any).data.progress).toBe(50);
     });
+
+    // Negative test cases
+    it('should handle data-* chunk with missing data property gracefully', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        // data property intentionally missing
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Should handle gracefully without throwing
+      expect(result).toBeDefined();
+      expect(result.length).toBe(1);
+
+      const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).data).toBeUndefined();
+    });
+
+    it('should handle data-* chunk with null data property', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: null,
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toBeDefined();
+      const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).data).toBeNull();
+    });
+
+    it('should handle data-* chunk with undefined data property', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: undefined,
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toBeDefined();
+      const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).data).toBeUndefined();
+    });
+
+    // Immutability verification
+    it('should not mutate original conversation array when adding data-* chunk', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Hello' }],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const originalLength = conversation.length;
+      const originalMessageParts = existingMessage.parts.length;
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Original conversation should not be mutated
+      expect(conversation.length).toBe(originalLength);
+      expect(conversation[0].parts.length).toBe(originalMessageParts);
+
+      // Result should be a new array
+      expect(result).not.toBe(conversation);
+      expect(result[0]).not.toBe(existingMessage);
+      expect(result[0].parts.length).toBe(2); // original text + new data part
+    });
+
+    it('should not mutate original message parts array when adding data-* chunk', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const originalParts = [{ type: 'text' as const, text: 'Hello' }];
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: originalParts,
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Original parts array should not be mutated
+      expect(originalParts.length).toBe(1);
+      expect(originalParts[0].type).toBe('text');
+    });
   });
 });
