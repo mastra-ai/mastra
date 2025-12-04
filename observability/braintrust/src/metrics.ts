@@ -53,7 +53,15 @@ export function normalizeUsageMetrics(modelAttr: ModelGenerationAttributes): Bra
 
   // Time to first token (TTFT) for streaming responses
   if (modelAttr.completionStartTime) {
-    metrics.time_to_first_token = modelAttr.completionStartTime.getTime();
+    // Handle both Date objects and already-converted timestamps (number/string)
+    const startTime = modelAttr.completionStartTime;
+    if (startTime instanceof Date) {
+      metrics.time_to_first_token = startTime.getTime();
+    } else if (typeof startTime === 'number') {
+      metrics.time_to_first_token = startTime;
+    } else if (typeof startTime === 'string') {
+      metrics.time_to_first_token = new Date(startTime).getTime();
+    }
   }
 
   return metrics;

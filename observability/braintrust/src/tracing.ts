@@ -140,21 +140,10 @@ export class BraintrustExporter extends BaseExporter {
 
     const payload = this.buildSpanPayload(span);
 
-    // When attaching to an external parent (eval/logger span), don't pass Mastra's internal
-    // parentSpanIds. Let Braintrust auto-handle the parent-child relationship.
-    const shouldOmitParentIds = spanData.isExternal && !span.parentSpanId;
-
     const braintrustSpan = braintrustParent.startSpan({
       spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
-      ...(shouldOmitParentIds
-        ? {}
-        : {
-            parentSpanIds: span.parentSpanId
-              ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
-              : { spanId: span.traceId, rootSpanId: span.traceId },
-          }),
       ...payload,
     });
 
@@ -251,14 +240,21 @@ export class BraintrustExporter extends BaseExporter {
       spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
-      parentSpanIds: span.parentSpanId
-        ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
-        : { spanId: span.traceId, rootSpanId: span.traceId },
       startTime: span.startTime.getTime() / 1000,
       ...payload,
     });
 
     braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
+  }
+
+  private initTraceMap(params: { traceId: string; isExternal: boolean; logger: Logger<true> | Span }): void {
+    const { traceId, isExternal, logger } = params;
+    this.traceMap.set(traceId, {
+      logger,
+      spans: new Map(),
+      activeIds: new Set(),
+      isExternal,
+    });
   }
 
   /**
@@ -272,12 +268,7 @@ export class BraintrustExporter extends BaseExporter {
       ...this.config.tuningParameters,
     });
 
-    this.traceMap.set(span.traceId, {
-      logger,
-      spans: new Map(),
-      activeIds: new Set(),
-      isExternal: false,
-    });
+    this.initTraceMap({ logger, isExternal: false, traceId: span.traceId });
   }
 
   /**
@@ -294,20 +285,10 @@ export class BraintrustExporter extends BaseExporter {
     // Check if it's a valid span (not the NOOP_SPAN)
     if (braintrustSpan && braintrustSpan.id) {
       // External span detected - attach Mastra traces to it
-      this.traceMap.set(span.traceId, {
-        logger: braintrustSpan,
-        spans: new Map(),
-        activeIds: new Set(),
-        isExternal: true,
-      });
+      this.initTraceMap({ logger: braintrustSpan, isExternal: true, traceId: span.traceId });
     } else {
       // No external span - use provided logger
-      this.traceMap.set(span.traceId, {
-        logger: this.providedLogger!,
-        spans: new Map(),
-        activeIds: new Set(),
-        isExternal: false,
-      });
+      this.initTraceMap({ logger: this.providedLogger!, isExternal: false, traceId: span.traceId });
     }
   }
 

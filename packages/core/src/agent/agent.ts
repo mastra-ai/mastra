@@ -1689,7 +1689,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
         const toolObj = createTool({
           id: `agent-${agentName}`,
-          description: `Agent: ${agentName}`,
+          description: agent.getDescription() || `Agent: ${agentName}`,
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
