@@ -96,6 +96,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
 
       const dataToSave = {
         ...validatedScore,
+        id: scoreId,
         scorer,
         preprocessStepResult,
         analyzeStepResult,

@@ -150,6 +150,23 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       expect(result.pagination.hasMore).toBe(false);
     });
 
+    it('should retrieve saved score by its returned id', async () => {
+      const scorerId = `scorer-${randomUUID()}`;
+      const score = createSampleScore({ scorerId });
+
+      // Save the score and get the returned score with its id
+      const { score: savedScore } = await storage.saveScore(score);
+      expect(savedScore.id).toBeDefined();
+
+      // Retrieve the score by its id - this should find the saved score
+      const retrievedScore = await storage.getScoreById({ id: savedScore.id });
+
+      expect(retrievedScore).not.toBeNull();
+      expect(retrievedScore?.id).toBe(savedScore.id);
+      expect(retrievedScore?.scorerId).toBe(scorerId);
+      expect(retrievedScore?.runId).toBe(score.runId);
+    });
+
     it('listScoresByEntityId should return paginated scores with total count when returnPaginationResults is true', async () => {
       const scorer = createSampleScore({ scorerId: `scorer-${randomUUID()}` });
       await storage.saveScore(scorer);
