@@ -198,6 +198,100 @@ describe('BraintrustExporter', () => {
         },
       });
     });
+
+    it('should reuse existing trace when multiple root spans share the same traceId', async () => {
+      const sharedTraceId = 'shared-trace-123';
+
+      // First root span (e.g., first agent.stream call)
+      const firstRootSpan = createMockSpan({
+        id: 'root-span-1',
+        name: 'agent-call-1',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      firstRootSpan.traceId = sharedTraceId;
+
+      // Child span of first root
+      const firstChildSpan = createMockSpan({
+        id: 'child-span-1',
+        name: 'tool-call-1',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'calculator' },
+      });
+      firstChildSpan.traceId = sharedTraceId;
+      firstChildSpan.parentSpanId = 'root-span-1';
+
+      // Second root span with same traceId (e.g., second agent.stream call after client-side tool)
+      const secondRootSpan = createMockSpan({
+        id: 'root-span-2',
+        name: 'agent-call-2',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      secondRootSpan.traceId = sharedTraceId;
+
+      // Child span of second root
+      const secondChildSpan = createMockSpan({
+        id: 'child-span-2',
+        name: 'tool-call-2',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'search' },
+      });
+      secondChildSpan.traceId = sharedTraceId;
+      secondChildSpan.parentSpanId = 'root-span-2';
+
+      // Process all spans
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstChildSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondChildSpan,
+      });
+
+      // Should create logger only once (for the shared traceId)
+      expect(mockInitLogger).toHaveBeenCalledTimes(1);
+
+      // Access internal traceMap to verify trace data is shared
+      const traceData = (exporter as any).traceMap.get(sharedTraceId);
+      expect(traceData).toBeDefined();
+
+      // All four spans should be tracked in the same trace
+      expect(traceData.spans.has('root-span-1')).toBe(true);
+      expect(traceData.spans.has('child-span-1')).toBe(true);
+      expect(traceData.spans.has('root-span-2')).toBe(true);
+      expect(traceData.spans.has('child-span-2')).toBe(true);
+
+      // All four spans should be active
+      expect(traceData.activeIds.has('root-span-1')).toBe(true);
+      expect(traceData.activeIds.has('child-span-1')).toBe(true);
+      expect(traceData.activeIds.has('root-span-2')).toBe(true);
+      expect(traceData.activeIds.has('child-span-2')).toBe(true);
+    });
   });
 
   describe('Span Type Mappings', () => {
