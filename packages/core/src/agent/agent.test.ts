@@ -4520,7 +4520,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   });
 
   if (version === 'v2') {
-    describe.only('error handling consistency', () => {
+    describe('error handling consistency', () => {
       it('should preserve full APICallError in fullStream chunk, onError callback, and result.error', async () => {
         let onErrorCallbackError: any = null;
         let fullStreamError: any = null;
