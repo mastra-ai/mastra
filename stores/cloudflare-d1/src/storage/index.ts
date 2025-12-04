@@ -3,7 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
   StorageColumn,
@@ -143,7 +143,7 @@ export class D1Store extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_INITIALIZATION_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.SYSTEM,
           text: 'Error initializing D1Store',
