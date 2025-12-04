@@ -93,7 +93,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         value: serializedRecord,
       });
 
-      const scoreFromDb = await this.getScoreById({ id: score.id });
+      const scoreFromDb = await this.getScoreById({ id });
       return { score: scoreFromDb! };
     } catch (error) {
       const mastraError = new MastraError(
