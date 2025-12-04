@@ -1,12 +1,12 @@
-import { ReadableStream } from 'stream/web';
+import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from 'ai-v5';
+import { getErrorFromUnknown } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
-import { getErrorFromUnknown } from '../../error';
 
 /**
  * Check if a ReadableStreamDefaultController is open and can accept data.
