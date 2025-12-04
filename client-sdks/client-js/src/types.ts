@@ -169,9 +169,13 @@ export interface GetToolResponse {
 export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  limit?: number | false;
-  offset?: number;
+  page?: number;
+  perPage?: number;
   resourceId?: string;
+  /** @deprecated Use page instead */
+  offset?: number;
+  /** @deprecated Use perPage instead */
+  limit?: number | false;
 }
 
 export type ListWorkflowRunsResponse = WorkflowRuns;

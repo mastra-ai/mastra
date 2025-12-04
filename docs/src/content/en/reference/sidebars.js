@@ -228,6 +228,11 @@ const sidebars = {
               id: "workflows/run-methods/restart",
               label: ".restart()",
             },
+            {
+              type: "doc",
+              id: "workflows/run-methods/timeTravel",
+              label: ".timeTravel()",
+            },
           ],
         },
       ],
@@ -277,6 +282,11 @@ const sidebars = {
               type: "doc",
               id: "streaming/workflows/observeStream",
               label: ".observeStream()",
+            },
+            {
+              type: "doc",
+              id: "streaming/workflows/timeTravelStream",
+              label: ".timeTravelStream()",
             },
           ],
         },
@@ -424,6 +434,22 @@ const sidebars = {
           label: "Turbopuffer Vector Store",
         },
         { type: "doc", id: "vectors/upstash", label: "Upstash Vector Store" },
+      ],
+    },
+    {
+      type: "category",
+      label: "Server",
+      collapsed: true,
+      items: [
+        {
+          type: "doc",
+          id: "server/mastra-server",
+          label: "MastraServer",
+        },
+        { type: "doc", id: "server/hono-adapter", label: "Hono Adapter" },
+        { type: "doc", id: "server/express-adapter", label: "Express Adapter" },
+        { type: "doc", id: "server/create-route", label: "createRoute()" },
+        { type: "doc", id: "server/routes", label: "Server Routes" },
       ],
     },
     {
