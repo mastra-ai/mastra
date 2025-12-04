@@ -1085,7 +1085,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Validate that exactly one of id or filter is provided
       if (!id && !filter) {
         throw new MastraError({
-          id: createVectorErrorId('PG', 'UPDATE', 'MISSING_PARAMS'),
+          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'MISSING_PARAMS'),
           text: 'Either id or filter must be provided',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1095,7 +1095,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       if (id && filter) {
         throw new MastraError({
-          id: createVectorErrorId('PG', 'UPDATE', 'CONFLICTING_PARAMS'),
+          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'CONFLICTING_PARAMS'),
           text: 'Cannot provide both id and filter - they are mutually exclusive',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1139,7 +1139,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Update by filter
         if (!filter || Object.keys(filter).length === 0) {
           throw new MastraError({
-            id: createVectorErrorId('PG', 'UPDATE', 'EMPTY_FILTER'),
+            id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
             text: 'Cannot update with empty filter',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1155,7 +1155,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         if (!whereClause) {
           throw new MastraError({
-            id: createVectorErrorId('PG', 'UPDATE', 'INVALID_FILTER'),
+            id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'INVALID_FILTER'),
             text: 'Filter produced empty WHERE clause',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1263,7 +1263,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Validate that exactly one of filter or ids is provided
       if (!filter && !ids) {
         throw new MastraError({
-          id: createVectorErrorId('PG', 'DELETE', 'MISSING_PARAMS'),
+          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'MISSING_PARAMS'),
           text: 'Either filter or ids must be provided',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1273,7 +1273,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       if (filter && ids) {
         throw new MastraError({
-          id: createVectorErrorId('PG', 'DELETE', 'CONFLICTING_PARAMS'),
+          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'CONFLICTING_PARAMS'),
           text: 'Cannot provide both filter and ids - they are mutually exclusive',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1288,7 +1288,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Delete by IDs
         if (ids.length === 0) {
           throw new MastraError({
-            id: createVectorErrorId('PG', 'DELETE', 'EMPTY_IDS'),
+            id: createVectorErrorId('PG', 'DELETE_VECTORS', 'EMPTY_IDS'),
             text: 'Cannot delete with empty ids array',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1304,7 +1304,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
         if (!filter || Object.keys(filter).length === 0) {
           throw new MastraError({
-            id: createVectorErrorId('PG', 'DELETE', 'EMPTY_FILTER'),
+            id: createVectorErrorId('PG', 'DELETE_VECTORS', 'EMPTY_FILTER'),
             text: 'Cannot delete with empty filter. Use deleteIndex to delete all vectors.',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1321,7 +1321,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         if (!whereClause) {
           throw new MastraError({
-            id: createVectorErrorId('PG', 'DELETE', 'INVALID_FILTER'),
+            id: createVectorErrorId('PG', 'DELETE_VECTORS', 'INVALID_FILTER'),
             text: 'Filter produced empty WHERE clause',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
