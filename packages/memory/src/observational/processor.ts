@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { parseMemoryRuntimeContext } from '@mastra/core/memory';
-import type { ProcessInputStepArgs, Processor, ProcessorMessageResult, ProcessOutputResultArgs } from '@mastra/core/processors';
+import type { ProcessInputArgs, ProcessInputStepArgs, Processor, ProcessorMessageResult, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { MastraStorage } from '@mastra/core/storage';
 import { encode } from '@toon-format/toon'
 
@@ -100,7 +100,7 @@ function buildUserPrompt(exchange: ConversationExchange, compiledMemory: string)
 
     const hasUser = exchange.relevantMessages.some((m) => m.role === `user`)
     const hasAgent = exchange.relevantMessages.some(
-        (m) => m.role === `assistant` || m.role === `tool`,
+        (m) => m.role === `assistant`,
     )
     if (hasUser && hasAgent) {
         prompt +=
@@ -116,8 +116,8 @@ function buildUserPrompt(exchange: ConversationExchange, compiledMemory: string)
     const toonHistory = encode(
         exchange.relevantMessages.map((m) => {
             if (`providerMetadata` in m) delete m.providerMetadata
-            if (`parts` in m) {
-                for (const part of m.parts) {
+            if (m.content.parts) {
+                for (const part of m.content.parts) {
                     if (`providerMetadata` in part) delete part.providerMetadata
                 }
             }
@@ -161,16 +161,17 @@ export class ObservationalMemory implements Processor {
         });
     }
 
+    processInput(args: ProcessInputArgs) {
+        return args.messageList;
+    }
+
     async processInputStep(args: ProcessInputStepArgs) {
-        console.log(args, 'SUHHHHHHHHHH');
-
         const memoryInfo = args.messageList.getMemoryInfo();
-
-        console.log(args, memoryInfo);
 
         if (memoryInfo.threadId) {
             const observations = await this.storage?.stores?.memory.listObservations({ threadId: memoryInfo.threadId });
-            console.log(observations);
+            console.log(observations, 'observations');
+            // TODO: Use observations to enhance the message context
         }
 
         return args.messageList;
