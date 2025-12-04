@@ -83,7 +83,7 @@
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
     "setup": "pnpm install && pnpm run build",
-    "prune": "find . -type d \\( -name 'node_modules' -o -name 'dist' -o -name '.turbo' \\) -prune -exec rm -rf {} +"
+    "cleanup": "find . -type d \\( -name 'node_modules' -o -name 'dist' -o -name '.turbo' \\) -prune -exec rm -rf {} +"
   },
   "lint-staged": {
     "*.{js,mjs,ts,tsx,md,mdx,json,graphql,gql}": [
