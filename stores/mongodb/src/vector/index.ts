@@ -494,7 +494,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // Validate that both id and filter are not provided at the same time
     if ('id' in params && params.id && 'filter' in params && params.filter) {
       throw new MastraError({
-        id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE_PARAMS'),
+        id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -505,7 +505,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // Check if neither id nor filter is provided
     if (!('id' in params || 'filter' in params) || (!params.id && !params.filter)) {
       throw new MastraError({
-        id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'MISSING_PARAMS'),
+        id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either id or filter must be provided',
@@ -634,7 +634,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // Validate that exactly one of filter or ids is provided
     if (!filter && !ids) {
       throw new MastraError({
-        id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'MISSING_PARAMS'),
+        id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -644,7 +644,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     if (filter && ids) {
       throw new MastraError({
-        id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'CONFLICTING_PARAMS'),
+        id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },

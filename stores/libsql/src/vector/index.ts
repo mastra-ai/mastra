@@ -420,7 +420,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     // Validate that both id and filter are not provided at the same time
     if ('id' in params && params.id && 'filter' in params && params.filter) {
       throw new MastraError({
-        id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE_PARAMS'),
+        id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -513,7 +513,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       whereValues = filterValues;
     } else {
       throw new MastraError({
-        id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'MISSING_PARAMS'),
+        id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -599,7 +599,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     // Validate that exactly one of filter or ids is provided
     if (!filter && !ids) {
       throw new MastraError({
-        id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'MISSING_PARAMS'),
+        id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -609,7 +609,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
     if (filter && ids) {
       throw new MastraError({
-        id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'CONFLICTING_PARAMS'),
+        id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },

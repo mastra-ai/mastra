@@ -366,7 +366,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
       await this.updateVectorsByFilter(indexName, params.filter, update);
     } else {
       throw new MastraError({
-        id: createVectorErrorId('OPENSEARCH', 'UPDATE_VECTOR', 'MISSING_PARAMS'),
+        id: createVectorErrorId('OPENSEARCH', 'UPDATE_VECTOR', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either id or filter must be provided',

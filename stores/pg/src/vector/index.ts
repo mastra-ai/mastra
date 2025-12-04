@@ -1085,7 +1085,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Validate that exactly one of id or filter is provided
       if (!id && !filter) {
         throw new MastraError({
-          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'MISSING_PARAMS'),
+          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'NO_TARGET'),
           text: 'Either id or filter must be provided',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1095,7 +1095,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       if (id && filter) {
         throw new MastraError({
-          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'CONFLICTING_PARAMS'),
+          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
           text: 'Cannot provide both id and filter - they are mutually exclusive',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1263,7 +1263,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Validate that exactly one of filter or ids is provided
       if (!filter && !ids) {
         throw new MastraError({
-          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'MISSING_PARAMS'),
+          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'NO_TARGET'),
           text: 'Either filter or ids must be provided',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1273,7 +1273,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       if (filter && ids) {
         throw new MastraError({
-          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'CONFLICTING_PARAMS'),
+          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
           text: 'Cannot provide both filter and ids - they are mutually exclusive',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,

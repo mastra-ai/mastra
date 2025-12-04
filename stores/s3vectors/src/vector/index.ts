@@ -71,7 +71,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     if (!opts?.vectorBucketName) {
       throw new MastraError(
         {
-          id: createVectorErrorId('S3VECTORS', 'MISSING_BUCKET_NAME', 'FAILED'),
+          id: createVectorErrorId('S3VECTORS', 'INITIALIZATION', 'MISSING_BUCKET_NAME'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
