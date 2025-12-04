@@ -1,0 +1,620 @@
+---
+title: "Guide: Connect Mastra Agents to Slack"
+description: "A step-by-step guide to connecting Slack bots to Mastra agents with streaming responses and conversation memory."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Connect Mastra Agents to Slack
+
+This guide walks you through building a Slack bot that connects to Mastra agents. The pattern supports streaming responses with live typing indicators, thread-based conversation memory, and multiple agents with their own Slack apps.
+
+```
+Slack message → /slack/{app}/events → Mastra agent → streaming response back to Slack
+```
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An OpenAI API key (or another supported [Model Provider](/models/v1))
+- [This example repo](https://github.com/graysonhicks/mastra-slack/tree/feat/stream) or an existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
+- A Slack workspace where you can create apps
+
+## Architecture Overview
+
+The integration uses three key components outside of your Mastra Agent and Tools:
+
+- **Verification** — Validates Slack request signatures for security
+- **Routes** — Webhook endpoints that receive Slack events and route them to agents
+- **Streaming** — Handles live updates with spinner animations and tool call indicators
+
+<Steps>
+
+<StepItem title="Install dependencies">
+
+Install the required packages:
+
+```bash copy
+pnpm install
+```
+
+</StepItem>
+
+<StepItem title="Create your agent and tools">
+
+Create a new file `src/mastra/agents/my-agent.ts` and define your agent with memory and tools:
+
+```ts copy title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const reverseTextTool = createTool({
+  id: "reverse-text",
+  description: "Reverses a text string character by character",
+  inputSchema: z.object({
+    text: z.string().describe("The text to reverse"),
+  }),
+  execute: async ({ context }) => {
+    return context.text.split("").reverse().join("");
+  },
+});
+
+export const myAgent = new Agent({
+  name: "my-agent",
+  description: "A helpful assistant",
+  instructions: `You are a helpful assistant that responds to user messages. When asked to reverse text, use the reverse-text tool.
+
+Examples:
+- User: "hello" → You: "olleh"
+- User: "Hello World!" → You: "!dlroW olleH"`,
+  model: "openai/gpt-4o-mini",
+  tools: [reverseTextTool],
+  memory: new Memory({
+    options: {
+      lastMessages: 20, // Keep last 20 messages in context
+    },
+  }),
+});
+```
+
+The `Memory` component enables conversation history scoped to Slack threads, so users can have contextual back-and-forth conversations. Tools make your agent more powerful by enabling it to perform actions beyond just generating text.  Here it is more to illustrate the Slack streaming updates.
+
+</StepItem>
+
+</Steps>
+
+## Setting Up Your Slack App
+
+<Steps>
+
+<StepItem title="Create your Slack app">
+
+Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**
+
+</StepItem>
+
+<StepItem title="Configure OAuth & Permissions">
+
+Navigate to **OAuth & Permissions** and add these Bot Token Scopes:
+- `app_mentions:read` — receive @mentions
+- `channels:history` — read messages in public channels
+- `chat:write` — send messages
+- `im:history` — read direct messages
+
+</StepItem>
+
+<StepItem title="Get bot token">
+
+Ccopy the **Bot User OAuth Token** to your `.env` file as `SLACK_MY_AGENT_BOT_TOKEN`.
+
+</StepItem>
+
+<StepItem title="Configure Event Subscriptions">
+
+Navigate to **Event Subscriptions** and:
+
+1. Enable Event Subscriptions
+2. Set the Request URL to:
+   ```
+   https://your-server.com/slack/my-agent/events
+   ```
+   (You'll update this with your ngrok URL when running locally or production Mastra URL)
+
+3. Subscribe to bot events:
+   - `app_mention`
+   - `message.im`
+
+</StepItem>
+
+<StepItem title="Enable Agents & AI Apps">
+
+Navigate to **Agents & AI Apps** and toggle on to enable agent features.
+
+</StepItem>
+
+<StepItem title="Get Signing Secret">
+
+Navigate to **Basic Information** → **App Credentials** and copy the **Signing Secret** to your `.env` file as `SLACK_MY_AGENT_SIGNING_SECRET`.
+
+</StepItem>
+
+</Steps>
+
+## Implementing the Integration
+
+<Steps>
+
+<StepItem title="Create the Slack verification helper">
+
+Create `src/mastra/slack/verify.ts` to validate incoming Slack requests:
+
+```ts copy title="src/mastra/slack/verify.ts"
+import * as crypto from "crypto";
+
+/**
+ * Verify that a request came from Slack
+ */
+export function verifySlackRequest(
+  signingSecret: string,
+  requestSignature: string,
+  timestamp: string,
+  body: string
+): boolean {
+  // Reject old requests (more than 5 minutes old)
+  const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 60 * 5;
+  if (parseInt(timestamp) < fiveMinutesAgo) {
+    return false;
+  }
+
+  // Compute the expected signature
+  const sigBasestring = `v0:${timestamp}:${body}`;
+  const mySignature =
+    "v0=" +
+    crypto
+      .createHmac("sha256", signingSecret)
+      .update(sigBasestring, "utf8")
+      .digest("hex");
+
+  // Compare signatures using timing-safe comparison
+  return crypto.timingSafeEqual(
+    Buffer.from(mySignature, "utf8"),
+    Buffer.from(requestSignature, "utf8")
+  );
+}
+```
+
+This prevents unauthorized requests and replay attacks.
+
+</StepItem>
+
+<StepItem title="Create the streaming handler">
+
+Create `src/mastra/slack/streaming.ts` to handle streaming responses with live updates:
+
+```ts copy title="src/mastra/slack/streaming.ts"
+import { WebClient } from "@slack/web-api";
+import type { Mastra } from "@mastra/core/mastra";
+
+const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const TOOL_ICONS = ["🔄", "⚙️", "🔧", "⚡"];
+
+export interface StreamingOptions {
+  mastra: Mastra;
+  slackClient: WebClient;
+  channel: string;
+  threadTs: string;
+  agentName: string;
+  message: string;
+  resourceId: string;
+  threadId: string;
+}
+
+type Status = "thinking" | "tool_call" | "responding";
+
+interface State {
+  text: string;
+  status: Status;
+  toolName?: string;
+}
+
+/** Convert kebab-case/snake_case to Title Case */
+const formatToolName = (id: string) =>
+  id
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+/** Get animated status text for Slack message */
+function getStatusText(state: State, frame: number): string {
+  const spinner = SPINNER[frame % SPINNER.length];
+  const toolIcon = TOOL_ICONS[frame % TOOL_ICONS.length];
+
+  switch (state.status) {
+    case "thinking":
+      return `${spinner} Thinking...`;
+    case "tool_call":
+      return `${toolIcon} Using ${state.toolName}...`;
+    case "responding":
+      return `${spinner} Responding...`;
+  }
+}
+
+/** Build a map from internal tool names to actual tool IDs */
+async function buildToolMap(
+  mastra: Mastra,
+  agentName: string
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const agent = mastra.getAgent(agentName);
+    const tools = await agent?.getTools();
+    if (tools) {
+      Object.entries(tools).forEach(([key, tool], index) => {
+        const toolId = (tool as any).id || (tool as any).name || key;
+        map.set(`_${index}`, toolId);
+      });
+    }
+  } catch (e) {
+    console.error("Error building tool map:", e);
+  }
+  return map;
+}
+
+/**
+ * Stream a response from Mastra agent to Slack with live status updates
+ */
+export async function streamToSlack(options: StreamingOptions): Promise<void> {
+  const {
+    mastra,
+    slackClient,
+    channel,
+    threadTs,
+    agentName,
+    message,
+    resourceId,
+    threadId,
+  } = options;
+
+  const state: State = { text: "", status: "thinking" };
+  const toolMap = await buildToolMap(mastra, agentName);
+
+  let messageTs: string | undefined;
+  let frame = 0;
+  let animationTimer: NodeJS.Timeout | undefined;
+
+  const updateMessage = async () => {
+    if (!messageTs) return;
+    try {
+      await slackClient.chat.update({
+        channel,
+        ts: messageTs,
+        text: getStatusText(state, frame),
+      });
+    } catch {
+      // Ignore update errors
+    }
+  };
+
+  try {
+    // Post initial "Thinking..." message
+    const initial = await slackClient.chat.postMessage({
+      channel,
+      thread_ts: threadTs,
+      text: getStatusText(state, 0),
+    });
+    messageTs = initial.ts as string;
+
+    // Start animation loop (updates every 300ms)
+    animationTimer = setInterval(() => {
+      frame++;
+      updateMessage();
+    }, 300);
+
+    // Get agent and start streaming
+    const agent = mastra.getAgent(agentName);
+    if (!agent) {
+      throw new Error(`Agent "${agentName}" not found`);
+    }
+
+    const result = await agent.stream(message, {
+      resourceId,
+      threadId,
+      onChunk: (chunk) => {
+        if (chunk.type === "tool-call") {
+          const internalName = (chunk as any).payload?.toolName || "tool";
+          const toolId = toolMap.get(internalName) || internalName;
+          state.status = "tool_call";
+          state.toolName = formatToolName(toolId);
+          console.log(`🔧 Tool call: ${state.toolName}`);
+        } else if (chunk.type === "tool-result") {
+          state.status = "responding";
+        }
+      },
+    });
+
+    // Process the text stream
+    for await (const chunk of result.textStream) {
+      if (chunk) {
+        state.text += chunk;
+        state.status = "responding";
+      }
+    }
+
+    // Stop animation and send final response
+    clearInterval(animationTimer);
+
+    await slackClient.chat.update({
+      channel,
+      ts: messageTs,
+      text: state.text || "Sorry, I couldn't generate a response.",
+    });
+
+    console.log("✅ Response sent to Slack");
+  } catch (error) {
+    console.error("❌ Error streaming to Slack:", error);
+
+    if (animationTimer) clearInterval(animationTimer);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorText = `❌ Error: ${errorMessage}`;
+
+    if (messageTs) {
+      await slackClient.chat.update({ channel, ts: messageTs, text: errorText }).catch(() => {});
+    } else {
+      await slackClient.chat.postMessage({ channel, thread_ts: threadTs, text: errorText }).catch(() => {});
+    }
+
+    throw error;
+  }
+}
+```
+
+This provides a polished user experience with animated spinners while the agent thinks, and shows which tool is being used.
+
+</StepItem>
+
+<StepItem title="Create the Slack routes">
+
+Create `src/mastra/slack/routes.ts` to handle incoming Slack events using Mastra's `registerApiRoute` function:
+
+```ts copy title="src/mastra/slack/routes.ts"
+import { registerApiRoute } from "@mastra/core/server";
+import { WebClient } from "@slack/web-api";
+import { verifySlackRequest } from "./verify";
+import { streamToSlack } from "./streaming";
+
+interface SlackAppConfig {
+  name: string;           // URL path segment: /slack/{name}/events (used in Slack Event Subscriptions)
+  botToken: string;
+  signingSecret: string;
+  agentName: string;      // Key in mastra.agents object (e.g., "myAgent" matches agents: { myAgent })
+}
+
+function createSlackEventsRoute(config: SlackAppConfig) {
+  return registerApiRoute(`/slack/${config.name}/events`, {
+    method: "POST",
+    handler: async (c) => {
+      try {
+        const body = await c.req.text();
+        const payload = JSON.parse(body);
+
+        // Handle URL verification challenge (required by Slack)
+        if (payload.type === "url_verification") {
+          console.log(`✅ [${config.name}] URL verification challenge received`);
+          return c.json({ challenge: payload.challenge });
+        }
+
+        if (!config.botToken || !config.signingSecret) {
+          console.error(`❌ [${config.name}] Missing bot token or signing secret`);
+          return c.json({ error: "Server misconfigured" }, 500);
+        }
+
+        // Verify request signature
+        const slackSignature = c.req.header("x-slack-signature");
+        const slackTimestamp = c.req.header("x-slack-request-timestamp");
+
+        if (!slackSignature || !slackTimestamp) {
+          return c.json({ error: "Missing Slack signature headers" }, 401);
+        }
+
+        const isValid = verifySlackRequest(
+          config.signingSecret,
+          slackSignature,
+          slackTimestamp,
+          body
+        );
+
+        if (!isValid) {
+          console.error(`❌ [${config.name}] Invalid Slack signature`);
+          return c.json({ error: "Invalid signature" }, 401);
+        }
+
+        // Handle events
+        if (payload.event) {
+          const event = payload.event;
+
+          // Ignore bot messages and message edits
+          if (event.bot_id || event.subtype) {
+            return c.json({ ok: true });
+          }
+
+          // Handle app mentions and direct messages
+          if (event.type === "app_mention" || event.type === "message") {
+            let messageText = event.text || "";
+            const userId = event.user;
+            const channelId = event.channel;
+            const threadTs = event.thread_ts || event.ts;
+            const teamId = payload.team_id;
+
+            console.log(`📨 [${config.name}] Message received:`, {
+              agent: config.agentName,
+              text: messageText,
+              user: userId,
+            });
+
+            // Strip out bot mention from message
+            messageText = messageText.replace(/<@[A-Z0-9]+>/g, "").trim();
+
+            // Process asynchronously (don't block Slack's 3s timeout)
+            const mastra = c.get("mastra");
+            const slackClient = new WebClient(config.botToken);
+
+            (async () => {
+              try {
+                await streamToSlack({
+                  mastra,
+                  slackClient,
+                  channel: channelId,
+                  threadTs,
+                  agentName: config.agentName,
+                  message: messageText,
+                  resourceId: `slack-${teamId}-${userId}`,
+                  threadId: `slack-${channelId}-${threadTs}`,
+                });
+              } catch (error) {
+                console.error(`❌ [${config.name}] Error processing message:`, error);
+              }
+            })();
+          }
+        }
+
+        return c.json({ ok: true });
+      } catch (error) {
+        console.error(`Error handling Slack event [${config.name}]:`, error);
+        return c.json({ error: "Failed to handle event" }, 500);
+      }
+    },
+  });
+}
+
+// Configure your Slack apps here
+const slackApps: SlackAppConfig[] = [
+  {
+    name: "my-agent",
+    botToken: process.env.SLACK_MY_AGENT_BOT_TOKEN!,
+    signingSecret: process.env.SLACK_MY_AGENT_SIGNING_SECRET!,
+    agentName: "myAgent",
+  },
+];
+
+// Create a route for each Slack app / Agent
+export const slackRoutes = slackApps.map(createSlackEventsRoute);
+```
+
+**Key points:**
+- The route responds immediately to Slack (within 3s timeout) and processes the message asynchronously
+- **Thread Memory**: Conversations are scoped to Slack threads using Mastra's memory system:
+  - `resourceId: slack-${teamId}-${userId}` — identifies the user, allowing memory to persist across conversations
+  - `threadId: slack-${channelId}-${threadTs}` — identifies the conversation thread, so users can have multiple independent conversations with the same agent in different threads
+- Bot mentions are stripped from the message before sending to the agent
+
+</StepItem>
+
+<StepItem title="Register everything with Mastra">
+
+Update your `src/mastra/index.ts` to register the agent and routes:
+
+```ts copy title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
+import { myAgent } from "./agents/my-agent";
+import { slackRoutes } from "./slack/routes";
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db",
+  }),
+  server: {
+    apiRoutes: slackRoutes,
+  },
+});
+```
+
+</StepItem>
+
+<StepItem title="Set up environment variables">
+
+Create a `.env` file with your credentials:
+
+```bash copy title=".env"
+OPENAI_API_KEY=sk-your-key
+
+# Slack app credentials
+SLACK_MY_AGENT_BOT_TOKEN=xoxb-...
+SLACK_MY_AGENT_SIGNING_SECRET=...
+```
+
+</StepItem>
+
+<StepItem title="Run and test">
+
+Start your server with ngrok for local development:
+
+```bash copy
+# Terminal 1: Start ngrok
+ngrok http 4111
+
+# Terminal 2: Start Mastra
+pnpm dev
+```
+
+Copy the ngrok URL and update your Slack app's Event Subscriptions Request URL.
+
+Now mention your bot in Slack: `@MyAgent hello!`
+
+You should see:
+1. A "⠋ Thinking..." message appear
+2. The spinner animate while the agent processes
+3. If tools are used, "⚙️ Using Tool Name..." appears
+4. The final response replaces the status message
+
+</StepItem>
+
+</Steps>
+
+## Adding Multiple Agents
+
+You can connect multiple agents to Slack, each with their own app:
+
+```ts copy title="src/mastra/slack/routes.ts"
+const slackApps: SlackAppConfig[] = [
+ {
+    name: "reverse",
+    botToken: process.env.SLACK_REVERSE_BOT_TOKEN!,
+    signingSecret: process.env.SLACK_REVERSE_SIGNING_SECRET!,
+    agentName: "reverseAgent",
+  },
+  {
+    name: "caps",
+    botToken: process.env.SLACK_CAPS_BOT_TOKEN!,
+    signingSecret: process.env.SLACK_CAPS_SIGNING_SECRET!,
+    agentName: "capsAgent",
+  },
+  {
+    name: "numbers",
+    botToken: process.env.SLACK_NUMBERS_BOT_TOKEN!,
+    signingSecret: process.env.SLACK_NUMBERS_SIGNING_SECRET!,
+    agentName: "numbersAgent",
+  },
+];
+```
+
+Each agent gets its own webhook endpoint (`/slack/reverse/events`, `/slack/caps/events`, `/slack/numbers/events`) and its own Slack app.
+
+## Project Structure
+
+```
+src/mastra/
+├── agents/           # Agent definitions with tools and memory
+├── slack/
+│   ├── routes.ts     # Slack webhook handlers
+│   ├── streaming.ts  # Stream responses with live updates
+│   └── verify.ts     # Request signature verification
+└── index.ts          # Mastra instance with agents and routes
+```
+
+
