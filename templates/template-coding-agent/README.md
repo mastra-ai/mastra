@@ -151,7 +151,9 @@ E2B_API_KEY=your_e2b_api_key_here
 
 ```
 
-The agent will automatically detect and use the sandbox provider based on which API key you set.
+> [!Note]
+> The agent will automatically detect and use the sandbox provider based on which API key you set.
+
 **Model Provider (required):**
 
 ```bash
