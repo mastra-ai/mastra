@@ -297,7 +297,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         });
 
         const findUserWorkflow = createWorkflow({
-          id: 'find-user-worfklow',
+          id: 'find-user-workflow',
           description: 'This is a test tool that returns the name and email',
           inputSchema: z.object({
             name: z.string(),
