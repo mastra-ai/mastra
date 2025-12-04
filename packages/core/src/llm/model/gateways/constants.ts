@@ -6,8 +6,8 @@ export const PROVIDERS_WITH_INSTALLED_PACKAGES = [
   'mistral',
   'openai',
   'openrouter',
-  'xai',
   'perplexity',
+  'xai',
 ];
 
 // anything here doesn't show up in model router. for now that's just copilot which requires a special oauth flow
