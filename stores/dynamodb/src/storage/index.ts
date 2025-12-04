@@ -34,6 +34,26 @@ export interface DynamoDBStoreConfig {
     accessKeyId: string;
     secretAccessKey: string;
   };
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new DynamoDBStore({ name: 'my-store', config: { ...config, disableInit: false } });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new DynamoDBStore({ name: 'my-store', config: { ...config, disableInit: true } });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
 }
 
 // Define a type for our service that allows string indexing
@@ -49,7 +69,7 @@ export class DynamoDBStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor({ name, config }: { name: string; config: DynamoDBStoreConfig }) {
-    super({ id: config.id, name });
+    super({ id: config.id, name, disableInit: config.disableInit });
 
     // Validate required config
     try {
