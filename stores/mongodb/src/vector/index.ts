@@ -23,10 +23,16 @@ import type { MongoDBVectorFilter } from './filter';
 // Define necessary types and interfaces
 export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
+  embeddingPath?: string;
 }
 
 interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter> {
   documentFilter?: MongoDBVectorFilter;
+  embeddingPath?: string;
+}
+
+export interface MongoDBUpdateVectorParams extends UpdateVectorParams {
+  embeddingPath?: string;
 }
 
 export interface MongoDBIndexReadyParams {
@@ -48,7 +54,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private client: MongoClient;
   private db: Db;
   private collections: Map<string, Collection<MongoDBDocument>>;
-  private readonly embeddingFieldName = 'embedding';
+  private embeddingFieldName = 'embedding';
   private readonly metadataFieldName = 'metadata';
   private readonly documentFieldName = 'document';
   private collectionForValidation: Collection<MongoDBDocument> | null = null;
@@ -58,8 +64,39 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     dotproduct: 'dotProduct',
   };
 
-  constructor({ id, uri, dbName, options }: { id: string; uri: string; dbName: string; options?: MongoClientOptions }) {
+  private static setNestedField(obj: any, path: string, value: any) {
+    if (!path || path.trim() === '') {
+      throw new Error('Path cannot be empty');
+    }
+    const keys = path.split('.');
+    if (keys.some(k => !k)) {
+      throw new Error(`Invalid path: "${path}" contains empty segments`);
+    }
+    let o: any = obj;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!o[key]) o[key] = {};
+      o = o[key] as any;
+    }
+    const lastKey = keys[keys.length - 1];
+    o[lastKey] = value;
+  }
+
+  constructor({
+    id,
+    uri,
+    dbName,
+    options,
+    embeddingField = 'embedding',
+  }: {
+    id: string;
+    uri: string;
+    dbName: string;
+    options?: MongoClientOptions;
+    embeddingField?: string;
+  }) {
     super({ id });
+    this.embeddingFieldName = embeddingField;
     const client = new MongoClient(uri, {
       ...options,
       driverInfo: {
@@ -232,7 +269,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     throw new Error(`Index "${indexNameInternal}" did not become ready within timeout`);
   }
 
-  async upsert({ indexName, vectors, metadata, ids, documents }: MongoDBUpsertVectorParams): Promise<string[]> {
+  async upsert({
+    indexName,
+    vectors,
+    metadata,
+    ids,
+    documents,
+    embeddingPath,
+  }: MongoDBUpsertVectorParams): Promise<string[]> {
     try {
       const collection = await this.getCollection(indexName);
 
@@ -261,10 +305,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           {} as Record<string, any>,
         );
 
-        const updateDoc: Partial<MongoDBDocument> = {
-          [this.embeddingFieldName]: vector,
-          [this.metadataFieldName]: normalizedMeta,
-        };
+        if (embeddingPath && embeddingPath !== this.embeddingFieldName) {
+          throw new Error(`embeddingPath "${embeddingPath}" must match the indexed path "${this.embeddingFieldName}"`);
+        }
+        const updateDoc: Partial<MongoDBDocument> = {};
+        const effectiveEmbeddingPath = embeddingPath || this.embeddingFieldName;
+
+        MongoDBVector.setNestedField(updateDoc, effectiveEmbeddingPath, vector);
+        MongoDBVector.setNestedField(updateDoc, this.metadataFieldName, normalizedMeta);
+
         if (doc !== undefined) {
           updateDoc[this.documentFieldName] = doc;
         }
@@ -302,6 +351,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     filter,
     includeVector = false,
     documentFilter,
+    embeddingPath,
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
     try {
       const collection = await this.getCollection(indexName, true);
@@ -324,10 +374,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         combinedFilter = documentMongoFilter;
       }
 
+      const vectorPath = embeddingPath || this.embeddingFieldName;
+      if (embeddingPath && embeddingPath !== this.embeddingFieldName) {
+        throw new Error(`embeddingPath "${embeddingPath}" must match the indexed path "${this.embeddingFieldName}"`);
+      }
       const vectorSearch: Document = {
         index: indexNameInternal,
         queryVector: queryVector,
-        path: this.embeddingFieldName,
+        path: vectorPath,
         numCandidates: 100,
         limit: topK,
       };
@@ -369,7 +423,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             score: 1,
             metadata: `$${this.metadataFieldName}`,
             document: `$${this.documentFieldName}`,
-            ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
+            ...(includeVector && { vector: `$${vectorPath}` }),
           },
         },
       ];
@@ -380,7 +434,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         id: result._id,
         score: result.score,
         metadata: result.metadata,
-        vector: includeVector ? result.vector : undefined,
+        vector: includeVector ? (result.vector as number[]) : undefined,
         document: result.document,
       }));
     } catch (error) {
@@ -487,8 +541,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(params: UpdateVectorParams<MongoDBVectorFilter>): Promise<void> {
-    const { indexName, update } = params;
+  async updateVector(params: MongoDBUpdateVectorParams): Promise<void> {
+    const { indexName, update,embeddingPath } = params;
 
     // Validate that both id and filter are not provided at the same time
     if ('id' in params && params.id && 'filter' in params && params.filter) {
@@ -523,7 +577,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (update.vector) {
         const stats = await this.describeIndex({ indexName });
         await this.validateVectorDimensions([update.vector], stats.dimension);
-        updateDoc[this.embeddingFieldName] = update.vector;
+        if (embeddingPath && embeddingPath !== this.embeddingFieldName) {
+          throw new Error(`embeddingPath "${embeddingPath}" must match the indexed path "${this.embeddingFieldName}"`);
+        }
+        const effectivePath = embeddingPath || this.embeddingFieldName;
+        MongoDBVector.setNestedField(updateDoc, effectivePath, update.vector);
       }
 
       if (update.metadata) {
@@ -537,7 +595,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           {} as Record<string, any>,
         );
 
-        updateDoc[this.metadataFieldName] = normalizedMeta;
+        MongoDBVector.setNestedField(updateDoc, this.metadataFieldName, normalizedMeta);
       }
 
       // Type narrowing: check if updating by id or by filter
