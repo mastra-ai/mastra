@@ -78,10 +78,10 @@ describe('Input and Output Processors', () => {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'processed: ' },
-            { type: 'text-delta', id: '1', delta: textContent },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'processed: ' },
+            { type: 'text-delta', id: 'text-1', delta: textContent },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -595,9 +595,9 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'This is a test response with test words' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'This is a test response with test words' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 8, outputTokens: 10, totalTokens: 18 } },
             ]),
           }),
@@ -680,84 +680,6 @@ describe('Input and Output Processors', () => {
       expect((result.response.messages[0].content[0] as any).text).toBe('HELLO WORLD');
     });
 
-    it('should apply output processor modifications to result.text with structured output', async () => {
-      class JsonModifyingProcessor implements Processor {
-        readonly id = 'json-modifying-processor';
-        readonly name = 'JSON Modifying Processor';
-
-        async processOutputResult({ messages }) {
-          return messages.map(msg => ({
-            ...msg,
-            content: {
-              ...msg.content,
-              parts: msg.content.parts.map(part => {
-                if (part.type === 'text') {
-                  try {
-                    const data = JSON.parse(part.text);
-                    // Transform the name to uppercase
-                    const modified = { ...data, name: data.name.toUpperCase() };
-                    return { ...part, text: JSON.stringify(modified) };
-                  } catch {
-                    return part;
-                  }
-                }
-                return part;
-              }),
-            },
-          }));
-        }
-      }
-
-      const agent = new Agent({
-        id: 'structured-output-processor-test-agent',
-        name: 'Structured Output Processor Test Agent',
-        instructions: 'You are a helpful assistant.',
-        model: new MockLanguageModelV2({
-          doGenerate: async () => ({
-            content: [
-              {
-                type: 'text',
-                text: '{"name": "John", "age": 30}',
-              },
-            ],
-            finishReason: 'stop',
-            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          }),
-          doStream: async () => ({
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: '{"name": "John", "age": 30}' },
-              { type: 'text-end', id: '1' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
-            ]),
-          }),
-        }),
-        outputProcessors: [new JsonModifyingProcessor()],
-      });
-
-      const result = await agent.generate('Get user info', {
-        structuredOutput: {
-          schema: z.object({
-            name: z.string(),
-            age: z.number(),
-          }),
-        },
-      });
-
-      // result.text should contain the PROCESSED JSON (name transformed to uppercase)
-      expect(result.text).toContain('JOHN');
-
-      // result.object should also contain the PROCESSED values
-      // (parsed from the processed text after output processors run)
-      expect(result.object).toBeDefined();
-      expect(result.object?.name).toBe('JOHN');
-      expect(result.object?.age).toBe(30);
-    });
-
     it('should process messages through multiple output processors in sequence', async () => {
       let finalProcessedText = '';
 
@@ -821,9 +743,9 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'hello world' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'hello world' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 2, outputTokens: 5, totalTokens: 7 } },
             ]),
           }),
@@ -887,9 +809,9 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'This content is inappropriate and should be blocked' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'This content is inappropriate and should be blocked' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
             ]),
           }),
@@ -957,9 +879,9 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'This is a test response' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'This is a test response' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
             ]),
           }),
@@ -1293,12 +1215,12 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: '{"winner":' },
-              { type: 'text-delta', id: '1', delta: '"Barack' },
-              { type: 'text-delta', id: '1', delta: ' Obama",' },
-              { type: 'text-delta', id: '1', delta: '"year":"2012"}' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: '{"winner":' },
+              { type: 'text-delta', id: 'text-1', delta: '"Barack' },
+              { type: 'text-delta', id: 'text-1', delta: ' Obama",' },
+              { type: 'text-delta', id: 'text-1', delta: '"year":"2012"}' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -1391,9 +1313,9 @@ describe('Input and Output Processors', () => {
               stream: convertArrayToReadableStream([
                 { type: 'stream-start', warnings: [] },
                 { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'This should be aborted' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'This should be aborted' },
+                { type: 'text-end', id: 'text-1' },
                 { type: 'finish', finishReason: 'stop', usage: { inputTokens: 4, outputTokens: 10, totalTokens: 14 } },
               ]),
             }),

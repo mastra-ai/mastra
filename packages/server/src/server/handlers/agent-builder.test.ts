@@ -608,7 +608,7 @@ describe('Agent Builder Handlers', () => {
       const result = await LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE.handler({
         ...createTestRuntimeContext({ mastra: mockMastra }),
         actionId: 'merge-template',
-        offset: 0,
+        page: 0,
       });
 
       expect(result).toEqual({
@@ -634,7 +634,7 @@ describe('Agent Builder Handlers', () => {
       const result = await LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE.handler({
         ...createTestRuntimeContext({ mastra: mockMastra }),
         actionId: 'merge-template',
-        offset: 0,
+        page: 0,
       });
 
       expect(result.total).toEqual(1);

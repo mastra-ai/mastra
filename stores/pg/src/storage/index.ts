@@ -42,7 +42,7 @@ export class PostgresStore extends MastraStorage {
     // Validation: connectionString or host/database/user/password must not be empty
     try {
       validateConfig('PostgresStore', config);
-      super({ id: config.id, name: 'PostgresStore' });
+      super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
       this.schema = config.schemaName || 'public';
       if (isConnectionStringConfig(config)) {
         this.#config = {
