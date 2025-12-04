@@ -450,6 +450,98 @@ for await (const part of uiMessageStream) {
 }
 ```
 
+## Using Mastra Features with AI SDK
+
+The `withMastra()` function wraps an AI SDK model with Mastra features, allowing you to use [processors](/docs/v1/agents/processors) and [memory](/docs/v1/memory/memory-processors) with AI SDK's `generateText`, `streamText`, `generateObject`, and `streamObject` functions.
+
+### With Processors
+
+```typescript title="src/example.ts" copy
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import type { Processor } from '@mastra/core/processors';
+
+const loggingProcessor: Processor<'logger'> = {
+  id: 'logger',
+  async processInput({ messages }) {
+    console.log('Input:', messages.length, 'messages');
+    return messages;
+  },
+  async processOutputResult({ messages }) {
+    console.log('Output:', messages.length, 'messages');
+    return messages;
+  },
+};
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [loggingProcessor],
+  outputProcessors: [loggingProcessor],
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What is 2 + 2?',
+});
+```
+
+### With Memory
+
+```typescript title="src/memory-example.ts" copy
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import { LibSQLStore } from '@mastra/libsql';
+
+const storage = new LibSQLStore({
+  id: 'my-app',
+  url: 'file:./data.db',
+});
+await storage.init();
+
+const model = withMastra(openai('gpt-4o'), {
+  memory: {
+    storage,
+    threadId: 'user-thread-123',
+    resourceId: 'user-123',
+    lastMessages: 10,
+  },
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What did we talk about earlier?',
+});
+```
+
+### With Both
+
+```typescript title="src/combined-example.ts" copy
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import { LibSQLStore } from '@mastra/libsql';
+
+const storage = new LibSQLStore({ id: 'my-app', url: 'file:./data.db' });
+await storage.init();
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [myGuardProcessor],
+  outputProcessors: [myLoggingProcessor],
+  memory: {
+    storage,
+    threadId: 'thread-123',
+    resourceId: 'user-123',
+    lastMessages: 10,
+  },
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'Hello!',
+});
+```
+
 ## UI Hooks
 
 Mastra supports AI SDK UI hooks for connecting frontend components directly to agents using HTTP streams.

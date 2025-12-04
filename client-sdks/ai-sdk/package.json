@@ -39,6 +39,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/libsql": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -69,6 +70,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
+    "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "ai": "^5.0.60"
   },
   "engines": {
