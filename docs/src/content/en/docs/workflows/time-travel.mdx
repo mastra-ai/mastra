@@ -27,7 +27,7 @@ Use `run.timeTravel()` to re-execute a workflow from a specific step:
 import { mastra } from "./mastra";
 
 const workflow = mastra.getWorkflow("myWorkflow");
-const run = await workflow.createRun();
+const run = await workflow.createRunAsync();
 
 const result = await run.timeTravel({
   step: "step2",
@@ -116,7 +116,7 @@ Time travel is particularly useful for debugging and recovering from failed work
 
 ```typescript showLineNumbers copy
 const workflow = mastra.getWorkflow("myWorkflow");
-const run = await workflow.createRun();
+const run = await workflow.createRunAsync();
 
 // Initial run fails at step2
 const failedResult = await run.start({
@@ -137,7 +137,7 @@ if (failedResult.status === "failed") {
 You can time travel to resume a suspended workflow from an earlier step:
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRun();
+const run = await workflow.createRunAsync();
 
 // Start workflow - suspends at promptAgent step
 const initialResult = await run.start({
@@ -160,7 +160,7 @@ if (initialResult.status === "suspended") {
 Use `timeTravelStream()` to receive streaming events during time travel execution:
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRun();
+const run = await workflow.createRunAsync();
 
 const output = run.timeTravelStream({
   step: "step2",

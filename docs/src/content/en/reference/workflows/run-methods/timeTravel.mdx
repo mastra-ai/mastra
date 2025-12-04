@@ -10,7 +10,7 @@ The `.timeTravel()` method re-executes a workflow starting from any specific ste
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRun();
+const run = await workflow.createRunAsync();
 
 const result = await run.timeTravel({
   step: "step2",
