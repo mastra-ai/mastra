@@ -19,7 +19,7 @@ This template demonstrates how to build an AI coding assistant that can work wit
 ## Prerequisites
 
 - Node.js 20 or higher
-- API key for your chosen sandbox provider (E2B or Daytona)
+- API key for your chosen sandbox provider ([Daytona](https://www.daytona.io/) or [E2B](https://e2b.dev))
 - API key for your chosen model provider
 
 ## Setup
@@ -42,11 +42,12 @@ This template demonstrates how to build an AI coding assistant that can work wit
    **Choose your sandbox provider** by setting the corresponding API key:
 
    ```env
-   # Option 1: Use E2B (set E2B_API_KEY)
-   E2B_API_KEY="your-e2b-api-key-here"
+   # Option 1: Use Daytona (set DAYTONA_API_KEY)
+   DAYTONA_API_KEY="your-daytona-api-key-here"
 
-   # Option 2: Use Daytona (set DAYTONA_API_KEY)
-   # DAYTONA_API_KEY="your-daytona-api-key-here"
+   # Option 2: Use E2B (set E2B_API_KEY)
+   # E2B_API_KEY="your-e2b-api-key-here"
+
 
    # Model provider (required)
    OPENAI_API_KEY="your-openai-api-key-here"
@@ -93,7 +94,7 @@ Complete toolkit for sandbox interaction with support for multiple providers:
 
 **Provider Selection:**
 
-- Automatically uses **E2B** or **Daytona** based on which API key you set
+- Automatically uses **Daytona** or **E2B** based on which API key you set
 
 **Sandbox Management:**
 
@@ -142,11 +143,12 @@ The agent includes a configured memory system:
 **Sandbox Provider (choose one):**
 
 ```bash
-# Option 1: E2B
+# Option 1: Daytona
+DAYTONA_API_KEY=your_daytona_api_key_here
+
+# Option 2: E2B
 E2B_API_KEY=your_e2b_api_key_here
 
-# Option 2: Daytona
-DAYTONA_API_KEY=your_daytona_api_key_here
 ```
 
 **Model Provider (required):**
@@ -179,7 +181,7 @@ export const codingAgent = new Agent({
 ### "Please set either DAYTONA_API_KEY or E2B_API_KEY environment variable"
 
 - You need to configure a sandbox provider by setting one of the API keys
-- Add either `E2B_API_KEY` or `DAYTONA_API_KEY` to your `.env` file
+- Add either `DAYTONA_API_KEY` or `E2B_API_KEY` to your `.env` file
 - Only set ONE provider API key (not both)
 - Restart the development server after adding the key
 
