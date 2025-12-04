@@ -334,6 +334,7 @@ export type ProviderModelsMap = {
     'deepseek-r1-671b',
     'dolphin-2.9.2-qwen2-72b',
     'gemini-3-pro-preview',
+    'grok-41-fast',
     'kimi-k2-thinking',
     'llama-3.1-405b',
     'llama-3.2-3b',

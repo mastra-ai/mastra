@@ -23,6 +23,7 @@ function Agent() {
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
+  const isNewThread = searchParams.get('new') === 'true';
   const {
     data: threads,
     isLoading: isThreadsLoading,
@@ -30,10 +31,10 @@ function Agent() {
   } = useThreads({ resourceId: agentId!, agentId: agentId!, isMemoryEnabled: !!memory?.result });
 
   useEffect(() => {
-    if (memory?.result && (!threadId || threadId === 'new')) {
+    if (memory?.result && !threadId) {
       // use @lukeed/uuid because we don't need a cryptographically secure uuid (this is a debugging local uuid)
       // using crypto.randomUUID() on a domain without https (ex a local domain like local.lan:4111) will cause a TypeError
-      navigate(`/agents/${agentId}/chat/${uuid()}`);
+      navigate(`/agents/${agentId}/chat/${uuid()}?new=true`);
     }
   }, [memory?.result, threadId]);
 
@@ -77,14 +78,16 @@ function Agent() {
 
                 <div className="grid overflow-y-auto relative bg-surface1 py-4">
                   <AgentChat
+                    key={threadId}
                     agentId={agentId!}
                     agentName={agent?.name}
                     modelVersion={agent?.modelVersion}
-                    threadId={threadId!}
+                    threadId={threadId}
                     memory={memory?.result}
                     refreshThreadList={refreshThreads}
                     modelList={agent?.modelList}
                     messageId={messageId}
+                    isNewThread={isNewThread}
                   />
                 </div>
 

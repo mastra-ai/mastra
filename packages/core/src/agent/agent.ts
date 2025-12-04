@@ -1689,7 +1689,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
         const toolObj = createTool({
           id: `agent-${agentName}`,
-          description: `Agent: ${agentName}`,
+          description: agent.getDescription() || `Agent: ${agentName}`,
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
@@ -2478,6 +2478,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       input: options.messages,
       attributes: {
         agentId: this.id,
+        agentName: this.name,
+        conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
       },
       metadata: {
