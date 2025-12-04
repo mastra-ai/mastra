@@ -1,6 +1,11 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  WorkflowsStorage,
+} from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsClickhouse } from '../operations';
@@ -100,7 +105,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -134,7 +139,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -258,7 +263,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: workflowName ?? '', resourceId: resourceId ?? '' },
@@ -317,7 +322,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: runId ?? '', workflowName: workflowName ?? '' },
