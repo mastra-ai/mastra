@@ -508,8 +508,21 @@ export class Workflow<
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
    */
-  then<TStepId extends string, TStepState extends z.ZodObject<any>, TSchemaOut extends z.ZodType<any>>(
-    step: Step<TStepId, SubsetOf<TStepState, TState>, TPrevSchema, TSchemaOut, any, any, TEngineType>,
+  then<
+    TStepId extends string,
+    TStepState extends z.ZodObject<any>,
+    TStepInputSchema extends z.ZodType<any>,
+    TSchemaOut extends z.ZodType<any>,
+  >(
+    step: Step<
+      TStepId,
+      SubsetOf<TStepState, TState>,
+      z.TypeOf<TPrevSchema> extends z.TypeOf<TStepInputSchema> ? TStepInputSchema : never,
+      TSchemaOut,
+      any,
+      any,
+      TEngineType
+    >,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
     this.serializedStepFlow.push({
@@ -747,11 +760,11 @@ export class Workflow<
         infer S extends z.ZodObject<any>,
         TPrevSchema,
         infer O,
-        infer R,
-        infer E,
+        any, // Don't infer TResumeSchema - causes issues with heterogeneous tuples
+        any, // Don't infer TSuspendSchema - causes issues with heterogeneous tuples
         TEngineType
       >
-        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, R, E, TEngineType>
+        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, any, any, TEngineType>
         : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
   ) {
@@ -840,7 +853,7 @@ export class Workflow<
       TOutput,
       z.ZodObject<
         {
-          [K in keyof StepsRecord<ExtractedSteps[]>]: StepsRecord<ExtractedSteps[]>[K]['outputSchema'];
+          [K in keyof StepsRecord<ExtractedSteps[]>]: z.ZodOptional<StepsRecord<ExtractedSteps[]>[K]['outputSchema']>;
         },
         any,
         z.ZodTypeAny
@@ -1223,6 +1236,7 @@ export class Workflow<
         step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
         requestContext,
         tracingContext,
+        writableStream: writer,
         outputOptions: { includeState: true, includeResumeLabels: true },
         label: resume.label,
       });

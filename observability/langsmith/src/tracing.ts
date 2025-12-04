@@ -19,6 +19,12 @@ import { normalizeUsageMetrics } from './metrics';
 export interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   /** LangSmith client instance */
   client?: Client;
+  /**
+   * The name of the LangSmith project to send traces to.
+   * Overrides the LANGCHAIN_PROJECT environment variable.
+   * If neither is set, traces are sent to the "default" project.
+   */
+  projectName?: string;
 }
 
 type SpanData = {
@@ -284,6 +290,11 @@ export class LangSmithExporter extends BaseExporter {
         ...span.metadata,
       },
     };
+
+    // Add project name if configured
+    if (this.config.projectName) {
+      payload.project_name = this.config.projectName;
+    }
 
     // Core span data
     if (span.input !== undefined) {

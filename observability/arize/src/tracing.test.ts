@@ -1,4 +1,5 @@
 import type { Mutable } from '@arizeai/openinference-genai/types';
+import { SemanticConventions } from '@arizeai/openinference-semantic-conventions';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -192,5 +193,242 @@ describe('ArizeExporter', () => {
         "output.value": "{"text":"The weather in Tokyo is sunny."}",
       }
     `);
+  });
+
+  it('maps threadId and userId attributes to OpenInference session/user identifiers', async () => {
+    exporter = new ArizeExporter({
+      endpoint: 'http://localhost:4318/v1/traces',
+    });
+
+    const testSpan: Mutable<AnyExportedSpan> = {
+      id: 'span-2',
+      traceId: 'trace-2',
+      type: SpanType.MODEL_GENERATION,
+      name: 'Session/User Mapping',
+      startTime: new Date(),
+      endTime: new Date(),
+      input: { messages: [] },
+      output: { text: 'ok' },
+      attributes: {
+        model: 'gpt-4',
+        provider: 'openai',
+      },
+      metadata: {
+        threadId: 'thread-123',
+        userId: 'user-456',
+      },
+    } as unknown as AnyExportedSpan;
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: testSpan,
+    });
+
+    const exportedAttributes = exportedSpans[0].attributes;
+
+    expect(exportedAttributes[SemanticConventions.SESSION_ID]).toBe('thread-123');
+    expect(exportedAttributes[SemanticConventions.USER_ID]).toBe('user-456');
+    expect(exportedAttributes.threadId).toBeUndefined();
+    expect(exportedAttributes.userId).toBeUndefined();
+  });
+
+  it('includes custom attributes in OpenInference metadata payload', async () => {
+    exporter = new ArizeExporter({
+      endpoint: 'http://localhost:4318/v1/traces',
+    });
+
+    const testSpan: Mutable<AnyExportedSpan> = {
+      id: 'span-3',
+      traceId: 'trace-3',
+      type: SpanType.MODEL_GENERATION,
+      name: 'Custom Metadata',
+      startTime: new Date(),
+      endTime: new Date(),
+      input: { text: 'hi' },
+      output: { text: 'hello' },
+      attributes: {
+        model: 'gpt-4',
+        provider: 'openai',
+      },
+      metadata: {
+        companyId: 'acme-co',
+        featureFlag: 'beta',
+        correlation_id: 'corr-123',
+        // reserved fields should not be present in metadata blob
+        input: 'raw-input',
+        output: 'raw-output',
+        sessionId: 'should-not-appear',
+      },
+    } as unknown as AnyExportedSpan;
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: testSpan,
+    });
+
+    const exportedAttributes = exportedSpans[0].attributes;
+    const metadata = exportedAttributes[SemanticConventions.METADATA];
+    expect(typeof metadata).toBe('string');
+    const parsed = JSON.parse(metadata as string);
+    expect(parsed).toMatchObject({
+      companyId: 'acme-co',
+      featureFlag: 'beta',
+      correlation_id: 'corr-123',
+    });
+    expect(parsed.input).toBeUndefined();
+    expect(parsed.output).toBeUndefined();
+    expect(parsed.sessionId).toBeUndefined();
+  });
+
+  describe('Tags Support', () => {
+    it('includes tags in the exported span attributes for root spans with tags', async () => {
+      // This test verifies that tags are included in the exported data for Arize
+      // using the native OpenInference tag.tags convention
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+        projectName: 'test-project',
+      });
+
+      const rootSpanWithTags: Mutable<AnyExportedSpan> = {
+        id: 'span-with-tags',
+        traceId: 'trace-with-tags',
+        type: SpanType.AGENT_RUN,
+        name: 'Tagged Agent Run',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        input: { prompt: 'Hello' },
+        output: { response: 'Hi there!' },
+        attributes: {
+          agentId: 'agent-123',
+        },
+        tags: ['production', 'experiment-v2', 'user-request'],
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: rootSpanWithTags,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const exportedAttributes = exportedSpans[0].attributes;
+
+      // Tags should be present using OpenInference native tag.tags convention
+      // Note: ArizeExporter receives JSON string from SpanConverter, passes it through to tag.tags
+      expect(exportedAttributes[SemanticConventions.TAG_TAGS]).toBeDefined();
+      expect(exportedAttributes[SemanticConventions.TAG_TAGS]).toBe(
+        JSON.stringify(['production', 'experiment-v2', 'user-request']),
+      );
+    });
+
+    it('does not include tags for child spans', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+        projectName: 'test-project',
+      });
+
+      const childSpanWithTags: Mutable<AnyExportedSpan> = {
+        id: 'child-span-with-tags',
+        traceId: 'trace-parent',
+        parentSpanId: 'parent-span-id',
+        type: SpanType.TOOL_CALL,
+        name: 'Child Tool',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { args: {} },
+        output: { result: 42 },
+        attributes: {
+          toolId: 'calculator',
+        },
+        // Tags should be ignored for child spans
+        tags: ['should-not-appear'],
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: childSpanWithTags,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const exportedAttributes = exportedSpans[0].attributes;
+
+      // Tags should NOT be present on child spans (neither mastra.tags nor tag.tags)
+      expect(exportedAttributes['mastra.tags']).toBeUndefined();
+      expect(exportedAttributes[SemanticConventions.TAG_TAGS]).toBeUndefined();
+    });
+
+    it('does not include tags when tags array is empty', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+        projectName: 'test-project',
+      });
+
+      const rootSpanEmptyTags: Mutable<AnyExportedSpan> = {
+        id: 'span-empty-tags',
+        traceId: 'trace-empty-tags',
+        type: SpanType.AGENT_RUN,
+        name: 'Agent No Tags',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        input: { prompt: 'Hello' },
+        output: { response: 'Hi!' },
+        attributes: {
+          agentId: 'agent-123',
+        },
+        tags: [],
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: rootSpanEmptyTags,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const exportedAttributes = exportedSpans[0].attributes;
+
+      // Tags should NOT be present when array is empty
+      expect(exportedAttributes['mastra.tags']).toBeUndefined();
+      expect(exportedAttributes[SemanticConventions.TAG_TAGS]).toBeUndefined();
+    });
+
+    it('includes tags with workflow spans', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+        projectName: 'test-project',
+      });
+
+      const workflowSpanWithTags: Mutable<AnyExportedSpan> = {
+        id: 'workflow-with-tags',
+        traceId: 'trace-workflow',
+        type: SpanType.WORKFLOW_RUN,
+        name: 'Data Processing Workflow',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        input: { data: [] },
+        output: { processed: true },
+        attributes: {
+          workflowId: 'wf-123',
+        },
+        tags: ['batch-processing', 'priority-high'],
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: workflowSpanWithTags,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const exportedAttributes = exportedSpans[0].attributes;
+
+      // Tags should be present using OpenInference native tag.tags convention
+      // Note: ArizeExporter receives JSON string from SpanConverter, passes it through to tag.tags
+      expect(exportedAttributes[SemanticConventions.TAG_TAGS]).toBeDefined();
+      expect(exportedAttributes[SemanticConventions.TAG_TAGS]).toBe(
+        JSON.stringify(['batch-processing', 'priority-high']),
+      );
+    });
   });
 });

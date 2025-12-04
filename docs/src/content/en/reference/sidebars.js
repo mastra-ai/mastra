@@ -270,23 +270,13 @@ const sidebars = {
             },
             {
               type: "doc",
-              id: "streaming/workflows/streamVNext",
-              label: ".streamVNext()",
-            },
-            {
-              type: "doc",
-              id: "streaming/workflows/resumeStreamVNext",
-              label: ".resumeStreamVNext()",
+              id: "streaming/workflows/resumeStream",
+              label: ".resumeStream()",
             },
             {
               type: "doc",
               id: "streaming/workflows/observeStream",
               label: ".observeStream()",
-            },
-            {
-              type: "doc",
-              id: "streaming/workflows/observeStreamVNext",
-              label: ".observeStreamVNext()",
             },
           ],
         },
@@ -407,6 +397,16 @@ const sidebars = {
           id: "vectors/couchbase",
           label: "Couchbase Vector Store",
         },
+        {
+          type: "doc",
+          id: "vectors/duckdb",
+          label: "DuckDB Vector Store",
+        },
+        {
+          type: "doc",
+          id: "vectors/elasticsearch",
+          label: "ElasticSearch Vector Store",
+        },
         { type: "doc", id: "vectors/lance", label: "Lance Vector Store" },
         { type: "doc", id: "vectors/libsql", label: "LibSQL Vector Store" },
         { type: "doc", id: "vectors/mongodb", label: "MongoDB Vector Store" },
@@ -424,6 +424,22 @@ const sidebars = {
           label: "Turbopuffer Vector Store",
         },
         { type: "doc", id: "vectors/upstash", label: "Upstash Vector Store" },
+      ],
+    },
+    {
+      type: "category",
+      label: "Server",
+      collapsed: true,
+      items: [
+        {
+          type: "doc",
+          id: "server/mastra-server",
+          label: "MastraServer",
+        },
+        { type: "doc", id: "server/hono-adapter", label: "Hono Adapter" },
+        { type: "doc", id: "server/express-adapter", label: "Express Adapter" },
+        { type: "doc", id: "server/create-route", label: "createRoute()" },
+        { type: "doc", id: "server/routes", label: "Server Routes" },
       ],
     },
     {
@@ -549,6 +565,11 @@ const sidebars = {
                   type: "doc",
                   id: "observability/tracing/exporters/otel",
                   label: "OtelExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/posthog",
+                  label: "PostHogExporter",
                 },
               ],
             },

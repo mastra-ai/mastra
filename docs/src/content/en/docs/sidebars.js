@@ -41,6 +41,11 @@ const sidebars = {
           id: "getting-started/mcp-docs-server",
           label: "MCP Docs Server",
         },
+        {
+          type: "doc",
+          id: "getting-started/manual-install",
+          label: "Manual Install",
+        },
       ],
     },
     {
@@ -59,13 +64,13 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "agents/agent-approval",
-          label: "Agent Approval",
+          id: "agents/agent-memory",
+          label: "Memory",
         },
         {
           type: "doc",
-          id: "agents/agent-memory",
-          label: "Memory",
+          id: "agents/structured-output",
+          label: "Structured Output",
         },
         {
           type: "doc",
@@ -74,8 +79,18 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/processors",
+          label: "Processors",
+        },
+        {
+          type: "doc",
           id: "agents/guardrails",
           label: "Guardrails",
+        },
+        {
+          type: "doc",
+          id: "agents/agent-approval",
+          label: "Agent Approval",
         },
         {
           type: "doc",
@@ -122,6 +137,11 @@ const sidebars = {
           type: "doc",
           id: "workflows/snapshots",
           label: "Snapshots",
+        },
+        {
+          type: "doc",
+          id: "workflows/time-travel",
+          label: "Time Travel",
         },
         {
           type: "doc",
@@ -274,7 +294,17 @@ const sidebars = {
         {
           type: "doc",
           id: "server-db/mastra-server",
-          label: "Mastra Server",
+          label: "Server Configuration",
+        },
+        {
+          type: "doc",
+          id: "server-db/server-adapters",
+          label: "Server Adapters",
+        },
+        {
+          type: "doc",
+          id: "server-db/custom-adapters",
+          label: "Custom Adapters",
         },
         {
           type: "doc",
@@ -475,6 +505,11 @@ const sidebars = {
                   type: "doc",
                   id: "observability/tracing/exporters/otel",
                   label: "OpenTelemetry",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/posthog",
+                  label: "PostHog",
                 },
               ],
             },

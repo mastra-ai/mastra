@@ -3,7 +3,6 @@ import type { MastraScorers } from '../evals';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
@@ -24,6 +23,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   state: TState;
   setState(state: TState): void;
   resumeData?: TResumeSchema;
+  suspendData?: TSuspendSchema;
   retryCount: number;
   tracingContext: TracingContext;
   getInitData<T extends z.ZodType<any>>(): z.infer<T>;
@@ -46,7 +46,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   [STREAM_FORMAT_SYMBOL]: 'legacy' | 'vnext' | undefined;
   engine: EngineType;
   abortSignal: AbortSignal;
-  writer: ToolStream<ChunkType>;
+  writer: ToolStream;
   validateSchemas?: boolean;
 };
 

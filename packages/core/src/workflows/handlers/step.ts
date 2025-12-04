@@ -109,6 +109,16 @@ export async function executeStep(
     resumeDataToUse = resume?.resumePayload;
   }
 
+  // Extract suspend data if this step was previously suspended
+  let suspendDataToUse =
+    stepResults[step.id]?.status === 'suspended' ? stepResults[step.id]?.suspendPayload : undefined;
+
+  // Filter out internal workflow metadata before exposing to step code
+  if (suspendDataToUse && '__workflow_meta' in suspendDataToUse) {
+    const { __workflow_meta, ...userSuspendData } = suspendDataToUse;
+    suspendDataToUse = userSuspendData;
+  }
+
   const startTime = resumeDataToUse ? undefined : Date.now();
   const resumeTime = resumeDataToUse ? Date.now() : undefined;
 
@@ -251,6 +261,7 @@ export async function executeStep(
         },
         retryCount,
         resumeData: resumeDataToUse,
+        suspendData: suspendDataToUse,
         tracingContext: { currentSpan: stepSpan },
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),

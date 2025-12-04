@@ -13,7 +13,7 @@ import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -2072,9 +2072,9 @@ describe('Workflow', () => {
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Paris' },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Paris' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'finish',
                   id: '2',
@@ -2097,9 +2097,9 @@ describe('Workflow', () => {
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'London' },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'London' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'finish',
                   id: '2',
@@ -2679,8 +2679,8 @@ describe('Workflow', () => {
         return {
           stream: simulateReadableStream({
             chunks: [
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Response' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Response' },
               {
                 type: 'finish',
                 id: '2',
@@ -3933,6 +3933,128 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+    });
+
+    it('should update state after each concurrent batch in foreach step', async () => {
+      const subWorkflow1 = createWorkflow({
+        id: 's1',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .then(
+          createStep({
+            id: 's1s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              expect(ctx.state.output).toBe(2);
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const subWorkflow2 = createWorkflow({
+        id: 's2',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .then(
+          createStep({
+            id: 's2s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              ctx.setState({ ...ctx.state, output: 2 });
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const routing = createWorkflow({
+        id: 'routing',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .branch([
+          [async s => s.inputData === 1, subWorkflow1],
+          [async s => s.inputData === 2, subWorkflow2],
+        ])
+        .map(async ({ inputData }) => {
+          return (inputData.s1 ?? 0) + (inputData.s2 ?? 0);
+        })
+        .commit();
+
+      const workflows = createWorkflow({
+        id: 'root',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .foreach(routing)
+        .commit();
+
+      const run = await workflows.createRun();
+      const result = await run.start({
+        inputData: [2, 1],
+        initialState: { output: 0 },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ output: 2 });
+    });
+
+    it('should bail foreach execution when called in a concurrent batch', async () => {
+      const bailResult = [15];
+
+      const workflows = createWorkflow({
+        id: 'root',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .foreach(
+          createStep({
+            id: 's1s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              console.log('running step 111');
+              console.log('state===', ctx.state);
+              if (ctx.state.output > 1) {
+                return ctx.bail(bailResult);
+              }
+              ctx.setState({ ...ctx.state, output: ctx.inputData });
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const run = await workflows.createRun();
+      const result = await run.start({
+        inputData: [1, 2, 3, 4],
+        initialState: { output: 0 },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state?.output).toBe(2);
+      if (result.status === 'success') {
+        expect(result.result).toEqual(bailResult);
+      }
     });
 
     it('should have runId in the step execute function - bug #4260', async () => {
@@ -8111,6 +8233,265 @@ describe('Workflow', () => {
 
       expect(result.steps['last-step']).toBeUndefined();
     });
+
+    it('should allow a steps input schema to be a subset of the previous step output schema', async () => {
+      const prevStep = createStep({
+        id: 'prev-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ a: z.string(), b: z.string().optional() }),
+        execute: async () => {
+          return { a: 'a', b: 'b' };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      const sharedStepAttrs = {
+        outputSchema: z.boolean(),
+        execute: async () => true,
+      } satisfies Partial<Parameters<typeof createStep>[0]>;
+
+      const equalStep = createStep({
+        id: 'equal-step',
+        inputSchema: prevStep.outputSchema,
+        ...sharedStepAttrs,
+      });
+      // this is ok
+      workflow.then(prevStep).then(equalStep).commit();
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result.status).toBe('success');
+      expect(result.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'equal-step': {
+          status: 'success',
+          payload: {
+            a: 'a',
+            b: 'b',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const missingRequiredKeyStep = createStep({
+        id: 'missing-required-key-step',
+        inputSchema: prevStep.outputSchema.omit({ a: true }),
+        ...sharedStepAttrs,
+      });
+      const missingRequiredKeyWorkflow = createWorkflow({
+        id: 'missing-required-key-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      missingRequiredKeyWorkflow.then(prevStep).then(missingRequiredKeyStep).commit();
+      const run2 = await missingRequiredKeyWorkflow.createRun();
+      const result2 = await run2.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result2.status).toBe('success');
+      expect(result2.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'missing-required-key-step': {
+          status: 'success',
+          payload: {
+            b: 'b',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const missingOptionalKeyStep = createStep({
+        id: 'missing-optional-key-step',
+        inputSchema: prevStep.outputSchema.omit({ b: true }),
+        ...sharedStepAttrs,
+      });
+
+      const missingOptionalKeyWorkflow = createWorkflow({
+        id: 'missing-optional-key-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      missingOptionalKeyWorkflow.then(prevStep).then(missingOptionalKeyStep).commit();
+      const run3 = await missingOptionalKeyWorkflow.createRun();
+      const result3 = await run3.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result3.status).toBe('success');
+      expect(result3.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'missing-optional-key-step': {
+          status: 'success',
+          payload: {
+            a: 'a',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const extraOptionalKeyStep = createStep({
+        id: 'extra-optional-key-step',
+        inputSchema: prevStep.outputSchema.extend({ c: z.string().optional() }),
+        ...sharedStepAttrs,
+      });
+
+      const extraOptionalKeyWorkflow = createWorkflow({
+        id: 'extra-optional-key-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      extraOptionalKeyWorkflow.then(prevStep).then(extraOptionalKeyStep).commit();
+      const run4 = await extraOptionalKeyWorkflow.createRun();
+      const result4 = await run4.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(result4.status).toBe('success');
+      expect(result4.steps).toEqual({
+        input: {
+          value: 'test',
+        },
+        'prev-step': {
+          status: 'success',
+          payload: {
+            value: 'test',
+          },
+          output: {
+            a: 'a',
+            b: 'b',
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'extra-optional-key-step': {
+          status: 'success',
+          payload: {
+            a: 'a',
+            b: 'b',
+          },
+          output: true,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const extraRequiredKeyStep = createStep({
+        id: 'extra-required-key-step',
+        inputSchema: prevStep.outputSchema.extend({ c: z.string() }),
+        ...sharedStepAttrs,
+      });
+
+      const errWorkflow = createWorkflow({
+        id: 'error-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      //@ts-expect-error -- extra-required-step should not be allowed
+      errWorkflow.then(prevStep).then(extraRequiredKeyStep).commit();
+
+      const errorRun = await errWorkflow.createRun();
+      const errorResult = await errorRun.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(errorResult.status).toBe('failed');
+      expect(errorResult.steps['extra-required-key-step'].status).toBe('failed');
+      expect((errorResult.steps['extra-required-key-step'] as StepFailure<any, any, any, any>).error).toBe(
+        'Error: Step input validation failed: \n- c: Required',
+      );
+
+      const distinctTypeStep = createStep({
+        id: 'distinct-type-step',
+        inputSchema: z.string(),
+        ...sharedStepAttrs,
+      });
+
+      const errWorkflow2 = createWorkflow({
+        id: 'error-workflow-2',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      //@ts-expect-error -- distinct-type-step should not be allowed
+      errWorkflow2.then(prevStep).then(distinctTypeStep).commit();
+
+      const errorRun2 = await errWorkflow2.createRun();
+      const errorResult2 = await errorRun2.start({
+        inputData: {
+          value: 'test',
+        },
+      });
+      expect(errorResult2.status).toBe('failed');
+      expect(errorResult2.steps['distinct-type-step'].status).toBe('failed');
+      expect((errorResult2.steps['distinct-type-step'] as StepFailure<any, any, any, any>).error).toBe(
+        'Error: Step input validation failed: \n- : Expected string, received object',
+      );
+    });
   });
 
   describe('Schema Validation Zod-v4', () => {
@@ -8205,7 +8586,6 @@ describe('Workflow', () => {
         await run.start({
           inputData: {
             required: 'test',
-            // @ts-expect-error
             nested: { value: 'not-a-number' },
           },
         });
@@ -9105,7 +9485,7 @@ describe('Workflow', () => {
 
       const randomTool = createTool({
         id: 'random-tool',
-        execute: toolAction,
+        execute: toolAction as any,
         description: 'random-tool',
         inputSchema: z.object({ name: z.string() }),
         outputSchema: z.object({ name: z.string() }),
@@ -10027,6 +10407,112 @@ describe('Workflow', () => {
       expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
         status: 'success',
       });
+    });
+
+    it('should handle writer.custom during resume operations', async () => {
+      let customEvents: WorkflowStreamEvent[] = [];
+
+      const stepWithWriter = createStep({
+        id: 'step-with-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+        suspendSchema: z.object({ suspendValue: z.number() }),
+        resumeSchema: z.object({ resumeValue: z.number() }),
+        execute: async ({ inputData, resumeData, writer, suspend }) => {
+          if (!resumeData?.resumeValue) {
+            // First run - emit custom event and suspend
+            await writer?.custom({
+              type: 'suspend-event',
+              data: { message: 'About to suspend', value: inputData.value },
+            });
+
+            await suspend({ suspendValue: inputData.value });
+            return { value: inputData.value, success: false };
+          } else {
+            // Resume - emit custom event to test that writer works on resume
+            await writer?.custom({
+              type: 'resume-event',
+              data: {
+                message: 'Successfully resumed',
+                originalValue: inputData.value,
+                resumeValue: resumeData.resumeValue,
+              },
+            });
+
+            return { value: resumeData.resumeValue, success: true };
+          }
+        },
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'test-resume-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+      });
+
+      testWorkflow.then(stepWithWriter).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-resume-writer': testWorkflow },
+      });
+
+      // Create run and start workflow
+      const run = await testWorkflow.createRun();
+
+      // Use streaming to capture custom events
+      let streamResult = run.stream({ inputData: { value: 42 } });
+
+      // Collect all events from the stream - custom events come through directly
+      for await (const event of streamResult.fullStream) {
+        //@ts-expect-error `suspend-event` is custom
+        if (event.type === 'suspend-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const firstResult = await streamResult.result;
+      expect(firstResult.status).toBe('suspended');
+
+      // Check that suspend event was emitted
+      expect(customEvents).toHaveLength(1);
+      expect(customEvents[0].type).toBe('suspend-event');
+      // @ts-expect-error data.message exists on this custom event
+      expect(customEvents[0].data.message).toBe('About to suspend');
+      // @ts-expect-error data.value exists on this custom event
+      expect(customEvents[0].data.value).toBe(42);
+
+      // Reset events for resume test
+      customEvents = [];
+
+      // Resume the workflow using streaming
+      streamResult = run.resumeStream({
+        resumeData: { resumeValue: 99 },
+      });
+
+      // Collect events from resume stream
+      for await (const event of streamResult.fullStream) {
+        // @ts-expect-error `resume-event` is custom
+        if (event.type === 'resume-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const resumeResult = await streamResult.result;
+      expect(resumeResult.status).toBe('success');
+      // @ts-expect-error output exists on success result
+      expect(resumeResult.result).toEqual({ value: 99, success: true });
+
+      // Check that resume event was emitted (this proves writer.custom works during resume)
+      expect(customEvents).toHaveLength(1);
+      expect(customEvents[0].type).toBe('resume-event');
+      // @ts-expect-error data.message exists on this custom event
+      expect(customEvents[0].data.message).toBe('Successfully resumed');
+      // @ts-expect-error data.originalValue exists on this custom event
+      expect(customEvents[0].data.originalValue).toBe(42);
+      // @ts-expect-error data.resumeValue exists on this custom event
+      expect(customEvents[0].data.resumeValue).toBe(99);
     });
 
     it('should handle basic suspend and resume in nested dountil workflow - bug #5650', async () => {
@@ -13833,8 +14319,7 @@ describe('Workflow', () => {
         id: 'suspendingStep',
         execute: async ({ suspend, resumeData }) => {
           if (!resumeData) {
-            await suspend({});
-            return undefined;
+            return suspend({});
           }
           return { resumed: true, data: resumeData };
         },
@@ -14471,7 +14956,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
         outputSchema: z.object({ success: z.boolean() }),
         execute: final,
       });
@@ -14729,7 +15214,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
         outputSchema: z.object({ finalValue: z.number() }),
         execute: final,
       });
@@ -14863,7 +15348,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({ finalValue: z.number() }),
           execute: final,
         });
@@ -14923,8 +15408,8 @@ describe('Workflow', () => {
             createStep({
               id: 'last-step',
               inputSchema: z.object({
-                'nested-workflow-a': wfA.outputSchema,
-                'nested-workflow-b': wfB.outputSchema,
+                'nested-workflow-a': wfA.outputSchema.optional(),
+                'nested-workflow-b': wfB.outputSchema.optional(),
               }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
@@ -15011,7 +15496,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({ finalValue: z.number() }),
           execute: final,
         });
@@ -15067,8 +15552,8 @@ describe('Workflow', () => {
             createStep({
               id: 'last-step',
               inputSchema: z.object({
-                'nested-workflow-a': wfA.outputSchema,
-                'nested-workflow-b': wfB.outputSchema,
+                'nested-workflow-a': wfA.outputSchema.optional(),
+                'nested-workflow-b': wfB.outputSchema.optional(),
               }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
@@ -15156,7 +15641,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({ finalValue: z.number() }),
           execute: final,
         });
@@ -15216,14 +15701,14 @@ describe('Workflow', () => {
             createStep({
               id: 'map-results',
               inputSchema: z.object({
-                'nested-workflow-c': otherStep.outputSchema,
-                'nested-workflow-d': otherStep.outputSchema,
+                'nested-workflow-c': otherStep.outputSchema.optional(),
+                'nested-workflow-d': otherStep.outputSchema.optional(),
               }),
               outputSchema: otherStep.outputSchema,
               execute: async ({ inputData }) => {
                 return {
-                  newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue,
-                  other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other,
+                  newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue ?? 0,
+                  other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other ?? 0,
                 };
               },
             }),
@@ -15248,8 +15733,8 @@ describe('Workflow', () => {
             createStep({
               id: 'last-step',
               inputSchema: z.object({
-                'nested-workflow-a': wfA.outputSchema,
-                'nested-workflow-b': wfB.outputSchema,
+                'nested-workflow-a': wfA.outputSchema.optional(),
+                'nested-workflow-b': wfB.outputSchema.optional(),
               }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
@@ -15342,7 +15827,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({
             finalValue: z.number(),
           }),
@@ -15818,7 +16303,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({
             finalValue: z.number(),
           }),
@@ -15938,7 +16423,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
         outputSchema: z.object({
           finalValue: z.number(),
         }),
@@ -16389,7 +16874,7 @@ describe('Workflow', () => {
       const step = createStep({
         id: 'step1',
         execute,
-        inputSchema: z.object({ human: z.boolean() }),
+        inputSchema: z.object({ human: z.boolean().optional() }),
         outputSchema: z.object({}),
       });
       const workflow = createWorkflow({
@@ -17036,6 +17521,134 @@ describe('Workflow', () => {
       });
 
       expect(typedStep).toBeDefined();
+    });
+  });
+
+  describe('Suspend Data Access', () => {
+    it('should provide access to suspendData in workflow step on resume', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const suspendDataAccess = createStep({
+        id: 'suspend-data-access-test',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        resumeSchema: z.object({
+          confirm: z.boolean(),
+        }),
+        suspendSchema: z.object({
+          reason: z.string(),
+          originalValue: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+        execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+          const { value } = inputData;
+          const { confirm } = resumeData ?? {};
+
+          // On first execution, suspend with context
+          if (!confirm) {
+            return await suspend({
+              reason: 'User confirmation required',
+              originalValue: value,
+            });
+          }
+
+          // On resume, we can now access the suspend data!
+          const suspendReason = suspendData?.reason || 'Unknown';
+          const originalValue = suspendData?.originalValue || 'Unknown';
+
+          return {
+            result: `Processed ${originalValue} after ${suspendReason}`,
+            wasResumed: true,
+            suspendReason,
+          };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'suspend-data-test-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+      });
+
+      workflow.then(suspendDataAccess).commit();
+
+      const run = await workflow.createRun();
+
+      // Start the workflow - should suspend
+      const initialResult = await run.start({
+        inputData: { value: 'test-value' },
+      });
+
+      expect(initialResult.status).toBe('suspended');
+
+      // Resume the workflow with confirmation
+      const resumedResult = await run.resume({
+        step: suspendDataAccess,
+        resumeData: { confirm: true },
+      });
+
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.result.suspendReason).toBe('User confirmation required');
+      expect(resumedResult.result.result).toBe('Processed test-value after User confirmation required');
+    });
+
+    it('should handle missing suspendData gracefully', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const stepWithoutSuspend = createStep({
+        id: 'no-suspend-step',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        execute: async ({ inputData, suspendData }) => {
+          // Should handle missing suspendData gracefully
+          const message = suspendData ? 'Had suspend data' : 'No suspend data';
+          return { result: `${inputData.value}: ${message}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'no-suspend-workflow',
+        mastra,
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      workflow.then(stepWithoutSuspend).commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: { value: 'test' },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result.result).toBe('test: No suspend data');
     });
   });
 });

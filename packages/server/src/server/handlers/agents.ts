@@ -716,6 +716,7 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   summary: 'Stream a response from an agent',
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
+  deprecated: true,
   handler: STREAM_GENERATE_ROUTE.handler,
 });
 
@@ -963,6 +964,7 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   summary: 'Stream a response from an agent',
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
+  deprecated: true,
   handler: async () => {
     throw new HTTPException(410, { message: 'This endpoint is deprecated. Please use /stream instead.' });
   },
@@ -979,6 +981,7 @@ export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
+  deprecated: true,
   handler: async () => {
     try {
       throw new MastraError({
@@ -1004,5 +1007,6 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
+  deprecated: true,
   handler: STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE.handler,
 });
