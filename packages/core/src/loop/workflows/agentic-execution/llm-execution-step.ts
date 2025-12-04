@@ -2,12 +2,11 @@ import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
-import { MessageList, type MastraDBMessage } from '../../../agent/message-list';
+import type { MessageList, MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
-import { resolveModelConfig } from '../../../llm';
-import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
+import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -25,7 +24,6 @@ import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
-import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 
 type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   tools?: ToolSet;
@@ -470,7 +468,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   requestContext,
   methodType,
   modelSpanTracker,
-  mastra,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -498,13 +495,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         };
         let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
-        // Call processInputStep for processors (runs BEFORE prepareStep)
-        // This allows processors to modify messages at each step of the agentic loop
         const inputStepProcessors = [
           ...(inputProcessors || []),
           ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
         ];
-        // Run processInputStep for all processors that implement it
         if (inputStepProcessors && inputStepProcessors.length > 0) {
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputStepProcessors,
@@ -514,9 +508,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           });
 
           try {
-            // processInputStep modifies messages in place via messageList (same as processInput)
             const processInputStepResult = await processorRunner.runProcessInputStep<TOOLS>({
-              messages: messageList.get.all.db(),
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
               tracingContext,
@@ -524,15 +516,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               model,
               steps: inputData.output?.steps || [],
               toolChoice: stepToolChoice,
-              tools: stepTools,
+              activeTools: Object.keys(stepTools || {}),
+              providerOptions,
             });
 
             if (processInputStepResult.model) {
-              const resolvedStepModel = await resolveModelConfig(processInputStepResult.model, requestContext, mastra);
-              if (resolvedStepModel.specificationVersion === 'v1') {
-                throw new Error('v1 language models are not supported in processInputStep');
-              }
-              stepModel = resolvedStepModel;
+              stepModel = processInputStepResult.model;
             }
             if (processInputStepResult.toolChoice) {
               stepToolChoice = processInputStepResult.toolChoice;

@@ -1456,7 +1456,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           messageList,
           stopWhen: stepCountIs(3),
           options: {
-            prepareStep: async ({ model, stepNumber, steps, messages, messageList: ml }) => {
+            // @ts-expect-error -- TODO
+            prepareStep: async ({ model, stepNumber, steps, messages, tools, messageList: ml }) => {
+              console.log('tools', tools);
               prepareStepCalls.push({
                 model: {
                   modelId: model.modelId,
@@ -1502,6 +1504,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   ],
                 };
               }
+              return {};
             },
           },
         });

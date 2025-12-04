@@ -52,14 +52,6 @@ export type PrepareStepFunction = <TOOLS extends ToolSet>(
   args: ProcessInputStepArgs<TOOLS>,
 ) => Promise<ProcessInputStepResult<TOOLS> | undefined> | ProcessInputStepResult<TOOLS> | undefined;
 
-// export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
-//   steps: Array<StepResult<TOOLS>>;
-//   stepNumber: number;
-//   model: MastraLanguageModelV2;
-//   messages: Array<MastraDBMessage>;
-//   messageList: MessageList;
-// }) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
-
 export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;

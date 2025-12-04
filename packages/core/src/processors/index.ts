@@ -1,12 +1,13 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { StepResult, ToolChoice, ToolSet } from 'ai-v5';
+import type { CallSettings, StepResult, ToolChoice, ToolSet } from 'ai-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType } from '../stream';
+import type { ChunkType, OutputSchema } from '../stream';
+import type { StructuredOutputOptions } from './processors';
 
 /**
  * Base context shared by all processor methods
@@ -66,24 +67,42 @@ export interface ProcessOutputResultArgs extends ProcessorMessageContext {}
 /**
  * Arguments for processInputStep method
  */
-export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> extends ProcessorMessageContext {
+export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
+  extends ProcessorMessageContext {
   /** The current step number (0-indexed) */
   stepNumber: number;
+  steps: Array<StepResult<TOOLS>>;
+
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
+
   model: MastraLanguageModelV2;
-  steps: Array<StepResult<TOOLS>>;
   toolChoice?: ToolChoice<TOOLS>;
-  tools?: TOOLS;
+  activeTools?: Array<keyof TOOLS>;
+
+  providerOptions?: SharedV2ProviderOptions;
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
 }
+
+export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
+  ProcessInputStepArgs<TOOLS>,
+  'messages' | 'systemMessages' | 'abort'
+>;
 
 export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
+
   messages?: MastraDBMessage[];
   messageList?: MessageList;
 };
+
+export type RunProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = Omit<
+  ProcessInputStepResult<TOOLS>,
+  'model'
+> & { model?: MastraLanguageModelV2 };
 
 /**
  * Arguments for processOutputStream method

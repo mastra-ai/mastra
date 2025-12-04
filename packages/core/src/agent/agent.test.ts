@@ -4,7 +4,7 @@ import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { CoreMessage, CoreSystemMessage, LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { APICallError, stepCountIs } from 'ai-v5';
+import { APICallError, stepCountIs, tool } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
@@ -23,6 +23,9 @@ import { delay } from '../utils';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
+import { ModelRouterLanguageModel } from '../llm';
+import { PrepareStepFunction } from '../loop/types';
+import { ProcessInputStepArgs } from '../processors';
 
 config();
 
@@ -6127,12 +6130,64 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
 describe('Agent Tests', () => {
   describe('prepareStep', () => {
-    it.only('should use mastra model config openai compatible object when set in prepareStep', async () => {
+    it.only('tools', async () => {
       const agent = new Agent({
         id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: 'openai/gpt-4o',
+        tools: {
+          tool1: tool({
+            inputSchema: z.object({ value: z.string() }),
+            execute: async () => 'result1',
+          }),
+          tool2: tool({
+            inputSchema: z.object({ value: z.string() }),
+            execute: async () => 'result2',
+          }),
+        },
+      });
+
+      let prepareStepCallArgs: ProcessInputStepArgs<any> | undefined;
+      const result = await agent.generate('Hello', {
+        prepareStep: args => {
+          prepareStepCallArgs = args;
+          return {
+            model: 'openai/gpt-4o',
+            activeTools: args?.activeTools?.filter(t => t !== 'tool2'),
+            toolChoice: 'none',
+          };
+        },
+      });
+
+      expect(prepareStepCallArgs).toMatchObject({
+        model: expect.any(ModelRouterLanguageModel),
+        toolChoice: 'auto',
+        activeTools: ['tool1'],
+        stepNumber: 0,
+      });
+
+      console.log('result', result.request.body);
+      // expect((result?.request?.body as any)?.model).toBe('gpt-4o-mini');
+      // expect(result?.response?.modelMetadata).toMatchObject({
+      //   modelId: 'gpt-4o-mini',
+      //   modelProvider: 'openai',
+      //   modelVersion: 'v2',
+      // });
+    });
+
+    it('should use mastra model config openai compatible object when set in prepareStep', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o',
+        tools: {
+          tool1: tool({
+            inputSchema: z.object({ value: z.string() }),
+            execute: async () => 'result1',
+          }),
+        },
       });
 
       const result = await agent.generate('Hello', {
