@@ -47,7 +47,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   [STREAM_FORMAT_SYMBOL]: 'legacy' | 'vnext' | undefined;
   engine: EngineType;
   abortSignal: AbortSignal;
-  writer: ToolStream<ChunkType>;
+  writer: ToolStream;
   validateSchemas?: boolean;
 };
 
