@@ -66,8 +66,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
         },
         error,
       );
-
-      throw error;
     }
   }
 
@@ -89,8 +87,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
         },
         error,
       );
-
-      throw error;
     }
   }
 
@@ -594,8 +590,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
         },
         error,
       );
-
-      throw error;
     }
   }
 
@@ -632,8 +626,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
         },
         error,
       );
-
-      throw error;
     }
   }
 

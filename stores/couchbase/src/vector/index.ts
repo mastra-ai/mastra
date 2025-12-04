@@ -78,7 +78,6 @@ export class CouchbaseVector extends MastraVector {
           details: {
             connectionString,
             username,
-            password,
             bucketName,
             scopeName,
             collectionName,
