@@ -81567,6 +81567,179 @@ The stream emits various event types during workflow execution. Each event has a
 
 
 ---
+title: "Reference: Run.timeTravelStream() | Streaming"
+description: Documentation for the `Run.timeTravelStream()` method for streaming workflow time travel execution.
+---
+
+# Run.timeTravelStream()
+[EN] Source: https://mastra.ai/en/reference/streaming/workflows/timeTravelStream
+
+The `.timeTravelStream()` method re-executes a workflow starting from any specific step with streaming events. This allows you to receive real-time updates during time travel execution while maintaining full visibility into each step's progress.
+
+## Usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+// Process events as they arrive
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+// Get the final result
+const result = await output.result;
+```
+
+## Parameters
+
+All parameters are the same as [`Run.timeTravel()`](../../workflows/run-methods/timeTravel#parameters). See the [timeTravel reference](../../workflows/run-methods/timeTravel#parameters) for detailed parameter documentation.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "An object containing both the stream and result promise",
+    },
+    {
+      name: "output.fullStream",
+      type: "ReadableStream<WorkflowStreamEvent>",
+      description:
+        "A readable stream that emits workflow events as execution progresses",
+    },
+    {
+      name: "output.result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "A promise that resolves to the final workflow execution result",
+    },
+    {
+      name: "output.traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "The trace ID associated with this execution when Tracing is enabled",
+    },
+  ]}
+/>
+
+## Stream events
+
+The stream emits various workflow events during execution:
+
+- `workflow-step-start`: Emitted when a step begins execution
+- `workflow-step-finish`: Emitted when a step completes successfully
+- `workflow-step-error`: Emitted when a step encounters an error
+- `workflow-step-suspended`: Emitted when a step suspends
+- Additional events depending on step types (agents, tools, etc.)
+
+## Extended usage examples
+
+### Processing events during time travel
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+for await (const event of output.fullStream) {
+  switch (event.type) {
+    case "workflow-step-start":
+      console.log(`Starting step: ${event.payload.stepName}`);
+      break;
+    case "workflow-step-finish":
+      console.log(`Completed step: ${event.payload.stepName}`);
+      break;
+    case "workflow-step-error":
+      console.error(`Error in step: ${event.payload.stepName}`, event.payload.error);
+      break;
+  }
+}
+
+const result = await output.result;
+console.log("Time travel completed:", result);
+```
+
+### Time travel stream with context
+
+```typescript showLineNumbers copy
+const output = run.timeTravelStream({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+
+for await (const event of output.fullStream) {
+  // Handle events
+  console.log(event);
+}
+
+const result = await output.result;
+```
+
+### Time travel stream with nested workflows
+
+```typescript showLineNumbers copy
+const output = run.timeTravelStream({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+const result = await output.result;
+```
+
+## Notes
+
+- The stream closes automatically when time travel execution completes or encounters an error
+- You can process events from the stream while the workflow is still executing
+- The `result` promise resolves only after all steps have completed
+- Stream events follow the same format as regular workflow streaming
+- Time travel streaming requires storage to be configured since it relies on persisted workflow snapshots
+
+## Related
+
+- [Run.timeTravel()](../../workflows/run-methods/timeTravel)
+- [Time Travel](/docs/v1/workflows/time-travel)
+- [Workflow Streaming](/docs/v1/streaming/workflow-streaming)
+- [Run.stream()](./stream)
+- [Run.resumeStream()](./resumeStream)
+
+
+
+---
 title: "Reference: LLM provider API keys (choose one or more) | Templates"
 description: "Complete guide to creating, using, and contributing Mastra templates"
 ---
@@ -98074,6 +98247,319 @@ const result = await run.start({
 
 
 ---
+title: "Reference: Run.timeTravel() | Workflows"
+description: Documentation for the `Run.timeTravel()` method in workflows, which re-executes a workflow from a specific step.
+---
+
+# Run.timeTravel()
+[EN] Source: https://mastra.ai/en/reference/workflows/run-methods/timeTravel
+
+The `.timeTravel()` method re-executes a workflow starting from any specific step, using either stored snapshot data or custom context you provide. This is useful for debugging failed workflows, testing individual steps with different inputs, or recovering from errors without re-running the entire workflow.
+
+## Usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step<string, any, TInputSchema, any, any, any, TEngineType> | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, TInputSchema, any, any, any, TEngineType>] | string | string[]",
+      description:
+        "The target step to start execution from. It can be a Step instance, array of Steps (for nested workflows), step ID string, or array of step ID strings. Use dot notation or arrays for nested workflow steps (e.g., 'nestedWorkflow.step3' or ['nestedWorkflow', 'step3'])",
+      isOptional: false,
+    },
+    {
+      name: "inputData",
+      type: "z.infer<TInputSchema>",
+      description: "Input data for the target step. Must match the step's input schema. If not provided, uses data from the workflow snapshot",
+      isOptional: true,
+    },
+    {
+      name: "resumeData",
+      type: "any",
+      description: "Resume data to provide if the workflow was previously suspended",
+      isOptional: true,
+    },
+    {
+      name: "initialState",
+      type: "z.infer<TState>",
+      description: "Initial state to set for the workflow run. Used to set workflow-level state before execution",
+      isOptional: true,
+    },
+    {
+      name: "context",
+      type: "TimeTravelContext<any, any, any, any>",
+      description:
+        "Execution context containing step results for steps before the target step. Each key is a step ID with a StepResult object containing status, payload, output, startedAt, endedAt, suspendPayload, and resumePayload",
+      isOptional: true,
+    },
+    {
+      name: "nestedStepsContext",
+      type: "Record<string, TimeTravelContext<any, any, any, any>>",
+      description:
+        "Context for nested workflow steps. Keyed by nested workflow ID, each containing step results for that nested workflow",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during time travel execution",
+      isOptional: true,
+    },
+    {
+      name: "writableStream",
+      type: "WritableStream<ChunkType>",
+      description: "Optional writable stream for streaming workflow output during time travel",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "Options for Tracing configuration.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "Options for output configuration.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "includeState",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Whether to include the workflow run state in the result.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "includeResumeLabels",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Whether to include resume labels in the result.",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "A promise that resolves to the workflow execution result containing step outputs and status",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+    },
+  ]}
+/>
+
+## Extended usage examples
+
+### Time travel with custom context
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+```
+
+### Time travel to nested workflow step
+
+```typescript showLineNumbers copy
+// Using dot notation
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  inputData: { value: 10 },
+});
+
+// Using array of step IDs
+const result = await run.timeTravel({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+});
+```
+
+### Time travel with initial state
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+  initialState: {
+    counter: 5,
+    metadata: { source: "time-travel" },
+  },
+});
+```
+
+### Time travel with nested workflows context
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+    nestedWorkflow: {
+      status: "running",
+      payload: { step1Result: 2 },
+      startedAt: Date.now(),
+    },
+  },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+```
+
+## Notes
+
+- Time travel requires storage to be configured since it relies on persisted workflow snapshots
+- When re-executing a workflow, the workflow loads the existing snapshot from storage (if available)
+- Step results before the target step are reconstructed from the snapshot or provided context
+- Execution begins from the specified step with the provided or reconstructed input data
+- The workflow continues to completion from that point forward
+- Time travel can be used on workflows that have not been run yet by providing custom context or input data for the step to start from.
+
+
+## Related
+
+- [Time Travel](/docs/v1/workflows/time-travel)
+- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
+- [Workflow.createRun()](../workflow-methods/create-run)
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+
+
+
+---
 title: "Reference: Run Class | Workflows"
 description: Documentation for the Run class in Mastra, which represents a workflow execution instance.
 ---
@@ -98139,6 +98625,18 @@ if (result.status === "suspended") {
       description: "Restarts the workflow execution from last active step",
       required: true,
     },
+    {
+      name: "timeTravel",
+      type: "(options?: TimeTravelOptions) => Promise<WorkflowResult>",
+      description: "Re-executes a workflow starting from any specific step, using either stored snapshot data or custom context you provide.",
+      required: true,
+    },
+    {
+      name: "timeTravelStream",
+      type: "(options?: TimeTravelOptions) => MastraWorkflowStream",
+      description: "Time travels a workflow execution with streaming support",
+      required: true,
+    },
   ]}
 />
 
@@ -98175,8 +98673,9 @@ A workflow run's `status` indicates its current execution state. The possible va
 - [Run.resume()](./run-methods/resume)
 - [Run.cancel()](./run-methods/cancel)
 - [Run.restart()](./run-methods/restart)
+- [Run.timeTravel()](./run-methods/timeTravel)
 - [Run.stream()](/docs/v1/streaming/workflow-streaming)
-
+- [Run.timeTravelStream()](../streaming/workflows/timeTravelStream)
 
 ---
 title: "Reference: Step Class | Workflows"
