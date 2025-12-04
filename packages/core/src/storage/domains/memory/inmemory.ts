@@ -18,12 +18,13 @@ import { MemoryStorage } from './base';
 export type InMemoryThreads = Map<string, StorageThreadType>;
 export type InMemoryResources = Map<string, StorageResourceType>;
 export type InMemoryMessages = Map<string, StorageMessageType>;
-
+export type InMemoryObservations = Map<string, any>;
 export class InMemoryMemory extends MemoryStorage {
   private collection: {
     threads: InMemoryThreads;
     resources: InMemoryResources;
     messages: InMemoryMessages;
+    observations: InMemoryObservations;
   };
   private operations: StoreOperations;
   constructor({
@@ -34,12 +35,23 @@ export class InMemoryMemory extends MemoryStorage {
       threads: InMemoryThreads;
       resources: InMemoryResources;
       messages: InMemoryMessages;
+      observations: InMemoryObservations;
     };
     operations: StoreOperations;
   }) {
     super();
     this.collection = collection;
     this.operations = operations;
+  }
+
+  async listObservations({ threadId }: { threadId: string }): Promise<any[]> {
+    return Array.from(this.collection.observations.values()).filter((observation: any) => observation.threadId === threadId);
+  }
+
+  async saveObservations({ observations }: { observations: any[] }): Promise<void> {
+    for (const observation of observations) {
+      this.collection.observations.set(observation.id || crypto.randomUUID(), observation);
+    }
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

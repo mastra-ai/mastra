@@ -180,6 +180,13 @@ export class MessageList {
     return events;
   }
 
+  public getMemoryInfo() {
+    return {
+      threadId: this.memoryInfo?.threadId,
+      resourceId: this.memoryInfo?.resourceId,
+    };
+  }
+
   public add(messages: MessageListInput, messageSource: MessageSource) {
     if (messageSource === `user`) messageSource = `input`;
 
@@ -199,9 +206,9 @@ export class MessageList {
       this.addOne(
         typeof message === `string`
           ? {
-              role: 'user',
-              content: message,
-            }
+            role: 'user',
+            content: message,
+          }
           : message,
         messageSource,
       );
@@ -423,9 +430,9 @@ export class MessageList {
           downloadRetries?: number;
           supportedUrls?: Record<string, RegExp[]>;
         } = {
-          downloadConcurrency: 10,
-          downloadRetries: 3,
-        },
+            downloadConcurrency: 10,
+            downloadRetries: 3,
+          },
       ): Promise<LanguageModelV2Prompt> => {
         // Filter incomplete tool calls when sending messages TO the LLM
         const modelMessages = this.aiV5UIMessagesToAIV5ModelMessages(this.all.aiV5.ui(), true);
@@ -979,12 +986,12 @@ export class MessageList {
       typeof m.content.content === `string` && m.content.content !== ''
         ? m.content.content
         : m.content.parts.reduce((prev, part) => {
-            if (part.type === `text`) {
-              // return only the last text part like AI SDK does
-              return part.text;
-            }
-            return prev;
-          }, '');
+          if (part.type === `text`) {
+            // return only the last text part like AI SDK does
+            return part.text;
+          }
+          return prev;
+        }, '');
 
     const parts: MastraMessageContentV2['parts'] = [];
 
@@ -1522,9 +1529,9 @@ export class MessageList {
       // This fixes issue #10683 where messages without createdAt would get shuffled
       const rawCreatedAt =
         'metadata' in message &&
-        message.metadata &&
-        typeof message.metadata === 'object' &&
-        'createdAt' in message.metadata
+          message.metadata &&
+          typeof message.metadata === 'object' &&
+          'createdAt' in message.metadata
           ? message.metadata.createdAt
           : undefined;
       const result = {
@@ -1935,9 +1942,9 @@ export class MessageList {
     // This fixes issue #10683 where messages without createdAt would get shuffled
     const rawCreatedAt =
       'metadata' in coreMessage &&
-      coreMessage.metadata &&
-      typeof coreMessage.metadata === 'object' &&
-      'createdAt' in coreMessage.metadata
+        coreMessage.metadata &&
+        typeof coreMessage.metadata === 'object' &&
+        'createdAt' in coreMessage.metadata
         ? coreMessage.metadata.createdAt
         : undefined;
 
@@ -1989,11 +1996,11 @@ export class MessageList {
   static isMastraDBMessage(msg: MessageInput): msg is MastraDBMessage {
     return Boolean(
       `content` in msg &&
-        msg.content &&
-        !Array.isArray(msg.content) &&
-        typeof msg.content !== `string` &&
-        `format` in msg.content &&
-        msg.content.format === 2,
+      msg.content &&
+      !Array.isArray(msg.content) &&
+      typeof msg.content !== `string` &&
+      `format` in msg.content &&
+      msg.content.format === 2,
     );
   }
 
@@ -2134,7 +2141,7 @@ export class MessageList {
       return (
         oneMM1.id === twoMM1.id &&
         MessageList.cacheKeyFromAIV4CoreMessageContent(oneMM1.content) ===
-          MessageList.cacheKeyFromAIV4CoreMessageContent(twoMM1.content)
+        MessageList.cacheKeyFromAIV4CoreMessageContent(twoMM1.content)
       );
     }
 
@@ -2145,7 +2152,7 @@ export class MessageList {
       return (
         oneMM2.id === twoMM2.id &&
         MessageList.cacheKeyFromAIV4Parts(oneMM2.content.parts) ===
-          MessageList.cacheKeyFromAIV4Parts(twoMM2.content.parts)
+        MessageList.cacheKeyFromAIV4Parts(twoMM2.content.parts)
       );
     }
 

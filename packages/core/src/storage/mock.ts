@@ -6,7 +6,7 @@ import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';
 import { InMemoryMemory } from './domains/memory/inmemory';
-import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
+import type { InMemoryThreads, InMemoryResources, InMemoryMessages, InMemoryObservations } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import type { InMemoryObservability } from './domains/observability/inmemory';
 import { StoreOperationsInMemory } from './domains/operations/inmemory';
@@ -51,6 +51,7 @@ export class InMemoryStore extends MastraStorage {
         threads: database.mastra_threads as InMemoryThreads,
         resources: database.mastra_resources as InMemoryResources,
         messages: database.mastra_messages as InMemoryMessages,
+        observations: database.mastra_observations as InMemoryObservations,
       },
       operations: operationsStorage,
     });

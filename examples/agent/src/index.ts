@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { mastra } from './mastra/index';
 
+
+
+const agent = mastra.getAgent('chefAgent');
+const tools = mastra.listTools();
+
 /**
  * Comprehensive validation tests for all Mastra primitives
  * Testing get(key), getById(id), and list() for each primitive

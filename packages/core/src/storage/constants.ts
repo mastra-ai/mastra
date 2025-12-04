@@ -7,6 +7,8 @@ export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
+export const TABLE_OBSERVATIONS = 'mastra_observations';
+
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -15,7 +17,8 @@ export type TABLE_NAMES =
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
-  | typeof TABLE_SPANS;
+  | typeof TABLE_SPANS
+  | typeof TABLE_OBSERVATIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -94,6 +97,13 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: {
       type: 'timestamp',
     },
+  },
+  [TABLE_OBSERVATIONS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    threadId: { type: 'text', nullable: false },
+    observation: { type: 'text', nullable: false },
+    createdAt: { type: 'timestamp', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_SCORERS]: SCORERS_SCHEMA,
   [TABLE_THREADS]: {
