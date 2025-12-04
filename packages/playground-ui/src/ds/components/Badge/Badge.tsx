@@ -5,7 +5,7 @@ import { Icon } from '../../icons/Icon';
 
 export interface BadgeProps {
   icon?: React.ReactNode;
-  variant?: 'default' | 'success' | 'error' | 'info';
+  variant?: 'default' | 'success' | 'error' | 'info' | 'warning';
   className?: string;
   children?: React.ReactNode;
 }
@@ -14,6 +14,7 @@ const variantClasses = {
   default: 'text-icon3',
   success: 'text-accent1',
   error: 'text-accent2',
+  warning: 'text-orange-500',
   info: 'text-accent3',
 };
 
