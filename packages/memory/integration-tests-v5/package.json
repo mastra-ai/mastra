@@ -38,7 +38,7 @@
     "ai": "latest",
     "jsdom": "^26.1.0",
     "mastra": "latest",
-    "next": "^15.5.4",
+    "next": "^15.5.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
