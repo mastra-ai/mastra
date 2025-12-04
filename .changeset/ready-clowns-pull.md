@@ -3,7 +3,7 @@
 '@mastra/core': patch
 ---
 
-Adds `withMastra()` to `@mastra/ai-sdk` for wrapping AI SDK models with Mastra processors and memory.
+**@mastra/ai-sdk**: Adds `withMastra()` for wrapping AI SDK models with Mastra processors and memory.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -25,3 +25,5 @@ const { text } = await generateText({ model, prompt: 'Hello!' });
 ```
 
 Works with `generateText`, `streamText`, `generateObject`, and `streamObject`.
+
+**@mastra/core**: Exports `convertFullStreamChunkToMastra` from the stream module for AI SDK stream chunk transformations.
