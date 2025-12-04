@@ -290,6 +290,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
       return { runs, total };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'LIST_WORKFLOW_RUNS', 'FAILED'),

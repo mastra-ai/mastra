@@ -223,6 +223,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       } catch {
         // Ignore rollback errors
       }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
