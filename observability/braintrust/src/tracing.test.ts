@@ -186,15 +186,11 @@ describe('BraintrustExporter', () => {
       expect(mockInitLogger).not.toHaveBeenCalled();
 
       // Should create child span on parent span
-      // Child spans use rootSpanId pointing to the root span's ID
+      // The startSpan() chain handles parent-child relationships automatically
       expect(mockSpan.startSpan).toHaveBeenCalledWith({
         spanId: 'child-span-id',
         name: 'child-tool',
         type: 'tool', // TOOL_CALL maps to 'tool'
-        parentSpanIds: {
-          spanId: rootSpan.id,
-          rootSpanId: rootSpan.id,
-        },
         input: undefined,
         metadata: {
           spanType: 'tool_call',
@@ -733,15 +729,11 @@ describe('BraintrustExporter', () => {
       });
 
       // Should create child span on parent
-      // Child spans use rootSpanId pointing to the actual root span's ID (not the trace ID)
+      // The startSpan() chain handles parent-child relationships automatically
       expect(mockSpan.startSpan).toHaveBeenCalledWith({
         spanId: 'child-event',
         name: 'tool-result',
         type: 'task',
-        parentSpanIds: {
-          spanId: rootSpan.id,
-          rootSpanId: rootSpan.id, // Points to root span's actual ID
-        },
         startTime: childEventSpan.startTime.getTime() / 1000,
         output: { result: 42 },
         metadata: {
@@ -1071,8 +1063,8 @@ describe('BraintrustExporter', () => {
     });
   });
 
-  describe('Root Span ID Tracking', () => {
-    it('should track rootSpanId in SpanData for proper parent-child relationships', async () => {
+  describe('Span Nesting (SDK handles parent-child relationships)', () => {
+    it('should NOT set parentSpanIds - SDK startSpan() chain handles nesting', async () => {
       // Create root span
       const rootSpan = createMockSpan({
         id: 'root-span-id',
@@ -1087,26 +1079,9 @@ describe('BraintrustExporter', () => {
         exportedSpan: rootSpan,
       });
 
-      // Verify SpanData has rootSpanId set to the root span's ID
-      const spanData = (exporter as any).traceMap.get(rootSpan.traceId);
-      expect(spanData).toBeDefined();
-      expect(spanData.rootSpanId).toBe('root-span-id');
-    });
-
-    it('should use rootSpanId for child span parentSpanIds', async () => {
-      // Create root span
-      const rootSpan = createMockSpan({
-        id: 'root-span-id',
-        name: 'root-agent',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: {},
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpan,
-      });
+      // Root span should not have parentSpanIds
+      const rootStartSpanCall = mockLogger.startSpan.mock.calls[0][0];
+      expect(rootStartSpanCall.parentSpanIds).toBeUndefined();
 
       vi.clearAllMocks();
 
@@ -1126,34 +1101,9 @@ describe('BraintrustExporter', () => {
         exportedSpan: childSpan,
       });
 
-      // Verify child span uses rootSpanId
-      expect(mockSpan.startSpan).toHaveBeenCalledWith(
-        expect.objectContaining({
-          parentSpanIds: {
-            spanId: 'root-span-id',
-            rootSpanId: 'root-span-id',
-          },
-        }),
-      );
-    });
-
-    it('should NOT set parentSpanIds for root spans (makes Braintrust mark them is_root: true)', async () => {
-      const rootSpan = createMockSpan({
-        id: 'root-span-id',
-        name: 'root-agent',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: {},
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpan,
-      });
-
-      // Verify startSpan was called WITHOUT parentSpanIds
-      const startSpanCall = mockLogger.startSpan.mock.calls[0][0];
-      expect(startSpanCall.parentSpanIds).toBeUndefined();
+      // Child span should also not have parentSpanIds - SDK handles it via startSpan() chain
+      const childStartSpanCall = mockSpan.startSpan.mock.calls[0][0];
+      expect(childStartSpanCall.parentSpanIds).toBeUndefined();
     });
   });
 
