@@ -5,7 +5,7 @@
  * server at a custom base path (e.g., /admin, /studio) instead of root (/).
  */
 
-import { readFile } from 'fs/promises';
+import { readFile } from 'node:fs/promises';
 import type { Mastra } from '@mastra/core/mastra';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHonoServer } from '../index';
