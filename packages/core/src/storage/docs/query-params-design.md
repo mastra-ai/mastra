@@ -53,16 +53,33 @@ All simple string filters are at root level:
 ?hasChildError=true
 ```
 
-### Date Range (nested)
+### Date Range Filters - startedAt, endedAt (nested)
 
-Uses bracket notation since it has nested start/end:
+Filter by when spans started or ended. Each supports a range with `start` and `end`:
 
 ```
-?dateRange[start]=2024-01-01T00:00:00.000Z
-&dateRange[end]=2024-12-31T23:59:59.999Z
+?startedAt[start]=2024-01-01T00:00:00.000Z
+&startedAt[end]=2024-12-31T23:59:59.999Z
 ```
 
-Either `start` or `end` can be omitted for open-ended ranges.
+Filter by endedAt (when spans completed):
+
+```
+?endedAt[start]=2024-01-01T00:00:00.000Z
+&endedAt[end]=2024-01-31T23:59:59.999Z
+```
+
+Either `start` or `end` can be omitted for open-ended ranges. Both filters can be used together.
+
+### Order By
+
+Sort results by `startedAt` or `endedAt` with `ASC` or `DESC` direction:
+
+```
+?orderBy[field]=startedAt&orderBy[direction]=DESC
+```
+
+Follows the existing `StorageOrderBy` pattern used elsewhere in the API.
 
 ### Array Filters - tags (nested)
 
@@ -99,26 +116,28 @@ Same pattern for `scope` and `versionInfo`:
 ## Complete Example
 
 ```
-GET /api/observability/traces?page=0&perPage=20&entityType=agent&entityId=weatherAgent&status=success&dateRange[start]=2024-01-01T00:00:00.000Z&tags[0]=production&tags[1]=v2&metadata[customerId]=abc123
+GET /api/observability/traces?page=0&perPage=20&entityType=agent&entityId=weatherAgent&status=success&startedAt[start]=2024-01-01T00:00:00.000Z&orderBy[field]=startedAt&orderBy[direction]=DESC&tags[0]=production&tags[1]=v2&metadata[customerId]=abc123
 ```
 
 ## Parameter Summary
 
-| Parameter       | Type    | Format  | Example                                   |
-| --------------- | ------- | ------- | ----------------------------------------- |
-| `page`          | number  | scalar  | `page=0`                                  |
-| `perPage`       | number  | scalar  | `perPage=20`                              |
-| `entityType`    | string  | scalar  | `entityType=agent`                        |
-| `entityId`      | string  | scalar  | `entityId=weatherAgent`                   |
-| `spanType`      | string  | scalar  | `spanType=AGENT_EXECUTOR_RUN`             |
-| `status`        | string  | scalar  | `status=success`                          |
-| `userId`        | string  | scalar  | `userId=user_123`                         |
-| `hasChildError` | boolean | scalar  | `hasChildError=true`                      |
-| `dateRange`     | object  | bracket | `dateRange[start]=...&dateRange[end]=...` |
-| `tags`          | array   | bracket | `tags[0]=a&tags[1]=b`                     |
-| `metadata`      | object  | bracket | `metadata[key]=value`                     |
-| `scope`         | object  | bracket | `scope[key]=value`                        |
-| `versionInfo`   | object  | bracket | `versionInfo[key]=value`                  |
+| Parameter       | Type    | Format  | Example                                            |
+| --------------- | ------- | ------- | -------------------------------------------------- |
+| `page`          | number  | scalar  | `page=0`                                           |
+| `perPage`       | number  | scalar  | `perPage=20`                                       |
+| `entityType`    | string  | scalar  | `entityType=agent`                                 |
+| `entityId`      | string  | scalar  | `entityId=weatherAgent`                            |
+| `spanType`      | string  | scalar  | `spanType=AGENT_EXECUTOR_RUN`                      |
+| `status`        | string  | scalar  | `status=success`                                   |
+| `userId`        | string  | scalar  | `userId=user_123`                                  |
+| `hasChildError` | boolean | scalar  | `hasChildError=true`                               |
+| `startedAt`     | object  | bracket | `startedAt[start]=...&startedAt[end]=...`          |
+| `endedAt`       | object  | bracket | `endedAt[start]=...&endedAt[end]=...`              |
+| `orderBy`       | object  | bracket | `orderBy[field]=startedAt&orderBy[direction]=DESC` |
+| `tags`          | array   | bracket | `tags[0]=a&tags[1]=b`                              |
+| `metadata`      | object  | bracket | `metadata[key]=value`                              |
+| `scope`         | object  | bracket | `scope[key]=value`                                 |
+| `versionInfo`   | object  | bracket | `versionInfo[key]=value`                           |
 
 ## Implementation
 
@@ -141,16 +160,19 @@ export function parseTracesQueryParams(input: string | Record<string, string>): 
 
   // Restructure: scalar filters at root → filters object
   // page/perPage → pagination object
+  // orderBy → orderBy object
   const restructured = {
     pagination: { page: parsed.page, perPage: parsed.perPage },
     filters: {
       entityType: parsed.entityType,
       entityId: parsed.entityId,
       // ... other scalar filters
-      dateRange: parsed.dateRange, // already nested from qs
+      startedAt: parsed.startedAt, // already nested from qs
+      endedAt: parsed.endedAt, // already nested from qs
       tags: parsed.tags, // already array from qs
       metadata: parsed.metadata, // already nested from qs
     },
+    orderBy: parsed.orderBy, // already nested from qs
   };
 
   // Validate with Zod (handles type coercion)
@@ -165,16 +187,18 @@ The client uses `serializeTracesParams()` from `@mastra/core/storage`:
 ```typescript
 export function serializeTracesParams(args: TracesPaginatedArg): string {
   // Flatten: pagination and scalar filters to root level
-  // Keep nested: dateRange, tags, metadata, scope, versionInfo
+  // Keep nested: startedAt, endedAt, orderBy, tags, metadata, scope, versionInfo
   const flattened = {
     page: args.pagination?.page,
     perPage: args.pagination?.perPage,
     entityType: args.filters?.entityType,
     entityId: args.filters?.entityId,
     // ... other scalar filters
-    dateRange: args.filters?.dateRange, // stays nested
+    startedAt: args.filters?.startedAt, // stays nested
+    endedAt: args.filters?.endedAt, // stays nested
     tags: args.filters?.tags, // stays nested
     metadata: args.filters?.metadata, // stays nested
+    orderBy: args.orderBy, // stays nested
   };
 
   return qs.stringify(flattened, {
@@ -216,17 +240,19 @@ If validation errors occur, return all errors:
 
 This replaces the previous dot notation format:
 
-| Old Format            | New Format                       |
-| --------------------- | -------------------------------- |
-| `page=0`              | `page=0` (unchanged)             |
-| `perPage=20`          | `perPage=20` (unchanged)         |
-| `entityType=agent`    | `entityType=agent` (unchanged)   |
-| `entityId=abc`        | `entityId=abc` (unchanged)       |
-| `status=success`      | `status=success` (unchanged)     |
-| `hasChildError=true`  | `hasChildError=true` (unchanged) |
-| `dateRange.start=...` | `dateRange[start]=...`           |
-| `tags=a,b`            | `tags[0]=a&tags[1]=b`            |
-| `metadata.key=val`    | `metadata[key]=val`              |
+| Old Format            | New Format                                         |
+| --------------------- | -------------------------------------------------- |
+| `page=0`              | `page=0` (unchanged)                               |
+| `perPage=20`          | `perPage=20` (unchanged)                           |
+| `entityType=agent`    | `entityType=agent` (unchanged)                     |
+| `entityId=abc`        | `entityId=abc` (unchanged)                         |
+| `status=success`      | `status=success` (unchanged)                       |
+| `hasChildError=true`  | `hasChildError=true` (unchanged)                   |
+| `dateRange.start=...` | `startedAt[start]=...` (renamed + bracket)         |
+| `dateRange.end=...`   | `startedAt[end]=...` or `endedAt[...]`             |
+| `tags=a,b`            | `tags[0]=a&tags[1]=b`                              |
+| `metadata.key=val`    | `metadata[key]=val`                                |
+| (none)                | `orderBy[field]=startedAt&orderBy[direction]=DESC` |
 
 The qs library handles bracket notation for nested structures.
 Simple scalars remain at root level for maximum readability.

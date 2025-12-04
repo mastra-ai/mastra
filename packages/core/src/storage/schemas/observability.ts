@@ -53,12 +53,36 @@ export const dateRangeSchema = z
   .describe('Date range filter for timestamps');
 
 /**
+ * Fields available for ordering trace results
+ */
+export const tracesOrderByFieldSchema = z
+  .enum(['startedAt', 'endedAt'])
+  .describe("Field to order by: 'startedAt' | 'endedAt'");
+
+/**
+ * Sort direction for ordering
+ */
+export const sortDirectionSchema = z.enum(['ASC', 'DESC']).describe("Sort direction: 'ASC' | 'DESC'");
+
+/**
+ * Order by configuration for trace queries
+ * Follows the existing StorageOrderBy pattern
+ */
+export const tracesOrderBySchema = z
+  .object({
+    field: tracesOrderByFieldSchema.optional().describe('Field to order by'),
+    direction: sortDirectionSchema.optional().describe('Sort direction'),
+  })
+  .describe('Order by configuration');
+
+/**
  * Filters for querying traces (with proper types)
  */
 export const tracesFilterSchema = z
   .object({
-    // Date range filter
-    dateRange: dateRangeSchema.optional().describe('Filter by date range'),
+    // Date range filters for startedAt and endedAt
+    startedAt: dateRangeSchema.optional().describe('Filter by span start time range'),
+    endedAt: dateRangeSchema.optional().describe('Filter by span end time range'),
 
     // Span type filter
     spanType: spanTypeSchema.optional().describe('Filter by span type'),
@@ -111,6 +135,7 @@ export const tracesPaginatedArgSchema = z
   .object({
     filters: tracesFilterSchema.optional().describe('Optional filters to apply'),
     pagination: paginationArgsSchema.optional().describe('Optional pagination settings'),
+    orderBy: tracesOrderBySchema.optional().describe('Optional ordering configuration'),
   })
   .describe('Arguments for paginated trace queries');
 
@@ -122,6 +147,9 @@ export type SpanEntityType = z.infer<typeof spanEntityTypeSchema>;
 export type SpanStatus = z.infer<typeof spanStatusSchema>;
 export type DateRange = z.infer<typeof dateRangeSchema>;
 export type PaginationArgs = z.infer<typeof paginationArgsSchema>;
+export type TracesOrderByField = z.infer<typeof tracesOrderByFieldSchema>;
+export type SortDirection = z.infer<typeof sortDirectionSchema>;
+export type TracesOrderBy = z.infer<typeof tracesOrderBySchema>;
 export type TracesFilter = z.infer<typeof tracesFilterSchema>;
 export type TracesPaginatedArg = z.infer<typeof tracesPaginatedArgSchema>;
 
@@ -248,8 +276,11 @@ export function parseTracesQueryParams(
   }
 
   // Nested filters (already parsed by qs into objects/arrays)
-  if (parsed.dateRange !== undefined) {
-    filters.dateRange = parsed.dateRange;
+  if (parsed.startedAt !== undefined) {
+    filters.startedAt = parsed.startedAt;
+  }
+  if (parsed.endedAt !== undefined) {
+    filters.endedAt = parsed.endedAt;
   }
   if (parsed.tags !== undefined) {
     filters.tags = parsed.tags;
@@ -266,6 +297,11 @@ export function parseTracesQueryParams(
 
   if (Object.keys(filters).length > 0) {
     restructured.filters = filters;
+  }
+
+  // Order by (nested - uses bracket notation)
+  if (parsed.orderBy !== undefined) {
+    restructured.orderBy = parsed.orderBy;
   }
 
   // Step 4: Validate with Zod schema (handles type coercion)
@@ -319,7 +355,7 @@ export function serializeTracesParams(args: TracesPaginatedArg): string {
  * Prepares TracesPaginatedArg for qs.stringify:
  * - Flattens pagination to root level (page, perPage)
  * - Flattens simple scalar filters to root level
- * - Keeps nested structures (dateRange, tags, metadata, etc.) for bracket notation
+ * - Keeps nested structures (startedAt, endedAt, orderBy, tags, metadata, etc.) for bracket notation
  * - Converts Date objects to ISO strings
  */
 function prepareForSerialization(args: TracesPaginatedArg): Record<string, unknown> {
@@ -343,11 +379,19 @@ function prepareForSerialization(args: TracesPaginatedArg): Record<string, unkno
     }
 
     // Keep nested structures (qs will use bracket notation)
-    // dateRange - convert Date to ISO string
-    if (args.filters.dateRange) {
-      result.dateRange = {
-        ...(args.filters.dateRange.start && { start: args.filters.dateRange.start.toISOString() }),
-        ...(args.filters.dateRange.end && { end: args.filters.dateRange.end.toISOString() }),
+    // startedAt - convert Date to ISO string
+    if (args.filters.startedAt) {
+      result.startedAt = {
+        ...(args.filters.startedAt.start && { start: args.filters.startedAt.start.toISOString() }),
+        ...(args.filters.startedAt.end && { end: args.filters.startedAt.end.toISOString() }),
+      };
+    }
+
+    // endedAt - convert Date to ISO string
+    if (args.filters.endedAt) {
+      result.endedAt = {
+        ...(args.filters.endedAt.start && { start: args.filters.endedAt.start.toISOString() }),
+        ...(args.filters.endedAt.end && { end: args.filters.endedAt.end.toISOString() }),
       };
     }
 
@@ -366,6 +410,14 @@ function prepareForSerialization(args: TracesPaginatedArg): Record<string, unkno
     if (args.filters.versionInfo && Object.keys(args.filters.versionInfo).length > 0) {
       result.versionInfo = args.filters.versionInfo;
     }
+  }
+
+  // orderBy - nested structure with field and direction
+  if (args.orderBy) {
+    result.orderBy = {
+      ...(args.orderBy.field && { field: args.orderBy.field }),
+      ...(args.orderBy.direction && { direction: args.orderBy.direction }),
+    };
   }
 
   return result;

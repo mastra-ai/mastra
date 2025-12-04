@@ -20,14 +20,16 @@ export class Observability extends BaseResource {
    * Retrieves paginated list of traces with optional filtering
    *
    * Uses the shared serializeTracesParams from @mastra/core/storage for
-   * consistent query param serialization with the server. Uses qs bracket notation:
-   * - pagination[page], pagination[perPage]
-   * - filters[dateRange][start], filters[dateRange][end]
-   * - filters[tags][0], filters[tags][1], ...
-   * - filters[metadata][key]
-   * - filters[hasChildError]
+   * consistent query param serialization with the server. Uses flattened format:
+   * - page, perPage (scalar at root)
+   * - entityType, entityId, status, etc. (scalar filters at root)
+   * - startedAt[start], startedAt[end] (date ranges use bracket notation)
+   * - endedAt[start], endedAt[end]
+   * - orderBy[field], orderBy[direction]
+   * - tags[0], tags[1], ... (arrays use bracket notation)
+   * - metadata[key] (objects use bracket notation)
    *
-   * @param params - Parameters for pagination and filtering
+   * @param params - Parameters for pagination, filtering, and ordering
    * @returns Promise containing paginated traces and pagination info
    */
   getTraces(params: TracesPaginatedArg = {}): Promise<GetTracesResponse> {

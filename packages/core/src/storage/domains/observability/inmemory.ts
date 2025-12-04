@@ -91,8 +91,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const allRootSpans = this.filterForRootSpans(Array.from(this.collection.values()));
     const filteredRootSpans = this.filterSpansByFilter(allRootSpans, filters);
 
-    const startDate = filters?.dateRange?.start;
-    const endDate = filters?.dateRange?.end;
+    // Filter by startedAt date range
+    const startDate = filters?.startedAt?.start;
+    const endDate = filters?.startedAt?.end;
     const filteredRootSpansByDate = this.filterSpansByDate(filteredRootSpans, startDate, endDate);
 
     const total = filteredRootSpansByDate.length;

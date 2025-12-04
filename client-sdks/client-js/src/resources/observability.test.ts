@@ -123,7 +123,7 @@ describe('Observability Methods', () => {
       expect(url).toContain('entityType=agent');
     });
 
-    it('should fetch traces with date range filter using Date objects', async () => {
+    it('should fetch traces with startedAt date range filter using Date objects', async () => {
       mockSuccessfulResponse();
 
       const startDate = new Date('2024-01-01T00:00:00Z');
@@ -131,30 +131,50 @@ describe('Observability Methods', () => {
 
       await client.getTraces({
         filters: {
-          dateRange: {
+          startedAt: {
             start: startDate,
             end: endDate,
           },
         },
       });
 
-      // Nested: dateRange uses bracket notation (dateRange[start]=...)
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringMatching(/\/api\/observability\/traces\?.*dateRange%5Bstart%5D=/),
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
+      // Nested: startedAt uses bracket notation (startedAt[start]=...)
+      const url = (global.fetch as any).mock.calls[0][0];
+      expect(url).toContain('/api/observability/traces?');
+      expect(url).toContain('startedAt%5Bstart%5D=');
+      expect(url).toContain('startedAt%5Bend%5D=');
     });
 
-    it('should fetch traces with partial date range filter', async () => {
+    it('should fetch traces with endedAt date range filter', async () => {
+      mockSuccessfulResponse();
+
+      const startDate = new Date('2024-01-01T00:00:00Z');
+      const endDate = new Date('2024-01-31T23:59:59Z');
+
+      await client.getTraces({
+        filters: {
+          endedAt: {
+            start: startDate,
+            end: endDate,
+          },
+        },
+      });
+
+      // Nested: endedAt uses bracket notation (endedAt[start]=...)
+      const url = (global.fetch as any).mock.calls[0][0];
+      expect(url).toContain('/api/observability/traces?');
+      expect(url).toContain('endedAt%5Bstart%5D=');
+      expect(url).toContain('endedAt%5Bend%5D=');
+    });
+
+    it('should fetch traces with partial startedAt filter', async () => {
       mockSuccessfulResponse();
 
       const startDate = new Date('2024-01-01T00:00:00Z');
 
       await client.getTraces({
         filters: {
-          dateRange: {
+          startedAt: {
             start: startDate,
           },
         },
@@ -162,11 +182,28 @@ describe('Observability Methods', () => {
 
       // Nested: only start date in bracket notation
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringMatching(/\/api\/observability\/traces\?dateRange%5Bstart%5D=/),
+        expect.stringMatching(/\/api\/observability\/traces\?startedAt%5Bstart%5D=/),
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
       );
+    });
+
+    it('should fetch traces with orderBy parameter', async () => {
+      mockSuccessfulResponse();
+
+      await client.getTraces({
+        orderBy: {
+          field: 'startedAt',
+          direction: 'DESC',
+        },
+      });
+
+      // Nested: orderBy uses bracket notation
+      const url = (global.fetch as any).mock.calls[0][0];
+      expect(url).toContain('/api/observability/traces?');
+      expect(url).toContain('orderBy%5Bfield%5D=startedAt');
+      expect(url).toContain('orderBy%5Bdirection%5D=DESC');
     });
 
     it('should fetch traces with all filters combined', async () => {
@@ -184,10 +221,14 @@ describe('Observability Methods', () => {
           spanType: 'agent_run' as SpanType,
           entityId: 'entity-123',
           entityType: 'agent',
-          dateRange: {
+          startedAt: {
             start: startDate,
             end: endDate,
           },
+        },
+        orderBy: {
+          field: 'startedAt',
+          direction: 'DESC',
         },
       });
 
@@ -202,8 +243,11 @@ describe('Observability Methods', () => {
       expect(url).toContain('entityId=entity-123');
       expect(url).toContain('entityType=agent');
       // Nested filters - bracket notation
-      expect(url).toContain('dateRange%5Bstart%5D=');
-      expect(url).toContain('dateRange%5Bend%5D=');
+      expect(url).toContain('startedAt%5Bstart%5D=');
+      expect(url).toContain('startedAt%5Bend%5D=');
+      // orderBy - bracket notation
+      expect(url).toContain('orderBy%5Bfield%5D=startedAt');
+      expect(url).toContain('orderBy%5Bdirection%5D=DESC');
     });
 
     it('should handle HTTP errors gracefully', async () => {

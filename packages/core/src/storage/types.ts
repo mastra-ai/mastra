@@ -11,6 +11,9 @@ export type {
   SpanStatus,
   DateRange,
   PaginationArgs,
+  TracesOrderByField,
+  SortDirection,
+  TracesOrderBy,
   TracesFilter,
   TracesPaginatedArg,
 } from './schemas/observability';
@@ -23,6 +26,9 @@ export {
   dateRangeSchema,
   paginationArgsSchema,
   tracesFilterSchema,
+  tracesOrderByFieldSchema,
+  sortDirectionSchema,
+  tracesOrderBySchema,
   tracesPaginatedArgSchema,
   // Query param translation functions
   parseTracesQueryParams,

@@ -87,13 +87,13 @@ const url = `/api/endpoint?${query.toString()}`;
 
 ## Endpoint Patterns by Type
 
-| Endpoint          | Complex Params                  | Approach                                                     |
-| ----------------- | ------------------------------- | ------------------------------------------------------------ |
-| **Workflows**     | None                            | Simple scalars only (`page`, `offset`, `fromDate`, `status`) |
-| **Logs**          | None                            | Simple scalars, `filters` as string/string[]                 |
-| **Scores**        | None                            | Simple scalars only                                          |
-| **Memory**        | `filter`, `include`, `orderBy`  | JSON strings with `z.preprocess`                             |
-| **Observability** | `dateRange`, `metadata`, `tags` | Dot notation (new pattern)                                   |
+| Endpoint          | Complex Params                                        | Approach                                                     |
+| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| **Workflows**     | None                                                  | Simple scalars only (`page`, `offset`, `fromDate`, `status`) |
+| **Logs**          | None                                                  | Simple scalars, `filters` as string/string[]                 |
+| **Scores**        | None                                                  | Simple scalars only                                          |
+| **Memory**        | `filter`, `include`, `orderBy`                        | JSON strings with `z.preprocess`                             |
+| **Observability** | `startedAt`, `endedAt`, `orderBy`, `metadata`, `tags` | qs bracket notation (recommended)                            |
 
 ## URL Examples
 
@@ -109,10 +109,10 @@ GET /api/workflows/runs?offset=0&limit=20&fromDate=2024-01-01T00:00:00Z&status=s
 GET /api/memory/threads/thread-123/messages?agentId=myAgent&page=0&perPage=40&filter={"dateRange":{"start":"2024-01-01T00:00:00Z"}}&orderBy={"field":"createdAt","direction":"DESC"}
 ```
 
-### Dot Notation (Observability)
+### Bracket Notation (Observability)
 
 ```
-GET /api/observability/traces?page=0&perPage=20&dateRange.start=2024-01-01T00:00:00Z&entityType=agent&tags=prod,v2&metadata.customerId=abc123
+GET /api/observability/traces?page=0&perPage=20&entityType=agent&startedAt[start]=2024-01-01T00:00:00Z&orderBy[field]=startedAt&orderBy[direction]=DESC&tags[0]=prod&tags[1]=v2&metadata[customerId]=abc123
 ```
 
 ## Trade-offs
@@ -122,10 +122,10 @@ GET /api/observability/traces?page=0&perPage=20&dateRange.start=2024-01-01T00:00
 - **Pros**: Simple to implement, reuses standard JSON
 - **Cons**: URLs are ugly when encoded (`%7B%22dateRange%22%3A...`), harder to debug
 
-### Dot Notation
+### Bracket Notation (qs library)
 
-- **Pros**: Human-readable URLs, easy to construct manually
-- **Cons**: Requires custom transform logic, non-standard
+- **Pros**: Human-readable URLs, standardized via qs library, easy bidirectional serialization
+- **Cons**: Slightly more verbose than dot notation for deeply nested structures
 
 ### Simple Scalars Only
 
@@ -144,7 +144,7 @@ GET /api/observability/traces?page=0&perPage=20&dateRange.start=2024-01-01T00:00
 The Observability API uses `qs` for bidirectional query string handling with a flattened approach:
 
 - **Simple scalars at root**: `page`, `perPage`, `entityType`, `entityId`, `status`, etc.
-- **Bracket notation only for nested**: `dateRange[start]`, `tags[0]`, `metadata[key]`
+- **Bracket notation only for nested**: `startedAt[start]`, `endedAt[end]`, `orderBy[field]`, `tags[0]`, `metadata[key]`
 
 ```typescript
 import qs from 'qs';
@@ -157,14 +157,15 @@ const queryString = qs.stringify(
     entityType: 'agent',
     entityId: 'weatherAgent',
     status: 'success',
-    dateRange: { start: '2024-01-01T00:00:00Z' },
+    startedAt: { start: '2024-01-01T00:00:00Z' },
+    orderBy: { field: 'startedAt', direction: 'DESC' },
     tags: ['production', 'v2'],
     metadata: { customerId: 'abc123' },
   },
   { encode: true, skipNulls: true, arrayFormat: 'indices' },
 );
 
-// Produces: page=0&perPage=20&entityType=agent&entityId=weatherAgent&status=success&dateRange[start]=...&tags[0]=production&tags[1]=v2&metadata[customerId]=abc123
+// Produces: page=0&perPage=20&entityType=agent&entityId=weatherAgent&status=success&startedAt[start]=...&orderBy[field]=startedAt&orderBy[direction]=DESC&tags[0]=production&tags[1]=v2&metadata[customerId]=abc123
 
 // Server: parse and restructure into schema shape
 const parsed = qs.parse(queryString, { ignoreQueryPrefix: true, depth: 2 });
