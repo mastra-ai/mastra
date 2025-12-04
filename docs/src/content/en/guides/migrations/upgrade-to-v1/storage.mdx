@@ -278,6 +278,52 @@ npx @mastra/codemod@beta v1/storage-postgres-schema-name .
 
 :::
 
+### PostgresStore BYOC: `client` to `pool`
+
+PostgresStore now uses `pg.Pool` directly instead of `pg-promise`. This enables support for HTTP-based drivers like `@neondatabase/serverless` for serverless environments.
+
+**Breaking changes:**
+- The `client` parameter (pg-promise `IDatabase`) has been removed - use `pool` instead
+- The `store.pgp` property has been removed - use `store.pool` for direct database access
+
+To migrate, replace pg-promise clients with pg pools:
+
+```diff
+- import pgPromise from 'pg-promise';
++ import { Pool } from 'pg';
+
+- const pgp = pgPromise();
+- const db = pgp('postgresql://user:pass@localhost:5432/db');
++ const pool = new Pool({
++   connectionString: 'postgresql://user:pass@localhost:5432/db',
++ });
+
+  const store = new PostgresStore({
+    id: 'my-store',
+-   client: db,
++   pool,
+  });
+
+  // Direct database access
+- store.pgp; // No longer available
++ store.pool; // Use pg.Pool directly
+```
+
+You can now share a pool between `PgVector` and `PostgresStore`:
+
+```typescript
+import { Pool } from 'pg';
+import { PgVector, PostgresStore } from '@mastra/pg';
+
+const pool = new Pool({ connectionString: '...' });
+
+const vectorStore = new PgVector({ id: 'vectors', pool });
+const store = new PostgresStore({ id: 'storage', pool });
+
+// When done, YOU close the pool
+await pool.end();
+```
+
 ### Score storage methods to `listScoresBy*` pattern
 
 Score storage APIs have been renamed to follow the `listScoresBy*` pattern. This change provides consistency with the broader API naming conventions.
