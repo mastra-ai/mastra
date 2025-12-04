@@ -256,28 +256,9 @@ await store.init();
 await pool.end();
 ```
 
-#### Using pg-promise Client Directly
-
-If you're already using pg-promise in your application, you can pass its client directly:
-
-```typescript
-import pgPromise from 'pg-promise';
-import { PostgresStore } from '@mastra/pg';
-
-const pgp = pgPromise();
-const db = pgp('postgresql://user:pass@localhost:5432/db');
-
-const store = new PostgresStore({
-  id: 'my-store',
-  client: db, // Pass pg-promise client directly
-});
-
-await store.init();
-```
-
 #### Important Notes for BYOC
 
-1. **Lifecycle Management**: When you provide your own pool or client, you are responsible for closing it. The stores will NOT close user-provided connections.
+1. **Lifecycle Management**: When you provide your own pool, you are responsible for closing it. The stores will NOT close user-provided connections.
 
 2. **Schema Configuration**: You can still specify `schemaName` when using BYOC:
 
@@ -290,10 +271,6 @@ await store.init();
    ```
 
 3. **Initialization**: `PostgresStore.init()` must still be called to set up tables, even when using BYOC.
-
-4. **Pool vs Client for PostgresStore**:
-   - `pool`: Pass a `pg.Pool` or compatible pool (recommended for most cases)
-   - `client`: Pass a pg-promise `IDatabase` instance (for existing pg-promise users)
 
 ## Features
 
