@@ -1,5 +1,6 @@
 import { ReadableStream, WritableStream } from 'node:stream/web';
 import type { ToolSet } from 'ai-v5';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
@@ -46,6 +47,24 @@ export function workflowLoopStream<
     start: async controller => {
       const writer = new WritableStream<ChunkType<OUTPUT>>({
         write: chunk => {
+          // Handle data-* chunks (custom data chunks from writer.custom())
+          // These need to be persisted to storage, not just streamed
+          if (chunk.type.startsWith('data-')) {
+            const dataPart = {
+              type: chunk.type as `data-${string}`,
+              data: 'data' in chunk ? chunk.data : undefined,
+            };
+            const message: MastraDBMessage = {
+              id: messageId!,
+              role: 'assistant',
+              content: {
+                format: 2,
+                parts: [dataPart],
+              },
+              createdAt: new Date(),
+            };
+            messageList.add(message, 'response');
+          }
           controller.enqueue(chunk);
         },
       });

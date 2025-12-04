@@ -432,17 +432,16 @@ describe('ToolStream - writer.custom', () => {
     const assistantMessages = recalledMessages.messages.filter(m => m.role === 'assistant');
     expect(assistantMessages.length).toBeGreaterThan(0);
 
-    // Check if any assistant message contains data parts
+    // Check if any assistant message contains data parts (stored as { type: 'data-progress', data: ... })
     const hasDataParts = assistantMessages.some(m => {
       const content = m.content;
       if (typeof content === 'object' && 'parts' in content) {
-        return content.parts.some((p: any) => p.type === 'data' && p.dataType === 'data-progress');
+        return content.parts.some((p: any) => p.type === 'data-progress');
       }
       return false;
     });
 
-    // This assertion should FAIL until we implement data-* chunk persistence
-    // The data-* chunks are streamed to the client but NOT saved to storage
+    // data-* chunks should now be persisted to storage
     expect(hasDataParts).toBe(true);
   });
 });

@@ -2362,13 +2362,12 @@ describe('toUIMessage', () => {
       const conversation: MastraUIMessage[] = [existingMessage];
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
-      // Verify data-* chunk is added as a data part
+      // Verify data-* chunk is added as a data part with type: 'data-progress' (AI SDK v5 format)
       const lastMessage = result[result.length - 1];
       expect(lastMessage.role).toBe('assistant');
 
-      const dataPart = lastMessage.parts.find((p: any) => p.type === 'data');
+      const dataPart = lastMessage.parts.find((p: any) => p.type === 'data-progress');
       expect(dataPart).toBeDefined();
-      expect((dataPart as any).dataType).toBe('data-progress');
       expect((dataPart as any).data).toEqual({
         taskName: 'test-task',
         progress: 50,
@@ -2403,7 +2402,7 @@ describe('toUIMessage', () => {
       conversation = toUIMessage({ chunk: chunk2, conversation, metadata: baseMetadata });
 
       const lastMessage = conversation[conversation.length - 1];
-      const dataParts = lastMessage.parts.filter((p: any) => p.type === 'data');
+      const dataParts = lastMessage.parts.filter((p: any) => p.type.startsWith('data-'));
 
       // Should have accumulated both data parts
       expect(dataParts.length).toBe(2);
@@ -2411,7 +2410,7 @@ describe('toUIMessage', () => {
       expect((dataParts[1] as any).data.progress).toBe(75);
     });
 
-    it('should handle data-* chunks with different dataTypes', async () => {
+    it('should handle data-* chunks with different types', async () => {
       const progressChunk: ChunkType = {
         type: 'data-progress',
         data: { progress: 50 },
@@ -2438,11 +2437,11 @@ describe('toUIMessage', () => {
       conversation = toUIMessage({ chunk: statusChunk, conversation, metadata: baseMetadata });
 
       const lastMessage = conversation[conversation.length - 1];
-      const dataParts = lastMessage.parts.filter((p: any) => p.type === 'data');
+      const dataParts = lastMessage.parts.filter((p: any) => p.type.startsWith('data-'));
 
       expect(dataParts.length).toBe(2);
-      expect((dataParts[0] as any).dataType).toBe('data-progress');
-      expect((dataParts[1] as any).dataType).toBe('data-status');
+      expect((dataParts[0] as any).type).toBe('data-progress');
+      expect((dataParts[1] as any).type).toBe('data-status');
     });
   });
 });
