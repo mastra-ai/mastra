@@ -171,6 +171,7 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
         type: 'data',
         name: part.type.substring(5), // Extract name from 'data-{name}'
         data: (part as any).data,
+        metadata: message.metadata,
       };
     }
 

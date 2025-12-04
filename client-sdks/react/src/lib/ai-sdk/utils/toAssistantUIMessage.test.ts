@@ -1413,7 +1413,7 @@ describe('toAssistantUIMessage', () => {
   });
 
   describe('Data parts (from persisted data-* chunks)', () => {
-    it('should convert data parts to a proper content format', () => {
+    it('should convert data parts to DataMessagePart format', () => {
       const message: MastraUIMessage = {
         id: 'msg-data-1',
         role: 'assistant',
@@ -1444,7 +1444,7 @@ describe('toAssistantUIMessage', () => {
 
       const result = toAssistantUIMessage(message);
 
-      // Data parts should be converted to a format @assistant-ui can handle
+      // Data parts should be converted to DataMessagePart format
       expect(result.content).toHaveLength(3);
 
       // First part should be text
@@ -1453,9 +1453,10 @@ describe('toAssistantUIMessage', () => {
         text: 'Processing your request...',
       });
 
-      // Data parts should preserve the data-* type format
+      // Data parts should be converted to { type: 'data', name: '...', data: ... }
       const dataPart1 = result.content[1] as any;
-      expect(dataPart1.type).toBe('data-progress');
+      expect(dataPart1.type).toBe('data');
+      expect(dataPart1.name).toBe('progress');
       expect(dataPart1.data).toEqual({
         taskName: 'test-task',
         progress: 50,
@@ -1463,7 +1464,8 @@ describe('toAssistantUIMessage', () => {
       });
 
       const dataPart2 = result.content[2] as any;
-      expect(dataPart2.type).toBe('data-progress');
+      expect(dataPart2.type).toBe('data');
+      expect(dataPart2.name).toBe('progress');
       expect(dataPart2.data).toEqual({
         taskName: 'test-task',
         progress: 100,
@@ -1496,17 +1498,19 @@ describe('toAssistantUIMessage', () => {
 
       const result = toAssistantUIMessage(message);
 
-      // This test verifies data parts with different types are handled correctly
+      // Data parts with different types should be converted correctly
       expect(result.content).toHaveLength(2);
 
       const part1 = result.content[0] as any;
-      expect(part1.type).toBe('data-workflow-step');
+      expect(part1.type).toBe('data');
+      expect(part1.name).toBe('workflow-step');
 
       const part2 = result.content[1] as any;
-      expect(part2.type).toBe('data-custom-event');
+      expect(part2.type).toBe('data');
+      expect(part2.name).toBe('custom-event');
     });
 
-    it('should preserve data part metadata', () => {
+    it('should preserve metadata on data parts', () => {
       const message: MastraUIMessage = {
         id: 'msg-data-3',
         role: 'assistant',
@@ -1518,18 +1522,18 @@ describe('toAssistantUIMessage', () => {
         ],
         metadata: {
           mode: 'stream',
-          requestId: 'req-123',
         },
       };
 
       const result = toAssistantUIMessage(message);
 
-      // Metadata should be passed to data parts
-      expect(result.content[0]).toMatchObject({
-        metadata: {
-          mode: 'stream',
-          requestId: 'req-123',
-        },
+      // DataMessagePart format: { type: 'data', name: string, data: T, metadata: ... }
+      const dataPart = result.content[0] as any;
+      expect(dataPart.type).toBe('data');
+      expect(dataPart.name).toBe('progress');
+      expect(dataPart.data).toEqual({ progress: 100 });
+      expect(dataPart.metadata).toEqual({
+        mode: 'stream',
       });
     });
   });
