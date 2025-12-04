@@ -2,7 +2,9 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
+import { MockMemory } from '../memory/mock';
 import type { ChunkType } from '../stream/types';
+import { delay } from '../utils';
 import { createTool } from '.';
 
 describe('ToolStream - writer.custom', () => {
@@ -319,5 +321,128 @@ describe('ToolStream - writer.custom', () => {
       expect(data.value).toBe('test');
       expect(data.timestamp).toBeDefined();
     }
+  });
+
+  it('should persist data-* chunks to memory storage', async () => {
+    // Create a mock memory instance
+    const mockMemory = new MockMemory();
+
+    // Create a tool that emits data-* chunks
+    const progressTool = createTool({
+      id: 'progress-tool',
+      description: 'A tool that emits progress data chunks',
+      inputSchema: z.object({
+        taskName: z.string(),
+      }),
+      execute: async (inputData, context) => {
+        // Emit a data-* chunk for progress tracking
+        await context?.writer?.custom({
+          type: 'data-progress',
+          data: {
+            taskName: inputData.taskName,
+            progress: 50,
+            status: 'in-progress',
+          },
+        });
+
+        // Emit another data-* chunk for completion
+        await context?.writer?.custom({
+          type: 'data-progress',
+          data: {
+            taskName: inputData.taskName,
+            progress: 100,
+            status: 'complete',
+          },
+        });
+
+        return { success: true, taskName: inputData.taskName };
+      },
+    });
+
+    // Create a mock model that will call the tool
+    const mockModelWithTool = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          {
+            type: 'tool-call',
+            toolCallId: 'call-progress-1',
+            toolName: 'progressTool',
+            input: '{"taskName": "test-task"}',
+            providerExecuted: false,
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Task completed.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    // Create agent with memory
+    const agent = new Agent({
+      id: 'test-agent-with-memory',
+      name: 'Test Agent with Memory',
+      instructions: 'You are a test agent.',
+      model: mockModelWithTool,
+      tools: {
+        progressTool,
+      },
+      memory: mockMemory,
+    });
+
+    const threadId = 'test-thread-data-chunks';
+    const resourceId = 'user-test-data-chunks';
+
+    // Stream with memory enabled
+    const stream = await agent.stream('Run the progress tool for test-task', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Collect chunks and verify data-* chunks appear in stream
+    const chunks: ChunkType[] = [];
+    for await (const chunk of stream.fullStream) {
+      chunks.push(chunk);
+    }
+
+    // Verify data-* chunks appeared in the stream
+    const dataChunks = chunks.filter(chunk => chunk.type === 'data-progress');
+    expect(dataChunks.length).toBe(2);
+
+    // Wait for debounced save to complete
+    await delay(200);
+
+    // Retrieve messages from storage
+    const recalledMessages = await mockMemory.recall({
+      threadId,
+      resourceId,
+    });
+
+    // Find assistant messages
+    const assistantMessages = recalledMessages.messages.filter(m => m.role === 'assistant');
+    expect(assistantMessages.length).toBeGreaterThan(0);
+
+    // Check if any assistant message contains data parts
+    const hasDataParts = assistantMessages.some(m => {
+      const content = m.content;
+      if (typeof content === 'object' && 'parts' in content) {
+        return content.parts.some((p: any) => p.type === 'data' && p.dataType === 'data-progress');
+      }
+      return false;
+    });
+
+    // This assertion should FAIL until we implement data-* chunk persistence
+    // The data-* chunks are streamed to the client but NOT saved to storage
+    expect(hasDataParts).toBe(true);
   });
 });
