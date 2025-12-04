@@ -90,13 +90,16 @@ export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
   'messages' | 'systemMessages' | 'abort'
 >;
 
-export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
+export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
 
   messages?: MastraDBMessage[];
   messageList?: MessageList;
+  providerOptions?: SharedV2ProviderOptions;
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
 };
 
 export type RunProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = Omit<
