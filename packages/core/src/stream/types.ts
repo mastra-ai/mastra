@@ -466,6 +466,7 @@ export type DataChunkType = {
 
 export type NetworkAbortPayload = {
   reason?: string;
+  runId: string;
   usage?: {
     inputTokens: number;
     outputTokens: number;

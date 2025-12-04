@@ -67,7 +67,7 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
       start: async controller => {
         // Wire abort signal to cancel the workflow run
         if (abortSignal) {
-          const handleAbort = () => {
+          const handleAbort = async () => {
             if (aborted) return;
             aborted = true;
             this.#aborted = true;
@@ -75,6 +75,7 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
             // Emit abort event before cancelling
             const abortPayload: NetworkAbortPayload = {
               reason: abortSignal.reason || 'Aborted',
+              runId: run.runId,
               usage: this.#usageCount,
             };
             controller.enqueue({
@@ -85,17 +86,17 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
             });
 
             // Cancel the workflow run
-            run.cancel();
+            await run.cancel();
 
             // Call the onAbort callback if provided
-            onAbort?.({ reason: abortSignal.reason });
+            await onAbort?.({ reason: abortSignal.reason });
           };
 
           abortSignal.addEventListener('abort', handleAbort);
 
           // If already aborted, handle immediately
           if (abortSignal.aborted) {
-            handleAbort();
+            await handleAbort();
           }
         }
 

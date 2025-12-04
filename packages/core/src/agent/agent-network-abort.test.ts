@@ -1,11 +1,9 @@
+import type { LoopConfig } from '../loop/types';
+import type { MultiPrimitiveExecutionOptions } from './agent.types';
+
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
-import { createTool } from '../tools';
-import { Agent } from './index';
-import type { MultiPrimitiveExecutionOptions } from './agent.types';
-import type { LoopConfig } from '../loop/types';
 
 /**
  * Test suite for GitHub Issue #10874:
