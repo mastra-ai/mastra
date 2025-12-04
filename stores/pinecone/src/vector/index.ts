@@ -355,7 +355,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No updates provided',

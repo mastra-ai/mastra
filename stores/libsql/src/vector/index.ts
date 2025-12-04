@@ -430,7 +430,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
