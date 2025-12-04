@@ -23,26 +23,48 @@ import { ScoresStorageD1 } from './domains/scores';
 import { WorkflowsStorageD1 } from './domains/workflows';
 
 /**
- * Configuration for D1 using the REST API
+ * Base configuration options shared across D1 configurations
  */
-export interface D1Config {
+export interface D1BaseConfig {
   /** Storage instance ID */
   id: string;
+  /** Optional prefix for table names */
+  tablePrefix?: string;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new D1Store({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new D1Store({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
+}
+
+/**
+ * Configuration for D1 using the REST API
+ */
+export interface D1Config extends D1BaseConfig {
   /** Cloudflare account ID */
   accountId: string;
   /** Cloudflare API token with D1 access */
   apiToken: string;
   /** D1 database ID */
   databaseId: string;
-  /** Optional prefix for table names */
-  tablePrefix?: string;
 }
 
-export interface D1ClientConfig {
-  /** Storage instance ID */
-  id: string;
-  /** Optional prefix for table names */
-  tablePrefix?: string;
+export interface D1ClientConfig extends D1BaseConfig {
   /** D1 Client */
   client: D1Client;
 }
@@ -50,13 +72,9 @@ export interface D1ClientConfig {
 /**
  * Configuration for D1 using the Workers Binding API
  */
-export interface D1WorkersConfig {
-  /** Storage instance ID */
-  id: string;
+export interface D1WorkersConfig extends D1BaseConfig {
   /** D1 database binding from Workers environment */
   binding: D1Database; // D1Database binding from Workers
-  /** Optional prefix for table names */
-  tablePrefix?: string;
 }
 
 /**
@@ -82,7 +100,7 @@ export class D1Store extends MastraStorage {
    */
   constructor(config: D1StoreConfig) {
     try {
-      super({ id: config.id, name: 'D1' });
+      super({ id: config.id, name: 'D1', disableInit: config.disableInit });
 
       if (config.tablePrefix && !/^[a-zA-Z0-9_]*$/.test(config.tablePrefix)) {
         throw new Error('Invalid tablePrefix: only letters, numbers, and underscores are allowed.');
