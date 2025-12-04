@@ -97,9 +97,11 @@ export const vNextBodyOptions: any = {
 
 // Agent handlers
 export async function getAgentsHandler(c: Context) {
+  const partial = c.req.query('partial') === 'true';
   const serializedAgents = await getOriginalAgentsHandler({
     mastra: c.get('mastra'),
     runtimeContext: c.get('runtimeContext'),
+    partial,
   });
 
   return c.json(serializedAgents);

@@ -35,9 +35,10 @@ import { handleError } from '../../error';
 export async function getWorkflowsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-
+    const partial = c.req.query('partial') === 'true';
     const workflows = await getOriginalWorkflowsHandler({
       mastra,
+      partial,
     });
 
     return c.json(workflows);
