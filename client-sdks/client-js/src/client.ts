@@ -59,13 +59,20 @@ export class MastraClient extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
-  public listAgents(requestContext?: RequestContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+  public listAgents(
+    requestContext?: RequestContext | Record<string, any>,
+    partial?: boolean,
+  ): Promise<Record<string, GetAgentResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
 
     if (requestContextParam) {
       searchParams.set('requestContext', requestContextParam);
+    }
+
+    if (partial) {
+      searchParams.set('partial', 'true');
     }
 
     const queryString = searchParams.toString();
@@ -243,6 +250,7 @@ export class MastraClient extends BaseResource {
    */
   public listWorkflows(
     requestContext?: RequestContext | Record<string, any>,
+    partial?: boolean,
   ): Promise<Record<string, GetWorkflowResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
@@ -250,6 +258,10 @@ export class MastraClient extends BaseResource {
 
     if (requestContextParam) {
       searchParams.set('requestContext', requestContextParam);
+    }
+
+    if (partial) {
+      searchParams.set('partial', 'true');
     }
 
     const queryString = searchParams.toString();
