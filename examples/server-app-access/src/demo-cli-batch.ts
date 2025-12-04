@@ -10,7 +10,7 @@
  * processes requests in-memory and only uses the path. The hostname is ignored.
  */
 
-import { MastraServer } from '@mastra/hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { Hono } from 'hono';
 import type { Hono as HonoType } from 'hono';
 
@@ -21,7 +21,7 @@ const BASE_URL = 'http://internal';
 
 async function main() {
   // Create and initialize server (no port binding)
-  const app = new Hono();
+  const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
   const adapter = new MastraServer({ app: app as any, mastra });
   await adapter.init();
 

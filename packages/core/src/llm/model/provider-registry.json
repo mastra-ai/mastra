@@ -369,7 +369,6 @@
     "deepseek": {
       "url": "https://api.deepseek.com",
       "apiKeyEnvVar": "DEEPSEEK_API_KEY",
-      "apiKeyHeader": "Authorization",
       "name": "DeepSeek",
       "models": ["deepseek-chat", "deepseek-reasoner"],
       "docUrl": "https://platform.deepseek.com/api-docs/pricing",
@@ -1019,6 +1018,7 @@
         "deepseek/deepseek-v3.1-terminus",
         "deepseek/deepseek-v3.1-terminus:exacto",
         "deepseek/deepseek-v3.2",
+        "deepseek/deepseek-v3.2-speciale",
         "featherless/qwerky-72b",
         "google/gemini-2.0-flash-001",
         "google/gemini-2.0-flash-exp:free",
@@ -2407,6 +2407,7 @@
       "deepseek/deepseek-v3.1-terminus",
       "deepseek/deepseek-v3.1-terminus:exacto",
       "deepseek/deepseek-v3.2",
+      "deepseek/deepseek-v3.2-speciale",
       "featherless/qwerky-72b",
       "google/gemini-2.0-flash-001",
       "google/gemini-2.0-flash-exp:free",
