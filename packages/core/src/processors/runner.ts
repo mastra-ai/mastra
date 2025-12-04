@@ -1,9 +1,9 @@
-import type { StepResult, ToolChoice, ToolSet } from 'ai-v5';
+import type { ToolSet } from 'ai-v5';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import { MastraError } from '../error';
-import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
+import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
 import { SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
@@ -11,14 +11,12 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type {
-  ProcessInputStepArgs,
   ProcessInputStepResult,
   Processor,
   ProcessorMessageResult,
   RunProcessInputStepArgs,
   RunProcessInputStepResult,
 } from './index';
-import { resolveModelConfig } from '../llm';
 
 /**
  * Implementation of processor state management
