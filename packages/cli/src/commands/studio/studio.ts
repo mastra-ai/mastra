@@ -14,10 +14,10 @@ export async function studio(options: StudioOptions = {}) {
   config({ path: [options.env || '.env.production', '.env'] });
 
   try {
-    const distPath = join(process.cwd(), 'dist', 'playground');
+    const distPath = join(process.cwd(), '.mastra', 'output', 'playground');
 
     if (!existsSync(distPath)) {
-      logger.error(`Studio distribution not found at ${distPath}. Please build the studio first.`);
+      logger.error(`Studio distribution not found at ${distPath}. Please run 'mastra build' first.`);
       process.exit(1);
     }
 
