@@ -1,5 +1,6 @@
 import { Client as ElasticSearchClient } from '@elastic/elasticsearch';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -15,7 +16,6 @@ import type {
 import { MastraVector } from '@mastra/core/vector';
 import { ElasticSearchFilterTranslator } from './filter';
 import type { ElasticSearchVectorFilter } from './filter';
-import { createVectorErrorId } from '@mastra/core/storage';
 
 const METRIC_MAPPING = {
   cosine: 'cosine',

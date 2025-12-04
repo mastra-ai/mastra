@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -16,7 +17,6 @@ import { ChromaClient, CloudClient } from 'chromadb';
 import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection, Metadata } from 'chromadb';
 import type { ChromaVectorFilter } from './filter';
 import { ChromaFilterTranslator } from './filter';
-import { createVectorErrorId } from '@mastra/core/storage';
 
 interface ChromaUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];

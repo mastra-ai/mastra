@@ -1,6 +1,7 @@
 import type { Db } from '@datastax/astra-db-ts';
 import { DataAPIClient, UUID } from '@datastax/astra-db-ts';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -16,7 +17,6 @@ import type {
 } from '@mastra/core/vector';
 import type { AstraVectorFilter } from './filter';
 import { AstraFilterTranslator } from './filter';
-import { createVectorErrorId } from '@mastra/core/storage';
 
 // Mastra and Astra DB agree on cosine and euclidean, but Astra DB uses dot_product instead of dotproduct.
 const metricMap = {

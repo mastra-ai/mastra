@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -16,7 +17,6 @@ import Cloudflare from 'cloudflare';
 
 import { VectorizeFilterTranslator } from './filter';
 import type { VectorizeVectorFilter } from './filter';
-import { createVectorErrorId } from '@mastra/core/storage';
 
 type VectorizeQueryParams = QueryVectorParams<VectorizeVectorFilter>;
 

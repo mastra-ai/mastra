@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
@@ -16,7 +17,6 @@ import { Index } from '@upstash/vector';
 import { UpstashFilterTranslator } from './filter';
 import type { UpstashVectorFilter } from './filter';
 import type { UpstashUpsertVectorParams, UpstashQueryVectorParams, UpstashUpdateVectorParams } from './types';
-import { createVectorErrorId } from '@mastra/core/storage';
 
 export class UpstashVector extends MastraVector<UpstashVectorFilter> {
   private client: Index;

@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -17,7 +18,6 @@ import type { QdrantClientParams, Schemas } from '@qdrant/js-client-rest';
 
 import { QdrantFilterTranslator } from './filter';
 import type { QdrantVectorFilter } from './filter';
-import { createVectorErrorId } from '@mastra/core/storage';
 
 const BATCH_SIZE = 256;
 const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {

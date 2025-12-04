@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -22,7 +23,6 @@ import type {
 
 import { PineconeFilterTranslator } from './filter';
 import type { PineconeVectorFilter } from './filter';
-import { createVectorErrorId } from '@mastra/core/storage';
 
 interface PineconeIndexStats extends IndexStats {
   namespaces?: IndexStatsDescription['namespaces'];
