@@ -726,7 +726,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     // Validate mutually exclusive parameters
     if ('id' in params && 'filter' in params && params.id && params.filter) {
       throw new MastraError({
-        id: createVectorErrorId('LANCE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('LANCE', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'id and filter are mutually exclusive',
@@ -736,7 +736,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     if (!('id' in params || 'filter' in params) || (!params.id && !params.filter)) {
       throw new MastraError({
-        id: createVectorErrorId('LANCE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('LANCE', 'UPDATE_VECTOR', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either id or filter must be provided',
@@ -746,7 +746,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     if ('filter' in params && params.filter && Object.keys(params.filter).length === 0) {
       throw new MastraError({
-        id: createVectorErrorId('LANCE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('LANCE', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Cannot update with empty filter',
@@ -756,7 +756,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: createVectorErrorId('LANCE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('LANCE', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No updates provided',
@@ -1014,7 +1014,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     // Validate mutually exclusive parameters
     if (ids && filter) {
       throw new MastraError({
-        id: createVectorErrorId('LANCE', 'DELETE_VECTORS', 'INVALID_ARGS'),
+        id: createVectorErrorId('LANCE', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'ids and filter are mutually exclusive',
@@ -1024,7 +1024,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     if (!ids && !filter) {
       throw new MastraError({
-        id: createVectorErrorId('LANCE', 'DELETE_VECTORS', 'INVALID_ARGS'),
+        id: createVectorErrorId('LANCE', 'DELETE_VECTORS', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either filter or ids must be provided',
@@ -1035,7 +1035,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     // Validate non-empty arrays and objects
     if (ids && ids.length === 0) {
       throw new MastraError({
-        id: createVectorErrorId('LANCE', 'DELETE_VECTORS', 'INVALID_ARGS'),
+        id: createVectorErrorId('LANCE', 'DELETE_VECTORS', 'EMPTY_IDS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Cannot delete with empty ids array',
@@ -1045,7 +1045,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     if (filter && Object.keys(filter).length === 0) {
       throw new MastraError({
-        id: createVectorErrorId('LANCE', 'DELETE_VECTORS', 'INVALID_ARGS'),
+        id: createVectorErrorId('LANCE', 'DELETE_VECTORS', 'EMPTY_FILTER'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Cannot delete with empty filter',

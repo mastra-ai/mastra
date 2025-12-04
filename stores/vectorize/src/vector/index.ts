@@ -314,7 +314,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: createVectorErrorId('VECTORIZE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        id: createVectorErrorId('VECTORIZE', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No update data provided',
