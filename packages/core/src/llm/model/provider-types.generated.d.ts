@@ -742,6 +742,7 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v3.1-terminus',
     'deepseek/deepseek-v3.1-terminus:exacto',
     'deepseek/deepseek-v3.2',
+    'deepseek/deepseek-v3.2-speciale',
     'featherless/qwerky-72b',
     'google/gemini-2.0-flash-001',
     'google/gemini-2.0-flash-exp:free',
