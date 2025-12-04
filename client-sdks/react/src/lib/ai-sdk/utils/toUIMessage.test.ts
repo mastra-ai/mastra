@@ -499,7 +499,7 @@ describe('toUIMessage', () => {
         type: 'text-start',
         payload: {
           id: 'text-1',
-          providerMetadata: { model: 'gpt-4' },
+          providerMetadata: { model: { name: 'gpt-4' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -521,7 +521,7 @@ describe('toUIMessage', () => {
         type: 'text',
         text: '',
         state: 'streaming',
-        providerMetadata: { model: 'gpt-4' },
+        providerMetadata: { model: { name: 'gpt-4' } },
       });
     });
 
@@ -564,7 +564,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'text-1',
           text: ' world',
-          providerMetadata: { model: 'gpt-4' },
+          providerMetadata: { model: { name: 'gpt-4' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -599,7 +599,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'text-1',
           text: 'Hello',
-          providerMetadata: { model: 'gpt-4' },
+          providerMetadata: { model: { name: 'gpt-4' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -620,7 +620,7 @@ describe('toUIMessage', () => {
         type: 'text',
         text: 'Hello',
         state: 'streaming',
-        providerMetadata: { model: 'gpt-4' },
+        providerMetadata: { model: { name: 'gpt-4' } },
       });
     });
 
@@ -678,7 +678,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'reasoning-1',
           text: ' this problem',
-          providerMetadata: { model: 'o1' },
+          providerMetadata: { model: { name: 'o1' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -713,7 +713,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'reasoning-1',
           text: 'Analyzing...',
-          providerMetadata: { model: 'o1' },
+          providerMetadata: { model: { name: 'o1' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -734,7 +734,7 @@ describe('toUIMessage', () => {
         type: 'reasoning',
         text: 'Analyzing...',
         state: 'streaming',
-        providerMetadata: { model: 'o1' },
+        providerMetadata: { model: { name: 'o1' } },
       });
     });
 
@@ -744,7 +744,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'reasoning-1',
           text: 'Thinking...',
-          providerMetadata: { model: 'o1' },
+          providerMetadata: { model: { name: 'o1' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -761,7 +761,7 @@ describe('toUIMessage', () => {
             type: 'reasoning',
             text: 'Thinking...',
             state: 'streaming',
-            providerMetadata: { model: 'o1' },
+            providerMetadata: { model: { name: 'o1' } },
           },
         ],
         metadata: baseMetadata,
@@ -782,7 +782,7 @@ describe('toUIMessage', () => {
           toolCallId: 'call-1',
           toolName: 'search',
           args: { query: 'weather' },
-          providerMetadata: { latency: 100 },
+          providerMetadata: { latency: { value: 100 } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -805,7 +805,7 @@ describe('toUIMessage', () => {
         toolCallId: 'call-1',
         state: 'input-available',
         input: { query: 'weather' },
-        callProviderMetadata: { latency: 100 },
+        callProviderMetadata: { latency: { value: 100 } },
       });
     });
 
@@ -1296,7 +1296,7 @@ describe('toUIMessage', () => {
           sourceType: 'url',
           title: 'Example Article',
           url: 'https://example.com/article',
-          providerMetadata: { source: 'web' },
+          providerMetadata: { source: { web: true } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1318,7 +1318,7 @@ describe('toUIMessage', () => {
         sourceId: 'source-1',
         url: 'https://example.com/article',
         title: 'Example Article',
-        providerMetadata: { source: 'web' },
+        providerMetadata: { source: { web: true } },
       });
     });
 
@@ -1331,7 +1331,7 @@ describe('toUIMessage', () => {
           title: 'Research Paper',
           mimeType: 'application/pdf',
           filename: 'paper.pdf',
-          providerMetadata: { source: 'upload' },
+          providerMetadata: { source: { upload: true } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1354,7 +1354,7 @@ describe('toUIMessage', () => {
         mediaType: 'application/pdf',
         title: 'Research Paper',
         filename: 'paper.pdf',
-        providerMetadata: { source: 'upload' },
+        providerMetadata: { source: { upload: true } },
       });
     });
 
@@ -1446,9 +1446,9 @@ describe('toUIMessage', () => {
         type: 'file',
         payload: {
           data: 'SGVsbG8gV29ybGQ=',
-          base64: true,
+          base64: 'true',
           mimeType: 'text/plain',
-          providerMetadata: { source: 'upload' },
+          providerMetadata: { source: { upload: true } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1469,7 +1469,7 @@ describe('toUIMessage', () => {
         type: 'file',
         mediaType: 'text/plain',
         url: 'data:text/plain;base64,SGVsbG8gV29ybGQ=',
-        providerMetadata: { source: 'upload' },
+        providerMetadata: { source: { upload: true } },
       });
     });
 
@@ -1478,7 +1478,7 @@ describe('toUIMessage', () => {
         type: 'file',
         payload: {
           data: 'Hello World',
-          base64: false,
+          base64: '',
           mimeType: 'text/plain',
         },
         runId: 'run-123',
@@ -1654,7 +1654,7 @@ describe('toUIMessage', () => {
         type: 'finish',
         payload: {
           stepResult: { reason: 'stop' },
-          output: { usage: {} },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
           metadata: {},
           messages: { all: [], user: [], nonUser: [] },
         },
@@ -1698,7 +1698,7 @@ describe('toUIMessage', () => {
         type: 'finish',
         payload: {
           stepResult: { reason: 'stop' },
-          output: { usage: {} },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
           metadata: {},
           messages: { all: [], user: [], nonUser: [] },
         },
@@ -1733,7 +1733,7 @@ describe('toUIMessage', () => {
         type: 'finish',
         payload: {
           stepResult: { reason: 'stop' },
-          output: { usage: {} },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
           metadata: {},
           messages: { all: [], user: [], nonUser: [] },
         },
@@ -1774,7 +1774,7 @@ describe('toUIMessage', () => {
         type: 'finish',
         payload: {
           stepResult: { reason: 'stop' },
-          output: { usage: {} },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
           metadata: {},
           messages: { all: [], user: [], nonUser: [] },
         },
