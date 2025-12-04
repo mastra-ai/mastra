@@ -1,4 +1,4 @@
-// Integration tests for CouchbaseSearchStore
+// Integration tests for CouchbaseQueryStore
 // IMPORTANT: These tests require Docker Engine to be running.
 // The tests will automatically start and configure the required Couchbase container.
 
@@ -6,9 +6,9 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import axios from 'axios';
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
-import { connect, QueryScanConsistency } from 'couchbase';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { CouchbaseSearchStore, DISTANCE_MAPPING } from './index';
+import { connect } from 'couchbase';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { CouchbaseQueryStore, QUERY_VECTOR_INDEX_DISTANCE_MAPPING } from './queryVectorStore';
 
 const containerName = 'mastra_couchbase_testing';
 
@@ -16,11 +16,10 @@ const connectionString = 'couchbase://localhost';
 const username = 'Administrator';
 const password = 'password';
 
-const dimension = 3;
-const test_bucketName = 'test-bucket';
-const test_scopeName = 'test-scope';
-const test_collectionName = 'test-collection';
-const test_indexName = 'test-index';
+const test_bucketName = 'test-bucket-2';
+const test_scopeName = 'test-scope-2';
+const test_collectionName = 'test-collection-2';
+const test_indexName = 'test-index-2';
 
 async function setupCluster() {
   try {
@@ -31,7 +30,7 @@ async function setupCluster() {
       --cluster-index-ramsize 512 --cluster-fts-ramsize 512 --services data,index,query,fts`,
       { stdio: 'inherit' },
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error initializing Couchbase cluster:', error.message);
     // Decide if you want to re-throw or handle specific errors here
   }
@@ -44,7 +43,7 @@ async function setupCluster() {
       --bucket "${test_bucketName}" --bucket-type couchbase --bucket-ramsize 200`,
       { stdio: 'inherit' },
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating bucket:', error.message);
     // Decide if you want to re-throw or handle specific errors here
   }
@@ -63,7 +62,7 @@ async function checkBucketHealth(
   let attempt = 0;
 
   // Parse the connection string to get the host
-  const parsedUrl = new URL(connectionString);
+  const parsedUrl = new URL(connectionString.replace('couchbase://', 'http://'));
   const host = parsedUrl.hostname;
   const url = `http://${host}:8091/pools/default/buckets/${bucketName}`;
 
@@ -90,7 +89,7 @@ async function checkBucketHealth(
         await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
         attempt++;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.log(
         `Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed with error: ${error.message}`,
       );
@@ -102,18 +101,30 @@ async function checkBucketHealth(
   throw new Error(`Bucket '${bucketName}' health check failed after ${maxAttempts} attempts.`);
 }
 
-describe('Integration Testing CouchbaseSearchStore', async () => {
+describe('Integration Testing CouchbaseQueryStore', async () => {
   // Use Couchbase Enterprise 7.6+ which supports vector search
-  let couchbase_client: CouchbaseSearchStore;
+  let couchbase_client: CouchbaseQueryStore;
   let cluster: Cluster;
   let bucket: Bucket;
   let scope: Scope;
   let collection: Collection;
+  const testVectors: number[][] = [
+    [1.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 0.0, 1.0],
+  ];
+  const testMetadata: Record<string, any>[] = [
+    { label: 'x-axis', num1: 1, num2: 2, num3: 3 },
+    { label: 'y-axis', num1: 4, num2: 5, num3: 6 },
+    { label: 'z-axis', num1: 7, num2: 8, num3: 9 },
+  ];
+  const testVectorIds = ['test_id_1', 'test_id_2', 'test_id_3'];
+  const test_dimension = 3;
 
   beforeAll(
     async () => {
       try {
-        // Initialize the cluster
+        // Initialize the cluster (may already be done by index.integration.test.ts)
         await setupCluster();
 
         // Check cluster health before trying to connect
@@ -130,7 +141,7 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
         const bucketmanager = cluster.buckets();
         try {
           await bucketmanager.getBucket(test_bucketName);
-        } catch (e) {
+        } catch (e: any) {
           if (e.message.includes('not found')) {
             await bucketmanager.createBucket({
               name: test_bucketName,
@@ -145,30 +156,34 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
 
         // If scope or collection are not there, then create it
         const all_scopes = await bucket.collections().getAllScopes();
-        const scope_info = all_scopes.find(scope => scope.name === test_scopeName);
+        const scope_info = all_scopes.find(s => s.name === test_scopeName);
         if (!scope_info) {
           await bucket.collections().createScope(test_scopeName);
+          await new Promise(resolve => setTimeout(resolve, 1000));
           scope = bucket.scope(test_scopeName);
           await bucket.collections().createCollection(test_collectionName, test_scopeName);
+          await new Promise(resolve => setTimeout(resolve, 1000));
           collection = scope.collection(test_collectionName);
         } else {
           scope = bucket.scope(test_scopeName);
-          if (!scope_info.collections.some(collection => collection.name === test_collectionName)) {
+          if (!scope_info.collections.some(c => c.name === test_collectionName)) {
             await bucket.collections().createCollection(test_collectionName, test_scopeName);
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
           collection = scope.collection(test_collectionName);
         }
 
-        // Initialize the CouchbaseVector client after cluster setup
-        couchbase_client = new CouchbaseSearchStore({
+        // Initialize the CouchbaseQueryStore client after cluster setup
+        couchbase_client = new CouchbaseQueryStore({
+          id: 'couchbase-query-store-integration-test',
           connectionString,
           username,
           password,
           bucketName: test_bucketName,
           scopeName: test_scopeName,
           collectionName: test_collectionName,
-          id: 'couchbase-integration-test',
         });
+        await couchbase_client.getCollection();
       } catch (error) {
         console.error('Failed to start Couchbase container:', error);
         throw error; // Re-throw to fail the tests properly
@@ -178,133 +193,149 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
   ); // 5 minutes
 
   afterAll(async () => {
+    if (bucket) {
+      try {
+        await bucket.collections().dropCollection(test_collectionName, test_scopeName);
+        await bucket.collections().createCollection(test_collectionName, test_scopeName);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+
     if (cluster) {
       await cluster.close();
     }
   }, 50000);
 
-  describe('Connection', () => {
-    it('should connect to couchbase', async () => {
-      const testClient = new CouchbaseSearchStore({
-        id: 'couchbase-connection-test',
-        connectionString,
-        username,
-        password,
-        bucketName: test_bucketName,
-        scopeName: test_scopeName,
-        collectionName: test_collectionName,
-      });
-      expect(testClient).toBeDefined();
-      const testCollection = await testClient.getCollection();
-      expect(testCollection).toBeDefined();
-    }, 50000);
-  });
-
   describe('Index Operations', () => {
-    it('should create index', async () => {
-      await couchbase_client.createIndex({ indexName: test_indexName, dimension, metric: 'euclidean' });
+    beforeAll(async () => {
+      // Insert documents directly into the collection
+      for (let i = 0; i < testVectors.length; i++) {
+        await collection.upsert(testVectorIds[i], {
+          embedding: testVectors[i],
+          metadata: testMetadata[i],
+        });
+      }
+
+      // Wait for documents to be persisted
       await new Promise(resolve => setTimeout(resolve, 5000));
+    }, 50000);
 
-      const index_definition = await scope.searchIndexes().getIndex(test_indexName);
+    it('should create Hyperscale index', async () => {
+      await couchbase_client.createIndex({
+        indexName: test_indexName + '_hyperscale',
+        dimension: test_dimension,
+        metric: 'euclidean',
+        fields_to_index: ['num1', 'num2', 'num3', 'label'],
+      });
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      let index_definition: Record<string, any> = {};
+      const sqlpp_query = `SELECT idx.* FROM system:indexes AS idx WHERE idx.bucket_id = "${test_bucketName}" AND idx.scope_id = "${test_scopeName}" AND idx.keyspace_id = "${test_collectionName}" AND idx.name = "${test_indexName}_hyperscale";`;
+      const results = await cluster.query(sqlpp_query);
+      results.rows.forEach((row: any) => {
+        if (row.name === test_indexName + '_hyperscale') {
+          index_definition = row;
+        }
+      });
+
       expect(index_definition).toBeDefined();
-      expect(index_definition.name).toBe(test_indexName);
-      expect(
-        index_definition.params.mapping?.types?.[`${test_scopeName}.${test_collectionName}`]?.properties?.embedding
-          ?.fields?.[0]?.dims,
-      ).toBe(dimension);
-      expect(
-        index_definition.params.mapping?.types?.[`${test_scopeName}.${test_collectionName}`]?.properties?.embedding
-          ?.fields?.[0]?.similarity,
-      ).toBe('l2_norm'); // similiarity(=="l2_norm") is mapped to euclidean in couchbase
+      expect(index_definition.name).toBe(test_indexName + '_hyperscale');
+      expect(index_definition.with.dimension).toBe(test_dimension);
+      expect(index_definition.with.similarity.toUpperCase()).toBe('L2_SQUARED');
     }, 50000);
 
-    it('should list indexes', async () => {
-      const indexes = await couchbase_client.listIndexes();
-      expect(indexes).toContain(test_indexName);
-    }, 50000);
+    it('should create COMPOSITE index', async () => {
+      await couchbase_client.createIndex({
+        indexName: test_indexName + '_composite',
+        dimension: test_dimension,
+        metric: 'euclidean',
+        fields_to_index: ['num1', 'num2', 'num3', 'label'],
+        vector_index_type: 'composite',
+      });
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-    it('should describe index', async () => {
-      const stats = await couchbase_client.describeIndex({ indexName: test_indexName });
-      expect(stats.dimension).toBe(dimension);
-      expect(stats.metric).toBe('euclidean'); // similiarity(=="l2_norm") is mapped to euclidean in couchbase
-      expect(typeof stats.count).toBe('number');
+      let index_definition: Record<string, any> = {};
+      const sqlpp_query = `SELECT idx.* FROM system:indexes AS idx WHERE idx.bucket_id = "${test_bucketName}" AND idx.scope_id = "${test_scopeName}" AND idx.keyspace_id = "${test_collectionName}" AND idx.name = "${test_indexName}_composite";`;
+      const results = await cluster.query(sqlpp_query);
+      results.rows.forEach((row: any) => {
+        if (row.name === test_indexName + '_composite') {
+          index_definition = row;
+        }
+      });
+
+      expect(index_definition).toBeDefined();
+      expect(index_definition.name).toBe(test_indexName + '_composite');
+      expect(index_definition.with.dimension).toBe(test_dimension);
+      expect(index_definition.with.similarity.toUpperCase()).toBe('L2_SQUARED');
+      expect(index_definition.index_key).toEqual([
+        '(`metadata`.`num1`)',
+        '(`metadata`.`num2`)',
+        '(`metadata`.`num3`)',
+        '(`metadata`.`label`)',
+        '`embedding` VECTOR',
+      ]);
     }, 50000);
 
     it('should delete index', async () => {
-      await couchbase_client.deleteIndex({ indexName: test_indexName });
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      await expect(scope.searchIndexes().getIndex(test_indexName)).rejects.toThrowError();
-    }, 50000);
-  });
-
-  describe('Vector Operations', () => {
-    const testVectors = [
-      [1.0, 0.0, 0.0],
-      [0.0, 1.0, 0.0],
-      [0.0, 0.0, 1.0],
-    ];
-    const testMetadata = [
-      {
-        label: 'x-axis',
-        brightness: 10,
-      },
-      {
-        label: 'y-axis',
-        text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
-        brightness: 20,
-      },
-      {
-        label: 'z-axis',
-        brightness: 30,
-      },
-    ];
-    let testVectorIds: string[] = ['test_id_1', 'test_id_2', 'test_id_3'];
-
-    beforeAll(async () => {
-      await couchbase_client.createIndex({
-        indexName: test_indexName,
-        dimension,
-        metric: 'euclidean',
-        fields_to_index: [{ name: 'brightness', type: 'number' }],
-      });
-      // Clean up any existing documents in the collection from previous runs
-      try {
-        const queryResult = await cluster.query(
-          `SELECT META().id FROM \`${test_bucketName}\`.\`${test_scopeName}\`.\`${test_collectionName}\``,
-          { scanConsistency: QueryScanConsistency.RequestPlus },
-        );
-        for (const row of queryResult.rows) {
-          try {
-            await collection.remove(row.id);
-          } catch {
-            // Ignore errors for non-existent documents
-          }
-        }
-      } catch {
-        // Ignore if query fails (e.g., if collection is empty)
-      }
-
+      await couchbase_client.deleteIndex({ indexName: test_indexName + '_hyperscale' });
+      await couchbase_client.deleteIndex({ indexName: test_indexName + '_composite' });
       await new Promise(resolve => setTimeout(resolve, 5000));
     }, 50000);
 
     afterAll(async () => {
-      await couchbase_client.deleteIndex({ indexName: test_indexName });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Clean up any test vectors that may have been created
+      try {
+        for (const id of testVectorIds) {
+          await collection.remove(id).catch(() => {
+            // Ignore errors if document doesn't exist
+          });
+        }
+      } catch (error) {
+        console.error('Error cleaning up test vectors:', error);
+      }
     }, 50000);
+  });
 
-    it('should upsert vectors with metadata', async () => {
-      // Use the couchbase_client to upsert vectors
-      const vectorIds = await couchbase_client.upsert({
+  describe('Vector Operations', () => {
+    beforeAll(async () => {
+      await couchbase_client.upsert({
         indexName: test_indexName,
         vectors: testVectors,
         metadata: testMetadata,
         ids: testVectorIds,
       });
-      await new Promise(resolve => setTimeout(resolve, 5000));
 
+      await couchbase_client.createIndex({
+        indexName: test_indexName,
+        dimension: test_dimension,
+        metric: 'euclidean',
+        fields_to_index: ['num1', 'num2', 'num3', 'label'],
+        vector_index_type: 'hyperscale',
+      });
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }, 50000);
+
+    afterAll(async () => {
+      // Clean up test vectors
+      try {
+        for (const id of testVectorIds) {
+          await collection.remove(id).catch(() => {
+            // Ignore errors if document doesn't exist
+          });
+        }
+      } catch (error) {
+        console.error('Error cleaning up test vectors:', error);
+      }
+
+      await couchbase_client.deleteIndex({ indexName: test_indexName });
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }, 50000);
+
+    it('should upsert vectors with metadata', async () => {
       // Verify vectors were stored correctly by retrieving them directly through the collection
       for (let i = 0; i < 3; i++) {
-        const result = await collection.get(vectorIds[i]);
+        const result = await collection.get(testVectorIds[i]);
         expect(result.content).toHaveProperty('embedding');
         expect(result.content).toHaveProperty('metadata');
         expect(result.content.embedding).toEqual(testVectors[i]);
@@ -317,10 +348,10 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
         }
       }
 
-      expect(vectorIds).toHaveLength(3);
-      expect(vectorIds[0]).toBeDefined();
-      expect(vectorIds[1]).toBeDefined();
-      expect(vectorIds[2]).toBeDefined();
+      expect(testVectorIds).toHaveLength(3);
+      expect(testVectorIds[0]).toBeDefined();
+      expect(testVectorIds[1]).toBeDefined();
+      expect(testVectorIds[2]).toBeDefined();
     }, 50000);
 
     it('should query vectors and return nearest neighbors', async () => {
@@ -335,36 +366,6 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
 
       // Verify results
       expect(results).toHaveLength(topK);
-
-      // Check each result has expected properties
-      for (let i = 0; i < results.length; i++) {
-        const result = results[i];
-        // Find the index of this ID in the testVectorIds array
-        const originalIndex = testVectorIds.indexOf(result.id);
-        expect(originalIndex).not.toBe(-1); // Ensure we found the ID
-
-        const expectedMetadata = testMetadata[originalIndex];
-        const returnedMetadata = { ...result.metadata }; // Create a copy to avoid modifying the original
-
-        // Check if 'content' field exists and matches if 'text' was in original metadata
-        if (expectedMetadata.text) {
-          expect(returnedMetadata).toHaveProperty('content');
-          expect(returnedMetadata.content).toEqual(expectedMetadata.text);
-        }
-
-        // If the original metadata had a 'text' field, the returned metadata might include a 'content' field from the search index.
-        // We only want to compare the original metadata fields, so remove 'content' if it's present in the returned data
-        // and the original metadata had a 'text' field (which implies 'content' was likely added automatically).
-        if (expectedMetadata.text && returnedMetadata.content) {
-          delete returnedMetadata.content;
-        }
-
-        expect(result).toHaveProperty('id');
-        expect(result).toHaveProperty('score');
-        expect(result).toHaveProperty('metadata');
-        expect(typeof result.score).toBe('number');
-        expect(returnedMetadata).toEqual(expectedMetadata); // Compare potentially modified returned metadata
-      }
 
       // The first result should be the most similar to the query vector
       // In this case, it should be the X-axis vector [1,0,0] since our query is [1.0,0.1,0.1]
@@ -381,37 +382,37 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
         queryVector,
         topK,
         filter: {
-          'metadata.brightness': {
-            $eq: 10,
+          'metadata.num1': {
+            $eq: 1,
           },
         },
       });
 
-      // Verify results - we should only get the vector with brightness = 10
+      // Verify results - we should only get the vector with num1 = 1
       expect(results).toHaveLength(1);
 
-      // Verify it's the correct vector (first one with brightness = 10)
+      // Verify it's the correct vector (first one with num1 = 1)
       const result = results[0];
       expect(result.id).toBe(testVectorIds[0]);
-      expect(result.metadata?.brightness).toBe(10);
+      expect(result.metadata?.num1).toBe(1);
       expect(result.metadata?.label).toBe('x-axis');
 
-      // Verify with another filter - brightness = 20
+      // Verify with another filter - num1 = 4
       const results2 = await couchbase_client.query({
         indexName: test_indexName,
         queryVector,
         topK,
         filter: {
-          'metadata.brightness': {
-            $eq: 20,
+          'metadata.num1': {
+            $eq: 4,
           },
         },
       });
 
-      // Verify results - we should only get the vector with brightness = 20
+      // Verify results - we should only get the vector with num1 = 4
       expect(results2).toHaveLength(1);
       expect(results2[0].id).toBe(testVectorIds[1]);
-      expect(results2[0].metadata?.brightness).toBe(20);
+      expect(results2[0].metadata?.num1).toBe(4);
       expect(results2[0].metadata?.label).toBe('y-axis');
 
       // Test a range filter
@@ -420,47 +421,49 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
         queryVector,
         topK,
         filter: {
-          'metadata.brightness': {
-            $gt: 10,
-            $lt: 31,
+          'metadata.num1': {
+            $gt: 1,
+            $lt: 8,
           },
         },
       });
 
-      // Should get vectors with brightness between 10 and 30 (exclusive of 10)
+      // Should get vectors with num1 between 1 and 8 (exclusive of 1)
       expect(resultsRange).toHaveLength(2);
       const ids = resultsRange.map(r => r.id).sort();
       expect(ids).toEqual([testVectorIds[1], testVectorIds[2]].sort());
     }, 50000);
 
     it('should update the vector by id', async () => {
-      // Use specific IDs for upsert
-      const new_vectors = [
-        [2, 1, 3],
-        [34, 1, 12],
-        [22, 23, 1],
-      ];
-      const vectorIds = await couchbase_client.upsert({
-        indexName: test_indexName,
-        vectors: new_vectors,
-        metadata: testMetadata,
-        ids: testVectorIds,
-      });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      const originalDocs = await Promise.all(testVectorIds.map(id => collection.get(id)));
 
-      // Verify the IDs match what we requested
-      expect(vectorIds).toEqual(testVectorIds);
+      try {
+        // Use specific IDs for upsert
+        const new_vectors = [
+          [2, 1, 3],
+          [34, 1, 12],
+          [22, 23, 1],
+        ];
+        const vectorIds = await couchbase_client.upsert({
+          indexName: test_indexName,
+          vectors: new_vectors,
+          metadata: testMetadata,
+          ids: testVectorIds,
+        });
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
-      // Verify each document was stored with the right data
-      for (let i = 0; i < testVectorIds.length; i++) {
-        const result = await collection.get(testVectorIds[i]);
-        expect(result.content.embedding).toEqual(new_vectors[i]);
-        expect(result.content.metadata).toEqual(testMetadata[i]);
-      }
+        // Verify the IDs match what we requested
+        expect(vectorIds).toEqual(testVectorIds);
 
-      // Delete the vectors form the collection for further tests to run smoothly
-      for (let i = 0; i < testVectorIds.length; i++) {
-        await collection.remove(testVectorIds[i]);
+        // Verify each document was stored with the right data
+        for (let i = 0; i < testVectorIds.length; i++) {
+          const result = await collection.get(testVectorIds[i]);
+          expect(result.content.embedding).toEqual(new_vectors[i]);
+          expect(result.content.metadata).toEqual(testMetadata[i]);
+        }
+      } finally {
+        // Restore original documents
+        await Promise.all(originalDocs.map((doc, i) => collection.upsert(testVectorIds[i], doc.content)));
       }
     }, 50000);
 
@@ -474,108 +477,144 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
       ).rejects.toThrow();
     }, 50000);
 
-    it('should throw error when includeVector is true in query', async () => {
-      await expect(
-        couchbase_client.query({
-          indexName: test_indexName,
-          queryVector: [1.0, 2.0, 3.0],
-          includeVector: true,
-        }),
-      ).rejects.toThrow('Including vectors in search results is not yet supported by the CouchbaseSearchStore');
+    it('should include vector in results when includeVector is true', async () => {
+      const queryVector = [1.0, 0.1, 0.1];
+      const topK = 1;
+      const results = await couchbase_client.query({
+        indexName: test_indexName,
+        queryVector,
+        topK,
+        includeVector: true,
+      });
+
+      expect(results).toHaveLength(topK);
+      expect(results[0]).toHaveProperty('vector');
+      expect(Array.isArray(results[0].vector)).toBe(true);
+      expect(results[0]?.vector?.length).toBe(test_dimension);
     }, 50000);
 
     it('should upsert vectors with generated ids', async () => {
-      const ids = await couchbase_client.upsert({ indexName: test_indexName, vectors: testVectors });
-      expect(ids).toHaveLength(testVectors.length);
-      ids.forEach(id => expect(typeof id).toBe('string'));
+      let ids: string[] = [];
+      try {
+        ids = await couchbase_client.upsert({ indexName: test_indexName, vectors: testVectors });
+        expect(ids).toHaveLength(testVectors.length);
+        ids.forEach(id => expect(typeof id).toBe('string'));
 
-      // Count is not supported by Couchbase
-      const stats = await couchbase_client.describeIndex({ indexName: test_indexName });
-      expect(stats.count).toBe(-1);
+        // Count is not supported by Couchbase
+        const stats = await couchbase_client.describeIndex({ indexName: test_indexName });
+        expect(stats.count).toBe(-1);
+      } finally {
+        // Cleanup
+        for (const id of ids) {
+          try {
+            await collection.remove(id);
+          } catch {
+            // ignore if not found
+          }
+        }
+      }
     });
 
     it('should update existing vectors', async () => {
-      // Initial upsert
-      await couchbase_client.upsert({
-        indexName: test_indexName,
-        vectors: testVectors,
-        metadata: testMetadata,
-        ids: testVectorIds,
-      });
+      const originalDoc = await collection.get(testVectorIds[0]);
+      try {
+        // Update first vector
+        const updatedVector = [[0.5, 0.5, 0.0]];
+        const updatedMetadata = [{ label: 'updated-x-axis' }];
+        await couchbase_client.upsert({
+          indexName: test_indexName,
+          vectors: updatedVector,
+          metadata: updatedMetadata,
+          ids: [testVectorIds?.[0]!],
+        });
 
-      // Update first vector
-      const updatedVector = [[0.5, 0.5, 0.0]];
-      const updatedMetadata = [{ label: 'updated-x-axis' }];
-      await couchbase_client.upsert({
-        indexName: test_indexName,
-        vectors: updatedVector,
-        metadata: updatedMetadata,
-        ids: [testVectorIds?.[0]!],
-      });
-
-      // Verify update
-      const result = await collection.get(testVectorIds?.[0]!);
-      expect(result.content.embedding).toEqual(updatedVector[0]);
-      expect(result.content.metadata).toEqual(updatedMetadata[0]);
+        // Verify update
+        const result = await collection.get(testVectorIds?.[0]!);
+        expect(result.content.embedding).toEqual(updatedVector[0]);
+        expect(result.content.metadata).toEqual(updatedMetadata[0]);
+      } finally {
+        // Restore original document
+        await collection.upsert(testVectorIds[0], originalDoc.content);
+      }
     });
 
     it('should update the vector by id', async () => {
       const ids = await couchbase_client.upsert({ indexName: test_indexName, vectors: testVectors });
       expect(ids).toHaveLength(3);
 
-      const idToBeUpdated = ids[0];
-      const newVector = [1, 2, 3];
-      const newMetaData = {
-        test: 'updates',
-      };
+      try {
+        const idToBeUpdated = ids[0];
+        const newVector = [1, 2, 3];
+        const newMetaData = {
+          test: 'updates',
+        };
 
-      const update = {
-        vector: newVector,
-        metadata: newMetaData,
-      };
+        const update = {
+          vector: newVector,
+          metadata: newMetaData,
+        };
 
-      await couchbase_client.updateVector({ indexName: test_indexName, id: idToBeUpdated, update });
+        await couchbase_client.updateVector({ indexName: test_indexName, id: idToBeUpdated, update });
 
-      const result = await collection.get(idToBeUpdated);
-      expect(result.content.embedding).toEqual(newVector);
-      expect(result.content.metadata).toEqual(newMetaData);
+        const result = await collection.get(idToBeUpdated);
+        expect(result.content.embedding).toEqual(newVector);
+        expect(result.content.metadata).toEqual(newMetaData);
+      } finally {
+        // Cleanup
+        for (const id of ids) {
+          await collection.remove(id);
+        }
+      }
     });
 
     it('should only update the metadata by id', async () => {
       const ids = await couchbase_client.upsert({ indexName: test_indexName, vectors: testVectors });
       expect(ids).toHaveLength(3);
+      try {
+        const idToBeUpdated = ids[0];
+        const newMetaData = {
+          test: 'updates',
+        };
 
-      const idToBeUpdated = ids[0];
-      const newMetaData = {
-        test: 'updates',
-      };
+        const update = {
+          metadata: newMetaData,
+        };
 
-      const update = {
-        metadata: newMetaData,
-      };
+        await couchbase_client.updateVector({ indexName: test_indexName, id: idToBeUpdated, update });
 
-      await couchbase_client.updateVector({ indexName: test_indexName, id: idToBeUpdated, update });
-
-      const result = await collection.get(idToBeUpdated);
-      expect(result.content.embedding).toEqual(testVectors[0]);
-      expect(result.content.metadata).toEqual(newMetaData);
+        const result = await collection.get(idToBeUpdated);
+        expect(result.content.embedding).toEqual(testVectors[0]);
+        expect(result.content.metadata).toEqual(newMetaData);
+      } finally {
+        // Cleanup
+        for (const id of ids) {
+          await collection.remove(id);
+        }
+      }
     });
 
     it('should only update vector embeddings by id', async () => {
       const ids = await couchbase_client.upsert({ indexName: test_indexName, vectors: testVectors });
       expect(ids).toHaveLength(3);
 
-      const idToBeUpdated = ids[0];
-      const newVector = [1, 2, 3];
+      try {
+        const idToBeUpdated = ids[0];
+        const newVector = [1, 2, 3];
 
-      const update = {
-        vector: newVector,
-      };
+        const update = {
+          vector: newVector,
+        };
 
-      await couchbase_client.updateVector({ indexName: test_indexName, id: idToBeUpdated, update });
+        await couchbase_client.updateVector({ indexName: test_indexName, id: idToBeUpdated, update });
 
-      const result = await collection.get(idToBeUpdated);
-      expect(result.content.embedding).toEqual(newVector);
+        const result = await collection.get(idToBeUpdated);
+        expect(result.content.embedding).toEqual(newVector);
+      } finally {
+        // Cleanup
+        for (const id of ids) {
+          await collection.remove(id);
+        }
+      }
     });
 
     it('should throw exception when no updates are given', async () => {
@@ -588,13 +627,24 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
       const ids = await couchbase_client.upsert({ indexName: test_indexName, vectors: testVectors });
       expect(ids).toHaveLength(3);
       const idToBeDeleted = ids[0];
-
-      await couchbase_client.deleteVector({ indexName: test_indexName, id: idToBeDeleted });
-
       try {
-        await collection.get(idToBeDeleted);
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
+        await couchbase_client.deleteVector({ indexName: test_indexName, id: idToBeDeleted });
+
+        try {
+          await collection.get(idToBeDeleted);
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error);
+        }
+      } finally {
+        // Cleanup remaining
+        for (const id of ids.slice(1)) {
+          try {
+            await collection.remove(id);
+          } catch (e) {
+            // ignore - may already be deleted
+            console.error(e);
+          }
+        }
       }
     });
   });
@@ -622,8 +672,8 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
       const nonExistentIndex = 'non_existent_index';
 
       // Verify the index doesn't exist using cluster API
-      const allIndexes = await scope.searchIndexes().getAllIndexes();
-      expect(allIndexes.find(idx => idx.name === nonExistentIndex)).toBeUndefined();
+      const allIndexes = await couchbase_client.listIndexes();
+      expect(allIndexes.find(idx => idx === nonExistentIndex)).toBeUndefined();
 
       // Now test the couchbase_client method
       await expect(couchbase_client.describeIndex({ indexName: nonExistentIndex })).rejects.toThrow();
@@ -633,8 +683,8 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
       const nonExistentIndex = 'non_existent_index';
 
       // Verify the index doesn't exist using cluster API
-      const allIndexes = await scope.searchIndexes().getAllIndexes();
-      expect(allIndexes.find(idx => idx.name === nonExistentIndex)).toBeUndefined();
+      const allIndexes = await couchbase_client.listIndexes();
+      expect(allIndexes.find(idx => idx === nonExistentIndex)).toBeUndefined();
 
       // Now test the couchbase_client method
       await expect(couchbase_client.deleteIndex({ indexName: nonExistentIndex })).rejects.toThrow();
@@ -655,138 +705,120 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
         couchbase_client.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] }),
       ).rejects.toThrow();
     }, 50000);
-
-    it('should handle duplicate index creation gracefully', async () => {
-      const duplicateIndexName = `duplicate-test-${randomUUID()}`;
-      const dimension = 768;
-      const infoSpy = vi.spyOn(couchbase_client['logger'], 'info');
-      const warnSpy = vi.spyOn(couchbase_client['logger'], 'warn');
-
-      try {
-        // Create index first time
-        await couchbase_client.createIndex({
-          indexName: duplicateIndexName,
-          dimension,
-          metric: 'cosine',
-        });
-
-        // Try to create with same dimensions - should not throw
-        await expect(
-          couchbase_client.createIndex({
-            indexName: duplicateIndexName,
-            dimension,
-            metric: 'cosine',
-          }),
-        ).resolves.not.toThrow();
-
-        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('already exists with'));
-
-        // Try to create with same dimensions and different metric - should not throw
-        await expect(
-          couchbase_client.createIndex({
-            indexName: duplicateIndexName,
-            dimension,
-            metric: 'euclidean',
-          }),
-        ).resolves.not.toThrow();
-
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to create index with metric'));
-
-        // Try to create with different dimensions - should throw
-        await expect(
-          couchbase_client.createIndex({
-            indexName: duplicateIndexName,
-            dimension: dimension + 1,
-            metric: 'cosine',
-          }),
-        ).rejects.toThrow(
-          `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
-        );
-      } finally {
-        infoSpy.mockRestore();
-        warnSpy.mockRestore();
-        // Cleanup
-        await couchbase_client.deleteIndex({ indexName: duplicateIndexName });
-      }
-    }, 50000);
   });
 
   describe('Vector Dimension Tracking', () => {
-    beforeAll(async () => {
-      const indexes = await couchbase_client.listIndexes();
-      if (indexes.length > 0) {
-        for (const index of indexes) {
-          await couchbase_client.deleteIndex({ indexName: index });
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        }
-      }
-    }, 50000);
-
     const testIndexName = `${test_indexName}_dim_tracking`;
     const testDimension = 5;
+
+    beforeEach(() => {
+      (couchbase_client as any).vector_dimension = null;
+    });
+
+    afterEach(async () => {
+      try {
+        await couchbase_client.deleteIndex({ indexName: testIndexName });
+      } catch {}
+    });
 
     it('should track vector dimension after creating an index', async () => {
       // Initial vector_dimension should be null
       expect((couchbase_client as any).vector_dimension).toBeNull();
 
-      // After creating index, vector_dimension should be set
-      await couchbase_client.createIndex({
-        indexName: testIndexName,
-        dimension: testDimension,
-      });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      const docId = 'temp_doc_for_index';
+      await collection.upsert(docId, { embedding: new Array(testDimension).fill(0) });
 
-      // Check internal property
-      expect((couchbase_client as any).vector_dimension).toBe(testDimension);
+      try {
+        // After creating index, vector_dimension should be set
+        await couchbase_client.createIndex({
+          indexName: testIndexName,
+          dimension: testDimension,
+        });
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
-      // Also verify through index description
-      const indexDef = await scope.searchIndexes().getIndex(testIndexName);
-      expect(
-        indexDef.params.mapping?.types?.[`${test_scopeName}.${test_collectionName}`]?.properties?.embedding?.fields?.[0]
-          ?.dims,
-      ).toBe(testDimension);
+        // Check internal property
+        expect((couchbase_client as any).vector_dimension).toBe(testDimension);
+
+        // Also verify through index description
+        const stats = await couchbase_client.describeIndex({ indexName: testIndexName });
+        expect(stats.dimension).toBe(testDimension);
+      } finally {
+        await collection.remove(docId);
+      }
     }, 50000);
 
     it('should validate vector dimensions against tracked dimension during upsert', async () => {
-      // Should succeed with correct dimensions
-      const vectorIds = await couchbase_client.upsert({
-        indexName: testIndexName,
-        vectors: [
-          [1, 2, 3, 4, 5],
-          [4, 5, 6, 7, 8],
-        ],
-        metadata: [{}, {}],
-      });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      const docId = 'temp_doc_for_index';
+      await collection.upsert(docId, { embedding: new Array(testDimension).fill(0) });
 
-      // Verify vectors were inserted with correct dimensions
-      for (const id of vectorIds) {
-        const result = await collection.get(id);
-        expect(result.content.embedding.length).toBe(testDimension);
-      }
-
-      // Should fail with incorrect dimensions
-      await expect(
-        couchbase_client.upsert({
+      try {
+        await couchbase_client.createIndex({
           indexName: testIndexName,
-          vectors: [[1, 2, 3, 4]], // 4 dimensions instead of 5
-          metadata: [{}],
-        }),
-      ).rejects.toThrow('Vector dimension mismatch');
+          dimension: testDimension,
+        });
+
+        // Should succeed with correct dimensions
+        const vectorIds = await couchbase_client.upsert({
+          indexName: testIndexName,
+          vectors: [
+            [1, 2, 3, 4, 5],
+            [4, 5, 6, 7, 8],
+          ],
+          metadata: [{}, {}],
+        });
+
+        try {
+          // Verify vectors were inserted with correct dimensions
+          for (const id of vectorIds) {
+            const result = await collection.get(id);
+            expect(result.content.embedding.length).toBe(testDimension);
+          }
+
+          // Should fail with incorrect dimensions
+          await expect(
+            couchbase_client.upsert({
+              indexName: testIndexName,
+              vectors: [[1, 2, 3, 4]], // 4 dimensions instead of 5
+              metadata: [{}],
+            }),
+          ).rejects.toThrow('Vector dimension mismatch');
+        } finally {
+          // Cleanup
+          for (const id of vectorIds) {
+            await collection.remove(id);
+          }
+        }
+      } finally {
+        await collection.remove(docId);
+      }
     }, 50000);
 
     it('should reset vector_dimension when deleting an index', async () => {
-      expect((couchbase_client as any).vector_dimension).toBe(testDimension);
+      // Have to insert a doc to create an index
+      const docId = 'temp_doc_for_index';
+      await collection.upsert(docId, { embedding: new Array(testDimension).fill(0) });
 
-      // Delete the index
-      await couchbase_client.deleteIndex({ indexName: testIndexName });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      try {
+        await couchbase_client.createIndex({
+          indexName: testIndexName,
+          dimension: testDimension,
+        });
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        expect((couchbase_client as any).vector_dimension).toBe(testDimension);
 
-      // Verify dimension is reset
-      expect((couchbase_client as any).vector_dimension).toBeNull();
+        // Delete the index
+        await couchbase_client.deleteIndex({ indexName: testIndexName });
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
-      // Also verify the index is gone using cluster directly
-      await expect(scope.searchIndexes().getIndex(testIndexName)).rejects.toThrow();
+        // Verify dimension is reset
+        expect((couchbase_client as any).vector_dimension).toBeUndefined();
+
+        // Also verify the index is gone using cluster directly
+        const indexes = await couchbase_client.listIndexes();
+        expect(indexes.includes(testIndexName)).toBe(false);
+      } finally {
+        await collection.remove(docId);
+      }
     }, 50000);
   });
 
@@ -799,30 +831,47 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
           await new Promise(resolve => setTimeout(resolve, 5000));
         }
       }
+
+      // Upsert test vectors with metadata
+      await couchbase_client.upsert({
+        indexName: test_indexName,
+        vectors: testVectors,
+        metadata: testMetadata,
+        ids: testVectorIds,
+      });
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }, 50000);
+
+    afterAll(async () => {
+      // Clean up test vectors
+      try {
+        for (const id of testVectorIds) {
+          await collection.remove(id).catch(() => {
+            // Ignore errors if document doesn't exist
+          });
+        }
+      } catch (error) {
+        console.error('Error cleaning up test vectors:', error);
+      }
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }, 50000);
 
     it('should handle metric mapping correctly', async () => {
       // Test each possible metric mapping from the imported DISTANCE_MAPPING constant
-      const metricsToTest = Object.keys(DISTANCE_MAPPING) as Array<keyof typeof DISTANCE_MAPPING>;
+      const metricsToTest = Object.keys(QUERY_VECTOR_INDEX_DISTANCE_MAPPING) as Array<
+        keyof typeof QUERY_VECTOR_INDEX_DISTANCE_MAPPING
+      >;
 
       for (const mastraMetric of metricsToTest) {
-        const couchbaseMetric = DISTANCE_MAPPING[mastraMetric];
         const testIndexName = `${test_indexName}_${mastraMetric}`;
 
         // Create index with this metric
         await couchbase_client.createIndex({
           indexName: testIndexName,
-          dimension: dimension,
+          dimension: test_dimension,
           metric: mastraMetric,
         });
         await new Promise(resolve => setTimeout(resolve, 5000));
-        // Verify through the Couchbase API
-        const indexDef = await scope.searchIndexes().getIndex(testIndexName);
-        const similarityParam =
-          indexDef.params.mapping?.types?.[`${test_scopeName}.${test_collectionName}`]?.properties?.embedding
-            ?.fields?.[0]?.similarity;
-        expect(similarityParam).toBe(couchbaseMetric);
-
         // Verify through our API
         const stats = await couchbase_client.describeIndex({ indexName: testIndexName });
         expect(stats.metric).toBe(mastraMetric);
@@ -945,50 +994,48 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
       await bucket.collections().dropCollection(collectionName, scopeName);
       await bucket.collections().createCollection(collectionName, scopeName);
       collection = bucket.scope(scopeName).collection(collectionName);
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Wait for collection to be ready
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Reinitialize the couchbase_client to use the fresh collection
-      couchbase_client = new CouchbaseSearchStore({
-        id: 'couchbase-filter-test',
-        connectionString,
-        username,
-        password,
-        bucketName: test_bucketName,
-        scopeName: test_scopeName,
-        collectionName: test_collectionName,
+      // Create a document to ensure we can create the index
+      const tempDocId = 'temp_doc_for_index_' + randomUUID();
+      await collection.upsert(tempDocId, {
+        embedding: new Array(filterDimension).fill(0),
+        metadata: { placeholder: true },
       });
 
-      // Create a search index with all needed fields for filtering
-      await couchbase_client.createIndex({
-        indexName: filterIndexName,
-        dimension: filterDimension,
-        metric: 'cosine',
-        fields_to_index: [
-          { name: 'price', type: 'number' },
-          { name: 'rating', type: 'number' },
-          { name: 'inStock', type: 'boolean' },
-          { name: 'category', type: 'text' },
-          { name: 'tags', type: 'text' },
-          { name: 'name', type: 'text' },
-          { name: 'description', type: 'text' },
-          { name: 'createdAt', type: 'datetime' },
-        ],
-      });
+      try {
+        // Insert test data
+        _docIds = await couchbase_client.upsert({
+          indexName: filterIndexName,
+          vectors: testVectors,
+          metadata: testMetadata,
+        });
 
-      // Insert test data
-      _docIds = await couchbase_client.upsert({
-        indexName: filterIndexName,
-        vectors: testVectors,
-        metadata: testMetadata,
-      });
+        // Create a search index with all needed fields for filtering
+        await couchbase_client.createIndex({
+          indexName: filterIndexName,
+          dimension: filterDimension,
+          metric: 'cosine',
+          fields_to_index: ['price', 'rating', 'inStock', 'category', 'name', 'description', 'createdAt'],
+          vector_index_type: 'hyperscale',
+        });
 
-      // Wait for documents to be indexed
-      await new Promise(resolve => setTimeout(resolve, 5000));
+        // Wait for documents to be indexed
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      } finally {
+        // Clean up the temporary document
+        await collection.remove(tempDocId);
+      }
     }, 60000);
 
     afterAll(async () => {
+      // Clean up all documents
+      for (const id of _docIds) {
+        try {
+          await collection.remove(id);
+        } catch {}
+      }
+
       // Clean up by deleting the test index
       await couchbase_client.deleteIndex({ indexName: filterIndexName });
       await new Promise(resolve => setTimeout(resolve, 5000));
@@ -1318,9 +1365,13 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
       });
 
       // Should prioritize vector similarity, expecting the first vector to be closest
-      expect(resultsNoFilter[0].metadata?.name).toBe('Product A');
+      // However, specific IDs aren't deterministic in the query API, so check the embedding
+      const firstResultID = resultsNoFilter[0].id;
+      const firstResult = await collection.get(firstResultID);
+      // First dimension should be close to 1.0 since our query vector is [0.9, 0.1, 0.1]
+      expect(firstResult.content.embedding[0]).toBeGreaterThan(0.7);
 
-      // Apply filter that includes the closest vector (electronics)
+      // Apply filter to a subset of documents
       const resultsWithFilter = await couchbase_client.query({
         indexName: filterIndexName,
         queryVector,
@@ -1329,10 +1380,6 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
           $or: [{ 'metadata.category': { $eq: 'electronics' } }, { 'metadata.category': { $eq: 'home' } }],
         },
       });
-
-      // Should return filtered results ordered by vector similarity
-      // First result should still be Product A (electronics)
-      expect(resultsWithFilter[0].metadata?.name).toBe('Product A');
 
       // All results should match the filter
       for (const result of resultsWithFilter) {

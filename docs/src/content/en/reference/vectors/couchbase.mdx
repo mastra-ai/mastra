@@ -1,30 +1,61 @@
 ---
-title: "Reference: Couchbase Vector Store | Vectors"
-description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
+title: "Reference: Couchbase Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for using Couchbase as a vector store in Mastra, including CouchbaseSearchStore and CouchbaseQueryStore.
 ---
 
 # Couchbase Vector Store
 
-The `CouchbaseVector` class provides vector search using [Couchbase Vector Search](https://docs.couchbase.com/server/current/vector-search/vector-search.html). It enables efficient similarity search and metadata filtering within your Couchbase collections.
+Mastra provides two vector store implementations for Couchbase, enabling vector similarity search and advanced metadata filtering within your Couchbase collections.
 
-## Requirements
+- **`CouchbaseQueryStore`**: Utilizes Couchbase's Hyperscale or Composite Vector Indexes. Recommended for most use cases, especially vector-first workloads, applications requiring complex filtering, or those that need to scale to billions of vectors.
+- **`CouchbaseSearchStore`**: Leverages Couchbase's Search Vector Index. Recommended for hybrid search use cases where a high recall rate is a priority.
 
-- **Couchbase Server 7.6.4+** or a compatible Capella cluster
-- **Search Service enabled** on your Couchbase deployment
+## Choosing Your Store and Index Type
 
-## Installation
+The primary choice is between `CouchbaseSearchStore` and `CouchbaseQueryStore`. If you choose `CouchbaseQueryStore`, you then select between a Hyperscale or Composite index.
 
-```bash copy
-npm install @mastra/couchbase@beta
-```
+For more information about choosing the right vector index type, see [Choose the Right Vector Index](https://docs.couchbase.com/cloud/vector-index/use-vector-indexes.html).
 
-## Usage Example
+### `CouchbaseSearchStore` vs. `CouchbaseQueryStore`
 
-```typescript copy
-import { CouchbaseVector } from "@mastra/couchbase";
+| Feature         | `CouchbaseSearchStore`                                  | `CouchbaseQueryStore`                                                       |
+| --------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Best For**    | Hybrid search and high recall rates.                          | Vector-first workloads, complex filtering, and high QPS performance.              |
+| **Couchbase Version** | 7.6.4+                                                        | 8.0.0+                                                                            |
+| **Filtering**   | Pre-filtering with flexible ordering.                         | Pre-filtering with `WHERE` clauses (Composite) or post-filtering (Hyperscale).       |
+| **Scalability** | Up to 10 million vectors.                                     | Up to billions of vectors (Hyperscale).                                                |
 
-const store = new CouchbaseVector({
-  id: 'couchbase-vector',
+### Choosing the Right Index Type for `CouchbaseQueryStore`
+
+#### Hyperscale Vector Indexes
+
+- **Best for**: Pure vector searches like content discovery, recommendations, and semantic search.
+- **Use when**: You primarily perform vector-only queries without complex scalar filtering.
+- **Features**: High performance with a low memory footprint, optimized for concurrent operations, and designed to scale to billions of vectors.
+
+For more information, see [Vector Search Using Hyperscale Vector Indexes](https://docs.couchbase.com/cloud/vector-index/hyperscale-vector-index.html).
+
+#### Composite Vector Indexes
+
+- **Best for**: Filtered vector searches that combine vector similarity with scalar value filtering.
+- **Use when**: Your queries combine vector similarity with scalar filters that eliminate large portions of the dataset.
+- **Features**: Efficient pre-filtering where scalar attributes reduce the vector comparison scope.
+
+## `CouchbaseQueryStore`
+
+This store uses the Hyperscale or Composite Vector Indexes.
+
+### Requirements
+
+- **Couchbase Server 8.0.0+** or a compatible Capella cluster.
+- **Hyperscale or Composite Vector Indexes** available on your Couchbase deployment.
+
+### Usage Example
+
+```typescript copy showLineNumbers
+import { CouchbaseQueryStore } from '@mastra/couchbase';
+
+const store = new CouchbaseQueryStore({
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,
   username: process.env.COUCHBASE_USERNAME,
   password: process.env.COUCHBASE_PASSWORD,
@@ -34,7 +65,139 @@ const store = new CouchbaseVector({
 });
 ```
 
-## Constructor Options
+### Constructor Options
+
+(Same as `CouchbaseSearchStore`)
+
+### Methods
+
+#### createIndex()
+
+Creates a new Hyperscale or Composite Vector Index. You can choose the index type with the `vector_index_type` parameter.
+
+> **Important**: A vector index can only be created on a collection that contains at least one document with the target vector field (`embedding`). For optimal performance, it is recommended to delete and recreate the index after significant data changes, as this allows Couchbase to retrain the index centroids on the updated dataset.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric",
+    },
+    {
+        name: "vector_index_type",
+        type: "'hyperscale' | 'composite'",
+        isOptional: true,
+        defaultValue: "'hyperscale'",
+        description: "The type of vector index to create. Can be 'hyperscale' or 'composite'. Learn more about the differences between the two at https://docs.couchbase.com/cloud/vector-index/use-vector-indexes.html."
+    },
+    {
+        name: "fields_to_index",
+        type: "string[]",
+        isOptional: true,
+        description: "Metadata fields to include in the index."
+    },
+    {
+        name: "index_metadata",
+        type: "Record<string, any>",
+        isOptional: true,
+        description: "Additional metadata for the index, such as a 'description' for quantization and centroid settings."
+    }
+  ]}
+/>
+
+##### Understanding Index Configuration (`index_metadata.description`)
+
+The `description` field within `index_metadata` controls how Couchbase optimizes vector storage and search performance. The format is `'IVF[<centroids>],{PQ|SQ}<settings>'`.
+
+- **Centroids (IVF)**: Controls how the dataset is subdivided. More centroids lead to faster searches but slower training. If omitted (e.g., `IVF,SQ8`), Couchbase auto-selects based on dataset size.
+- **Quantization (PQ/SQ)**: Compresses vectors to save memory. `SQ` (Scalar) and `PQ` (Product) offer different levels of precision and performance.
+
+**Common Examples**:
+- `IVF,SQ8`: Auto-selected centroids with 8-bit scalar quantization. A good default.
+- `IVF1000,SQ6`: 1000 centroids with 6-bit scalar quantization.
+- `IVF,PQ32x8`: Auto-selected centroids with 32 subquantizers of 8 bits each.
+
+#### query()
+
+Searches for similar vectors using a Hyperscale or Composite Vector Index.
+
+> **Note:** In Hyperscale or Composite vector search, the score represents the vector distance. A lower score indicates higher similarity.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to search in",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters. All field names must be prefixed with 'metadata.'. See [Metadata Filters](./metadata-filters).",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vector data in results.",
+    },
+  ]}
+/>
+
+## `CouchbaseSearchStore`
+
+This store uses the Search Vector Index and is ideal for scenarios where high recall rate is needed.
+
+For more information about Couchbase Search Vector Index, see [Search](https://docs.couchbase.com/cloud/search/search.html).
+
+### Requirements
+
+- **Couchbase Server 7.6.4+** or a compatible Capella cluster.
+- **Search Vector Index** available on your Couchbase deployment.
+
+### Usage Example
+
+```typescript copy showLineNumbers
+import { CouchbaseSearchStore } from '@mastra/couchbase';
+
+const store = new CouchbaseSearchStore({
+  connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+  username: process.env.COUCHBASE_USERNAME,
+  password: process.env.COUCHBASE_PASSWORD,
+  bucketName: process.env.COUCHBASE_BUCKET,
+  scopeName: process.env.COUCHBASE_SCOPE,
+  collectionName: process.env.COUCHBASE_COLLECTION,
+});
+```
+
+### Constructor Options
 
 <PropertiesTable
   content={[
@@ -73,22 +236,16 @@ const store = new CouchbaseVector({
       type: "string",
       description: "Name of the Couchbase collection to use",
     },
-    {
-      name: "options",
-      type: "CouchbaseClientOptions",
-      isOptional: true,
-      description: "Optional Couchbase client options",
-    },
   ]}
 />
 
-## Methods
+### Methods
 
-### createIndex()
+#### createIndex()
 
-Creates a new vector index in Couchbase.
+Creates a new Search index in Couchbase.
 
-> **Note:** Index creation is asynchronous. After calling `createIndex`, allow time (typically 1–5 seconds for small datasets, longer for large ones) before querying. For production, implement polling to check index status rather than using fixed delays.
+> **Note:** Index creation is asynchronous. After calling `createIndex`, allow time (typically 1–5 seconds for small datasets, longer for large ones) before querying.
 
 <PropertiesTable
   content={[
@@ -109,21 +266,201 @@ Creates a new vector index in Couchbase.
       defaultValue: "cosine",
       description: "Distance metric for similarity search",
     },
+    {
+        name: "fields_to_index",
+        type: "{ name: string; type: string }[]",
+        isOptional: true,
+        description: "Metadata fields to index for filtering."
+    }
   ]}
 />
 
-### upsert()
+#### query()
 
-Adds or updates vectors and their metadata in the collection.
+Searches for similar vectors using a Search index.
 
-> **Note:** You can upsert data before or after creating the index. The `upsert` method does not require the index to exist. Couchbase allows multiple Search indexes over the same collection.
+> **Note:** The `includeVector` parameter is not supported by `CouchbaseSearchStore`.
 
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "Name of the index to insert into",
+      description: "Name of the index to search in",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters. All field names must be prefixed with 'metadata.'. See [Metadata Filters](./metadata-filters).",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Not supported.",
+    },
+  ]}
+/>
+
+## `CouchbaseQueryStore`
+
+This store uses the Hyperscale or Composite Vector Indexes.
+
+### Requirements
+
+- **Couchbase Server 8.0.0+** or a compatible Capella cluster.
+- **Hyperscale or Composite Vector Indexes** available on your Couchbase deployment.
+
+### Usage Example
+
+```typescript copy showLineNumbers
+import { CouchbaseQueryStore } from '@mastra/couchbase';
+
+const store = new CouchbaseQueryStore({
+  connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+  username: process.env.COUCHBASE_USERNAME,
+  password: process.env.COUCHBASE_PASSWORD,
+  bucketName: process.env.COUCHBASE_BUCKET,
+  scopeName: process.env.COUCHBASE_SCOPE,
+  collectionName: process.env.COUCHBASE_COLLECTION,
+});
+```
+
+### Constructor Options
+
+(Same as `CouchbaseSearchStore`)
+
+### Methods
+
+#### createIndex()
+
+Creates a new Hyperscale or Composite Vector Index. You can choose the index type with the `vector_index_type` parameter.
+
+> **Important**: A vector index can only be created on a collection that contains at least one document with the target vector field (`embedding`). For optimal performance, it is recommended to delete and recreate the index after significant data changes, as this allows Couchbase to retrain the index centroids on the updated dataset.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric",
+    },
+    {
+        name: "vector_index_type",
+        type: "'hyperscale' | 'composite'",
+        isOptional: true,
+        defaultValue: "'hyperscale'",
+        description: "The type of vector index to create. Can be 'hyperscale' or 'composite'. Learn more about the differences between the two at https://docs.couchbase.com/cloud/vector-index/use-vector-indexes.html."
+    },
+    {
+        name: "fields_to_index",
+        type: "string[]",
+        isOptional: true,
+        description: "Metadata fields to include in the index."
+    },
+    {
+        name: "index_metadata",
+        type: "Record<string, any>",
+        isOptional: true,
+        description: "Additional metadata for the index, such as a 'description' for quantization and centroid settings."
+    }
+  ]}
+/>
+
+##### Understanding Index Configuration (`index_metadata.description`)
+
+The `description` field within `index_metadata` controls how Couchbase optimizes vector storage and search performance. The format is `'IVF[<centroids>],{PQ|SQ}<settings>'`.
+
+- **Centroids (IVF)**: Controls how the dataset is subdivided. More centroids lead to faster searches but slower training. If omitted (e.g., `IVF,SQ8`), Couchbase auto-selects based on dataset size.
+- **Quantization (PQ/SQ)**: Compresses vectors to save memory. `SQ` (Scalar) and `PQ` (Product) offer different levels of precision and performance.
+
+**Common Examples**:
+- `IVF,SQ8`: Auto-selected centroids with 8-bit scalar quantization. A good default.
+- `IVF1000,SQ6`: 1000 centroids with 6-bit scalar quantization.
+- `IVF,PQ32x8`: Auto-selected centroids with 32 subquantizers of 8 bits each.
+
+#### query()
+
+Searches for similar vectors using a Hyperscale or Composite Vector Index.
+
+> **Note:** In Hyperscale or Composite vector search, the score represents the vector distance. A lower score indicates higher similarity.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to search in",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters. All field names must be prefixed with 'metadata.'. See [Metadata Filters](./metadata-filters).",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vector data in results.",
+    },
+  ]}
+/>
+
+
+## Common Methods
+
+The following methods are available on both `CouchbaseSearchStore` and `CouchbaseQueryStore`.
+
+### upsert()
+
+Adds or updates vectors and their metadata.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index for dimension validation",
     },
     {
       name: "vectors",
@@ -145,57 +482,9 @@ Adds or updates vectors and their metadata in the collection.
   ]}
 />
 
-### query()
-
-Searches for similar vectors.
-
-> **Warning:** The `filter` and `includeVector` parameters are not currently supported. Filtering must be performed client-side after retrieving results, or by using the Couchbase SDK's Search capabilities directly. To retrieve the vector embedding, fetch the full document by ID using the Couchbase SDK.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to search in",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors for",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vector data in results",
-    },
-    {
-      name: "minScore",
-      type: "number",
-      isOptional: true,
-      defaultValue: "0",
-      description: "Minimum similarity score threshold",
-    },
-  ]}
-/>
-
 ### describeIndex()
 
-Returns information about the index.
+Returns information about an index.
 
 <PropertiesTable
   content={[
@@ -207,19 +496,9 @@ Returns information about the index.
   ]}
 />
 
-Returns:
-
-```typescript copy
-interface IndexStats {
-  dimension: number;
-  count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
-}
-```
-
 ### deleteIndex()
 
-Deletes an index and all its data.
+Deletes an index.
 
 <PropertiesTable
   content={[
@@ -233,9 +512,7 @@ Deletes an index and all its data.
 
 ### listIndexes()
 
-Lists all vector indexes in the Couchbase bucket.
-
-Returns: `Promise<string[]>`
+Lists all vector indexes.
 
 ### updateVector()
 
@@ -244,34 +521,24 @@ Updates a specific vector entry by its ID with new vector data and/or metadata. 
 <PropertiesTable
   content={[
     {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
       name: "id",
       type: "string",
       description: "ID of the vector entry to update",
     },
     {
       name: "update",
-      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-      description: "Object containing the vector and/or metadata to update",
+      type: "object",
+      description: "Update data containing vector and/or metadata",
     },
   ]}
 />
 
 ### deleteVector()
 
-Deletes a single vector by its ID from the index.
+Deletes a vector entry by its ID.
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
     {
       name: "id",
       type: "string",
@@ -301,58 +568,19 @@ Deletes multiple vectors by their IDs. **Note:** Filter-based deletion is not ye
 
 ### disconnect()
 
-Closes the Couchbase client connection. Should be called when done using the store.
-
-## Response Types
-
-Query results are returned in this format:
-
-```typescript copy
-interface QueryResult {
-  id: string;
-  score: number;
-  metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
-}
-```
-
-## Error Handling
-
-The store throws typed errors that can be caught:
-
-```typescript copy
-try {
-  await store.query({
-    indexName: "my_index",
-    queryVector: queryVector,
-  });
-} catch (error) {
-  // Handle specific error cases
-  if (error.message.includes("Invalid index name")) {
-    console.error(
-      "Index name must start with a letter or underscore and contain only valid characters.",
-    );
-  } else if (error.message.includes("Index not found")) {
-    console.error("The specified index does not exist");
-  } else {
-    console.error("Vector store error:", error.message);
-  }
-}
-```
+Closes the Couchbase client connection.
 
 ## Notes
 
-- **Index Deletion Caveat:** Deleting a Search index does NOT delete the vectors/documents in the associated Couchbase collection. Data remains unless explicitly removed.
-- **Required Permissions:** The Couchbase user must have permissions to connect, read/write documents in the target collection (`kv` role), and manage Search Indexes (`search_admin` role on the relevant bucket/scope).
-- **Index Definition Details & Document Structure:** The `createIndex` method constructs a Search Index definition that indexes the `embedding` field (as type `vector`) and the `content` field (as type `text`), targeting documents within the specified `scopeName.collectionName`. Each document stores the vector in the `embedding` field and metadata in the `metadata` field. If `metadata` contains a `text` property, its value is also copied to a top-level `content` field, which is indexed for text search.
-- **Replication & Durability:** Consider using Couchbase's built-in replication and persistence features for data durability. Monitor index statistics regularly to ensure efficient search.
-
-## Limitations
-
-- Index creation delays may impact immediate querying after creation.
-- No hard enforcement of vector dimension at ingest time (dimension mismatches will error at query time).
-- Vector insertion and index updates are eventually consistent; strong consistency is not guaranteed immediately after writes.
+- **Asynchronous Operations**: Index creation and upserts are asynchronous. Allow time for processing before querying.
+- **Permissions**: The Couchbase user must have permissions to connect, read/write documents, and manage Search Vector Indexes or Hyperscale/Composite Vector Indexes.
+- **Composite Index Filtering**: When using Composite indexes, scalar filters take precedence over vector similarity.
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters)
+- [Metadata Filters](./metadata-filters)
+- [Choose the Right Vector Index](https://docs.couchbase.com/cloud/vector-index/use-vector-indexes.html)
+- [Vector Search Using Hyperscale Vector Indexes](https://docs.couchbase.com/cloud/vector-index/hyperscale-vector-index.html)
+- [Vector Search](https://docs.couchbase.com/cloud/vector-search/vector-search.html)
+- [Search](https://docs.couchbase.com/cloud/search/search.html)
+- [Couchbase Node.js SDK](https://docs.couchbase.com/nodejs-sdk/current/hello-world/start-using-sdk.html)
