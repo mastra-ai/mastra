@@ -12,7 +12,7 @@ import type { RequestContext } from '@mastra/core/di';
 import type { Span, SpanType, TracingContext } from '@mastra/core/observability';
 import type { ChunkType } from '@mastra/core/stream';
 import type { WritableStream } from 'node:stream/web';
-import { runStep } from './runtime.workflow';
+import { getRuntime } from './runtime.workflow';
 import type { VercelWorkflow } from './workflow';
 import type { VercelRun } from './run';
 
@@ -62,7 +62,8 @@ export class VercelExecutionEngine extends DefaultExecutionEngine {
 
     run.pendingOperations.set(operationId, operationFn);
     try {
-      return (await runStep(operationId, this._runId, this._workflowId)) as T;
+      // Call the user's registered runStep function (with "use step" directive)
+      return (await getRuntime().runStep(operationId, this._runId, this._workflowId)) as T;
     } finally {
       run.pendingOperations.delete(operationId);
     }

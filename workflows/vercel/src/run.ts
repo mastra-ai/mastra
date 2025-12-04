@@ -11,7 +11,7 @@ import type {
   WorkflowResult,
 } from '@mastra/core/workflows';
 import type { z } from 'zod';
-import { mainWorkflow } from './runtime.workflow';
+import { getRuntime } from './runtime.workflow';
 import type { VercelEngineType } from './types';
 
 /**
@@ -110,8 +110,8 @@ export class VercelRun<
     const inputDataToUse = await this._validateInput(params.inputData);
     const initialStateToUse = await this._validateInitialState(params.initialState ?? {});
 
-    // Call the mainWorkflow function which has "use workflow" directive
-    const result = await mainWorkflow({
+    // Call the user's registered mainWorkflow function (with "use workflow" directive)
+    const result = await getRuntime().mainWorkflow({
       workflowId: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -176,8 +176,8 @@ export class VercelRun<
     const newRequestContext = this.serializeRequestContext(params.requestContext);
     const mergedRequestContext = { ...persistedRequestContext, ...newRequestContext };
 
-    // Call mainWorkflow with resume params
-    const result = await mainWorkflow({
+    // Call the user's registered mainWorkflow with resume params
+    const result = await getRuntime().mainWorkflow({
       workflowId: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,

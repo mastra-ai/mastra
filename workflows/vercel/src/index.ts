@@ -40,8 +40,9 @@ export { VercelExecutionEngine } from './execution-engine';
 export { VercelWorkflow } from './workflow';
 export { VercelRun } from './run';
 
-// Runtime functions (with Vercel directives)
-export { mainWorkflow, runStep } from './runtime.workflow';
+// Runtime registration and implementation functions
+// Users must create wrappers WITH directives in their project
+export { registerRuntime, runStepImpl, mainWorkflowImpl } from './runtime.workflow';
 
 // Types
 export type { VercelEngineType, VercelWorkflowConfig, MainWorkflowParams } from './types';

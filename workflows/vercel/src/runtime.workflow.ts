@@ -1,31 +1,87 @@
 /**
- * Vercel Workflow Runtime
+ * Vercel Workflow Runtime Implementations
  *
- * This file contains module-level functions with Vercel's "use workflow" and "use step" directives.
- * These are the ONLY places where these directives should appear.
+ * This file contains the IMPLEMENTATION of workflow runtime functions WITHOUT directives.
+ * Users must create wrapper functions in their project WITH the directives.
  *
- * IMPORTANT: This file uses ONLY dynamic imports to avoid Vercel's static analysis
- * blocking Node.js modules. All imports happen inside function bodies.
+ * @example
+ * ```typescript
+ * // In your project: src/workflow-runtime.ts
+ * import { runStepImpl, mainWorkflowImpl } from '@mastra/vercel';
+ *
+ * export async function runStep(...args: Parameters<typeof runStepImpl>) {
+ *   'use step';
+ *   return runStepImpl(...args);
+ * }
+ *
+ * export async function mainWorkflow(...args: Parameters<typeof mainWorkflowImpl>) {
+ *   'use workflow';
+ *   return mainWorkflowImpl(...args);
+ * }
+ * ```
  */
 
 import type { WorkflowResult, StepResult, TimeTravelExecutionParams } from '@mastra/core/workflows';
 import type { MainWorkflowParams } from './types';
 
+// =============================================================================
+// Runtime Registration
+// =============================================================================
+
+type RuntimeFunctions = {
+  runStep: (operationId: string, runId: string, workflowId: string) => Promise<unknown>;
+  mainWorkflow: (params: MainWorkflowParams) => Promise<WorkflowResult<any, any, any, any>>;
+};
+
+let _runtime: RuntimeFunctions | null = null;
+
 /**
- * Execute a durable operation with Vercel's "use step" directive.
+ * Register the workflow runtime functions.
+ * These should be the user's wrapped versions WITH the Vercel directives.
  *
- * This function retrieves the pending operation from the VercelRun instance
- * and executes it. The closure already has all the context it needs.
+ * @example
+ * ```typescript
+ * import { registerRuntime } from '@mastra/vercel';
+ * import { runStep, mainWorkflow } from './workflow-runtime';
+ *
+ * registerRuntime({ runStep, mainWorkflow });
+ * ```
+ */
+export function registerRuntime(runtime: RuntimeFunctions): void {
+  _runtime = runtime;
+}
+
+/**
+ * Get the registered runtime functions.
+ * @internal
+ */
+export function getRuntime(): RuntimeFunctions {
+  if (!_runtime) {
+    throw new Error(
+      'Vercel workflow runtime not registered. ' +
+        'You must create wrapper functions with "use step" and "use workflow" directives ' +
+        'in your project and register them with registerRuntime(). ' +
+        'See: https://mastra.ai/docs/vercel-workflows',
+    );
+  }
+  return _runtime;
+}
+
+// =============================================================================
+// Implementation Functions (NO directives - users wrap these)
+// =============================================================================
+
+/**
+ * Implementation of the step execution logic.
+ * Users must wrap this in a function with 'use step' directive.
  *
  * @param operationId - The unique operation identifier
  * @param runId - The workflow run ID
  * @param workflowId - The workflow ID
  * @returns The operation result
  */
-export async function runStep(operationId: string, runId: string, workflowId: string): Promise<unknown> {
-  'use step';
-
-  // Dynamic imports to avoid Vercel's static Node.js module blocking
+export async function runStepImpl(operationId: string, runId: string, workflowId: string): Promise<unknown> {
+  // Dynamic imports to keep this file clean of Node.js module imports
   const { getMastra } = await import('./singleton');
 
   const mastra = getMastra();
@@ -46,18 +102,14 @@ export async function runStep(operationId: string, runId: string, workflowId: st
 }
 
 /**
- * Main workflow entry point with Vercel durability.
- *
- * This function has the "use workflow" directive and orchestrates
- * the entire workflow execution using the VercelExecutionEngine.
+ * Implementation of the main workflow execution logic.
+ * Users must wrap this in a function with 'use workflow' directive.
  *
  * @param params - Workflow parameters (must be serializable)
  * @returns The workflow result
  */
-export async function mainWorkflow(params: MainWorkflowParams): Promise<WorkflowResult<any, any, any, any>> {
-  'use workflow';
-
-  // Dynamic imports to avoid Vercel's static Node.js module blocking
+export async function mainWorkflowImpl(params: MainWorkflowParams): Promise<WorkflowResult<any, any, any, any>> {
+  // Dynamic imports to keep this file clean of Node.js module imports
   const { getMastra } = await import('./singleton');
   const { VercelExecutionEngine } = await import('./execution-engine');
   const { RequestContext } = await import('@mastra/core/di');
