@@ -1,7 +1,7 @@
 ---
 '@mastra/client-js': patch
 '@mastra/server': patch
-'@mastra/cloud': patch
+'@mastra/core': patch
 ---
 
 feat: Add partial response support for agent and workflow list endpoints
