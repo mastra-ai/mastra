@@ -21,11 +21,11 @@ export interface WorkflowContext extends Context {
   runId?: string;
 }
 
-export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
+export async function getWorkflowsHandler({ mastra, partial = false }: WorkflowContext & { partial?: boolean }) {
   try {
     const workflows = mastra.getWorkflows({ serialized: false });
     const _workflows = Object.entries(workflows).reduce<Record<string, WorkflowInfo>>((acc, [key, workflow]) => {
-      acc[key] = getWorkflowInfo(workflow);
+      acc[key] = getWorkflowInfo(workflow, partial);
       return acc;
     }, {});
     return _workflows;
