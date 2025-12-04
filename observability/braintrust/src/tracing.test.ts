@@ -1080,6 +1080,183 @@ describe('BraintrustExporter', () => {
     });
   });
 
+  describe('Input/Output Formatting for Braintrust UI', () => {
+    it('should format agent input from message array to plain text', async () => {
+      // This test reproduces the bug from https://github.com/mastra-ai/mastra/issues/9822
+      // Braintrust UI displays raw JSON for input/output instead of plain text
+      const agentSpan = createMockSpan({
+        id: 'agent-span-input',
+        name: "agent run: 'test-agent'",
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        // Input is a message array (as passed from agent.ts line 2478: input: options.messages)
+        input: [
+          { role: 'user', content: 'What is the weather in Tokyo?' },
+        ],
+        attributes: { agentId: 'test-agent' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // The input should be formatted as plain text for Braintrust UI display
+      // Expected: "What is the weather in Tokyo?"
+      // Actual (bug): [{"role":"user","content":"What is the weather in Tokyo?"}]
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: 'What is the weather in Tokyo?',
+        }),
+      );
+    });
+
+    it('should format agent output from structured object to plain text', async () => {
+      // This test reproduces the bug from https://github.com/mastra-ai/mastra/issues/9822
+      const agentSpan = createMockSpan({
+        id: 'agent-span-output',
+        name: "agent run: 'test-agent'",
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'test-agent' },
+        // Output is a structured object (as passed from agent.ts lines 2722-2728)
+        output: {
+          text: 'The weather in Tokyo is sunny with 25°C.',
+          object: null,
+          files: [],
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // The output should be formatted as plain text for Braintrust UI display
+      // Expected: "The weather in Tokyo is sunny with 25°C."
+      // Actual (bug): {"text":"The weather in Tokyo is sunny with 25°C.","object":null,"files":[]}
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: 'The weather in Tokyo is sunny with 25°C.',
+        }),
+      );
+    });
+
+    it('should format multi-turn conversation input to readable text', async () => {
+      const agentSpan = createMockSpan({
+        id: 'agent-span-multi',
+        name: "agent run: 'test-agent'",
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        // Multi-turn conversation as input
+        input: [
+          { role: 'user', content: 'Hello!' },
+          { role: 'assistant', content: 'Hi there!' },
+          { role: 'user', content: 'What is 2+2?' },
+        ],
+        attributes: { agentId: 'test-agent' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Should show readable text, focusing on the last user message or showing conversation
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // Could be just the last user message or a formatted conversation
+          input: expect.any(String),
+        }),
+      );
+
+      // Verify it's NOT the raw JSON array
+      const call = mockLogger.startSpan.mock.calls[0][0];
+      expect(typeof call.input).toBe('string');
+      expect(call.input).not.toContain('[{');
+      expect(call.input).not.toContain('"role"');
+    });
+
+    it('should handle string input without modification', async () => {
+      // When input is already a plain string, it should pass through unchanged
+      const agentSpan = createMockSpan({
+        id: 'agent-span-string',
+        name: "agent run: 'test-agent'",
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        input: 'What is the weather?',
+        attributes: { agentId: 'test-agent' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: 'What is the weather?',
+        }),
+      );
+    });
+
+    it('should handle complex message content (arrays with parts)', async () => {
+      // Messages can have complex content with text parts, images, etc.
+      const agentSpan = createMockSpan({
+        id: 'agent-span-complex',
+        name: "agent run: 'test-agent'",
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Describe this image:' },
+              { type: 'image', image: 'base64-encoded-image-data' },
+            ],
+          },
+        ],
+        attributes: { agentId: 'test-agent' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Should extract readable text from complex content
+      const call = mockLogger.startSpan.mock.calls[0][0];
+      expect(typeof call.input).toBe('string');
+      expect(call.input).toContain('Describe this image:');
+    });
+
+    it('should NOT format LLM generation spans (preserve raw data for debugging)', async () => {
+      // LLM generation spans should keep raw data for detailed debugging
+      const llmSpan = createMockSpan({
+        id: 'llm-span-raw',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        output: { content: 'Hi there!' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // LLM spans should keep structured data for detailed analysis
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { messages: [{ role: 'user', content: 'Hello' }] },
+          output: { content: 'Hi there!' },
+        }),
+      );
+    });
+  });
+
   describe('Out-of-Order Events', () => {
     it('keeps trace until last child ends when root ends first', async () => {
       // Start root span

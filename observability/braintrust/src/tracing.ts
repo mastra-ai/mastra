@@ -62,6 +62,94 @@ function mapSpanType(spanType: SpanType): 'llm' | 'score' | 'function' | 'eval' 
   return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
+/**
+ * Extract text content from a message content field.
+ * Handles both string content and array content with parts.
+ */
+function extractTextFromContent(content: unknown): string | undefined {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    // Extract text from content parts (e.g., [{ type: 'text', text: '...' }, { type: 'image', ... }])
+    const textParts = content
+      .filter((part): part is { type: string; text: string } => part?.type === 'text' && typeof part?.text === 'string')
+      .map(part => part.text);
+
+    return textParts.length > 0 ? textParts.join('\n') : undefined;
+  }
+
+  return undefined;
+}
+
+/**
+ * Format agent input for display in Braintrust UI.
+ * Converts message arrays to readable text format.
+ *
+ * @param input - The raw input (could be message array, string, or other)
+ * @returns Formatted string for display, or original input if not formattable
+ */
+function formatAgentInput(input: unknown): unknown {
+  // If already a string, return as-is
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  // Handle message array format: [{ role: 'user', content: '...' }, ...]
+  if (Array.isArray(input) && input.length > 0) {
+    const firstItem = input[0];
+
+    // Check if it looks like a message array (has role and content properties)
+    if (firstItem && typeof firstItem === 'object' && 'role' in firstItem && 'content' in firstItem) {
+      // For single message, just return the content directly
+      if (input.length === 1) {
+        const text = extractTextFromContent(firstItem.content);
+        return text ?? input;
+      }
+
+      // Format multi-turn conversation with role prefixes
+      const formattedMessages = input
+        .map((msg: { role: string; content: unknown }) => {
+          const text = extractTextFromContent(msg.content);
+          if (!text) return null;
+          return `${msg.role}: ${text}`;
+        })
+        .filter(Boolean);
+
+      return formattedMessages.length > 0 ? formattedMessages.join('\n') : input;
+    }
+  }
+
+  // For other types, return original input
+  return input;
+}
+
+/**
+ * Format agent output for display in Braintrust UI.
+ * Extracts the text field from structured output objects.
+ *
+ * @param output - The raw output (could be structured object with text field, string, or other)
+ * @returns Formatted string for display, or original output if not formattable
+ */
+function formatAgentOutput(output: unknown): unknown {
+  // If already a string, return as-is
+  if (typeof output === 'string') {
+    return output;
+  }
+
+  // Handle structured output with text field: { text: '...', object: null, files: [] }
+  if (output && typeof output === 'object' && 'text' in output) {
+    const textValue = (output as { text: unknown }).text;
+    if (typeof textValue === 'string') {
+      return textValue;
+    }
+  }
+
+  // For other types, return original output
+  return output;
+}
+
 export class BraintrustExporter extends BaseExporter {
   name = 'braintrust';
   private traceMap = new Map<string, SpanData>();
@@ -368,13 +456,17 @@ export class BraintrustExporter extends BaseExporter {
   private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
     const payload: Record<string, any> = {};
 
+    // Determine if this span type should have formatted input/output for better Braintrust UI display
+    // Agent runs benefit from human-readable text, while LLM spans need raw data for debugging
+    const shouldFormatForUI = span.type === SpanType.AGENT_RUN || span.type === SpanType.WORKFLOW_RUN;
+
     // Core span data
     if (span.input !== undefined) {
-      payload.input = span.input;
+      payload.input = shouldFormatForUI ? formatAgentInput(span.input) : span.input;
     }
 
     if (span.output !== undefined) {
-      payload.output = span.output;
+      payload.output = shouldFormatForUI ? formatAgentOutput(span.output) : span.output;
     }
 
     // Initialize metrics and metadata objects
