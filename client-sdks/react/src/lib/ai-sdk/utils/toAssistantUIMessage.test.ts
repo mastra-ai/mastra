@@ -1411,4 +1411,137 @@ describe('toAssistantUIMessage', () => {
       expect((result.content[1] as any).args.data).toHaveLength(100000);
     });
   });
+
+  describe('Data parts (from persisted data-* chunks)', () => {
+    it('should convert data parts to a proper content format', () => {
+      const message: MastraUIMessage = {
+        id: 'msg-data-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'Processing your request...',
+            state: 'done',
+          },
+          {
+            type: 'data',
+            dataType: 'data-progress',
+            data: {
+              taskName: 'test-task',
+              progress: 50,
+              status: 'in-progress',
+            },
+          } as any,
+          {
+            type: 'data',
+            dataType: 'data-progress',
+            data: {
+              taskName: 'test-task',
+              progress: 100,
+              status: 'complete',
+            },
+          } as any,
+        ],
+      };
+
+      const result = toAssistantUIMessage(message);
+
+      // Data parts should be converted to a format @assistant-ui can handle
+      // Currently they fall through to empty text parts - this test verifies proper handling
+      expect(result.content).toHaveLength(3);
+
+      // First part should be text
+      expect(result.content[0]).toMatchObject({
+        type: 'text',
+        text: 'Processing your request...',
+      });
+
+      // Data parts should be converted to a proper format (not empty text)
+      // This assertion will FAIL until we implement data part handling
+      const dataPart1 = result.content[1] as any;
+      expect(dataPart1.type).toBe('data');
+      expect(dataPart1.dataType).toBe('data-progress');
+      expect(dataPart1.data).toEqual({
+        taskName: 'test-task',
+        progress: 50,
+        status: 'in-progress',
+      });
+
+      const dataPart2 = result.content[2] as any;
+      expect(dataPart2.type).toBe('data');
+      expect(dataPart2.dataType).toBe('data-progress');
+      expect(dataPart2.data).toEqual({
+        taskName: 'test-task',
+        progress: 100,
+        status: 'complete',
+      });
+    });
+
+    it('should handle data parts with different dataTypes', () => {
+      const message: MastraUIMessage = {
+        id: 'msg-data-2',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data',
+            dataType: 'data-workflow-step',
+            data: {
+              stepId: 'step-1',
+              stepName: 'validation',
+              status: 'running',
+            },
+          } as any,
+          {
+            type: 'data',
+            dataType: 'data-custom-event',
+            data: {
+              eventType: 'user-action',
+              payload: { action: 'click' },
+            },
+          } as any,
+        ],
+      };
+
+      const result = toAssistantUIMessage(message);
+
+      // This test verifies data parts with different dataTypes are handled correctly
+      expect(result.content).toHaveLength(2);
+
+      const part1 = result.content[0] as any;
+      expect(part1.type).toBe('data');
+      expect(part1.dataType).toBe('data-workflow-step');
+
+      const part2 = result.content[1] as any;
+      expect(part2.type).toBe('data');
+      expect(part2.dataType).toBe('data-custom-event');
+    });
+
+    it('should preserve data part metadata', () => {
+      const message: MastraUIMessage = {
+        id: 'msg-data-3',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data',
+            dataType: 'data-progress',
+            data: { progress: 100 },
+          } as any,
+        ],
+        metadata: {
+          mode: 'stream',
+          requestId: 'req-123',
+        },
+      };
+
+      const result = toAssistantUIMessage(message);
+
+      // Metadata should be passed to data parts
+      expect(result.content[0]).toMatchObject({
+        metadata: {
+          mode: 'stream',
+          requestId: 'req-123',
+        },
+      });
+    });
+  });
 });

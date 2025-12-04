@@ -2328,4 +2328,121 @@ describe('toUIMessage', () => {
       });
     });
   });
+
+  describe('data-* chunk handling', () => {
+    const baseMetadata: MastraUIMessageMetadata = {
+      mode: 'stream',
+    };
+
+    it('should add data-* chunks as data parts to the assistant message', async () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: {
+          taskName: 'test-task',
+          progress: 50,
+          status: 'in-progress',
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'Processing...',
+            state: 'streaming',
+          },
+        ],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Verify data-* chunk is added as a data part
+      const lastMessage = result[result.length - 1];
+      expect(lastMessage.role).toBe('assistant');
+
+      const dataPart = lastMessage.parts.find((p: any) => p.type === 'data');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).dataType).toBe('data-progress');
+      expect((dataPart as any).data).toEqual({
+        taskName: 'test-task',
+        progress: 50,
+        status: 'in-progress',
+      });
+    });
+
+    it('should handle multiple data-* chunks accumulating in the same message', async () => {
+      const chunk1: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 25 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const chunk2: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 75 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      let conversation: MastraUIMessage[] = [existingMessage];
+      conversation = toUIMessage({ chunk: chunk1, conversation, metadata: baseMetadata });
+      conversation = toUIMessage({ chunk: chunk2, conversation, metadata: baseMetadata });
+
+      const lastMessage = conversation[conversation.length - 1];
+      const dataParts = lastMessage.parts.filter((p: any) => p.type === 'data');
+
+      // Should have accumulated both data parts
+      expect(dataParts.length).toBe(2);
+      expect((dataParts[0] as any).data.progress).toBe(25);
+      expect((dataParts[1] as any).data.progress).toBe(75);
+    });
+
+    it('should handle data-* chunks with different dataTypes', async () => {
+      const progressChunk: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const statusChunk: ChunkType = {
+        type: 'data-status',
+        data: { status: 'running', step: 'validation' },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      let conversation: MastraUIMessage[] = [existingMessage];
+      conversation = toUIMessage({ chunk: progressChunk, conversation, metadata: baseMetadata });
+      conversation = toUIMessage({ chunk: statusChunk, conversation, metadata: baseMetadata });
+
+      const lastMessage = conversation[conversation.length - 1];
+      const dataParts = lastMessage.parts.filter((p: any) => p.type === 'data');
+
+      expect(dataParts.length).toBe(2);
+      expect((dataParts[0] as any).dataType).toBe('data-progress');
+      expect((dataParts[1] as any).dataType).toBe('data-status');
+    });
+  });
 });
