@@ -1,11 +1,12 @@
 import { spawn } from 'child_process';
+import { existsSync } from 'fs';
 import { join } from 'path';
 import { config } from 'dotenv';
 import { logger } from '../../utils/logger';
 
 interface StudioOptions {
   env?: string;
-  port?: string;
+  port?: string | number;
 }
 
 export async function studio(options: StudioOptions = {}) {
@@ -14,10 +15,17 @@ export async function studio(options: StudioOptions = {}) {
 
   try {
     const distPath = join(process.cwd(), 'dist', 'playground');
+
+    if (!existsSync(distPath)) {
+      logger.error(`Studio distribution not found at ${distPath}. Please build the studio first.`);
+      process.exit(1);
+    }
+
     const port = options.port || 3000;
 
-    // Start the server using node
-    const server = spawn('npx', ['serve', distPath, '-s', '-n', '-p', port.toString()]);
+    // Start the server using the installed serve binary
+    const serveBin = join(process.cwd(), 'node_modules', '.bin', 'serve');
+    const server = spawn(serveBin, [distPath, '-s', '-n', '-p', port.toString()]);
 
     let stderrBuffer = '';
     server.stderr.on('data', data => {
@@ -29,10 +37,14 @@ export async function studio(options: StudioOptions = {}) {
     });
 
     server.on('exit', code => {
-      if (code !== 0 && stderrBuffer) {
-        logger.error(stderrBuffer.trim());
-
-        process.exit(code);
+      if (code !== 0) {
+        if (stderrBuffer) {
+          logger.error(stderrBuffer.trim());
+        }
+        process.exit(code ?? 1);
+      } else {
+        // Normal exit - server stopped
+        process.exit(0);
       }
     });
 
