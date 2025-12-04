@@ -175,6 +175,11 @@ export function workflowLoopStream<
             from: ChunkFrom.AGENT,
             payload: { error },
           });
+
+          if (rest.options?.onError) {
+            // Call onError callback if provided
+            await rest.options?.onError?.({ error });
+          }
         }
 
         controller.close();
