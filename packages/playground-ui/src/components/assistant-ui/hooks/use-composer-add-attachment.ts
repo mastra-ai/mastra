@@ -23,7 +23,7 @@ export const useComposerAddAttachment = ({
     input.multiple = multiple;
     input.hidden = true;
 
-    const attachmentAccept = composerRuntime.getAttachmentAccept();
+    const attachmentAccept = composerRuntime.getState().attachmentAccept;
     if (attachmentAccept !== '*') {
       input.accept = attachmentAccept;
     }
