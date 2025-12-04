@@ -5051,8 +5051,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   });
 
   if (version === 'v2') {
-    describe.only('error handling consistency', () => {
-      it.skip('should preserve full APICallError in fullStream chunk, onError callback, and result.error', async () => {
+    describe('error handling consistency', () => {
+      it('should preserve full APICallError in fullStream chunk, onError callback, and result.error', async () => {
         let onErrorCallbackError: any = null;
         let fullStreamError: any = null;
 
@@ -5108,7 +5108,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(onErrorCallbackError).toBeInstanceOf(APICallError);
       });
 
-      it.skip('should preserve the error.cause in fullStream error chunks, onError callback, and result.error', async () => {
+      it('should preserve the error.cause in fullStream error chunks, onError callback, and result.error', async () => {
         const testErrorCauseMessage = 'Test error cause message';
         const testErrorCause = new Error(testErrorCauseMessage);
 
@@ -5190,7 +5190,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect((resultError as Error).cause).toBe(testErrorCause);
       });
 
-      it.skip('should expose the same error in fullStream error chunks, onError callback, and result.error', async () => {
+      it('should expose the same error in fullStream error chunks, onError callback, and result.error', async () => {
         const testErrorMessage = 'Test API error';
         const testErrorStatusCode = 401;
         const testErrorRequestId = 'req_123';
