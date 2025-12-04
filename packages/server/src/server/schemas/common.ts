@@ -130,6 +130,14 @@ export const messageResponseSchema = z.object({
   message: z.string(),
 });
 
+/**
+ * Partial data query parameter schema
+ * Used by list endpoints to return minimal data without schemas
+ */
+export const partialQuerySchema = z.object({
+  partial: z.string().optional(),
+});
+
 // ============================================================================
 // Logging Schemas
 // ============================================================================
