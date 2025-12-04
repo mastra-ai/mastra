@@ -3,7 +3,7 @@ import type {
   LanguageModelV2Middleware,
   LanguageModelV2Prompt,
   LanguageModelV2StreamPart,
-} from '@ai-sdk/provider-v5';
+} from '@ai-sdk/provider';
 import { MessageList, TripWire } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
