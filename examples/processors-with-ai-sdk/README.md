@@ -1,6 +1,6 @@
 # Using Mastra Processors with AI SDK
 
-This example demonstrates how to use Mastra's processor middleware with the AI SDK's `generateText`, `streamText`, and `wrapLanguageModel` functions.
+This example demonstrates how to use `withMastra` to wrap AI SDK models with Mastra processors and memory.
 
 ## Setup
 
@@ -26,17 +26,35 @@ pnpm start
 This example shows:
 
 - Creating custom processors (logging, prefix)
-- Using `createProcessorMiddleware` to wrap a model
+- Using `withMastra` to wrap a model
 - Running processors with `generateText`
+
+### Streaming Example
+
+```bash
+pnpm start:stream
+```
+
+### Tripwire/Abort Example
+
+```bash
+pnpm start:tripwire
+```
+
+### Memory Example
+
+```bash
+pnpm start:memory
+```
 
 ## How It Works
 
-The `createProcessorMiddleware` function creates AI SDK middleware that runs Mastra processors:
+The `withMastra` function wraps an AI SDK model with Mastra processors and memory:
 
 ```typescript
-import { wrapLanguageModel, generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { createProcessorMiddleware } from '@mastra/core/processors';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
 
 // Create your processors
 const myProcessor = {
@@ -51,13 +69,10 @@ const myProcessor = {
   },
 };
 
-// Wrap the model with processor middleware
-const model = wrapLanguageModel({
-  model: openai('gpt-4o'),
-  middleware: createProcessorMiddleware({
-    inputProcessors: [myProcessor],
-    outputProcessors: [myProcessor],
-  }),
+// Wrap the model with processors
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [myProcessor],
+  outputProcessors: [myProcessor],
 });
 
 // Use with generateText or streamText

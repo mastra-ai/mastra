@@ -6,16 +6,15 @@
  */
 
 import { openai } from '@ai-sdk/openai';
-import { generateText, wrapLanguageModel } from 'ai';
-import { createProcessorMiddleware } from '@mastra/ai-sdk';
-import type { Processor, ProcessInputArgs } from '@mastra/core/processors';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import type { InputProcessor, ProcessInputArgs } from '@mastra/core/processors';
 
 /**
  * A guard processor that blocks certain content
  */
-const guardProcessor: Processor<'guard'> = {
+const guardProcessor: InputProcessor = {
   id: 'guard',
-  name: 'Content Guard',
 
   async processInput(args: ProcessInputArgs) {
     console.log('\n🛡️  [Guard] Checking input messages...');
@@ -46,11 +45,8 @@ async function main() {
   console.log('='.repeat(50));
 
   // Create a wrapped model with the guard processor
-  const modelWithGuard = wrapLanguageModel({
-    model: openai('gpt-4o-mini'),
-    middleware: createProcessorMiddleware({
-      inputProcessors: [guardProcessor],
-    }),
+  const modelWithGuard = withMastra(openai('gpt-4o-mini'), {
+    inputProcessors: [guardProcessor],
   });
 
   // Test 1: Normal message (should pass)

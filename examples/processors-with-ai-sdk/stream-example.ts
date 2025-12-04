@@ -6,16 +6,15 @@
  */
 
 import { openai } from '@ai-sdk/openai';
-import { streamText, wrapLanguageModel } from 'ai';
-import { createProcessorMiddleware } from '@mastra/ai-sdk';
-import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
+import { streamText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import type { OutputProcessor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 
 /**
  * A processor that counts and logs streaming chunks
  */
-const chunkCounterProcessor: Processor<'chunk-counter'> = {
+const chunkCounterProcessor: OutputProcessor = {
   id: 'chunk-counter',
-  name: 'Chunk Counter',
 
   async processOutputStream(args: ProcessOutputStreamArgs) {
     const { part, state } = args;
@@ -42,12 +41,11 @@ const chunkCounterProcessor: Processor<'chunk-counter'> = {
 /**
  * A processor that filters out certain patterns from the stream
  */
-const filterProcessor: Processor<'filter'> = {
+const filterProcessor: OutputProcessor = {
   id: 'filter',
-  name: 'Content Filter',
 
   async processOutputStream(args: ProcessOutputStreamArgs) {
-    const { part, state } = args;
+    const { part } = args;
 
     if (part.type === 'text-delta') {
       // Example: Replace any occurrence of "AI" with "Assistant"
@@ -73,11 +71,8 @@ async function main() {
   console.log('='.repeat(50));
 
   // Create a wrapped model with streaming processors
-  const modelWithProcessors = wrapLanguageModel({
-    model: openai('gpt-4o-mini'),
-    middleware: createProcessorMiddleware({
-      outputProcessors: [chunkCounterProcessor, filterProcessor],
-    }),
+  const modelWithProcessors = withMastra(openai('gpt-4o-mini'), {
+    outputProcessors: [chunkCounterProcessor, filterProcessor],
   });
 
   console.log('\n📝 Streaming a response with processors...\n');
