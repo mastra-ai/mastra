@@ -153,7 +153,9 @@ export function workflowLoopStream<
             payload: { error },
           });
 
-          await rest.options?.onError?.({ error });
+          if (rest.options?.onError) {
+            await rest.options?.onError?.({ error });
+          }
         }
 
         controller.close();
