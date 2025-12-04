@@ -2,6 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
+  createStorageErrorId,
   ScoresStorage,
   TABLE_SCORERS,
   calculatePagination,
@@ -43,7 +44,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id },
@@ -60,7 +61,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_VALIDATION_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -121,7 +122,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scorerId: score.scorerId, runId: score.runId },
@@ -202,7 +203,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scorerId, page: pagination.page, perPage: pagination.perPage },
@@ -263,7 +264,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId, page: pagination.page, perPage: pagination.perPage },
@@ -326,7 +327,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType, page: pagination.page, perPage: pagination.perPage },
@@ -390,7 +391,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { traceId, spanId, page: pagination.page, perPage: pagination.perPage },
