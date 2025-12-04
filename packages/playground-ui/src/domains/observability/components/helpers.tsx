@@ -83,6 +83,15 @@ export function getSpanInfo({ span, withTraceId = true, withSpanId = true }: get
     },
   ];
 
+  // Add finish reason if available
+  if (span?.attributes?.finishReason) {
+    baseInfo.push({
+      key: 'finishReason',
+      label: 'Finish Reason',
+      value: span.attributes.finishReason,
+    });
+  }
+
   if (withSpanId) {
     baseInfo.unshift({
       key: 'spanId',

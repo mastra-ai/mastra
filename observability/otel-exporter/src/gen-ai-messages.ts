@@ -1,5 +1,12 @@
 /**
- * Type represenation of a gen_ai chat message part
+ * Utilities for converting Mastra messages to OpenTelemetry gen_ai message format
+ * Based on OpenTelemetry GenAI semantic conventions
+ * @see https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/#gen-ai-input-messages
+ * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-input-messages.json
+ */
+
+/**
+ * Type representation of a gen_ai chat message part
  */
 type GenAIMessagePart =
   | {
@@ -43,7 +50,7 @@ type MastraMessagePart =
  */
 type MastraMessage = {
   role: string;
-  content: MastraMessagePart[];
+  content: MastraMessagePart[] | string;
 };
 
 const isMastraMessagePart = (p: unknown): p is MastraMessagePart => {
