@@ -4,6 +4,7 @@ import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import {
   calculatePagination,
+  createStorageErrorId,
   normalizePerPage,
   ScoresStorage,
   TABLE_SCORERS,
@@ -57,7 +58,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -139,7 +140,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -155,7 +156,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('PG', 'SAVE_SCORE', 'INVALID_PAYLOAD'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -209,7 +210,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('PG', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -265,7 +266,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -323,7 +324,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -374,7 +375,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
