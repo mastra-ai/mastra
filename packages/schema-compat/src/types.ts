@@ -4,4 +4,4 @@ export type ModelInformation = {
   supportsStructuredOutputs: boolean;
 };
 
-export type { Schema } from '@internal/ai-sdk-v4/schema';
+export type { Schema } from '@internal/ai-sdk/v4/schema';

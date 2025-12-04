@@ -1,5 +1,5 @@
 import type { WritableStream } from 'node:stream/web';
-import type { TextStreamPart } from '@internal/ai-sdk-v4';
+import type { TextStreamPart } from '@internal/ai-sdk/v4';
 import type { z } from 'zod';
 import type { MastraScorers } from '../evals';
 import type { Mastra } from '../mastra';

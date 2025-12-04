@@ -13,7 +13,7 @@ import type {
   generateObject,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from '@internal/ai-sdk-v4';
+} from '@internal/ai-sdk/v4';
 import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';

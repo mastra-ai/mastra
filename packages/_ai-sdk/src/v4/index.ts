@@ -1,3 +1,4 @@
+// V4 main exports (ai@4.x with LanguageModelV1)
 export * from './model';
 export * from './schema';
 export * from './tool';

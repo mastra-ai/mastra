@@ -1,4 +1,4 @@
-import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk/v4';
 
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { TracingContext } from '../observability';

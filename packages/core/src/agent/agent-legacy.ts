@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { WritableStream } from 'node:stream/web';
-import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
+import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk/v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';

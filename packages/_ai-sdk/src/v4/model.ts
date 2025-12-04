@@ -1,3 +1,4 @@
+// V4 Model exports from ai@4.x
 export { generateObject, generateText, Output, streamObject, streamText } from 'ai';
 export type {
   StreamObjectResult,

@@ -3,10 +3,12 @@ import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
 
+import { ToolLoopAgent } from 'ai-v6';
+
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
-import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
+import { chefModelV2Agent, networkAgent, weatherInfo } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow } from './workflows/other';
 import { moderationProcessor } from './agents/model-v2-agent';
@@ -24,15 +26,25 @@ const testScorer = createScorer({
   return 1;
 });
 
+const agent = new ToolLoopAgent({
+  id: 'tool-loop-agent',
+  model: 'anthropic/claude-sonnet-4.5',
+  instructions: 'You are a helpful weather assistant.',
+  tools: {
+    weather: weatherInfo,
+  },
+});
+
 export const mastra = new Mastra({
   agents: {
-    chefAgent,
-    chefAgentResponses,
-    dynamicAgent,
-    agentThatHarassesYou,
-    evalAgent,
-    chefModelV2Agent,
-    networkAgent,
+    // chefAgent,
+    // chefAgentResponses,
+    // dynamicAgent,
+    // agentThatHarassesYou,
+    // evalAgent,
+    // chefModelV2Agent,
+    // networkAgent,
+    agent,
   },
   processors: {
     moderationProcessor,

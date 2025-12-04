@@ -51,7 +51,7 @@ function fixDtsFiles(dir: string) {
       const relativePath = relative(dirname(filePath), typeFile);
       let content = readFileSync(filePath, 'utf-8');
 
-      const hasV4Import = content.includes('@internal/ai-sdk-v4');
+      const hasV4Import = content.includes('@internal/ai-sdk/v4');
       // Replace imports from @internal/utils to local file
       content = content.replace(/from ['"]@internal\/ai-sdk-v4['"]/g, `from '${relativePath}'`);
       content = content.replace(/import\(['"]@internal\/ai-sdk-v4['"]/g, `import('${relativePath}'`);

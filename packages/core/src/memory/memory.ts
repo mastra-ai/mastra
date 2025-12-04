@@ -1,5 +1,5 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel, AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
+import type { EmbeddingModel, AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk/v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
