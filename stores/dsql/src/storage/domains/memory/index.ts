@@ -1064,9 +1064,9 @@ export class MemoryDSQL extends MemoryStorage {
 
         updates.push(`"updatedAt" = $${paramIndex}`);
         values.push(updatedResource.updatedAt.toISOString());
-        updates.push(`"updatedAtZ" = $${paramIndex++}`);
+        paramIndex++;
+        updates.push(`"updatedAtZ" = $${paramIndex}`);
         values.push(updatedResource.updatedAt.toISOString());
-
         paramIndex++;
 
         values.push(resourceId);
