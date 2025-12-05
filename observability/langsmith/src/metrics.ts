@@ -22,61 +22,47 @@ export function normalizeUsageMetrics(modelAttr: ModelGenerationAttributes): Lan
   const metrics: LangSmithUsageMetrics = {};
   const usage = modelAttr.usage;
 
-  // Input tokens
   if (usage?.inputTokens !== undefined) {
     metrics.input_tokens = usage.inputTokens;
-  } else if (usage?.promptTokens !== undefined) {
-    metrics.input_tokens = usage.promptTokens;
   }
 
-  // Output tokens
   if (usage?.outputTokens !== undefined) {
     metrics.output_tokens = usage.outputTokens;
-  } else if (usage?.completionTokens !== undefined) {
-    metrics.output_tokens = usage.completionTokens;
   }
 
-  // Total tokens
-  if (usage?.totalTokens !== undefined) {
-    metrics.total_tokens = usage.totalTokens;
-  } else if (typeof usage?.inputTokens === 'number' && typeof usage?.outputTokens === 'number') {
-    metrics.total_tokens = usage.inputTokens + usage.outputTokens;
+  // Compute total if we have both
+  if (metrics.input_tokens !== undefined && metrics.output_tokens !== undefined) {
+    metrics.total_tokens = metrics.input_tokens + metrics.output_tokens;
   }
 
-  // Reasoning tokens - prefer new outputDetails, fallback to legacy
-  const reasoningTokens = usage?.outputDetails?.reasoning ?? usage?.reasoningTokens;
-  if (reasoningTokens !== undefined) {
+  if (usage?.outputDetails?.reasoning !== undefined) {
     metrics.output_token_details = {
       ...(metrics.output_token_details ?? {}),
-      reasoning_tokens: reasoningTokens,
+      reasoning_tokens: usage.outputDetails.reasoning,
     };
   }
 
-  // Cache read tokens - prefer new inputDetails, fallback to legacy
-  const cacheRead = usage?.inputDetails?.cacheRead ?? usage?.cachedInputTokens ?? usage?.promptCacheHitTokens;
-  if (cacheRead !== undefined) {
+  if (usage?.inputDetails?.cacheRead !== undefined) {
     metrics.input_token_details = {
       ...(metrics.input_token_details ?? {}),
-      cache_read: cacheRead,
+      cache_read: usage.inputDetails.cacheRead,
     };
   }
 
-  // Cache write tokens - prefer new inputDetails, fallback to legacy
-  const cacheWrite = usage?.inputDetails?.cacheWrite ?? usage?.promptCacheMissTokens;
-  if (cacheWrite !== undefined) {
+  if (usage?.inputDetails?.cacheWrite !== undefined) {
     metrics.input_token_details = {
       ...(metrics.input_token_details ?? {}),
-      cache_write: cacheWrite,
+      cache_write: usage.inputDetails.cacheWrite,
     };
   }
 
-  // Audio tokens from inputDetails/outputDetails
   if (usage?.inputDetails?.audio !== undefined) {
     metrics.input_token_details = {
       ...(metrics.input_token_details ?? {}),
       audio: usage.inputDetails.audio,
     };
   }
+
   if (usage?.outputDetails?.audio !== undefined) {
     metrics.output_token_details = {
       ...(metrics.output_token_details ?? {}),

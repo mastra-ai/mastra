@@ -59,14 +59,4 @@ describe('getAttributes - token usage', () => {
     expect(attrs['gen_ai.usage.reasoning_tokens']).toBe(400);
     expect(attrs['llm.token_count.completion_details.reasoning']).toBe(400);
   });
-
-  it('should fallback to legacy cachedInputTokens', () => {
-    const span = createModelGenerationSpan({
-      model: 'gpt-4',
-      provider: 'openai',
-      usage: { inputTokens: 1000, outputTokens: 200, cachedInputTokens: 800 },
-    });
-    const attrs = getAttributes(span);
-    expect(attrs['gen_ai.usage.cached_input_tokens']).toBe(800);
-  });
 });

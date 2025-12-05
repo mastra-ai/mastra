@@ -4,11 +4,11 @@ import { extractUsageProperties } from './tracing';
 
 describe('extractUsageProperties', () => {
   it('should extract basic tokens', () => {
-    const usage: UsageStats = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
+    const usage: UsageStats = { inputTokens: 100, outputTokens: 50 };
     const result = extractUsageProperties(usage);
     expect(result.$ai_input_tokens).toBe(100);
     expect(result.$ai_output_tokens).toBe(50);
-    expect(result.$ai_total_tokens).toBe(150);
+    expect(result.$ai_total_tokens).toBe(150); // Computed from inputTokens + outputTokens
   });
 
   it('should extract cacheRead from inputDetails', () => {
@@ -27,11 +27,5 @@ describe('extractUsageProperties', () => {
     const usage: UsageStats = { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } };
     const result = extractUsageProperties(usage);
     expect(result.reasoning_tokens).toBe(400);
-  });
-
-  it('should fallback to legacy cachedInputTokens', () => {
-    const usage: UsageStats = { inputTokens: 1000, outputTokens: 200, cachedInputTokens: 800 };
-    const result = extractUsageProperties(usage);
-    expect(result.cached_input_tokens).toBe(800);
   });
 });

@@ -177,41 +177,36 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     // Token usage - use OTEL standard naming + OpenInference conventions
     if (modelAttrs.usage) {
       const usage = modelAttrs.usage;
-      const inputTokens = usage.inputTokens ?? usage.promptTokens;
-      const outputTokens = usage.outputTokens ?? usage.completionTokens;
 
-      if (inputTokens !== undefined) {
-        attributes[ATTR_GEN_AI_USAGE_INPUT_TOKENS] = inputTokens;
+      if (usage.inputTokens !== undefined) {
+        attributes[ATTR_GEN_AI_USAGE_INPUT_TOKENS] = usage.inputTokens;
         // OpenInference: llm.token_count.prompt
-        attributes['llm.token_count.prompt'] = inputTokens;
+        attributes['llm.token_count.prompt'] = usage.inputTokens;
       }
-      if (outputTokens !== undefined) {
-        attributes[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS] = outputTokens;
+      if (usage.outputTokens !== undefined) {
+        attributes[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS] = usage.outputTokens;
         // OpenInference: llm.token_count.completion
-        attributes['llm.token_count.completion'] = outputTokens;
+        attributes['llm.token_count.completion'] = usage.outputTokens;
       }
 
-      // Reasoning tokens - prefer new outputDetails, fallback to legacy
-      const reasoningTokens = usage.outputDetails?.reasoning ?? usage.reasoningTokens;
-      if (reasoningTokens !== undefined) {
-        attributes['gen_ai.usage.reasoning_tokens'] = reasoningTokens;
+      // Reasoning tokens from outputDetails
+      if (usage.outputDetails?.reasoning !== undefined) {
+        attributes['gen_ai.usage.reasoning_tokens'] = usage.outputDetails.reasoning;
         // OpenInference: llm.token_count.completion_details.reasoning
-        attributes['llm.token_count.completion_details.reasoning'] = reasoningTokens;
+        attributes['llm.token_count.completion_details.reasoning'] = usage.outputDetails.reasoning;
       }
 
-      // Cache read tokens - prefer new inputDetails, fallback to legacy
-      const cacheRead = usage.inputDetails?.cacheRead ?? usage.cachedInputTokens ?? usage.promptCacheHitTokens;
-      if (cacheRead !== undefined) {
-        attributes['gen_ai.usage.cached_input_tokens'] = cacheRead;
+      // Cache read tokens from inputDetails
+      if (usage.inputDetails?.cacheRead !== undefined) {
+        attributes['gen_ai.usage.cached_input_tokens'] = usage.inputDetails.cacheRead;
         // OpenInference: llm.token_count.prompt_details.cache_read
-        attributes['llm.token_count.prompt_details.cache_read'] = cacheRead;
+        attributes['llm.token_count.prompt_details.cache_read'] = usage.inputDetails.cacheRead;
       }
 
-      // Cache write tokens - prefer new inputDetails, fallback to legacy
-      const cacheWrite = usage.inputDetails?.cacheWrite ?? usage.promptCacheMissTokens;
-      if (cacheWrite !== undefined) {
+      // Cache write tokens from inputDetails
+      if (usage.inputDetails?.cacheWrite !== undefined) {
         // OpenInference: llm.token_count.prompt_details.cache_write
-        attributes['llm.token_count.prompt_details.cache_write'] = cacheWrite;
+        attributes['llm.token_count.prompt_details.cache_write'] = usage.inputDetails.cacheWrite;
       }
 
       // Audio tokens from inputDetails/outputDetails

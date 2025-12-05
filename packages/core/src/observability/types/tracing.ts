@@ -110,35 +110,16 @@ export interface OutputTokenDetails {
   image?: number;
 }
 
-/** Token usage statistics - supports both v5 and legacy formats */
+/** Token usage statistics */
 export interface UsageStats {
-  // ===== Totals =====
   /** Total input tokens (sum of all input details) */
   inputTokens?: number;
   /** Total output tokens (sum of all output details) */
   outputTokens?: number;
-
-  // ===== Token Details =====
   /** Detailed breakdown of input token usage */
   inputDetails?: InputTokenDetails;
   /** Detailed breakdown of output token usage */
   outputDetails?: OutputTokenDetails;
-
-  // ===== Legacy format (for backward compatibility) =====
-  /** @deprecated Use inputTokens instead */
-  promptTokens?: number;
-  /** @deprecated Use outputTokens instead */
-  completionTokens?: number;
-  /** @deprecated Compute from inputTokens + outputTokens */
-  totalTokens?: number;
-  /** @deprecated Use outputDetails.reasoning instead */
-  reasoningTokens?: number;
-  /** @deprecated Use inputDetails.cacheRead instead */
-  cachedInputTokens?: number;
-  /** @deprecated Use inputDetails.cacheRead instead */
-  promptCacheHitTokens?: number;
-  /** @deprecated Use inputDetails.cacheWrite instead */
-  promptCacheMissTokens?: number;
 }
 
 /**

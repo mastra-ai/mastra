@@ -480,9 +480,8 @@ describe('LangSmithExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            promptTokens: 10,
-            completionTokens: 5,
-            totalTokens: 15,
+            inputTokens: 10,
+            outputTokens: 5,
           },
           parameters: {
             temperature: 0.7,
@@ -512,7 +511,7 @@ describe('LangSmithExporter', () => {
           usage_metadata: {
             input_tokens: 10,
             output_tokens: 5,
-            total_tokens: 15,
+            total_tokens: 15, // computed from input + output
           },
           streaming: false,
           resultType: 'response_generation',
@@ -609,7 +608,7 @@ describe('LangSmithExporter', () => {
       // Update with usage info
       llmSpan.attributes = {
         ...llmSpan.attributes,
-        usage: { totalTokens: 150 },
+        usage: { inputTokens: 100, outputTokens: 50 },
       } as ModelGenerationAttributes;
       llmSpan.output = { content: 'Updated response' };
 
@@ -625,7 +624,9 @@ describe('LangSmithExporter', () => {
           mastra_span_type: 'model_generation',
           ls_model_name: 'gpt-4',
           usage_metadata: {
-            total_tokens: 150,
+            input_tokens: 100,
+            output_tokens: 50,
+            total_tokens: 150, // computed from input + output
           },
         }),
       );

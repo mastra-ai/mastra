@@ -333,7 +333,6 @@ describe('PosthogExporter', () => {
           usage: {
             inputTokens: 100,
             outputTokens: 200,
-            totalTokens: 300,
           },
         },
       });
@@ -347,7 +346,7 @@ describe('PosthogExporter', () => {
             $ai_provider: 'openai',
             $ai_input_tokens: 100,
             $ai_output_tokens: 200,
-            $ai_total_tokens: 300,
+            $ai_total_tokens: 300, // Computed from inputTokens + outputTokens
           }),
         }),
       );
@@ -418,63 +417,6 @@ describe('PosthogExporter', () => {
   });
 
   // --- Priority 2: Advanced Features ---
-  describe('Token Usage Normalization', () => {
-    beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
-    });
-
-    it('should normalize v4 format (promptTokens/completionTokens)', async () => {
-      const generation = createSpan({
-        type: SpanType.MODEL_GENERATION,
-        attributes: {
-          usage: {
-            promptTokens: 100,
-            completionTokens: 200,
-            totalTokens: 300,
-          },
-        },
-      });
-
-      await exportSpanLifecycle(exporter, generation);
-
-      expect(mockCapture).toHaveBeenCalledWith(
-        expect.objectContaining({
-          properties: expect.objectContaining({
-            $ai_input_tokens: 100,
-            $ai_output_tokens: 200,
-            $ai_total_tokens: 300,
-          }),
-        }),
-      );
-    });
-
-    it('should prefer v5 format (inputTokens/outputTokens) when both present', async () => {
-      const generation = createSpan({
-        type: SpanType.MODEL_GENERATION,
-        attributes: {
-          usage: {
-            inputTokens: 150,
-            outputTokens: 250,
-            promptTokens: 100,
-            completionTokens: 200,
-            totalTokens: 400,
-          },
-        },
-      });
-
-      await exportSpanLifecycle(exporter, generation);
-
-      expect(mockCapture).toHaveBeenCalledWith(
-        expect.objectContaining({
-          properties: expect.objectContaining({
-            $ai_input_tokens: 150,
-            $ai_output_tokens: 250,
-          }),
-        }),
-      );
-    });
-  });
-
   describe('Privacy Mode', () => {
     it('should pass privacy mode config to SDK', async () => {
       exporter = new PosthogExporter({

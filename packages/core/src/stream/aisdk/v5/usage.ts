@@ -113,21 +113,6 @@ export function extractUsageWithCacheTokens(
     result.outputDetails = outputDetails;
   }
 
-  // Include legacy fields for backward compatibility
-  result.totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0);
-
-  // Legacy cache fields
-  if (inputDetails.cacheRead !== undefined) {
-    result.cachedInputTokens = inputDetails.cacheRead;
-    result.promptCacheHitTokens = inputDetails.cacheRead;
-  }
-  if (inputDetails.cacheWrite !== undefined) {
-    result.promptCacheMissTokens = inputDetails.cacheWrite;
-  }
-  if (outputDetails.reasoning !== undefined) {
-    result.reasoningTokens = outputDetails.reasoning;
-  }
-
   return result;
 }
 
@@ -167,19 +152,6 @@ export function mergeUsageStats(base: UsageStats | undefined, addition: UsageSta
     };
     // Remove undefined values
     merged.outputDetails = cleanObject(merged.outputDetails);
-  }
-
-  // Update legacy fields
-  merged.totalTokens = (merged.inputTokens ?? 0) + (merged.outputTokens ?? 0);
-  if (merged.inputDetails?.cacheRead !== undefined) {
-    merged.cachedInputTokens = merged.inputDetails.cacheRead;
-    merged.promptCacheHitTokens = merged.inputDetails.cacheRead;
-  }
-  if (merged.inputDetails?.cacheWrite !== undefined) {
-    merged.promptCacheMissTokens = merged.inputDetails.cacheWrite;
-  }
-  if (merged.outputDetails?.reasoning !== undefined) {
-    merged.reasoningTokens = merged.outputDetails.reasoning;
   }
 
   return merged;

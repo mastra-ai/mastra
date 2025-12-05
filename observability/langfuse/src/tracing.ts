@@ -53,129 +53,47 @@ type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerat
 
 /**
  * Normalized token usage format compatible with Langfuse.
- * This unified format supports both AI SDK v4 and v5 token structures.
- *
- * @example
- * ```typescript
- * // AI SDK v4 format normalizes to:
- * { input: 100, output: 50, total: 150 }
- *
- * // AI SDK v5 format normalizes to:
- * { input: 120, output: 60, total: 180, reasoning: 1000, cachedInput: 50 }
- * ```
  */
 export interface NormalizedUsage {
-  /**
-   * Input tokens sent to the model
-   * @source AI SDK v5: `inputTokens` | AI SDK v4: `promptTokens`
-   */
   input?: number;
-
-  /**
-   * Output tokens received from the model
-   * @source AI SDK v5: `outputTokens` | AI SDK v4: `completionTokens`
-   */
   output?: number;
-
-  /**
-   * Total tokens (input + output + reasoning if applicable)
-   * @source AI SDK v4 & v5: `totalTokens`
-   */
   total?: number;
-
-  /**
-   * Reasoning tokens used by reasoning models
-   * @source inputDetails.reasoning or outputDetails.reasoning
-   * @example Models like o1-preview, o1-mini, Claude thinking
-   */
   reasoning?: number;
-
-  /**
-   * Cached input tokens (cache read/hit)
-   * @source inputDetails.cacheRead or cachedInputTokens
-   * @example Anthropic's prompt caching, OpenAI prompt caching
-   */
   cachedInput?: number;
-
-  /**
-   * Cache write tokens (cache creation - Anthropic only)
-   * @source inputDetails.cacheWrite or promptCacheMissTokens
-   * @example Anthropic's cache_creation_input_tokens
-   */
   cacheWrite?: number;
-
-  /**
-   * Prompt cache hit tokens (legacy format)
-   * @source AI SDK v4: `promptCacheHitTokens`
-   * @deprecated Prefer `cachedInput` from inputDetails.cacheRead
-   */
-  promptCacheHit?: number;
-
-  /**
-   * Prompt cache miss tokens (legacy format)
-   * @source AI SDK v4: `promptCacheMissTokens`
-   * @deprecated Prefer `cacheWrite` from inputDetails.cacheWrite
-   */
-  promptCacheMiss?: number;
 }
 
 /**
- * Normalize usage data to handle both AI SDK v4 and v5 formats.
- *
- * AI SDK v4 uses: promptTokens, completionTokens
- * AI SDK v5 uses: inputTokens, outputTokens
- *
- * This function normalizes to a unified format that Langfuse can consume,
- * prioritizing v5 format while maintaining backward compatibility.
- *
- * @param usage - Token usage data from AI SDK (v4 or v5 format)
- * @returns Normalized usage object, or undefined if no usage data available
+ * Normalize usage data to Langfuse format.
  */
 export function normalizeUsage(usage: ModelGenerationAttributes['usage']): NormalizedUsage | undefined {
   if (!usage) return undefined;
 
   const normalized: NormalizedUsage = {};
 
-  // Handle input tokens (v5 'inputTokens' or v4 'promptTokens')
-  const inputTokens = usage.inputTokens ?? usage.promptTokens;
-  if (inputTokens !== undefined) {
-    normalized.input = inputTokens;
+  if (usage.inputTokens !== undefined) {
+    normalized.input = usage.inputTokens;
   }
 
-  // Handle output tokens (v5 'outputTokens' or v4 'completionTokens')
-  const outputTokens = usage.outputTokens ?? usage.completionTokens;
-  if (outputTokens !== undefined) {
-    normalized.output = outputTokens;
+  if (usage.outputTokens !== undefined) {
+    normalized.output = usage.outputTokens;
   }
 
-  // Total tokens - calculate if not provided
-  if (usage.totalTokens !== undefined) {
-    normalized.total = usage.totalTokens;
-  } else if (normalized.input !== undefined && normalized.output !== undefined) {
+  // Compute total if we have both
+  if (normalized.input !== undefined && normalized.output !== undefined) {
     normalized.total = normalized.input + normalized.output;
   }
 
-  // Reasoning tokens - prefer new outputDetails, fallback to legacy
   if (usage.outputDetails?.reasoning !== undefined) {
     normalized.reasoning = usage.outputDetails.reasoning;
-  } else if (usage.reasoningTokens !== undefined) {
-    normalized.reasoning = usage.reasoningTokens;
   }
 
-  // Cache read tokens - prefer new inputDetails, fallback to legacy
   if (usage.inputDetails?.cacheRead !== undefined) {
     normalized.cachedInput = usage.inputDetails.cacheRead;
-  } else if (usage.cachedInputTokens !== undefined) {
-    normalized.cachedInput = usage.cachedInputTokens;
-  } else if (usage.promptCacheHitTokens !== undefined) {
-    normalized.promptCacheHit = usage.promptCacheHitTokens;
   }
 
-  // Cache write tokens - prefer new inputDetails, fallback to legacy
   if (usage.inputDetails?.cacheWrite !== undefined) {
     normalized.cacheWrite = usage.inputDetails.cacheWrite;
-  } else if (usage.promptCacheMissTokens !== undefined) {
-    normalized.promptCacheMiss = usage.promptCacheMissTokens;
   }
 
   return Object.keys(normalized).length > 0 ? normalized : undefined;

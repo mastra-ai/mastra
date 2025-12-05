@@ -20,7 +20,6 @@ export interface PostHogUsageProperties {
 
 /**
  * Extracts and normalizes token usage from UsageStats to PostHog property format.
- * Handles both new inputDetails/outputDetails and legacy fields.
  *
  * @param usage - The UsageStats from span attributes
  * @returns PostHog-formatted usage properties
@@ -30,25 +29,22 @@ export function extractUsageProperties(usage: UsageStats | undefined): PostHogUs
 
   const props: PostHogUsageProperties = {};
 
-  const inputTokens = usage.inputTokens ?? usage.promptTokens;
-  const outputTokens = usage.outputTokens ?? usage.completionTokens;
-  const totalTokens = usage.totalTokens;
+  if (usage.inputTokens !== undefined) props.$ai_input_tokens = usage.inputTokens;
+  if (usage.outputTokens !== undefined) props.$ai_output_tokens = usage.outputTokens;
 
-  if (inputTokens !== undefined) props.$ai_input_tokens = inputTokens;
-  if (outputTokens !== undefined) props.$ai_output_tokens = outputTokens;
-  if (totalTokens !== undefined) props.$ai_total_tokens = totalTokens;
+  // Compute total if we have both
+  if (props.$ai_input_tokens !== undefined && props.$ai_output_tokens !== undefined) {
+    props.$ai_total_tokens = props.$ai_input_tokens + props.$ai_output_tokens;
+  }
 
-  // Reasoning tokens - prefer new outputDetails, fallback to legacy
-  const reasoningTokens = usage.outputDetails?.reasoning ?? usage.reasoningTokens;
-  if (reasoningTokens !== undefined) props.reasoning_tokens = reasoningTokens;
+  // Reasoning tokens from outputDetails
+  if (usage.outputDetails?.reasoning !== undefined) props.reasoning_tokens = usage.outputDetails.reasoning;
 
-  // Cache read tokens - prefer new inputDetails, fallback to legacy
-  const cacheRead = usage.inputDetails?.cacheRead ?? usage.cachedInputTokens ?? usage.promptCacheHitTokens;
-  if (cacheRead !== undefined) props.cached_input_tokens = cacheRead;
+  // Cache read tokens from inputDetails
+  if (usage.inputDetails?.cacheRead !== undefined) props.cached_input_tokens = usage.inputDetails.cacheRead;
 
-  // Cache write tokens - prefer new inputDetails, fallback to legacy
-  const cacheWrite = usage.inputDetails?.cacheWrite ?? usage.promptCacheMissTokens;
-  if (cacheWrite !== undefined) props.cache_write_tokens = cacheWrite;
+  // Cache write tokens from inputDetails
+  if (usage.inputDetails?.cacheWrite !== undefined) props.cache_write_tokens = usage.inputDetails.cacheWrite;
 
   // Audio tokens from inputDetails/outputDetails
   if (usage.inputDetails?.audio !== undefined) props.audio_input_tokens = usage.inputDetails.audio;

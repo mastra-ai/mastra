@@ -25,6 +25,8 @@ import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
 import type { MastraModelOptions } from './shared.types';
+import { extractUsageWithCacheTokens } from '../../stream/aisdk/v5/usage';
+import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 
 export class MastraLLMVNext extends MastraBase {
   #models: ModelManagerModelConfig[];
@@ -291,13 +293,7 @@ export class MastraLLMVNext extends MastraBase {
               },
               attributes: {
                 finishReason: props?.finishReason,
-                usage: {
-                  inputTokens: props?.totalUsage?.inputTokens,
-                  outputTokens: props?.totalUsage?.outputTokens,
-                  totalTokens: props?.totalUsage?.totalTokens,
-                  reasoningTokens: props?.totalUsage?.reasoningTokens,
-                  cachedInputTokens: props?.totalUsage?.cachedInputTokens,
-                },
+                usage: extractUsageWithCacheTokens(props?.totalUsage as LanguageModelV2Usage),
                 responseId: props?.response.id,
                 responseModel: props?.response.modelId,
               },

@@ -46,6 +46,7 @@ import type {
   StreamReturn,
 } from './base.types';
 import type { inferOutput, MastraModelOptions } from './shared.types';
+import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 
 export class MastraLLMV1 extends MastraBase {
   #model: LanguageModel;
@@ -270,7 +271,7 @@ export class MastraLLMV1 extends MastraBase {
         },
         attributes: {
           finishReason: result.finishReason,
-          usage: result.usage,
+          usage: convertV4Usage(result.usage),
         },
       });
 
@@ -371,7 +372,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           attributes: {
             finishReason: result.finishReason,
-            usage: result.usage,
+            usage: convertV4Usage(result.usage),
           },
         });
 
@@ -553,7 +554,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           attributes: {
             finishReason: props?.finishReason,
-            usage: props?.usage,
+            usage: convertV4Usage(props?.usage),
           },
         });
 

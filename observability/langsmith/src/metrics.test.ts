@@ -5,7 +5,7 @@ import { normalizeUsageMetrics } from './metrics';
 describe('normalizeUsageMetrics', () => {
   it('should extract basic tokens', () => {
     const modelAttr: ModelGenerationAttributes = {
-      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+      usage: { inputTokens: 100, outputTokens: 50 },
     };
     const result = normalizeUsageMetrics(modelAttr);
     expect(result.input_tokens).toBe(100);
@@ -35,13 +35,5 @@ describe('normalizeUsageMetrics', () => {
     };
     const result = normalizeUsageMetrics(modelAttr);
     expect(result.output_token_details?.reasoning_tokens).toBe(400);
-  });
-
-  it('should fallback to legacy cachedInputTokens', () => {
-    const modelAttr: ModelGenerationAttributes = {
-      usage: { inputTokens: 1000, outputTokens: 200, cachedInputTokens: 800 },
-    };
-    const result = normalizeUsageMetrics(modelAttr);
-    expect(result.input_token_details?.cache_read).toBe(800);
   });
 });

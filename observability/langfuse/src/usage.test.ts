@@ -4,7 +4,7 @@ import { normalizeUsage } from './tracing';
 
 describe('normalizeUsage', () => {
   it('should extract basic tokens', () => {
-    const usage: UsageStats = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
+    const usage: UsageStats = { inputTokens: 100, outputTokens: 50 };
     const result = normalizeUsage(usage);
     expect(result?.input).toBe(100);
     expect(result?.output).toBe(50);
@@ -27,11 +27,5 @@ describe('normalizeUsage', () => {
     const usage: UsageStats = { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } };
     const result = normalizeUsage(usage);
     expect(result?.reasoning).toBe(400);
-  });
-
-  it('should fallback to legacy cachedInputTokens', () => {
-    const usage: UsageStats = { inputTokens: 1000, outputTokens: 200, cachedInputTokens: 800 };
-    const result = normalizeUsage(usage);
-    expect(result?.cachedInput).toBe(800);
   });
 });
