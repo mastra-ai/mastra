@@ -1161,6 +1161,7 @@ export class MCPServer extends MCPServerBase {
    * @param options.options.onsessioninitialized - Callback when a new session is initialized
    * @param options.options.enableJsonResponse - If true, return JSON instead of SSE streaming
    * @param options.options.eventStore - Event store for message resumability
+   * @param options.options.serverless - If true, run in stateless mode without session management (ideal for serverless environments)
    *
    * @throws {MastraError} If HTTP connection setup fails
    *
@@ -1186,6 +1187,25 @@ export class MCPServer extends MCPServerBase {
    *
    * httpServer.listen(1234);
    * ```
+   *
+   * @example Serverless mode (Cloudflare Workers, Vercel Edge, etc.)
+   * ```typescript
+   * export default {
+   *   async fetch(request: Request) {
+   *     const url = new URL(request.url);
+   *     if (url.pathname === '/mcp') {
+   *       await server.startHTTP({
+   *         url,
+   *         httpPath: '/mcp',
+   *         req: request,
+   *         res: response,
+   *         options: { serverless: true },
+   *       });
+   *     }
+   *     return new Response('Not found', { status: 404 });
+   *   },
+   * };
+   * ```
    */
   public async startHTTP({
     url,
@@ -1198,7 +1218,7 @@ export class MCPServer extends MCPServerBase {
     httpPath: string;
     req: http.IncomingMessage;
     res: http.ServerResponse<http.IncomingMessage>;
-    options?: StreamableHTTPServerTransportOptions;
+    options?: Partial<StreamableHTTPServerTransportOptions> & { serverless?: boolean };
   }) {
     this.logger.debug(`startHTTP: Received ${req.method} request to ${url.pathname}`);
 
@@ -1208,6 +1228,17 @@ export class MCPServer extends MCPServerBase {
       res.end();
       return;
     }
+    // Serverless/stateless mode: single request/response without session management
+    // Triggered by either: serverless: true OR sessionIdGenerator: undefined
+    const isStatelessMode =
+      options?.serverless || (options && 'sessionIdGenerator' in options && options.sessionIdGenerator === undefined);
+
+    if (isStatelessMode) {
+      this.logger.debug('startHTTP: Running in stateless mode (serverless or sessionIdGenerator: undefined)');
+      await this.handleServerlessRequest(req, res);
+      return;
+    }
+
     const mergedOptions = {
       sessionIdGenerator: () => randomUUID(), // default: enabled
       ...options, // user-provided overrides default
@@ -1374,6 +1405,95 @@ export class MCPServer extends MCPServerBase {
               message: 'Internal server error',
             },
             id: null, // Cannot determine original request ID in catch
+          }),
+        );
+      }
+    }
+  }
+
+  /**
+   * Handles a stateless, serverless HTTP request without session management.
+   *
+   * This method bypasses all session/transport state and handles each request independently.
+   * For serverless environments (Cloudflare Workers, Vercel Edge, etc.) where
+   * persistent connections and session state cannot be maintained across requests.
+   *
+   * Each request gets a fresh transport and server instance that are discarded after the response.
+   *
+   * @param req - Incoming HTTP request
+   * @param res - HTTP response object
+   * @private
+   */
+  private async handleServerlessRequest(req: http.IncomingMessage, res: http.ServerResponse<http.IncomingMessage>) {
+    try {
+      this.logger.debug(`handleServerlessRequest: Received ${req.method} request`);
+
+      // Parse the request body (for POST requests)
+      const body =
+        req.method === 'POST'
+          ? await new Promise<any>((resolve, reject) => {
+              let data = '';
+              req.on('data', chunk => (data += chunk));
+              req.on('end', () => {
+                try {
+                  resolve(JSON.parse(data));
+                } catch (e) {
+                  reject(new Error(`Invalid JSON in request body: ${e instanceof Error ? e.message : String(e)}`));
+                }
+              });
+              req.on('error', reject);
+            })
+          : undefined;
+
+      this.logger.debug(`handleServerlessRequest: Processing ${req.method} request`, {
+        method: body?.method,
+        id: body?.id,
+      });
+
+      // Create a transient server instance for this single request
+      const transientServer = this.createServerInstance();
+
+      // Create a one-time transport that handles this single request
+      // sessionIdGenerator: undefined disables session management entirely
+      // enableJsonResponse: true forces JSON-RPC responses instead of SSE streaming
+      const tempTransport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+
+      // Connect the transient server to the temporary transport
+      await transientServer.connect(tempTransport);
+
+      // Handle the request through the transport
+      // The transport will send the response and this instance will be garbage collected
+      await tempTransport.handleRequest(req, res, body);
+
+      this.logger.debug(`handleServerlessRequest: Completed ${body?.method} request`, { id: body?.id });
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_SERVERLESS_REQUEST_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          text: 'Failed to handle serverless MCP request',
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('handleServerlessRequest: Error handling request:', { error: mastraError });
+
+      // If headers haven't been sent, send an error response
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: 'Internal server error',
+              data: error instanceof Error ? error.message : String(error),
+            },
+            id: null,
           }),
         );
       }
