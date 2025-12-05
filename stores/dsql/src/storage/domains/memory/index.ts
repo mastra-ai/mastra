@@ -372,16 +372,8 @@ export class MemoryDSQL extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages({
-    threadId,
-    include,
-  }: {
-    threadId: string;
-    include: StorageListMessagesInput['include'];
-  }): Promise<MessageRowFromDB[] | null> {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    if (!include) return null;
+  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+    if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
     const params: any[] = [];
@@ -390,17 +382,19 @@ export class MemoryDSQL extends MemoryStorage {
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      // if threadId is provided, use it, otherwise use threadId from args
-      const searchId = inc.threadId || threadId;
+      // Query by message ID directly - get the threadId from the message itself via subquery
       unionQueries.push(
         `
             SELECT * FROM (
-              WITH ordered_messages AS (
+              WITH target_thread AS (
+                SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx}
+              ),
+              ordered_messages AS (
                 SELECT 
                   *,
                   ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
                 FROM ${tableName}
-                WHERE thread_id = $${paramIdx}
+                WHERE thread_id = (SELECT thread_id FROM target_thread)
               )
               SELECT
                 m.id,
@@ -412,23 +406,23 @@ export class MemoryDSQL extends MemoryStorage {
                 m.thread_id AS "threadId",
                 m."resourceId"
               FROM ordered_messages m
-              WHERE m.id = $${paramIdx + 1}
+              WHERE m.id = $${paramIdx}
               OR EXISTS (
                 SELECT 1 FROM ordered_messages target
-                WHERE target.id = $${paramIdx + 1}
+                WHERE target.id = $${paramIdx}
                 AND (
                   -- Get previous messages (messages that come BEFORE the target)
-                  (m.row_num < target.row_num AND m.row_num >= target.row_num - $${paramIdx + 2})
+                  (m.row_num < target.row_num AND m.row_num >= target.row_num - $${paramIdx + 1})
                   OR
                   -- Get next messages (messages that come AFTER the target)
-                  (m.row_num > target.row_num AND m.row_num <= target.row_num + $${paramIdx + 3})
+                  (m.row_num > target.row_num AND m.row_num <= target.row_num + $${paramIdx + 2})
                 )
               )
             ) AS query_${paramIdx}
             `, // Keep ASC for final sorting after fetching context
       );
-      params.push(searchId, id, withPreviousMessages, withNextMessages);
-      paramIdx += 4;
+      params.push(id, withPreviousMessages, withNextMessages);
+      paramIdx += 3;
     }
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
     const includedRows = await this.client.manyOrNone<MessageRowFromDB>(finalQuery, params);
@@ -499,15 +493,20 @@ export class MemoryDSQL extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array, filtering out non-string values to avoid TypeError
+    const threadIds = (Array.isArray(threadId) ? threadId : [threadId]).filter(
+      (id): id is string => typeof id === 'string',
+    );
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_DSQL_STORE_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? String(threadId) : String(threadId) },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -519,7 +518,7 @@ export class MemoryDSQL extends MemoryStorage {
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
         details: {
-          threadId,
+          threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
           page,
         },
       });
@@ -536,10 +535,11 @@ export class MemoryDSQL extends MemoryStorage {
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
 
-      // Build WHERE conditions
-      const conditions: string[] = [`thread_id = $1`];
-      const queryParams: any[] = [threadId];
-      let paramIndex = 2;
+      // Build WHERE conditions - use IN for multiple thread IDs
+      const threadPlaceholders = threadIds.map((_, i) => `$${i + 1}`).join(', ');
+      const conditions: string[] = [`thread_id IN (${threadPlaceholders})`];
+      const queryParams: any[] = [...threadIds];
+      let paramIndex = threadIds.length + 1;
 
       if (resourceId) {
         conditions.push(`"resourceId" = $${paramIndex++}`);
@@ -583,7 +583,7 @@ export class MemoryDSQL extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ threadId, include });
+        const includeMessages = await this._getIncludedMessages({ include });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -628,7 +628,10 @@ export class MemoryDSQL extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
@@ -646,7 +649,7 @@ export class MemoryDSQL extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
