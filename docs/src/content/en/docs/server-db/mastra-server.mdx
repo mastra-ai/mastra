@@ -1,11 +1,17 @@
 ---
-title: "Mastra Server | Server & DB"
-description: "Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more"
+title: "Server Configuration | Server & DB"
+description: "Configure the Mastra server with custom settings for port, timeout, CORS, and more."
 ---
 
-# Mastra Server
+# Server Configuration
 
 When deploying your Mastra application to production, it runs as an HTTP server that exposes your agents, workflows, and other functionality as API endpoints. This page covers how to configure and customize the server for a production environment.
+
+:::info
+
+This page covers the `server` configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), see [Server Adapters](/docs/v1/server-db/server-adapters).
+
+:::
 
 ## Server architecture
 
@@ -40,10 +46,6 @@ export const mastra = new Mastra({
   },
 });
 ```
-
-The `method` option can be one of `"GET"`, `"POST"`, `"PUT"`,
-`"DELETE"` or `"ALL"`. Using `"ALL"` will cause the handler to be
-invoked for any HTTP method that matches the path.
 
 ## TypeScript configuration
 
@@ -90,29 +92,6 @@ export const mastra = new Mastra({
 
 ## Stream data redaction
 
-When streaming agent responses over HTTP, Mastra automatically redacts sensitive information from stream chunks before sending them to clients. This prevents accidental exposure of:
+When streaming agent responses, the HTTP streaming layer redacts system prompts, tool definitions, API keys, and similar data from each chunk before sending it to clients. This is enabled by default.
 
-- System prompts and agent instructions
-- Tool definitions and their parameters
-- API keys and other credentials in request bodies
-- Internal configuration data
-
-This redaction happens at the HTTP boundary, so internal callbacks like `onStepFinish` still have access to the full request data for debugging and observability purposes.
-
-### Configuring redaction
-
-By default, redaction is enabled. If you're using the server adapters directly (e.g., `@mastra/hono` or `@mastra/express`), you can configure this behavior:
-
-```typescript title="Custom server setup" copy
-import { HonoServerAdapter } from "@mastra/hono";
-import { mastra } from "./mastra";
-
-const adapter = new HonoServerAdapter({
-  mastra,
-  streamOptions: {
-    redact: true,
-  },
-});
-```
-
-Set `redact: false` only for internal services or debugging scenarios where you need access to the full request data in stream responses.
+If you're using server adapters directly, you can configure redaction behavior. See [Stream data redaction](/docs/v1/server-db/server-adapters#stream-data-redaction) in the Server Adapters docs.

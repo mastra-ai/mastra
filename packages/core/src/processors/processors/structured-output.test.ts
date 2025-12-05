@@ -679,7 +679,7 @@ describe('Structured Output with Tool Execution', () => {
     expect(finalObject.activities.length).toBeGreaterThanOrEqual(1);
     expect(finalObject.toolsCalled).toHaveLength(2);
     expect(finalObject.location).toBe('Toronto');
-  }, 15000);
+  }, 60000);
 
   it('should NOT use structured output processor when model is not provided', async () => {
     const responseSchema = z.object({

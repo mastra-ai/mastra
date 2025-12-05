@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
@@ -64,7 +65,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('UPSTASH', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { namespace, vectorCount: vectors.length },
@@ -133,7 +134,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('UPSTASH', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { namespace, topK },
@@ -154,7 +155,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('UPSTASH', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -181,7 +182,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('UPSTASH', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { namespace },
@@ -208,7 +209,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
       }
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('UPSTASH', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { namespace },
@@ -237,7 +238,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     // Validate mutually exclusive parameters
     if ('id' in params && params.id && 'filter' in params && params.filter) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_VECTOR_UPDATE_MUTUALLY_EXCLUSIVE',
+        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         text: 'Cannot specify both id and filter - they are mutually exclusive',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -247,7 +248,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
 
     if (!('id' in params && params.id) && !('filter' in params && params.filter)) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_VECTOR_UPDATE_NO_TARGET',
+        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'NO_TARGET'),
         text: 'Either id or filter must be provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -257,7 +258,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
 
     if (!update.vector && !update.metadata && !sparseVector) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_VECTOR_UPDATE_NO_PAYLOAD',
+        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         text: 'No update data provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -268,7 +269,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     // Validate filter is not empty
     if ('filter' in params && params.filter && Object.keys(params.filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_VECTOR_UPDATE_EMPTY_FILTER',
+        id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
         text: 'Filter cannot be an empty filter object',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -364,7 +365,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('UPSTASH', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -392,7 +393,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('UPSTASH', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -418,7 +419,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     // Validate mutually exclusive parameters
     if (ids && filter) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_VECTOR_DELETE_VECTORS_MUTUALLY_EXCLUSIVE',
+        id: createVectorErrorId('UPSTASH', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         text: 'Cannot specify both ids and filter - they are mutually exclusive',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -428,7 +429,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
 
     if (!ids && !filter) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_VECTOR_DELETE_VECTORS_NO_TARGET',
+        id: createVectorErrorId('UPSTASH', 'DELETE_VECTORS', 'NO_TARGET'),
         text: 'Either filter or ids must be provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -439,7 +440,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     // Validate ids array is not empty
     if (ids && ids.length === 0) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_VECTOR_DELETE_VECTORS_EMPTY_IDS',
+        id: createVectorErrorId('UPSTASH', 'DELETE_VECTORS', 'EMPTY_IDS'),
         text: 'Cannot delete with empty ids array',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -450,7 +451,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     // Validate filter is not empty
     if (filter && Object.keys(filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_VECTOR_DELETE_VECTORS_EMPTY_FILTER',
+        id: createVectorErrorId('UPSTASH', 'DELETE_VECTORS', 'EMPTY_FILTER'),
         text: 'Cannot delete with empty filter object',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -494,7 +495,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('UPSTASH', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
