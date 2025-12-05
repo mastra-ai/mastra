@@ -13,15 +13,14 @@ import { SpanType } from '@mastra/core/observability';
 import type {
   Span,
   EndSpanOptions,
+  EndGenerationOptions,
   ErrorSpanOptions,
   TracingContext,
   UpdateSpanOptions,
-  RawLanguageModelUsage,
-  ProviderMetadataForUsage,
 } from '@mastra/core/observability';
-import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
+import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload, LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 
-import { extractUsageWithCacheTokens } from './usage';
+import { extractUsageMetrics } from './usage';
 
 /**
  * Manages MODEL_STEP and MODEL_CHUNK span tracking for streaming Model responses.
@@ -95,26 +94,24 @@ export class ModelSpanTracker {
 
   /**
    * End the generation span with optional raw usage data.
-   * If rawUsage is provided, it will be converted to UsageStats with cache token details.
+   * If usage is provided, it will be converted to UsageStats with cache token details.
    */
-  endGeneration(
-    options?: EndSpanOptions<SpanType.MODEL_GENERATION>,
-    rawUsage?: RawLanguageModelUsage,
-    providerMetadata?: ProviderMetadataForUsage,
-  ): void {
+  endGeneration(options?: EndGenerationOptions): void {
+    const { usage, providerMetadata, ...spanOptions } = options ?? {};
+
     // If raw usage provided, convert and merge with any existing attributes
-    if (rawUsage) {
-      const usage = extractUsageWithCacheTokens(rawUsage, providerMetadata);
+    if (usage) {
+      const usageStats = extractUsageMetrics(usage, providerMetadata);
       const mergedOptions: EndSpanOptions<SpanType.MODEL_GENERATION> = {
-        ...options,
+        ...spanOptions,
         attributes: {
-          ...options?.attributes,
-          usage,
+          ...spanOptions?.attributes,
+          usage: usageStats,
         },
       };
       this.#modelSpan?.end(mergedOptions);
     } else {
-      this.#modelSpan?.end(options);
+      this.#modelSpan?.end(spanOptions);
     }
   }
 
@@ -156,7 +153,7 @@ export class ModelSpanTracker {
     const metadata = payload.metadata;
 
     // Convert raw usage to UsageStats with cache token details
-    const usage = extractUsageWithCacheTokens(rawUsage, metadata?.providerMetadata);
+    const usage = extractUsageMetrics(rawUsage, metadata?.providerMetadata);
 
     // Remove request object from metadata (too verbose)
     const cleanMetadata = metadata ? { ...metadata } : undefined;

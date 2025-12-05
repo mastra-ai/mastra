@@ -280,26 +280,24 @@ export class MastraLLMVNext extends MastraBase {
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span
             // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
-            modelSpanTracker?.endGeneration(
-              {
-                output: {
-                  files: props?.files,
-                  object: props?.object,
-                  reasoning: props?.reasoning,
-                  reasoningText: props?.reasoningText,
-                  sources: props?.sources,
-                  text: props?.text,
-                  warnings: props?.warnings,
-                },
-                attributes: {
-                  finishReason: props?.finishReason,
-                  responseId: props?.response.id,
-                  responseModel: props?.response.modelId,
-                },
+            modelSpanTracker?.endGeneration({
+              output: {
+                files: props?.files,
+                object: props?.object,
+                reasoning: props?.reasoning,
+                reasoningText: props?.reasoningText,
+                sources: props?.sources,
+                text: props?.text,
+                warnings: props?.warnings,
               },
-              props?.totalUsage,
-              props?.providerMetadata,
-            );
+              attributes: {
+                finishReason: props?.finishReason,
+                responseId: props?.response.id,
+                responseModel: props?.response.modelId,
+              },
+              usage: props?.totalUsage,
+              providerMetadata: props?.providerMetadata,
+            });
 
             try {
               await options?.onFinish?.({ ...props, runId: runId! });

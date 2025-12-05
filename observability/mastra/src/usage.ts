@@ -6,12 +6,26 @@ import type {
   InputTokenDetails,
   OutputTokenDetails,
   UsageStats,
-  RawLanguageModelUsage,
-  ProviderMetadataForUsage,
 } from '@mastra/core/observability';
+import type { LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 
-// Re-export types for convenience
-export type { RawLanguageModelUsage, ProviderMetadataForUsage };
+/**
+ * Provider-specific metadata shapes for type-safe access.
+ * These match the actual shapes from AI SDK providers.
+ */
+interface AnthropicMetadata {
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+}
+
+interface GoogleUsageMetadata {
+  cachedContentTokenCount?: number;
+  thoughtsTokenCount?: number;
+}
+
+interface GoogleMetadata {
+  usageMetadata?: GoogleUsageMetadata;
+}
 
 /**
  * Extracts and normalizes token usage from AI SDK response, including
@@ -25,11 +39,11 @@ export type { RawLanguageModelUsage, ProviderMetadataForUsage };
  *
  * @param usage - The LanguageModelV2Usage from AI SDK response
  * @param providerMetadata - Optional provider-specific metadata
- * @returns Normalized UsageStats with inputDetails and outputDetails
+ * @returns UsageStats with inputDetails and outputDetails
  */
-export function extractUsageWithCacheTokens(
-  usage: RawLanguageModelUsage | undefined,
-  providerMetadata?: ProviderMetadataForUsage,
+export function extractUsageMetrics(
+  usage?: LanguageModelUsage,
+  providerMetadata?: ProviderMetadata,
 ): UsageStats {
   if (!usage) {
     return {};
@@ -56,7 +70,7 @@ export function extractUsageWithCacheTokens(
   // ===== Anthropic =====
   // Cache tokens are in providerMetadata.anthropic
   // inputTokens does NOT include cache tokens - need to sum them
-  const anthropic = providerMetadata?.anthropic;
+  const anthropic = providerMetadata?.anthropic as AnthropicMetadata | undefined;
 
   if (anthropic) {
     if (anthropic.cacheReadInputTokens) {
@@ -79,7 +93,7 @@ export function extractUsageWithCacheTokens(
   // ===== Google/Gemini =====
   // Cache tokens and thoughts are in providerMetadata.google.usageMetadata
   // Available in @ai-sdk/google@1.2.23+
-  const google = providerMetadata?.google;
+  const google = providerMetadata?.google as GoogleMetadata | undefined;
 
   if (google?.usageMetadata) {
     if (google.usageMetadata.cachedContentTokenCount) {
@@ -108,58 +122,3 @@ export function extractUsageWithCacheTokens(
   return result;
 }
 
-/**
- * Merges two UsageStats objects, summing numeric values and combining details.
- * Useful for aggregating usage across multiple model calls or streaming chunks.
- */
-export function mergeUsageStats(base: UsageStats | undefined, addition: UsageStats | undefined): UsageStats {
-  if (!base) return addition ?? {};
-  if (!addition) return base;
-
-  const merged: UsageStats = {
-    inputTokens: (base.inputTokens ?? 0) + (addition.inputTokens ?? 0),
-    outputTokens: (base.outputTokens ?? 0) + (addition.outputTokens ?? 0),
-  };
-
-  // Merge input details
-  if (base.inputDetails || addition.inputDetails) {
-    merged.inputDetails = {
-      text: sumOptional(base.inputDetails?.text, addition.inputDetails?.text),
-      cacheRead: sumOptional(base.inputDetails?.cacheRead, addition.inputDetails?.cacheRead),
-      cacheWrite: sumOptional(base.inputDetails?.cacheWrite, addition.inputDetails?.cacheWrite),
-      audio: sumOptional(base.inputDetails?.audio, addition.inputDetails?.audio),
-      image: sumOptional(base.inputDetails?.image, addition.inputDetails?.image),
-    };
-    // Remove undefined values
-    merged.inputDetails = cleanObject(merged.inputDetails);
-  }
-
-  // Merge output details
-  if (base.outputDetails || addition.outputDetails) {
-    merged.outputDetails = {
-      text: sumOptional(base.outputDetails?.text, addition.outputDetails?.text),
-      reasoning: sumOptional(base.outputDetails?.reasoning, addition.outputDetails?.reasoning),
-      audio: sumOptional(base.outputDetails?.audio, addition.outputDetails?.audio),
-      image: sumOptional(base.outputDetails?.image, addition.outputDetails?.image),
-    };
-    // Remove undefined values
-    merged.outputDetails = cleanObject(merged.outputDetails);
-  }
-
-  return merged;
-}
-
-function sumOptional(a: number | undefined, b: number | undefined): number | undefined {
-  if (a === undefined && b === undefined) return undefined;
-  return (a ?? 0) + (b ?? 0);
-}
-
-function cleanObject<T extends object>(obj: T): T {
-  const cleaned = { ...obj } as Record<string, unknown>;
-  for (const key of Object.keys(cleaned)) {
-    if (cleaned[key] === undefined) {
-      delete cleaned[key];
-    }
-  }
-  return cleaned as T;
-}

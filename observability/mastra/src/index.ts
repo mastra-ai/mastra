@@ -21,5 +21,3 @@ export * from './model-tracing';
 // Export tracing options builder utilities
 export * from './tracing-options';
 
-// Export usage extraction utilities
-export * from './usage';

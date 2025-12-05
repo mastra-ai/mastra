@@ -5,6 +5,7 @@ import type { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
+import type { LanguageModelUsage, ProviderMetadata } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 
 // ============================================================================
@@ -132,7 +133,7 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   provider?: string;
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
-  /** Token usage statistics - supports both v5 and legacy formats */
+  /** Token usage statistics */
   usage?: UsageStats;
   /** Model parameters */
   parameters?: {
@@ -552,46 +553,21 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   tags?: string[];
 }
 
-/**
- * Raw usage data from AI SDK (subset of LanguageModelV2Usage)
- */
-export interface RawLanguageModelUsage {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  cachedInputTokens?: number;
-  reasoningTokens?: number;
-}
 
 /**
- * Provider metadata for usage extraction (subset of SharedV2ProviderMetadata)
+ * Options for ending a model generation span
  */
-export interface ProviderMetadataForUsage {
-  anthropic?: {
-    cacheCreationInputTokens?: number;
-    cacheReadInputTokens?: number;
-  };
-  google?: {
-    usageMetadata?: {
-      cachedContentTokenCount?: number;
-      thoughtsTokenCount?: number;
-    };
-  };
-  [key: string]: unknown;
+export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENERATION> {
+  /** Raw usage data from AI SDK - will be converted to UsageStats with cache token details */
+  usage?: LanguageModelUsage;
+  /** Provider-specific metadata for extracting cache tokens */
+  providerMetadata?: ProviderMetadata;
 }
 
 export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
-  /**
-   * End the model generation span with optional raw usage data.
-   * If rawUsage is provided, it will be converted to UsageStats with cache token details.
-   */
-  endGeneration(
-    options?: EndSpanOptions<SpanType.MODEL_GENERATION>,
-    rawUsage?: RawLanguageModelUsage,
-    providerMetadata?: ProviderMetadataForUsage,
-  ): void;
+  endGeneration(options?: EndGenerationOptions): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
 }
 
