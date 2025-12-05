@@ -9,4 +9,24 @@ export const config = {
     ],
     dest: './packages/core/dist/agent/agent.md',
   },
+  workflow: {
+    src: [],
+    dest: './packages/core/dist/workflow/workflow.md',
+  },
+  memory: {
+    src: [],
+    dest: './packages/core/dist/memory/memory.md',
+  },
+  tools: {
+    src: [],
+    dest: './packages/core/dist/tool/tool.md',
+  },
+  storage: {
+    src: [],
+    dest: './packages/core/dist/storage/storage.md',
+  },
+  evals: {
+    src: [],
+    dest: './packages/core/dist/evals/evals.md',
+  },
 };
