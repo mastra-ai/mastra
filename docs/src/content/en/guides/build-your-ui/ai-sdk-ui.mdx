@@ -452,9 +452,11 @@ for await (const part of uiMessageStream) {
 
 ## Using Mastra Features with AI SDK
 
-The `withMastra()` function wraps an AI SDK model with Mastra features, allowing you to use [processors](/docs/v1/agents/processors) and [memory](/docs/v1/memory/memory-processors) with AI SDK's `generateText`, `streamText`, `generateObject`, and `streamObject` functions.
+If you're already using the AI SDK directly and want to add Mastra capabilities like [processors](/docs/v1/agents/processors) or [memory](/docs/v1/memory/memory-processors) without switching to the full Mastra agent API, `withMastra()` lets you wrap any AI SDK model with these features. This is useful when you want to keep your existing AI SDK code but add input/output processing, conversation persistence, or content filtering.
 
 ### With Processors
+
+Processors let you transform messages before they're sent to the model (`processInput`) and after responses are received (`processOutputResult`). This example creates a logging processor that logs message counts at each stage, then wraps an OpenAI model with it.
 
 ```typescript title="src/example.ts" copy
 import { openai } from '@ai-sdk/openai';
@@ -487,6 +489,8 @@ const { text } = await generateText({
 
 ### With Memory
 
+Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a LibSQL storage backend to persist conversation history, loading the last 10 messages for context.
+
 ```typescript title="src/memory-example.ts" copy
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
@@ -515,6 +519,8 @@ const { text } = await generateText({
 ```
 
 ### With Both
+
+You can combine processors and memory together. Input processors run after memory loads historical messages, and output processors run before memory saves the response.
 
 ```typescript title="src/combined-example.ts" copy
 import { openai } from '@ai-sdk/openai';
