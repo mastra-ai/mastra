@@ -18,6 +18,8 @@ catalog:
   '@vitest/coverage-v8': 4.0.12
   '@vitest/ui': 4.0.12
   vitest: 4.0.12
+  react: 19.2.1
+  react-dom: 19.2.1
 
 patchedDependencies:
   '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
