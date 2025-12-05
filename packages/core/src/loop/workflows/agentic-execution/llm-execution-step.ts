@@ -469,6 +469,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   methodType,
   modelSpanTracker,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
+  const initialSystemMessages = messageList.getAllSystemMessages();
+
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
@@ -484,6 +486,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         runState: AgenticRunState;
         callBail?: boolean;
       }>(models)(async (model, isLastModel) => {
+        // Reset system messages to original before each step execution
+        // This ensures that system message modifications in prepareStep/processInputStep/processors
+        // don't persist across steps - each step starts fresh with original system messages
+        if (initialSystemMessages) {
+          messageList.replaceAllSystemMessages(initialSystemMessages);
+        }
+
         let stepModel = model;
         let stepToolChoice = toolChoice;
         let stepTools = tools;
