@@ -471,6 +471,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const testAgent = new Agent({
+        id: 'test-agent',
         name: 'Test agent',
         instructions: 'You are an agent that can use the noSchemaTool to get test data.',
         model: openaiModel,
@@ -6128,7 +6129,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
 describe('Agent Tests', () => {
   describe('prepareStep', () => {
-    it.only('tools', async () => {
+    it('tools', async () => {
       const agent = new Agent({
         id: 'test-agent',
         name: 'test-agent',
@@ -6387,6 +6388,96 @@ describe('Agent Tests', () => {
   // NOTE: Memory processor deduplication tests have been moved to @mastra/memory integration tests
   // since MessageHistory and WorkingMemory processors now live in @mastra/memory package.
   // See packages/memory/integration-tests-v5/src/input-processors.test.ts for comprehensive tests.
+
+  describe('prepareStep MessageList persistence across steps (v2 only)', () => {
+    it('system message modifications in prepareStep should not persist across steps', async () => {
+      const systemMessagesSeenAtEachStep: string[][] = [];
+      let callCount = 0;
+
+      // Create a model that makes a tool call on first step, then stops
+      const toolCallModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            // First call: return a tool call
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'testTool',
+                  input: '{ "input": "test" }',
+                },
+              ],
+              warnings: [],
+            };
+          } else {
+            // Second call: return text (stop)
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [{ type: 'text' as const, text: 'Done' }],
+              warnings: [],
+            };
+          }
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'A test tool',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async () => ({ output: 'tool result' }),
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Original agent instructions',
+        model: toolCallModel,
+        tools: { testTool },
+      });
+      agent.__setLogger(noopLogger);
+
+      await agent.generate('Hello', {
+        prepareStep: async ({ messageList, stepNumber }) => {
+          // Record what system messages we see at the start of this step
+          const currentSystemMessages = messageList.getAllSystemMessages();
+          systemMessagesSeenAtEachStep.push(currentSystemMessages.map(m => (m.content as string) || ''));
+
+          // On step 0, replace all system messages with a custom one
+          if (stepNumber === 0) {
+            messageList.replaceAllSystemMessages([
+              {
+                role: 'system',
+                content: `Modified system message from step ${stepNumber}`,
+              },
+            ]);
+            return { messageList };
+          }
+        },
+      });
+
+      // We should have been called at least twice (step 0 and step 1)
+      expect(systemMessagesSeenAtEachStep.length).toBeGreaterThanOrEqual(2);
+
+      // Step 0 should see the original agent instructions
+      expect(systemMessagesSeenAtEachStep[0]).toContain('Original agent instructions');
+
+      // Step 1 should see the modified system message (NOT the original)
+      // This proves MessageList persists across steps
+      expect(systemMessagesSeenAtEachStep[1]).not.toContain('Modified system message from step 0');
+      expect(systemMessagesSeenAtEachStep[1]).toContain('Original agent instructions');
+    });
+  });
 
   agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
