@@ -19,6 +19,14 @@ export function verifySlackRequest(
   const sigBasestring = `v0:${timestamp}:${body}`;
   const mySignature = 'v0=' + crypto.createHmac('sha256', signingSecret).update(sigBasestring, 'utf8').digest('hex');
 
+  // Guard: ensure requestSignature is valid and lengths match before timingSafeEqual
+  if (
+    typeof requestSignature !== 'string' ||
+    Buffer.byteLength(requestSignature, 'utf8') !== Buffer.byteLength(mySignature, 'utf8')
+  ) {
+    return false;
+  }
+
   // Compare signatures
   return crypto.timingSafeEqual(Buffer.from(mySignature, 'utf8'), Buffer.from(requestSignature, 'utf8'));
 }

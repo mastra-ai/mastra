@@ -15,10 +15,12 @@ const analyzeStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
+    const trimmed = text.trim();
+    const wordCount = trimmed === '' ? 0 : trimmed.split(/\s+/).length;
     return {
       text,
       charCount: text.length,
-      wordCount: text.trim().split(/\s+/).length,
+      wordCount,
     };
   },
 });
@@ -94,15 +96,18 @@ const formatStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { original, uppercased, charCount, wordCount } = inputData;
-    const border = '═'.repeat(Math.max(uppercased.length + 4, 30));
+    const borderLen = Math.max(uppercased.length + 4, 30);
+    const border = '═'.repeat(borderLen);
+
+    const pad = (str: string) => str.padEnd(borderLen + 1) + '║';
 
     const result = [
       `╔${border}╗`,
-      `║ 🔄 REVERSE TRANSFORMATION COMPLETE`,
+      pad(`║ 🔄 REVERSE TRANSFORMATION COMPLETE`),
       `╠${border}╣`,
-      `║ Original: "${original}"`,
-      `║ Result:   "${uppercased}"`,
-      `║ Stats:    ${charCount} chars, ${wordCount} words`,
+      pad(`║ Original: "${original}"`),
+      pad(`║ Result:   "${uppercased}"`),
+      pad(`║ Stats:    ${charCount} chars, ${wordCount} words`),
       `╚${border}╝`,
     ].join('\n');
 

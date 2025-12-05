@@ -15,4 +15,7 @@ export const mastra = new Mastra({
   server: {
     apiRoutes: slackRoutes,
   },
+  bundler: {
+    externals: ['supports-color'],
+  },
 });
