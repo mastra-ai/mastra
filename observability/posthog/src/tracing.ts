@@ -6,16 +6,13 @@ import { PostHog } from 'posthog-node';
 
 /**
  * Token usage format compatible with PostHog.
+ * @see https://posthog.com/docs/llm-analytics/generations#event-properties
  */
 export interface PostHogUsageMetrics {
   $ai_input_tokens?: number;
   $ai_output_tokens?: number;
-  $ai_total_tokens?: number;
-  reasoning_tokens?: number;
-  cached_input_tokens?: number;
-  cache_write_tokens?: number;
-  audio_input_tokens?: number;
-  audio_output_tokens?: number;
+  $ai_cache_read_input_tokens?: number;
+  $ai_cache_creation_input_tokens?: number;
 }
 
 /**
@@ -32,23 +29,12 @@ export function formatUsageMetrics(usage?: UsageStats): PostHogUsageMetrics {
   if (usage.inputTokens !== undefined) props.$ai_input_tokens = usage.inputTokens;
   if (usage.outputTokens !== undefined) props.$ai_output_tokens = usage.outputTokens;
 
-  // Compute total if we have both
-  if (props.$ai_input_tokens !== undefined && props.$ai_output_tokens !== undefined) {
-    props.$ai_total_tokens = props.$ai_input_tokens + props.$ai_output_tokens;
-  }
-
-  // Reasoning tokens from outputDetails
-  if (usage.outputDetails?.reasoning !== undefined) props.reasoning_tokens = usage.outputDetails.reasoning;
-
   // Cache read tokens from inputDetails
-  if (usage.inputDetails?.cacheRead !== undefined) props.cached_input_tokens = usage.inputDetails.cacheRead;
+  if (usage.inputDetails?.cacheRead !== undefined) props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
 
   // Cache write tokens from inputDetails
-  if (usage.inputDetails?.cacheWrite !== undefined) props.cache_write_tokens = usage.inputDetails.cacheWrite;
-
-  // Audio tokens from inputDetails/outputDetails
-  if (usage.inputDetails?.audio !== undefined) props.audio_input_tokens = usage.inputDetails.audio;
-  if (usage.outputDetails?.audio !== undefined) props.audio_output_tokens = usage.outputDetails.audio;
+  if (usage.inputDetails?.cacheWrite !== undefined)
+    props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
 
   return props;
 }

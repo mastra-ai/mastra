@@ -552,10 +552,46 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   tags?: string[];
 }
 
+/**
+ * Raw usage data from AI SDK (subset of LanguageModelV2Usage)
+ */
+export interface RawLanguageModelUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  cachedInputTokens?: number;
+  reasoningTokens?: number;
+}
+
+/**
+ * Provider metadata for usage extraction (subset of SharedV2ProviderMetadata)
+ */
+export interface ProviderMetadataForUsage {
+  anthropic?: {
+    cacheCreationInputTokens?: number;
+    cacheReadInputTokens?: number;
+  };
+  google?: {
+    usageMetadata?: {
+      cachedContentTokenCount?: number;
+      thoughtsTokenCount?: number;
+    };
+  };
+  [key: string]: unknown;
+}
+
 export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
-  endGeneration(options?: EndSpanOptions<SpanType.MODEL_GENERATION>): void;
+  /**
+   * End the model generation span with optional raw usage data.
+   * If rawUsage is provided, it will be converted to UsageStats with cache token details.
+   */
+  endGeneration(
+    options?: EndSpanOptions<SpanType.MODEL_GENERATION>,
+    rawUsage?: RawLanguageModelUsage,
+    providerMetadata?: ProviderMetadataForUsage,
+  ): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
 }
 

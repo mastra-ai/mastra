@@ -176,8 +176,7 @@ interface FinishPayload {
     logprobs?: LanguageModelV1LogProbs;
   };
   output: {
-    // Use our extended LanguageModelUsage type which includes inputDetails/outputDetails
-    usage: LanguageModelUsage;
+    usage: LanguageModelV2Usage;
   };
   metadata: {
     providerMetadata?: SharedV2ProviderMetadata;
@@ -641,51 +640,12 @@ export type ModelManagerModelConfig = {
   id: string;
 };
 
-/**
- * Detailed breakdown of input token usage by type.
- */
-export interface InputTokenDetails {
-  /** Regular text tokens (non-cached, non-audio, non-image) */
-  text?: number;
-  /** Tokens served from cache (cache hit/read) */
-  cacheRead?: number;
-  /** Tokens written to cache (cache creation - Anthropic only) */
-  cacheWrite?: number;
-  /** Audio input tokens */
-  audio?: number;
-  /** Image input tokens (includes PDF pages) */
-  image?: number;
-}
-
-/**
- * Detailed breakdown of output token usage by type.
- */
-export interface OutputTokenDetails {
-  /** Regular text output tokens */
-  text?: number;
-  /** Reasoning/thinking tokens (o1, Claude thinking, Gemini thoughts) */
-  reasoning?: number;
-  /** Audio output tokens */
-  audio?: number;
-  /** Image output tokens */
-  image?: number;
-}
-
 export interface LanguageModelUsage {
-  /** Total input tokens (sum of all input details) */
   inputTokens?: number;
-  /** Total output tokens (sum of all output details) */
   outputTokens?: number;
-  /** Detailed breakdown of input token usage */
-  inputDetails?: InputTokenDetails;
-  /** Detailed breakdown of output token usage */
-  outputDetails?: OutputTokenDetails;
-  // Legacy fields for backward compatibility
   totalTokens?: number;
   reasoningTokens?: number;
   cachedInputTokens?: number;
-  promptCacheHitTokens?: number;
-  promptCacheMissTokens?: number;
 }
 
 export type partialModel = {

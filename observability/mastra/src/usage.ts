@@ -1,25 +1,17 @@
-import type { LanguageModelV2Usage, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
-
-import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '../../../observability/types/tracing';
-
 /**
- * Provider-specific metadata types for cache token extraction
+ * Usage extraction utilities for converting AI SDK usage to Mastra UsageStats
  */
-interface AnthropicProviderMetadata {
-  cacheCreationInputTokens?: number;
-  cacheReadInputTokens?: number;
-}
 
-interface GoogleUsageMetadata {
-  cachedContentTokenCount?: number;
-  thoughtsTokenCount?: number;
-  promptTokenCount?: number;
-  candidatesTokenCount?: number;
-}
+import type {
+  InputTokenDetails,
+  OutputTokenDetails,
+  UsageStats,
+  RawLanguageModelUsage,
+  ProviderMetadataForUsage,
+} from '@mastra/core/observability';
 
-interface GoogleProviderMetadata {
-  usageMetadata?: GoogleUsageMetadata;
-}
+// Re-export types for convenience
+export type { RawLanguageModelUsage, ProviderMetadataForUsage };
 
 /**
  * Extracts and normalizes token usage from AI SDK response, including
@@ -36,8 +28,8 @@ interface GoogleProviderMetadata {
  * @returns Normalized UsageStats with inputDetails and outputDetails
  */
 export function extractUsageWithCacheTokens(
-  usage: LanguageModelV2Usage | undefined,
-  providerMetadata?: SharedV2ProviderMetadata,
+  usage: RawLanguageModelUsage | undefined,
+  providerMetadata?: ProviderMetadataForUsage,
 ): UsageStats {
   if (!usage) {
     return {};
@@ -64,7 +56,7 @@ export function extractUsageWithCacheTokens(
   // ===== Anthropic =====
   // Cache tokens are in providerMetadata.anthropic
   // inputTokens does NOT include cache tokens - need to sum them
-  const anthropic = providerMetadata?.anthropic as AnthropicProviderMetadata | undefined;
+  const anthropic = providerMetadata?.anthropic;
 
   if (anthropic) {
     if (anthropic.cacheReadInputTokens) {
@@ -87,7 +79,7 @@ export function extractUsageWithCacheTokens(
   // ===== Google/Gemini =====
   // Cache tokens and thoughts are in providerMetadata.google.usageMetadata
   // Available in @ai-sdk/google@1.2.23+
-  const google = providerMetadata?.google as GoogleProviderMetadata | undefined;
+  const google = providerMetadata?.google;
 
   if (google?.usageMetadata) {
     if (google.usageMetadata.cachedContentTokenCount) {

@@ -346,7 +346,6 @@ describe('PosthogExporter', () => {
             $ai_provider: 'openai',
             $ai_input_tokens: 100,
             $ai_output_tokens: 200,
-            $ai_total_tokens: 300,
           }),
         }),
       );

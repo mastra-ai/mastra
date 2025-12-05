@@ -10,7 +10,6 @@ import type { OutputSchema, PartialSchemaOutput } from '../../base/schema';
 import type { ChunkType } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
-import { extractUsageWithCacheTokens } from './usage';
 
 export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
@@ -215,8 +214,6 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
     case 'finish':
       const { finishReason, usage, providerMetadata, messages, ...rest } = value;
-      // Extract cache tokens from providerMetadata for providers like Anthropic/Google
-      const extractedUsage = extractUsageWithCacheTokens(value.usage, value.providerMetadata);
       return {
         type: 'finish',
         runId: ctx.runId,
@@ -226,7 +223,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
             reason: value.finishReason,
           },
           output: {
-            usage: extractedUsage,
+            usage: {
+              ...(value.usage ?? {}),
+              totalTokens:
+                value?.usage?.totalTokens ?? (value.usage?.inputTokens ?? 0) + (value.usage?.outputTokens ?? 0),
+            },
           },
           metadata: {
             providerMetadata: value.providerMetadata,
@@ -361,8 +362,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
       return {
         type: 'finish',
         finishReason: chunk.payload.stepResult.reason,
-        // Cast to LanguageModelV2Usage for AI SDK compatibility - our usage includes additional details
-        totalUsage: chunk.payload.output.usage as LanguageModelV2Usage,
+        totalUsage: chunk.payload.output.usage,
       };
     }
     case 'reasoning-start':

@@ -25,8 +25,6 @@ import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
 import type { MastraModelOptions } from './shared.types';
-import { extractUsageWithCacheTokens } from '../../stream/aisdk/v5/usage';
-import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 
 export class MastraLLMVNext extends MastraBase {
   #models: ModelManagerModelConfig[];
@@ -281,23 +279,27 @@ export class MastraLLMVNext extends MastraBase {
           onFinish: async props => {
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span
-            modelSpanTracker?.endGeneration({
-              output: {
-                files: props?.files,
-                object: props?.object,
-                reasoning: props?.reasoning,
-                reasoningText: props?.reasoningText,
-                sources: props?.sources,
-                text: props?.text,
-                warnings: props?.warnings,
+            // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
+            modelSpanTracker?.endGeneration(
+              {
+                output: {
+                  files: props?.files,
+                  object: props?.object,
+                  reasoning: props?.reasoning,
+                  reasoningText: props?.reasoningText,
+                  sources: props?.sources,
+                  text: props?.text,
+                  warnings: props?.warnings,
+                },
+                attributes: {
+                  finishReason: props?.finishReason,
+                  responseId: props?.response.id,
+                  responseModel: props?.response.modelId,
+                },
               },
-              attributes: {
-                finishReason: props?.finishReason,
-                usage: extractUsageWithCacheTokens(props?.totalUsage as LanguageModelV2Usage),
-                responseId: props?.response.id,
-                responseModel: props?.response.modelId,
-              },
-            });
+              props?.totalUsage,
+              props?.providerMetadata,
+            );
 
             try {
               await options?.onFinish?.({ ...props, runId: runId! });

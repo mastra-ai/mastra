@@ -16,8 +16,12 @@ import type {
   ErrorSpanOptions,
   TracingContext,
   UpdateSpanOptions,
+  RawLanguageModelUsage,
+  ProviderMetadataForUsage,
 } from '@mastra/core/observability';
 import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
+
+import { extractUsageWithCacheTokens } from './usage';
 
 /**
  * Manages MODEL_STEP and MODEL_CHUNK span tracking for streaming Model responses.
@@ -90,10 +94,28 @@ export class ModelSpanTracker {
   }
 
   /**
-   * End the generation span
+   * End the generation span with optional raw usage data.
+   * If rawUsage is provided, it will be converted to UsageStats with cache token details.
    */
-  endGeneration(options?: EndSpanOptions<SpanType.MODEL_GENERATION>): void {
-    this.#modelSpan?.end(options);
+  endGeneration(
+    options?: EndSpanOptions<SpanType.MODEL_GENERATION>,
+    rawUsage?: RawLanguageModelUsage,
+    providerMetadata?: ProviderMetadataForUsage,
+  ): void {
+    // If raw usage provided, convert and merge with any existing attributes
+    if (rawUsage) {
+      const usage = extractUsageWithCacheTokens(rawUsage, providerMetadata);
+      const mergedOptions: EndSpanOptions<SpanType.MODEL_GENERATION> = {
+        ...options,
+        attributes: {
+          ...options?.attributes,
+          usage,
+        },
+      };
+      this.#modelSpan?.end(mergedOptions);
+    } else {
+      this.#modelSpan?.end(options);
+    }
   }
 
   /**
@@ -129,9 +151,12 @@ export class ModelSpanTracker {
 
     // Extract all data from step-finish chunk
     const output = payload.output;
-    const { usage, ...otherOutput } = output;
+    const { usage: rawUsage, ...otherOutput } = output;
     const stepResult = payload.stepResult;
     const metadata = payload.metadata;
+
+    // Convert raw usage to UsageStats with cache token details
+    const usage = extractUsageWithCacheTokens(rawUsage, metadata?.providerMetadata);
 
     // Remove request object from metadata (too verbose)
     const cleanMetadata = metadata ? { ...metadata } : undefined;
