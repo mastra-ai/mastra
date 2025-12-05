@@ -46,40 +46,26 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     this.schema = schema;
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
+  updateWorkflowResults(_args: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
+  updateWorkflowState(_args: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');
   }
 
