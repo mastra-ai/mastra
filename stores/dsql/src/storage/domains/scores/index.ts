@@ -5,29 +5,25 @@ import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import {
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
   ScoresStorage,
   TABLE_SCORERS,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsDSQL } from '../operations';
 import { getTableName } from '../utils';
 
+/**
+ * DSQL-specific score row transformation.
+ * Uses Z-suffix timestamps (createdAtZ, updatedAtZ) when available.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  return {
-    ...row,
-    input: safelyParseJSON(row.input),
-    scorer: safelyParseJSON(row.scorer),
-    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
-    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
-    metadata: safelyParseJSON(row.metadata),
-    output: safelyParseJSON(row.output),
-    additionalContext: safelyParseJSON(row.additionalContext),
-    requestContext: safelyParseJSON(row.requestContext),
-    entity: safelyParseJSON(row.entity),
-    createdAt: row.createdAtZ || row.createdAt,
-    updatedAt: row.updatedAtZ || row.updatedAt,
-  } as ScoreRowData;
+  return coreTransformScoreRow(row, {
+    preferredTimestampFields: {
+      createdAt: 'createdAtZ',
+      updatedAt: 'updatedAtZ',
+    },
+  });
 }
 
 export class ScoresDSQL extends ScoresStorage {
