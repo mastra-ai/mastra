@@ -19,8 +19,7 @@ type ToAISDKFrom = 'agent' | 'network' | 'workflow';
 /**
  * Converts Mastra streams (workflow, agent network, or agent) to AI SDK v5 compatible streams.
  *
- * This function transforms various Mastra stream types into ReadableStream objects that are compatible
- * with the AI SDK v5, enabling seamless integration with AI SDK's streaming capabilities.
+ * This function transforms various Mastra stream types into ReadableStream objects that are compatible with the AI SDK v5, enabling seamless integration with AI SDK's streaming capabilities.
  *
  *
  * @param {MastraWorkflowStream | WorkflowRunOutput | MastraAgentNetworkStream | MastraModelOutput} stream
