@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 Converts Mastra streams (agent, network, or workflow) to AI SDK-compatible streams. Use this function when you need to manually transform Mastra streams for use with AI SDK's `createUIMessageStream()` and `createUIMessageStreamResponse()`.
 
-This is useful when building custom streaming endpoints outside of Mastra's built-in route handlers like [`chatRoute()`](/reference/v1/ai-sdk/chat-route) or [`workflowRoute()`](/reference/v1/ai-sdk/workflow-route).
+This is useful when building custom streaming endpoints outside Mastra's provided route helpers such as [`chatRoute()`](/reference/v1/ai-sdk/chat-route) or [`workflowRoute()`](/reference/v1/ai-sdk/workflow-route).
 
 ## Usage example
 
@@ -48,7 +48,7 @@ Pass `messages` to `originalMessages` in `createUIMessageStream()` to avoid dupl
 
 ## Parameters
 
-The first parameter is the Mastra stream to convert. Can be one of:
+The first parameter is the Mastra stream to convert. It can be one of:
 - `MastraModelOutput` - An agent stream from `agent.stream()`
 - `MastraAgentNetworkStream` - A network stream from `agent.network()`
 - `MastraWorkflowStream` or `WorkflowRunOutput` - A workflow stream

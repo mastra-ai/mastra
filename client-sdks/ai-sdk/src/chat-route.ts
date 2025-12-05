@@ -131,9 +131,8 @@ export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
 /**
  * Creates a chat route handler for streaming agent conversations using the AI SDK format.
  *
- * This function registers an HTTP POST endpoint that accepts messages, executes an agent,
- * and streams the response back to the client in AI SDK-compatible format.
- * *
+ * This function registers an HTTP POST endpoint that accepts messages, executes an agent, and streams the response back to the client in AI SDK-compatible format.
+ *
  * @param {chatRouteOptions} options - Configuration options for the chat route
  * @param {string} [options.path='/chat/:agentId'] - The route path. Include `:agentId` for dynamic routing
  * @param {string} [options.agent] - Fixed agent ID when not using dynamic routing

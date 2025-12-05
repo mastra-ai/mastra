@@ -8,7 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # Using AI SDK UI
 
-[AI SDK UI](https://sdk.vercel.ai) is a free open-source library that gives you the tools you need to build AI-powered products. Mastra has great integration with AI SDK UI, including model routing, streaming support, custom React hooks, custom tool/UI, and more.
+[AI SDK UI](https://sdk.vercel.ai) is a free open-source library of React utilities and components for building AI-powered interfaces. Mastra has great integration with AI SDK UI through model routing, streaming support, custom React hooks, and custom tool/UI components.
 
 :::note
 Migrating from AI SDK v4 to v5? See the [migration guide](/guides/v1/migrations/ai-sdk-v4-to-v5).
@@ -47,7 +47,7 @@ The recommended way of using Mastra and AI SDK UI together is by installing the 
   </TabItem>
 </Tabs>
 
-The `@mastra/ai-sdk` route handlers will seamlessly integrate with AI SDK UI's hooks. AI SDK UI provides three main hooks: [`useChat()`](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot), [`useCompletion()`](https://ai-sdk.dev/docs/ai-sdk-ui/completion), and [`useObject`](https://ai-sdk.dev/docs/ai-sdk-ui/object-generation).
+The `@mastra/ai-sdk` route handlers integrate directly with AI SDK UI's hooks. AI SDK UI provides three main hooks: [`useChat()`](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot), [`useCompletion()`](https://ai-sdk.dev/docs/ai-sdk-ui/completion), and [`useObject`](https://ai-sdk.dev/docs/ai-sdk-ui/object-generation).
 
 If you haven't already, install the required AI SDK packages:
 
@@ -139,9 +139,11 @@ export const mastra = new Mastra({
 You can also use dynamic workflow routing, see the [`workflowRoute()` reference documentation](/reference/v1/ai-sdk/workflow-route) for more details.
 
 :::tip Agent streaming in workflows
-When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are automatically streamed to the UI in real-time. This provides a seamless streaming experience even when agents are running inside workflow steps.
 
-Learn more in [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui).
+When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
+
+See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+
 :::
 
 </TabItem>
@@ -392,7 +394,7 @@ export async function POST(req: Request) {
 
 ### Stream transformations
 
-To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/v1/ai-sdk/to-ai-sdk-stream) utility. Take a look at the [examples](/reference/v1/ai-sdk/to-ai-sdk-stream#examples) to learn more.
+To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/v1/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/v1/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
 
 ### Passing additional data
 
