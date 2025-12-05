@@ -2,7 +2,7 @@ import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
-import esmShim from '@rollup/plugin-esm-shim';
+import { esmShim } from './plugins/esm-shim';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'rollup';
 import { esbuild } from './plugins/esbuild';

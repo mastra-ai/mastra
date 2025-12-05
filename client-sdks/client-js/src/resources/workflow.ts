@@ -53,6 +53,13 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    // Legacy support: also send limit/offset if provided (for older servers)
     if (params?.limit !== null && params?.limit !== undefined) {
       if (params.limit === false) {
         searchParams.set('limit', 'false');

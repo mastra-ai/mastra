@@ -26,6 +26,7 @@ export const BUNDLE = [
   'v1/workflow-create-run-async',
   'v1/workflow-run-count',
   'v1/workflow-list-runs',
+  'v1/workflow-stream-vnext',
   'v1/memory-query-to-recall',
   'v1/memory-vector-search-param',
   'v1/memory-message-v2-type',

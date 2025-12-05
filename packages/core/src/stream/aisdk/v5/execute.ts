@@ -1,7 +1,7 @@
 import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import { APICallError } from 'ai-v5';
-import type { ToolChoice, ToolSet } from 'ai-v5';
+import type { IdGenerator, ToolChoice, ToolSet } from 'ai-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
@@ -42,6 +42,7 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   headers?: Record<string, string | undefined>;
   shouldThrowError?: boolean;
   methodType: ModelMethodType;
+  generateId?: IdGenerator;
 };
 
 export function execute<OUTPUT extends OutputSchema = undefined>({
@@ -59,10 +60,12 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   headers,
   shouldThrowError,
   methodType,
+  generateId,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
     name: model.modelId,
+    generateId,
   });
 
   const toolsAndToolChoice = prepareToolsAndToolChoice({

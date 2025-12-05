@@ -3,6 +3,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
+  createStorageErrorId,
   ScoresStorage,
   SCORERS_SCHEMA,
   TABLE_SCORERS,
@@ -58,7 +59,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scoreId: id },
@@ -75,7 +76,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('CLICKHOUSE', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { scoreId: score.id },
@@ -110,7 +111,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scoreId: score.id },
@@ -190,7 +191,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId },
@@ -295,7 +296,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scorerId },
@@ -378,7 +379,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType },
@@ -464,7 +465,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { traceId, spanId },

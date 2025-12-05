@@ -84,7 +84,7 @@ export async function createHonoServer(
 
   // Create server adapter with all configuration
   const honoServerAdapter = new MastraServer({
-    app: app as any,
+    app,
     mastra,
     tools: options.tools,
     taskStore: a2aTaskStore,

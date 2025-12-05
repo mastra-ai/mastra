@@ -150,6 +150,7 @@ export class MastraLLMVNext extends MastraBase {
     resourceId,
     structuredOutput,
     options,
+    inputProcessors,
     outputProcessors,
     returnScorerData,
     providerOptions,
@@ -220,6 +221,7 @@ export class MastraLLMVNext extends MastraBase {
         providerOptions,
         _internal,
         structuredOutput,
+        inputProcessors,
         outputProcessors,
         returnScorerData,
         modelSpanTracker,
@@ -296,6 +298,8 @@ export class MastraLLMVNext extends MastraBase {
                   reasoningTokens: props?.totalUsage?.reasoningTokens,
                   cachedInputTokens: props?.totalUsage?.cachedInputTokens,
                 },
+                responseId: props?.response.id,
+                responseModel: props?.response.modelId,
               },
             });
 

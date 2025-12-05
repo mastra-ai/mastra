@@ -154,4 +154,87 @@ describe('OtelBridge', () => {
       bridge.shutdown();
     });
   });
+
+  describe('Tags Support', () => {
+    it('should include tags as mastra.tags attribute for root spans with tags', async () => {
+      // This test verifies that tags are included in the OTEL span attributes
+      // OtelBridge uses SpanConverter which should set mastra.tags on root spans
+      const { SpanConverter } = await import('@mastra/otel-exporter');
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
+
+      const rootSpanWithTags = {
+        id: 'root-with-tags',
+        traceId: 'trace-with-tags',
+        type: SpanType.AGENT_RUN,
+        name: 'tagged-agent',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        attributes: { agentId: 'agent-123' },
+        tags: ['production', 'experiment-v2', 'user-request'],
+      } as any;
+
+      const readableSpan = await converter.convertSpan(rootSpanWithTags);
+
+      // Tags should be present as mastra.tags attribute (JSON-stringified for backend compatibility)
+      expect(readableSpan.attributes['mastra.tags']).toBeDefined();
+      expect(readableSpan.attributes['mastra.tags']).toBe(
+        JSON.stringify(['production', 'experiment-v2', 'user-request']),
+      );
+    });
+
+    it('should not include mastra.tags attribute for child spans', async () => {
+      const { SpanConverter } = await import('@mastra/otel-exporter');
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
+
+      const childSpanWithTags = {
+        id: 'child-with-tags',
+        traceId: 'trace-parent',
+        parentSpanId: 'root-span-id',
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        attributes: { toolId: 'calculator' },
+        tags: ['should-not-appear'],
+      } as any;
+
+      const readableSpan = await converter.convertSpan(childSpanWithTags);
+
+      // Tags should NOT be present on child spans
+      expect(readableSpan.attributes['mastra.tags']).toBeUndefined();
+    });
+
+    it('should not include mastra.tags attribute when tags is empty or undefined', async () => {
+      const { SpanConverter } = await import('@mastra/otel-exporter');
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
+
+      const rootSpanNoTags = {
+        id: 'root-no-tags',
+        traceId: 'trace-no-tags',
+        type: SpanType.AGENT_RUN,
+        name: 'agent-no-tags',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        attributes: { agentId: 'agent-123' },
+        tags: [],
+      } as any;
+
+      const readableSpan = await converter.convertSpan(rootSpanNoTags);
+
+      // Tags should NOT be present when array is empty
+      expect(readableSpan.attributes['mastra.tags']).toBeUndefined();
+    });
+  });
 });

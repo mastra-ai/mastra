@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TABLE_SCORERS } from './constants';
-import { safelyParseJSON, transformRow, transformScoreRow } from './utils';
+import { safelyParseJSON, createStorageErrorId, createVectorErrorId, transformRow, transformScoreRow } from './utils';
+import type { StoreName } from './utils';
 
 describe('safelyParseJSON', () => {
   const sampleObject = {
@@ -14,7 +15,6 @@ describe('safelyParseJSON', () => {
 
     // Act: Pass object through safelyParseJSON
     const result = safelyParseJSON(inputObject);
-
     // Assert: Verify object reference and structure preservation
     expect(result).toBe(inputObject); // Same reference
     expect(result).toEqual({
@@ -315,5 +315,155 @@ describe('transformScoreRow', () => {
 
     expect(result.createdAt).toBeInstanceOf(Date);
     expect(result.updatedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('createStorageErrorId', () => {
+  it('should generate error ID with FAILED status', () => {
+    const errorId = createStorageErrorId('PG', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED');
+    expect(errorId).toBe('MASTRA_STORAGE_PG_LIST_THREADS_BY_RESOURCE_ID_FAILED');
+  });
+
+  it('should generate error ID with custom status', () => {
+    const errorId = createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID');
+    expect(errorId).toBe('MASTRA_STORAGE_MONGODB_LIST_MESSAGES_INVALID_THREAD_ID');
+  });
+
+  it('should normalize operations with proper word boundaries', () => {
+    const errorId = createStorageErrorId('PG', 'listMessagesById', 'FAILED');
+    expect(errorId).toBe('MASTRA_STORAGE_PG_LIST_MESSAGES_BY_ID_FAILED');
+  });
+
+  it('should normalize status values', () => {
+    const errorId = createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'invalid-thread-id');
+    expect(errorId).toBe('MASTRA_STORAGE_MONGODB_LIST_MESSAGES_INVALID_THREAD_ID');
+  });
+
+  it('should handle various casing styles in operations correctly', () => {
+    // camelCase
+    expect(createStorageErrorId('PG', 'getMessage', 'FAILED')).toBe('MASTRA_STORAGE_PG_GET_MESSAGE_FAILED');
+
+    // PascalCase
+    expect(createStorageErrorId('PG', 'GetMessage', 'FAILED')).toBe('MASTRA_STORAGE_PG_GET_MESSAGE_FAILED');
+
+    // SCREAMING_SNAKE_CASE (already normalized)
+    expect(createStorageErrorId('PG', 'GET_MESSAGE', 'FAILED')).toBe('MASTRA_STORAGE_PG_GET_MESSAGE_FAILED');
+
+    // Mixed with acronyms
+    expect(createStorageErrorId('PG', 'parseJSONData', 'FAILED')).toBe('MASTRA_STORAGE_PG_PARSE_JSON_DATA_FAILED');
+  });
+
+  it('should handle special characters in status', () => {
+    const errorId = createStorageErrorId('PG', 'SOME_OPERATION', 'custom-status');
+    expect(errorId).toBe('MASTRA_STORAGE_PG_SOME_OPERATION_CUSTOM_STATUS');
+  });
+
+  it('should generate consistent IDs for all canonical store names', () => {
+    const stores: StoreName[] = [
+      'PG',
+      'MONGODB',
+      'CLICKHOUSE',
+      'CLOUDFLARE_D1',
+      'MSSQL',
+      'LIBSQL',
+      'DYNAMODB',
+      'LANCE',
+      'UPSTASH',
+      'CLOUDFLARE',
+    ];
+    const operations = ['LIST_THREADS_BY_RESOURCE_ID', 'LIST_MESSAGES', 'LIST_WORKFLOW_RUNS'];
+
+    stores.forEach(store => {
+      operations.forEach(operation => {
+        const errorId = createStorageErrorId(store, operation, 'FAILED');
+        expect(errorId).toMatch(/^MASTRA_STORAGE_[A-Z0-9_]+_FAILED$/);
+        expect(errorId).toContain(store);
+        expect(errorId).toContain(operation);
+      });
+    });
+  });
+
+  it('should handle all statuses consistently', () => {
+    const statuses = ['FAILED', 'INVALID_THREAD_ID', 'DUPLICATE_KEY', 'NOT_FOUND', 'TIMEOUT'];
+
+    statuses.forEach(status => {
+      const errorId = createStorageErrorId('PG', 'LIST_MESSAGES', status);
+      expect(errorId).toBe(`MASTRA_STORAGE_PG_LIST_MESSAGES_${status}`);
+    });
+  });
+
+  it('should normalize complex operation names', () => {
+    expect(createStorageErrorId('PG', 'listThreadsByResourceId', 'FAILED')).toBe(
+      'MASTRA_STORAGE_PG_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+    );
+
+    expect(createStorageErrorId('DYNAMODB', 'getMessagesPaginated', 'FAILED')).toBe(
+      'MASTRA_STORAGE_DYNAMODB_GET_MESSAGES_PAGINATED_FAILED',
+    );
+  });
+});
+
+describe('createVectorErrorId', () => {
+  it('should generate vector error ID with FAILED status', () => {
+    const errorId = createVectorErrorId('CHROMA', 'QUERY', 'FAILED');
+    expect(errorId).toBe('MASTRA_VECTOR_CHROMA_QUERY_FAILED');
+  });
+
+  it('should generate vector error ID with custom status', () => {
+    const errorId = createVectorErrorId('PINECONE', 'UPSERT', 'INVALID_DIMENSION');
+    expect(errorId).toBe('MASTRA_VECTOR_PINECONE_UPSERT_INVALID_DIMENSION');
+  });
+
+  it('should normalize vector operations with proper word boundaries', () => {
+    const errorId = createVectorErrorId('PG', 'createIndex', 'FAILED');
+    expect(errorId).toBe('MASTRA_VECTOR_PG_CREATE_INDEX_FAILED');
+  });
+
+  it('should normalize vector status values', () => {
+    const errorId = createVectorErrorId('ASTRA', 'DELETE', 'db-error');
+    expect(errorId).toBe('MASTRA_VECTOR_ASTRA_DELETE_DB_ERROR');
+  });
+
+  it('should handle various casing styles in vector operations', () => {
+    expect(createVectorErrorId('QDRANT', 'deleteVector', 'FAILED')).toBe('MASTRA_VECTOR_QDRANT_DELETE_VECTOR_FAILED');
+    expect(createVectorErrorId('OPENSEARCH', 'CreateIndex', 'FAILED')).toBe(
+      'MASTRA_VECTOR_OPENSEARCH_CREATE_INDEX_FAILED',
+    );
+    expect(createVectorErrorId('TURBOPUFFER', 'list-indexes', 'failed')).toBe(
+      'MASTRA_VECTOR_TURBOPUFFER_LIST_INDEXES_FAILED',
+    );
+  });
+
+  it('should generate consistent IDs for all vector store names', () => {
+    const stores: StoreName[] = [
+      'PG',
+      'CHROMA',
+      'PINECONE',
+      'QDRANT',
+      'ASTRA',
+      'COUCHBASE',
+      'OPENSEARCH',
+      'TURBOPUFFER',
+      'VECTORIZE',
+    ];
+    const operations = ['QUERY', 'UPSERT', 'DELETE', 'CREATE_INDEX'];
+
+    stores.forEach(store => {
+      operations.forEach(operation => {
+        const errorId = createVectorErrorId(store, operation, 'FAILED');
+        expect(errorId).toMatch(/^MASTRA_VECTOR_[A-Z0-9_]+_FAILED$/);
+        expect(errorId).toContain(store);
+        expect(errorId).toContain(operation);
+      });
+    });
+  });
+
+  it('should normalize complex vector operation names', () => {
+    expect(createVectorErrorId('LIBSQL', 'deleteVectorById', 'FAILED')).toBe(
+      'MASTRA_VECTOR_LIBSQL_DELETE_VECTOR_BY_ID_FAILED',
+    );
+    expect(createVectorErrorId('MONGODB', 'createVectorIndex', 'FAILED')).toBe(
+      'MASTRA_VECTOR_MONGODB_CREATE_VECTOR_INDEX_FAILED',
+    );
   });
 });

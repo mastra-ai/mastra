@@ -74,11 +74,11 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'This contains ' },
-            { type: 'text-delta', id: '1', delta: 'SENSITIVE data that ' },
-            { type: 'text-delta', id: '1', delta: 'should be SENSITIVE redacted' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'This contains ' },
+            { type: 'text-delta', id: 'text-1', delta: 'SENSITIVE data that ' },
+            { type: 'text-delta', id: 'text-1', delta: 'should be SENSITIVE redacted' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
