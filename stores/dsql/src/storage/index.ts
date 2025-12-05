@@ -64,7 +64,6 @@ export class DSQLStore extends MastraStorage {
     }
 
     try {
-      this.isConnected = true;
       this.#pgp = pgPromise();
 
       // Build pg-promise connection config with AuroraDSQLClient for IAM authentication
@@ -106,6 +105,8 @@ export class DSQLStore extends MastraStorage {
 
       await super.init();
 
+      this.isConnected = true;
+
       // Create automatic performance indexes by default
       // This is done after table creation and is safe to run multiple times
       try {
@@ -116,7 +117,6 @@ export class DSQLStore extends MastraStorage {
         console.warn('Failed to create indexes:', indexError);
       }
     } catch (error) {
-      this.isConnected = false;
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_DSQL_STORE_INIT_FAILED',
