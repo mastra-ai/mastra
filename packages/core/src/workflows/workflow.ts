@@ -2012,16 +2012,29 @@ export class Run<
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
         // @ts-ignore
-        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
-          controller.enqueue({
-            type,
-            runId: self.runId,
-            from,
-            payload: {
-              stepName: (payload as unknown as { id: string })?.id,
-              ...payload,
-            },
-          } as WorkflowStreamEvent);
+        const unwatch = self.watch(async (event: any) => {
+          const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
+          // Check if this is a custom event (has 'data' property instead of 'payload')
+          // Custom events should be passed through as-is with their original structure
+          if (data !== undefined && payload === undefined) {
+            controller.enqueue({
+              type,
+              runId: self.runId,
+              from,
+              data,
+              ...rest,
+            } as WorkflowStreamEvent);
+          } else {
+            controller.enqueue({
+              type,
+              runId: self.runId,
+              from,
+              payload: {
+                stepName: (payload as unknown as { id: string })?.id,
+                ...payload,
+              },
+            } as WorkflowStreamEvent);
+          }
         });
 
         self.closeStreamAction = async () => {
@@ -2156,16 +2169,29 @@ export class Run<
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
         // @ts-ignore
-        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
-          controller.enqueue({
-            type,
-            runId: self.runId,
-            from,
-            payload: {
-              stepName: (payload as unknown as { id: string }).id,
-              ...payload,
-            },
-          } as WorkflowStreamEvent);
+        const unwatch = self.watch(async (event: any) => {
+          const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
+          // Check if this is a custom event (has 'data' property instead of 'payload')
+          // Custom events should be passed through as-is with their original structure
+          if (data !== undefined && payload === undefined) {
+            controller.enqueue({
+              type,
+              runId: self.runId,
+              from,
+              data,
+              ...rest,
+            } as WorkflowStreamEvent);
+          } else {
+            controller.enqueue({
+              type,
+              runId: self.runId,
+              from,
+              payload: {
+                stepName: (payload as unknown as { id: string })?.id,
+                ...payload,
+              },
+            } as WorkflowStreamEvent);
+          }
         });
 
         self.closeStreamAction = async () => {
