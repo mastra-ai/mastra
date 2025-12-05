@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import {
@@ -71,7 +71,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let validatedScore: ValidatedSaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
@@ -81,6 +81,13 @@ export class ScoresMSSQL extends ScoresStorage {
           id: createStorageErrorId('MSSQL', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: {
+            scorer: score.scorer.id,
+            entityId: score.entityId,
+            entityType: score.entityType,
+            traceId: score.traceId || '',
+            spanId: score.spanId || '',
+          },
         },
         error,
       );

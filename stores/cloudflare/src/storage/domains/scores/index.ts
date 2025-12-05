@@ -1,6 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
   createStorageErrorId,
   ScoresStorage,
@@ -51,7 +51,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let parsedScore: ValidatedSaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
@@ -61,15 +61,21 @@ export class ScoresStorageCloudflare extends ScoresStorage {
           id: createStorageErrorId('CLOUDFLARE', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { scoreId: score.id },
+          details: {
+            scorer: score.scorer.id,
+            entityId: score.entityId,
+            entityType: score.entityType,
+            traceId: score.traceId || '',
+            spanId: score.spanId || '',
+          },
         },
         error,
       );
     }
 
-    try {
-      const id = crypto.randomUUID();
+    const id = crypto.randomUUID();
 
+    try {
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
       for (const [key, value] of Object.entries(parsedScore)) {
@@ -102,7 +108,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
           id: createStorageErrorId('CLOUDFLARE', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to save score: ${score.id}`,
+          details: { id },
         },
         error,
       );

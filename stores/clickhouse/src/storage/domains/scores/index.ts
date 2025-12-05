@@ -1,7 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
   createStorageErrorId,
   ScoresStorage,
@@ -69,7 +69,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let parsedScore: ValidatedSaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
@@ -79,21 +79,36 @@ export class ScoresStorageClickhouse extends ScoresStorage {
           id: createStorageErrorId('CLICKHOUSE', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { scoreId: score.id },
+          details: {
+            scorer: score.scorer.id,
+            entityId: score.entityId,
+            entityType: score.entityType,
+            traceId: score.traceId || '',
+            spanId: score.spanId || '',
+          },
         },
         error,
       );
     }
 
+    const now = new Date();
+    const id = crypto.randomUUID();
+    const createdAt = now;
+    const updatedAt = now;
+
     try {
       // Build record from schema columns, converting undefined to null for ClickHouse
       const record: Record<string, unknown> = {};
       for (const key of Object.keys(SCORERS_SCHEMA)) {
-        const value = parsedScore[key as keyof typeof parsedScore];
-        if (key === 'createdAt' || key === 'updatedAt') {
-          record[key] = new Date().toISOString();
+        if (key === 'id') {
+          record[key] = id;
           continue;
         }
+        if (key === 'createdAt' || key === 'updatedAt') {
+          record[key] = now.toISOString();
+          continue;
+        }
+        const value = parsedScore[key as keyof typeof parsedScore];
         record[key] = value === undefined || value === null ? '_null_' : value;
       }
 
@@ -107,14 +122,14 @@ export class ScoresStorageClickhouse extends ScoresStorage {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-      return { score };
+      return { score: { ...score, id, createdAt, updatedAt } };
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { scoreId: score.id },
+          details: { scoreId: id },
         },
         error,
       );

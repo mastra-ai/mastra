@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
   calculatePagination,
@@ -121,7 +121,7 @@ export class ScoresUpstash extends ScoresStorage {
     };
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let validatedScore: ValidatedSaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
@@ -131,21 +131,41 @@ export class ScoresUpstash extends ScoresStorage {
           id: createStorageErrorId('UPSTASH', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: {
+            scorer: score.scorer.id,
+            entityId: score.entityId,
+            entityType: score.entityType,
+            traceId: score.traceId || '',
+            spanId: score.spanId || '',
+          },
         },
         error,
       );
     }
-    const { key, processedRecord } = processRecord(TABLE_SCORERS, validatedScore);
+
+    const now = new Date();
+    const id = crypto.randomUUID();
+    const createdAt = now;
+    const updatedAt = now;
+
+    const scoreWithId = {
+      ...validatedScore,
+      id,
+      createdAt,
+      updatedAt,
+    };
+
+    const { key, processedRecord } = processRecord(TABLE_SCORERS, scoreWithId);
     try {
       await this.client.set(key, processedRecord);
-      return { score };
+      return { score: { ...score, id, createdAt, updatedAt } };
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { id: score.id },
+          details: { id },
         },
         error,
       );
