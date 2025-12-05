@@ -132,6 +132,7 @@ export function workflowLoopStream<
 
       if (rest.autoResumeSuspendedTools && executionResult.status === 'suspended') {
         while (executionResult.status === 'suspended') {
+          // using while loop because there could because the workflow might get suspended multiple times
           const agent = rest.mastra?.getAgentById(agentId)!;
           let resumeSchema: z.ZodType<any> | undefined = undefined;
           const requireToolApproval: Record<string, any> | undefined =
