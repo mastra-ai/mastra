@@ -16,6 +16,13 @@ export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
 export type WorkflowEngineType = string;
 
+/**
+ * Type of workflow - determines how the workflow is categorized in the UI.
+ * - 'default': Standard workflow
+ * - 'processor': Workflow used as a processor for agent input/output processing
+ */
+export type WorkflowType = 'default' | 'processor';
+
 export type RestartExecutionParams = {
   activePaths: number[];
   activeStepsPath: Record<string, number[]>;
@@ -197,6 +204,7 @@ export type WorkflowRunStatus =
   | 'running'
   | 'success'
   | 'failed'
+  | 'tripwire'
   | 'suspended'
   | 'waiting'
   | 'pending'
@@ -282,6 +290,8 @@ export type WorkflowInfo = {
   inputSchema: string | undefined;
   outputSchema: string | undefined;
   options?: WorkflowOptions;
+  /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
+  isProcessorWorkflow?: boolean;
 };
 
 export type DefaultEngineType = {};
@@ -456,6 +466,30 @@ export type WorkflowResult<
       error: Error;
     } & TracingProperties)
   | ({
+      status: 'tripwire';
+      input: z.infer<TInput>;
+      state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
+      /** The reason the tripwire was triggered */
+      reason: string;
+      /** Whether the tripwire requested a retry */
+      retry?: boolean;
+      /** Metadata from the tripwire */
+      metadata?: unknown;
+      /** ID of the processor that triggered the tripwire */
+      processorId?: string;
+    } & TracingProperties)
+  | ({
       status: 'suspended';
       input: z.infer<TInput>;
       state?: z.infer<TState>;
@@ -516,6 +550,8 @@ export type WorkflowConfig<
     delay?: number;
   };
   options?: WorkflowOptions;
+  /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
+  type?: WorkflowType;
 };
 
 /**

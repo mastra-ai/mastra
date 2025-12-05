@@ -456,10 +456,52 @@ describe('toUIMessage', () => {
         ],
         metadata: {
           ...baseMetadata,
-          status: 'warning',
+          status: 'tripwire',
+          tripwire: {
+            retry: undefined,
+            tripwirePayload: undefined,
+            processorId: undefined,
+          },
         },
       });
       expect(result[0].id).toMatch(/^tripwire-run-123/);
+    });
+
+    it('should include tripwire metadata when provided', () => {
+      const chunk: ChunkType = {
+        type: 'tripwire',
+        payload: {
+          tripwireReason: 'PII detected in message',
+          retry: false,
+          metadata: { detectedPII: ['email', 'phone'], severity: 'high' },
+          processorId: 'pii-detection',
+        },
+        runId: 'run-456',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'PII detected in message',
+          },
+        ],
+        metadata: {
+          ...baseMetadata,
+          status: 'tripwire',
+          tripwire: {
+            retry: false,
+            tripwirePayload: { detectedPII: ['email', 'phone'], severity: 'high' },
+            processorId: 'pii-detection',
+          },
+        },
+      });
     });
   });
 

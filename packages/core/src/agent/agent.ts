@@ -30,7 +30,8 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
 import { SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessor, OutputProcessor } from '../processors/index';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
+import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -44,12 +45,14 @@ import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow, WorkflowResult } from '../workflows';
+import { createWorkflow, createStep, isProcessor } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
+import type { TripWireOptions } from './trip-wire';
 import type {
   AgentConfig,
   AgentGenerateOptions,
@@ -122,8 +125,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: CompositeVoice;
-  #inputProcessors?: DynamicArgument<InputProcessor[]>;
-  #outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
+  #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+  #maxProcessorRetries?: number;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -248,6 +252,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.#outputProcessors = config.outputProcessors;
     }
 
+    if (config.maxProcessorRetries !== undefined) {
+      this.#maxProcessorRetries = config.maxProcessorRetries;
+    }
+
     // @ts-ignore Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
@@ -303,8 +311,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     outputProcessorOverrides,
   }: {
     requestContext: RequestContext;
-    inputProcessorOverrides?: InputProcessor[];
-    outputProcessorOverrides?: OutputProcessor[];
+    inputProcessorOverrides?: InputProcessorOrWorkflow[];
+    outputProcessorOverrides?: OutputProcessorOrWorkflow[];
   }): Promise<ProcessorRunner> {
     // Use overrides if provided, otherwise resolve from agent config + memory
     const inputProcessors = inputProcessorOverrides ?? (await this.listResolvedInputProcessors(requestContext));
@@ -322,10 +330,70 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
-   * Resolves and returns output processors from agent configuration.
+   * Combines multiple processors into a single workflow.
+   * Each processor becomes a step in the workflow, chained together.
+   * If there's only one item and it's already a workflow, returns it as-is.
    * @internal
    */
-  private async listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
+  private combineProcessorsIntoWorkflow<T extends InputProcessorOrWorkflow | OutputProcessorOrWorkflow>(
+    processors: T[],
+    workflowId: string,
+  ): T[] {
+    // No processors - return empty array
+    if (processors.length === 0) {
+      return [];
+    }
+
+    // Single item that's already a workflow - mark it as processor type and return
+    if (processors.length === 1 && isProcessorWorkflow(processors[0]!)) {
+      const workflow = processors[0]!;
+      // Mark the workflow as a processor workflow
+      workflow.type = 'processor';
+      return [workflow];
+    }
+
+    // Filter out invalid processors (objects that don't implement any processor methods)
+    const validProcessors = processors.filter(p => isProcessorWorkflow(p) || isProcessor(p));
+
+    if (validProcessors.length === 0) {
+      return [];
+    }
+
+    // If after filtering we have a single workflow, mark it as processor type and return
+    if (validProcessors.length === 1 && isProcessorWorkflow(validProcessors[0]!)) {
+      const workflow = validProcessors[0]!;
+      // Mark the workflow as a processor workflow
+      workflow.type = 'processor';
+      return [workflow];
+    }
+
+    // Create a single workflow with all processors chained
+    // Mark it as a processor workflow type
+    let workflow = createWorkflow({
+      id: workflowId,
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      type: 'processor',
+    });
+
+    for (const processorOrWorkflow of validProcessors) {
+      // Convert processor to step, or use workflow directly (nested workflows are allowed)
+      const step = isProcessorWorkflow(processorOrWorkflow)
+        ? processorOrWorkflow
+        : createStep(processorOrWorkflow as Exclude<T, ProcessorWorkflow>);
+      workflow = workflow.then(step);
+    }
+
+    // The resulting workflow is compatible with both Input and Output processor types
+    return [workflow.commit() as T];
+  }
+
+  /**
+   * Resolves and returns output processors from agent configuration.
+   * All processors are combined into a single workflow for consistency.
+   * @internal
+   */
+  private async listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     // Get configured output processors
     const configuredProcessors = this.#outputProcessors
       ? typeof this.#outputProcessors === 'function'
@@ -339,15 +407,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
+    // Combine all processors into a single workflow
     // Memory processors should run last (to persist messages after other processing)
-    return [...configuredProcessors, ...memoryProcessors];
+    const allProcessors = [...configuredProcessors, ...memoryProcessors];
+    return this.combineProcessorsIntoWorkflow(allProcessors, `output-processor-workflow-${this.id}`);
   }
 
   /**
    * Resolves and returns input processors from agent configuration.
+   * All processors are combined into a single workflow for consistency.
    * @internal
    */
-  private async listResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
+  private async listResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
     // Get configured input processors
     const configuredProcessors = this.#inputProcessors
       ? typeof this.#inputProcessors === 'function'
@@ -361,22 +432,65 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
+    // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
-    return [...memoryProcessors, ...configuredProcessors];
+    const allProcessors = [...memoryProcessors, ...configuredProcessors];
+    return this.combineProcessorsIntoWorkflow(allProcessors, `input-processor-workflow-${this.id}`);
   }
 
   /**
    * Returns the input processors for this agent, resolving function-based processors if necessary.
    */
-  public async listInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
+  public async listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
     return this.listResolvedInputProcessors(requestContext);
   }
 
   /**
    * Returns the output processors for this agent, resolving function-based processors if necessary.
    */
-  public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
+  public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
+  }
+
+  /**
+   * Returns configured processor workflows for registration with Mastra.
+   * This excludes memory-derived processors to avoid triggering memory factory functions.
+   * @internal
+   */
+  public async getConfiguredProcessorWorkflows(): Promise<ProcessorWorkflow[]> {
+    const workflows: ProcessorWorkflow[] = [];
+
+    // Get input processors (static or from function)
+    if (this.#inputProcessors) {
+      const inputProcessors =
+        typeof this.#inputProcessors === 'function'
+          ? await this.#inputProcessors({ requestContext: new RequestContext() })
+          : this.#inputProcessors;
+
+      const combined = this.combineProcessorsIntoWorkflow(inputProcessors, `input-processor-workflow-${this.id}`);
+      for (const p of combined) {
+        if (isProcessorWorkflow(p)) {
+          workflows.push(p);
+        }
+      }
+    }
+
+    // Get output processors (static or from function)
+    if (this.#outputProcessors) {
+      const outputProcessors =
+        typeof this.#outputProcessors === 'function'
+          ? await this.#outputProcessors({ requestContext: new RequestContext() })
+          : this.#outputProcessors;
+
+      const combined = this.combineProcessorsIntoWorkflow(outputProcessors, `output-processor-workflow-${this.id}`);
+      for (const p of combined) {
+        if (isProcessorWorkflow(p)) {
+          workflows.push(p);
+        }
+      }
+    }
+
+    return workflows;
   }
 
   /**
@@ -1338,14 +1452,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
-    inputProcessorOverrides?: InputProcessor[];
+    inputProcessorOverrides?: InputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
     tripwireTriggered: boolean;
     tripwireReason: string;
+    tripwireOptions?: TripWireOptions<unknown>;
+    processorId?: string;
   }> {
     let tripwireTriggered = false;
     let tripwireReason = '';
+    let tripwireOptions: TripWireOptions<unknown> | undefined;
+    let processorId: string | undefined;
 
     if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
@@ -1358,6 +1476,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         if (error instanceof TripWire) {
           tripwireTriggered = true;
           tripwireReason = error.message;
+          tripwireOptions = error.options;
+          processorId = error.processorId;
         } else {
           throw new MastraError(
             {
@@ -1376,6 +1496,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       messageList,
       tripwireTriggered,
       tripwireReason,
+      tripwireOptions,
+      processorId,
     };
   }
 
@@ -1392,7 +1514,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
-    outputProcessorOverrides?: OutputProcessor[];
+    outputProcessorOverrides?: OutputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
     tripwireTriggered: boolean;
@@ -2810,6 +2932,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       ...mergedOptions,
       messages,
       methodType: 'generate',
+      // Use agent's maxProcessorRetries as default, allow options to override
+      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
     } as InnerAgentExecutionOptions<OUTPUT>;
 
     const result = await this.#execute(executeOptions);
@@ -2887,6 +3011,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       ...mergedOptions,
       messages,
       methodType: 'stream',
+      // Use agent's maxProcessorRetries as default, allow options to override
+      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
     } as InnerAgentExecutionOptions<OUTPUT>;
 
     const result = await this.#execute(executeOptions);

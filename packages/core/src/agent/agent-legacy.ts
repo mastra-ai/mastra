@@ -23,7 +23,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { Span, TracingContext, TracingOptions, TracingProperties } from '../observability';
 import { SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessor, OutputProcessor } from '../processors/index';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
@@ -103,7 +103,7 @@ export interface AgentLegacyCapabilities {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
-    inputProcessorOverrides?: InputProcessor[];
+    inputProcessorOverrides?: InputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
     tripwireTriggered: boolean;
@@ -141,13 +141,13 @@ export interface AgentLegacyCapabilities {
   /** Agent network append flag */
   _agentNetworkAppend?: boolean;
   /** List resolved output processors */
-  listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]>;
+  listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
   /** Run output processors */
   __runOutputProcessors(args: {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
-    outputProcessorOverrides?: OutputProcessor[];
+    outputProcessorOverrides?: OutputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
     tripwireTriggered: boolean;

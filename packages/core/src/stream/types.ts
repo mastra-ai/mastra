@@ -13,7 +13,7 @@ import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
-import type { OutputProcessor } from '../processors';
+import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
@@ -230,7 +230,8 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
     text?: string;
     toolCalls?: TypedToolCall<Tools>[];
     usage: LanguageModelV2Usage;
-    steps?: StepResult<Tools>[];
+    /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
+    steps?: MastraStepResult<Tools>[];
     object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
   };
   metadata: {
@@ -302,8 +303,14 @@ interface WatchPayload {
   [key: string]: unknown;
 }
 
-interface TripwirePayload {
+interface TripwirePayload<TMetadata = unknown> {
   tripwireReason: string;
+  /** If true, the agent should retry with the tripwire reason as feedback */
+  retry?: boolean;
+  /** Strongly typed metadata from the processor */
+  metadata?: TMetadata;
+  /** The ID of the processor that triggered the tripwire */
+  processorId?: string;
 }
 
 // Network-specific payload interfaces
@@ -676,12 +683,36 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   onStepFinish?: MastraOnStepFinishCallback;
   includeRawChunks?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
-  outputProcessors?: OutputProcessor[];
+  outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
+};
+
+/**
+ * Tripwire data attached to a step when a processor triggers a tripwire.
+ * When a step has tripwire data, its text is excluded from the final output.
+ */
+export interface StepTripwireData {
+  /** The tripwire message/reason */
+  message: string;
+  /** Whether retry was requested */
+  retry?: boolean;
+  /** Additional metadata from the tripwire */
+  metadata?: unknown;
+  /** ID of the processor that triggered the tripwire */
+  processorId?: string;
+}
+
+/**
+ * Extended StepResult that includes tripwire data.
+ * This extends the AI SDK's StepResult with our custom tripwire field.
+ */
+export type MastraStepResult<Tools extends ToolSet = ToolSet> = StepResult<Tools> & {
+  /** Tripwire data if this step was rejected by a processor */
+  tripwire?: StepTripwireData;
 };
 
 export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
@@ -718,4 +749,6 @@ export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
   };
   reasoningText: string | undefined;
   providerMetadata: SharedV2ProviderMetadata | undefined;
+  /** Tripwire data if this step was rejected by a processor */
+  tripwire?: StepTripwireData;
 };

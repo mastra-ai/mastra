@@ -2,7 +2,12 @@ import type { Agent, AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
-import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
+import type {
+  InputProcessor,
+  OutputProcessor,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
@@ -143,13 +148,15 @@ export async function getSerializedAgentTools(
   }, {});
 }
 
-export function getSerializedProcessors(processors: (InputProcessor | OutputProcessor)[]): SerializedProcessor[] {
+export function getSerializedProcessors(
+  processors: (InputProcessor | OutputProcessor | InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[],
+): SerializedProcessor[] {
   return processors.map(processor => {
     // Processors are class instances or objects with a name property
     // Use the name property if available, otherwise fall back to constructor name
     return {
       id: processor.id,
-      name: processor.name || processor.constructor.name,
+      name: (processor as any).name || processor.constructor.name,
     };
   });
 }

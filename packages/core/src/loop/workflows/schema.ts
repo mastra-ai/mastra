@@ -24,7 +24,7 @@ import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
-  reason: LanguageModelV2FinishReason | 'abort';
+  reason: LanguageModelV2FinishReason | 'tripwire';
   warnings: LanguageModelV2CallWarning[];
   isContinued: boolean;
   logprobs?: LanguageModelV1LogProbs;
@@ -76,6 +76,11 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extend
   output: LLMIterationOutput<Tools, OUTPUT>;
   metadata: LLMIterationMetadata;
   stepResult: LLMIterationStepResult;
+  /**
+   * Number of times processors have triggered retry for this generation.
+   * Used to enforce maxProcessorRetries limit.
+   */
+  processorRetryCount?: number;
 }
 
 // Zod schemas for common types used in validation
@@ -139,6 +144,7 @@ export const llmIterationOutputSchema = z.object({
     request: z.record(z.any()).optional(),
   }),
   stepResult: llmIterationStepResultSchema,
+  processorRetryCount: z.number().optional(),
 });
 
 export const toolCallInputSchema = z.object({

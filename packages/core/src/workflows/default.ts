@@ -1,4 +1,5 @@
 import type { WritableStream } from 'node:stream/web';
+import { TripWire } from '../agent/trip-wire';
 import type { RequestContext } from '../di';
 import type { IErrorDefinition } from '../error';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -273,7 +274,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowId: string;
       runId: string;
     },
-  ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: string; endedAt: number } }> {
+  ): Promise<
+    | {
+        ok: true;
+        result: T;
+      }
+    | {
+        ok: false;
+        error: {
+          status: 'failed';
+          error: string;
+          endedAt: number;
+          tripwire?: TripWire;
+        };
+      }
+  > {
     for (let i = 0; i < params.retries + 1; i++) {
       if (i > 0 && params.delay) {
         await new Promise(resolve => setTimeout(resolve, params.delay));
@@ -311,6 +326,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               status: 'failed',
               error: `Error: ${errorInstance.message}`,
               endedAt: Date.now(),
+              // Preserve TripWire for proper handling in workflow result
+              tripwire: e instanceof TripWire ? e : undefined,
             },
           };
         }
@@ -350,7 +367,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (lastOutput.status === 'success') {
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
-      base.error = this.formatResultError(error, lastOutput);
+      // Check if the failure was due to a TripWire
+      const tripwireError = (lastOutput as any)?.tripwire;
+      if (tripwireError instanceof TripWire) {
+        // Use 'tripwire' status instead of 'failed' for tripwire errors
+        base.status = 'tripwire';
+        base.reason = tripwireError.message;
+        base.retry = tripwireError.options?.retry;
+        base.metadata = tripwireError.options?.metadata;
+        base.processorId = tripwireError.processorId;
+      } else {
+        base.error = this.formatResultError(error, lastOutput);
+      }
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {

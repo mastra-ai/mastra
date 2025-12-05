@@ -11,6 +11,9 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
   Object.entries(context).forEach(([stepId, stepResult]) => {
     if (stepId !== 'input' && 'status' in stepResult) {
       const result = stepResult as StepResult<any, any, any, any>;
+      // Check if this is a tripwire (failed step with tripwire property)
+      const hasTripwire = 'tripwire' in result && (result as any).tripwire;
+
       steps[stepId] = {
         status: result.status,
         output: 'output' in result ? result.output : undefined,
@@ -18,7 +21,9 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
         suspendPayload: 'suspendPayload' in result ? result.suspendPayload : undefined,
         suspendOutput: 'suspendOutput' in result ? result.suspendOutput : undefined,
         resumePayload: 'resumePayload' in result ? result.resumePayload : undefined,
-        error: 'error' in result ? result.error : undefined,
+        // Don't include error when tripwire is present - tripwire takes precedence
+        error: hasTripwire ? undefined : 'error' in result ? result.error : undefined,
+        tripwire: hasTripwire ? (result as any).tripwire : undefined,
         startedAt: 'startedAt' in result ? result.startedAt : Date.now(),
         endedAt: 'endedAt' in result ? result.endedAt : undefined,
         suspendedAt: 'suspendedAt' in result ? result.suspendedAt : undefined,
@@ -49,5 +54,13 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
     ...(runState.status === 'success' ? { result: runState.result } : {}),
     ...(runState.status === 'failed' ? { error: runState.error } : {}),
     ...(runState.status === 'suspended' ? { suspended: suspendedStepIds, suspendPayload: suspendPayload } : {}),
+    ...(runState.status === 'tripwire'
+      ? {
+          reason: (runState as any).reason,
+          retry: (runState as any).retry,
+          metadata: (runState as any).metadata,
+          processorId: (runState as any).processorId,
+        }
+      : {}),
   } as WorkflowRunStreamResult;
 }

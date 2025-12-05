@@ -88,12 +88,13 @@ export function createPrepareMemoryStep<
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
-        const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
-          requestContext,
-          tracingContext,
-          messageList,
-          inputProcessorOverrides: options.inputProcessors,
-        });
+        const { tripwireTriggered, tripwireReason, tripwireOptions, processorId } =
+          await capabilities.runInputProcessors({
+            requestContext,
+            tracingContext,
+            messageList,
+            inputProcessorOverrides: options.inputProcessors,
+          });
         return {
           threadExists: false,
           thread: undefined,
@@ -101,6 +102,8 @@ export function createPrepareMemoryStep<
           ...(tripwireTriggered && {
             tripwire: true,
             tripwireReason,
+            tripwireOptions,
+            processorId,
           }),
         };
       }
@@ -169,12 +172,14 @@ export function createPrepareMemoryStep<
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
 
-      const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
-        requestContext,
-        tracingContext,
-        messageList,
-        inputProcessorOverrides: options.inputProcessors,
-      });
+      const { tripwireTriggered, tripwireReason, tripwireOptions, processorId } = await capabilities.runInputProcessors(
+        {
+          requestContext,
+          tracingContext,
+          messageList,
+          inputProcessorOverrides: options.inputProcessors,
+        },
+      );
 
       return {
         thread: threadObject,
@@ -182,6 +187,8 @@ export function createPrepareMemoryStep<
         ...(tripwireTriggered && {
           tripwire: true,
           tripwireReason,
+          tripwireOptions,
+          processorId,
         }),
         threadExists: !!existingThread,
       };

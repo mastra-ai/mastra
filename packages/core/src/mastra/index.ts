@@ -734,6 +734,20 @@ export class Mastra<
       vectors: this.#vectors,
     });
     agents[agentKey] = agent;
+
+    // Register configured processor workflows from the agent
+    // Use .then() to handle async resolution without blocking the constructor
+    // This excludes memory-derived processors to avoid triggering memory factory functions
+    agent
+      .getConfiguredProcessorWorkflows()
+      .then(processorWorkflows => {
+        for (const workflow of processorWorkflows) {
+          this.addWorkflow(workflow, workflow.id);
+        }
+      })
+      .catch(err => {
+        this.#logger?.debug(`Failed to register processor workflows for agent ${agentKey}:`, err);
+      });
   }
 
   /**

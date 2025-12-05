@@ -6,17 +6,27 @@ import { cn } from '@/lib/utils';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 
+export interface TripwireData {
+  message?: string;
+  options?: {
+    retry?: boolean;
+    metadata?: unknown;
+  };
+  processorId?: string;
+}
+
 export interface WorkflowStepActionBarProps {
   input?: any;
   output?: any;
   suspendOutput?: any;
   resumeData?: any;
   error?: any;
+  tripwire?: TripwireData;
   stepName: string;
   stepId?: string;
   mapConfig?: string;
   onShowNestedGraph?: () => void;
-  status?: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
+  status?: 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'tripwire';
   stepKey?: string;
 }
 
@@ -26,6 +36,7 @@ export const WorkflowStepActionBar = ({
   resumeData,
   suspendOutput,
   error,
+  tripwire,
   mapConfig,
   stepName,
   stepId,
@@ -37,6 +48,7 @@ export const WorkflowStepActionBar = ({
   const [isOutputOpen, setIsOutputOpen] = useState(false);
   const [isResumeDataOpen, setIsResumeDataOpen] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
+  const [isTripwireOpen, setIsTripwireOpen] = useState(false);
   const [isMapConfigOpen, setIsMapConfigOpen] = useState(false);
   const [isTimeTravelOpen, setIsTimeTravelOpen] = useState(false);
 
@@ -49,12 +61,13 @@ export const WorkflowStepActionBar = ({
 
   return (
     <>
-      {(input || output || error || mapConfig || resumeData || onShowNestedGraph || showTimeTravel) && (
+      {(input || output || error || tripwire || mapConfig || resumeData || onShowNestedGraph || showTimeTravel) && (
         <div
           className={cn(
             'flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg',
             status === 'success' && 'bg-accent1Dark',
             status === 'failed' && 'bg-accent2Dark',
+            status === 'tripwire' && 'bg-amber-900/40 border-amber-500/20',
             status === 'suspended' && 'bg-accent3Dark',
             status === 'waiting' && 'bg-accent5Dark',
             status === 'running' && 'bg-accent6Dark',
@@ -152,6 +165,31 @@ export const WorkflowStepActionBar = ({
 
                   <div className="px-4 overflow-hidden">
                     <CodeDialogContent data={error} />
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
+
+          {tripwire && (
+            <>
+              <Button onClick={() => setIsTripwireOpen(true)} className="text-amber-400 hover:text-amber-300">
+                Tripwire
+              </Button>
+
+              <Dialog open={isTripwireOpen} onOpenChange={setIsTripwireOpen}>
+                <DialogContent className={dialogContentClass}>
+                  <DialogTitle className={dialogTitleClass}>{stepName} tripwire</DialogTitle>
+
+                  <div className="px-4 overflow-hidden">
+                    <CodeDialogContent
+                      data={{
+                        reason: tripwire.message,
+                        retry: tripwire.options?.retry,
+                        metadata: tripwire.options?.metadata,
+                        processorId: tripwire.processorId,
+                      }}
+                    />
                   </div>
                 </DialogContent>
               </Dialog>

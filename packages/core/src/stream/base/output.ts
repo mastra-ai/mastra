@@ -250,6 +250,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 part: processed,
                 blocked,
                 reason,
+                tripwireOptions,
+                processorId,
               } = await processorRunner.processPart(
                 chunk,
                 processorStates,
@@ -263,6 +265,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   type: 'tripwire',
                   payload: {
                     tripwireReason: reason || 'Output processor blocked content',
+                    retry: tripwireOptions?.retry,
+                    metadata: tripwireOptions?.metadata,
+                    processorId,
                   },
                 } as ChunkType<OUTPUT>);
                 return;
@@ -407,6 +412,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
+              // Check if this step has tripwire data (from DefaultStepResult in llm-execution-step)
+              // The current step is the last one in the steps array
+              // We use 'as any' because tripwire is our custom property not in AI SDK's StepResult type
+              const payloadSteps = chunk.payload.output?.steps || [];
+              const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
+              const stepTripwire = currentPayloadStep?.tripwire;
+
+              // If step has tripwire, text should be empty (rejected response)
+              const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
+
               const stepResult: LLMStepResult = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
                 sources: self.#bufferedByStep.sources,
@@ -415,7 +430,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 toolResults: self.#bufferedByStep.toolResults,
 
                 content: messageList.get.response.aiV5.modelContent(-1),
-                text: self.#bufferedByStep.text,
+                text: stepText,
+                // Include tripwire data if present
+                tripwire: stepTripwire,
                 reasoningText: self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
                 reasoning: Object.values(self.#bufferedReasoningDetails),
                 get staticToolCalls() {
@@ -532,6 +549,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#status = 'success';
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
+              }
+
+              // Check if this is a tripwire case - set tripwire flag
+              // This can happen when max retries is exceeded or a processor triggers a tripwire
+              if ((chunk.payload.stepResult.reason as string) === 'tripwire') {
+                self.#tripwire = true;
+                // Try to get the tripwire reason from the last step's tripwire data
+                const outputSteps = (chunk.payload.output as any)?.steps;
+                const lastStep = outputSteps?.[outputSteps?.length - 1];
+                self.#tripwireReason = lastStep?.tripwire?.message || 'Processor tripwire triggered';
               }
 
               // Add structured output to the latest assistant message metadata
@@ -959,10 +986,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       };
     }
 
+    const steps = await this.steps;
+
+    // Calculate text from steps, which respects tripwire (rejected steps return empty text)
+    // This ensures rejected responses are excluded from the final text output
+    const textFromSteps = steps.map((step: any) => step.text || '').join('');
+
     const fullOutput = {
-      text: await this.text,
+      // Use text calculated from steps to properly exclude rejected responses
+      text: textFromSteps,
       usage: await this.usage,
-      steps: await this.steps,
+      steps,
       finishReason: await this.finishReason,
       warnings: await this.warnings,
       providerMetadata: await this.providerMetadata,

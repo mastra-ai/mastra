@@ -129,11 +129,9 @@ export function workflowLoopStream<
         return;
       }
 
-      if (executionResult.result.stepResult?.reason === 'abort') {
-        controller.close();
-        return;
-      }
-
+      // Always emit finish chunk, even for abort (tripwire) cases
+      // This ensures the stream properly completes and all promises are resolved
+      // The tripwire/abort status is communicated through the stepResult.reason
       controller.enqueue({
         type: 'finish',
         runId,
@@ -142,7 +140,7 @@ export function workflowLoopStream<
           ...executionResult.result,
           stepResult: {
             ...executionResult.result.stepResult,
-            // @ts-ignore we add 'abort' for tripwires so the type is not compatible
+            // @ts-ignore we add 'tripwire' and 'retry' for processor scenarios so the type is not compatible
             reason: executionResult.result.stepResult.reason,
           },
         },

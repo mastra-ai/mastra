@@ -8,6 +8,12 @@ import { ModerationProcessor } from '@mastra/core/processors';
 import { logDataMiddleware } from '../../model-middleware';
 import { APICallError, wrapLanguageModel } from 'ai-v5';
 import { cookingTool } from '../tools';
+import {
+  advancedModerationWorkflow,
+  branchingModerationWorkflow,
+  contentModerationWorkflow,
+} from '../workflows/content-moderation';
+import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -129,4 +135,60 @@ export const networkAgent = new Agent({
   //   weatherInfo,
   // },
   memory,
+});
+
+// =============================================================================
+// Agents with Processor Workflows
+// These demonstrate using processor workflows for content moderation
+// =============================================================================
+
+/**
+ * Agent with Advanced Moderation Workflow
+ *
+ * Uses the advanced moderation workflow that includes:
+ * - Length validation
+ * - Parallel PII, toxicity, and spam checks
+ * - Language detection
+ */
+export const agentWithAdvancedModeration = new Agent({
+  id: 'agent-with-advanced-moderation',
+  name: 'Agent with Advanced Moderation',
+  description: 'A helpful assistant with advanced content moderation using parallel processor checks.',
+  instructions: `You are a helpful assistant. Always provide detailed, thoughtful responses.`,
+  model: openai_v5('gpt-4o-mini'),
+  inputProcessors: [advancedModerationWorkflow],
+  outputProcessors: [responseQualityProcessor, stepLoggerProcessor],
+  maxProcessorRetries: 2,
+});
+
+/**
+ * Agent with Branching Moderation Workflow
+ *
+ * Uses conditional branching to apply different processors based on content.
+ */
+export const agentWithBranchingModeration = new Agent({
+  id: 'agent-with-branching-moderation',
+  name: 'Agent with Branching Moderation',
+  description: 'A helpful assistant with smart content moderation that branches based on message content.',
+  instructions: `You are a helpful assistant.`,
+  model: openai_v5('gpt-4o-mini'),
+  inputProcessors: [branchingModerationWorkflow],
+  outputProcessors: [stepLoggerProcessor],
+  maxProcessorRetries: 2,
+});
+
+/**
+ * Agent with Sequential Moderation Workflow
+ *
+ * Uses a simple sequential workflow for content moderation.
+ */
+export const agentWithSequentialModeration = new Agent({
+  id: 'agent-with-sequential-moderation',
+  name: 'Agent with Sequential Moderation',
+  description: 'A helpful assistant with sequential content moderation checks.',
+  instructions: `You are a helpful assistant.`,
+  model: openai_v5('gpt-4o-mini'),
+  inputProcessors: [contentModerationWorkflow],
+  outputProcessors: [responseQualityProcessor],
+  maxProcessorRetries: 2,
 });

@@ -95,6 +95,8 @@ export function createMapResultsStep<
       ...(memoryData.tripwire && {
         tripwire: memoryData.tripwire,
         tripwireReason: memoryData.tripwireReason,
+        tripwireOptions: memoryData.tripwireOptions,
+        processorId: memoryData.processorId,
       }),
     };
 
@@ -104,6 +106,8 @@ export function createMapResultsStep<
 
       const modelOutput = await getModelOutputForTripwire({
         tripwireReason: result.tripwireReason!,
+        tripwireOptions: memoryData.tripwireOptions,
+        processorId: memoryData.processorId,
         runId,
         tracingContext,
         options,
@@ -213,6 +217,7 @@ export function createMapResultsStep<
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
+      maxProcessorRetries: options.maxProcessorRetries,
     };
 
     return loopOptions;

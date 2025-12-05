@@ -337,14 +337,36 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               payload: {},
             },
           };
+        } else if (result.status === 'tripwire') {
+          await emitter.emit('watch', {
+            type: 'workflow-step-result',
+            payload: {
+              id: step.id,
+              status: 'tripwire',
+              error: result?.reason,
+              payload: prevOutput,
+            },
+          });
+
+          return {
+            executionContext,
+            result: {
+              status: 'tripwire',
+              reason: result?.reason,
+              retry: result?.retry,
+              metadata: result?.metadata,
+              processorId: result?.processorId,
+            },
+          };
         }
 
+        // Status is 'success'
         await emitter.emit('watch', {
           type: 'workflow-step-result',
           payload: {
             id: step.id,
             status: 'success',
-            output: result?.result,
+            output: (result as any)?.result,
           },
         });
 
@@ -356,7 +378,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
         });
 
-        return { executionContext, result: { status: 'success', output: result?.result } };
+        return { executionContext, result: { status: 'success', output: (result as any)?.result } };
       },
     );
 

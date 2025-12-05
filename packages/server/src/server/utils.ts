@@ -48,6 +48,7 @@ export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     options: workflow.options,
+    isProcessorWorkflow: workflow.type === 'processor',
   };
 }
 

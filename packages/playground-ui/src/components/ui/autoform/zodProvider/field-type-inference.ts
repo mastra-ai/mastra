@@ -43,6 +43,14 @@ export function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig):
   if (schema instanceof z.ZodDiscriminatedUnion) {
     return 'discriminated-union';
   }
+  if (schema instanceof z.ZodLiteral) {
+    // For literal types, infer the field type based on the literal value
+    const values = schema._zod.def.values;
+    const literalValue = Array.isArray(values) ? values[0] : values;
+    if (typeof literalValue === 'number') return 'number';
+    if (typeof literalValue === 'boolean') return 'boolean';
+    return 'string';
+  }
 
   return 'string'; // Default to string for unknown types
 }

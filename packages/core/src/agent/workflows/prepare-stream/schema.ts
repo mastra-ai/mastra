@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
-import type { OutputProcessor } from '../../../processors';
+import type { OutputProcessorOrWorkflow } from '../../../processors';
 import type { DynamicArgument } from '../../../types';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
@@ -19,7 +19,7 @@ export type AgentCapabilities = {
   convertTools: Agent['convertTools'];
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
-  outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   llm: MastraLLMVNext;
 };
 
@@ -57,6 +57,13 @@ export const prepareMemoryStepOutputSchema = z.object({
   messageList: z.instanceof(MessageList),
   tripwire: z.boolean().optional(),
   tripwireReason: z.string().optional(),
+  tripwireOptions: z
+    .object({
+      retry: z.boolean().optional(),
+      metadata: z.unknown().optional(),
+    })
+    .optional(),
+  processorId: z.string().optional(),
 });
 
 export type PrepareMemoryStepOutput = z.infer<typeof prepareMemoryStepOutputSchema>;
