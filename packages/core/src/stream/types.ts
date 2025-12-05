@@ -168,7 +168,7 @@ interface ToolCallInputStreamingEndPayload {
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
-interface FinishPayload {
+interface FinishPayload<Tools extends ToolSet = ToolSet> {
   stepResult: {
     reason: LanguageModelV2FinishReason;
     warnings?: LanguageModelV2CallWarning[];
@@ -177,6 +177,8 @@ interface FinishPayload {
   };
   output: {
     usage: LanguageModelV2Usage;
+    /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
+    steps?: MastraStepResult<Tools>[];
   };
   metadata: {
     providerMetadata?: SharedV2ProviderMetadata;

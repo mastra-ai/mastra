@@ -413,8 +413,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
               // Check if this step has tripwire data (from DefaultStepResult in llm-execution-step)
-              // The current step is the last one in the steps array
-              // We use 'as any' because tripwire is our custom property not in AI SDK's StepResult type
+              // The current step is the last one in the steps array (MastraStepResult with tripwire field)
               const payloadSteps = chunk.payload.output?.steps || [];
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
@@ -555,8 +554,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               // This can happen when max retries is exceeded or a processor triggers a tripwire
               if ((chunk.payload.stepResult.reason as string) === 'tripwire') {
                 self.#tripwire = true;
-                // Try to get the tripwire reason from the last step's tripwire data
-                const outputSteps = (chunk.payload.output as any)?.steps;
+                // Try to get the tripwire reason from the last step's tripwire data (MastraStepResult)
+                const outputSteps = chunk.payload.output?.steps;
                 const lastStep = outputSteps?.[outputSteps?.length - 1];
                 self.#tripwireReason = lastStep?.tripwire?.message || 'Processor tripwire triggered';
               }
