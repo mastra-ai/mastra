@@ -933,9 +933,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             ? {
                 retryReason: processOutputStepTripwire.message,
                 retryMetadata: processOutputStepTripwire.options?.metadata,
-                retryProcessorId: processOutputStepTripwire.options?.metadata
-                  ? undefined
-                  : (processOutputStepTripwire as any).processorId,
+                retryProcessorId: processOutputStepTripwire.processorId,
               }
             : {}),
         },
