@@ -182,6 +182,7 @@
     "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
     "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
+    "generate:llm-docs": "pnpx tsx scripts/generate-llm-docs.ts",
     "generate:providers": "pnpx tsx scripts/generate-providers.ts",
     "generate:model-router": "pnpx tsx scripts/generate-providers.ts && pnpx tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
