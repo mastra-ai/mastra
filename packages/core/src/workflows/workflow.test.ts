@@ -3358,9 +3358,11 @@ describe('Workflow', () => {
       let calls = 0;
       const step1 = createStep({
         id: 'step1',
-        execute: async ({ state }) => {
+        execute: async ({ state, setState }) => {
           calls++;
-          return { result: 'success', value: state.value };
+          const newState = state.value + '!!!';
+          await setState({ value: newState });
+          return { result: 'success', value: newState };
         },
         inputSchema: z.object({}),
         outputSchema: z.object({ result: z.string(), value: z.string() }),
@@ -3390,16 +3392,20 @@ describe('Workflow', () => {
       const result = await run.start({
         inputData: {},
         initialState: { value: 'test-state', otherValue: 'test-other-state' },
+        outputOptions: {
+          includeState: true,
+        },
       });
 
       expect(calls).toBe(1);
       expect(result.steps['step1']).toEqual({
         status: 'success',
-        output: { result: 'success', value: 'test-state' },
+        output: { result: 'success', value: 'test-state!!!' },
         payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      expect(result.state).toEqual({ value: 'test-state!!!', otherValue: 'test-other-state' });
     });
 
     it('should execute a single step nested workflow successfully with state', async () => {
@@ -3469,7 +3475,7 @@ describe('Workflow', () => {
         id: 'step1',
         execute: async ({ state, setState }) => {
           calls++;
-          setState({ ...state, value: state.value + '!!!' });
+          await setState({ ...state, value: state.value + '!!!' });
           return {};
         },
         inputSchema: z.object({}),
@@ -4034,7 +4040,7 @@ describe('Workflow', () => {
               if (ctx.state.output > 1) {
                 return ctx.bail(bailResult);
               }
-              ctx.setState({ ...ctx.state, output: ctx.inputData });
+              await ctx.setState({ ...ctx.state, output: ctx.inputData });
               return ctx.inputData;
             },
           }),
@@ -4055,6 +4061,85 @@ describe('Workflow', () => {
       if (result.status === 'success') {
         expect(result.result).toEqual(bailResult);
       }
+    });
+
+    it('should properly update state when executing multiple steps in parallel', async () => {
+      const shareSchema = z.object({
+        name: z.string(),
+        age: z.number(),
+        test: z.string(),
+        random: z.string(),
+      });
+
+      const setSteps = createStep({
+        id: 'setSteps',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: shareSchema.pick({ test: true }),
+        execute: async ({ state, setState }) => {
+          const newState = { ...state, test: 'asdf' };
+          await setState(newState);
+          return {};
+        },
+      });
+
+      const workflow2 = createWorkflow({
+        id: 'workflow2',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: shareSchema.pick({ test: true }),
+      })
+        .then(setSteps)
+        .commit();
+
+      const step1 = createStep({
+        id: 'step1',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: shareSchema.pick({ name: true, age: true }),
+        execute: async ({ state, setState }) => {
+          const newState = { ...state, name: 'name', age: 18 };
+          await setState(newState);
+          return {};
+        },
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({}),
+        outputSchema: shareSchema,
+        stateSchema: shareSchema,
+        execute: async ({ state }) => {
+          return state;
+        },
+      });
+
+      const workflow1 = createWorkflow({
+        id: 'workflow1',
+        inputSchema: z.object({}),
+        outputSchema: shareSchema,
+        stateSchema: shareSchema,
+      })
+        .parallel([step1, setSteps])
+        .then(step2)
+        .commit();
+
+      const run = await workflow1.createRun();
+      const result = await run.start({
+        inputData: {},
+        initialState: {
+          name: '',
+          test: '',
+          age: 0,
+          random: 'random',
+        },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ name: 'name', age: 18, test: 'asdf', random: 'random' });
     });
 
     it('should have runId in the step execute function - bug #4260', async () => {
@@ -9951,7 +10036,7 @@ describe('Workflow', () => {
       const improveResponseAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend, state, setState }) => {
-          setState({ ...state, value: 'test state' });
+          await setState({ ...state, value: 'test state' });
           await suspend();
           return undefined;
         })
@@ -10939,7 +11024,7 @@ describe('Workflow', () => {
 
           if (!resumeData) {
             // First run: update state and suspend
-            setState({ ...state, count: state.count + 1, items: [...state.items, 'item-1'] });
+            await setState({ ...state, count: state.count + 1, items: [...state.items, 'item-1'] });
             await suspend({});
             return {};
           }

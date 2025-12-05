@@ -21,7 +21,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   requestContext: RequestContext;
   inputData: TStepInput;
   state: TState;
-  setState(state: TState): void;
+  setState(state: TState): Promise<void>;
   resumeData?: TResumeSchema;
   suspendData?: TSuspendSchema;
   retryCount: number;

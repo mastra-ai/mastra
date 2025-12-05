@@ -288,9 +288,7 @@ export async function executeConditional(
             requestContext,
             inputData: prevOutput,
             state: executionContext.state,
-            setState: (state: any) => {
-              executionContext.state = state;
-            },
+            setState: async (_state: any) => {},
             retryCount: -1,
             tracingContext: {
               currentSpan: evalSpan,
@@ -606,9 +604,7 @@ export async function executeLoop(
           requestContext,
           inputData: result.output,
           state: executionContext.state,
-          setState: (state: any) => {
-            executionContext.state = state;
-          },
+          setState: async (_state: any) => {},
           retryCount: -1,
           tracingContext: {
             currentSpan: evalSpan,
