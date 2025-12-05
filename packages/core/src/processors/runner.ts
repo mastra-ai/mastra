@@ -525,21 +525,28 @@ export class ProcessorRunner {
     args: RunProcessInputStepArgs<TOOLS>,
   ): Promise<RunProcessInputStepResult<TOOLS>> {
     const {
-      providerOptions,
-      // modelSettings,
+      providerOptions: initialProviderOptions,
+      modelSettings: initialModelSettings,
       // structuredOutput,
       messageList,
       stepNumber,
-      model,
+      model: initialModel,
       steps,
-      toolChoice,
-      activeTools,
+      toolChoice: initialToolChoice,
+      activeTools: initialActiveTools,
 
       tracingContext,
       requestContext,
     } = args;
 
     const stepInputResult: RunProcessInputStepResult<TOOLS> = {};
+
+    // Track accumulated values that chain through processors
+    let currentModel = initialModel;
+    let currentToolChoice = initialToolChoice;
+    let currentActiveTools = initialActiveTools;
+    let currentProviderOptions = initialProviderOptions;
+    let currentModelSettings = initialModelSettings;
 
     // Run through all input processors that have processInputStep
     for (const [index, processor] of this.inputProcessors.entries()) {
@@ -587,24 +594,27 @@ export class ProcessorRunner {
             tracingContext: { currentSpan: processorSpan },
             requestContext,
             steps,
-            toolChoice,
-            model,
-            activeTools,
+            toolChoice: currentToolChoice,
+            model: currentModel,
+            activeTools: currentActiveTools,
 
-            providerOptions,
-            // modelSettings, // TODO
+            providerOptions: currentProviderOptions,
+            modelSettings: currentModelSettings,
             // structuredOutput, // TODO -- also need to somehow make the result.object and objectStream types work?
           }),
           { messageList, processor, stepNumber },
         );
 
         if (result.model) {
+          currentModel = result.model;
           stepInputResult.model = result.model;
         }
         if (result.toolChoice) {
+          currentToolChoice = result.toolChoice;
           stepInputResult.toolChoice = result.toolChoice;
         }
         if (result.activeTools) {
+          currentActiveTools = result.activeTools;
           stepInputResult.activeTools = result.activeTools;
         }
         if (result.messages) {
@@ -614,7 +624,12 @@ export class ProcessorRunner {
           messageList.replaceAllSystemMessages(result.systemMessages);
         }
         if (result.providerOptions) {
+          currentProviderOptions = result.providerOptions;
           stepInputResult.providerOptions = result.providerOptions;
+        }
+        if (result.modelSettings) {
+          currentModelSettings = result.modelSettings;
+          stepInputResult.modelSettings = result.modelSettings;
         }
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();

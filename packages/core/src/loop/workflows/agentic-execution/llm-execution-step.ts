@@ -497,6 +497,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         let stepToolChoice = toolChoice;
         let stepTools = tools;
         let stepProviderOptions = providerOptions;
+        let stepModelSettings = modelSettings;
 
         const inputStepProcessors = [
           ...(inputProcessors || []),
@@ -521,6 +522,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               toolChoice: stepToolChoice,
               activeTools: Object.keys(stepTools || {}),
               providerOptions,
+              modelSettings,
             });
 
             if (processInputStepResult.model) {
@@ -537,6 +539,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             }
             if (processInputStepResult.providerOptions) {
               stepProviderOptions = processInputStepResult.providerOptions;
+            }
+            if (processInputStepResult.modelSettings) {
+              stepModelSettings = processInputStepResult.modelSettings;
             }
           } catch (error) {
             console.error('Error in processInputStep processors:', error);
@@ -568,7 +573,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                   tools: stepTools,
                   toolChoice: stepToolChoice,
                   options,
-                  modelSettings,
+                  modelSettings: stepModelSettings,
                   includeRawChunks,
                   structuredOutput,
                   headers,

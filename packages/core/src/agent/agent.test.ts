@@ -6696,6 +6696,54 @@ describe('Agent Tests', () => {
       expect(capturedProviderOptions).toBeDefined();
       expect(capturedProviderOptions?.anthropic?.cacheControl?.type).toBe('ephemeral');
     });
+
+    it('modelSettings can be modified via prepareStep', async () => {
+      let capturedOptions: any = null;
+
+      // Create a model that captures all options passed to doGenerate
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async options => {
+          // Capture the full options object to inspect modelSettings
+          capturedOptions = options;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test instructions',
+        model: mockModel,
+      });
+      agent.__setLogger(noopLogger);
+
+      await agent.generate('Hello', {
+        prepareStep: async ({ stepNumber }) => {
+          if (stepNumber === 0) {
+            return {
+              modelSettings: {
+                maxTokens: 500,
+                temperature: 0.7,
+              },
+            };
+          }
+        },
+      });
+
+      expect(capturedOptions).toBeDefined();
+      // ModelSettings are spread into the options passed to doGenerate
+      expect((capturedOptions as any)?.maxTokens).toBe(500);
+      expect((capturedOptions as any)?.temperature).toBe(0.7);
+    });
   });
 
   agentTests({ version: 'v1' });

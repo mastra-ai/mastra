@@ -41,6 +41,18 @@ describe('processInputStep', () => {
     threadId: 'test-thread',
   });
 
+  const createMockModel = (id: string = 'test-model') =>
+    ({
+      modelId: id,
+      specificationVersion: 'v2',
+      provider: 'test',
+      defaultObjectGenerationMode: 'json',
+      supportsImageUrls: false,
+      supportsStructuredOutputs: true,
+      doGenerate: async () => ({}),
+      doStream: async () => ({}),
+    }) as any;
+
   describe('processInput runs once', () => {
     it('processInput is called only once via runInputProcessors', async () => {
       let processInputCallCount = 0;
@@ -94,13 +106,15 @@ describe('processInputStep', () => {
       messageList.add([createMessage('test message')], 'input');
 
       const result = await runner.runProcessInputStep({
-        messages: messageList.get.all.db(),
         messageList,
         stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
       });
 
+      // runProcessInputStep now returns a result object, not MessageList
       expect(result).toBeDefined();
-      expect(result).toBeInstanceOf(MessageList);
+      expect(typeof result).toBe('object');
     });
   });
 
@@ -152,6 +166,8 @@ describe('processInputStep', () => {
       await runner.runProcessInputStep({
         messageList: messageList0,
         stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
       });
 
       // Simulate step 1 (after tool call)
@@ -198,6 +214,8 @@ describe('processInputStep', () => {
       await runner.runProcessInputStep({
         messageList: messageList1,
         stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
       });
 
       expect(processInputStepCallCount).toBe(2);
@@ -275,6 +293,8 @@ describe('processInputStep', () => {
       await runner.runProcessInputStep({
         messageList,
         stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
       });
 
       expect(transformationCount).toBe(1);
@@ -319,9 +339,177 @@ describe('processInputStep', () => {
       await runner.runProcessInputStep({
         messageList,
         stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
       });
 
       expect(executionOrder).toEqual(['processor-1', 'processor-2']);
+    });
+
+    it('should chain model changes through multiple processors', async () => {
+      const modelsSeenByEachProcessor: Array<{ processorId: string; modelId: string }> = [];
+
+      // Create mock models with identifiable IDs
+      const createMockModel = (id: string) =>
+        ({
+          modelId: id,
+          specificationVersion: 'v2',
+          provider: 'test',
+          defaultObjectGenerationMode: 'json',
+          supportsImageUrls: false,
+          supportsStructuredOutputs: true,
+          doGenerate: async () => ({}),
+          doStream: async () => ({}),
+        }) as any;
+
+      const initialModel = createMockModel('initial-model');
+      const modelFromProcessor1 = createMockModel('model-from-processor-1');
+      const modelFromProcessor2 = createMockModel('model-from-processor-2');
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ model }) => {
+          modelsSeenByEachProcessor.push({
+            processorId: 'processor-1',
+            modelId: model.modelId,
+          });
+          // Return a different model
+          return { model: modelFromProcessor1 };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async ({ model }) => {
+          modelsSeenByEachProcessor.push({
+            processorId: 'processor-2',
+            modelId: model.modelId,
+          });
+          // Return yet another model
+          return { model: modelFromProcessor2 };
+        },
+      };
+
+      const processor3: Processor = {
+        id: 'processor-3',
+        processInputStep: async ({ model }) => {
+          modelsSeenByEachProcessor.push({
+            processorId: 'processor-3',
+            modelId: model.modelId,
+          });
+          // Don't change the model, just observe
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2, processor3],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: initialModel,
+        steps: [],
+      });
+
+      // Verify what each processor saw
+      expect(modelsSeenByEachProcessor).toEqual([
+        { processorId: 'processor-1', modelId: 'initial-model' },
+        { processorId: 'processor-2', modelId: 'model-from-processor-1' },
+        { processorId: 'processor-3', modelId: 'model-from-processor-2' },
+      ]);
+
+      // Verify the final result has the last model
+      expect(result.model?.modelId).toBe('model-from-processor-2');
+    });
+
+    it('should chain providerOptions changes through multiple processors', async () => {
+      const providerOptionsSeenByEachProcessor: Array<{ processorId: string; options: any }> = [];
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ providerOptions }) => {
+          providerOptionsSeenByEachProcessor.push({
+            processorId: 'processor-1',
+            options: { ...providerOptions },
+          });
+          return {
+            providerOptions: {
+              ...providerOptions,
+              anthropic: { cacheControl: { type: 'ephemeral' } },
+            },
+          };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async ({ providerOptions }) => {
+          providerOptionsSeenByEachProcessor.push({
+            processorId: 'processor-2',
+            options: { ...providerOptions },
+          });
+          return {
+            providerOptions: {
+              ...providerOptions,
+              openai: { reasoningEffort: 'high' },
+            },
+          };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const mockModel = {
+        modelId: 'test-model',
+        specificationVersion: 'v2',
+        provider: 'test',
+      } as any;
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: mockModel,
+        steps: [],
+        providerOptions: { initial: { setting: true } },
+      });
+
+      // Verify processor1 saw the initial options
+      expect(providerOptionsSeenByEachProcessor[0]).toEqual({
+        processorId: 'processor-1',
+        options: { initial: { setting: true } },
+      });
+
+      // Verify processor2 saw the options modified by processor1
+      expect(providerOptionsSeenByEachProcessor[1]).toEqual({
+        processorId: 'processor-2',
+        options: {
+          initial: { setting: true },
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        },
+      });
+
+      // Verify the final result has both modifications
+      expect(result.providerOptions).toEqual({
+        initial: { setting: true },
+        anthropic: { cacheControl: { type: 'ephemeral' } },
+        openai: { reasoningEffort: 'high' },
+      });
     });
   });
 
@@ -358,6 +546,8 @@ describe('processInputStep', () => {
       await runner.runProcessInputStep({
         messageList,
         stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
       });
 
       // Simulate tool call/result between steps
@@ -396,6 +586,8 @@ describe('processInputStep', () => {
       await runner.runProcessInputStep({
         messageList,
         stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
       });
 
       expect(executionLog).toEqual(['processInput', 'processInputStep-0', 'processInputStep-1']);
@@ -435,6 +627,8 @@ describe('processInputStep', () => {
       await runner.runProcessInputStep({
         messageList,
         stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
       });
 
       expect(executionLog).toEqual(['input-only-processInput', 'step-only-processInputStep-0']);

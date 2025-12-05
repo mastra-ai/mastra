@@ -14,29 +14,33 @@ This enables:
 
 ### Processor Pipeline
 
-When multiple `inputProcessors` are provided, they run **in order**. Each processor can modify the step configuration, and changes accumulate:
+When multiple `inputProcessors` are provided, they run **in order**. Each processor can modify the step configuration, and changes **chain through** - each processor receives the accumulated state from previous processors:
 
 ```
 Step N starts
     │
     ▼
 ┌─────────────────────┐
-│ Processor 1         │ ─── can modify: model, toolChoice, activeTools, messages
-│ processInputStep()  │
+│ Processor 1         │ ─── can modify: model, toolChoice, activeTools, messages,
+│ processInputStep()  │     systemMessages, providerOptions, modelSettings
 └─────────────────────┘
     │ result merged into stepInputResult
+    │ next processor receives updated values
     ▼
 ┌─────────────────────┐
-│ Processor 2         │ ─── receives updated state from Processor 1
+│ Processor 2         │ ─── receives model/toolChoice/etc modified by Processor 1
 │ processInputStep()  │
 └─────────────────────┘
     │ result merged into stepInputResult
+    │ next processor receives updated values
     ▼
     ... more processors ...
     │
     ▼
 LLM invoked with final stepInputResult
 ```
+
+**Chaining behavior**: If Processor 1 returns `{ model: modelA }`, then Processor 2 will receive `model: modelA` in its args (not the original model). This allows processors to build on each other's modifications.
 
 ### prepareStep Integration
 
@@ -294,7 +298,7 @@ class ReasoningTransformer implements Processor {
 ## TODO Items
 
 1. ~~**providerOptions support**: Pass through and allow modification~~ ✅ Implemented
-2. ~~**modelSettings support**: Pass through and allow modification~~ ✅ Implemented
+2. ~~**modelSettings support**: Pass through and allow modification~~ ✅ Implemented (including proper chaining through multiple processors)
 3. **structuredOutput support**: Partially implemented - can be passed and returned, but:
    - If a processor changes `structuredOutput` to a different schema, the `OUTPUT` type changes
    - This affects the return type of `result.object` and `objectStream`
@@ -320,7 +324,7 @@ return createStep({
       messageList.replaceAllSystemMessages(initialSystemMessages);
     }
     // ... then run processors
-  }
+  },
 });
 ```
 
@@ -329,32 +333,28 @@ return createStep({
 There are two ways to modify system messages in `processInputStep`/`prepareStep`:
 
 1. **Return `{ systemMessages }` to REPLACE all system messages**:
+
    ```typescript
    prepareStep: async ({ systemMessages }) => {
      return {
-       systemMessages: [
-         ...systemMessages,
-         { role: 'system', content: 'Additional instruction for this step' }
-       ]
+       systemMessages: [...systemMessages, { role: 'system', content: 'Additional instruction for this step' }],
      };
-   }
+   };
    ```
 
 2. **Include system messages in returned `messages[]` array to ADD**:
    ```typescript
    prepareStep: async ({ messages }) => {
      return {
-       messages: [
-         ...messages,
-         { role: 'system', content: 'This gets added via addSystem()' }
-       ]
+       messages: [...messages, { role: 'system', content: 'This gets added via addSystem()' }],
      };
-   }
+   };
    ```
 
 ### Consistency with processInput
 
 Both `processInput` and `processInputStep` handle system messages the same way:
+
 - `{ systemMessages }` in result → **replaces** all system messages
 - System role messages in `messages[]` array → **adds** via `messageList.addSystem()`
 
