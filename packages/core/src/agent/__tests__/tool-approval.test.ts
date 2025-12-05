@@ -520,9 +520,6 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           instructions: 'You are an agent that can get list of users using findUserWorkflow.',
           model: openaiModel,
           workflows: { findUserWorkflow },
-          defaultOptions: {
-            autoResumeSuspendedTools: true,
-          },
         });
 
         const mastra = new Mastra({
@@ -534,7 +531,9 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('userAgent');
 
         let toolCall;
-        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        const stream = await agentOne.stream('Find the user with name - Dero Israel', {
+          autoResumeSuspendedTools: true,
+        });
         const suspendData = {
           suspendPayload: null,
           suspendedToolName: '',
