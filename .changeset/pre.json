@@ -83,7 +83,28 @@
     "@mastra/inngest": "0.18.5"
   },
   "changesets": [
+    "add-custom-fetch-support",
+    "blue-pigs-mix",
+    "bright-tigers-fly",
+    "calm-teams-learn",
+    "chilly-ties-stare",
+    "eight-carrots-strive",
+    "emit-workflow-error-chunks",
+    "fair-needles-greet",
+    "fix-cloud-install-peer-deps",
+    "fuzzy-stars-make",
+    "good-walls-warn",
+    "grumpy-onions-wonder",
+    "kind-zebras-rest",
     "moody-donkeys-argue",
-    "petite-flies-dream"
+    "olive-chairs-bow",
+    "petite-flies-dream",
+    "ready-carpets-unite",
+    "slow-ways-live",
+    "thick-stars-win",
+    "tired-comics-tickle",
+    "violet-candies-cough",
+    "warm-dryers-switch",
+    "warm-dryers-switches"
   ]
 }
