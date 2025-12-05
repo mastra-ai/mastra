@@ -180,7 +180,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1166+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 58+ AI providers and 1151+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -222,10 +222,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Moonshot AI | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai): Use Moonshot AI models with Mastra. 5 models available.
 - [Morph | Models | Mastra](https://mastra.ai/en/models/providers/morph): Use Morph models with Mastra. 3 models available.
 - [Nebius Token Factory | Models | Mastra](https://mastra.ai/en/models/providers/nebius): Use Nebius Token Factory models with Mastra. 15 models available.
-- [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 20 models available.
+- [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 21 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
-- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 35 models available.
-- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 21 models available.
+- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 36 models available.
+- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 22 models available.
 - [OVHcloud AI Endpoints | Models | Mastra](https://mastra.ai/en/models/providers/ovhcloud): Use OVHcloud AI Endpoints models with Mastra. 15 models available.
 - [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 4 models available.
 - [Poe | Models | Mastra](https://mastra.ai/en/models/providers/poe): Use Poe models with Mastra. 100 models available.
@@ -233,7 +233,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Scaleway | Models | Mastra](https://mastra.ai/en/models/providers/scaleway): Use Scaleway models with Mastra. 13 models available.
 - [SiliconFlow | Models | Mastra](https://mastra.ai/en/models/providers/siliconflow): Use SiliconFlow models with Mastra. 72 models available.
 - [submodel | Models | Mastra](https://mastra.ai/en/models/providers/submodel): Use submodel models with Mastra. 9 models available.
-- [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 23 models available.
+- [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 24 models available.
 - [Together AI | Models | Mastra](https://mastra.ai/en/models/providers/togetherai): Use Together AI models with Mastra. 6 models available.
 - [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 2 models available.
 - [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 17 models available.
@@ -265,6 +265,13 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Agent.listTools() | Agents](https://mastra.ai/en/reference/agents/listTools): Documentation for the `Agent.listTools()` method in Mastra agents, which retrieves the tools that the agent can use.
 - [Reference: Agent.listWorkflows() | Agents](https://mastra.ai/en/reference/agents/listWorkflows): Documentation for the `Agent.listWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute.
 - [Reference: Agent.network() | Agents](https://mastra.ai/en/reference/agents/network): Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing.
+- [Reference: chatRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/chat-route): API reference for chatRoute(), a function to create chat route handlers for streaming agent conversations in AI SDK-compatible format.
+- [Reference: handleChatStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/handle-chat-stream): API reference for handleChatStream(), a framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
+- [Reference: handleNetworkStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/handle-network-stream): API reference for handleNetworkStream(), a framework-agnostic handler for streaming network execution in AI SDK-compatible format.
+- [Reference: handleWorkflowStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/handle-workflow-stream): API reference for handleWorkflowStream(), a framework-agnostic handler for streaming workflow execution in AI SDK-compatible format.
+- [Reference: networkRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/network-route): API reference for networkRoute(), a function to create network route handlers for streaming network execution in AI SDK-compatible format.
+- [Reference: toAISdkStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/to-ai-sdk-stream): API reference for toAISdkStream(), a function to convert Mastra streams to AI SDK-compatible streams.
+- [Reference: workflowRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/workflow-route): API reference for workflowRoute(), a function to create workflow route handlers for streaming workflow execution in AI SDK-compatible format.
 - [Reference: MastraAuthAuth0 Class | Auth](https://mastra.ai/en/reference/auth/auth0): API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.
 - [Reference: MastraAuthClerk Class | Auth](https://mastra.ai/en/reference/auth/clerk): API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.
 - [Reference: MastraAuthFirebase Class | Auth](https://mastra.ai/en/reference/auth/firebase): API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication.
