@@ -11,9 +11,10 @@ import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/w
 import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { findNativePackageModule } from './utils';
+import { findNativePackageModule, isDependencyPartOfPackage } from './utils';
+import { GLOBAL_EXTERNALS } from './analyze/constants';
+import { getPackageInfo } from 'local-pkg';
 
 type ErrorId = 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD';
 
@@ -211,8 +212,12 @@ If you think your configuration is valid, please open an issue.`);
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
 
+  const { externals: customExternals = [] } = bundlerOptions || {};
+  const allExternals = [...GLOBAL_EXTERNALS, ...customExternals];
+
   logger.info('Analyzing dependencies...');
 
+  const allUsedExternals = new Set<string>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
@@ -228,6 +233,12 @@ If you think your configuration is valid, please open an issue.`);
 
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
+      const isPartOfExternals = allExternals.some(external => isDependencyPartOfPackage(dep, external));
+      if (isPartOfExternals) {
+        allUsedExternals.add(dep);
+        continue;
+      }
+
       if (depsToOptimize.has(dep)) {
         // Merge with existing exports if dependency already exists
         const existingEntry = depsToOptimize.get(dep)!;
@@ -252,18 +263,14 @@ If you think your configuration is valid, please open an issue.`);
     }
   }
 
-  logger.debug(`Analyzed dependencies: ${Array.from(depsToOptimize.keys()).join(', ')}`);
-
+  const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
-  logger.debug(
-    `${Array.from(depsToOptimize.keys())
-      .map(key => `- ${key}`)
-      .join('\n')}`,
-  );
+  logger.debug(`${sortedDeps.map(key => `- ${key}`).join('\n')}`);
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
       ...bundlerOptions,
+      externals: allExternals,
       enableEsmShim,
       isDev,
     },
@@ -284,5 +291,8 @@ If you think your configuration is valid, please open an issue.`);
     logger,
   );
 
-  return result;
+  return {
+    ...result,
+    externalDependencies: new Set([...result.externalDependencies, ...Array.from(allUsedExternals)]),
+  };
 }

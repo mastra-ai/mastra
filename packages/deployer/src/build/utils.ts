@@ -13,6 +13,14 @@ export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   }
 }
 
+export function isDependencyPartOfPackage(dep: string, packageName: string) {
+  if (dep === packageName) {
+    return true;
+  }
+
+  return dep.startsWith(`${packageName}/`);
+}
+
 /**
  * Get the package name from a module ID
  */
