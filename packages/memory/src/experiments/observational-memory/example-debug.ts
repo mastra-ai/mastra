@@ -8,6 +8,7 @@ import { Agent } from '@mastra/core/agent';
 import { InMemoryMemory } from '@mastra/core/storage';
 import { MessageHistory } from '@mastra/memory';
 import { ObservationalMemory } from './observational-memory';
+import { TokenCounter } from './token-counter';
 
 // Create shared storage for both Memory and OM
 const storage = new InMemoryMemory({
@@ -76,7 +77,7 @@ async function chat(message: string, label: string) {
   console.log(`   - Has observations: ${record?.activeObservations ? 'YES ✅' : 'NO'}`);
   console.log(`   - Observed msg IDs: ${record?.observedMessageIds.length || 0}`);
   console.log(`   - Observation tokens: ${record?.observationTokenCount || 0}`);
-  console.log(`   - Generation: ${record?.generationNumber || 0}`);
+  console.log(`   - Reflections: ${record?.metadata?.reflectionCount || 0}`);
 
   return response;
 }
@@ -132,9 +133,8 @@ async function main() {
   const record = await om.getRecord(threadId, resourceId);
   console.log(`   Observed message IDs: ${record?.observedMessageIds.length || 0}`);
   console.log(`   Observation tokens: ${record?.observationTokenCount || 0}`);
-  console.log(
-    `   Generation: ${record?.generationNumber || 0} ${record?.generationNumber ? '(reflection occurred!)' : ''}`,
-  );
+  const reflections = record?.metadata?.reflectionCount || 0;
+  console.log(`   Reflections: ${reflections} ${reflections > 0 ? '(reflection occurred!)' : ''}`);
 
   const observations = await om.getObservations(threadId, resourceId);
   if (observations) {
@@ -219,7 +219,72 @@ async function main() {
   console.log('\n📊 FINAL OM STATS:');
   console.log(`   - Total observed messages: ${finalRecord?.observedMessageIds.length || 0}`);
   console.log(`   - Final observation tokens: ${finalRecord?.observationTokenCount || 0}`);
-  console.log(`   - Reflection generations: ${finalRecord?.generationNumber || 0}`);
+  console.log(`   - Reflections: ${finalRecord?.metadata?.reflectionCount || 0}`);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // TOKEN COMPARISON: Message History vs Observational Memory
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('\n' + '═'.repeat(70));
+  console.log('💰 TOKEN USAGE COMPARISON');
+  console.log('═'.repeat(70));
+
+  const tokenCounter = createTokenCounter();
+
+  // Get all messages from storage (what MessageHistory would load)
+  const allMessages = await storage.listMessages({
+    threadId,
+    page: 0,
+    perPage: 1000,
+    orderBy: { field: 'createdAt', direction: 'ASC' },
+  });
+
+  // Count tokens for full message history
+  const fullHistoryTokens = tokenCounter.countMessages(allMessages.messages);
+
+  // Count tokens for OM approach (observations + unobserved messages)
+  const observationTokens = finalRecord?.observationTokenCount || 0;
+  const observedMessageIds = new Set(finalRecord?.observedMessageIds || []);
+  const unobservedMessages = allMessages.messages.filter(m => !observedMessageIds.has(m.id));
+  const unobservedTokens = tokenCounter.countMessages(unobservedMessages);
+  const omTotalTokens = observationTokens + unobservedTokens;
+
+  // Calculate savings
+  const tokensSaved = fullHistoryTokens - omTotalTokens;
+  const savingsPercent = fullHistoryTokens > 0 ? Math.round((tokensSaved / fullHistoryTokens) * 100) : 0;
+
+  console.log('\n📊 Without OM (full message history):');
+  console.log(`   - Total messages: ${allMessages.messages.length}`);
+  console.log(`   - Total tokens: ${fullHistoryTokens.toLocaleString()}`);
+
+  console.log('\n📊 With OM (observations + unobserved):');
+  console.log(`   - Observation tokens: ${observationTokens.toLocaleString()}`);
+  console.log(`   - Unobserved messages: ${unobservedMessages.length}`);
+  console.log(`   - Unobserved tokens: ${unobservedTokens.toLocaleString()}`);
+  console.log(`   - Total tokens: ${omTotalTokens.toLocaleString()}`);
+
+  console.log('\n💰 SAVINGS:');
+  console.log(`   - Tokens saved: ${tokensSaved.toLocaleString()} (${savingsPercent}%)`);
+
+  if (savingsPercent > 50) {
+    console.log(`\n🎉 EXCELLENT! OM saved over ${savingsPercent}% of tokens!`);
+  } else if (savingsPercent > 20) {
+    console.log(`\n✨ GOOD! OM saved ${savingsPercent}% of tokens.`);
+  } else if (savingsPercent > 0) {
+    console.log(`\n👍 OM saved ${savingsPercent}% of tokens (savings grow with longer conversations).`);
+  } else {
+    console.log(`\n📈 OM hasn't saved tokens yet (savings appear after more observations).`);
+  }
+
+  // Show what would happen with even more messages
+  console.log('\n📈 PROJECTION (if conversation continued):');
+  const projectedMessages = allMessages.messages.length * 3;
+  const projectedFullTokens = fullHistoryTokens * 3;
+  const projectedOMTokens = observationTokens + unobservedTokens; // Observations don't grow linearly!
+  const projectedSavings = Math.round(((projectedFullTokens - projectedOMTokens) / projectedFullTokens) * 100);
+  console.log(`   - With ${projectedMessages} messages:`);
+  console.log(`     • Full history: ~${projectedFullTokens.toLocaleString()} tokens`);
+  console.log(`     • With OM: ~${projectedOMTokens.toLocaleString()} tokens`);
+  console.log(`     • Projected savings: ~${projectedSavings}%`);
 }
 
 main().catch(console.error);
