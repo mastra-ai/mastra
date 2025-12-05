@@ -591,4 +591,271 @@ describe('Knowledge', () => {
       expect(graph.getNodes().length).toBe(2);
     });
   });
+
+  // ============================================
+  // High-Level API Tests
+  // ============================================
+
+  describe('addDocuments (High-Level API)', () => {
+    it('throws error for empty documents array', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      expect(() => kb.addDocuments([])).toThrow('Documents array must not be empty');
+    });
+
+    it('adds documents with auto-generated IDs', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addDocuments([
+        { text: 'First document', embedding: [1, 0, 0] },
+        { text: 'Second document', embedding: [0, 1, 0] },
+      ]);
+      expect(kb.getNodes().length).toBe(2);
+      // All nodes should have UUIDs as IDs
+      for (const node of kb.getNodes()) {
+        expect(node.id).toMatch(/^[0-9a-f-]{36}$/);
+      }
+    });
+
+    it('uses provided IDs when specified', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addDocuments([
+        { id: 'doc-1', text: 'First document', embedding: [1, 0, 0] },
+        { id: 'doc-2', text: 'Second document', embedding: [0, 1, 0] },
+      ]);
+      expect(kb.getNode('doc-1')).toBeDefined();
+      expect(kb.getNode('doc-2')).toBeDefined();
+    });
+
+    it('uses default node type of "document"', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addDocuments([{ text: 'Test', embedding: [1, 2, 3] }]);
+      expect(kb.getNodes()[0]?.type).toBe('document');
+    });
+
+    it('uses custom node type when specified', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addDocuments([{ text: 'Test', embedding: [1, 2, 3] }], { nodeType: 'article' });
+      expect(kb.getNodes()[0]?.type).toBe('article');
+    });
+
+    it('creates edges by default with 0.7 threshold', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      // Two very similar vectors should create an edge
+      kb.addDocuments([
+        { text: 'A', embedding: [1, 0, 0] },
+        { text: 'B', embedding: [0.95, 0.05, 0] }, // Very similar to A
+      ]);
+      expect(kb.getEdges().length).toBeGreaterThan(0);
+    });
+
+    it('respects custom similarity threshold', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      // With threshold of 0.99, these should NOT create an edge
+      // [1, 0, 0] and [0.7, 0.7, 0] have cosine similarity ~0.71
+      kb.addDocuments(
+        [
+          { text: 'A', embedding: [1, 0, 0] },
+          { text: 'B', embedding: [0.7, 0.7, 0] },
+        ],
+        { similarityThreshold: 0.99 },
+      );
+      expect(kb.getEdges().length).toBe(0);
+    });
+
+    it('does not create edges when createEdges is false', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addDocuments(
+        [
+          { text: 'A', embedding: [1, 0, 0] },
+          { text: 'B', embedding: [1, 0, 0] }, // Identical - would normally create edge
+        ],
+        { createEdges: false },
+      );
+      expect(kb.getEdges().length).toBe(0);
+    });
+
+    it('stores text in node properties', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addDocuments([{ text: 'Hello world', embedding: [1, 2, 3] }]);
+      const node = kb.getNodes()[0];
+      expect(node?.properties?.text).toBe('Hello world');
+    });
+
+    it('preserves metadata in node properties', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addDocuments([{ text: 'Test', embedding: [1, 2, 3], metadata: { source: 'file.pdf', page: 5 } }]);
+      const node = kb.getNodes()[0];
+      expect(node?.properties?.source).toBe('file.pdf');
+      expect(node?.properties?.page).toBe(5);
+    });
+  });
+
+  describe('addFact (High-Level API)', () => {
+    it('throws error for missing required fields', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      expect(() => kb.addFact({ subject: '', predicate: 'is', object: 'test' })).toThrow(
+        'Fact must have subject, predicate, and object',
+      );
+      expect(() => kb.addFact({ subject: 'test', predicate: '', object: 'test' })).toThrow(
+        'Fact must have subject, predicate, and object',
+      );
+      expect(() => kb.addFact({ subject: 'test', predicate: 'is', object: '' })).toThrow(
+        'Fact must have subject, predicate, and object',
+      );
+    });
+
+    it('creates nodes and edge for a new fact', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      const result = kb.addFact({
+        subject: 'TypeScript',
+        predicate: 'extends',
+        object: 'JavaScript',
+      });
+
+      expect(result.subjectCreated).toBe(true);
+      expect(result.objectCreated).toBe(true);
+      expect(result.subjectNode.properties?.name).toBe('TypeScript');
+      expect(result.objectNode.properties?.name).toBe('JavaScript');
+      expect(result.edge.type).toBe('extends');
+      expect(result.edge.source).toBe(result.subjectNode.id);
+      expect(result.edge.target).toBe(result.objectNode.id);
+    });
+
+    it('reuses existing entity nodes', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+
+      // Add first fact
+      const result1 = kb.addFact({
+        subject: 'TypeScript',
+        predicate: 'extends',
+        object: 'JavaScript',
+      });
+
+      // Add second fact with same subject
+      const result2 = kb.addFact({
+        subject: 'TypeScript',
+        predicate: 'has',
+        object: 'Type System',
+      });
+
+      expect(result2.subjectCreated).toBe(false);
+      expect(result2.objectCreated).toBe(true);
+      expect(result2.subjectNode.id).toBe(result1.subjectNode.id);
+      expect(kb.getNodes().length).toBe(3); // TypeScript, JavaScript, Type System
+    });
+
+    it('creates entity nodes with type "entity"', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addFact({ subject: 'A', predicate: 'relates_to', object: 'B' });
+
+      const nodes = kb.getNodes();
+      expect(nodes.every(n => n.type === 'entity')).toBe(true);
+    });
+
+    it('uses default weight of 1.0', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      const result = kb.addFact({ subject: 'A', predicate: 'relates_to', object: 'B' });
+      expect(result.edge.weight).toBe(1.0);
+    });
+
+    it('uses custom weight when specified', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      const result = kb.addFact({ subject: 'A', predicate: 'relates_to', object: 'B', weight: 0.5 });
+      expect(result.edge.weight).toBe(0.5);
+    });
+
+    it('includes additional properties on nodes', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      const result = kb.addFact({
+        subject: 'TypeScript',
+        predicate: 'extends',
+        object: 'JavaScript',
+        subjectProperties: { version: '5.0', year: 2023 },
+        objectProperties: { year: 1995 },
+      });
+
+      expect(result.subjectNode.properties?.version).toBe('5.0');
+      expect(result.subjectNode.properties?.year).toBe(2023);
+      expect(result.objectNode.properties?.year).toBe(1995);
+    });
+
+    it('includes edge properties when specified', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      const result = kb.addFact({
+        subject: 'A',
+        predicate: 'relates_to',
+        object: 'B',
+        edgeProperties: { confidence: 0.9, source: 'manual' },
+      });
+
+      expect(result.edge.properties?.confidence).toBe(0.9);
+      expect(result.edge.properties?.source).toBe('manual');
+    });
+
+    it('creates directed edges (no reverse edge)', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addFact({ subject: 'A', predicate: 'parent_of', object: 'B' });
+
+      // Should only have 1 edge (no reverse)
+      expect(kb.getEdges().length).toBe(1);
+    });
+  });
+
+  describe('findEntityByName (High-Level API)', () => {
+    it('returns undefined for non-existent entity', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      expect(kb.findEntityByName('NonExistent')).toBeUndefined();
+    });
+
+    it('finds entity by name', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addFact({ subject: 'TypeScript', predicate: 'is', object: 'Language' });
+
+      const entity = kb.findEntityByName('TypeScript');
+      expect(entity).toBeDefined();
+      expect(entity?.properties?.name).toBe('TypeScript');
+    });
+
+    it('returns first match if multiple nodes have same name', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addFact({ subject: 'Test', predicate: 'is', object: 'Thing' });
+
+      const entity = kb.findEntityByName('Test');
+      expect(entity).toBeDefined();
+    });
+  });
+
+  describe('getFactsAbout (High-Level API)', () => {
+    it('returns empty array for non-existent entity', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      expect(kb.getFactsAbout('NonExistent')).toEqual([]);
+    });
+
+    it('returns all facts where entity is subject', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addFact({ subject: 'TypeScript', predicate: 'extends', object: 'JavaScript' });
+      kb.addFact({ subject: 'TypeScript', predicate: 'has', object: 'Types' });
+      kb.addFact({ subject: 'Python', predicate: 'is', object: 'Language' });
+
+      const facts = kb.getFactsAbout('TypeScript');
+      expect(facts.length).toBe(2);
+    });
+
+    it('returns all facts where entity is object', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addFact({ subject: 'TypeScript', predicate: 'extends', object: 'JavaScript' });
+      kb.addFact({ subject: 'CoffeeScript', predicate: 'compiles_to', object: 'JavaScript' });
+
+      const facts = kb.getFactsAbout('JavaScript');
+      expect(facts.length).toBe(2);
+    });
+
+    it('returns facts where entity is both subject and object', () => {
+      const kb = new Knowledge({ name: 'TestKB' });
+      kb.addFact({ subject: 'A', predicate: 'relates_to', object: 'B' });
+      kb.addFact({ subject: 'B', predicate: 'relates_to', object: 'C' });
+
+      const facts = kb.getFactsAbout('B');
+      expect(facts.length).toBe(2);
+    });
+  });
 });

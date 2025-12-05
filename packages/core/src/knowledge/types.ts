@@ -117,3 +117,71 @@ export interface KnowledgeBaseConfig {
   schema?: KnowledgeSchema;
   options?: KnowledgeOptions;
 }
+
+// ============================================
+// High-Level API Types
+// ============================================
+
+/**
+ * A document chunk for the high-level addDocuments API.
+ * Simpler than GraphChunk - focuses on what users typically have.
+ */
+export interface DocumentChunk {
+  /** Optional ID - will be auto-generated if not provided */
+  id?: string;
+  /** The text content of the chunk */
+  text: string;
+  /** The embedding vector for similarity search */
+  embedding: number[];
+  /** Optional metadata about the chunk */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Options for adding documents via the high-level API.
+ */
+export interface AddDocumentsOptions {
+  /** Node type to assign to document nodes (default: 'document') */
+  nodeType?: string;
+  /** Similarity threshold for automatic edge creation (default: 0.7) */
+  similarityThreshold?: number;
+  /** Whether to create edges between similar documents (default: true) */
+  createEdges?: boolean;
+}
+
+/**
+ * A fact represented as a subject-predicate-object triple.
+ * This is the standard RDF-style knowledge representation.
+ */
+export interface Fact {
+  /** The subject entity (e.g., "TypeScript") */
+  subject: string;
+  /** The relationship/predicate (e.g., "is_a", "extends", "has") */
+  predicate: string;
+  /** The object entity (e.g., "Programming Language") */
+  object: string;
+  /** Optional properties for the subject entity */
+  subjectProperties?: Record<string, unknown>;
+  /** Optional properties for the object entity */
+  objectProperties?: Record<string, unknown>;
+  /** Optional properties for the relationship edge */
+  edgeProperties?: Record<string, unknown>;
+  /** Optional weight for the relationship (default: 1.0) */
+  weight?: number;
+}
+
+/**
+ * Result from adding a fact, containing the created/updated entities.
+ */
+export interface AddFactResult {
+  /** The subject node (created or existing) */
+  subjectNode: KnowledgeNode;
+  /** The object node (created or existing) */
+  objectNode: KnowledgeNode;
+  /** The edge representing the predicate */
+  edge: KnowledgeEdge;
+  /** Whether the subject node was newly created */
+  subjectCreated: boolean;
+  /** Whether the object node was newly created */
+  objectCreated: boolean;
+}

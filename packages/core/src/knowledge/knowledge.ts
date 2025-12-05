@@ -12,6 +12,10 @@ import type {
   AddNodesFromChunksEdgeOptions,
   QueryOptions,
   KnowledgeBaseConfig,
+  DocumentChunk,
+  AddDocumentsOptions,
+  Fact,
+  AddFactResult,
 } from './types';
 
 /**
@@ -102,4 +106,71 @@ export abstract class MastraKnowledge extends MastraBase {
   // --- Serialization ---
 
   abstract serialize(): string;
+
+  // ============================================
+  // High-Level API
+  // ============================================
+
+  /**
+   * Add documents to the knowledge base with automatic node and edge creation.
+   *
+   * This is the primary high-level method for ingesting document chunks.
+   * It automatically:
+   * - Creates nodes for each document chunk
+   * - Generates unique IDs if not provided
+   * - Creates edges between similar documents based on cosine similarity
+   *
+   * @param chunks - Array of document chunks to add
+   * @param options - Optional configuration for document ingestion
+   *
+   * @example
+   * ```typescript
+   * await knowledge.addDocuments([
+   *   { text: 'AI is transforming...', embedding: [...] },
+   *   { text: 'Machine learning...', embedding: [...] }
+   * ]);
+   * ```
+   */
+  abstract addDocuments(chunks: DocumentChunk[], options?: AddDocumentsOptions): void;
+
+  /**
+   * Add a fact (subject-predicate-object triple) to the knowledge base.
+   *
+   * This method provides a semantic way to add structured knowledge.
+   * It automatically:
+   * - Creates or finds existing entity nodes for subject and object
+   * - Creates an edge with the predicate as the relationship type
+   * - Deduplicates entities by name
+   *
+   * @param fact - The fact to add (subject-predicate-object)
+   * @returns Information about the created/updated entities
+   *
+   * @example
+   * ```typescript
+   * const result = knowledge.addFact({
+   *   subject: 'TypeScript',
+   *   predicate: 'extends',
+   *   object: 'JavaScript'
+   * });
+   * ```
+   */
+  abstract addFact(fact: Fact): AddFactResult;
+
+  /**
+   * Find an entity node by its name.
+   *
+   * Useful for checking if an entity already exists before adding facts.
+   *
+   * @param name - The entity name to search for
+   * @returns The matching node or undefined
+   */
+  abstract findEntityByName(name: string): KnowledgeNode | undefined;
+
+  /**
+   * Get all facts (edges) related to a specific entity.
+   *
+   * @param entityName - The name of the entity
+   * @returns Array of edges where the entity is either source or target
+   */
+  abstract getFactsAbout(entityName: string): KnowledgeEdge[];
 }

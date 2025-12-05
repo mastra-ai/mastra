@@ -6,13 +6,16 @@ import {
   type KnowledgeEdge,
   type KnowledgeData,
   type KnowledgeSchema,
-  type KnowledgeOptions,
   type SupportedEdgeType,
   type GraphChunk,
   type RankedNode,
   type AddNodesFromChunksEdgeOptions,
   type QueryOptions,
   type KnowledgeBaseConfig,
+  type DocumentChunk,
+  type AddDocumentsOptions,
+  type Fact,
+  type AddFactResult,
 } from '@mastra/core/knowledge';
 
 /**
@@ -491,5 +494,136 @@ export class Knowledge extends MastraKnowledge {
       current = (current as Record<string, unknown>)[part];
     }
     return true;
+  }
+
+  // ============================================
+  // High-Level API
+  // ============================================
+
+  /**
+   * Add documents to the knowledge base with automatic node and edge creation.
+   *
+   * This is the primary high-level method for ingesting document chunks.
+   * It delegates to the low-level addNodesFromChunks method with sensible defaults.
+   */
+  addDocuments(chunks: DocumentChunk[], options?: AddDocumentsOptions): void {
+    if (!chunks || chunks.length === 0) {
+      throw new Error('Documents array must not be empty');
+    }
+
+    const nodeType = options?.nodeType ?? 'document';
+    const similarityThreshold = options?.similarityThreshold ?? 0.7;
+    const createEdges = options?.createEdges ?? true;
+
+    // Convert DocumentChunk to GraphChunk format
+    const graphChunks: GraphChunk[] = chunks.map(chunk => ({
+      id: chunk.id ?? randomUUID(),
+      text: chunk.text,
+      embedding: chunk.embedding,
+      metadata: {
+        text: chunk.text,
+        ...chunk.metadata,
+      },
+    }));
+
+    // Delegate to the low-level method
+    this.addNodesFromChunks({
+      chunks: graphChunks,
+      nodeType,
+      edgeOptions: createEdges
+        ? { strategy: 'cosine', threshold: similarityThreshold, edgeType: 'semantic' }
+        : { strategy: 'explicit', edges: [] },
+    });
+  }
+
+  /**
+   * Add a fact (subject-predicate-object triple) to the knowledge base.
+   *
+   * This method creates or finds entity nodes and creates an edge between them.
+   */
+  addFact(fact: Fact): AddFactResult {
+    if (!fact.subject || !fact.predicate || !fact.object) {
+      throw new Error('Fact must have subject, predicate, and object');
+    }
+
+    let subjectCreated = false;
+    let objectCreated = false;
+
+    // Find or create subject node
+    let subjectNode = this.findEntityByName(fact.subject);
+    if (!subjectNode) {
+      subjectNode = {
+        id: randomUUID(),
+        type: 'entity',
+        properties: {
+          name: fact.subject,
+          ...fact.subjectProperties,
+        },
+        createdAt: new Date().toISOString(),
+      };
+      this.addNode(subjectNode);
+      subjectCreated = true;
+    }
+
+    // Find or create object node
+    let objectNode = this.findEntityByName(fact.object);
+    if (!objectNode) {
+      objectNode = {
+        id: randomUUID(),
+        type: 'entity',
+        properties: {
+          name: fact.object,
+          ...fact.objectProperties,
+        },
+        createdAt: new Date().toISOString(),
+      };
+      this.addNode(objectNode);
+      objectCreated = true;
+    }
+
+    // Create edge for the predicate
+    const edge: KnowledgeEdge = {
+      id: randomUUID(),
+      source: subjectNode.id,
+      target: objectNode.id,
+      type: fact.predicate,
+      weight: fact.weight ?? 1.0,
+      properties: fact.edgeProperties,
+      directed: true, // Facts are directional by nature
+      createdAt: new Date().toISOString(),
+    };
+    this.addEdge(edge);
+
+    return {
+      subjectNode,
+      objectNode,
+      edge,
+      subjectCreated,
+      objectCreated,
+    };
+  }
+
+  /**
+   * Find an entity node by its name property.
+   */
+  findEntityByName(name: string): KnowledgeNode | undefined {
+    for (const node of this.nodes.values()) {
+      if (node.properties?.name === name) {
+        return node;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Get all facts (edges) related to a specific entity.
+   */
+  getFactsAbout(entityName: string): KnowledgeEdge[] {
+    const entity = this.findEntityByName(entityName);
+    if (!entity) {
+      return [];
+    }
+
+    return Array.from(this.edges.values()).filter(edge => edge.source === entity.id || edge.target === entity.id);
   }
 }
