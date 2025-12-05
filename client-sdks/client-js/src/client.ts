@@ -60,15 +60,23 @@ export class MastraClient extends BaseResource {
   /**
    * Retrieves all available agents
    * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param partial - Optional flag to return minimal data without schemas
    * @returns Promise containing map of agent IDs to agent details
    */
-  public getAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+  public getAgents(
+    runtimeContext?: RuntimeContext | Record<string, any>,
+    partial?: boolean,
+  ): Promise<Record<string, GetAgentResponse>> {
     const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
 
     const searchParams = new URLSearchParams();
 
     if (runtimeContextParam) {
       searchParams.set('runtimeContext', runtimeContextParam);
+    }
+
+    if (partial) {
+      searchParams.set('partial', 'true');
     }
 
     const queryString = searchParams.toString();
@@ -259,10 +267,12 @@ export class MastraClient extends BaseResource {
   /**
    * Retrieves all available workflows
    * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param partial - Optional flag to return minimal data without schemas
    * @returns Promise containing map of workflow IDs to workflow details
    */
   public getWorkflows(
     runtimeContext?: RuntimeContext | Record<string, any>,
+    partial?: boolean,
   ): Promise<Record<string, GetWorkflowResponse>> {
     const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
 
@@ -270,6 +280,10 @@ export class MastraClient extends BaseResource {
 
     if (runtimeContextParam) {
       searchParams.set('runtimeContext', runtimeContextParam);
+    }
+
+    if (partial) {
+      searchParams.set('partial', 'true');
     }
 
     const queryString = searchParams.toString();
