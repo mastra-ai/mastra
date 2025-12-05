@@ -7,6 +7,7 @@ import {
   ScoresStorage,
   TABLE_SCORERS,
   transformScoreRow as coreTransformScoreRow,
+  createStorageErrorId,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
@@ -42,7 +43,7 @@ export class ScoresUpstash extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -127,7 +128,7 @@ export class ScoresUpstash extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_SCORE_VALIDATION_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -141,7 +142,7 @@ export class ScoresUpstash extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id: score.id },

@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
+import { createStorageErrorId, normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
@@ -102,7 +102,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -141,7 +141,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -162,7 +162,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'DYNAMODB_STORE_INVALID_PAGE',
+            id: createStorageErrorId('DYNAMODB', 'LIST_WORKFLOW_RUNS', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -253,7 +253,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: args?.workflowName || '', resourceId: args?.resourceId || '' },
@@ -332,7 +332,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId, workflowName: args?.workflowName || '' },
