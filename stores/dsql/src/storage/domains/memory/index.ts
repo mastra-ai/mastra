@@ -498,7 +498,7 @@ export class MemoryDSQL extends MemoryStorage {
     if (!threadId.trim()) {
       throw new MastraError(
         {
-          id: 'STORAGE_PG_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: 'MASTRA_STORAGE_DSQL_STORE_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
