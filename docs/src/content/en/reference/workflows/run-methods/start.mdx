@@ -36,9 +36,9 @@ const result = await run.start({
       isOptional: true,
     },
     {
-      name: "writableStream",
-      type: "WritableStream<ChunkType>",
-      description: "Optional writable stream for streaming workflow output",
+      name: "outputWriter",
+      type: "(chunk: TOutput) => Promise<void>",
+      description: "Optional asynchronous function to handle output chunks as they are produced",
       isOptional: true,
     },
     {
