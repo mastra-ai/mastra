@@ -18,8 +18,8 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
-import type { StoreOperationsDSQL } from '../operations';
 import { withRetry } from '../../../shared/retry';
+import type { StoreOperationsDSQL } from '../operations';
 import { getTableName, getSchemaName } from '../utils';
 
 // Database row type that includes timezone-aware columns

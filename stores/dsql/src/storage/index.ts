@@ -1,3 +1,4 @@
+import { AuroraDSQLClient } from '@aws/aurora-dsql-node-postgres-connector';
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
@@ -18,7 +19,6 @@ import type {
   StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { AuroraDSQLClient } from '@aws/aurora-dsql-node-postgres-connector';
 import pgPromise from 'pg-promise';
 import { validateDSQLConfig, getEffectiveRegion, DSQL_POOL_DEFAULTS } from '../shared/config';
 import type { DSQLConfig } from '../shared/config';
