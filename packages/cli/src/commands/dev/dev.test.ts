@@ -25,12 +25,18 @@ vi.mock('@mastra/deployer', () => {
   };
 });
 
-vi.mock('@mastra/deployer/build', () => ({
-  getServerOptions: vi.fn().mockResolvedValue({
-    port: 4111,
-    host: 'localhost',
-  }),
-}));
+vi.mock('@mastra/deployer/build', async importOriginal => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+  const actual = await importOriginal<typeof import('@mastra/deployer/build')>();
+
+  return {
+    normalizeStudioBase: actual.normalizeStudioBase,
+    getServerOptions: vi.fn().mockResolvedValue({
+      port: 4111,
+      host: 'localhost',
+    }),
+  };
+});
 
 vi.mock('get-port', () => ({
   default: vi.fn().mockResolvedValue(4111),

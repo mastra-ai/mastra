@@ -150,3 +150,41 @@ export function findNativePackageModule(moduleIds: string[]): string | undefined
     return true;
   });
 }
+
+/**
+ * Ensures that server.studioBase is normalized.
+ *
+ * - If server.studioBase is '/' or empty, returns empty string
+ * - Normalizes multiple slashes to single slash (e.g., '//' → '/')
+ * - Removes trailing slashes (e.g., '/admin/' → '/admin')
+ * - Adds leading slash if missing (e.g., 'admin' → '/admin')
+ *
+ * @param studioBase - The studioBase path to normalize
+ * @returns Normalized studioBase path string
+ */
+export function normalizeStudioBase(studioBase: string): string {
+  // Validate: no path traversal, no query params, no special chars
+  if (studioBase.includes('..') || studioBase.includes('?') || studioBase.includes('#')) {
+    throw new Error(`Invalid base path: "${studioBase}". Base path cannot contain '..', '?', or '#'`);
+  }
+
+  // Normalize multiple slashes to single slash
+  studioBase = studioBase.replace(/\/+/g, '/');
+
+  // Handle default value cases
+  if (studioBase === '/' || studioBase === '') {
+    return '';
+  }
+
+  // Remove trailing slash
+  if (studioBase.endsWith('/')) {
+    studioBase = studioBase.slice(0, -1);
+  }
+
+  // Add leading slash if missing
+  if (!studioBase.startsWith('/')) {
+    studioBase = `/${studioBase}`;
+  }
+
+  return studioBase;
+}
