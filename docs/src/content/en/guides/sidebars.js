@@ -182,11 +182,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "guide/slack",
-          label: "Agents: Connect to Slack",
-        },
-        {
-          type: "doc",
           id: "guide/stock-agent",
           label: "Tools: Stock Agent",
         },
