@@ -3,13 +3,18 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "dependsOn": ["pre-build"],
+      "dependsOn": ["pre-build", "generate:llm-docs"],
       "outputs": ["./**/*.d.ts"]
     },
     "pre-build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
       "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
+    },
+    "generate:llm-docs": {
+      "dependsOn": ["pre-build"],
+      "outputs": ["dist/**/*.md"],
+      "inputs": ["$TURBO_DEFAULT$", "./llm-docs.js", "./scripts/generate-llm-docs.ts"]
     }
   }
 }

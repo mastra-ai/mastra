@@ -1,6 +1,6 @@
-import { readFile, writeFile, mkdir } from 'fs/promises';
-import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '../../..');
@@ -60,6 +60,7 @@ async function generateLlmDocs() {
 
     for (const srcPath of src) {
       const absoluteSrcPath = resolve(rootDir, srcPath);
+      console.log(`Reading: ${absoluteSrcPath}`);
       try {
         const content = await readFile(absoluteSrcPath, 'utf-8');
         const cleaned = cleanContent(content);
