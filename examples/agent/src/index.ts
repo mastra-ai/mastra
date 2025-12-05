@@ -97,22 +97,9 @@ async function validateAllPrimitives() {
   );
 
   // Test getWorkflowById
-  await testMethod('Workflow: getWorkflowById() with valid ID', async () => {
+  await testMethod('Workflow: getWorkflowById() with valid ID', () => {
     const workflow = mastra.getWorkflow('myWorkflow');
     const workflowById = mastra.getWorkflowById(workflow.id);
-
-    const run = await workflow.createRun();
-
-    const result = await run.start({
-      inputData: {
-        ingredient: 'ketchup',
-      },
-      outputWriter: async (chunk: string) => {
-        // For testing, we just log the chunk
-        console.log('Output chunk:', chunk);
-      },
-    });
-
     return { id: workflowById.id, name: workflowById.name };
   });
 
