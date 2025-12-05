@@ -1,5 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { ObservationalMemory } from '@mastra/memory/experiments';
+import { MessageHistory } from '@mastra/core/processors';
 import { openai } from '@ai-sdk/openai';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
 import chalk from 'chalk';
@@ -8,10 +10,10 @@ import { join } from 'path';
 import { readdir, readFile, mkdir, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 
-import { BenchmarkStore, BenchmarkVectorStore } from '../storage';
+import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
 import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType, DatasetType } from '../data/types';
-import { getMemoryOptions } from '../config';
+import { getMemoryOptions, observationalMemoryConfig } from '../config';
 import { makeRetryModel } from '../retry-model';
 
 export interface RunOptions {
@@ -319,14 +321,53 @@ export class RunCommand {
     }
 
     const memoryOptions = getMemoryOptions(options.memoryConfig);
+    const usesObservationalMemory = options.memoryConfig === 'observational-memory';
 
-    // Create memory with the hydrated stores
-    const memory = new Memory({
-      storage: benchmarkStore,
-      vector: benchmarkVectorStore,
-      embedder: cachedOpenAI.embedding('text-embedding-3-small'),
-      options: memoryOptions.options,
-    });
+    // Create memory with the hydrated stores (for non-OM configs)
+    const memory = usesObservationalMemory
+      ? undefined
+      : new Memory({
+          storage: benchmarkStore,
+          vector: benchmarkVectorStore,
+          embedder: cachedOpenAI.embedding('text-embedding-3-small'),
+          options: memoryOptions.options,
+        });
+
+    // Create observational memory processor if using OM config
+    let observationalMemory: ObservationalMemory | undefined;
+    let messageHistory: MessageHistory | undefined;
+    let omStorage: PersistableInMemoryMemory | undefined;
+
+    if (usesObservationalMemory) {
+      // Use PersistableInMemoryMemory for ObservationalMemory
+      omStorage = new PersistableInMemoryMemory();
+
+      // Hydrate OM storage from prepared data
+      const omPath = join(questionDir, 'om.json');
+      if (existsSync(omPath)) {
+        await omStorage.hydrate(omPath);
+        updateStatus(`Loaded OM data for ${meta.questionId}...`);
+      }
+
+      observationalMemory = new ObservationalMemory({
+        storage: omStorage,
+        observerConfig: {
+          model: retry4o.model,
+          historyThreshold: observationalMemoryConfig.historyThreshold,
+        },
+        reflectorConfig: {
+          model: retry4o.model,
+          observationThreshold: observationalMemoryConfig.observationThreshold,
+        },
+        resourceScope: observationalMemoryConfig.resourceScope,
+      });
+
+      // MessageHistory for persisting messages
+      messageHistory = new MessageHistory({
+        storage: omStorage,
+        lastMessages: 10,
+      });
+    }
 
     // Create agent with the specified model
     const agentInstructions = `You are a helpful assistant with access to extensive conversation history. 
@@ -340,6 +381,9 @@ Be specific rather than generic when the user has expressed clear preferences in
       model: modelProvider,
       instructions: agentInstructions,
       memory,
+      // For OM, use processors instead of memory
+      inputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
+      outputProcessors: usesObservationalMemory ? [observationalMemory!, messageHistory!] : undefined,
     });
 
     // Create a fresh thread for the evaluation question

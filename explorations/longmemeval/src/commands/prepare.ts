@@ -1,5 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { ObservationalMemory } from '@mastra/memory/experiments';
+import { MessageHistory } from '@mastra/core/processors';
 import { MockLanguageModelV1 } from '../test-utils/mock-model';
 import { openai } from '@ai-sdk/openai';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
@@ -11,11 +13,11 @@ import { mkdir, writeFile, readFile, unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 
 import { DatasetLoader } from '../data/loader';
-import { BenchmarkStore, BenchmarkVectorStore } from '../storage';
+import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import type { LongMemEvalQuestion, MemoryConfigOptions, MemoryConfigType } from '../data/types';
 import type { CoreMessage } from 'ai';
 
-import { getMemoryOptions } from '../config';
+import { getMemoryOptions, observationalMemoryConfig } from '../config';
 import { makeRetryModel } from '../retry-model';
 
 const retry4o = makeRetryModel(openai('gpt-4o'));
@@ -91,15 +93,16 @@ export class PrepareCommand {
     // Get memory configuration
     const memoryOptions = getMemoryOptions(options.memoryConfig);
 
-    // Use real model for working memory, mock for others
+    // Use real model for working memory and observational memory, mock for others
     const needsRealModel =
       options.memoryConfig === 'working-memory' ||
       options.memoryConfig === 'working-memory-tailored' ||
       options.memoryConfig === 'combined' ||
-      options.memoryConfig === 'combined-tailored';
+      options.memoryConfig === 'combined-tailored' ||
+      options.memoryConfig === 'observational-memory';
 
     if (needsRealModel && !process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is required for working memory preparation');
+      throw new Error('OPENAI_API_KEY is required for working memory or observational memory preparation');
     }
 
     const model = needsRealModel
@@ -439,13 +442,14 @@ export class PrepareCommand {
       options.memoryConfig === 'working-memory-tailored' ||
       options.memoryConfig === 'combined' ||
       options.memoryConfig === 'combined-tailored';
+    const usesObservationalMemory = options.memoryConfig === 'observational-memory';
     const usesTailoredTemplate =
       options.memoryConfig === 'working-memory-tailored' || options.memoryConfig === 'combined-tailored';
 
-    // Working memory must run one session (thread) at a time, in order
-    // otherwise the data will not be accurate as working memory is meant
-    // to build up over time, using the previous working memory state to create the next.
-    if (usesWorkingMemory) isConcurrent = false;
+    // Working memory and observational memory must run one session (thread) at a time, in order
+    // otherwise the data will not be accurate as memory is meant
+    // to build up over time, using the previous state to create the next.
+    if (usesWorkingMemory || usesObservationalMemory) isConcurrent = false;
 
     // Use custom template if available for tailored configs
     if (usesTailoredTemplate && wmTemplates && wmTemplates[question.question_id]) {
@@ -473,14 +477,46 @@ export class PrepareCommand {
       options: memoryOptions.options,
     });
 
-    // Create agent with appropriate model
+    // Create observational memory processor if using OM config
+    let observationalMemory: ObservationalMemory | undefined;
+    let messageHistory: MessageHistory | undefined;
+    let omStorage: PersistableInMemoryMemory | undefined;
+
+    if (usesObservationalMemory) {
+      // Use PersistableInMemoryMemory for ObservationalMemory (has persist/hydrate)
+      omStorage = new PersistableInMemoryMemory();
+
+      observationalMemory = new ObservationalMemory({
+        storage: omStorage,
+        observerConfig: {
+          model: retry4o.model,
+          historyThreshold: observationalMemoryConfig.historyThreshold,
+        },
+        reflectorConfig: {
+          model: retry4o.model,
+          observationThreshold: observationalMemoryConfig.observationThreshold,
+        },
+        resourceScope: observationalMemoryConfig.resourceScope,
+      });
+
+      // MessageHistory for persisting messages
+      messageHistory = new MessageHistory({
+        storage: omStorage,
+        lastMessages: 10, // Keep last 10 for context
+      });
+    }
+
+    // Create agent with appropriate model and processors
     const agent = new Agent({
       id: 'prep-agent',
       name: 'Prep Agent',
       instructions:
         "You are a helpful assistant. Process and store conversation history. Only store working memory information if it's in the template. Other information is not relevant",
       model: model,
-      memory: memory,
+      memory: usesObservationalMemory ? undefined : memory,
+      // For OM, use processors instead of memory
+      inputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
+      outputProcessors: usesObservationalMemory ? [observationalMemory!, messageHistory!] : undefined,
     });
 
     // Process all haystack sessions
@@ -646,19 +682,24 @@ export class PrepareCommand {
         // Mark as processed
         processedSessionIds.add(sessionId);
 
-        // Save progress after each session if using working memory
-        if (usesWorkingMemory) {
+        // Save progress after each session if using working memory or observational memory
+        if (usesWorkingMemory || usesObservationalMemory) {
           await writeFile(
             progressFile,
             JSON.stringify({
               processedSessionIds: Array.from(processedSessionIds),
               lastSavedDb: 'db.json',
               lastSavedVector: 'vector.json',
+              lastSavedOm: usesObservationalMemory ? 'om.json' : undefined,
             }),
           );
 
           // Persist current state
-          await benchmarkStore.persist(join(questionDir, 'db.json'));
+          if (usesObservationalMemory && omStorage) {
+            await omStorage.persist(join(questionDir, 'om.json'));
+          } else {
+            await benchmarkStore.persist(join(questionDir, 'db.json'));
+          }
           if (options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined')) {
             await benchmarkVectorStore.persist(join(questionDir, 'vector.json'));
           }
@@ -696,7 +737,11 @@ export class PrepareCommand {
     }
 
     // Persist storage
-    await benchmarkStore.persist(join(questionDir, 'db.json'));
+    if (usesObservationalMemory && omStorage) {
+      await omStorage.persist(join(questionDir, 'om.json'));
+    } else {
+      await benchmarkStore.persist(join(questionDir, 'db.json'));
+    }
 
     // Persist vector store if used
     if (options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined')) {

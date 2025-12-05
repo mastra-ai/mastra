@@ -8,6 +8,17 @@ const semanticRecall = {
 
 const lastMessages = 10;
 
+// Observational Memory configuration
+// These thresholds are tuned for LongMemEval's session-based structure
+export const observationalMemoryConfig = {
+  // Observer triggers after ~500 tokens of new messages (roughly 5-10 exchanges)
+  historyThreshold: { min: 400, max: 600 },
+  // Reflector triggers when observations exceed ~2000 tokens
+  observationThreshold: { min: 1500, max: 2500 },
+  // Resource scope for cross-session memory
+  resourceScope: true,
+} as const;
+
 export function getMemoryOptions(memoryConfig: string): MemoryConfigOptions {
   switch (memoryConfig) {
     case 'semantic-recall':
@@ -74,6 +85,17 @@ export function getMemoryOptions(memoryConfig: string): MemoryConfigOptions {
             scope: 'resource',
             version: 'vnext',
           },
+        },
+      };
+
+    case 'observational-memory':
+      // Observational Memory uses its own processor, minimal Memory config
+      return {
+        type: 'observational-memory',
+        options: {
+          lastMessages: 5, // OM handles context, just keep minimal recent
+          semanticRecall: false,
+          workingMemory: { enabled: false },
         },
       };
 
