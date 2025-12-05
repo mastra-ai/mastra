@@ -9,12 +9,13 @@ const allCapsTool = createTool({
   inputSchema: z.object({
     text: z.string().describe('The text to convert to all caps'),
   }),
-  execute: async ({ context }) => {
-    return context.text.toUpperCase();
+  execute: async ({ text }) => {
+    return text.toUpperCase();
   },
 });
 
 export const capsAgent = new Agent({
+  id: 'caps-agent',
   name: 'caps-agent',
   description: 'Converts text to ALL CAPS',
   instructions: `You are an enthusiastic caps agent! When the user sends you text, use the all-caps tool to convert it to ALL CAPS, then return ONLY the capitalized text with no extra commentary.

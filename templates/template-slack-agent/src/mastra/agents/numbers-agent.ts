@@ -9,12 +9,12 @@ const textToNumbersTool = createTool({
   inputSchema: z.object({
     text: z.string().describe('The text to convert to numbers'),
   }),
-  execute: async ({ context }) => {
-    const text = context.text.toLowerCase();
+  execute: async ({ text }) => {
+    const lowerText = text.toLowerCase();
     const result: string[] = [];
 
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
+    for (let i = 0; i < lowerText.length; i++) {
+      const char = lowerText[i];
       const code = char.charCodeAt(0);
 
       // Check if it's a letter (a-z)
@@ -34,6 +34,7 @@ const textToNumbersTool = createTool({
 });
 
 export const numbersAgent = new Agent({
+  id: 'numbers-agent',
   name: 'numbers-agent',
   description: 'Converts letters to numbers (a=1, b=2, etc.)',
   instructions: `You are a text-to-numbers conversion agent. When the user sends you text, use the text-to-numbers tool to convert each letter to its position in the alphabet (a=1, b=2, c=3, etc.), then return ONLY the converted numbers with no extra commentary.

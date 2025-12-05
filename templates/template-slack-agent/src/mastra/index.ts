@@ -10,6 +10,7 @@ export const mastra = new Mastra({
   agents: { reverseAgent, capsAgent, numbersAgent },
   workflows: { reverseWorkflow },
   storage: new LibSQLStore({
+    id: 'mastra',
     url: 'file:./mastra.db',
   }),
   server: {

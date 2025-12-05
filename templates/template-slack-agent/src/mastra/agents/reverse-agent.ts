@@ -10,12 +10,13 @@ const reverseTextTool = createTool({
   inputSchema: z.object({
     text: z.string().describe('The text to reverse'),
   }),
-  execute: async ({ context }) => {
-    return context.text.split('').reverse().join('');
+  execute: async ({ text }) => {
+    return text.split('').reverse().join('');
   },
 });
 
 export const reverseAgent = new Agent({
+  id: 'reverse-agent',
   name: 'reverse-agent',
   description: 'Reverses text character by character, with an optional fancy transformation workflow',
   instructions: `You are a text reversal agent. You have two capabilities:
