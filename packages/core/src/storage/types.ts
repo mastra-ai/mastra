@@ -298,6 +298,12 @@ export interface ObservationalMemoryRecord {
   /** Messages currently being observed (async) */
   bufferingMessageIds: string[];
 
+  // Thread tracking (resource scope only)
+  /** Thread IDs that have been observed (resource scope only) */
+  observedThreadIds?: string[];
+  /** Per-thread continuity messages from Reflector */
+  threadContinuityMessages?: Record<string, string>;
+
   // Configuration & metadata
   /** Current configuration (stored as JSON) */
   config: Record<string, unknown>;
@@ -336,6 +342,10 @@ export interface UpdateActiveObservationsInput {
   messageIds: string[];
   tokenCount: number;
   suggestedContinuation?: string;
+  /** Current thread ID (for resource scope thread tracking) */
+  currentThreadId?: string;
+  /** Per-thread continuity messages (from Reflector) */
+  threadContinuityMessages?: Record<string, string>;
 }
 
 /**

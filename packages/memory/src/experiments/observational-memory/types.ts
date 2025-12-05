@@ -54,10 +54,11 @@ export interface GoogleProviderOptions {
 
 /**
  * Provider-specific options for model configuration
+ * Index signature required for compatibility with core's ProviderOptions
  */
 export interface ProviderOptions {
   google?: GoogleProviderOptions;
-  // Add other providers as needed
+  [key: string]: unknown;
 }
 
 /**

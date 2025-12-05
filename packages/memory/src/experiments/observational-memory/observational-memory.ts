@@ -446,8 +446,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Format observations for injection into context.
    * Applies token optimization before presenting to the Actor.
+   *
+   * In resource scope mode, filters continuity messages to only show
+   * the message for the current thread.
    */
-  private formatObservationsForContext(observations: string, suggestedContinuation?: string): string {
+  private formatObservationsForContext(
+    observations: string,
+    suggestedContinuation?: string,
+    currentThreadId?: string,
+    threadContinuityMessages?: Record<string, string>,
+  ): string {
     // Optimize observations to save tokens
     const optimized = optimizeObservationsForContext(observations);
 
@@ -455,11 +463,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 ${optimized}
 </observational_memory>`;
 
-    if (suggestedContinuation) {
+    // In resource scope, use per-thread continuity message if available
+    let continuityMessage = suggestedContinuation;
+    if (this.resourceScope && currentThreadId && threadContinuityMessages?.[currentThreadId]) {
+      continuityMessage = threadContinuityMessages[currentThreadId];
+    }
+
+    if (continuityMessage) {
       content += `
 
 <continuation_hint>
-${suggestedContinuation}
+${continuityMessage}
 </continuation_hint>`;
     }
 
@@ -524,8 +538,15 @@ ${suggestedContinuation}
       const observationSystemMessage = this.formatObservationsForContext(
         record.activeObservations,
         record.suggestedContinuation,
+        threadId, // Current thread for continuity message filtering
+        record.threadContinuityMessages, // Per-thread continuity messages (resource scope)
       );
       console.log(`[OM processInput] Injecting observations (${observationSystemMessage.length} chars)`);
+      if (this.resourceScope) {
+        console.log(
+          `[OM processInput] Resource scope: observations from ${record.observedThreadIds?.length || 0} threads`,
+        );
+      }
       messageList.addSystem(observationSystemMessage, 'observational-memory');
     }
 
@@ -595,10 +616,16 @@ ${suggestedContinuation}
 
         console.log(`[OM] Observer returned observations (${result.observations.length} chars)`);
 
+        // In resource scope, add thread header to observations
+        let observationsWithHeader = result.observations;
+        if (this.resourceScope) {
+          observationsWithHeader = `**Thread: ${threadId}**\n\n${result.observations}`;
+        }
+
         // Combine with existing observations
         const newObservations = record.activeObservations
-          ? `${record.activeObservations}\n\n${result.observations}`
-          : result.observations;
+          ? `${record.activeObservations}\n\n${observationsWithHeader}`
+          : observationsWithHeader;
 
         const totalTokenCount = this.tokenCounter.countObservations(newObservations);
 
@@ -611,6 +638,8 @@ ${suggestedContinuation}
           messageIds: messageIdsToObserve,
           tokenCount: totalTokenCount,
           suggestedContinuation: result.suggestedContinuation,
+          // Track current thread in resource scope
+          currentThreadId: this.resourceScope ? threadId : undefined,
         });
 
         console.log(`[OM] Observations stored successfully`);

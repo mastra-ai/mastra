@@ -635,6 +635,9 @@ export class InMemoryMemory extends MemoryStorage {
       observedMessageIds: [],
       bufferedMessageIds: [],
       bufferingMessageIds: [],
+      // Resource scope fields
+      observedThreadIds: scope === 'resource' ? [] : undefined,
+      threadContinuityMessages: scope === 'resource' ? {} : undefined,
       config,
       metadata: {
         createdAt: new Date(),
@@ -655,7 +658,15 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
-    const { id, observations, messageIds, tokenCount, suggestedContinuation } = input;
+    const {
+      id,
+      observations,
+      messageIds,
+      tokenCount,
+      suggestedContinuation,
+      currentThreadId,
+      threadContinuityMessages,
+    } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
@@ -672,6 +683,21 @@ export class InMemoryMemory extends MemoryStorage {
       observedSet.add(msgId);
     }
     record.observedMessageIds = Array.from(observedSet);
+
+    // Track observed thread IDs (resource scope only)
+    if (currentThreadId && record.observedThreadIds) {
+      const threadSet = new Set(record.observedThreadIds);
+      threadSet.add(currentThreadId);
+      record.observedThreadIds = Array.from(threadSet);
+    }
+
+    // Update per-thread continuity messages (from Reflector)
+    if (threadContinuityMessages && record.threadContinuityMessages) {
+      record.threadContinuityMessages = {
+        ...record.threadContinuityMessages,
+        ...threadContinuityMessages,
+      };
+    }
 
     record.metadata.updatedAt = new Date();
   }

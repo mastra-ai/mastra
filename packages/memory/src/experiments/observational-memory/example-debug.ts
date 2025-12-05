@@ -84,135 +84,240 @@ async function chat(message: string, label: string) {
 
 async function main() {
   console.log('═'.repeat(70));
-  console.log('🧪 OBSERVATIONAL MEMORY - COMPREHENSIVE TEST');
+  console.log('🧪 OBSERVATIONAL MEMORY - EXTREME RECALL TEST');
   console.log(`   historyThreshold: 100 tokens (trigger observation)`);
   console.log(`   observationThreshold: 500 tokens (trigger reflection)`);
   console.log('═'.repeat(70));
+  console.log('\nThis test plants 30+ specific facts across 6 categories,');
+  console.log('then tests recall with increasingly difficult questions.\n');
 
   // ═══════════════════════════════════════════════════════════════════
-  // PHASE 1: Personal info
+  // PHASE 1: Personal Identity
   // ═══════════════════════════════════════════════════════════════════
-  console.log('\n' + '─'.repeat(70));
-  console.log('📌 PHASE 1: Personal Information');
+  console.log('─'.repeat(70));
+  console.log('📌 PHASE 1: Personal Identity');
   console.log('─'.repeat(70));
 
-  await chat('My name is Alice Chen and I work at TechCorp as a senior software engineer.', '1.1');
-  await chat('I have a golden retriever named Max and a cat named Whiskers.', '1.2');
-  await chat('I live in San Francisco, in the Mission District.', '1.3');
+  await chat('My name is Alice Chen and I was born on March 15, 1990.', '1.1');
+  await chat("I'm originally from Seattle but moved to San Francisco in 2015.", '1.2');
+  await chat('I live in the Mission District, on Valencia Street near 24th.', '1.3');
+  await chat("My partner's name is Jordan - we've been together for 4 years.", '1.4');
 
   // ═══════════════════════════════════════════════════════════════════
-  // PHASE 2: Work details (should trigger more observations)
-  // ═══════════════════════════════════════════════════════════════════
-  console.log('\n' + '─'.repeat(70));
-  console.log('📌 PHASE 2: Work Details');
-  console.log('─'.repeat(70));
-
-  await chat('At TechCorp I lead a team of 5 engineers building a payments platform.', '2.1');
-  await chat('My favorite programming languages are TypeScript and Rust.', '2.2');
-  await chat('I use VS Code with the Dracula theme and vim keybindings.', '2.3');
-
-  // ═══════════════════════════════════════════════════════════════════
-  // PHASE 3: Hobbies (push toward reflection threshold)
+  // PHASE 2: Pets & Family
   // ═══════════════════════════════════════════════════════════════════
   console.log('\n' + '─'.repeat(70));
-  console.log('📌 PHASE 3: Hobbies & Preferences');
+  console.log('📌 PHASE 2: Pets & Family');
   console.log('─'.repeat(70));
 
-  await chat('On weekends I love hiking in Marin County, especially Mount Tam.', '3.1');
-  await chat('I read a lot of sci-fi - my favorite author is Ursula K. Le Guin.', '3.2');
-  await chat("I'm training for the SF Marathon in July. Currently running 30 miles per week.", '3.3');
-  await chat('For coffee, I always order a cortado with oat milk.', '3.4');
+  await chat('I have a golden retriever named Max - he turned 3 last month.', '2.1');
+  await chat('We also have a tabby cat named Whiskers who is 7 years old.', '2.2');
+  await chat('My parents still live in Seattle - my mom is a teacher, dad is retired.', '2.3');
+  await chat('I have a younger brother named David who works at Google.', '2.4');
 
   // ═══════════════════════════════════════════════════════════════════
-  // Show current state
+  // PHASE 3: Career & Work
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('\n' + '─'.repeat(70));
+  console.log('📌 PHASE 3: Career & Work');
+  console.log('─'.repeat(70));
+
+  await chat("I work at TechCorp as a Senior Software Engineer. I've been there 3 years.", '3.1');
+  await chat('I lead a team of 5 engineers building a payments platform called PayFlow.', '3.2');
+  await chat('My manager is Sarah Thompson - she was promoted to VP last quarter.', '3.3');
+  await chat('Our tech stack is TypeScript, Node.js, PostgreSQL, and Redis.', '3.4');
+  await chat('I use VS Code with the Dracula theme and vim keybindings.', '3.5');
+  await chat('Before TechCorp, I worked at Stripe for 2 years and Square for 3.', '3.6');
+
+  // ═══════════════════════════════════════════════════════════════════
+  // PHASE 4: Hobbies & Interests
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('\n' + '─'.repeat(70));
+  console.log('📌 PHASE 4: Hobbies & Interests');
+  console.log('─'.repeat(70));
+
+  await chat('I love hiking - my favorite trail is the Dipsea Trail on Mount Tam.', '4.1');
+  await chat("I'm training for the SF Marathon in July - currently at 30 miles/week.", '4.2');
+  await chat('I read a lot of sci-fi. Ursula K. Le Guin is my favorite author.', '4.3');
+  await chat('The Left Hand of Darkness is probably my all-time favorite book.', '4.4');
+  await chat('I play guitar - mostly acoustic, learning fingerstyle right now.', '4.5');
+  await chat("I'm into photography too - I shoot with a Fujifilm X-T4.", '4.6');
+
+  // ═══════════════════════════════════════════════════════════════════
+  // PHASE 5: Preferences & Habits
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('\n' + '─'.repeat(70));
+  console.log('📌 PHASE 5: Preferences & Habits');
+  console.log('─'.repeat(70));
+
+  await chat('For coffee I always get a cortado with oat milk from Ritual Coffee.', '5.1');
+  await chat("I'm vegetarian - have been for about 5 years now.", '5.2');
+  await chat('My go-to restaurant is Burma Superstar on Clement Street.', '5.3');
+  await chat("I wake up at 6am every day - I'm definitely a morning person.", '5.4');
+  await chat('I use the Pomodoro technique for work - 25 min focus, 5 min break.', '5.5');
+
+  // ═══════════════════════════════════════════════════════════════════
+  // PHASE 6: Recent Events & Plans
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('\n' + '─'.repeat(70));
+  console.log('📌 PHASE 6: Recent Events & Plans');
+  console.log('─'.repeat(70));
+
+  await chat('Last week our team shipped PayFlow v2.0 - huge milestone!', '6.1');
+  await chat('Jordan and I are planning a trip to Japan next April for cherry blossoms.', '6.2');
+  await chat("I'm thinking about getting my AWS Solutions Architect certification.", '6.3');
+  await chat("We're adopting another dog soon - looking at rescue shelters.", '6.4');
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Show OM State
   // ═══════════════════════════════════════════════════════════════════
   console.log('\n' + '═'.repeat(70));
-  console.log('📊 CURRENT OM STATE');
+  console.log('📊 OBSERVATIONAL MEMORY STATE');
   console.log('═'.repeat(70));
 
   const record = await om.getRecord(threadId, resourceId);
-  console.log(`   Observed message IDs: ${record?.observedMessageIds.length || 0}`);
+  console.log(`   Total messages sent: ~24 user + ~24 assistant = ~48`);
+  console.log(`   Messages observed: ${record?.observedMessageIds.length || 0}`);
   console.log(`   Observation tokens: ${record?.observationTokenCount || 0}`);
   const reflections = record?.metadata?.reflectionCount || 0;
-  console.log(`   Reflections: ${reflections} ${reflections > 0 ? '(reflection occurred!)' : ''}`);
-
-  const observations = await om.getObservations(threadId, resourceId);
-  if (observations) {
-    console.log('\n📝 OBSERVATIONS:');
-    console.log('─'.repeat(70));
-    console.log(observations);
-    console.log('─'.repeat(70));
-  }
+  console.log(`   Reflections: ${reflections} ${reflections > 0 ? '🔄' : ''}`);
 
   // ═══════════════════════════════════════════════════════════════════
-  // RECALL TESTS
+  // RECALL TESTS - Easy
   // ═══════════════════════════════════════════════════════════════════
   console.log('\n' + '═'.repeat(70));
-  console.log('🧪 RECALL TESTS');
+  console.log('🧪 RECALL TESTS - EASY (Basic facts)');
   console.log('═'.repeat(70));
 
-  // Test 1: Basic recall
-  console.log('\n--- Test 1: Basic Identity ---');
-  const r1 = await chat('What is my full name and where do I work?', 'R1');
-
-  // Test 2: Specific details
-  console.log('\n--- Test 2: Specific Details ---');
-  const r2 = await chat('What are my pets names?', 'R2');
-
-  // Test 3: Work details
-  console.log('\n--- Test 3: Work Details ---');
-  const r3 = await chat('What programming languages do I prefer and what editor do I use?', 'R3');
-
-  // Test 4: Hobbies
-  console.log('\n--- Test 4: Hobbies ---');
-  const r4 = await chat('What are my hobbies and what marathon am I training for?', 'R4');
-
-  // Test 5: Comprehensive
-  console.log('\n--- Test 5: Comprehensive Summary ---');
-  const r5 = await chat('Give me a complete summary of everything you know about me.', 'R5');
+  const easy1 = await chat('What is my name?', 'E1');
+  const easy2 = await chat('Where do I work?', 'E2');
+  const easy3 = await chat("What are my pets' names?", 'E3');
 
   // ═══════════════════════════════════════════════════════════════════
-  // RESULTS
+  // RECALL TESTS - Medium
   // ═══════════════════════════════════════════════════════════════════
   console.log('\n' + '═'.repeat(70));
-  console.log('📋 FINAL RESULTS');
+  console.log('🧪 RECALL TESTS - MEDIUM (Specific details)');
   console.log('═'.repeat(70));
 
-  const allResponses = [r1, r2, r3, r4, r5].map(r => r.text.toLowerCase()).join(' ');
+  const med1 = await chat('What is my birthday and where was I born?', 'M1');
+  const med2 = await chat("What is my partner's name and how long have we been together?", 'M2');
+  const med3 = await chat('What is my tech stack at work?', 'M3');
+  const med4 = await chat("What's my favorite hiking trail?", 'M4');
+
+  // ═══════════════════════════════════════════════════════════════════
+  // RECALL TESTS - Hard
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('\n' + '═'.repeat(70));
+  console.log('🧪 RECALL TESTS - HARD (Obscure details)');
+  console.log('═'.repeat(70));
+
+  const hard1 = await chat("What is my manager's name and what happened to them recently?", 'H1');
+  const hard2 = await chat('What camera do I shoot with?', 'H2');
+  const hard3 = await chat("What's my favorite book and who wrote it?", 'H3');
+  const hard4 = await chat('Where do I get my coffee and what do I order?', 'H4');
+  const hard5 = await chat('What did my team ship last week?', 'H5');
+
+  // ═══════════════════════════════════════════════════════════════════
+  // RECALL TESTS - Expert
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('\n' + '═'.repeat(70));
+  console.log('🧪 RECALL TESTS - EXPERT (Combined knowledge)');
+  console.log('═'.repeat(70));
+
+  const exp1 = await chat('What certifications am I considering and what trips am I planning?', 'X1');
+  const exp2 = await chat("Tell me about my brother - what's his name and where does he work?", 'X2');
+  const exp3 = await chat(
+    'Give me a complete profile: name, age, location, job, team, hobbies, pets, and plans.',
+    'X3',
+  );
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SCORING
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('\n' + '═'.repeat(70));
+  console.log('📋 RECALL SCORING');
+  console.log('═'.repeat(70));
+
+  const allText = [easy1, easy2, easy3, med1, med2, med3, med4, hard1, hard2, hard3, hard4, hard5, exp1, exp2, exp3]
+    .map(r => r.text.toLowerCase())
+    .join(' ');
 
   const facts = [
-    { key: 'Alice Chen', found: allResponses.includes('alice') },
-    { key: 'TechCorp', found: allResponses.includes('techcorp') },
-    { key: 'Max (dog)', found: allResponses.includes('max') },
-    { key: 'Whiskers (cat)', found: allResponses.includes('whiskers') },
-    { key: 'San Francisco', found: allResponses.includes('san francisco') || allResponses.includes('sf') },
-    { key: 'TypeScript', found: allResponses.includes('typescript') },
-    { key: 'Rust', found: allResponses.includes('rust') },
-    { key: 'VS Code', found: allResponses.includes('vs code') || allResponses.includes('vscode') },
-    { key: 'Mount Tam', found: allResponses.includes('tam') || allResponses.includes('marin') },
-    { key: 'Ursula K. Le Guin', found: allResponses.includes('le guin') || allResponses.includes('ursula') },
-    { key: 'SF Marathon', found: allResponses.includes('marathon') },
-    { key: 'Cortado', found: allResponses.includes('cortado') },
+    // Easy
+    { category: 'Easy', key: 'Alice Chen', found: allText.includes('alice') },
+    { category: 'Easy', key: 'TechCorp', found: allText.includes('techcorp') },
+    { category: 'Easy', key: 'Max (dog)', found: allText.includes('max') },
+    { category: 'Easy', key: 'Whiskers (cat)', found: allText.includes('whiskers') },
+
+    // Medium
+    { category: 'Medium', key: 'March 15 / 1990', found: allText.includes('march') || allText.includes('1990') },
+    { category: 'Medium', key: 'Seattle (born)', found: allText.includes('seattle') },
+    { category: 'Medium', key: 'Jordan (partner)', found: allText.includes('jordan') },
+    { category: 'Medium', key: '4 years together', found: allText.includes('4 year') || allText.includes('four year') },
+    { category: 'Medium', key: 'TypeScript', found: allText.includes('typescript') },
+    {
+      category: 'Medium',
+      key: 'Dipsea Trail',
+      found: allText.includes('dipsea') || allText.includes('mount tam') || allText.includes('tam'),
+    },
+
+    // Hard
+    { category: 'Hard', key: 'Sarah Thompson (manager)', found: allText.includes('sarah') },
+    { category: 'Hard', key: 'VP promotion', found: allText.includes('vp') || allText.includes('promot') },
+    {
+      category: 'Hard',
+      key: 'Fujifilm X-T4',
+      found: allText.includes('fuji') || allText.includes('x-t4') || allText.includes('xt4'),
+    },
+    {
+      category: 'Hard',
+      key: 'Left Hand of Darkness',
+      found: allText.includes('left hand') || allText.includes('le guin'),
+    },
+    { category: 'Hard', key: 'Cortado + oat milk', found: allText.includes('cortado') },
+    { category: 'Hard', key: 'Ritual Coffee', found: allText.includes('ritual') },
+    { category: 'Hard', key: 'PayFlow v2.0', found: allText.includes('payflow') || allText.includes('v2') },
+
+    // Expert
+    {
+      category: 'Expert',
+      key: 'AWS certification',
+      found: allText.includes('aws') || allText.includes('certification'),
+    },
+    { category: 'Expert', key: 'Japan trip', found: allText.includes('japan') },
+    { category: 'Expert', key: 'David (brother)', found: allText.includes('david') },
+    { category: 'Expert', key: 'Google (David works)', found: allText.includes('google') },
+    { category: 'Expert', key: 'Adopting another dog', found: allText.includes('adopt') || allText.includes('rescue') },
   ];
 
-  let passed = 0;
-  for (const { key, found } of facts) {
-    console.log(`   ${found ? '✅' : '❌'} ${key}`);
-    if (found) passed++;
+  const categories = ['Easy', 'Medium', 'Hard', 'Expert'];
+  let totalPassed = 0;
+
+  for (const category of categories) {
+    const categoryFacts = facts.filter(f => f.category === category);
+    const categoryPassed = categoryFacts.filter(f => f.found).length;
+    totalPassed += categoryPassed;
+
+    console.log(`\n${category}:`);
+    for (const { key, found } of categoryFacts) {
+      console.log(`   ${found ? '✅' : '❌'} ${key}`);
+    }
+    console.log(`   Score: ${categoryPassed}/${categoryFacts.length}`);
   }
 
-  const pct = Math.round((passed / facts.length) * 100);
-  console.log(`\n   Score: ${passed}/${facts.length} (${pct}%)`);
+  const totalFacts = facts.length;
+  const pct = Math.round((totalPassed / totalFacts) * 100);
 
-  if (pct === 100) {
-    console.log('\n🎉 PERFECT RECALL!');
-  } else if (pct >= 80) {
-    console.log('\n✨ EXCELLENT RECALL!');
-  } else if (pct >= 60) {
-    console.log('\n👍 GOOD RECALL');
-  } else {
-    console.log('\n⚠️ NEEDS IMPROVEMENT');
-  }
+  console.log('\n' + '─'.repeat(70));
+  console.log(`📊 TOTAL SCORE: ${totalPassed}/${totalFacts} (${pct}%)`);
+  console.log('─'.repeat(70));
+
+  if (pct >= 90) console.log('🏆 EXCEPTIONAL RECALL!');
+  else if (pct >= 75) console.log('🎉 EXCELLENT RECALL!');
+  else if (pct >= 60) console.log('✨ GOOD RECALL!');
+  else if (pct >= 40) console.log('👍 MODERATE RECALL');
+  else console.log('⚠️ NEEDS IMPROVEMENT');
 
   // Final state
   const finalRecord = await om.getRecord(threadId, resourceId);
@@ -228,7 +333,7 @@ async function main() {
   console.log('💰 TOKEN USAGE COMPARISON');
   console.log('═'.repeat(70));
 
-  const tokenCounter = createTokenCounter();
+  const tokenCounter = new TokenCounter();
 
   // Get all messages from storage (what MessageHistory would load)
   const allMessages = await storage.listMessages({
