@@ -426,6 +426,7 @@ export class Workflow<
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
   #nestedWorkflowInput?: z.infer<TInput>;
+  public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
@@ -523,8 +524,21 @@ export class Workflow<
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
    */
-  then<TStepId extends string, TStepState extends z.ZodObject<any>, TSchemaOut extends z.ZodType<any>>(
-    step: Step<TStepId, SubsetOf<TStepState, TState>, TPrevSchema, TSchemaOut, any, any, TEngineType>,
+  then<
+    TStepId extends string,
+    TStepState extends z.ZodObject<any>,
+    TStepInputSchema extends z.ZodType<any>,
+    TSchemaOut extends z.ZodType<any>,
+  >(
+    step: Step<
+      TStepId,
+      SubsetOf<TStepState, TState>,
+      z.TypeOf<TPrevSchema> extends z.TypeOf<TStepInputSchema> ? TStepInputSchema : never,
+      TSchemaOut,
+      any,
+      any,
+      TEngineType
+    >,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
     this.serializedStepFlow.push({
@@ -983,6 +997,7 @@ export class Workflow<
    * @returns A built workflow instance ready for execution
    */
   commit() {
+    this.committed = true;
     this.executionGraph = this.buildExecutionGraph();
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TOutput>;
   }

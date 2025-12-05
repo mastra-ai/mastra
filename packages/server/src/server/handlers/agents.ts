@@ -72,7 +72,10 @@ export interface SerializedAgentWithId extends SerializedAgent {
   id: string;
 }
 
-export async function getSerializedAgentTools(tools: Record<string, unknown>): Promise<Record<string, SerializedTool>> {
+export async function getSerializedAgentTools(
+  tools: Record<string, unknown>,
+  partial: boolean = false,
+): Promise<Record<string, SerializedTool>> {
   return Object.entries(tools || {}).reduce<Record<string, SerializedTool>>((acc, [key, tool]) => {
     const _tool = tool as {
       id?: string;
@@ -86,39 +89,44 @@ export async function getSerializedAgentTools(tools: Record<string, unknown>): P
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
 
-    try {
-      if (_tool.inputSchema) {
-        if (_tool.inputSchema && typeof _tool.inputSchema === 'object' && 'jsonSchema' in _tool.inputSchema) {
-          inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
-        } else if (typeof _tool.inputSchema === 'function') {
-          const inputSchema = _tool.inputSchema();
-          if (inputSchema && inputSchema.jsonSchema) {
-            inputSchemaForReturn = stringify(inputSchema.jsonSchema);
+    // Only process schemas if not in partial mode
+    if (!partial) {
+      try {
+        if (_tool.inputSchema) {
+          if (_tool.inputSchema && typeof _tool.inputSchema === 'object' && 'jsonSchema' in _tool.inputSchema) {
+            inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
+          } else if (typeof _tool.inputSchema === 'function') {
+            const inputSchema = _tool.inputSchema();
+            if (inputSchema && inputSchema.jsonSchema) {
+              inputSchemaForReturn = stringify(inputSchema.jsonSchema);
+            }
+          } else if (_tool.inputSchema) {
+            inputSchemaForReturn = stringify(
+              zodToJsonSchema(_tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
           }
-        } else if (_tool.inputSchema) {
-          inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
         }
-      }
 
-      if (_tool.outputSchema) {
-        if (_tool.outputSchema && typeof _tool.outputSchema === 'object' && 'jsonSchema' in _tool.outputSchema) {
-          outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
-        } else if (typeof _tool.outputSchema === 'function') {
-          const outputSchema = _tool.outputSchema();
-          if (outputSchema && outputSchema.jsonSchema) {
-            outputSchemaForReturn = stringify(outputSchema.jsonSchema);
+        if (_tool.outputSchema) {
+          if (_tool.outputSchema && typeof _tool.outputSchema === 'object' && 'jsonSchema' in _tool.outputSchema) {
+            outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
+          } else if (typeof _tool.outputSchema === 'function') {
+            const outputSchema = _tool.outputSchema();
+            if (outputSchema && outputSchema.jsonSchema) {
+              outputSchemaForReturn = stringify(outputSchema.jsonSchema);
+            }
+          } else if (_tool.outputSchema) {
+            outputSchemaForReturn = stringify(
+              zodToJsonSchema(_tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
           }
-        } else if (_tool.outputSchema) {
-          outputSchemaForReturn = stringify(
-            zodToJsonSchema(_tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
-          );
         }
+      } catch (error) {
+        console.error(`Error getting serialized tool`, {
+          toolId: _tool.id,
+          error,
+        });
       }
-    } catch (error) {
-      console.error(`Error getting serialized tool`, {
-        toolId: _tool.id,
-        error,
-      });
     }
 
     acc[key] = {
@@ -175,18 +183,20 @@ async function formatAgentList({
   mastra,
   agent,
   runtimeContext,
+  partial = false,
 }: {
   id: string;
   mastra: Context['mastra'];
   agent: Agent;
   runtimeContext: RuntimeContext;
+  partial?: boolean;
 }): Promise<SerializedAgentWithId> {
   const instructions = await agent.getInstructions({ runtimeContext });
   const tools = await agent.getTools({ runtimeContext });
   const llm = await agent.getLLM({ runtimeContext });
   const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
   const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
-  const serializedAgentTools = await getSerializedAgentTools(tools);
+  const serializedAgentTools = await getSerializedAgentTools(tools, partial);
 
   let serializedAgentWorkflows: Record<
     string,
@@ -294,13 +304,14 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
 export async function getAgentsHandler({
   mastra,
   runtimeContext,
-}: Context & { runtimeContext: RuntimeContext }): Promise<Record<string, SerializedAgent>> {
+  partial = false,
+}: Context & { runtimeContext: RuntimeContext; partial?: boolean }): Promise<Record<string, SerializedAgent>> {
   try {
     const agents = mastra.getAgents();
 
     const serializedAgentsMap = await Promise.all(
       Object.entries(agents).map(async ([id, agent]) => {
-        return formatAgentList({ id, mastra, agent, runtimeContext });
+        return formatAgentList({ id, mastra, agent, runtimeContext, partial });
       }),
     );
 

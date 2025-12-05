@@ -119,6 +119,128 @@ describe('vNext Workflow Handlers', () => {
         'reusable-workflow': serializeWorkflow(reusableWorkflow),
       });
     });
+
+    it('should return workflows with partial data when partial=true query param is provided', async () => {
+      const stepWithSchemas = createStep({
+        id: 'step-with-schemas',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          output: z.string(),
+        }),
+        resumeSchema: z.object({
+          resumeData: z.string(),
+        }),
+        suspendSchema: z.object({
+          suspendData: z.string(),
+        }),
+        execute: vi.fn<any>().mockResolvedValue({ output: 'test' }),
+      });
+
+      const workflowWithSchemas = createWorkflow({
+        id: 'workflow-with-schemas',
+        description: 'A workflow with schemas',
+        inputSchema: z.object({
+          workflowInput: z.string(),
+        }),
+        outputSchema: z.object({
+          workflowOutput: z.string(),
+        }),
+        steps: [stepWithSchemas],
+      })
+        .then(stepWithSchemas)
+        .commit();
+
+      const mastraWithSchemas = new Mastra({
+        logger: false,
+        workflows: { 'workflow-with-schemas': workflowWithSchemas },
+        storage: new MockStore(),
+      });
+
+      const result = await getWorkflowsHandler({
+        mastra: mastraWithSchemas,
+        partial: true,
+      });
+
+      const workflow = result['workflow-with-schemas'];
+      expect(workflow).toBeDefined();
+      expect(workflow.name).toBe('workflow-with-schemas');
+      expect(workflow.description).toBe('A workflow with schemas');
+
+      // When partial=true, root-level schemas should be pruned
+      expect(workflow.inputSchema).toBeUndefined();
+      expect(workflow.outputSchema).toBeUndefined();
+
+      // Steps should not be returned, only stepCount
+      expect(workflow.steps).toEqual({});
+      expect(workflow.allSteps).toEqual({});
+      expect(workflow.stepCount).toBe(1);
+      expect(typeof workflow.stepCount).toBe('number');
+    });
+
+    it('should return workflows with full schemas when partial param is not provided', async () => {
+      const stepWithSchemas = createStep({
+        id: 'step-with-schemas',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          output: z.string(),
+        }),
+        execute: vi.fn<any>().mockResolvedValue({ output: 'test' }) as any,
+      });
+
+      const workflowWithSchemas = createWorkflow({
+        id: 'workflow-with-schemas',
+        description: 'A workflow with schemas',
+        inputSchema: z.object({
+          workflowInput: z.string(),
+        }),
+        outputSchema: z.object({
+          workflowOutput: z.string(),
+        }),
+        steps: [stepWithSchemas],
+      })
+        .then(stepWithSchemas)
+        .commit();
+
+      const mastraWithSchemas = new Mastra({
+        logger: false,
+        workflows: { 'workflow-with-schemas': workflowWithSchemas },
+        storage: new MockStore(),
+      });
+
+      const result = await getWorkflowsHandler({
+        mastra: mastraWithSchemas,
+        // No partial parameter provided
+      });
+
+      const workflow = result['workflow-with-schemas'];
+      expect(workflow).toBeDefined();
+
+      // When partial is not provided, schemas should be included
+      expect(workflow.inputSchema).toBeDefined();
+      expect(workflow.outputSchema).toBeDefined();
+      expect(typeof workflow.inputSchema).toBe('string');
+      expect(typeof workflow.outputSchema).toBe('string');
+
+      // Step-level schemas should also be included
+      const step = workflow.steps['step-with-schemas'];
+      // @ts-expect-error - step is only defined when partial=true
+      expect(step.inputSchema).toBeDefined();
+      // @ts-expect-error - step is only defined when partial=true
+      expect(step.outputSchema).toBeDefined();
+      // @ts-expect-error - step is only defined when partial=true
+      expect(typeof step.inputSchema).toBe('string');
+      // @ts-expect-error - step is only defined when partial=true
+      expect(typeof step.outputSchema).toBe('string');
+
+      // Steps object should be present, not stepCount
+      expect(workflow.steps).toBeDefined();
+      expect(workflow.allSteps).toBeDefined();
+      expect(workflow.stepCount).toBeUndefined();
+    });
   });
 
   describe('getWorkflowByIdHandler', () => {

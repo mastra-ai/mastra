@@ -69,6 +69,18 @@ if (result.status === "suspended") {
       description: "Restarts the workflow execution from last active step",
       required: true,
     },
+    {
+      name: "timeTravel",
+      type: "(options?: TimeTravelOptions) => Promise<WorkflowResult>",
+      description: "Re-executes a workflow starting from any specific step, using either stored snapshot data or custom context you provide.",
+      required: true,
+    },
+    {
+      name: "timeTravelStream",
+      type: "(options?: TimeTravelOptions) => MastraWorkflowStream",
+      description: "Time travels a workflow execution with streaming support",
+      required: true,
+    },
   ]}
 />
 
@@ -106,3 +118,5 @@ A workflow run's `status` indicates its current execution state. The possible va
 - [Run.watch()](./run-methods/watch)
 - [Run.cancel()](./run-methods/cancel)
 - [Run.restart()](./run-methods/restart)
+- [Run.timeTravel()](./run-methods/timeTravel)
+- [Run.timeTravelStream()](../streaming/workflows/timeTravelStream)
