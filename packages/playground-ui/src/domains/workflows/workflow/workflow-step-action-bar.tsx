@@ -5,15 +5,7 @@ import { useContext, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-
-export interface TripwireData {
-  message?: string;
-  options?: {
-    retry?: boolean;
-    metadata?: unknown;
-  };
-  processorId?: string;
-}
+import type { TripwireData } from '../context/use-current-run';
 
 export interface WorkflowStepActionBarProps {
   input?: any;
