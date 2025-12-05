@@ -72,7 +72,7 @@ export class StoreScoresLance extends ScoresStorage {
       filteredScore.updatedAt = now;
 
       await table.add([filteredScore], { mode: 'append' });
-      return { score: { ...score, id, createdAt: now, updatedAt: now } };
+      return { score: { ...validatedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error: any) {
       throw new MastraError(
         {

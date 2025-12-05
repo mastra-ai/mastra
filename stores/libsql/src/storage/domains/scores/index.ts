@@ -231,7 +231,7 @@ export class ScoresLibSQL extends ScoresStorage {
         },
       });
 
-      return { score: { ...score, id, createdAt: now, updatedAt: now } };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {

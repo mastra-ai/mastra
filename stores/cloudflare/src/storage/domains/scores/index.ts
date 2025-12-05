@@ -101,7 +101,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         value: serializedRecord,
       });
 
-      return { score: { ...score, id, createdAt: now, updatedAt: now } };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       const mastraError = new MastraError(
         {

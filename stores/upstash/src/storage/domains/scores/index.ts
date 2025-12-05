@@ -158,7 +158,7 @@ export class ScoresUpstash extends ScoresStorage {
     const { key, processedRecord } = processRecord(TABLE_SCORERS, scoreWithId);
     try {
       await this.client.set(key, processedRecord);
-      return { score: { ...score, id, createdAt, updatedAt } };
+      return { score: { ...validatedScore, id, createdAt, updatedAt } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {

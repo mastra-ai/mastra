@@ -96,6 +96,7 @@ export class ScoresMSSQL extends ScoresStorage {
     try {
       // Generate ID like other storage implementations
       const scoreId = randomUUID();
+      const now = new Date();
 
       const {
         scorer,
@@ -124,13 +125,12 @@ export class ScoresMSSQL extends ScoresStorage {
           requestContext: requestContext || null,
           entity: entity || null,
           scorer: scorer || null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id: scoreId });
-      return { score: scoreFromDb! };
+      return { score: { ...validatedScore, id: scoreId, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {

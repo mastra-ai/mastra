@@ -120,8 +120,7 @@ export class ScoresStorageD1 extends ScoresStorage {
 
       await this.operations.executeQuery({ sql, params });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {

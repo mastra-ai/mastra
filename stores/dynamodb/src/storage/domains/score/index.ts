@@ -141,14 +141,14 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     try {
       await this.service.entities.score.upsert(scoreData).go();
 
-      const savedScore: ScoreRowData = {
-        ...score,
-        id: scoreId,
-        createdAt: now,
-        updatedAt: now,
+      return {
+        score: {
+          ...validatedScore,
+          id: scoreId,
+          createdAt: now,
+          updatedAt: now,
+        } as ScoreRowData,
       };
-
-      return { score: savedScore };
     } catch (error) {
       throw new MastraError(
         {

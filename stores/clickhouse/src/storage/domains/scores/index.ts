@@ -122,7 +122,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-      return { score: { ...score, id, createdAt, updatedAt } };
+      return { score: { ...parsedScore, id, createdAt, updatedAt } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
