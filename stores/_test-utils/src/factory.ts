@@ -14,6 +14,7 @@ import { createScoresTest } from './domains/scores';
 import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
 import { createOperationsTests } from './domains/operations';
+import type { OperationsSkipTests } from './domains/operations';
 import { createObservabilityTests } from './domains/observability';
 import { createAgentsTests } from './domains/agents';
 export * from './domains/memory/data';
@@ -22,7 +23,17 @@ export * from './domains/scores/data';
 export * from './domains/observability/data';
 export * from './domains/agents/data';
 
-export function createTestSuite(storage: MastraStorage) {
+/**
+ * Options for createTestSuite to customize test execution
+ */
+export interface TestSuiteOptions {
+  /**
+   * Tests to skip in the operations module (index management, etc.)
+   */
+  skipOperationsTests?: OperationsSkipTests;
+}
+
+export function createTestSuite(storage: MastraStorage, options: TestSuiteOptions = {}) {
   describe(storage.constructor.name, () => {
     beforeAll(async () => {
       const start = Date.now();
@@ -34,6 +45,7 @@ export function createTestSuite(storage: MastraStorage) {
 
     afterAll(async () => {
       // Clear tables after tests
+      // Note: Individual storage implementations handle retry logic internally
       await Promise.all([
         storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT }),
         storage.clearTable({ tableName: TABLE_MESSAGES }),
@@ -46,7 +58,7 @@ export function createTestSuite(storage: MastraStorage) {
       ]);
     });
 
-    createOperationsTests({ storage });
+    createOperationsTests({ storage, skipTests: options.skipOperationsTests });
 
     createWorkflowsTests({ storage });
 
