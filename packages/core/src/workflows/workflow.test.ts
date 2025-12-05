@@ -4120,7 +4120,7 @@ describe('Workflow', () => {
         outputSchema: shareSchema,
         stateSchema: shareSchema,
       })
-        .parallel([step1, setSteps])
+        .parallel([step1, workflow2])
         .then(step2)
         .commit();
 
