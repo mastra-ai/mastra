@@ -62,7 +62,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
         updatedAt: now,
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      await this.operations.insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -302,7 +302,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
         };
       });
 
-      return this.operations.batchInsert({
+      await this.operations.batchInsert({
         tableName: TABLE_SPANS,
         records,
       });
@@ -326,7 +326,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     }[];
   }): Promise<void> {
     try {
-      return this.operations.batchUpdate({
+      await this.operations.batchUpdate({
         tableName: TABLE_SPANS,
         updates: args.records.map(record => {
           const data: Partial<UpdateSpanRecord> & {
