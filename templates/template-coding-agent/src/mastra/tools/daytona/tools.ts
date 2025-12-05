@@ -285,7 +285,11 @@ export const deleteFile = createTool({
       const sandbox = await getSandboxById(sandboxId);
       const normalizedPath = normalizeSandboxPath(path);
 
-      await sandbox.fs.deleteFile(normalizedPath);
+      // Check if the path is a directory
+      const fileInfo = await sandbox.fs.getFileDetails(normalizedPath);
+      const isDirectory = fileInfo.isDir;
+
+      await sandbox.fs.deleteFile(normalizedPath, isDirectory);
 
       return {
         success: true,
