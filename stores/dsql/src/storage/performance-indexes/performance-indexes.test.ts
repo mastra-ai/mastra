@@ -39,28 +39,28 @@ describe('DSQLStore Performance Indexes', () => {
       expect(operations.createIndex).toHaveBeenCalledWith({
         name: 'test_schema_mastra_threads_resourceid_createdat_idx',
         table: 'mastra_threads',
-        columns: ['resourceId', 'createdAt DESC'],
+        columns: ['resourceId', 'createdAt'],
       });
 
       // Check that composite index for messages is created
       expect(operations.createIndex).toHaveBeenCalledWith({
         name: 'test_schema_mastra_messages_thread_id_createdat_idx',
         table: 'mastra_messages',
-        columns: ['thread_id', 'createdAt DESC'],
+        columns: ['thread_id', 'createdAt'],
       });
 
       // Check that composite index for traces is created
       expect(operations.createIndex).toHaveBeenCalledWith({
         name: 'test_schema_mastra_traces_name_starttime_idx',
         table: 'mastra_traces',
-        columns: ['name', 'startTime DESC'],
+        columns: ['name', 'startTime'],
       });
 
       // Check that composite index for scores is created
       expect(operations.createIndex).toHaveBeenCalledWith({
         name: 'test_schema_mastra_scores_trace_id_span_id_created_at_idx',
         table: 'mastra_scorers',
-        columns: ['traceId', 'spanId', 'createdAt DESC'],
+        columns: ['traceId', 'spanId', 'createdAt'],
       });
     });
 
@@ -103,7 +103,7 @@ describe('DSQLStore Performance Indexes', () => {
       expect(publicOperations.createIndex).toHaveBeenCalledWith({
         name: 'mastra_threads_resourceid_createdat_idx', // No schema prefix
         table: 'mastra_threads',
-        columns: ['resourceId', 'createdAt DESC'],
+        columns: ['resourceId', 'createdAt'],
       });
     });
   });
