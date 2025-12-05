@@ -467,22 +467,57 @@ ${suggestedContinuation}
   }
 
   /**
-   * Process input - inject observations and filter messages.
+   * Get threadId and resourceId from either RequestContext or MessageList
    */
-  async processInput(args: ProcessInputArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext } = args;
-
+  private getThreadContext(
+    requestContext: ProcessInputArgs['requestContext'],
+    messageList: MessageList,
+  ): { threadId: string; resourceId?: string } | null {
+    // First try RequestContext (set by Memory)
     const memoryContext = requestContext?.get('MastraMemory') as
       | { thread?: { id: string }; resourceId?: string }
       | undefined;
-    const threadId = memoryContext?.thread?.id;
-    const resourceId = memoryContext?.resourceId;
 
-    if (!threadId) {
+    if (memoryContext?.thread?.id) {
+      return {
+        threadId: memoryContext.thread.id,
+        resourceId: memoryContext.resourceId,
+      };
+    }
+
+    // Fallback to MessageList's memoryInfo
+    const serialized = messageList.serialize();
+    if (serialized.memoryInfo?.threadId) {
+      return {
+        threadId: serialized.memoryInfo.threadId,
+        resourceId: serialized.memoryInfo.resourceId,
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Process input - inject observations and filter messages.
+   */
+  async processInput(args: ProcessInputArgs): Promise<MessageList | MastraDBMessage[]> {
+    const { messageList, messages, requestContext } = args;
+
+    console.log(`[OM processInput] Messages: ${messages.length}`);
+
+    const context = this.getThreadContext(requestContext, messageList);
+    if (!context) {
+      console.log('[OM processInput] No thread context found, skipping');
       return messageList;
     }
 
+    const { threadId, resourceId } = context;
+    console.log(`[OM processInput] Thread: ${threadId}, Resource: ${resourceId}`);
+
     const record = await this.getOrCreateRecord(threadId, resourceId);
+    console.log(
+      `[OM processInput] Record found - observations: ${record.activeObservations ? 'YES' : 'NO'}, observedMsgIds: ${record.observedMessageIds.length}`,
+    );
 
     // Inject observations as a system message
     if (record.activeObservations) {
@@ -490,15 +525,25 @@ ${suggestedContinuation}
         record.activeObservations,
         record.suggestedContinuation,
       );
+      console.log(`[OM processInput] Injecting observations (${observationSystemMessage.length} chars)`);
       messageList.addSystem(observationSystemMessage, 'observational-memory');
     }
 
     // Remove observed messages from context
     const observedIds = [...record.observedMessageIds, ...record.bufferedMessageIds];
 
+    const beforeCount = messageList.get.all.db().length;
     if (observedIds.length > 0) {
       messageList.removeByIds(observedIds);
+      const afterCount = messageList.get.all.db().length;
+      console.log(
+        `[OM processInput] Removed ${beforeCount - afterCount} observed messages (${beforeCount} → ${afterCount})`,
+      );
     }
+
+    // Log what agent will actually see
+    const finalMessages = messageList.get.all.db();
+    console.log(`[OM processInput] Agent will see: observations + ${finalMessages.length} unobserved messages`);
 
     return messageList;
   }
@@ -509,15 +554,12 @@ ${suggestedContinuation}
   async processOutputResult(args: ProcessOutputResultArgs): Promise<MessageList> {
     const { messageList, requestContext } = args;
 
-    const memoryContext = requestContext?.get('MastraMemory') as
-      | { thread?: { id: string }; resourceId?: string }
-      | undefined;
-    const threadId = memoryContext?.thread?.id;
-    const resourceId = memoryContext?.resourceId;
-
-    if (!threadId) {
+    const context = this.getThreadContext(requestContext, messageList);
+    if (!context) {
       return messageList;
     }
+
+    const { threadId, resourceId } = context;
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
 
@@ -525,6 +567,13 @@ ${suggestedContinuation}
     const unobservedMessages = this.getUnobservedMessages(allMessages, record);
     const messageTokens = this.tokenCounter.countMessages(unobservedMessages);
     const currentObservationTokens = record.observationTokenCount ?? 0;
+
+    console.log(
+      `[OM processOutputResult] Message tokens: ${messageTokens}, Current observation tokens: ${currentObservationTokens}`,
+    );
+    console.log(
+      `[OM processOutputResult] Should observe: ${this.shouldObserve(messageTokens, currentObservationTokens)}`,
+    );
 
     // Check if we need to observe
     if (this.shouldObserve(messageTokens, currentObservationTokens)) {
@@ -544,12 +593,16 @@ ${suggestedContinuation}
         // Call Observer agent
         const result = await this.callObserver(record.activeObservations, unobservedMessages);
 
+        console.log(`[OM] Observer returned observations (${result.observations.length} chars)`);
+
         // Combine with existing observations
         const newObservations = record.activeObservations
           ? `${record.activeObservations}\n\n${result.observations}`
           : result.observations;
 
         const totalTokenCount = this.tokenCounter.countObservations(newObservations);
+
+        console.log(`[OM] Storing observations: ${totalTokenCount} tokens, ${messageIdsToObserve.length} message IDs`);
 
         // Update storage
         await this.storage.updateActiveObservations({
@@ -559,6 +612,8 @@ ${suggestedContinuation}
           tokenCount: totalTokenCount,
           suggestedContinuation: result.suggestedContinuation,
         });
+
+        console.log(`[OM] Observations stored successfully`);
 
         // Check if we need to reflect
         if (this.shouldReflect(totalTokenCount)) {

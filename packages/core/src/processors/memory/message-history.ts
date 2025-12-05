@@ -32,6 +32,34 @@ export class MessageHistory implements Processor {
     this.lastMessages = options.lastMessages;
   }
 
+  /**
+   * Get threadId and resourceId from either RequestContext or MessageList's memoryInfo
+   */
+  private getMemoryContext(
+    requestContext: RequestContext | undefined,
+    messageList: MessageList,
+  ): { threadId: string; resourceId?: string } | null {
+    // First try RequestContext (set by Memory class)
+    const memoryContext = parseMemoryRuntimeContext(requestContext);
+    if (memoryContext?.thread?.id) {
+      return {
+        threadId: memoryContext.thread.id,
+        resourceId: memoryContext.resourceId,
+      };
+    }
+
+    // Fallback to MessageList's memoryInfo (set when MessageList is created with threadId)
+    const serialized = messageList.serialize();
+    if (serialized.memoryInfo?.threadId) {
+      return {
+        threadId: serialized.memoryInfo.threadId,
+        resourceId: serialized.memoryInfo.resourceId,
+      };
+    }
+
+    return null;
+  }
+
   async processInput(args: {
     messages: MastraDBMessage[];
     messageList: MessageList;
@@ -39,15 +67,18 @@ export class MessageHistory implements Processor {
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList } = args;
+    const { messageList, requestContext } = args;
 
-    // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(args.requestContext);
-    const threadId = memoryContext?.thread?.id;
+    // Get memory context from RequestContext or MessageList
+    const context = this.getMemoryContext(requestContext, messageList);
 
-    if (!threadId) {
+    console.log(`[MessageHistory processInput] Context: ${JSON.stringify(context)}`);
+
+    if (!context) {
       return messageList;
     }
+
+    const { threadId } = context;
 
     // 1. Fetch historical messages from storage (as DB format)
     const result = await this.storage.listMessages({
@@ -124,16 +155,20 @@ export class MessageHistory implements Processor {
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
   }): Promise<MessageList> {
-    const { messageList } = args;
+    const { messageList, requestContext } = args;
 
-    // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(args.requestContext);
-    const threadId = memoryContext?.thread?.id;
+    // Get memory context from RequestContext or MessageList
+    const context = this.getMemoryContext(requestContext, messageList);
+
+    // Check if readOnly from memoryConfig
+    const memoryContext = parseMemoryRuntimeContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    if (!threadId || readOnly) {
+    if (!context || readOnly) {
       return messageList;
     }
+
+    const { threadId } = context;
 
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();

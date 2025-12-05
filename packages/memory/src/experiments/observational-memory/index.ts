@@ -15,16 +15,7 @@
 export { ObservationalMemory, type ObservationalMemoryConfig } from './observational-memory';
 
 // Types
-export type {
-  ObserverConfig,
-  ReflectorConfig,
-  ObserverResult,
-  ReflectorResult,
-  ThresholdRange,
-  ModelSettings,
-  ProviderOptions,
-  GoogleProviderOptions,
-} from './types';
+export type { ObserverConfig, ReflectorConfig, ObserverResult, ReflectorResult } from './types';
 
 // Observer Agent
 export {
@@ -33,15 +24,10 @@ export {
   parseObserverOutput,
   optimizeObservationsForContext,
   formatMessagesForObserver,
+  DEFAULT_OBSERVER_CONFIG,
+  type ObserverAgentConfig,
+  type ObserverResult as ObserverAgentResult,
 } from './observer-agent';
-
-// Reflector Agent
-export {
-  REFLECTOR_SYSTEM_PROMPT,
-  buildReflectorPrompt,
-  parseReflectorOutput,
-  validateCompression,
-} from './reflector-agent';
 
 // Re-export storage types from core for convenience
 export type {
