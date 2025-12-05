@@ -355,66 +355,6 @@ const agent = new Agent({
 
 ${generateProviderOptionsSection(provider.id)}
 ${
-  provider.id === 'openai'
-    ? `
-## Zero Data Retention
-
-If your OpenAI organization has [zero data retention](https://platform.openai.com/docs/guides/your-data#zero-data-retention) enabled, you must explicitly set \`store: false\` in your provider options to prevent API errors.
-
-You can set this per request:
-
-\`\`\`typescript
-const agent = new Agent({
-  id: "zero-retention-agent",
-  name: "Zero Retention Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o"
-});
-
-// when using generate
-const response = await agent.generate("Hello!", {
-  providerOptions: {
-    openai: {
-      store: false  // Required for zero data retention orgs
-    }
-  }
-});
-
-// when using stream
-const stream = await agent.stream("Hello!", {
-  providerOptions: {
-    openai: {
-      store: false  // Required for zero data retention orgs
-    }
-  }
-});
-\`\`\`
-
-Or configure it globally for all requests from an agent using \`defaultOptions\`:
-
-\`\`\`typescript
-const agent = new Agent({
-  id: "zero-retention-agent",
-  name: "Zero Retention Agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o",
-  defaultOptions: {
-    providerOptions: {
-      openai: {
-        store: false  // Applies to all generate/stream calls
-      }
-    }
-  }
-});
-
-// Now all calls will automatically include store: false
-const response = await agent.generate("Hello!");
-const stream = await agent.stream("Tell me a story");
-\`\`\`
-`
-    : ''
-}
-${
   provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
     ? `
 ## Direct Provider Installation
