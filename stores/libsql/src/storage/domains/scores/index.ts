@@ -224,10 +224,10 @@ export class ScoresLibSQL extends ScoresStorage {
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
+          ...parsedScore,
           id,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
-          ...parsedScore,
         },
       });
 

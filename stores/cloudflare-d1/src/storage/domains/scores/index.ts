@@ -127,6 +127,7 @@ export class ScoresStorageD1 extends ScoresStorage {
           id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: { id },
         },
         error,
       );
