@@ -498,12 +498,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         let stepTools = tools;
         let stepProviderOptions = providerOptions;
 
-        const messageListPromptArgs = {
-          downloadRetries,
-          downloadConcurrency,
-          supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
-        };
-
         const inputStepProcessors = [
           ...(inputProcessors || []),
           ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
@@ -554,7 +548,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           _internal: _internal!,
           model: stepModel,
         });
-
+        const messageListPromptArgs = {
+          downloadRetries,
+          downloadConcurrency,
+          supportedUrls: stepModel?.supportedUrls as Record<string, RegExp[]>,
+        };
         const inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
         switch (stepModel.specificationVersion) {
