@@ -212,6 +212,22 @@ npx @mastra/codemod@beta v1/workflow-stream-vnext .
 
 :::
 
+### `suspend` and `setState` are not available in step conditon functions parameters
+
+The `suspend` and `setState` functions are not available in step conditon functions parameters.
+
+To migrate, use the `suspend` function in the step execute function instead.
+
+```diff
+.dowhile(step, async ({ suspend, state, setState }) => {
+- setState({...state, updatedState: "updated state"})
+- await suspend({ reason: "Suspension reason" });
++ // Use the suspend/setState in the step execute function instead
+});
+```
+
+This is the same for `dountil` and `branch` condition functions parameters.
+
 ### Legacy workflows export
 
 The `./workflows/legacy` export path has been removed from `@mastra/core`. Legacy workflows are no longer supported.

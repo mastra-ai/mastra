@@ -376,9 +376,7 @@ export async function executeStep(
     // For Inngest: on replay, the wrapped function didn't re-execute, so we restore from the memoized result
     Object.assign(executionContext.suspendedPaths, durableResult.contextMutations.suspendedPaths);
     Object.assign(executionContext.resumeLabels, durableResult.contextMutations.resumeLabels);
-    // if (durableResult.contextMutations.stateUpdate !== null) {
-    //   executionContext.state = durableResult.contextMutations.stateUpdate;
-    // }
+
     // Restore requestContext from memoized result (only for engines that need it)
     if (engine.requiresDurableContextSerialization() && durableResult.contextMutations.requestContextUpdate) {
       requestContext.clear();
