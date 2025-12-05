@@ -56,7 +56,7 @@ export const runCode = createTool({
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to run the code'),
     code: z.string().describe('The code to run in the sandbox'),
-    argv: z.array(z.string()).nullable().describe('Command line arguments to pass to the code.'),
+    argv: z.array(z.string()).optional().describe('Command line arguments to pass to the code.'),
     envs: z.record(z.string()).optional().describe('Custom environment variables for code execution.'),
     timeoutSeconds: z.number().optional().describe(`
           Maximum time in seconds to wait for execution to complete
