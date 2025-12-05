@@ -503,7 +503,7 @@ export class MemoryDSQL extends MemoryStorage {
         {
           id: 'MASTRA_STORAGE_DSQL_STORE_INVALID_THREAD_ID',
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
           details: { threadId: Array.isArray(threadId) ? String(threadId) : String(threadId) },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
@@ -675,7 +675,7 @@ export class MemoryDSQL extends MemoryStorage {
       throw new MastraError({
         id: 'MASTRA_STORAGE_DSQL_STORE_SAVE_MESSAGES_FAILED',
         domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.THIRD_PARTY,
+        category: ErrorCategory.USER,
         text: `Thread ID is required`,
       });
     }
@@ -686,7 +686,7 @@ export class MemoryDSQL extends MemoryStorage {
       throw new MastraError({
         id: 'MASTRA_STORAGE_DSQL_STORE_SAVE_MESSAGES_FAILED',
         domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.THIRD_PARTY,
+        category: ErrorCategory.USER,
         text: `Thread ${threadId} not found`,
         details: {
           threadId,
