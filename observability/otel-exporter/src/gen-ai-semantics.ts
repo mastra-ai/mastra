@@ -16,6 +16,7 @@ import type {
   MCPToolCallAttributes,
   ModelGenerationAttributes,
   ToolCallAttributes,
+  UsageStats,
   WorkflowRunAttributes,
 } from '@mastra/core/observability';
 import type { Attributes } from '@opentelemetry/api';
@@ -50,6 +51,62 @@ import {
   ATTR_GEN_AI_TOOL_NAME,
 } from '@opentelemetry/semantic-conventions/incubating';
 import { convertMastraMessagesToGenAIMessages } from './gen-ai-messages';
+
+/**
+ * Token usage attributes following OTel GenAI semantic conventions.
+ * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+ */
+export interface OtelUsageMetrics {
+  [ATTR_GEN_AI_USAGE_INPUT_TOKENS]?: number;
+  [ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]?: number;
+  'gen_ai.usage.reasoning_tokens'?: number;
+  'gen_ai.usage.cached_input_tokens'?: number;
+  'gen_ai.usage.cache_write_tokens'?: number;
+  'gen_ai.usage.audio_input_tokens'?: number;
+  'gen_ai.usage.audio_output_tokens'?: number;
+}
+
+/**
+ * Formats UsageStats to OTel GenAI semantic convention attributes.
+ */
+export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
+  if (!usage) return {};
+
+  const metrics: OtelUsageMetrics = {};
+
+  if (usage.inputTokens !== undefined) {
+    metrics[ATTR_GEN_AI_USAGE_INPUT_TOKENS] = usage.inputTokens;
+  }
+
+  if (usage.outputTokens !== undefined) {
+    metrics[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS] = usage.outputTokens;
+  }
+
+  // Reasoning tokens from outputDetails
+  if (usage.outputDetails?.reasoning !== undefined) {
+    metrics['gen_ai.usage.reasoning_tokens'] = usage.outputDetails.reasoning;
+  }
+
+  // Cache read tokens from inputDetails
+  if (usage.inputDetails?.cacheRead !== undefined) {
+    metrics['gen_ai.usage.cached_input_tokens'] = usage.inputDetails.cacheRead;
+  }
+
+  // Cache write tokens from inputDetails
+  if (usage.inputDetails?.cacheWrite !== undefined) {
+    metrics['gen_ai.usage.cache_write_tokens'] = usage.inputDetails.cacheWrite;
+  }
+
+  // Audio tokens from inputDetails/outputDetails
+  if (usage.inputDetails?.audio !== undefined) {
+    metrics['gen_ai.usage.audio_input_tokens'] = usage.inputDetails.audio;
+  }
+  if (usage.outputDetails?.audio !== undefined) {
+    metrics['gen_ai.usage.audio_output_tokens'] = usage.outputDetails.audio;
+  }
+
+  return metrics;
+}
 
 /**
  * Get the operation name based on span type for gen_ai.operation.name
@@ -175,64 +232,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     }
 
     // Token usage - use OTEL standard naming + OpenInference conventions
-    if (modelAttrs.usage) {
-      const usage = modelAttrs.usage;
-
-      if (usage.inputTokens !== undefined) {
-        attributes[ATTR_GEN_AI_USAGE_INPUT_TOKENS] = usage.inputTokens;
-        // OpenInference: llm.token_count.prompt
-        attributes['llm.token_count.prompt'] = usage.inputTokens;
-      }
-      if (usage.outputTokens !== undefined) {
-        attributes[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS] = usage.outputTokens;
-        // OpenInference: llm.token_count.completion
-        attributes['llm.token_count.completion'] = usage.outputTokens;
-      }
-
-      // Reasoning tokens from outputDetails
-      if (usage.outputDetails?.reasoning !== undefined) {
-        attributes['gen_ai.usage.reasoning_tokens'] = usage.outputDetails.reasoning;
-        // OpenInference: llm.token_count.completion_details.reasoning
-        attributes['llm.token_count.completion_details.reasoning'] = usage.outputDetails.reasoning;
-      }
-
-      // Cache read tokens from inputDetails
-      if (usage.inputDetails?.cacheRead !== undefined) {
-        attributes['gen_ai.usage.cached_input_tokens'] = usage.inputDetails.cacheRead;
-        // OpenInference: llm.token_count.prompt_details.cache_read
-        attributes['llm.token_count.prompt_details.cache_read'] = usage.inputDetails.cacheRead;
-      }
-
-      // Cache write tokens from inputDetails
-      if (usage.inputDetails?.cacheWrite !== undefined) {
-        // OpenInference: llm.token_count.prompt_details.cache_write
-        attributes['llm.token_count.prompt_details.cache_write'] = usage.inputDetails.cacheWrite;
-      }
-
-      // Audio tokens from inputDetails/outputDetails
-      if (usage.inputDetails?.audio !== undefined) {
-        attributes['llm.token_count.prompt_details.audio'] = usage.inputDetails.audio;
-      }
-      if (usage.outputDetails?.audio !== undefined) {
-        attributes['llm.token_count.completion_details.audio'] = usage.outputDetails.audio;
-      }
-
-      // Image tokens from inputDetails/outputDetails
-      if (usage.inputDetails?.image !== undefined) {
-        attributes['llm.token_count.prompt_details.image'] = usage.inputDetails.image;
-      }
-      if (usage.outputDetails?.image !== undefined) {
-        attributes['llm.token_count.completion_details.image'] = usage.outputDetails.image;
-      }
-
-      // Text tokens from inputDetails/outputDetails
-      if (usage.inputDetails?.text !== undefined) {
-        attributes['llm.token_count.prompt_details.text'] = usage.inputDetails.text;
-      }
-      if (usage.outputDetails?.text !== undefined) {
-        attributes['llm.token_count.completion_details.text'] = usage.outputDetails.text;
-      }
-    }
+    Object.assign(attributes, formatUsageMetrics(modelAttrs.usage));
 
     // Parameters using OTEL conventions
     if (modelAttrs.parameters) {

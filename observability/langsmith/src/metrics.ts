@@ -1,4 +1,5 @@
-import type { ModelGenerationAttributes } from '@mastra/core/observability';
+import type { UsageStats } from '@mastra/core/observability';
+
 /**
  * LangSmithUsageMetrics
  *
@@ -15,12 +16,13 @@ export interface LangSmithUsageMetrics {
   output_token_details?: {
     [key: string]: number;
   };
-  [key: string]: number | { [key: string]: number } | undefined;
 }
 
-export function normalizeUsageMetrics(modelAttr: ModelGenerationAttributes): LangSmithUsageMetrics {
+/**
+ * Formats UsageStats to LangSmith's expected metric format.
+ */
+export function formatUsageMetrics(usage?: UsageStats): LangSmithUsageMetrics {
   const metrics: LangSmithUsageMetrics = {};
-  const usage = modelAttr.usage;
 
   if (usage?.inputTokens !== undefined) {
     metrics.input_tokens = usage.inputTokens;

@@ -510,7 +510,7 @@ describe('BraintrustExporter', () => {
         metrics: {
           prompt_tokens: 10,
           completion_tokens: 5,
-          tokens: 15, // computed total
+          tokens: 15,
         },
         metadata: {
           spanType: 'model_generation',
@@ -677,7 +677,7 @@ describe('BraintrustExporter', () => {
       expect(mockSpan.log).toHaveBeenCalledWith({
         // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
         output: { role: 'assistant', content: 'Updated response' },
-        metrics: { prompt_tokens: 100, completion_tokens: 50, tokens: 150 }, // computed total
+        metrics: { prompt_tokens: 100, completion_tokens: 50, tokens: 150 },
         metadata: {
           spanType: 'model_generation',
           model: 'gpt-4',

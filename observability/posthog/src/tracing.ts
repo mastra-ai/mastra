@@ -5,9 +5,9 @@ import { BaseExporter } from '@mastra/observability';
 import { PostHog } from 'posthog-node';
 
 /**
- * PostHog usage properties interface
+ * Token usage format compatible with PostHog.
  */
-export interface PostHogUsageProperties {
+export interface PostHogUsageMetrics {
   $ai_input_tokens?: number;
   $ai_output_tokens?: number;
   $ai_total_tokens?: number;
@@ -19,15 +19,15 @@ export interface PostHogUsageProperties {
 }
 
 /**
- * Extracts and normalizes token usage from UsageStats to PostHog property format.
+ * Formats UsageStats to PostHog's expected property format.
  *
  * @param usage - The UsageStats from span attributes
  * @returns PostHog-formatted usage properties
  */
-export function extractUsageProperties(usage: UsageStats | undefined): PostHogUsageProperties {
+export function formatUsageMetrics(usage?: UsageStats): PostHogUsageMetrics {
   if (!usage) return {};
 
-  const props: PostHogUsageProperties = {};
+  const props: PostHogUsageMetrics = {};
 
   if (usage.inputTokens !== undefined) props.$ai_input_tokens = usage.inputTokens;
   if (usage.outputTokens !== undefined) props.$ai_output_tokens = usage.outputTokens;
@@ -379,7 +379,7 @@ export class PosthogExporter extends BaseExporter {
     if (span.output) props.$ai_output_choices = this.formatMessages(span.output, 'assistant');
 
     // Extract usage properties using the shared utility
-    Object.assign(props, extractUsageProperties(attrs.usage));
+    Object.assign(props, formatUsageMetrics(attrs.usage));
 
     if (attrs.parameters) {
       if (attrs.parameters.temperature !== undefined) props.$ai_temperature = attrs.parameters.temperature;

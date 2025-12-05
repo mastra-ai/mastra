@@ -511,7 +511,7 @@ describe('LangSmithExporter', () => {
           usage_metadata: {
             input_tokens: 10,
             output_tokens: 5,
-            total_tokens: 15, // computed from input + output
+            total_tokens: 15,
           },
           streaming: false,
           resultType: 'response_generation',
@@ -626,7 +626,7 @@ describe('LangSmithExporter', () => {
           usage_metadata: {
             input_tokens: 100,
             output_tokens: 50,
-            total_tokens: 150, // computed from input + output
+            total_tokens: 150,
           },
         }),
       );

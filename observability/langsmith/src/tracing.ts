@@ -14,7 +14,7 @@ import type { BaseExporterConfig } from '@mastra/observability';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
-import { normalizeUsageMetrics } from './metrics';
+import { formatUsageMetrics } from './metrics';
 
 export interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   /** LangSmith client instance */
@@ -335,7 +335,7 @@ export class LangSmithExporter extends BaseExporter {
       }
 
       // Usage/token info goes to metrics
-      payload.metadata.usage_metadata = normalizeUsageMetrics(modelAttr);
+      payload.metadata.usage_metadata = formatUsageMetrics(modelAttr.usage);
 
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {

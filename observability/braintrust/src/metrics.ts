@@ -1,4 +1,5 @@
-import type { ModelGenerationAttributes } from '@mastra/core/observability';
+import type { UsageStats } from '@mastra/core/observability';
+
 /**
  * BraintrustUsageMetrics
  *
@@ -11,13 +12,13 @@ export interface BraintrustUsageMetrics {
   completion_reasoning_tokens?: number;
   prompt_cached_tokens?: number;
   prompt_cache_creation_tokens?: number;
-  time_to_first_token?: number;
-  [key: string]: number | undefined;
 }
 
-export function normalizeUsageMetrics(modelAttr: ModelGenerationAttributes): BraintrustUsageMetrics {
+/**
+ * Formats UsageStats to Braintrust's expected metric format.
+ */
+export function formatUsageMetrics(usage?: UsageStats): BraintrustUsageMetrics {
   const metrics: BraintrustUsageMetrics = {};
-  const usage = modelAttr.usage;
 
   if (usage?.inputTokens !== undefined) {
     metrics.prompt_tokens = usage.inputTokens;
@@ -44,17 +45,25 @@ export function normalizeUsageMetrics(modelAttr: ModelGenerationAttributes): Bra
     metrics.prompt_cache_creation_tokens = usage.inputDetails.cacheWrite;
   }
 
-  // Time to first token (TTFT) for streaming responses
-  if (modelAttr.completionStartTime) {
-    const startTime = modelAttr.completionStartTime;
-    if (startTime instanceof Date) {
-      metrics.time_to_first_token = startTime.getTime();
-    } else if (typeof startTime === 'number') {
-      metrics.time_to_first_token = startTime;
-    } else if (typeof startTime === 'string') {
-      metrics.time_to_first_token = new Date(startTime).getTime();
-    }
+  return metrics;
+}
+
+/**
+ * Extracts time to first token (TTFT) from completionStartTime.
+ * Returns the timestamp in milliseconds, or undefined if not available.
+ */
+export function extractTimeToFirstToken(completionStartTime: Date | number | string | undefined): number | undefined {
+  if (!completionStartTime) {
+    return undefined;
   }
 
-  return metrics;
+  if (completionStartTime instanceof Date) {
+    return completionStartTime.getTime();
+  } else if (typeof completionStartTime === 'number') {
+    return completionStartTime;
+  } else if (typeof completionStartTime === 'string') {
+    return new Date(completionStartTime).getTime();
+  }
+
+  return undefined;
 }

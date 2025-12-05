@@ -4,15 +4,9 @@
  * This exporter sends observability data to Langfuse.
  * Root spans start traces in Langfuse.
  * MODEL_GENERATION spans become Langfuse generations, all others become spans.
- *
- * Compatible with both AI SDK v4 and v5:
- * - Handles both legacy token usage format (promptTokens/completionTokens)
- *   and v5 format (inputTokens/outputTokens)
- * - Supports v5 reasoning tokens and cache-related metrics
- * - Adapts to v5 streaming protocol changes
  */
 
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, UsageStats } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
@@ -52,9 +46,9 @@ type TraceData = {
 type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
 
 /**
- * Normalized token usage format compatible with Langfuse.
+ * Token usage format compatible with Langfuse.
  */
-export interface NormalizedUsage {
+export interface LangfuseUsageMetrics {
   input?: number;
   output?: number;
   total?: number;
@@ -64,39 +58,39 @@ export interface NormalizedUsage {
 }
 
 /**
- * Normalize usage data to Langfuse format.
+ * Formats UsageStats to Langfuse's expected format.
  */
-export function normalizeUsage(usage: ModelGenerationAttributes['usage']): NormalizedUsage | undefined {
-  if (!usage) return undefined;
+export function formatUsageMetrics(usage?: UsageStats): LangfuseUsageMetrics {
+  if (!usage) return {};
 
-  const normalized: NormalizedUsage = {};
+  const metrics: LangfuseUsageMetrics = {};
 
   if (usage.inputTokens !== undefined) {
-    normalized.input = usage.inputTokens;
+    metrics.input = usage.inputTokens;
   }
 
   if (usage.outputTokens !== undefined) {
-    normalized.output = usage.outputTokens;
+    metrics.output = usage.outputTokens;
   }
 
   // Compute total if we have both
-  if (normalized.input !== undefined && normalized.output !== undefined) {
-    normalized.total = normalized.input + normalized.output;
+  if (metrics.input !== undefined && metrics.output !== undefined) {
+    metrics.total = metrics.input + metrics.output;
   }
 
   if (usage.outputDetails?.reasoning !== undefined) {
-    normalized.reasoning = usage.outputDetails.reasoning;
+    metrics.reasoning = usage.outputDetails.reasoning;
   }
 
   if (usage.inputDetails?.cacheRead !== undefined) {
-    normalized.cachedInput = usage.inputDetails.cacheRead;
+    metrics.cachedInput = usage.inputDetails.cacheRead;
   }
 
   if (usage.inputDetails?.cacheWrite !== undefined) {
-    normalized.cacheWrite = usage.inputDetails.cacheWrite;
+    metrics.cacheWrite = usage.inputDetails.cacheWrite;
   }
 
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
+  return metrics;
 }
 
 export class LangfuseExporter extends BaseExporter {
@@ -443,11 +437,7 @@ export class LangfuseExporter extends BaseExporter {
       }
 
       if (modelAttr.usage !== undefined) {
-        // Normalize usage to handle both v4 and v5 formats
-        const normalizedUsage = normalizeUsage(modelAttr.usage);
-        if (normalizedUsage) {
-          payload.usage = normalizedUsage;
-        }
+        payload.usage = formatUsageMetrics(modelAttr.usage);
         attributesToOmit.push('usage');
       }
 

@@ -13,7 +13,7 @@ import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
-import { normalizeUsageMetrics } from './metrics';
+import { formatUsageMetrics, extractTimeToFirstToken } from './metrics';
 
 const MASTRA_TRACE_ID_METADATA_KEY = 'mastra-trace-id';
 
@@ -426,7 +426,13 @@ export class BraintrustExporter extends BaseExporter {
       }
 
       // Usage/token info goes to metrics
-      payload.metrics = normalizeUsageMetrics(modelAttr);
+      payload.metrics = formatUsageMetrics(modelAttr.usage);
+
+      // Time to first token (TTFT) for streaming responses
+      const ttft = extractTimeToFirstToken(modelAttr.completionStartTime);
+      if (ttft !== undefined) {
+        payload.metrics.time_to_first_token = ttft;
+      }
 
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {

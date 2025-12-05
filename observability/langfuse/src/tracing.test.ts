@@ -680,7 +680,7 @@ describe('LangfuseExporter', () => {
         usage: {
           input: 100,
           output: 50,
-          total: 150, // computed
+          total: 150,
         },
       });
     });
@@ -1395,7 +1395,7 @@ describe('LangfuseExporter', () => {
             usage: {
               input: 120,
               output: 60,
-              total: 180, // computed
+              total: 180,
             },
           }),
         );
@@ -1430,7 +1430,7 @@ describe('LangfuseExporter', () => {
               input: 100,
               output: 1050,
               reasoning: 1000,
-              total: 1150, // computed
+              total: 1150,
             },
           }),
         );
@@ -1465,7 +1465,7 @@ describe('LangfuseExporter', () => {
               input: 150,
               output: 75,
               cachedInput: 100,
-              total: 225, // computed
+              total: 225,
             },
           }),
         );
