@@ -140,7 +140,7 @@ export function workflowLoopStream<
           ...executionResult.result,
           stepResult: {
             ...executionResult.result.stepResult,
-            // @ts-ignore we add 'tripwire' and 'retry' for processor scenarios so the type is not compatible
+            // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
             reason: executionResult.result.stepResult.reason,
           },
         },

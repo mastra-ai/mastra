@@ -24,7 +24,8 @@ import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
-  reason: LanguageModelV2FinishReason | 'tripwire';
+  /** Includes 'tripwire' and 'retry' for processor scenarios */
+  reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
   warnings: LanguageModelV2CallWarning[];
   isContinued: boolean;
   logprobs?: LanguageModelV1LogProbs;

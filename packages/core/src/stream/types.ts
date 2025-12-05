@@ -170,7 +170,8 @@ interface ToolCallInputStreamingEndPayload {
 
 interface FinishPayload<Tools extends ToolSet = ToolSet> {
   stepResult: {
-    reason: LanguageModelV2FinishReason;
+    /** Includes 'tripwire' and 'retry' for processor scenarios */
+    reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
     warnings?: LanguageModelV2CallWarning[];
     isContinued?: boolean;
     logprobs?: LanguageModelV1LogProbs;
