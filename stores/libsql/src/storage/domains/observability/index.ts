@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   CreateSpanRecord,
@@ -31,7 +31,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_CREATE_SPAN_FAILED',
+          id: createStorageErrorId('LIBSQL', 'CREATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -65,7 +65,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_TRACE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'GET_TRACE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -95,7 +95,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_UPDATE_SPAN_FAILED',
+          id: createStorageErrorId('LIBSQL', 'UPDATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -134,7 +134,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
         name = `agent run: '${entityId}'`;
       } else {
         const error = new MastraError({
-          id: 'LIBSQL_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('LIBSQL', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -166,7 +166,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_TRACES_PAGINATED_COUNT_FAILED',
+          id: createStorageErrorId('LIBSQL', 'GET_TRACES_PAGINATED', 'COUNT_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -210,7 +210,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('LIBSQL', 'GET_TRACES_PAGINATED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -234,7 +234,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_BATCH_CREATE_SPANS_FAILED',
+          id: createStorageErrorId('LIBSQL', 'BATCH_CREATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -261,7 +261,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_BATCH_UPDATE_SPANS_FAILED',
+          id: createStorageErrorId('LIBSQL', 'BATCH_UPDATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -280,7 +280,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_BATCH_DELETE_TRACES_FAILED',
+          id: createStorageErrorId('LIBSQL', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
