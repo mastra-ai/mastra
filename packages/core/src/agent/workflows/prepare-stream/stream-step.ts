@@ -21,6 +21,7 @@ interface StreamStepOptions {
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
@@ -36,6 +37,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   requireToolApproval,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
   methodType,
   saveQueueManager,
@@ -86,6 +88,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
           memory,
         },
         agentId,
+        agentName,
         toolCallId,
         methodType: modelMethodType,
       });

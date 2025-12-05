@@ -1197,6 +1197,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         tracingContext,
         messageList,
         agentId: this.id,
+        agentName: this.name,
       });
 
       text = await result.text;
@@ -2546,6 +2547,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requireToolApproval: options.requireToolApproval,
       resumeContext,
       agentId: this.id,
+      agentName: this.name,
       toolCallId: options.toolCallId,
     });
 
