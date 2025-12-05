@@ -818,6 +818,34 @@ export class MessageList {
     return this.systemMessages;
   }
 
+  /**
+   * Get all system messages (both tagged and untagged)
+   * @returns Array of all system messages
+   */
+  public getAllSystemMessages(): CoreMessageV4[] {
+    return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
+  }
+
+  /**
+   * Replace all system messages with new ones
+   * This clears both tagged and untagged system messages and replaces them with the provided array
+   * @param messages - Array of system messages to set
+   */
+  public replaceAllSystemMessages(messages: CoreMessageV4[]): this {
+    // Clear existing system messages
+    this.systemMessages = [];
+    this.taggedSystemMessages = {};
+
+    // Add all new messages as untagged (processors don't need to preserve tags)
+    for (const message of messages) {
+      if (message.role === 'system') {
+        this.systemMessages.push(message);
+      }
+    }
+
+    return this;
+  }
+
   public addSystem(
     messages:
       | CoreMessageV4
@@ -1490,8 +1518,18 @@ export class MessageList {
 
     if (MessageList.isAIV5CoreMessage(message)) {
       const dbMsg = MessageList.aiV5ModelMessageToMastraDBMessage(message, messageSource);
+      // Only use the original createdAt from input message metadata, not the generated one from the static method
+      // This fixes issue #10683 where messages without createdAt would get shuffled
+      const rawCreatedAt =
+        'metadata' in message &&
+        message.metadata &&
+        typeof message.metadata === 'object' &&
+        'createdAt' in message.metadata
+          ? message.metadata.createdAt
+          : undefined;
       const result = {
         ...dbMsg,
+        createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1499,8 +1537,12 @@ export class MessageList {
     }
     if (MessageList.isAIV5UIMessage(message)) {
       const dbMsg = MessageList.aiV5UIMessageToMastraDBMessage(message);
+      // Only use the original createdAt from input message, not the generated one from the static method
+      // This fixes issue #10683 where messages without createdAt would get shuffled
+      const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
       return {
         ...dbMsg,
+        createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1511,21 +1553,28 @@ export class MessageList {
 
   private lastCreatedAt?: number;
   // this makes sure messages added in order will always have a date atleast 1ms apart.
-  private generateCreatedAt(messageSource: MessageSource, start?: Date | number): Date {
-    start = start instanceof Date ? start : start ? new Date(start) : undefined;
+  private generateCreatedAt(messageSource: MessageSource, start?: unknown): Date {
+    // Normalize timestamp
+    const startDate: Date | undefined =
+      start instanceof Date
+        ? start
+        : typeof start === 'string' || typeof start === 'number'
+          ? new Date(start)
+          : undefined;
 
-    if (start && !this.lastCreatedAt) {
-      this.lastCreatedAt = start.getTime();
-      return start;
+    if (startDate && !this.lastCreatedAt) {
+      this.lastCreatedAt = startDate.getTime();
+      return startDate;
     }
 
-    if (start && messageSource === `memory`) {
-      // we don't want to modify start time if the message came from memory or we may accidentally re-order old messages
-      return start;
+    if (startDate && messageSource === `memory`) {
+      // Preserve user-provided timestamps for memory messages to avoid re-ordering
+      // Messages without timestamps will fall through to get generated incrementing timestamps
+      return startDate;
     }
 
     const now = new Date();
-    const nowTime = start?.getTime() || now.getTime();
+    const nowTime = startDate?.getTime() || now.getTime();
     // find the latest createdAt in all stored messages
     const lastTime = this.messages.reduce((p, m) => {
       if (m.createdAt.getTime() > p) return m.createdAt.getTime();
@@ -1882,10 +1931,20 @@ export class MessageList {
       content.metadata = coreMessage.metadata as Record<string, unknown>;
     }
 
+    // Extract createdAt from metadata if provided
+    // This fixes issue #10683 where messages without createdAt would get shuffled
+    const rawCreatedAt =
+      'metadata' in coreMessage &&
+      coreMessage.metadata &&
+      typeof coreMessage.metadata === 'object' &&
+      'createdAt' in coreMessage.metadata
+        ? coreMessage.metadata.createdAt
+        : undefined;
+
     return {
       id,
       role: MessageList.getRole(coreMessage),
-      createdAt: this.generateCreatedAt(messageSource),
+      createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
@@ -1966,6 +2025,36 @@ export class MessageList {
           }
           return prev;
         }, 0);
+
+        // OpenAI sends reasoning items (rs_...) inside part.providerMetadata.openai.itemId.
+        // When the reasoning text is empty, the default cache key logic produces "reasoning0"
+        // for *all* reasoning parts. This makes distinct rs_ entries appear identical, so the
+        // message-merging logic drops the latest reasoning item. The result is that subsequent
+        // OpenAI calls fail with:
+        //
+        //   "Item 'fc_...' was provided without its required 'reasoning' item"
+        //
+        // To fix this, we incorporate the OpenAI itemId into the cache key so each rs_ entry
+        // is treated as distinct.
+        //
+        // Note: We cast `part` to `any` here because the AI SDK’s ReasoningUIPart V4 type does
+        // NOT declare `providerMetadata` (even though Mastra attaches it at runtime). This
+        // access is safe in JavaScript, but TypeScript cannot type it without augmentation,
+        // so we intentionally narrow to `any` only for this metadata lookup.
+
+        const partAny = part as any;
+
+        if (
+          partAny &&
+          Object.hasOwn(partAny, 'providerMetadata') &&
+          partAny.providerMetadata &&
+          Object.hasOwn(partAny.providerMetadata, 'openai') &&
+          partAny.providerMetadata.openai &&
+          Object.hasOwn(partAny.providerMetadata.openai, 'itemId')
+        ) {
+          const itemId = partAny.providerMetadata.openai.itemId;
+          key += `|${itemId}`;
+        }
       }
       if (part.type === `file`) {
         key += part.data;

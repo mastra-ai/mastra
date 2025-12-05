@@ -51,8 +51,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install
 
       - name: Run build
         run: pnpm build
@@ -70,7 +85,7 @@ jobs:
           fi
 
       - name: Publish packages
-        run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public
+        run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
 
@@ -121,7 +136,11 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
+          registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: pnpm install
@@ -155,7 +174,7 @@ jobs:
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
-        run: pnpm publish -r --access public
+        run: pnpm publish -r --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
 
@@ -165,7 +184,7 @@ jobs:
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}
-        run: pnpm publish -r --dry-run --access public
+        run: pnpm publish -r --dry-run --access public --no-git-checks
 
       - name: Add tags
         run: |
@@ -208,6 +227,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
+          registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -262,8 +282,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install
 
       - name: Generate slugified branch name
         id: slugify

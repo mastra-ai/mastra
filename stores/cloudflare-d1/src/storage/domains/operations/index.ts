@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { createStorageErrorId, StoreOperations, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
 import { createSqlBuilder } from '../../sql-builder';
@@ -87,7 +87,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_OPERATIONS_WORKERS_BINDING_QUERY_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'WORKERS_BINDING_QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { sql },
@@ -123,7 +123,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_OPERATIONS_REST_QUERY_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'REST_QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { sql },
@@ -217,7 +217,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_OPERATIONS_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -237,7 +237,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_OPERATIONS_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -256,7 +256,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_OPERATIONS_DROP_TABLE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'DROP_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -288,7 +288,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_OPERATIONS_ALTER_TABLE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'ALTER_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName: args.tableName },
@@ -312,7 +312,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_OPERATIONS_INSERT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -340,7 +340,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_OPERATIONS_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -387,7 +387,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_OPERATIONS_LOAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -464,7 +464,7 @@ export class StoreOperationsD1 extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_BATCH_UPSERT_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'BATCH_UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to batch upsert into ${tableName}: ${error instanceof Error ? error.message : String(error)}`,

@@ -12,51 +12,28 @@ import { useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useChatbotSidebar } from "@site/src/theme/DocRoot/Layout/ChatbotSidebar/context";
 
-const SHORTCUT_OS_KEY = "shortcut-os-preference";
-
-function getInitialIsMac(): boolean {
-  if (typeof window === "undefined") return false;
-
-  try {
-    const cached = localStorage.getItem(SHORTCUT_OS_KEY);
-    if (cached !== null) {
-      return cached === "mac";
-    }
-  } catch (error) {
-    console.error(
-      "Error reading shortcut preference from localStorage:",
-      error,
-    );
-  }
-
-  return false;
-}
-
 export function Shortcut({ shortcut }: { shortcut: string }) {
-  const [isMac, setIsMac] = useState(getInitialIsMac);
+  const [os, setOS] = useState<"mac" | "other" | null>(null);
 
   useEffect(() => {
-    const isMacOS = navigator.userAgent.includes("Mac");
-    setIsMac(isMacOS);
+    const userAgent = navigator.userAgent;
 
-    try {
-      localStorage.setItem(SHORTCUT_OS_KEY, isMacOS ? "mac" : "other");
-    } catch (error) {
-      console.error("Error saving shortcut preference to localStorage:", error);
+    if (userAgent.includes("Mac")) {
+      setOS("mac");
+    } else {
+      setOS("other");
     }
   }, []);
 
+  const shortCut = os === "mac" ? "⌘ K" : "CTRL K";
   return (
-    <kbd className="flex items-center py-2 gap-1 text-xs font-medium text-(--mastra-icons-3)">
-      {!isMac ? (
-        `CTRL ${shortcut}`
-      ) : (
-        <span className="inline-flex gap-1 items-center text-sm">
-          <span className="text-xs">⌘</span>
-          <span className="text-xs">{shortcut}</span>
-        </span>
-      )}
-    </kbd>
+    <>
+      {os ? (
+        <kbd className="flex items-center py-2 gap-1 text-xs font-medium text-(--mastra-icons-3)">
+          {shortCut}
+        </kbd>
+      ) : null}
+    </>
   );
 }
 
@@ -74,7 +51,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
   }
   // Configure Algolia search options
   const searchOptions = {
-    indexName: "docs_crawler",
+    indexName: "docs_v1_crawler",
     hitsPerPage: 20,
     attributesToRetrieve: [
       "hierarchy",

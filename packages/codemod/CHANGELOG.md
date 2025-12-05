@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 0.1.0-beta.3
+
+### Patch Changes
+
+- Add `v1/workflow-stream-vnext` codemod. This codemod renames `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()` to their "non-VNext" counterparts. ([#10802](https://github.com/mastra-ai/mastra/pull/10802))
+
 ## 0.1.0-beta.2
 
 ### Patch Changes

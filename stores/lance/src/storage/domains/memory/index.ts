@@ -4,6 +4,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -51,7 +52,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -75,7 +76,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -133,7 +134,7 @@ export class StoreMemoryLance extends MemoryStorage {
         // If it's not a commit conflict or we've exhausted retries, throw the error
         throw new MastraError(
           {
-            id: 'LANCE_STORE_UPDATE_THREAD_FAILED',
+            id: createStorageErrorId('LANCE', 'UPDATE_THREAD', 'FAILED'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.THIRD_PARTY,
           },
@@ -145,7 +146,7 @@ export class StoreMemoryLance extends MemoryStorage {
     // This should never be reached, but just in case
     throw new MastraError(
       {
-        id: 'LANCE_STORE_UPDATE_THREAD_FAILED',
+        id: createStorageErrorId('LANCE', 'UPDATE_THREAD', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
       },
@@ -165,7 +166,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('LANCE', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -213,7 +214,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -228,15 +229,18 @@ export class StoreMemoryLance extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -248,7 +252,7 @@ export class StoreMemoryLance extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_LANCE_LIST_MESSAGES_INVALID_PAGE',
+            id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -262,8 +266,12 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const table = await this.client.openTable(TABLE_MESSAGES);
 
-      // Build query conditions
-      const conditions: string[] = [`thread_id = '${this.escapeSql(threadId)}'`];
+      // Build query conditions for multiple threads
+      const threadCondition =
+        threadIds.length === 1
+          ? `thread_id = '${this.escapeSql(threadIds[0]!)}'`
+          : `thread_id IN (${threadIds.map(t => `'${this.escapeSql(t)}'`).join(', ')})`;
+      const conditions: string[] = [threadCondition];
 
       if (resourceId) {
         conditions.push(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
@@ -393,11 +401,11 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'LANCE_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
@@ -468,7 +476,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -487,7 +495,7 @@ export class StoreMemoryLance extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_LANCE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            id: createStorageErrorId('LANCE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -542,7 +550,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -743,7 +751,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('LANCE', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
@@ -841,7 +849,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -866,7 +874,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -934,7 +942,7 @@ export class StoreMemoryLance extends MemoryStorage {
         // If it's not a commit conflict or we've exhausted retries, throw the error
         throw new MastraError(
           {
-            id: 'LANCE_STORE_UPDATE_RESOURCE_FAILED',
+            id: createStorageErrorId('LANCE', 'UPDATE_RESOURCE', 'FAILED'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.THIRD_PARTY,
           },

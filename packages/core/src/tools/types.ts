@@ -1,4 +1,4 @@
-import type { WritableStream } from 'stream/web';
+import type { WritableStream } from 'node:stream/web';
 import type {
   Tool,
   ToolV5,
@@ -88,7 +88,7 @@ export interface MCPToolExecutionContext {
 export type MastraToolInvocationOptions = ToolInvocationOptions & {
   suspend?: (suspendPayload: any) => Promise<any>;
   resumeData?: any;
-  writableStream?: WritableStream<any> | ToolStream<any>;
+  writableStream?: WritableStream<any> | ToolStream;
   tracingContext?: TracingContext;
   /**
    * Optional MCP-specific context passed when tool is executed in MCP server.
@@ -132,6 +132,10 @@ export type CoreTool = {
   outputSchema?: FlexibleSchema<any> | Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
   /**
+   * Provider-specific options passed to the model when this tool is used.
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
+  /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
    */
@@ -159,6 +163,10 @@ export type InternalCoreTool = {
   parameters: Schema;
   outputSchema?: Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
+  /**
+   * Provider-specific options passed to the model when this tool is used.
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
@@ -189,7 +197,7 @@ export interface ToolExecutionContext<
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
-  writer?: ToolStream<any>;
+  writer?: ToolStream;
 
   // ============ Context-specific nested properties ============
 
@@ -231,6 +239,19 @@ export interface ToolAction<
   ) => Promise<(TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any) | ValidationError>;
   mastra?: Mastra;
   requireApproval?: boolean;
+  /**
+   * Provider-specific options passed to the model when this tool is used.
+   * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
+   * @example
+   * ```typescript
+   * providerOptions: {
+   *   anthropic: {
+   *     cacheControl: { type: 'ephemeral' }
+   *   }
+   * }
+   * ```
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {

@@ -1,6 +1,6 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { createStorageErrorId, StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ClickhouseConfig } from '../utils';
 import { COLUMN_TYPES, TABLE_ENGINES, transformRow } from '../utils';
@@ -97,7 +97,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -147,7 +147,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_ALTER_TABLE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'ALTER_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -172,7 +172,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -214,7 +214,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_INSERT_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -249,7 +249,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -311,7 +311,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LOAD_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },

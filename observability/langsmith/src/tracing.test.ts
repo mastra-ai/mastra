@@ -83,13 +83,48 @@ describe('LangSmithExporter', () => {
       expect(exporter.name).toBe('langsmith');
     });
 
+    it('should pass projectName to RunTree when configured', async () => {
+      // Create exporter with custom projectName
+      const exporterWithProject = new LangSmithExporter({
+        apiKey: 'test-api-key',
+        projectName: 'my-custom-project',
+      });
+
+      const rootSpan = createMockSpan({
+        id: 'test-span',
+        name: 'test',
+        type: SpanType.GENERIC,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporterWithProject.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Should pass project_name to the RunTree constructor
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project_name: 'my-custom-project',
+        }),
+      );
+    });
+
     it('should disable exporter when apiKey is missing', async () => {
+      // Temporarily clear env var to test missing apiKey behavior
+      const originalEnvKey = process.env.LANGSMITH_API_KEY;
+      delete process.env.LANGSMITH_API_KEY;
+
       const invalidConfig = {
         // Missing apiKey
         apiUrl: 'https://test.com',
       };
 
       const disabledExporter = new LangSmithExporter(invalidConfig);
+
+      // Restore env var
+      process.env.LANGSMITH_API_KEY = originalEnvKey;
 
       // Should be disabled when apiKey is missing
       expect(disabledExporter['isDisabled']).toBe(true);

@@ -45,7 +45,7 @@ export const WorkflowStepActionBar = ({
   const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
   const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
 
-  const showTimeTravel = !withoutTimeTravel && stepKey;
+  const showTimeTravel = !withoutTimeTravel && stepKey && !mapConfig;
 
   return (
     <>

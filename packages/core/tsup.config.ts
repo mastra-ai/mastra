@@ -1,5 +1,5 @@
-import fs, { writeFileSync, readFileSync, readdirSync, copyFileSync } from 'fs';
-import path, { dirname, join, relative } from 'path';
+import fs, { writeFileSync, readFileSync, readdirSync, copyFileSync } from 'node:fs';
+import path, { dirname, join, relative } from 'node:path';
 
 import babel from '@babel/core';
 import { generateTypes } from '@internal/types-builder';

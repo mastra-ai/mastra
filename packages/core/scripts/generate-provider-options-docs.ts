@@ -5,8 +5,8 @@
  * and generates markdown documentation for each provider's options.
  */
 
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Node, Project, TypeFormatFlags } from 'ts-morph';
 import type { Type } from 'ts-morph';
 
@@ -143,6 +143,7 @@ export function generateProviderOptionsSection(providerId: string): string {
   // Map provider IDs to their type names
   const providerTypeMap: Record<string, { typeName: string; displayName: string }> = {
     anthropic: { typeName: 'AnthropicProviderOptions', displayName: 'Anthropic' },
+    deepseek: { typeName: 'DeepSeekChatOptions', displayName: 'DeepSeek' },
     google: { typeName: 'GoogleGenerativeAIProviderOptions', displayName: 'Google' },
     openai: { typeName: 'OpenAIResponsesProviderOptions', displayName: 'OpenAI' },
     xai: { typeName: 'XaiProviderOptions', displayName: 'xAI' },
@@ -163,6 +164,7 @@ export function generateProviderOptionsSection(providerId: string): string {
 
   project.addSourceFilesAtPaths([
     path.join(nodeModulesPath, '@ai-sdk/anthropic-v5/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/deepseek-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/google-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/openai-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/xai-v5/dist/index.d.ts'),
@@ -189,7 +191,7 @@ export function generateProviderOptionsSection(providerId: string): string {
     const exportedDeclarations = sourceFile.getExportedDeclarations();
     const typeExport = exportedDeclarations.get(providerInfo.typeName);
     if (typeExport && typeExport.length > 0) {
-      targetType = typeExport[0].getType();
+      targetType = typeExport[0]?.getType();
       break;
     }
   }
@@ -249,6 +251,7 @@ function main() {
 
   project.addSourceFilesAtPaths([
     path.join(nodeModulesPath, '@ai-sdk/anthropic-v5/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/deepseek-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/google-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/openai-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/xai-v5/dist/index.d.ts'),
@@ -257,6 +260,7 @@ function main() {
   // Generate docs for each provider
   const providers = [
     { name: 'anthropic', typeName: 'AnthropicProviderOptions' },
+    { name: 'deepseek', typeName: 'DeepSeekChatOptions' },
     { name: 'google', typeName: 'GoogleGenerativeAIProviderOptions' },
     { name: 'openai', typeName: 'OpenAIResponsesProviderOptions' },
     { name: 'xai', typeName: 'XaiProviderOptions' },

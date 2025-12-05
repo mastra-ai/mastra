@@ -1,39 +1,25 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { calculatePagination, normalizePerPage, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import {
+  calculatePagination,
+  normalizePerPage,
+  ScoresStorage,
+  TABLE_SCORERS,
+  transformScoreRow as coreTransformScoreRow,
+  createStorageErrorId,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { processRecord } from '../utils';
 
+/**
+ * Upstash-specific score row transformation.
+ * Uses default options (no timestamp conversion).
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  const parseField = (v: any) => {
-    if (typeof v === 'string') {
-      try {
-        return JSON.parse(v);
-      } catch {
-        return v;
-      }
-    }
-    return v;
-  };
-  return {
-    ...row,
-    scorer: parseField(row.scorer),
-    preprocessStepResult: parseField(row.preprocessStepResult),
-    generateScorePrompt: row.generateScorePrompt,
-    generateReasonPrompt: row.generateReasonPrompt,
-    analyzeStepResult: parseField(row.analyzeStepResult),
-    metadata: parseField(row.metadata),
-    input: parseField(row.input),
-    output: parseField(row.output),
-    additionalContext: parseField(row.additionalContext),
-    requestContext: parseField(row.requestContext),
-    entity: parseField(row.entity),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  } as ScoreRowData;
+  return coreTransformScoreRow(row);
 }
 
 export class ScoresUpstash extends ScoresStorage {
@@ -57,7 +43,7 @@ export class ScoresUpstash extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -142,7 +128,7 @@ export class ScoresUpstash extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_SCORE_VALIDATION_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -156,7 +142,7 @@ export class ScoresUpstash extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id: score.id },

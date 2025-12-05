@@ -1,5 +1,19 @@
 # create-mastra
 
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Fix select options overflow when list is long by adding maximum height ([#10813](https://github.com/mastra-ai/mastra/pull/10813))
+
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10500](https://github.com/mastra-ai/mastra/pull/10500))
+
+- Hide time travel on map steps in Studio ([#10631](https://github.com/mastra-ai/mastra/pull/10631))
+
 ## 1.0.0-beta.4
 
 ### Patch Changes

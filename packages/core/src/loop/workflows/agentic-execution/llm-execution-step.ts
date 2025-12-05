@@ -1,4 +1,4 @@
-import type { ReadableStream } from 'stream/web';
+import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
@@ -6,7 +6,9 @@ import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
+import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
+import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -243,27 +245,26 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       }
 
       case 'reasoning-end': {
-        // Use the accumulated reasoning deltas from runState
-        if (runState.state.reasoningDeltas.length > 0) {
-          const message: MastraDBMessage = {
-            id: messageId,
-            role: 'assistant',
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: 'reasoning' as const,
-                  reasoning: '',
-                  details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
-                  providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-                },
-              ],
-            },
-            createdAt: new Date(),
-          };
+        // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
+        // See: https://github.com/mastra-ai/mastra/issues/9005
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning' as const,
+                reasoning: '',
+                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+              },
+            ],
+          },
+          createdAt: new Date(),
+        };
 
-          messageList.add(message, 'response');
-        }
+        messageList.add(message, 'response');
 
         // Reset reasoning state
         runState.setState({
@@ -459,6 +460,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   controller,
   structuredOutput,
   outputProcessors,
+  inputProcessors,
+  logger,
+  agentId,
   headers,
   downloadRetries,
   downloadConcurrency,
@@ -496,11 +500,40 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             };
             let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
-            // Call prepareStep callback if provided
+            // Call processInputStep for processors (runs BEFORE prepareStep)
+            // This allows processors to modify messages at each step of the agentic loop
             let stepModel = model;
             let stepToolChoice = toolChoice;
             let stepTools = tools;
 
+            // Run processInputStep for all processors that implement it
+            if (inputProcessors && inputProcessors.length > 0) {
+              const processorRunner = new ProcessorRunner({
+                inputProcessors,
+                outputProcessors: [],
+                logger: logger || new ConsoleLogger({ level: 'error' }),
+                agentName: agentId || 'unknown',
+              });
+
+              try {
+                // processInputStep modifies messages in place via messageList (same as processInput)
+                await processorRunner.runProcessInputStep({
+                  messages: messageList.get.all.db(),
+                  messageList,
+                  stepNumber: inputData.output?.steps?.length || 0,
+                  tracingContext,
+                  requestContext,
+                });
+
+                // Re-fetch messages after processors have modified them
+                inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+              } catch (error) {
+                console.error('Error in processInputStep processors:', error);
+                throw error;
+              }
+            }
+
+            // Call prepareStep callback if provided (runs AFTER processInputStep)
             if (options?.prepareStep) {
               try {
                 const prepareStepResult = await options.prepareStep({
@@ -561,6 +594,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                   structuredOutput,
                   headers,
                   methodType,
+                  generateId: _internal?.generateId,
                   onResult: ({
                     warnings: warningsFromStream,
                     request: requestFromStream,

@@ -53,15 +53,22 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.perPage !== null && params?.perPage !== undefined) {
-      if (params.perPage === false) {
-        searchParams.set('perPage', 'false');
-      } else if (typeof params.perPage === 'number' && params.perPage > 0 && Number.isInteger(params.perPage)) {
-        searchParams.set('perPage', String(params.perPage));
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    // Legacy support: also send limit/offset if provided (for older servers)
+    if (params?.limit !== null && params?.limit !== undefined) {
+      if (params.limit === false) {
+        searchParams.set('limit', 'false');
+      } else if (typeof params.limit === 'number' && params.limit > 0 && Number.isInteger(params.limit)) {
+        searchParams.set('limit', String(params.limit));
       }
     }
-    if (params?.page !== null && params?.page !== undefined && !isNaN(Number(params?.page))) {
-      searchParams.set('page', String(params.page));
+    if (params?.offset !== null && params?.offset !== undefined && !isNaN(Number(params?.offset))) {
+      searchParams.set('offset', String(params.offset));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);
@@ -122,6 +129,7 @@ export class Workflow extends BaseResource {
     runId: string;
     start: (params: {
       inputData: Record<string, any>;
+      initialState?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<{ message: string }>;
@@ -133,10 +141,12 @@ export class Workflow extends BaseResource {
     }) => Promise<{ message: string }>;
     stream: (params: {
       inputData: Record<string, any>;
+      initialState?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
     }) => Promise<ReadableStream>;
     startAsync: (params: {
       inputData: Record<string, any>;
+      initialState?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<WorkflowRunResult>;
@@ -171,30 +181,43 @@ export class Workflow extends BaseResource {
       runId,
       start: async (p: {
         inputData: Record<string, any>;
+        initialState?: Record<string, any>;
         requestContext?: RequestContext | Record<string, any>;
         tracingOptions?: TracingOptions;
       }) => {
         return this.start({
           runId,
           inputData: p.inputData,
+          initialState: p.initialState,
           requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
         });
       },
       startAsync: async (p: {
         inputData: Record<string, any>;
+        initialState?: Record<string, any>;
         requestContext?: RequestContext | Record<string, any>;
         tracingOptions?: TracingOptions;
       }) => {
         return this.startAsync({
           runId,
           inputData: p.inputData,
+          initialState: p.initialState,
           requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
         });
       },
-      stream: async (p: { inputData: Record<string, any>; requestContext?: RequestContext | Record<string, any> }) => {
-        return this.stream({ runId, inputData: p.inputData, requestContext: p.requestContext });
+      stream: async (p: {
+        inputData: Record<string, any>;
+        initialState?: Record<string, any>;
+        requestContext?: RequestContext | Record<string, any>;
+      }) => {
+        return this.stream({
+          runId,
+          inputData: p.inputData,
+          initialState: p.initialState,
+          requestContext: p.requestContext,
+        });
       },
       resume: async (p: {
         step?: string | string[];
@@ -241,19 +264,25 @@ export class Workflow extends BaseResource {
 
   /**
    * Starts a workflow run synchronously without waiting for the workflow to complete
-   * @param params - Object containing the runId, inputData and requestContext
+   * @param params - Object containing the runId, inputData, initialState and requestContext
    * @returns Promise containing success message
    */
   start(params: {
     runId: string;
     inputData: Record<string, any>;
+    initialState?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(params.requestContext);
     return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
-      body: { inputData: params?.inputData, requestContext, tracingOptions: params.tracingOptions },
+      body: {
+        inputData: params?.inputData,
+        initialState: params?.initialState,
+        requestContext,
+        tracingOptions: params.tracingOptions,
+      },
     });
   }
 
@@ -289,12 +318,13 @@ export class Workflow extends BaseResource {
 
   /**
    * Starts a workflow run asynchronously and returns a promise that resolves when the workflow is complete
-   * @param params - Object containing the optional runId, inputData and requestContext
+   * @param params - Object containing the optional runId, inputData, initialState and requestContext
    * @returns Promise containing the workflow execution results
    */
   startAsync(params: {
     runId?: string;
     inputData: Record<string, any>;
+    initialState?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
@@ -308,18 +338,24 @@ export class Workflow extends BaseResource {
 
     return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
-      body: { inputData: params.inputData, requestContext, tracingOptions: params.tracingOptions },
+      body: {
+        inputData: params.inputData,
+        initialState: params.initialState,
+        requestContext,
+        tracingOptions: params.tracingOptions,
+      },
     });
   }
 
   /**
    * Starts a workflow run and returns a stream
-   * @param params - Object containing the optional runId, inputData and requestContext
+   * @param params - Object containing the optional runId, inputData, initialState and requestContext
    * @returns Promise containing the workflow execution results
    */
   async stream(params: {
     runId?: string;
     inputData: Record<string, any>;
+    initialState?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }) {
@@ -334,7 +370,12 @@ export class Workflow extends BaseResource {
       `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
       {
         method: 'POST',
-        body: { inputData: params.inputData, requestContext, tracingOptions: params.tracingOptions },
+        body: {
+          inputData: params.inputData,
+          initialState: params.initialState,
+          requestContext,
+          tracingOptions: params.tracingOptions,
+        },
         stream: true,
       },
     );
@@ -447,12 +488,13 @@ export class Workflow extends BaseResource {
 
   /**
    * Starts a workflow run and returns a stream
-   * @param params - Object containing the optional runId, inputData and requestContext
+   * @param params - Object containing the optional runId, inputData, initialState and requestContext
    * @returns Promise containing the workflow execution results
    */
   async streamVNext(params: {
     runId?: string;
     inputData?: Record<string, any>;
+    initialState?: Record<string, any>;
     requestContext?: RequestContext;
     closeOnSuspend?: boolean;
     tracingOptions?: TracingOptions;
@@ -470,6 +512,7 @@ export class Workflow extends BaseResource {
         method: 'POST',
         body: {
           inputData: params.inputData,
+          initialState: params.initialState,
           requestContext,
           closeOnSuspend: params.closeOnSuspend,
           tracingOptions: params.tracingOptions,

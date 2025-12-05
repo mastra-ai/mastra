@@ -1,6 +1,6 @@
-import { mkdtemp } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { Processor } from '@mastra/core/processors';
 import { LibSQLStore } from '@mastra/libsql';

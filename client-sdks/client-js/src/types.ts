@@ -54,6 +54,8 @@ export interface ClientOptions {
   abortSignal?: AbortSignal;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
+  /** Custom fetch function to use for HTTP requests. Useful for environments like Tauri that require custom fetch implementations. */
+  fetch?: typeof fetch;
 }
 
 export interface RequestOptions {
@@ -77,6 +79,7 @@ type WithoutMethods<T> = {
 
 export type NetworkStreamParams = {
   messages: MessageListInput;
+  tracingOptions?: TracingOptions;
 } & MultiPrimitiveExecutionOptions;
 
 export interface GetAgentResponse {
@@ -129,6 +132,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
 
 export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
+  tracingOptions?: TracingOptions;
   structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
@@ -165,9 +169,13 @@ export interface GetToolResponse {
 export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  perPage?: number | false;
   page?: number;
+  perPage?: number;
   resourceId?: string;
+  /** @deprecated Use page instead */
+  offset?: number;
+  /** @deprecated Use perPage instead */
+  limit?: number | false;
 }
 
 export type ListWorkflowRunsResponse = WorkflowRuns;

@@ -87,27 +87,29 @@ This ordering ensures that if your output guardrail calls `abort()`, memory proc
 
 ## Creating custom processors
 
-Custom processors implement the `InputProcessor` or `OutputProcessor` interface:
+Custom processors implement the `Processor` interface:
 
 ### Custom input processor
 
 ```typescript title="src/mastra/processors/custom-input.ts" showLineNumbers copy
 import type {
-  InputProcessor,
-  MastraMessageV2,
-  RuntimeContext,
+  Processor,
+  MastraDBMessage,
+  RequestContext,
 } from "@mastra/core";
 
-export class CustomInputProcessor implements InputProcessor {
-  name = "custom-input";
+export class CustomInputProcessor implements Processor {
+  id = "custom-input";
 
   async processInput({
     messages,
+    systemMessages,
     context,
   }: {
-    messages: MastraMessageV2[];
-    context: RuntimeContext;
-  }): Promise<MastraMessageV2[]> {
+    messages: MastraDBMessage[];
+    systemMessages: CoreMessage[];
+    context: RequestContext;
+  }): Promise<MastraDBMessage[]> {
     // Transform messages before they reach the LLM
     return messages.map((msg) => ({
       ...msg,
@@ -120,25 +122,71 @@ export class CustomInputProcessor implements InputProcessor {
 }
 ```
 
+The `processInput` method receives:
+- `messages`: User and assistant messages (not system messages)
+- `systemMessages`: All system messages (agent instructions, memory context, user-provided system prompts)
+- `messageList`: The full MessageList instance for advanced use cases
+- `abort`: Function to stop processing and return early
+- `requestContext`: Execution metadata like `threadId` and `resourceId`
+
+The method can return:
+- `MastraDBMessage[]` — Transformed messages array (backward compatible)
+- `{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }` — Both messages and modified system messages
+
+The framework handles both return formats, so modifying system messages is optional and existing processors continue to work.
+
+### Modifying system messages
+
+To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
+
+```typescript title="src/mastra/processors/system-trimmer.ts" showLineNumbers copy
+import type { Processor, CoreMessage, MastraDBMessage } from "@mastra/core";
+
+export class SystemTrimmer implements Processor {
+  id = "system-trimmer";
+
+  async processInput({
+    messages,
+    systemMessages,
+  }): Promise<{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }> {
+    // Trim system messages for smaller models
+    const trimmedSystemMessages = systemMessages.map((msg) => ({
+      ...msg,
+      content:
+        typeof msg.content === "string"
+          ? msg.content.substring(0, 500)
+          : msg.content,
+    }));
+
+    return { messages, systemMessages: trimmedSystemMessages };
+  }
+}
+```
+
+This is useful for:
+- Trimming verbose system prompts for models with smaller context windows
+- Filtering or modifying semantic recall content to prevent "prompt too long" errors
+- Dynamically adjusting system instructions based on the conversation
+
 ### Custom output processor
 
 ```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy
 import type {
-  OutputProcessor,
-  MastraMessageV2,
-  RuntimeContext,
+  Processor,
+  MastraDBMessage,
+  RequestContext,
 } from "@mastra/core";
 
-export class CustomOutputProcessor implements OutputProcessor {
-  name = "custom-output";
+export class CustomOutputProcessor implements Processor {
+  id = "custom-output";
 
   async processOutputResult({
     messages,
     context,
   }: {
-    messages: MastraMessageV2[];
-    context: RuntimeContext;
-  }): Promise<MastraMessageV2[]> {
+    messages: MastraDBMessage[];
+    context: RequestContext;
+  }): Promise<MastraDBMessage[]> {
     // Transform messages after the LLM generates them
     return messages.filter((msg) => msg.role !== "system");
   }
@@ -148,15 +196,13 @@ export class CustomOutputProcessor implements OutputProcessor {
     context,
   }: {
     stream: ReadableStream;
-    context: RuntimeContext;
+    context: RequestContext;
   }): Promise<ReadableStream> {
     // Transform streaming responses
     return stream;
   }
 }
 ```
-
-Both `processInput` and `processOutputResult` receive a `context` object containing execution metadata such as `threadId`, `resourceId`, and other runtime information.
 
 ## Built-in Utility Processors
 

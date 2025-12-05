@@ -154,9 +154,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               modelId: 'mock-model-id',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Dummy response' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Dummy response' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -181,17 +181,17 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }),
         doStream: async () => ({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Donald Trump' },
-            { type: 'text-delta', id: '1', delta: ` won` },
-            { type: 'text-delta', id: '1', delta: ` the` },
-            { type: 'text-delta', id: '1', delta: ` ` },
-            { type: 'text-delta', id: '1', delta: `201` },
-            { type: 'text-delta', id: '1', delta: `6` },
-            { type: 'text-delta', id: '1', delta: ` US` },
-            { type: 'text-delta', id: '1', delta: ` presidential` },
-            { type: 'text-delta', id: '1', delta: ` election` },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Donald Trump' },
+            { type: 'text-delta', id: 'text-1', delta: ` won` },
+            { type: 'text-delta', id: 'text-1', delta: ` the` },
+            { type: 'text-delta', id: 'text-1', delta: ` ` },
+            { type: 'text-delta', id: 'text-1', delta: `201` },
+            { type: 'text-delta', id: 'text-1', delta: `6` },
+            { type: 'text-delta', id: 'text-1', delta: ` US` },
+            { type: 'text-delta', id: 'text-1', delta: ` presidential` },
+            { type: 'text-delta', id: 'text-1', delta: ` election` },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -212,9 +212,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }),
         doStream: async () => ({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"winner":"Barack Obama"}' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"winner":"Barack Obama"}' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -929,9 +929,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Agent model response' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Agent model response' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -975,9 +975,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Custom Title Model Response' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Custom Title Model Response' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1113,9 +1113,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1159,9 +1159,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Standard Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Standard Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1324,9 +1324,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1370,9 +1370,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Standard Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Standard Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1514,9 +1514,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                     modelId: 'mock-model-id',
                     timestamp: new Date(0),
                   },
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: 'Generated Title' },
-                  { type: 'text-end', id: '1' },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Generated Title' },
+                  { type: 'text-end', id: 'text-1' },
                   {
                     type: 'finish',
                     finishReason: 'stop',
@@ -1540,9 +1540,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                     modelId: 'mock-model-id',
                     timestamp: new Date(0),
                   },
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: 'Agent Response' },
-                  { type: 'text-end', id: '1' },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Agent Response' },
+                  { type: 'text-end', id: 'text-1' },
                   {
                     type: 'finish',
                     finishReason: 'stop',
@@ -1805,9 +1805,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                     modelId: 'mock-model-id',
                     timestamp: new Date(0),
                   },
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: 'Should not be called' },
-                  { type: 'text-end', id: '1' },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Should not be called' },
+                  { type: 'text-end', id: 'text-1' },
                   {
                     type: 'finish',
                     finishReason: 'stop',
@@ -1831,9 +1831,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                     modelId: 'mock-model-id',
                     timestamp: new Date(0),
                   },
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: 'Agent Response' },
-                  { type: 'text-end', id: '1' },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Agent Response' },
+                  { type: 'text-end', id: 'text-1' },
                   {
                     type: 'finish',
                     finishReason: 'stop',
@@ -1990,9 +1990,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                     modelId: 'mock-model-id',
                     timestamp: new Date(0),
                   },
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '日本語のタイトル' },
-                  { type: 'text-end', id: '1' },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: '日本語のタイトル' },
+                  { type: 'text-end', id: 'text-1' },
                   {
                     type: 'finish',
                     finishReason: 'stop',
@@ -2016,9 +2016,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                     modelId: 'mock-model-id',
                     timestamp: new Date(0),
                   },
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: 'English Title' },
-                  { type: 'text-end', id: '1' },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'English Title' },
+                  { type: 'text-end', id: 'text-1' },
                   {
                     type: 'finish',
                     finishReason: 'stop',
@@ -2199,9 +2199,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Creative Custom Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Creative Custom Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -2340,9 +2340,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Default Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Default Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -2464,9 +2464,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Title with error handling' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Title with error handling' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -2624,9 +2624,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Title with default instructions' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Title with default instructions' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -2684,9 +2684,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Title with null instructions' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Title with null instructions' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -3009,9 +3009,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Dummy response' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Dummy response' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -3290,9 +3290,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             warnings: [],
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Logger test response' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Logger test response' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
             ]),
           }),
@@ -4001,13 +4001,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
+              { type: 'text-start', id: 'text-1' },
               ...Array.from({ length: 10 }, (_, count) => ({
                 type: 'text-delta' as const,
                 id: '1',
                 delta: `Dummy response ${count} `,
               })),
-              { type: 'text-end', id: '1' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -4438,8 +4438,16 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
     });
 
-    it('should not save thread if error occurs after starting response but before completion', async () => {
+    it('should save thread but not messages if error occurs during LLM generation', async () => {
+      // v2: Threads are now created upfront to prevent race conditions with storage backends
+      // like PostgresStore that validate thread existence before saving messages.
+      // When an error occurs during LLM generation, the thread will exist but no messages
+      // will be saved since the response never completed.
+      //
+      // v1 (legacy): Does not use memory processors, so the old behavior applies where
+      // threads are not saved until the request completes successfully.
       const mockMemory = new MockMemory();
+      const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
       const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -4495,9 +4503,19 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
       expect(errorCaught).toBe(true);
 
-      expect(saveThreadSpy).not.toHaveBeenCalled();
       const thread = await mockMemory.getThreadById({ threadId: 'thread-err' });
-      expect(thread).toBeNull();
+
+      if (version === 'v1') {
+        // v1 (legacy): Thread should NOT exist - old behavior preserved
+        expect(saveThreadSpy).not.toHaveBeenCalled();
+        expect(thread).toBeNull();
+      } else {
+        // v2: Thread should exist (created upfront to prevent race condition)
+        expect(thread).not.toBeNull();
+        expect(thread?.id).toBe('thread-err');
+        // But no messages should be saved since the LLM call failed
+        expect(saveMessagesSpy).not.toHaveBeenCalled();
+      }
     });
   });
 
@@ -4714,6 +4732,151 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(fullStreamError.requestId).toBe(testErrorRequestId);
         expect((resultError as any).statusCode).toBe(testErrorStatusCode);
         expect((resultError as any).requestId).toBe(testErrorRequestId);
+      });
+
+      // Helper to create a model that calls a non-existent tool
+      function createModelWithNonExistentToolCall() {
+        return new MockLanguageModelV2({
+          doGenerate: async () => ({
+            content: [
+              { type: 'tool-call', toolCallId: '123', toolName: 'nonExistentTool', input: '{"input": "test"}' },
+            ],
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolCallType: 'function',
+                toolName: 'nonExistentTool', // This tool doesn't exist in the agent's tools
+                input: '{"input": "test"}',
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        });
+      }
+
+      // Helper to create an agent with a tool that exists but the model will call a non-existent one
+      function createAgentWithMismatchedTool(model: MockLanguageModelV2) {
+        const existingTool = createTool({
+          id: 'existingTool',
+          description: 'A tool that exists',
+          inputSchema: z.object({ input: z.string() }),
+          execute: async () => ({ result: 'success' }),
+        });
+
+        return new Agent({
+          id: 'test-tool-not-found-error',
+          name: 'Test Tool Not Found Error',
+          model,
+          instructions: 'You are a helpful assistant.',
+          tools: { existingTool },
+        });
+      }
+
+      it('should throw correct error message in generate when workflow step fails (e.g. tool not found)', async () => {
+        const model = createModelWithNonExistentToolCall();
+        const agent = createAgentWithMismatchedTool(model);
+
+        let caughtError: Error | null = null;
+        try {
+          await agent.generate('Please use a tool');
+        } catch (err: any) {
+          caughtError = err;
+        }
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError).toBeInstanceOf(Error);
+        // The error should contain the actual error message, not "promise 'text' was not resolved"
+        expect(caughtError!.message).toMatch(/Tool nonExistentTool not found/i);
+        expect(caughtError!.message).not.toMatch(/promise.*was not resolved/i);
+      });
+
+      it('should have correct error in output.error and fullStream error chunk when workflow step fails in stream', async () => {
+        const model = createModelWithNonExistentToolCall();
+        const agent = createAgentWithMismatchedTool(model);
+
+        const output = await agent.stream('Please use a tool');
+
+        let errorChunk: any;
+        for await (const chunk of output.fullStream) {
+          if (chunk.type === 'error') {
+            errorChunk = chunk;
+          }
+        }
+
+        // Verify error chunk has correct error
+        expect(errorChunk).toBeDefined();
+        expect(errorChunk.payload.error).toBeDefined();
+        expect(errorChunk.payload.error).toBeInstanceOf(Error);
+        expect((errorChunk.payload.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
+        expect((errorChunk.payload.error as Error).message).not.toMatch(/promise.*was not resolved/i);
+
+        // Verify output.error has correct error
+        expect(output.error).toBeInstanceOf(Error);
+        expect((output.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
+        expect((output.error as Error).message).not.toMatch(/promise.*was not resolved/i);
+
+        // Verify they are the same instance
+        expect(output.error).toBe(errorChunk.payload.error);
+      });
+
+      it('should call onError with correct error in generate when workflow step fails', async () => {
+        const model = createModelWithNonExistentToolCall();
+        const agent = createAgentWithMismatchedTool(model);
+
+        let onErrorCalled = false;
+        let onErrorArg: string | Error | null = null;
+
+        try {
+          await agent.generate('Please use a tool', {
+            onError: ({ error }) => {
+              onErrorCalled = true;
+              onErrorArg = error;
+            },
+          });
+        } catch {
+          // Expected to throw
+        }
+
+        expect(onErrorCalled).toBe(true);
+        expect(onErrorArg).toBeInstanceOf(Error);
+        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
+        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
+      });
+
+      it('should call onError with correct error in stream when workflow step fails', async () => {
+        const model = createModelWithNonExistentToolCall();
+        const agent = createAgentWithMismatchedTool(model);
+
+        let onErrorCalled = false;
+        let onErrorArg: string | Error | null = null;
+
+        const output = await agent.stream('Please use a tool', {
+          onError: ({ error }) => {
+            onErrorCalled = true;
+            onErrorArg = error;
+          },
+        });
+
+        // Consume the stream to trigger the error
+        for await (const _ of output.fullStream) {
+          // Just consume
+        }
+
+        expect(onErrorCalled).toBe(true);
+        expect(onErrorArg).toBeInstanceOf(Error);
+        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
+        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
       });
     });
 
@@ -5018,10 +5181,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               stream: convertArrayToReadableStream([
                 { type: 'stream-start', warnings: [] },
                 { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'processed: ' },
-                { type: 'text-delta', id: '1', delta: textContent },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'processed: ' },
+                { type: 'text-delta', id: 'text-1', delta: textContent },
+                { type: 'text-end', id: 'text-1' },
                 { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
               ]),
               rawCall: { rawPrompt: prompt, rawSettings: {} },
@@ -5571,11 +5734,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Response' },
-              { type: 'text-delta', id: '1', delta: ' acknowledging' },
-              { type: 'text-delta', id: '1', delta: ' metadata' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Response' },
+              { type: 'text-delta', id: 'text-1', delta: ' acknowledging' },
+              { type: 'text-delta', id: 'text-1', delta: ' metadata' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
             ]),
             rawCall: { rawPrompt: null, rawSettings: {} },

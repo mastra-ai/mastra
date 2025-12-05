@@ -2,27 +2,22 @@ import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
+  createStorageErrorId,
   ScoresStorage,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
 
+/**
+ * Cloudflare KV-specific score row transformation.
+ * Uses default options (no timestamp conversion).
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  const deserialized: Record<string, any> = { ...row };
-
-  deserialized.input = safelyParseJSON(row.input);
-  deserialized.output = safelyParseJSON(row.output);
-  deserialized.scorer = safelyParseJSON(row.scorer);
-  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-  deserialized.requestContext = safelyParseJSON(row.requestContext);
-  deserialized.entity = safelyParseJSON(row.entity);
-
-  return deserialized as ScoreRowData;
+  return coreTransformScoreRow(row);
 }
 
 export class ScoresStorageCloudflare extends ScoresStorage {
@@ -43,7 +38,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get score by id: ${id}`,
@@ -63,7 +58,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { scoreId: score.id },
@@ -104,7 +99,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to save score: ${score.id}`,
@@ -179,7 +174,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get scores by scorer id: ${scorerId}`,
@@ -237,7 +232,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get scores by run id: ${runId}`,
@@ -297,7 +292,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get scores by entity id: ${entityId}, type: ${entityType}`,
@@ -357,7 +352,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get scores by span: traceId=${traceId}, spanId=${spanId}`,

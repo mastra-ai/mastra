@@ -3,11 +3,12 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
+  createStorageErrorId,
   TABLE_SCORERS,
   ScoresStorage,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
@@ -74,7 +75,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -167,7 +168,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -176,46 +177,14 @@ export class ScoresLibSQL extends ScoresStorage {
     }
   }
 
+  /**
+   * LibSQL-specific score row transformation.
+   * Maps additionalLLMContext column to additionalContext field.
+   */
   private transformScoreRow(row: Record<string, any>): ScoreRowData {
-    const scorerValue = safelyParseJSON(row.scorer);
-    const inputValue = safelyParseJSON(row.input ?? '{}');
-    const outputValue = safelyParseJSON(row.output ?? '{}');
-    const additionalLLMContextValue = row.additionalLLMContext ? safelyParseJSON(row.additionalLLMContext) : null;
-    const requestContextValue = row.requestContext ? safelyParseJSON(row.requestContext) : null;
-    const metadataValue = row.metadata ? safelyParseJSON(row.metadata) : null;
-    const entityValue = row.entity ? safelyParseJSON(row.entity) : null;
-    const preprocessStepResultValue = row.preprocessStepResult ? safelyParseJSON(row.preprocessStepResult) : null;
-    const analyzeStepResultValue = row.analyzeStepResult ? safelyParseJSON(row.analyzeStepResult) : null;
-
-    return {
-      id: row.id,
-      traceId: row.traceId,
-      spanId: row.spanId,
-      runId: row.runId,
-      scorer: scorerValue,
-      score: row.score,
-      reason: row.reason,
-      preprocessStepResult: preprocessStepResultValue,
-      analyzeStepResult: analyzeStepResultValue,
-      analyzePrompt: row.analyzePrompt,
-      preprocessPrompt: row.preprocessPrompt,
-      generateScorePrompt: row.generateScorePrompt,
-      generateReasonPrompt: row.generateReasonPrompt,
-      metadata: metadataValue,
-      input: inputValue,
-      output: outputValue,
-      additionalContext: additionalLLMContextValue,
-      requestContext: requestContextValue,
-      entityType: row.entityType,
-      entity: entityValue,
-      entityId: row.entityId,
-      scorerId: row.scorerId,
-      source: row.source,
-      resourceId: row.resourceId,
-      threadId: row.threadId,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    };
+    return coreTransformScoreRow(row, {
+      fieldMappings: { additionalContext: 'additionalLLMContext' },
+    });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
@@ -233,7 +202,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('LIBSQL', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -266,7 +235,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -330,7 +299,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -382,7 +351,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
