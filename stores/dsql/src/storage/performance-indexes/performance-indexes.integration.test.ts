@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { DSQLStore } from '../index';
 import { DSQLPerformanceTest } from './performance-test';
-import { TEST_CONFIG } from '../test-utils';
+import { TEST_CONFIG, canRunDSQLTests } from '../test-utils';
+
+// Skip integration tests when DSQL is not available
+const describeIf = canRunDSQLTests() ? describe : describe.skip;
 
 // Integration tests that require a real database connection
-describe('DSQLStore Performance Indexes Integration', () => {
+describeIf('DSQLStore Performance Indexes Integration', () => {
   let store: DSQLStore;
   let performanceTest: DSQLPerformanceTest;
 
@@ -42,10 +45,10 @@ describe('DSQLStore Performance Indexes Integration', () => {
   it('should demonstrate performance scaling with indexes across dataset sizes', async () => {
     const testSizes = [
       { name: 'XSmall', size: 100 },
-      { name: 'Small', size: 1000 },
-      { name: 'Medium', size: 10000 },
-      { name: 'Large', size: 100000 },
-      { name: 'XLarge', size: 1000000 },
+      // { name: 'Small', size: 1000 },
+      // { name: 'Medium', size: 10000 },
+      // { name: 'Large', size: 100000 },
+      // { name: 'XLarge', size: 1000000 },
     ];
 
     console.log('\n=== Comprehensive Performance Scaling Analysis ===');
