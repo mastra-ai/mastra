@@ -1,9 +1,13 @@
 import { ReadableStream, WritableStream } from 'node:stream/web';
 import type { ToolSet } from 'ai-v5';
+import type z from 'zod';
+import { MessageList } from '../../agent';
+import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import type { WorkflowResult } from '../../workflows';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
@@ -40,6 +44,7 @@ export function workflowLoopStream<
   streamState,
   agentId,
   toolCallId,
+  autoResumeSuspendedTools,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
@@ -112,7 +117,9 @@ export function workflowLoopStream<
         requestContext.set('__mastra_requireToolApproval', true);
       }
 
-      const executionResult = resumeContext
+      let executionResult: WorkflowResult<any, any, any, any>;
+
+      executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
             tracingContext: rest.modelSpanTracker?.getTracingContext(),
@@ -123,6 +130,78 @@ export function workflowLoopStream<
             tracingContext: rest.modelSpanTracker?.getTracingContext(),
             requestContext,
           });
+
+      if (autoResumeSuspendedTools && executionResult.status === 'suspended') {
+        while (executionResult.status === 'suspended') {
+          console.dir(
+            { suspendedSteps: executionResult.suspended, suspendPayload: executionResult.suspendPayload },
+            { depth: null },
+          );
+          const agent = rest.mastra?.getAgent(agentId)!;
+          let resumeSchema: z.ZodType<any> | undefined = undefined;
+          const toolName: string = executionResult.suspendPayload['executionWorkflow'].toolName;
+          const resumeLabel: string[] = executionResult.suspendPayload['executionWorkflow'].resumeLabel ?? [];
+          let suspendedStepId: string | undefined = undefined;
+          let suspendWorkflowId: string | undefined = undefined;
+          if (toolName.startsWith('workflow-')) {
+            const stepPath = resumeLabel?.[0];
+            const stepId = stepPath?.split('.')?.[0];
+            const workflowId = toolName.substring('workflow-'.length);
+            suspendWorkflowId = workflowId;
+            const agentWorkflows = await agent.listWorkflows();
+            const workflow = agentWorkflows[workflowId];
+            suspendedStepId = stepId;
+            if (workflow && stepId) {
+              const step = workflow.steps?.[stepId];
+              if (step) {
+                resumeSchema = step.resumeSchema;
+              }
+            }
+          } else {
+            const agentTools = await agent.listTools();
+            const tool = agentTools[toolName];
+            if (tool && 'resumeSchema' in tool) {
+              resumeSchema = tool.resumeSchema;
+            }
+          }
+
+          if (!resumeSchema) {
+            // throw new Error(`No resume schema found for tool ${toolName}`);
+            continue;
+          }
+
+          const llm = await agent.getLLM({ requestContext });
+
+          const systemInstructions = `
+            You are an assistant used to resume a suspended tool call.
+            Your job is to create the resume data for the tool call using the schema passed as the structure for the data.
+            You will generate an object that matches the schema.
+          `;
+
+          const messageList = new MessageList()
+            .add(systemInstructions, 'system')
+            .add(initialData.messages.all, 'memory');
+
+          const result = (llm as MastraLLMVNext).stream({
+            methodType: 'generate',
+            requestContext,
+            messageList,
+            agentId,
+            tracingContext: rest.modelSpanTracker?.getTracingContext()!,
+            structuredOutput: {
+              schema: resumeSchema,
+            },
+          });
+
+          const resumeDataForAutoResume = await result.object;
+
+          executionResult = await run.resume({
+            resumeData: resumeDataForAutoResume,
+            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            label: toolCallId,
+          });
+        }
+      }
 
       if (executionResult.status !== 'success') {
         controller.close();

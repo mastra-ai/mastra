@@ -205,7 +205,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
     });
 
     describe.skipIf(version === 'v1')('suspension', () => {
-      it('should call findUserTool with suspend and resume', async () => {
+      it.only('should call findUserTool with suspend and resume', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
           description: 'This is a test tool that returns the name and email',
@@ -237,6 +237,9 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           instructions: 'You are an agent that can get list of users using findUserTool.',
           model: openaiModel,
           tools: { findUserTool },
+          defaultOptions: {
+            autoResumeSuspendedTools: true,
+          },
         });
 
         const mastra = new Mastra({
@@ -316,6 +319,9 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           instructions: 'You are an agent that can get list of users using findUserWorkflow.',
           model: openaiModel,
           workflows: { findUserWorkflow },
+          defaultOptions: {
+            autoResumeSuspendedTools: true,
+          },
         });
 
         const mastra = new Mastra({

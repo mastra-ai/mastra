@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '../../../memory';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
+import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -217,7 +218,7 @@ export function createToolCallStep<
           writableStream: writer,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
-          suspend: async (suspendPayload: any) => {
+          suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             controller.enqueue({
               type: 'tool-call-suspended',
               runId,
@@ -232,6 +233,8 @@ export function createToolCallStep<
               {
                 toolCallSuspended: suspendPayload,
                 __streamState: streamState.serialize(),
+                toolName: inputData.toolName,
+                resumeLabel: options?.resumeLabel,
               },
               {
                 resumeLabel: inputData.toolCallId,

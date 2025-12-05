@@ -21,6 +21,7 @@ export type AgentCapabilities = {
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
   llm: MastraLLMVNext;
+  mastra?: Mastra;
 };
 
 const coreToolSchema = z.object({

@@ -41,6 +41,7 @@ interface CreatePrepareStreamWorkflowOptions<
   };
   agentId: string;
   toolCallId?: string;
+  autoResumeSuspendedTools?: boolean;
 }
 
 export function createPrepareStreamWorkflow<
@@ -64,6 +65,7 @@ export function createPrepareStreamWorkflow<
   resumeContext,
   agentId,
   toolCallId,
+  autoResumeSuspendedTools,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -104,6 +106,7 @@ export function createPrepareStreamWorkflow<
     memoryConfig,
     memory,
     resourceId,
+    autoResumeSuspendedTools,
   });
 
   const mapResultsStep = createMapResultsStep({

@@ -138,6 +138,7 @@ export function createMapResultsStep<
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
     const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
+      mastra: capabilities.mastra,
       methodType: modelMethodType,
       agentId,
       requestContext: result.requestContext!,

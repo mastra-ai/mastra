@@ -1976,11 +1976,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               } else if (result?.status === 'suspended') {
                 const suspendedStep = result?.suspended?.[0]?.[0]!;
                 const suspendPayload = result?.steps?.[suspendedStep]?.suspendPayload;
+                const suspendedStepIds = result?.suspended?.map(stepPath => stepPath.join('.'));
 
                 if (suspendPayload?.__workflow_meta) {
                   delete suspendPayload.__workflow_meta;
                 }
-                return suspend?.(suspendPayload);
+                return suspend?.(suspendPayload, { resumeLabel: suspendedStepIds });
               } else {
                 // This is to satisfy the execute fn's return value for typescript
                 return {
@@ -2523,6 +2524,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     // Create a capabilities object with bound methods
     const capabilities = {
+      mastra: this.#mastra,
       agentName: this.name,
       logger: this.logger,
       getMemory: this.getMemory.bind(this),
@@ -2561,6 +2563,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       resumeContext,
       agentId: this.id,
       toolCallId: options.toolCallId,
+      autoResumeSuspendedTools: options.autoResumeSuspendedTools,
     });
 
     const run = await executionWorkflow.createRun();
