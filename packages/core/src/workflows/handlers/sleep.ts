@@ -82,7 +82,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
         requestContext,
         inputData: prevOutput,
         state: executionContext.state,
-        setState: (state: any) => {
+        setState: async (state: any) => {
           executionContext.state = state;
         },
         retryCount: -1,
@@ -198,7 +198,7 @@ export async function executeSleepUntil(
         requestContext,
         inputData: prevOutput,
         state: executionContext.state,
-        setState: (state: any) => {
+        setState: async (state: any) => {
           executionContext.state = state;
         },
         retryCount: -1,

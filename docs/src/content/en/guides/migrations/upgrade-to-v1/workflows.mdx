@@ -177,6 +177,21 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
+### `setState` is now async and the data passed is validated
+
+The `setState` function is now async. The data passed is now validated against the `stateSchema` defined in the step.
+The state data validation also uses the `validateInputs` flag to determine whether to validate the state data or not.
+Also, when calling `setState`, you can now pass only the state data being updated, instead of adding the previous state spread (`...state`).
+
+To migrate, update the `setState` function to be async.
+
+```diff
+- setState({ ...state, sharedCounter: state.sharedCounter + 1 });
++ await setState({ sharedCounter: state.sharedCounter + 1 });
++ // await setState({ ...state, sharedCounter: state.sharedCounter + 1 }); 
++ // this also works, as the previous state spread remains supported
+```
+
 ## Removed
 
 ### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods

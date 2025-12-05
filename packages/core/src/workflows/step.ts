@@ -50,16 +50,21 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   validateSchemas?: boolean;
 };
 
+export type ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = Omit<
+  ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+  'setState' | 'suspend'
+>;
+
 export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
   params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
 ) => Promise<TStepOutput>;
 
 export type ConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+  params: ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
 ) => Promise<boolean>;
 
 export type LoopConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> & {
+  params: ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> & {
     iterationCount: number;
   },
 ) => Promise<boolean>;
