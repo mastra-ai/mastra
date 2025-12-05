@@ -610,6 +610,9 @@ export class ProcessorRunner {
         if (result.messages) {
           this.applyMessagesToMessageList(result.messages, messageList, idsBeforeProcessing, check);
         }
+        if (result.systemMessages) {
+          messageList.replaceAllSystemMessages(result.systemMessages);
+        }
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
 

@@ -97,6 +97,8 @@ export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet, OUTPUT exten
 
   messages?: MastraDBMessage[];
   messageList?: MessageList;
+  /** Replace all system messages with these */
+  systemMessages?: CoreMessageV4[];
   providerOptions?: SharedV2ProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
