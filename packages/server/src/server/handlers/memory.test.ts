@@ -9,6 +9,7 @@ import {
   GET_MEMORY_STATUS_ROUTE,
   LIST_THREADS_ROUTE,
   GET_THREAD_BY_ID_ROUTE,
+  GET_THREAD_BY_ID_DIRECT_ROUTE,
   SAVE_MESSAGES_ROUTE,
   CREATE_THREAD_ROUTE,
   LIST_MESSAGES_ROUTE,
@@ -333,6 +334,120 @@ describe('Memory Handlers', () => {
       });
       expect(result).toEqual(createdThread);
       expect(spy).toHaveBeenCalledWith({ threadId: 'test-thread' });
+    });
+  });
+
+  describe('getThreadByIdDirectHandler', () => {
+    it('should throw error when threadId is not provided', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+      await expect(
+        GET_THREAD_BY_ID_DIRECT_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra }),
+          threadId: undefined as any,
+          resourceId: 'test-resource',
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "threadId" is required' }));
+    });
+
+    it('should throw error when resourceId is not provided', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+      await expect(
+        GET_THREAD_BY_ID_DIRECT_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra }),
+          threadId: 'test-thread',
+          resourceId: undefined as any,
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
+    });
+
+    it('should throw error when storage is not initialized', async () => {
+      const mastra = new Mastra({
+        logger: false,
+      });
+      await expect(
+        GET_THREAD_BY_ID_DIRECT_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra }),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Storage is not initialized' }));
+    });
+
+    it('should throw 404 when thread is not found', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+
+      await expect(
+        GET_THREAD_BY_ID_DIRECT_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra }),
+          threadId: 'non-existent',
+          resourceId: 'test-resource',
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
+    });
+
+    it('should throw 403 when thread does not belong to the specified resource', async () => {
+      // Create thread via storage directly
+      const thread = createThread({ id: 'test-thread', resourceId: 'resource-a' });
+      await storage.saveThread({ thread });
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+
+      await expect(
+        GET_THREAD_BY_ID_DIRECT_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra }),
+          threadId: 'test-thread',
+          resourceId: 'resource-b', // Different resource
+        }),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Thread does not belong to the specified resource' }));
+    });
+
+    it('should return thread when found and resourceId matches', async () => {
+      // Create thread via storage directly
+      const thread = createThread({ id: 'test-thread', resourceId: 'test-resource' });
+      await storage.saveThread({ thread });
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+
+      const result = await GET_THREAD_BY_ID_DIRECT_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra }),
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      });
+      expect(result).toEqual(thread);
+    });
+
+    it('should work without any agents configured', async () => {
+      // Create thread via storage directly
+      const thread = createThread({ id: 'standalone-thread', resourceId: 'standalone-resource' });
+      await storage.saveThread({ thread });
+
+      // Mastra with no agents - only storage
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+
+      const result = await GET_THREAD_BY_ID_DIRECT_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra }),
+        threadId: 'standalone-thread',
+        resourceId: 'standalone-resource',
+      });
+      expect(result).toEqual(thread);
     });
   });
 
