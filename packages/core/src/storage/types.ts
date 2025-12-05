@@ -231,3 +231,129 @@ export interface StorageIndexStats extends IndexInfo {
   last_used?: Date; // Last time index was used
   method?: string; // Index method (btree, hash, etc)
 }
+
+// ============================================
+// Observational Memory Types
+// ============================================
+
+/**
+ * Scope of observational memory
+ */
+export type ObservationalMemoryScope = 'thread' | 'resource';
+
+/**
+ * How the observational memory record was created
+ */
+export type ObservationalMemoryOriginType = 'initial' | 'reflection';
+
+/**
+ * Metadata for observational memory record
+ */
+export interface ObservationalMemoryMetadata {
+  createdAt: Date;
+  updatedAt: Date;
+  /** Number of reflections performed */
+  reflectionCount: number;
+  /** When the last reflection occurred */
+  lastReflectionAt?: Date;
+}
+
+/**
+ * Core database record for observational memory
+ */
+export interface ObservationalMemoryRecord {
+  // Identity
+  /** Unique record ID */
+  id: string;
+  /** Memory scope - thread or resource */
+  scope: ObservationalMemoryScope;
+  /** Thread ID (null for resource scope) */
+  threadId: string | null;
+  /** Resource ID (always present) */
+  resourceId: string;
+
+  // Generation tracking
+  /** How this record was created */
+  originType: ObservationalMemoryOriginType;
+  /** Links to previous generation */
+  previousGenerationId?: string;
+
+  // Observation content
+  /** Currently active observations (markdown) */
+  activeObservations: string;
+  /** Observations waiting to be activated */
+  bufferedObservations?: string;
+  /** Reflection waiting to be swapped in */
+  bufferedReflection?: string;
+
+  // Suggested continuation from Observer/Reflector
+  /** Suggested continuation for the Actor agent */
+  suggestedContinuation?: string;
+
+  // Message tracking
+  /** Messages included in active observations */
+  observedMessageIds: string[];
+  /** Messages included in buffered observations */
+  bufferedMessageIds: string[];
+  /** Messages currently being observed (async) */
+  bufferingMessageIds: string[];
+
+  // Configuration & metadata
+  /** Current configuration (stored as JSON) */
+  config: Record<string, unknown>;
+  /** Metadata */
+  metadata: ObservationalMemoryMetadata;
+
+  // Token tracking
+  /** Running total of all tokens observed */
+  totalTokensObserved: number;
+  /** Current size of active observations */
+  observationTokenCount: number;
+
+  // State flags
+  /** Is a reflection currently in progress? */
+  isReflecting: boolean;
+  /** Is observation currently in progress? */
+  isObserving: boolean;
+}
+
+/**
+ * Input for creating a new observational memory record
+ */
+export interface CreateObservationalMemoryInput {
+  threadId: string | null;
+  resourceId: string;
+  scope: ObservationalMemoryScope;
+  config: Record<string, unknown>;
+}
+
+/**
+ * Input for updating active observations
+ */
+export interface UpdateActiveObservationsInput {
+  id: string;
+  observations: string;
+  messageIds: string[];
+  tokenCount: number;
+  suggestedContinuation?: string;
+}
+
+/**
+ * Input for updating buffered observations
+ */
+export interface UpdateBufferedObservationsInput {
+  id: string;
+  observations: string;
+  messageIds: string[];
+  suggestedContinuation?: string;
+}
+
+/**
+ * Input for creating a reflection generation
+ */
+export interface CreateReflectionGenerationInput {
+  currentRecord: ObservationalMemoryRecord;
+  reflection: string;
+  tokenCount: number;
+  suggestedContinuation?: string;
+}

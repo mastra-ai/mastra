@@ -10,6 +10,11 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  ObservationalMemoryRecord,
+  CreateObservationalMemoryInput,
+  UpdateActiveObservationsInput,
+  UpdateBufferedObservationsInput,
+  CreateReflectionGenerationInput,
 } from '../../types';
 import { safelyParseJSON } from '../../utils';
 import type { StoreOperations } from '../operations';
@@ -18,12 +23,14 @@ import { MemoryStorage } from './base';
 export type InMemoryThreads = Map<string, StorageThreadType>;
 export type InMemoryResources = Map<string, StorageResourceType>;
 export type InMemoryMessages = Map<string, StorageMessageType>;
+export type InMemoryObservationalMemory = Map<string, ObservationalMemoryRecord[]>;
 
 export class InMemoryMemory extends MemoryStorage {
   private collection: {
     threads: InMemoryThreads;
     resources: InMemoryResources;
     messages: InMemoryMessages;
+    observationalMemory: InMemoryObservationalMemory;
   };
   private operations: StoreOperations;
   constructor({
@@ -34,11 +41,15 @@ export class InMemoryMemory extends MemoryStorage {
       threads: InMemoryThreads;
       resources: InMemoryResources;
       messages: InMemoryMessages;
+      observationalMemory?: InMemoryObservationalMemory;
     };
     operations: StoreOperations;
   }) {
     super();
-    this.collection = collection;
+    this.collection = {
+      ...collection,
+      observationalMemory: collection.observationalMemory ?? new Map(),
+    };
     this.operations = operations;
   }
 
@@ -581,5 +592,280 @@ export class InMemoryMemory extends MemoryStorage {
         ? String(aValue).localeCompare(String(bValue))
         : String(bValue).localeCompare(String(aValue));
     });
+  }
+
+  // ============================================
+  // Observational Memory Implementation
+  // ============================================
+
+  private getObservationalMemoryKey(threadId: string | null, resourceId: string): string {
+    if (threadId) {
+      return `thread:${threadId}`;
+    }
+    return `resource:${resourceId}`;
+  }
+
+  async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
+    const key = this.getObservationalMemoryKey(threadId, resourceId);
+    const records = this.collection.observationalMemory.get(key);
+    return records?.[0] ?? null;
+  }
+
+  async getObservationalMemoryHistory(
+    threadId: string | null,
+    resourceId: string,
+    limit?: number,
+  ): Promise<ObservationalMemoryRecord[]> {
+    const key = this.getObservationalMemoryKey(threadId, resourceId);
+    const records = this.collection.observationalMemory.get(key) ?? [];
+    return limit ? records.slice(0, limit) : records;
+  }
+
+  async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
+    const { threadId, resourceId, scope, config } = input;
+    const key = this.getObservationalMemoryKey(threadId, resourceId);
+
+    const record: ObservationalMemoryRecord = {
+      id: crypto.randomUUID(),
+      scope,
+      threadId,
+      resourceId,
+      originType: 'initial',
+      activeObservations: '',
+      observedMessageIds: [],
+      bufferedMessageIds: [],
+      bufferingMessageIds: [],
+      config,
+      metadata: {
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        reflectionCount: 0,
+      },
+      totalTokensObserved: 0,
+      observationTokenCount: 0,
+      isReflecting: false,
+      isObserving: false,
+    };
+
+    // Add as first record (most recent)
+    const existing = this.collection.observationalMemory.get(key) ?? [];
+    this.collection.observationalMemory.set(key, [record, ...existing]);
+
+    return record;
+  }
+
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    const { id, observations, messageIds, tokenCount, suggestedContinuation } = input;
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.activeObservations = observations;
+    record.suggestedContinuation = suggestedContinuation;
+    record.observationTokenCount = tokenCount;
+    record.totalTokensObserved += tokenCount;
+
+    // Add messageIds to observedMessageIds (deduplicated)
+    const observedSet = new Set(record.observedMessageIds);
+    for (const msgId of messageIds) {
+      observedSet.add(msgId);
+    }
+    record.observedMessageIds = Array.from(observedSet);
+
+    record.metadata.updatedAt = new Date();
+  }
+
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    const { id, observations, messageIds, suggestedContinuation } = input;
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.bufferedObservations = observations;
+    if (suggestedContinuation) {
+      record.suggestedContinuation = suggestedContinuation;
+    }
+
+    // Add messageIds to bufferedMessageIds
+    const bufferedSet = new Set(record.bufferedMessageIds);
+    for (const msgId of messageIds) {
+      bufferedSet.add(msgId);
+    }
+    record.bufferedMessageIds = Array.from(bufferedSet);
+
+    record.metadata.updatedAt = new Date();
+  }
+
+  async swapBufferedToActive(id: string): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    if (!record.bufferedObservations) {
+      return; // Nothing to swap
+    }
+
+    // Append buffered to active (or replace if empty)
+    if (record.activeObservations) {
+      record.activeObservations = `${record.activeObservations}\n\n${record.bufferedObservations}`;
+    } else {
+      record.activeObservations = record.bufferedObservations;
+    }
+
+    // Move buffered message IDs to observed
+    const observedSet = new Set(record.observedMessageIds);
+    for (const msgId of record.bufferedMessageIds) {
+      observedSet.add(msgId);
+    }
+    record.observedMessageIds = Array.from(observedSet);
+
+    // Clear buffered state
+    record.bufferedObservations = undefined;
+    record.bufferedMessageIds = [];
+    record.bufferingMessageIds = [];
+
+    record.metadata.updatedAt = new Date();
+  }
+
+  async markMessagesAsBuffering(id: string, messageIds: string[]): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    const bufferingSet = new Set(record.bufferingMessageIds);
+    for (const msgId of messageIds) {
+      bufferingSet.add(msgId);
+    }
+    record.bufferingMessageIds = Array.from(bufferingSet);
+    record.metadata.updatedAt = new Date();
+  }
+
+  async markMessagesAsBuffered(id: string, messageIds: string[]): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    // Move from buffering to buffered
+    const bufferingSet = new Set(record.bufferingMessageIds);
+    const bufferedSet = new Set(record.bufferedMessageIds);
+
+    for (const msgId of messageIds) {
+      bufferingSet.delete(msgId);
+      bufferedSet.add(msgId);
+    }
+
+    record.bufferingMessageIds = Array.from(bufferingSet);
+    record.bufferedMessageIds = Array.from(bufferedSet);
+    record.metadata.updatedAt = new Date();
+  }
+
+  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    const { currentRecord, reflection, tokenCount, suggestedContinuation } = input;
+    const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
+
+    const newRecord: ObservationalMemoryRecord = {
+      id: crypto.randomUUID(),
+      scope: currentRecord.scope,
+      threadId: currentRecord.threadId,
+      resourceId: currentRecord.resourceId,
+      originType: 'reflection',
+      previousGenerationId: currentRecord.id,
+      activeObservations: reflection,
+      suggestedContinuation,
+      observedMessageIds: [...currentRecord.observedMessageIds],
+      bufferedMessageIds: [],
+      bufferingMessageIds: [],
+      config: currentRecord.config,
+      metadata: {
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        reflectionCount: currentRecord.metadata.reflectionCount + 1,
+        lastReflectionAt: new Date(),
+      },
+      totalTokensObserved: currentRecord.totalTokensObserved,
+      observationTokenCount: tokenCount,
+      isReflecting: false,
+      isObserving: false,
+    };
+
+    // Add as first record (most recent)
+    const existing = this.collection.observationalMemory.get(key) ?? [];
+    this.collection.observationalMemory.set(key, [newRecord, ...existing]);
+
+    return newRecord;
+  }
+
+  async updateBufferedReflection(id: string, reflection: string): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.bufferedReflection = reflection;
+    record.metadata.updatedAt = new Date();
+  }
+
+  async swapReflectionToActive(id: string): Promise<ObservationalMemoryRecord> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    if (!record.bufferedReflection) {
+      throw new Error('No buffered reflection to swap');
+    }
+
+    // Create a new generation with the reflection
+    const newRecord = await this.createReflectionGeneration({
+      currentRecord: record,
+      reflection: record.bufferedReflection,
+      tokenCount: 0, // Will be calculated by caller
+    });
+
+    // Clear the buffered reflection from old record
+    record.bufferedReflection = undefined;
+
+    return newRecord;
+  }
+
+  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.isReflecting = isReflecting;
+    record.metadata.updatedAt = new Date();
+  }
+
+  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.isObserving = isObserving;
+    record.metadata.updatedAt = new Date();
+  }
+
+  async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
+    const key = this.getObservationalMemoryKey(threadId, resourceId);
+    this.collection.observationalMemory.delete(key);
+  }
+
+  /**
+   * Helper to find an observational memory record by ID across all keys
+   */
+  private findObservationalMemoryRecordById(id: string): ObservationalMemoryRecord | null {
+    for (const records of this.collection.observationalMemory.values()) {
+      const record = records.find(r => r.id === id);
+      if (record) return record;
+    }
+    return null;
   }
 }
