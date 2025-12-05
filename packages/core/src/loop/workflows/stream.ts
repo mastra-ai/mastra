@@ -131,18 +131,36 @@ export function workflowLoopStream<
           });
 
       if (rest.autoResumeSuspendedTools && executionResult.status === 'suspended') {
+        const MAX_AUTO_RESUME_ATTEMPTS = 10;
+        let autoResumeAttempts = 0;
         while (executionResult.status === 'suspended') {
           // using while loop because there could because the workflow might get suspended multiple times
+          if (++autoResumeAttempts > MAX_AUTO_RESUME_ATTEMPTS) {
+            rest.logger?.error(
+              `[Agent:${agentId}] - Maximum auto-resume attempts (${MAX_AUTO_RESUME_ATTEMPTS}) exceeded, please resume the agent manually`,
+            );
+            break;
+          }
           const agent = rest.mastra?.getAgentById(agentId)!;
           let resumeSchema: z.ZodType<any> | undefined = undefined;
+          const executionWorkflowSuspendPayload = executionResult.suspendPayload?.['executionWorkflow'] as Record<
+            string,
+            any
+          >;
+          if (!executionWorkflowSuspendPayload) {
+            rest.logger?.error(
+              `[Agent:${agentId}] - Invalid suspend payload structure, please resume the agent manually`,
+            );
+            break;
+          }
           const requireToolApproval: Record<string, any> | undefined =
-            executionResult.suspendPayload['executionWorkflow'].requireToolApproval;
-          const toolName: string = executionResult.suspendPayload['executionWorkflow'].toolName || '';
-          const resumeLabel: string[] = executionResult.suspendPayload['executionWorkflow'].resumeLabel ?? [];
+            executionWorkflowSuspendPayload.requireToolApproval;
+          const toolName: string = executionWorkflowSuspendPayload.toolName || '';
+          const resumeLabel: string[] = executionWorkflowSuspendPayload.resumeLabel ?? [];
           let suspendedStepId: string | undefined = undefined;
           let suspendWorkflowId: string | undefined = undefined;
           if (toolName.startsWith('workflow-') && !requireToolApproval) {
-            const stepPath = resumeLabel?.[0];
+            const stepPath = resumeLabel?.[0] ?? '';
             const stepId = stepPath?.split('.')?.[0];
             const workflowId = toolName.substring('workflow-'.length);
             suspendWorkflowId = workflowId;
@@ -157,13 +175,13 @@ export function workflowLoopStream<
                 rest.logger?.warn(
                   `[Agent:${agentId}] - Suspended step ${stepId} not found in workflow ${workflowId}, auto resume will not be possible, please resume the agent manually`,
                 );
-                continue;
+                break;
               }
             } else {
               rest.logger?.warn(
-                `[Agent:${agentId}] - Suspended workflow ${workflowId} not found, auto resume will not be possible, please resume the agent manually`,
+                `[Agent:${agentId}] - Suspended workflow ${workflowId} step not found, auto resume will not be possible, please resume the agent manually`,
               );
-              continue;
+              break;
             }
           } else if (toolName && !requireToolApproval) {
             const agentTools = await agent.listTools();
@@ -182,11 +200,11 @@ export function workflowLoopStream<
               rest.logger?.warn(
                 `[Agent:${agentId}] - No resumeSchema found for suspended ${suspendWorkflowId ? `step ${suspendedStepId} in workflow tool ${suspendWorkflowId}` : `tool ${toolName}`}, auto resume will not be possible, please resume the agent manually`,
               );
-              continue;
+              break;
             }
 
             try {
-              const llm = await agent.getLLM({ requestContext });
+              const llm = (await agent.getLLM({ requestContext })) as MastraLLMVNext;
 
               const systemInstructions = `
             You are an assistant used to resume a suspended tool call.
@@ -196,7 +214,7 @@ export function workflowLoopStream<
 
               const messageListToUse = messageList.addSystem(systemInstructions);
 
-              const result = (llm as MastraLLMVNext).stream({
+              const result = llm.stream({
                 methodType: 'generate',
                 requestContext,
                 messageList: messageListToUse,
@@ -213,7 +231,7 @@ export function workflowLoopStream<
                 `[Agent:${agentId}] - Error generating resumeData for suspended ${suspendWorkflowId ? `step ${suspendedStepId} in workflow ${suspendWorkflowId}` : `tool ${toolName}`}:`,
                 error,
               );
-              continue;
+              break;
             }
           }
 
