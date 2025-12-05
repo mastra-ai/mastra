@@ -256,7 +256,7 @@ export class ScoresDSQL extends ScoresStorage {
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1 ORDER BY "createdAt" DESC LIMIT $2 OFFSET $3`,
         [runId, limitValue, start],
       );
       return {
@@ -314,7 +314,7 @@ export class ScoresDSQL extends ScoresStorage {
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2 ORDER BY "createdAt" DESC LIMIT $3 OFFSET $4`,
         [entityId, entityType, limitValue, start],
       );
       return {
