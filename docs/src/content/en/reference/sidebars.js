@@ -494,6 +494,36 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "AI SDK",
+      collapsed: true,
+      items: [
+        { type: "doc", id: "ai-sdk/chat-route", label: "chatRoute()" },
+        {
+          type: "doc",
+          id: "ai-sdk/handle-chat-stream",
+          label: "handleChatStream()",
+        },
+        {
+          type: "doc",
+          id: "ai-sdk/handle-network-stream",
+          label: "handleNetworkStream()",
+        },
+        {
+          type: "doc",
+          id: "ai-sdk/handle-workflow-stream",
+          label: "handleWorkflowStream()",
+        },
+        { type: "doc", id: "ai-sdk/network-route", label: "networkRoute()" },
+        {
+          type: "doc",
+          id: "ai-sdk/to-ai-sdk-stream",
+          label: "toAISdkStream()",
+        },
+        { type: "doc", id: "ai-sdk/workflow-route", label: "workflowRoute()" },
+      ],
+    },
+    {
+      type: "category",
       label: "Observability",
       collapsed: true,
       items: [
