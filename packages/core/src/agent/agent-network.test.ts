@@ -1,5 +1,6 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { openai } from '@ai-sdk/openai-v5';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from '../error';
 import { MockMemory } from '../memory/mock';
@@ -697,3 +698,86 @@ describe('Agent - network - updateWorkingMemory', () => {
     expect(thread?.resourceId).toBe(resourceId);
   });
 }, 120e3);
+
+describe('Agent - network - tool context validation', () => {
+  it('should pass toolCallId, threadId, and resourceId in context.agent when network executes a tool', async () => {
+    const mockExecute = vi.fn(async (_inputData, _context) => {
+      return { result: 'context captured' };
+    });
+
+    const tool = createTool({
+      id: 'context-check-tool',
+      description: 'Tool to validate context.agent properties from network',
+      inputSchema: z.object({
+        message: z.string(),
+      }),
+      execute: mockExecute,
+    });
+
+    // Mock model returns routing agent selection schema
+    // The network's routing agent uses structuredOutput expecting: { primitiveId, primitiveType, prompt, selectionReason }
+    const routingResponse = JSON.stringify({
+      primitiveId: 'tool',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ message: 'validate context' }),
+      selectionReason: 'Test context propagation through network',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const memory = new MockMemory();
+
+    const agent = new Agent({
+      id: 'context-network-agent',
+      name: 'Context Test Network',
+      instructions: 'Use the context-check-tool to validate context properties.',
+      model: mockModel,
+      tools: { tool },
+      memory,
+    });
+
+    const threadId = 'context-test-thread';
+    const resourceId = 'context-test-resource';
+
+    const anStream = await agent.network('Validate context by using the context-check-tool', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Consume the stream to trigger tool execution through network
+    for await (const chunk of anStream) {
+      // Stream events are processed
+    }
+
+    // Verify the tool was called with context containing toolCallId, threadId, and resourceId
+    expect(mockExecute).toHaveBeenCalled();
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'validate context' }),
+      expect.objectContaining({
+        agent: expect.objectContaining({
+          toolCallId: expect.any(String),
+          threadId,
+          resourceId,
+        }),
+      }),
+    );
+  });
+});
