@@ -136,6 +136,100 @@ describe('createLogger', () => {
   });
 });
 
+describe('PinoLogger redact option', () => {
+  let memoryStream: MemoryStream;
+
+  beforeEach(() => {
+    memoryStream = new MemoryStream();
+  });
+
+  it('should redact sensitive data from logs using paths array', async () => {
+    const logger = new PinoLogger({
+      name: 'SecureApp',
+      level: LogLevel.INFO,
+      transports: {
+        memory: memoryStream,
+      },
+      redact: ['password', 'token', 'apiKey'],
+    });
+
+    logger.info('User login', {
+      username: 'john',
+      password: 'secret123',
+      token: 'abc-xyz-123',
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const logs = await memoryStream.listLogs();
+
+    expect(logs[0]).toMatchObject({
+      msg: 'User login',
+      username: 'john',
+      password: '[Redacted]',
+      token: '[Redacted]',
+    });
+  });
+
+  it('should redact sensitive data with custom censor value', async () => {
+    const logger = new PinoLogger({
+      name: 'SecureApp',
+      level: LogLevel.INFO,
+      transports: {
+        memory: memoryStream,
+      },
+      redact: {
+        paths: ['password', 'apiKey'],
+        censor: '[REDACTED]',
+      },
+    });
+
+    logger.info('API call', {
+      endpoint: '/api/data',
+      apiKey: 'sk-12345',
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const logs = await memoryStream.listLogs();
+
+    expect(logs[0]).toMatchObject({
+      msg: 'API call',
+      endpoint: '/api/data',
+      apiKey: '[REDACTED]',
+    });
+  });
+
+  it('should redact nested paths with wildcards', async () => {
+    const logger = new PinoLogger({
+      name: 'SecureApp',
+      level: LogLevel.INFO,
+      transports: {
+        memory: memoryStream,
+      },
+      redact: ['*.password', 'user.email'],
+    });
+
+    logger.info('User data', {
+      user: {
+        name: 'John',
+        email: 'john@example.com',
+        password: 'secret',
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const logs = await memoryStream.listLogs();
+
+    expect(logs[0].user).toMatchObject({
+      name: 'John',
+      email: '[Redacted]',
+      password: '[Redacted]',
+    });
+  });
+});
+
 describe('PinoLogger.child()', () => {
   let memoryStream: MemoryStream;
 

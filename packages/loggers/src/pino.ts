@@ -13,6 +13,7 @@ export interface PinoLoggerOptions {
   transports?: TransportMap;
   overrideDefaultTransports?: boolean;
   formatters?: pino.LoggerOptions['formatters'];
+  redact?: pino.LoggerOptions['redact'];
 }
 
 interface PinoLoggerInternalOptions extends PinoLoggerOptions {
@@ -52,6 +53,7 @@ export class PinoLogger extends MastraLogger {
         name: options.name || 'app',
         level: options.level || LogLevel.INFO,
         formatters: options.formatters,
+        redact: options.redact,
       },
       options.overrideDefaultTransports
         ? options?.transports?.default
