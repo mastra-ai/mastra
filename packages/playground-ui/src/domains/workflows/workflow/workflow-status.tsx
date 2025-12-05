@@ -34,7 +34,7 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
 
   const isTripwire = status === 'tripwire';
   const hasTripwireMetadata = Boolean(
-    tripwire && (tripwire.retry !== undefined || tripwire.metadata || tripwire.processorId),
+    tripwire && (tripwire.retry !== undefined || tripwire.metadata !== undefined || tripwire.processorId !== undefined),
   );
 
   return (
