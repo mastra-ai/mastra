@@ -1,5 +1,180 @@
 # @mastra/core
 
+## 1.0.0-beta.7
+
+### Minor Changes
+
+- Add `disableInit` option to all storage adapters ([#10851](https://github.com/mastra-ai/mastra/pull/10851))
+
+  Adds a new `disableInit` config option to all storage providers that allows users to disable automatic table creation/migrations at runtime. This is useful for CI/CD pipelines where you want to run migrations during deployment with elevated credentials, then run the application with `disableInit: true` so it doesn't attempt schema changes at runtime.
+
+  ```typescript
+  // CI/CD script - run migrations
+  const storage = new PostgresStore({
+    connectionString: DATABASE_URL,
+    id: 'pg-storage',
+  });
+  await storage.init();
+
+  // Runtime - skip auto-init
+  const storage = new PostgresStore({
+    connectionString: DATABASE_URL,
+    id: 'pg-storage',
+    disableInit: true,
+  });
+  ```
+
+### Patch Changes
+
+- Add time-to-first-token (TTFT) support for Langfuse integration ([#10781](https://github.com/mastra-ai/mastra/pull/10781))
+
+  Adds `completionStartTime` to model generation spans, which Langfuse uses to calculate TTFT metrics. The timestamp is automatically captured when the first content chunk arrives during streaming.
+
+  ```typescript
+  // completionStartTime is now automatically captured and sent to Langfuse
+  // enabling TTFT metrics in your Langfuse dashboard
+  const result = await agent.stream('Hello');
+  ```
+
+- Updated OtelExporters, Bridge, and Arize packages to better implement GenAI v1.38.0 Otel Semantic Conventions. See: ([#10591](https://github.com/mastra-ai/mastra/pull/10591))
+  https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/README.md
+
+- Standardize error IDs across all storage and vector stores using centralized helper functions (`createStorageErrorId` and `createVectorErrorId`). This ensures consistent error ID patterns (`MASTRA_STORAGE_{STORE}_{OPERATION}_{STATUS}` and `MASTRA_VECTOR_{STORE}_{OPERATION}_{STATUS}`) across the codebase for better error tracking and debugging. ([#10913](https://github.com/mastra-ai/mastra/pull/10913))
+
+- fix: generate unique text IDs for Anthropic/Google providers ([#10740](https://github.com/mastra-ai/mastra/pull/10740))
+
+  Workaround for duplicate text-start/text-end IDs in multi-step agentic flows.
+
+  The `@ai-sdk/anthropic` and `@ai-sdk/google` providers use numeric indices ("0", "1", etc.) for text block IDs that reset for each LLM call. This caused duplicate IDs when an agent does TEXT → TOOL → TEXT, breaking message ordering and storage.
+
+  The fix replaces numeric IDs with UUIDs, maintaining a map per step so text-start, text-delta, and text-end chunks for the same block share the same UUID. OpenAI's UUIDs pass through unchanged.
+
+  Related: #9909
+
+- Fix sub-agent requestContext propagation in listAgentTools ([#10844](https://github.com/mastra-ai/mastra/pull/10844))
+
+  Sub-agents with dynamic model configurations were broken because `requestContext` was not being passed to `getModel()` when creating agent tools. This caused sub-agents using function-based model configurations to receive an empty context instead of the parent's context.
+
+  No code changes required for consumers - this fix restores expected behavior for dynamic model configurations in sub-agents.
+
+- Fix ToolStream type error when piping streams with different types ([#10845](https://github.com/mastra-ai/mastra/pull/10845))
+
+  Changes `ToolStream` to extend `WritableStream<unknown>` instead of `WritableStream<T>`. This fixes the TypeScript error when piping `objectStream` or `fullStream` to `writer` in workflow steps.
+
+  Before:
+
+  ```typescript
+  // TypeError: ToolStream<ChunkType> is not assignable to WritableStream<Partial<StoryPlan>>
+  await response.objectStream.pipeTo(writer);
+  ```
+
+  After:
+
+  ```typescript
+  // Works without type errors
+  await response.objectStream.pipeTo(writer);
+  ```
+
+- feat: add native Perplexity provider support ([#10885](https://github.com/mastra-ai/mastra/pull/10885))
+
+- When sending the first message to a new thread with PostgresStore, users would get a "Thread not found" error. This happened because the thread was created in memory but not persisted to the database before the MessageHistory output processor tried to save messages. ([#10881](https://github.com/mastra-ai/mastra/pull/10881))
+
+  **Before:**
+
+  ```ts
+  threadObject = await memory.createThread({
+    // ...
+    saveThread: false, // thread not in DB yet
+  });
+  // Later: MessageHistory calls saveMessages() -> PostgresStore throws "Thread not found"
+  ```
+
+  **After:**
+
+  ```ts
+  threadObject = await memory.createThread({
+    // ...
+    saveThread: true, // thread persisted immediately
+  });
+  // MessageHistory can now save messages without error
+  ```
+
+- Emit error chunk and call onError when agent workflow step fails ([#10907](https://github.com/mastra-ai/mastra/pull/10907))
+
+  When a workflow step fails (e.g., tool not found), the error is now properly emitted as an error chunk to the stream and the onError callback is called. This fixes the issue where agent.generate() would throw "promise 'text' was not resolved or rejected" instead of the actual error message.
+
+- fix(core): use agent description when converting agent to tool ([#10879](https://github.com/mastra-ai/mastra/pull/10879))
+
+- Adds native @ai-sdk/deepseek provider support instead of using the OpenAI-compatible fallback. ([#10822](https://github.com/mastra-ai/mastra/pull/10822))
+
+  ```typescript
+  const agent = new Agent({
+    model: 'deepseek/deepseek-reasoner',
+  });
+
+  // With provider options for reasoning
+  const response = await agent.generate('Solve this problem', {
+    providerOptions: {
+      deepseek: {
+        thinking: { type: 'enabled' },
+      },
+    },
+  });
+  ```
+
+  Also updates the doc generation scripts so DeepSeek provider options show up in the generated docs.
+
+- Return state too if `includeState: true` is in `outputOptions` and workflow run is not successful ([#10806](https://github.com/mastra-ai/mastra/pull/10806))
+
+- feat: Add partial response support for agent and workflow list endpoints ([#10886](https://github.com/mastra-ai/mastra/pull/10886))
+
+  Add optional `partial` query parameter to `/api/agents` and `/api/workflows` endpoints to return minimal data without schemas, reducing payload size for list views:
+  - When `partial=true`: tool schemas (inputSchema, outputSchema) are omitted
+  - When `partial=true`: workflow steps are replaced with stepCount integer
+  - When `partial=true`: workflow root schemas (inputSchema, outputSchema) are omitted
+  - Maintains backward compatibility when partial parameter is not provided
+
+  ## Server Endpoint Usage
+
+  ```http
+  # Get partial agent data (no tool schemas)
+  GET /api/agents?partial=true
+
+  # Get full agent data (default behavior)
+  GET /api/agents
+
+  # Get partial workflow data (stepCount instead of steps, no schemas)
+  GET /api/workflows?partial=true
+
+  # Get full workflow data (default behavior)
+  GET /api/workflows
+  ```
+
+  ## Client SDK Usage
+
+  ```typescript
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+
+  // Get partial agent list (smaller payload)
+  const partialAgents = await client.listAgents({ partial: true });
+
+  // Get full agent list with tool schemas
+  const fullAgents = await client.listAgents();
+
+  // Get partial workflow list (smaller payload)
+  const partialWorkflows = await client.listWorkflows({ partial: true });
+
+  // Get full workflow list with steps and schemas
+  const fullWorkflows = await client.listWorkflows();
+  ```
+
+- Fix processInputStep so it runs correctly. ([#10909](https://github.com/mastra-ai/mastra/pull/10909))
+
+- Updated dependencies [[`6c59a40`](https://github.com/mastra-ai/mastra/commit/6c59a40e0ad160467bd13d63a8a287028d75b02d), [`3076c67`](https://github.com/mastra-ai/mastra/commit/3076c6778b18988ae7d5c4c5c466366974b2d63f), [`0bada2f`](https://github.com/mastra-ai/mastra/commit/0bada2f2c1234932cf30c1c47a719ffb64b801c5), [`cc60ff6`](https://github.com/mastra-ai/mastra/commit/cc60ff616541a3b0fb531a7e469bf9ae7bb90528)]:
+  - @mastra/observability@1.0.0-beta.3
+
 ## 1.0.0-beta.6
 
 ### Major Changes
