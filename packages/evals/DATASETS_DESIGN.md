@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the design for introducing a datasets feature to Mastra's evaluation system. Datasets provide a structured way to manage test cases, enable reproducible experiments, and track evaluation results over time.
+This document outlines the design for introducing a datasets feature to Mastra's evaluation system. Datasets provide a structured way to manage test cases, enable reproducible evaluations, and track evaluation results over time.
 
 ---
 
@@ -20,7 +20,7 @@ This document outlines the design for introducing a datasets feature to Mastra's
   - Items can link to production traces (source_trace_id, source_observation_id)
   - CSV import functionality
   - Synthetic dataset generation via LLM prompting
-- **Workflow**: Create test cases → Run experiments → Evaluate performance → Compare results
+- **Workflow**: Create test cases → Run evaluations → Evaluate performance → Compare results
 
 ### Braintrust
 
@@ -35,7 +35,7 @@ This document outlines the design for introducing a datasets feature to Mastra's
 - **Operations**: Create, Read, Insert, Update (merge strategy), Delete, Query (BTQL filtering)
 - **Evaluation Integration**:
   - Pass directly to `Eval()` function
-  - Convert experiment results to datasets via `asDataset()`
+  - Convert evaluation results to datasets via `asDataset()`
   - Log dataset record IDs to link results
 - **Multimodal Support**: Images via URLs, base64, attachments, or external object stores
 
@@ -50,7 +50,7 @@ This document outlines the design for introducing a datasets feature to Mastra's
   - Messages/Chat (structured message formats with role and content)
 - **Features**:
   - Versioned (insert/update/delete creates version history)
-  - Experiments pinned to specific dataset versions
+  - Evaluations pinned to specific dataset versions
   - Integrated with production spans
 
 ### Summary Comparison
@@ -62,8 +62,8 @@ This document outlines the design for introducing a datasets feature to Mastra's
 | **Versioning**           | Yes                              | Yes (pin to version in SDK)  | Yes                         |
 | **Status**               | ACTIVE/ARCHIVED                  | No                           | No                          |
 | **Schema Validation**    | JSON Schema                      | No                           | No                          |
-| **Experiments**          | Runs linked to dataset           | Evals pin to dataset version | Experiments tied to dataset |
-| **Production Traces**    | Link items to traces             | Convert experiment → dataset | Link spans to dataset       |
+| **Evaluations**          | Runs linked to dataset           | Evals pin to dataset version | Evaluations tied to dataset |
+| **Production Traces**    | Link items to traces             | Convert evaluation → dataset | Link spans to dataset       |
 | **Folders/Organization** | Forward slash naming             | Project-based                | No                          |
 | **Multimodal**           | No                               | Yes (images, files)          | No                          |
 
@@ -75,8 +75,8 @@ This document outlines the design for introducing a datasets feature to Mastra's
 
 1. **Dataset** - A named, versioned collection of test cases
 2. **Dataset Item** - Individual test case with input/expectedOutput/metadata
-3. **Dataset Version** - Immutable snapshot for reproducible experiments
-4. **Experiment** - An evaluation run against a specific dataset version
+3. **Dataset Version** - Immutable snapshot for reproducible evaluations
+4. **Evaluation** - An evaluation run against a specific dataset version
 
 ---
 
@@ -132,10 +132,10 @@ interface DatasetVersion {
 }
 ```
 
-### Experiment
+### Evaluation
 
 ```typescript
-interface Experiment {
+interface Evaluation {
   id: string;
   name: string;
   datasetId: string;
@@ -156,12 +156,12 @@ interface Experiment {
 }
 ```
 
-### Experiment Result
+### Evaluation Result
 
 ```typescript
-interface ExperimentResult {
+interface EvaluationResult {
   id: string;
-  experimentId: string;
+  evaluationId: string;
   datasetItemId: string;
   runId: string; // Links to scorer runs
   output: any; // Actual output from agent/workflow
@@ -189,8 +189,8 @@ Following existing patterns in `packages/core/src/storage/constants.ts`:
 export const TABLE_DATASETS = 'mastra_datasets';
 export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
 export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
-export const TABLE_EXPERIMENTS = 'mastra_experiments';
-export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
+export const TABLE_EVALUATIONS = 'mastra_evaluations';
+export const TABLE_EVALUATION_RESULTS = 'mastra_evaluation_results';
 
 export const DATASET_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -227,7 +227,7 @@ export const DATASET_VERSION_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
-export const EXPERIMENT_SCHEMA: Record<string, StorageColumn> = {
+export const EVALUATION_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   name: { type: 'text', nullable: false },
   datasetId: { type: 'text', nullable: false },
@@ -243,9 +243,9 @@ export const EXPERIMENT_SCHEMA: Record<string, StorageColumn> = {
   completedAt: { type: 'timestamp', nullable: true },
 };
 
-export const EXPERIMENT_RESULT_SCHEMA: Record<string, StorageColumn> = {
+export const EVALUATION_RESULT_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  experimentId: { type: 'text', nullable: false },
+  evaluationId: { type: 'text', nullable: false },
   datasetItemId: { type: 'text', nullable: false },
   runId: { type: 'text', nullable: false },
   output: { type: 'jsonb', nullable: true },
@@ -314,26 +314,26 @@ class Dataset {
 }
 ```
 
-### ExperimentRunner
+### EvaluationRunner
 
 ```typescript
-class ExperimentRunner {
-  runExperiment(params: {
+class EvaluationRunner {
+  runEvaluation(params: {
     name: string;
     dataset: string | Dataset;
     version?: number; // Defaults to latest
     target: Agent | Workflow;
     scorers: MastraScorer[];
     concurrency?: number;
-    onItemComplete?: (result: ExperimentResult) => void;
-  }): Promise<Experiment>;
+    onItemComplete?: (result: EvaluationResult) => void;
+  }): Promise<Evaluation>;
 
-  getExperiment(id: string): Promise<Experiment | null>;
-  listExperiments(datasetId?: string): Promise<Experiment[]>;
-  getExperimentResults(experimentId: string): Promise<ExperimentResult[]>;
+  getEvaluation(id: string): Promise<Evaluation | null>;
+  listEvaluations(datasetId?: string): Promise<Evaluation[]>;
+  getEvaluationResults(evaluationId: string): Promise<EvaluationResult[]>;
 
-  // Compare experiments
-  compareExperiments(experimentIds: string[]): Promise<ExperimentComparison>;
+  // Compare evaluations
+  compareEvaluations(evaluationIds: string[]): Promise<EvaluationComparison>;
 }
 ```
 
@@ -369,8 +369,8 @@ const { items, version } = await dataset.addItems([
 ]);
 console.log(`Added ${items.length} items, now at version ${version.version}`);
 
-// Run experiment (pins to current version automatically)
-const experiment = await mastra.runExperiment({
+// Run evaluation (pins to current version automatically)
+const evaluation = await mastra.runEvaluation({
   name: 'gpt-4-test',
   dataset: dataset.id,
   target: myAgent,
@@ -378,7 +378,7 @@ const experiment = await mastra.runExperiment({
 });
 
 // Or pin to a specific version
-const experimentV1 = await mastra.runExperiment({
+const evaluationV1 = await mastra.runEvaluation({
   name: 'gpt-4-test-v1',
   dataset: dataset.id,
   version: 1, // Pin to version 1
@@ -401,7 +401,7 @@ await runEvals({
 });
 
 // New approach (dataset-based)
-await runExperiment({
+await runEvaluation({
   name: 'v2-prompt-test',
   dataset: 'qa-golden-set',
   version: 3, // Pin to specific version
@@ -469,8 +469,8 @@ await datasets.createItemsFromTraces(
 export const TABLE_DATASETS = 'mastra_datasets';
 export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
 export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
-export const TABLE_EXPERIMENTS = 'mastra_experiments';
-export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
+export const TABLE_EVALUATIONS = 'mastra_evaluations';
+export const TABLE_EVALUATION_RESULTS = 'mastra_evaluation_results';
 ```
 
 2. Update the `TABLE_NAMES` type union to include the new tables:
@@ -487,8 +487,8 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASETS
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_VERSIONS
-  | typeof TABLE_EXPERIMENTS
-  | typeof TABLE_EXPERIMENT_RESULTS;
+  | typeof TABLE_EVALUATIONS
+  | typeof TABLE_EVALUATION_RESULTS;
 ```
 
 3. Add the schema definitions (before `TABLE_SCHEMAS`):
@@ -529,7 +529,7 @@ export const DATASET_VERSION_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
-export const EXPERIMENT_SCHEMA: Record<string, StorageColumn> = {
+export const EVALUATION_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   name: { type: 'text', nullable: false },
   datasetId: { type: 'text', nullable: false },
@@ -545,9 +545,9 @@ export const EXPERIMENT_SCHEMA: Record<string, StorageColumn> = {
   completedAt: { type: 'timestamp', nullable: true },
 };
 
-export const EXPERIMENT_RESULT_SCHEMA: Record<string, StorageColumn> = {
+export const EVALUATION_RESULT_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  experimentId: { type: 'text', nullable: false },
+  evaluationId: { type: 'text', nullable: false },
   datasetItemId: { type: 'text', nullable: false },
   runId: { type: 'text', nullable: false },
   output: { type: 'jsonb', nullable: true },
@@ -566,8 +566,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASETS]: DATASET_SCHEMA,
   [TABLE_DATASET_ITEMS]: DATASET_ITEM_SCHEMA,
   [TABLE_DATASET_VERSIONS]: DATASET_VERSION_SCHEMA,
-  [TABLE_EXPERIMENTS]: EXPERIMENT_SCHEMA,
-  [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULT_SCHEMA,
+  [TABLE_EVALUATIONS]: EVALUATION_SCHEMA,
+  [TABLE_EVALUATION_RESULTS]: EVALUATION_RESULT_SCHEMA,
 };
 ```
 
@@ -582,7 +582,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
 
 **File:** `packages/core/src/evals/types.ts`
 
-**Task:** Add TypeScript interfaces for datasets, items, versions, experiments, and results.
+**Task:** Add TypeScript interfaces for datasets, items, versions, evaluations, and results.
 
 **Instructions:**
 
@@ -636,48 +636,48 @@ export interface DatasetVersionData {
 }
 
 // =============================================================================
-// Experiment Types
+// Evaluation Types
 // =============================================================================
 
-export type ExperimentStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-export type ExperimentEntityType = 'AGENT' | 'WORKFLOW';
+export type EvaluationStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type EvaluationEntityType = 'AGENT' | 'WORKFLOW';
 
-export interface ExperimentSummary {
+export interface EvaluationSummary {
   totalItems: number;
   completedItems: number;
   failedItems: number;
   scores: Record<string, number>; // Aggregated scores per scorer
 }
 
-export interface ExperimentData {
+export interface EvaluationData {
   id: string;
   name: string;
   datasetId: string;
   datasetVersionId: string;
   scorerIds: string[];
-  entityType: ExperimentEntityType;
+  entityType: EvaluationEntityType;
   entityId: string;
-  status: ExperimentStatus;
+  status: EvaluationStatus;
   metadata?: Record<string, unknown>;
-  summary?: ExperimentSummary;
+  summary?: EvaluationSummary;
   createdAt: Date;
   updatedAt: Date;
   completedAt?: Date;
 }
 
-export interface ExperimentResultScore {
+export interface EvaluationResultScore {
   scorerId: string;
   score: number;
   reason?: string;
 }
 
-export interface ExperimentResultData {
+export interface EvaluationResultData {
   id: string;
-  experimentId: string;
+  evaluationId: string;
   datasetItemId: string;
   runId: string;
   output?: unknown;
-  scores: Record<string, ExperimentResultScore>;
+  scores: Record<string, EvaluationResultScore>;
   latencyMs?: number;
   error?: string;
   createdAt: Date;
@@ -722,31 +722,31 @@ export interface UpdateDatasetItemParams {
 }
 
 // =============================================================================
-// Experiment Operation Params
+// Evaluation Operation Params
 // =============================================================================
 
-export interface CreateExperimentParams {
+export interface CreateEvaluationParams {
   name: string;
   datasetId: string;
   datasetVersionId: string;
   scorerIds: string[];
-  entityType: ExperimentEntityType;
+  entityType: EvaluationEntityType;
   entityId: string;
   metadata?: Record<string, unknown>;
 }
 
-export interface UpdateExperimentParams {
-  status?: ExperimentStatus;
-  summary?: ExperimentSummary;
+export interface UpdateEvaluationParams {
+  status?: EvaluationStatus;
+  summary?: EvaluationSummary;
   completedAt?: Date;
 }
 
-export interface CreateExperimentResultParams {
-  experimentId: string;
+export interface CreateEvaluationResultParams {
+  evaluationId: string;
   datasetItemId: string;
   runId: string;
   output?: unknown;
-  scores: Record<string, ExperimentResultScore>;
+  scores: Record<string, EvaluationResultScore>;
   latencyMs?: number;
   error?: string;
 }
@@ -822,16 +822,16 @@ import { MastraBase } from '../../../base';
 import type {
   CreateDatasetParams,
   CreateDatasetItemParams,
-  CreateExperimentParams,
-  CreateExperimentResultParams,
+  CreateEvaluationParams,
+  CreateEvaluationResultParams,
   DatasetData,
   DatasetItemData,
   DatasetVersionData,
-  ExperimentData,
-  ExperimentResultData,
+  EvaluationData,
+  EvaluationResultData,
   UpdateDatasetParams,
   UpdateDatasetItemParams,
-  UpdateExperimentParams,
+  UpdateEvaluationParams,
   DatasetStatus,
 } from '../../../evals/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
@@ -904,30 +904,30 @@ export abstract class DatasetStorage extends MastraBase {
   }): Promise<{ items: DatasetItemData[]; pagination: PaginationInfo }>;
 
   // ==========================================================================
-  // Experiment CRUD
+  // Evaluation CRUD
   // ==========================================================================
 
-  abstract createExperiment(params: CreateExperimentParams): Promise<ExperimentData>;
+  abstract createEvaluation(params: CreateEvaluationParams): Promise<EvaluationData>;
 
-  abstract getExperiment(id: string): Promise<ExperimentData | null>;
+  abstract getEvaluation(id: string): Promise<EvaluationData | null>;
 
-  abstract listExperiments(params: {
+  abstract listEvaluations(params: {
     datasetId?: string;
     pagination: StoragePagination;
-  }): Promise<{ experiments: ExperimentData[]; pagination: PaginationInfo }>;
+  }): Promise<{ evaluations: EvaluationData[]; pagination: PaginationInfo }>;
 
-  abstract updateExperiment(id: string, updates: UpdateExperimentParams): Promise<ExperimentData>;
+  abstract updateEvaluation(id: string, updates: UpdateEvaluationParams): Promise<EvaluationData>;
 
   // ==========================================================================
-  // Experiment Results
+  // Evaluation Results
   // ==========================================================================
 
-  abstract saveExperimentResult(params: CreateExperimentResultParams): Promise<ExperimentResultData>;
+  abstract saveEvaluationResult(params: CreateEvaluationResultParams): Promise<EvaluationResultData>;
 
-  abstract listExperimentResults(params: {
-    experimentId: string;
+  abstract listEvaluationResults(params: {
+    evaluationId: string;
     pagination: StoragePagination;
-  }): Promise<{ results: ExperimentResultData[]; pagination: PaginationInfo }>;
+  }): Promise<{ results: EvaluationResultData[]; pagination: PaginationInfo }>;
 }
 ```
 
@@ -962,16 +962,16 @@ export * from './inmemory';
 import type {
   CreateDatasetParams,
   CreateDatasetItemParams,
-  CreateExperimentParams,
-  CreateExperimentResultParams,
+  CreateEvaluationParams,
+  CreateEvaluationResultParams,
   DatasetData,
   DatasetItemData,
   DatasetVersionData,
-  ExperimentData,
-  ExperimentResultData,
+  EvaluationData,
+  EvaluationResultData,
   UpdateDatasetParams,
   UpdateDatasetItemParams,
-  UpdateExperimentParams,
+  UpdateEvaluationParams,
   DatasetStatus,
 } from '../../../evals/types';
 import { calculatePagination, normalizePerPage } from '../../base';
@@ -981,30 +981,30 @@ import { DatasetStorage } from './base';
 export type InMemoryDatasets = Map<string, DatasetData>;
 export type InMemoryDatasetItems = Map<string, DatasetItemData>;
 export type InMemoryDatasetVersions = Map<string, DatasetVersionData>;
-export type InMemoryExperiments = Map<string, ExperimentData>;
-export type InMemoryExperimentResults = Map<string, ExperimentResultData>;
+export type InMemoryEvaluations = Map<string, EvaluationData>;
+export type InMemoryEvaluationResults = Map<string, EvaluationResultData>;
 
 export interface DatasetInMemoryCollections {
   datasets: InMemoryDatasets;
   items: InMemoryDatasetItems;
   versions: InMemoryDatasetVersions;
-  experiments: InMemoryExperiments;
-  results: InMemoryExperimentResults;
+  evaluations: InMemoryEvaluations;
+  results: InMemoryEvaluationResults;
 }
 
 export class DatasetInMemory extends DatasetStorage {
   private datasets: InMemoryDatasets;
   private items: InMemoryDatasetItems;
   private versions: InMemoryDatasetVersions;
-  private experiments: InMemoryExperiments;
-  private results: InMemoryExperimentResults;
+  private evaluations: InMemoryEvaluations;
+  private results: InMemoryEvaluationResults;
 
   constructor({ collections }: { collections: DatasetInMemoryCollections }) {
     super();
     this.datasets = collections.datasets;
     this.items = collections.items;
     this.versions = collections.versions;
-    this.experiments = collections.experiments;
+    this.evaluations = collections.evaluations;
     this.results = collections.results;
   }
 
@@ -1263,12 +1263,12 @@ export class DatasetInMemory extends DatasetStorage {
   }
 
   // ==========================================================================
-  // Experiment CRUD
+  // Evaluation CRUD
   // ==========================================================================
 
-  async createExperiment(params: CreateExperimentParams): Promise<ExperimentData> {
+  async createEvaluation(params: CreateEvaluationParams): Promise<EvaluationData> {
     const now = new Date();
-    const experiment: ExperimentData = {
+    const evaluation: EvaluationData = {
       id: crypto.randomUUID(),
       name: params.name,
       datasetId: params.datasetId,
@@ -1281,66 +1281,66 @@ export class DatasetInMemory extends DatasetStorage {
       createdAt: now,
       updatedAt: now,
     };
-    this.experiments.set(experiment.id, experiment);
-    return experiment;
+    this.evaluations.set(evaluation.id, evaluation);
+    return evaluation;
   }
 
-  async getExperiment(id: string): Promise<ExperimentData | null> {
-    return this.experiments.get(id) ?? null;
+  async getEvaluation(id: string): Promise<EvaluationData | null> {
+    return this.evaluations.get(id) ?? null;
   }
 
-  async listExperiments(params: {
+  async listEvaluations(params: {
     datasetId?: string;
     pagination: StoragePagination;
-  }): Promise<{ experiments: ExperimentData[]; pagination: PaginationInfo }> {
+  }): Promise<{ evaluations: EvaluationData[]; pagination: PaginationInfo }> {
     const { datasetId, pagination } = params;
-    let experiments = Array.from(this.experiments.values());
+    let evaluations = Array.from(this.evaluations.values());
 
     if (datasetId) {
-      experiments = experiments.filter(e => e.datasetId === datasetId);
+      evaluations = evaluations.filter(e => e.datasetId === datasetId);
     }
 
-    experiments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    evaluations.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     const { page, perPage: perPageInput } = pagination;
     const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const end = perPageInput === false ? experiments.length : start + perPage;
+    const end = perPageInput === false ? evaluations.length : start + perPage;
 
     return {
-      experiments: experiments.slice(start, end),
+      evaluations: evaluations.slice(start, end),
       pagination: {
-        total: experiments.length,
+        total: evaluations.length,
         page,
         perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : experiments.length > end,
+        hasMore: perPageInput === false ? false : evaluations.length > end,
       },
     };
   }
 
-  async updateExperiment(id: string, updates: UpdateExperimentParams): Promise<ExperimentData> {
-    const experiment = this.experiments.get(id);
-    if (!experiment) {
-      throw new Error(`Experiment not found: ${id}`);
+  async updateEvaluation(id: string, updates: UpdateEvaluationParams): Promise<EvaluationData> {
+    const evaluation = this.evaluations.get(id);
+    if (!evaluation) {
+      throw new Error(`Evaluation not found: ${id}`);
     }
 
-    const updated: ExperimentData = {
-      ...experiment,
+    const updated: EvaluationData = {
+      ...evaluation,
       ...updates,
       updatedAt: new Date(),
     };
-    this.experiments.set(id, updated);
+    this.evaluations.set(id, updated);
     return updated;
   }
 
   // ==========================================================================
-  // Experiment Results
+  // Evaluation Results
   // ==========================================================================
 
-  async saveExperimentResult(params: CreateExperimentResultParams): Promise<ExperimentResultData> {
-    const result: ExperimentResultData = {
+  async saveEvaluationResult(params: CreateEvaluationResultParams): Promise<EvaluationResultData> {
+    const result: EvaluationResultData = {
       id: crypto.randomUUID(),
-      experimentId: params.experimentId,
+      evaluationId: params.evaluationId,
       datasetItemId: params.datasetItemId,
       runId: params.runId,
       output: params.output,
@@ -1353,13 +1353,13 @@ export class DatasetInMemory extends DatasetStorage {
     return result;
   }
 
-  async listExperimentResults(params: {
-    experimentId: string;
+  async listEvaluationResults(params: {
+    evaluationId: string;
     pagination: StoragePagination;
-  }): Promise<{ results: ExperimentResultData[]; pagination: PaginationInfo }> {
-    const { experimentId, pagination } = params;
+  }): Promise<{ results: EvaluationResultData[]; pagination: PaginationInfo }> {
+    const { evaluationId, pagination } = params;
     const results = Array.from(this.results.values())
-      .filter(r => r.experimentId === experimentId)
+      .filter(r => r.evaluationId === evaluationId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
     const { page, perPage: perPageInput } = pagination;
@@ -1387,7 +1387,7 @@ export function createDatasetInMemoryCollections(): DatasetInMemoryCollections {
     datasets: new Map(),
     items: new Map(),
     versions: new Map(),
-    experiments: new Map(),
+    evaluations: new Map(),
     results: new Map(),
   };
 }
@@ -2122,9 +2122,9 @@ export * from './datasets';
 
 ---
 
-### STEP 4: Experiment Runner
+### STEP 4: Evaluation Runner
 
-**Goal:** Implement experiment execution against datasets.
+**Goal:** Implement evaluation execution against datasets.
 
 **Parallel Execution:** STEP 4A and STEP 4B can be executed in parallel after STEP 3 is complete.
 
@@ -2132,38 +2132,38 @@ export * from './datasets';
 
 ---
 
-#### STEP 4A: Experiment Types and Helpers
+#### STEP 4A: Evaluation Types and Helpers
 
-**File:** `packages/evals/src/experiments/types.ts`
+**File:** `packages/evals/src/evaluations/types.ts`
 
-**Task:** Create additional types specific to the experiment runner that aren't in core types.
+**Task:** Create additional types specific to the evaluation runner that aren't in core types.
 
 **Instructions:**
 
 1. Create the directory structure:
 
    ```
-   packages/evals/src/experiments/
+   packages/evals/src/evaluations/
    ```
 
 2. Create `types.ts` with the following content:
 
 ```typescript
 import type {
-  ExperimentData,
-  ExperimentResultData,
-  ExperimentStatus,
-  ExperimentEntityType,
+  EvaluationData,
+  EvaluationResultData,
+  EvaluationStatus,
+  EvaluationEntityType,
   DatasetVersionData,
 } from '@mastra/core/evals';
 import type { MastraScorer } from '../scorer';
 
 // =============================================================================
-// Run Experiment Parameters
+// Run Evaluation Parameters
 // =============================================================================
 
-export interface RunExperimentParams {
-  /** Unique name for this experiment run */
+export interface RunEvaluationParams {
+  /** Unique name for this evaluation run */
   name: string;
 
   /** Dataset ID to run against */
@@ -2173,7 +2173,7 @@ export interface RunExperimentParams {
   datasetVersion?: number;
 
   /** Entity type to evaluate */
-  entityType: ExperimentEntityType;
+  entityType: EvaluationEntityType;
 
   /** Entity ID (agent ID or workflow ID) */
   entityId: string;
@@ -2181,17 +2181,17 @@ export interface RunExperimentParams {
   /** Scorers to run against each result */
   scorers: MastraScorer[];
 
-  /** Optional metadata for the experiment */
+  /** Optional metadata for the evaluation */
   metadata?: Record<string, unknown>;
 
   /** Concurrency limit for parallel execution */
   concurrency?: number;
 
   /** Callback when each item completes */
-  onItemComplete?: (result: ExperimentItemResult) => void | Promise<void>;
+  onItemComplete?: (result: EvaluationItemResult) => void | Promise<void>;
 
   /** Callback for progress updates */
-  onProgress?: (progress: ExperimentProgress) => void | Promise<void>;
+  onProgress?: (progress: EvaluationProgress) => void | Promise<void>;
 
   /** Optional abort signal for cancellation */
   signal?: AbortSignal;
@@ -2201,15 +2201,15 @@ export interface RunExperimentParams {
 // Progress and Result Types
 // =============================================================================
 
-export interface ExperimentProgress {
-  experimentId: string;
+export interface EvaluationProgress {
+  evaluationId: string;
   completed: number;
   total: number;
   failed: number;
   percentComplete: number;
 }
 
-export interface ExperimentItemResult {
+export interface EvaluationItemResult {
   datasetItemId: string;
   output: unknown;
   scores: Record<string, { score: number; reason?: string }>;
@@ -2218,20 +2218,20 @@ export interface ExperimentItemResult {
 }
 
 // =============================================================================
-// Experiment Instance (Hydrated with methods)
+// Evaluation Instance (Hydrated with methods)
 // =============================================================================
 
-export interface Experiment extends ExperimentData {
-  /** Get all results for this experiment */
+export interface Evaluation extends EvaluationData {
+  /** Get all results for this evaluation */
   getResults(params?: { page?: number; perPage?: number }): Promise<{
-    results: ExperimentResultData[];
+    results: EvaluationResultData[];
     pagination: { total: number; page: number; perPage: number; hasMore: boolean };
   }>;
 
   /** Iterate over all results using async iterator */
-  iterateResults(options?: { batchSize?: number }): AsyncIterable<ExperimentResultData>;
+  iterateResults(options?: { batchSize?: number }): AsyncIterable<EvaluationResultData>;
 
-  /** Get the dataset version used in this experiment */
+  /** Get the dataset version used in this evaluation */
   getDatasetVersion(): Promise<DatasetVersionData | null>;
 }
 
@@ -2239,11 +2239,11 @@ export interface Experiment extends ExperimentData {
 // List Parameters
 // =============================================================================
 
-export interface ListExperimentsParams {
+export interface ListEvaluationsParams {
   datasetId?: string;
   entityId?: string;
-  entityType?: ExperimentEntityType;
-  status?: ExperimentStatus;
+  entityType?: EvaluationEntityType;
+  status?: EvaluationStatus;
   page?: number;
   perPage?: number;
 }
@@ -2255,11 +2255,11 @@ export interface ListExperimentsParams {
 
 ---
 
-#### STEP 4B: Experiment Runner Class
+#### STEP 4B: Evaluation Runner Class
 
-**File:** `packages/evals/src/experiments/runner.ts`
+**File:** `packages/evals/src/evaluations/runner.ts`
 
-**Task:** Create the ExperimentRunner class that executes experiments against datasets.
+**Task:** Create the EvaluationRunner class that executes evaluations against datasets.
 
 **Instructions:**
 
@@ -2269,44 +2269,44 @@ export interface ListExperimentsParams {
 import type { DatasetStorage } from '@mastra/core/storage';
 import type { Mastra } from '@mastra/core';
 import type {
-  ExperimentData,
-  ExperimentResultData,
+  EvaluationData,
+  EvaluationResultData,
   DatasetItemData,
-  ExperimentStatus,
-  CreateExperimentParams,
-  CreateExperimentResultParams,
-  ExperimentSummary,
+  EvaluationStatus,
+  CreateEvaluationParams,
+  CreateEvaluationResultParams,
+  EvaluationSummary,
 } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type {
-  RunExperimentParams,
-  Experiment,
-  ExperimentProgress,
-  ExperimentItemResult,
-  ListExperimentsParams,
+  RunEvaluationParams,
+  Evaluation,
+  EvaluationProgress,
+  EvaluationItemResult,
+  ListEvaluationsParams,
 } from './types';
 import { Dataset, DatasetManager } from '../datasets';
 
-export interface ExperimentRunnerConfig {
+export interface EvaluationRunnerConfig {
   storage: DatasetStorage;
   mastra: Mastra;
 }
 
-export class ExperimentRunner {
+export class EvaluationRunner {
   private storage: DatasetStorage;
   private mastra: Mastra;
   private datasets: DatasetManager;
 
-  constructor(config: ExperimentRunnerConfig) {
+  constructor(config: EvaluationRunnerConfig) {
     this.storage = config.storage;
     this.mastra = config.mastra;
     this.datasets = new DatasetManager({ storage: config.storage });
   }
 
   /**
-   * Run an experiment against a dataset
+   * Run an evaluation against a dataset
    */
-  async run(params: RunExperimentParams): Promise<Experiment> {
+  async run(params: RunEvaluationParams): Promise<Evaluation> {
     const {
       name,
       datasetId,
@@ -2333,9 +2333,9 @@ export class ExperimentRunner {
       throw new Error(`Version ${version} not found for dataset ${datasetId}`);
     }
 
-    // 2. Create experiment record (status: PENDING)
+    // 2. Create evaluation record (status: PENDING)
     const scorerIds = scorers.map(s => s.id);
-    const experimentParams: CreateExperimentParams = {
+    const evaluationParams: CreateEvaluationParams = {
       name,
       datasetId,
       datasetVersionId: versionData.id,
@@ -2345,10 +2345,10 @@ export class ExperimentRunner {
       metadata,
     };
 
-    const experimentData = await this.storage.createExperiment(experimentParams);
+    const evaluationData = await this.storage.createEvaluation(evaluationParams);
 
     // Update to RUNNING
-    await this.storage.updateExperiment(experimentData.id, { status: 'RUNNING' });
+    await this.storage.updateEvaluation(evaluationData.id, { status: 'RUNNING' });
 
     // 3. Gather all items from the version
     const items: DatasetItemData[] = [];
@@ -2369,7 +2369,7 @@ export class ExperimentRunner {
     // 4. Process items with concurrency control
     const processItem = async (item: DatasetItemData): Promise<void> => {
       if (signal?.aborted) {
-        throw new Error('Experiment aborted');
+        throw new Error('Evaluation aborted');
       }
 
       const startTime = Date.now();
@@ -2414,9 +2414,9 @@ export class ExperimentRunner {
 
       const latencyMs = Date.now() - startTime;
 
-      // Save experiment result
-      const resultParams: CreateExperimentResultParams = {
-        experimentId: experimentData.id,
+      // Save evaluation result
+      const resultParams: CreateEvaluationResultParams = {
+        evaluationId: evaluationData.id,
         datasetItemId: item.id,
         runId: crypto.randomUUID(),
         output,
@@ -2425,11 +2425,11 @@ export class ExperimentRunner {
         error,
       };
 
-      await this.storage.createExperimentResult(resultParams);
+      await this.storage.createEvaluationResult(resultParams);
       completedItems++;
 
       // Call callbacks
-      const itemResult: ExperimentItemResult = {
+      const itemResult: EvaluationItemResult = {
         datasetItemId: item.id,
         output,
         scores: Object.fromEntries(Object.entries(scores).map(([k, v]) => [k, { score: v.score, reason: v.reason }])),
@@ -2442,8 +2442,8 @@ export class ExperimentRunner {
       }
 
       if (onProgress) {
-        const progress: ExperimentProgress = {
-          experimentId: experimentData.id,
+        const progress: EvaluationProgress = {
+          evaluationId: evaluationData.id,
           completed: completedItems,
           total: totalItems,
           failed: failedItems,
@@ -2480,8 +2480,8 @@ export class ExperimentRunner {
       await Promise.all(workers);
     }
 
-    // 5. Calculate summary and update experiment
-    const summary: ExperimentSummary = {
+    // 5. Calculate summary and update evaluation
+    const summary: EvaluationSummary = {
       totalItems,
       completedItems,
       failedItems,
@@ -2490,39 +2490,39 @@ export class ExperimentRunner {
       ),
     };
 
-    const finalStatus: ExperimentStatus = failedItems === totalItems ? 'FAILED' : 'COMPLETED';
+    const finalStatus: EvaluationStatus = failedItems === totalItems ? 'FAILED' : 'COMPLETED';
 
-    await this.storage.updateExperiment(experimentData.id, {
+    await this.storage.updateEvaluation(evaluationData.id, {
       status: finalStatus,
       summary,
       completedAt: new Date(),
     });
 
-    // 6. Return hydrated experiment
-    const finalData = await this.storage.getExperiment(experimentData.id);
+    // 6. Return hydrated evaluation
+    const finalData = await this.storage.getEvaluation(evaluationData.id);
     if (!finalData) {
-      throw new Error('Experiment not found after completion');
+      throw new Error('Evaluation not found after completion');
     }
 
-    return this.hydrateExperiment(finalData);
+    return this.hydrateEvaluation(finalData);
   }
 
   /**
-   * Get an experiment by ID
+   * Get an evaluation by ID
    */
-  async get(id: string): Promise<Experiment | null> {
-    const data = await this.storage.getExperiment(id);
+  async get(id: string): Promise<Evaluation | null> {
+    const data = await this.storage.getEvaluation(id);
     if (!data) {
       return null;
     }
-    return this.hydrateExperiment(data);
+    return this.hydrateEvaluation(data);
   }
 
   /**
-   * List experiments with optional filtering
+   * List evaluations with optional filtering
    */
-  async list(params?: ListExperimentsParams): Promise<{
-    experiments: Experiment[];
+  async list(params?: ListEvaluationsParams): Promise<{
+    evaluations: Evaluation[];
     pagination: PaginationInfo;
   }> {
     const pagination: StoragePagination = {
@@ -2530,7 +2530,7 @@ export class ExperimentRunner {
       perPage: params?.perPage ?? 10,
     };
 
-    const result = await this.storage.listExperiments({
+    const result = await this.storage.listEvaluations({
       pagination,
       datasetId: params?.datasetId,
       entityId: params?.entityId,
@@ -2539,40 +2539,40 @@ export class ExperimentRunner {
     });
 
     return {
-      experiments: result.experiments.map(data => this.hydrateExperiment(data)),
+      evaluations: result.evaluations.map(data => this.hydrateEvaluation(data)),
       pagination: result.pagination,
     };
   }
 
   /**
-   * Get results for an experiment
+   * Get results for an evaluation
    */
   async getResults(
-    experimentId: string,
+    evaluationId: string,
     params?: { page?: number; perPage?: number },
-  ): Promise<{ results: ExperimentResultData[]; pagination: PaginationInfo }> {
+  ): Promise<{ results: EvaluationResultData[]; pagination: PaginationInfo }> {
     const pagination: StoragePagination = {
       page: params?.page ?? 0,
       perPage: params?.perPage ?? 100,
     };
 
-    return this.storage.listExperimentResults({
-      experimentId,
+    return this.storage.listEvaluationResults({
+      evaluationId,
       pagination,
     });
   }
 
   /**
-   * Iterate over experiment results
+   * Iterate over evaluation results
    */
-  async *iterateResults(experimentId: string, options?: { batchSize?: number }): AsyncIterable<ExperimentResultData> {
+  async *iterateResults(evaluationId: string, options?: { batchSize?: number }): AsyncIterable<EvaluationResultData> {
     const batchSize = options?.batchSize ?? 100;
     let page = 0;
     let hasMore = true;
 
     while (hasMore) {
-      const result = await this.storage.listExperimentResults({
-        experimentId,
+      const result = await this.storage.listEvaluationResults({
+        evaluationId,
         pagination: { page, perPage: batchSize },
       });
 
@@ -2623,9 +2623,9 @@ export class ExperimentRunner {
   }
 
   /**
-   * Hydrate experiment data with methods
+   * Hydrate evaluation data with methods
    */
-  private hydrateExperiment(data: ExperimentData): Experiment {
+  private hydrateEvaluation(data: EvaluationData): Evaluation {
     const storage = this.storage;
     const runner = this;
 
@@ -2655,11 +2655,11 @@ export class ExperimentRunner {
 
 ---
 
-#### STEP 4C: Experiments Exports (`index.ts`)
+#### STEP 4C: Evaluations Exports (`index.ts`)
 
-**File:** `packages/evals/src/experiments/index.ts`
+**File:** `packages/evals/src/evaluations/index.ts`
 
-**Task:** Create the index file that exports all experiment-related classes and types.
+**Task:** Create the index file that exports all evaluation-related classes and types.
 
 **Dependencies:** STEP 4A and STEP 4B must be completed first.
 
@@ -2668,36 +2668,36 @@ export class ExperimentRunner {
 1. Create `index.ts` with the following content:
 
 ```typescript
-export { ExperimentRunner } from './runner';
-export type { ExperimentRunnerConfig } from './runner';
+export { EvaluationRunner } from './runner';
+export type { EvaluationRunnerConfig } from './runner';
 
 export type {
-  RunExperimentParams,
-  Experiment,
-  ExperimentProgress,
-  ExperimentItemResult,
-  ListExperimentsParams,
+  RunEvaluationParams,
+  Evaluation,
+  EvaluationProgress,
+  EvaluationItemResult,
+  ListEvaluationsParams,
 } from './types';
 
 // Re-export types from core for convenience
 export type {
-  ExperimentData,
-  ExperimentResultData,
-  ExperimentStatus,
-  ExperimentEntityType,
-  ExperimentSummary,
-  ExperimentResultScore,
-  CreateExperimentParams,
-  CreateExperimentResultParams,
-  UpdateExperimentParams,
+  EvaluationData,
+  EvaluationResultData,
+  EvaluationStatus,
+  EvaluationEntityType,
+  EvaluationSummary,
+  EvaluationResultScore,
+  CreateEvaluationParams,
+  CreateEvaluationResultParams,
+  UpdateEvaluationParams,
 } from '@mastra/core/evals';
 ```
 
-2. Update `packages/evals/src/index.ts` to export the experiments module:
+2. Update `packages/evals/src/index.ts` to export the evaluations module:
 
 ```typescript
 // Add to existing exports
-export * from './experiments';
+export * from './evaluations';
 ```
 
 **Verification:**
@@ -2709,7 +2709,7 @@ export * from './experiments';
 
 ### STEP 5: Mastra Integration
 
-**Goal:** Wire datasets and experiments into the Mastra class.
+**Goal:** Wire datasets and evaluations into the Mastra class.
 
 **Parallel Execution:** STEP 5A and STEP 5B can be executed in parallel after STEP 4 is complete.
 
@@ -2721,7 +2721,7 @@ export * from './experiments';
 
 **File:** `packages/core/src/mastra/index.ts`
 
-**Task:** Add `datasets` and `experiments` getters to the Mastra class.
+**Task:** Add `datasets` and `evaluations` getters to the Mastra class.
 
 **Instructions:**
 
@@ -2731,7 +2731,7 @@ export * from './experiments';
 
 ```typescript
 import { DatasetManager } from '@mastra/evals';
-import { ExperimentRunner } from '@mastra/evals';
+import { EvaluationRunner } from '@mastra/evals';
 import type { DatasetStorage } from '../storage/domains/datasets';
 ```
 
@@ -2739,7 +2739,7 @@ import type { DatasetStorage } from '../storage/domains/datasets';
 
 ```typescript
 private _datasetManager?: DatasetManager;
-private _experimentRunner?: ExperimentRunner;
+private _evaluationRunner?: EvaluationRunner;
 ```
 
 4. Add lazy-initialized getters:
@@ -2762,32 +2762,32 @@ get datasets(): DatasetManager {
 }
 
 /**
- * Get the experiment runner for running experiments against datasets
+ * Get the evaluation runner for running evaluations against datasets
  */
-get experiments(): ExperimentRunner {
-  if (!this._experimentRunner) {
+get evaluations(): EvaluationRunner {
+  if (!this._evaluationRunner) {
     const storage = this.getStorage();
     if (!storage?.datasets) {
-      throw new Error('Storage with dataset support is required for experiments. Configure storage in Mastra options.');
+      throw new Error('Storage with dataset support is required for evaluations. Configure storage in Mastra options.');
     }
-    this._experimentRunner = new ExperimentRunner({
+    this._evaluationRunner = new EvaluationRunner({
       storage: storage.datasets,
       mastra: this,
     });
   }
-  return this._experimentRunner;
+  return this._evaluationRunner;
 }
 ```
 
-5. Add convenience method for running experiments:
+5. Add convenience method for running evaluations:
 
 ```typescript
 /**
- * Run an experiment against a dataset
- * Convenience method that delegates to experiments.run()
+ * Run an evaluation against a dataset
+ * Convenience method that delegates to evaluations.run()
  */
-async runExperiment(params: Parameters<ExperimentRunner['run']>[0]) {
-  return this.experiments.run(params);
+async runEvaluation(params: Parameters<EvaluationRunner['run']>[0]) {
+  return this.evaluations.run(params);
 }
 ```
 
@@ -2861,13 +2861,13 @@ if (this.config.storage) {
 
 - Run `pnpm build:core` to ensure no TypeScript errors
 - Run `pnpm typecheck` in packages/core
-- Verify that `mastra.datasets` and `mastra.experiments` are accessible
+- Verify that `mastra.datasets` and `mastra.evaluations` are accessible
 
 ---
 
 ### STEP 6: Server API Routes
 
-**Goal:** Expose datasets and experiments via REST API.
+**Goal:** Expose datasets and evaluations via REST API.
 
 **Parallel Execution:** STEP 6A and STEP 6B can be executed in parallel after STEP 5 is complete.
 
@@ -3041,93 +3041,93 @@ export const archiveItemsResponseSchema = z.object({
 });
 
 // =============================================================================
-// Experiment Schemas
+// Evaluation Schemas
 // =============================================================================
 
-export const experimentStatusSchema = z.enum(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED']);
-export const experimentEntityTypeSchema = z.enum(['AGENT', 'WORKFLOW']);
+export const evaluationStatusSchema = z.enum(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED']);
+export const evaluationEntityTypeSchema = z.enum(['AGENT', 'WORKFLOW']);
 
-export const experimentSummarySchema = z.object({
+export const evaluationSummarySchema = z.object({
   totalItems: z.number(),
   completedItems: z.number(),
   failedItems: z.number(),
   scores: z.record(z.number()),
 });
 
-export const experimentDataSchema = z.object({
+export const evaluationDataSchema = z.object({
   id: z.string(),
   name: z.string(),
   datasetId: z.string(),
   datasetVersionId: z.string(),
   scorerIds: z.array(z.string()),
-  entityType: experimentEntityTypeSchema,
+  entityType: evaluationEntityTypeSchema,
   entityId: z.string(),
-  status: experimentStatusSchema,
+  status: evaluationStatusSchema,
   metadata: z.record(z.unknown()).optional(),
-  summary: experimentSummarySchema.optional(),
+  summary: evaluationSummarySchema.optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   completedAt: z.coerce.date().optional(),
 });
 
-export const experimentResultScoreSchema = z.object({
+export const evaluationResultScoreSchema = z.object({
   scorerId: z.string(),
   score: z.number(),
   reason: z.string().optional(),
 });
 
-export const experimentResultDataSchema = z.object({
+export const evaluationResultDataSchema = z.object({
   id: z.string(),
-  experimentId: z.string(),
+  evaluationId: z.string(),
   datasetItemId: z.string(),
   runId: z.string(),
   output: z.unknown().optional(),
-  scores: z.record(experimentResultScoreSchema),
+  scores: z.record(evaluationResultScoreSchema),
   latencyMs: z.number().optional(),
   error: z.string().optional(),
   createdAt: z.coerce.date(),
 });
 
-// Experiment request schemas
-export const experimentIdPathParams = z.object({
-  id: z.string().describe('Experiment ID'),
+// Evaluation request schemas
+export const evaluationIdPathParams = z.object({
+  id: z.string().describe('Evaluation ID'),
 });
 
-export const listExperimentsQuerySchema = z.object({
+export const listEvaluationsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(10),
   datasetId: z.string().optional(),
   entityId: z.string().optional(),
-  entityType: experimentEntityTypeSchema.optional(),
-  status: experimentStatusSchema.optional(),
+  entityType: evaluationEntityTypeSchema.optional(),
+  status: evaluationStatusSchema.optional(),
 });
 
-export const listExperimentResultsQuerySchema = z.object({
+export const listEvaluationResultsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(100),
 });
 
-export const runExperimentBodySchema = z.object({
+export const runEvaluationBodySchema = z.object({
   name: z.string().min(1),
   datasetId: z.string(),
   datasetVersion: z.number().optional(),
-  entityType: experimentEntityTypeSchema,
+  entityType: evaluationEntityTypeSchema,
   entityId: z.string(),
   scorerIds: z.array(z.string()).min(1),
   metadata: z.record(z.unknown()).optional(),
   concurrency: z.number().optional().default(1),
 });
 
-// Experiment response schemas
-export const experimentResponseSchema = experimentDataSchema;
+// Evaluation response schemas
+export const evaluationResponseSchema = evaluationDataSchema;
 
-export const experimentsWithPaginationResponseSchema = z.object({
-  experiments: z.array(experimentDataSchema),
+export const evaluationsWithPaginationResponseSchema = z.object({
+  evaluations: z.array(evaluationDataSchema),
   pagination: paginationInfoSchema,
 });
 
-export const experimentResultsWithPaginationResponseSchema = z.object({
-  results: z.array(experimentResultDataSchema),
+export const evaluationResultsWithPaginationResponseSchema = z.object({
+  results: z.array(evaluationResultDataSchema),
   pagination: paginationInfoSchema,
 });
 ```
@@ -3143,7 +3143,7 @@ export const experimentResultsWithPaginationResponseSchema = z.object({
 
 **File:** `packages/server/src/server/handlers/datasets.ts`
 
-**Task:** Create route handlers for datasets and experiments.
+**Task:** Create route handlers for datasets and evaluations.
 
 **Instructions:**
 
@@ -3171,13 +3171,13 @@ import {
   addItemsResponseSchema,
   updateItemResponseSchema,
   archiveItemsResponseSchema,
-  experimentIdPathParams,
-  listExperimentsQuerySchema,
-  listExperimentResultsQuerySchema,
-  runExperimentBodySchema,
-  experimentResponseSchema,
-  experimentsWithPaginationResponseSchema,
-  experimentResultsWithPaginationResponseSchema,
+  evaluationIdPathParams,
+  listEvaluationsQuerySchema,
+  listEvaluationResultsQuerySchema,
+  runEvaluationBodySchema,
+  evaluationResponseSchema,
+  evaluationsWithPaginationResponseSchema,
+  evaluationResultsWithPaginationResponseSchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -3440,18 +3440,18 @@ export const GET_VERSION_ITEMS_ROUTE = createRoute({
 });
 
 // =============================================================================
-// Experiment Routes
+// Evaluation Routes
 // =============================================================================
 
-export const RUN_EXPERIMENT_ROUTE = createRoute({
+export const RUN_EVALUATION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/experiments',
+  path: '/api/evaluations',
   responseType: 'json',
-  bodySchema: runExperimentBodySchema,
-  responseSchema: experimentResponseSchema,
-  summary: 'Run experiment',
-  description: 'Runs an experiment against a dataset',
-  tags: ['Experiments'],
+  bodySchema: runEvaluationBodySchema,
+  responseSchema: evaluationResponseSchema,
+  summary: 'Run evaluation',
+  description: 'Runs an evaluation against a dataset',
+  tags: ['Evaluations'],
   handler: async ({ mastra, scorerIds, ...params }) => {
     try {
       // Resolve scorers from IDs
@@ -3464,83 +3464,83 @@ export const RUN_EXPERIMENT_ROUTE = createRoute({
         return scorer;
       });
 
-      const experiment = await mastra.experiments.run({
+      const evaluation = await mastra.evaluations.run({
         ...params,
         scorers,
       });
 
       // Return serializable data (without methods)
-      const { getResults, iterateResults, getDatasetVersion, ...data } = experiment;
+      const { getResults, iterateResults, getDatasetVersion, ...data } = evaluation;
       return data;
     } catch (error) {
-      return handleError(error, 'Error running experiment');
+      return handleError(error, 'Error running evaluation');
     }
   },
 });
 
-export const LIST_EXPERIMENTS_ROUTE = createRoute({
+export const LIST_EVALUATIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/experiments',
+  path: '/api/evaluations',
   responseType: 'json',
-  queryParamSchema: listExperimentsQuerySchema,
-  responseSchema: experimentsWithPaginationResponseSchema,
-  summary: 'List experiments',
-  description: 'Returns a paginated list of experiments',
-  tags: ['Experiments'],
+  queryParamSchema: listEvaluationsQuerySchema,
+  responseSchema: evaluationsWithPaginationResponseSchema,
+  summary: 'List evaluations',
+  description: 'Returns a paginated list of evaluations',
+  tags: ['Evaluations'],
   handler: async ({ mastra, ...params }) => {
     try {
-      const result = await mastra.experiments.list(params);
+      const result = await mastra.evaluations.list(params);
       return {
-        experiments: result.experiments.map(exp => {
+        evaluations: result.evaluations.map(exp => {
           const { getResults, iterateResults, getDatasetVersion, ...data } = exp;
           return data;
         }),
         pagination: result.pagination,
       };
     } catch (error) {
-      return handleError(error, 'Error listing experiments');
+      return handleError(error, 'Error listing evaluations');
     }
   },
 });
 
-export const GET_EXPERIMENT_ROUTE = createRoute({
+export const GET_EVALUATION_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/experiments/:id',
+  path: '/api/evaluations/:id',
   responseType: 'json',
-  pathParamSchema: experimentIdPathParams,
-  responseSchema: experimentResponseSchema.nullable(),
-  summary: 'Get experiment',
-  description: 'Returns a specific experiment by ID',
-  tags: ['Experiments'],
+  pathParamSchema: evaluationIdPathParams,
+  responseSchema: evaluationResponseSchema.nullable(),
+  summary: 'Get evaluation',
+  description: 'Returns a specific evaluation by ID',
+  tags: ['Evaluations'],
   handler: async ({ mastra, id }) => {
     try {
-      const experiment = await mastra.experiments.get(id);
-      if (!experiment) {
+      const evaluation = await mastra.evaluations.get(id);
+      if (!evaluation) {
         return null;
       }
-      const { getResults, iterateResults, getDatasetVersion, ...data } = experiment;
+      const { getResults, iterateResults, getDatasetVersion, ...data } = evaluation;
       return data;
     } catch (error) {
-      return handleError(error, 'Error getting experiment');
+      return handleError(error, 'Error getting evaluation');
     }
   },
 });
 
-export const GET_EXPERIMENT_RESULTS_ROUTE = createRoute({
+export const GET_EVALUATION_RESULTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/experiments/:id/results',
+  path: '/api/evaluations/:id/results',
   responseType: 'json',
-  pathParamSchema: experimentIdPathParams,
-  queryParamSchema: listExperimentResultsQuerySchema,
-  responseSchema: experimentResultsWithPaginationResponseSchema,
-  summary: 'Get experiment results',
-  description: 'Returns results for a specific experiment',
-  tags: ['Experiments'],
+  pathParamSchema: evaluationIdPathParams,
+  queryParamSchema: listEvaluationResultsQuerySchema,
+  responseSchema: evaluationResultsWithPaginationResponseSchema,
+  summary: 'Get evaluation results',
+  description: 'Returns results for a specific evaluation',
+  tags: ['Evaluations'],
   handler: async ({ mastra, id, ...params }) => {
     try {
-      return await mastra.experiments.getResults(id, params);
+      return await mastra.evaluations.getResults(id, params);
     } catch (error) {
-      return handleError(error, 'Error getting experiment results');
+      return handleError(error, 'Error getting evaluation results');
     }
   },
 });
@@ -3562,10 +3562,10 @@ import {
   ARCHIVE_DATASET_ITEMS_ROUTE,
   LIST_DATASET_VERSIONS_ROUTE,
   GET_VERSION_ITEMS_ROUTE,
-  RUN_EXPERIMENT_ROUTE,
-  LIST_EXPERIMENTS_ROUTE,
-  GET_EXPERIMENT_ROUTE,
-  GET_EXPERIMENT_RESULTS_ROUTE,
+  RUN_EVALUATION_ROUTE,
+  LIST_EVALUATIONS_ROUTE,
+  GET_EVALUATION_ROUTE,
+  GET_EVALUATION_RESULTS_ROUTE,
 } from './handlers/datasets';
 
 // Add to route registration
@@ -3583,11 +3583,11 @@ const datasetRoutes = [
   GET_VERSION_ITEMS_ROUTE,
 ];
 
-const experimentRoutes = [
-  RUN_EXPERIMENT_ROUTE,
-  LIST_EXPERIMENTS_ROUTE,
-  GET_EXPERIMENT_ROUTE,
-  GET_EXPERIMENT_RESULTS_ROUTE,
+const evaluationRoutes = [
+  RUN_EVALUATION_ROUTE,
+  LIST_EVALUATIONS_ROUTE,
+  GET_EVALUATION_ROUTE,
+  GET_EVALUATION_RESULTS_ROUTE,
 ];
 ```
 
@@ -3624,8 +3624,8 @@ import { DatasetInMemory, createDatasetInMemoryCollections } from './inmemory';
 import type {
   CreateDatasetParams,
   CreateDatasetItemParams,
-  CreateExperimentParams,
-  CreateExperimentResultParams,
+  CreateEvaluationParams,
+  CreateEvaluationResultParams,
 } from '../../../evals/types';
 
 describe('DatasetInMemory', () => {
@@ -3904,15 +3904,15 @@ describe('DatasetInMemory', () => {
   });
 
   // ===========================================================================
-  // Experiment Tests
+  // Evaluation Tests
   // ===========================================================================
 
-  describe('Experiments', () => {
+  describe('Evaluations', () => {
     let datasetId: string;
     let versionId: string;
 
     beforeEach(async () => {
-      const dataset = await storage.createDataset({ name: 'Experiment Test' });
+      const dataset = await storage.createDataset({ name: 'Evaluation Test' });
       datasetId = dataset.id;
       const version = await storage.createVersion({
         datasetId,
@@ -3922,9 +3922,9 @@ describe('DatasetInMemory', () => {
       versionId = version.id;
     });
 
-    it('should create an experiment', async () => {
-      const params: CreateExperimentParams = {
-        name: 'Test Experiment',
+    it('should create an evaluation', async () => {
+      const params: CreateEvaluationParams = {
+        name: 'Test Evaluation',
         datasetId,
         datasetVersionId: versionId,
         scorerIds: ['scorer-1'],
@@ -3933,16 +3933,16 @@ describe('DatasetInMemory', () => {
         metadata: { key: 'value' },
       };
 
-      const experiment = await storage.createExperiment(params);
+      const evaluation = await storage.createEvaluation(params);
 
-      expect(experiment.id).toBeDefined();
-      expect(experiment.name).toBe('Test Experiment');
-      expect(experiment.status).toBe('PENDING');
-      expect(experiment.scorerIds).toEqual(['scorer-1']);
+      expect(evaluation.id).toBeDefined();
+      expect(evaluation.name).toBe('Test Evaluation');
+      expect(evaluation.status).toBe('PENDING');
+      expect(evaluation.scorerIds).toEqual(['scorer-1']);
     });
 
-    it('should update experiment status', async () => {
-      const experiment = await storage.createExperiment({
+    it('should update evaluation status', async () => {
+      const evaluation = await storage.createEvaluation({
         name: 'Test',
         datasetId,
         datasetVersionId: versionId,
@@ -3951,15 +3951,15 @@ describe('DatasetInMemory', () => {
         entityId: 'agent-1',
       });
 
-      const updated = await storage.updateExperiment(experiment.id, {
+      const updated = await storage.updateEvaluation(evaluation.id, {
         status: 'RUNNING',
       });
 
       expect(updated.status).toBe('RUNNING');
     });
 
-    it('should list experiments', async () => {
-      await storage.createExperiment({
+    it('should list evaluations', async () => {
+      await storage.createEvaluation({
         name: 'Exp 1',
         datasetId,
         datasetVersionId: versionId,
@@ -3967,7 +3967,7 @@ describe('DatasetInMemory', () => {
         entityType: 'AGENT',
         entityId: 'agent-1',
       });
-      await storage.createExperiment({
+      await storage.createEvaluation({
         name: 'Exp 2',
         datasetId,
         datasetVersionId: versionId,
@@ -3976,16 +3976,16 @@ describe('DatasetInMemory', () => {
         entityId: 'workflow-1',
       });
 
-      const result = await storage.listExperiments({
+      const result = await storage.listEvaluations({
         pagination: { page: 0, perPage: 10 },
         datasetId,
       });
 
-      expect(result.experiments).toHaveLength(2);
+      expect(result.evaluations).toHaveLength(2);
     });
 
-    it('should create and list experiment results', async () => {
-      const experiment = await storage.createExperiment({
+    it('should create and list evaluation results', async () => {
+      const evaluation = await storage.createEvaluation({
         name: 'Test',
         datasetId,
         datasetVersionId: versionId,
@@ -3994,8 +3994,8 @@ describe('DatasetInMemory', () => {
         entityId: 'agent-1',
       });
 
-      const resultParams: CreateExperimentResultParams = {
-        experimentId: experiment.id,
+      const resultParams: CreateEvaluationResultParams = {
+        evaluationId: evaluation.id,
         datasetItemId: 'item-1',
         runId: 'run-1',
         output: { response: 'Hello' },
@@ -4003,10 +4003,10 @@ describe('DatasetInMemory', () => {
         latencyMs: 100,
       };
 
-      await storage.createExperimentResult(resultParams);
+      await storage.createEvaluationResult(resultParams);
 
-      const results = await storage.listExperimentResults({
-        experimentId: experiment.id,
+      const results = await storage.listEvaluationResults({
+        evaluationId: evaluation.id,
         pagination: { page: 0, perPage: 10 },
       });
 
@@ -4329,11 +4329,11 @@ describe('Dataset', () => {
 
 ---
 
-#### STEP 7C: Experiment Runner Tests (`runner.test.ts`)
+#### STEP 7C: Evaluation Runner Tests (`runner.test.ts`)
 
-**File:** `packages/evals/src/experiments/runner.test.ts`
+**File:** `packages/evals/src/evaluations/runner.test.ts`
 
-**Task:** Create tests for the ExperimentRunner class.
+**Task:** Create tests for the EvaluationRunner class.
 
 **Instructions:**
 
@@ -4341,7 +4341,7 @@ describe('Dataset', () => {
 
 ```typescript
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ExperimentRunner } from './runner';
+import { EvaluationRunner } from './runner';
 import { DatasetManager } from '../datasets';
 import { DatasetInMemory, createDatasetInMemoryCollections } from '@mastra/core/storage';
 import type { MastraScorer } from '../scorer';
@@ -4375,9 +4375,9 @@ const createMockScorer = (id: string): MastraScorer => ({
   })),
 });
 
-describe('ExperimentRunner', () => {
+describe('EvaluationRunner', () => {
   let storage: DatasetInMemory;
-  let runner: ExperimentRunner;
+  let runner: EvaluationRunner;
   let datasets: DatasetManager;
   let mockMastra: ReturnType<typeof createMockMastra>;
 
@@ -4386,7 +4386,7 @@ describe('ExperimentRunner', () => {
       collections: createDatasetInMemoryCollections(),
     });
     mockMastra = createMockMastra();
-    runner = new ExperimentRunner({
+    runner = new EvaluationRunner({
       storage,
       mastra: mockMastra as any,
     });
@@ -4394,7 +4394,7 @@ describe('ExperimentRunner', () => {
   });
 
   describe('run', () => {
-    it('should run an experiment against a dataset', async () => {
+    it('should run an evaluation against a dataset', async () => {
       // Create dataset with items
       const dataset = await datasets.create({ name: 'Test Dataset' });
       await dataset.addItems([
@@ -4404,18 +4404,18 @@ describe('ExperimentRunner', () => {
 
       const scorer = createMockScorer('test-scorer');
 
-      const experiment = await runner.run({
-        name: 'Test Experiment',
+      const evaluation = await runner.run({
+        name: 'Test Evaluation',
         datasetId: dataset.id,
         entityType: 'AGENT',
         entityId: 'agent-1',
         scorers: [scorer],
       });
 
-      expect(experiment.status).toBe('COMPLETED');
-      expect(experiment.summary?.totalItems).toBe(2);
-      expect(experiment.summary?.completedItems).toBe(2);
-      expect(experiment.summary?.failedItems).toBe(0);
+      expect(evaluation.status).toBe('COMPLETED');
+      expect(evaluation.summary?.totalItems).toBe(2);
+      expect(evaluation.summary?.completedItems).toBe(2);
+      expect(evaluation.summary?.failedItems).toBe(0);
     });
 
     it('should use a specific dataset version', async () => {
@@ -4425,7 +4425,7 @@ describe('ExperimentRunner', () => {
 
       const scorer = createMockScorer('scorer');
 
-      const experiment = await runner.run({
+      const evaluation = await runner.run({
         name: 'Test',
         datasetId: dataset.id,
         datasetVersion: 1, // Use first version with 1 item
@@ -4434,7 +4434,7 @@ describe('ExperimentRunner', () => {
         scorers: [scorer],
       });
 
-      expect(experiment.summary?.totalItems).toBe(1);
+      expect(evaluation.summary?.totalItems).toBe(1);
     });
 
     it('should call onProgress callback', async () => {
@@ -4500,7 +4500,7 @@ describe('ExperimentRunner', () => {
 
       const scorer = createMockScorer('scorer');
 
-      const experiment = await runner.run({
+      const evaluation = await runner.run({
         name: 'Test',
         datasetId: dataset.id,
         entityType: 'AGENT',
@@ -4508,8 +4508,8 @@ describe('ExperimentRunner', () => {
         scorers: [scorer],
       });
 
-      expect(experiment.status).toBe('FAILED');
-      expect(experiment.summary?.failedItems).toBe(1);
+      expect(evaluation.status).toBe('FAILED');
+      expect(evaluation.summary?.failedItems).toBe(1);
     });
 
     it('should support concurrent execution', async () => {
@@ -4561,7 +4561,7 @@ describe('ExperimentRunner', () => {
           scorers: [scorer],
           signal: controller.signal,
         }),
-      ).rejects.toThrow('Experiment aborted');
+      ).rejects.toThrow('Evaluation aborted');
     });
 
     it('should work with workflows', async () => {
@@ -4570,7 +4570,7 @@ describe('ExperimentRunner', () => {
 
       const scorer = createMockScorer('scorer');
 
-      const experiment = await runner.run({
+      const evaluation = await runner.run({
         name: 'Test',
         datasetId: dataset.id,
         entityType: 'WORKFLOW',
@@ -4578,13 +4578,13 @@ describe('ExperimentRunner', () => {
         scorers: [scorer],
       });
 
-      expect(experiment.status).toBe('COMPLETED');
+      expect(evaluation.status).toBe('COMPLETED');
       expect(mockMastra.getWorkflowById).toHaveBeenCalledWith('workflow-1');
     });
   });
 
   describe('get', () => {
-    it('should retrieve an experiment by ID', async () => {
+    it('should retrieve an evaluation by ID', async () => {
       const dataset = await datasets.create({ name: 'Test' });
       await dataset.addItems([{ input: { prompt: 'Test' } }]);
 
@@ -4604,7 +4604,7 @@ describe('ExperimentRunner', () => {
   });
 
   describe('list', () => {
-    it('should list experiments', async () => {
+    it('should list evaluations', async () => {
       const dataset = await datasets.create({ name: 'Test' });
       await dataset.addItems([{ input: { prompt: 'Test' } }]);
 
@@ -4626,17 +4626,17 @@ describe('ExperimentRunner', () => {
 
       const result = await runner.list();
 
-      expect(result.experiments).toHaveLength(2);
+      expect(result.evaluations).toHaveLength(2);
     });
   });
 
   describe('getResults', () => {
-    it('should get experiment results', async () => {
+    it('should get evaluation results', async () => {
       const dataset = await datasets.create({ name: 'Test' });
       await dataset.addItems([{ input: { prompt: 'Test 1' } }, { input: { prompt: 'Test 2' } }]);
 
       const scorer = createMockScorer('scorer');
-      const experiment = await runner.run({
+      const evaluation = await runner.run({
         name: 'Test',
         datasetId: dataset.id,
         entityType: 'AGENT',
@@ -4644,19 +4644,19 @@ describe('ExperimentRunner', () => {
         scorers: [scorer],
       });
 
-      const results = await runner.getResults(experiment.id);
+      const results = await runner.getResults(evaluation.id);
 
       expect(results.results).toHaveLength(2);
     });
   });
 
   describe('iterateResults', () => {
-    it('should iterate over experiment results', async () => {
+    it('should iterate over evaluation results', async () => {
       const dataset = await datasets.create({ name: 'Test' });
       await dataset.addItems(Array.from({ length: 5 }, (_, i) => ({ input: { prompt: `Item ${i}` } })));
 
       const scorer = createMockScorer('scorer');
-      const experiment = await runner.run({
+      const evaluation = await runner.run({
         name: 'Test',
         datasetId: dataset.id,
         entityType: 'AGENT',
@@ -4665,7 +4665,7 @@ describe('ExperimentRunner', () => {
       });
 
       const results: unknown[] = [];
-      for await (const result of runner.iterateResults(experiment.id, { batchSize: 2 })) {
+      for await (const result of runner.iterateResults(evaluation.id, { batchSize: 2 })) {
         results.push(result);
       }
 
@@ -4751,27 +4751,27 @@ describe('Dataset API Handlers', () => {
   });
 });
 
-describe('Experiment API Handlers', () => {
-  describe('POST /api/experiments', () => {
-    it('should run an experiment', async () => {
+describe('Evaluation API Handlers', () => {
+  describe('POST /api/evaluations', () => {
+    it('should run an evaluation', async () => {
       // Test implementation
     });
   });
 
-  describe('GET /api/experiments', () => {
-    it('should list experiments', async () => {
+  describe('GET /api/evaluations', () => {
+    it('should list evaluations', async () => {
       // Test implementation
     });
   });
 
-  describe('GET /api/experiments/:id', () => {
-    it('should return experiment details', async () => {
+  describe('GET /api/evaluations/:id', () => {
+    it('should return evaluation details', async () => {
       // Test implementation
     });
   });
 
-  describe('GET /api/experiments/:id/results', () => {
-    it('should return experiment results', async () => {
+  describe('GET /api/evaluations/:id/results', () => {
+    it('should return evaluation results', async () => {
       // Test implementation
     });
   });
@@ -4865,14 +4865,14 @@ console.log(versions);
 const v1Items = await dataset.getVersionItems(1);
 ```
 
-### Running Experiments
+### Running Evaluations
 
 Run evaluations against a dataset with one or more scorers:
 
 ```typescript
 import { AnswerRelevancy, Faithfulness } from '@mastra/evals';
 
-const experiment = await mastra.experiments.run({
+const evaluation = await mastra.evaluations.run({
   name: 'Agent Evaluation v1',
   datasetId: dataset.id,
   entityType: 'AGENT',
@@ -4883,7 +4883,7 @@ const experiment = await mastra.experiments.run({
   },
 });
 
-console.log('Results:', experiment.summary);
+console.log('Results:', evaluation.summary);
 ```
 
 ### Iterating Large Datasets
@@ -4944,7 +4944,7 @@ const exportedData = await dataset.exportToJSON();
 - Creating and managing datasets
 - Working with items
 - Version management
-- Running experiments
+- Running evaluations
 - API reference
 - Examples
 
@@ -4983,7 +4983,7 @@ Note: Follow the existing documentation style and format in the docs directory.
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ STEP 3: Implementation (parallel) │
 │ ┌─────────────────────────────┐ ┌─────────────────────────────┐ │
-│ │ Dataset class (full) │ │ experiments/runner.ts │ │
+│ │ Dataset class (full) │ │ evaluations/runner.ts │ │
 │ │ DatasetManager (full) │ │ │ │
 │ └─────────────────────────────┘ └─────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -5019,7 +5019,7 @@ Note: Follow the existing documentation style and format in the docs directory.
 |------|----------------------------|------------|
 | 1 | `constants.ts`, `types.ts` | - |
 | 2 | Storage (`base.ts`, `inmemory.ts`), Class stubs | Step 1 |
-| 3 | `Dataset` class, `DatasetManager`, `ExperimentRunner` | Step 2 |
+| 3 | `Dataset` class, `DatasetManager`, `EvaluationRunner` | Step 2 |
 | 4 | Mastra integration, Server routes | Step 3 |
 | 5 | All test files | Step 4 |
 | 6 | Documentation | Step 5 |
@@ -5050,7 +5050,7 @@ _All questions have been resolved - see Notes & Decisions below._
 
 **Decision:** Versioning is automatic on every mutation (add, update, archive items).
 
-**Rationale:** This follows the Braintrust/Arize pattern where every modification creates a version. It ensures complete audit trail and allows experiments to always pin to a reproducible state.
+**Rationale:** This follows the Braintrust/Arize pattern where every modification creates a version. It ensures complete audit trail and allows evaluations to always pin to a reproducible state.
 
 **Implementation:**
 - Every `addItems`, `updateItem`, `archiveItems` call automatically increments `currentVersion`
@@ -5090,8 +5090,8 @@ class DatasetManager {
   async *iterateItems(datasetId: string, options?: IterateOptions): AsyncIterable<DatasetItem>;
 }
 
-// Usage in experiments
-async function runExperiment(params: ExperimentParams) {
+// Usage in evaluations
+async function runEvaluation(params: EvaluationParams) {
   const dataset = await getDataset(params.datasetId);
 
   // Stream items without loading all into memory
@@ -5120,11 +5120,11 @@ async function runExperiment(params: ExperimentParams) {
 
 **Rationale:** The existing `runEvals` API continues to work as-is. Datasets are a new, separate feature. Users can manually create datasets from their existing test data if desired.
 
-### Decision 5: Single Target per Experiment (Initially)
+### Decision 5: Single Target per Evaluation (Initially)
 
-**Decision:** Each experiment targets a single agent/workflow. Multi-agent A/B comparison deferred to future work.
+**Decision:** Each evaluation targets a single agent/workflow. Multi-agent A/B comparison deferred to future work.
 
-**Rationale:** Keeps the initial implementation focused. Comparison can be done by running separate experiments and using `compareExperiments()` API.
+**Rationale:** Keeps the initial implementation focused. Comparison can be done by running separate evaluations and using `compareEvaluations()` API.
 
 **Future consideration:** Could add `targets: Agent[]` parameter later for simultaneous A/B testing
 
