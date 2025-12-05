@@ -679,7 +679,7 @@ export class ProcessorRunner {
   }
 
   private async validateAndFormatProcessInputStepResult<TOOLS extends ToolSet = ToolSet>(
-    result: ProcessInputStepResult<TOOLS> | Awaited<ProcessorMessageResult> | undefined,
+    result: ProcessInputStepResult<TOOLS> | Awaited<ProcessorMessageResult> | undefined | void,
     {
       messageList,
       processor,

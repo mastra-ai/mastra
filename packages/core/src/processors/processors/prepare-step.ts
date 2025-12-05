@@ -14,7 +14,7 @@ export class PrepareStepProcessor implements Processor<'prepare-step'> {
 
   async processInputStep<TOOLS extends ToolSet>(
     args: ProcessInputStepArgs<TOOLS>,
-  ): Promise<ProcessInputStepResult<TOOLS> | undefined> {
+  ): Promise<ProcessInputStepResult<TOOLS> | undefined | void> {
     return this.prepareStep(args);
   }
 }

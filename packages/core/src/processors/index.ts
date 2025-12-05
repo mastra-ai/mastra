@@ -162,9 +162,10 @@ export interface Processor<TId extends string = string> {
   processInputStep?<TOOLS extends ToolSet = ToolSet>(
     args: ProcessInputStepArgs<TOOLS>,
   ):
-    | Promise<ProcessInputStepResult<TOOLS> | undefined>
+    | Promise<ProcessInputStepResult<TOOLS> | undefined | void>
     | ProcessInputStepResult<TOOLS>
     | ProcessorMessageResult
+    | void
     | undefined;
 }
 
