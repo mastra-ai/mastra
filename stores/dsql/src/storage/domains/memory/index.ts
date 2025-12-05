@@ -966,7 +966,7 @@ export class MemoryDSQL extends MemoryStorage {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'PG_STORE_DELETE_MESSAGES_FAILED',
+          id: 'MASTRA_STORAGE_DSQL_STORE_DELETE_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: messageIds.join(', ') },
