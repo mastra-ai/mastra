@@ -1,27 +1,31 @@
 {
-  "name": "slack-mastra",
+  "name": "template-slack-agent",
   "version": "1.0.0",
-  "description": "Slack integration for Mastra agents",
+  "description": "A Mastra template for building Slack bots with streaming responses, thread-based conversation memory, and support for multiple agents with their own Slack apps",
   "main": "index.js",
   "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",
-    "build": "mastra build"
+    "build": "mastra build",
+    "start": "mastra start"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@10.18.3",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "dependencies": {
-    "@mastra/core": "latest",
-    "@mastra/libsql": "latest",
-    "@mastra/memory": "latest",
+    "@mastra/core": "beta",
+    "@mastra/libsql": "beta",
+    "@mastra/memory": "beta",
     "@slack/web-api": "^7.9.2",
-    "zod": "^3.23.8",
-    "mastra": "latest"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^24.10.0",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "@types/node": "^24.1.0",
+    "mastra": "beta",
+    "typescript": "^5.8.3"
   }
 }
