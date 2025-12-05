@@ -77,11 +77,11 @@ export class ScoresStorageD1 extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.id,
-            entityId: score.entityId,
-            entityType: score.entityType,
-            traceId: score.traceId || '',
-            spanId: score.spanId || '',
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
           },
         },
         error,
@@ -107,9 +107,10 @@ export class ScoresStorageD1 extends ScoresStorage {
         }
       }
 
+      const now = new Date();
       serializedRecord.id = id;
-      serializedRecord.createdAt = new Date().toISOString();
-      serializedRecord.updatedAt = new Date().toISOString();
+      serializedRecord.createdAt = now.toISOString();
+      serializedRecord.updatedAt = now.toISOString();
 
       const columns = Object.keys(serializedRecord);
       const values = Object.values(serializedRecord);

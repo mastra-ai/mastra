@@ -62,11 +62,11 @@ export class ScoresStorageCloudflare extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.id,
-            entityId: score.entityId,
-            entityType: score.entityType,
-            traceId: score.traceId || '',
-            spanId: score.spanId || '',
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
           },
         },
         error,
@@ -90,9 +90,10 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         }
       }
 
+      const now = new Date();
       serializedRecord.id = id;
-      serializedRecord.createdAt = new Date().toISOString();
-      serializedRecord.updatedAt = new Date().toISOString();
+      serializedRecord.createdAt = now.toISOString();
+      serializedRecord.updatedAt = now.toISOString();
 
       await this.operations.putKV({
         tableName: TABLE_SCORERS,
@@ -100,8 +101,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         value: serializedRecord,
       });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...score, id, createdAt: now, updatedAt: now } };
     } catch (error) {
       const mastraError = new MastraError(
         {

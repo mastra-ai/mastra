@@ -206,11 +206,11 @@ export class ScoresLibSQL extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.id,
-            entityId: score.entityId,
-            entityType: score.entityType,
-            traceId: score.traceId || '',
-            spanId: score.spanId || '',
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
           },
         },
         error,
@@ -219,19 +219,19 @@ export class ScoresLibSQL extends ScoresStorage {
 
     try {
       const id = crypto.randomUUID();
+      const now = new Date();
 
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
           id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
           ...parsedScore,
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...score, id, createdAt: now, updatedAt: now } };
     } catch (error) {
       throw new MastraError(
         {
