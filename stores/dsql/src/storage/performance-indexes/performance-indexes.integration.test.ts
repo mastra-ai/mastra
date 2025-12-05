@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { DSQLStore } from '../index';
-import { DSQLPerformanceTest } from './performance-test';
 import { TEST_CONFIG, canRunDSQLTests } from '../test-utils';
+import { DSQLPerformanceTest } from './performance-test';
 
 // Skip integration tests when DSQL is not available
 const describeIf = canRunDSQLTests() ? describe : describe.skip;

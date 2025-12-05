@@ -10,9 +10,9 @@ import type {
   UpdateSpanRecord,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
-import type { StoreOperationsDSQL } from '../operations';
-import { withRetry } from '../../../shared/retry';
 import { splitIntoBatches, DEFAULT_MAX_ROWS_PER_BATCH } from '../../../shared/batch';
+import { withRetry } from '../../../shared/retry';
+import type { StoreOperationsDSQL } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityDSQL extends ObservabilityStorage {
