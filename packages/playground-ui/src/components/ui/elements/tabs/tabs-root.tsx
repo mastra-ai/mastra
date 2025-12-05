@@ -35,7 +35,7 @@ export const TabsRoot = <T extends string>({
     <RadixTabs.Root
       value={currentTab}
       onValueChange={handleTabChange}
-      className={cn('grid gap-[3rem] overflow-y-auto', className)}
+      className={cn('grid gap-8 overflow-y-auto', className)}
     >
       {children}
     </RadixTabs.Root>
