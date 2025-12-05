@@ -53,7 +53,7 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
   const step = steps[stepKey];
 
   // Check if this is a tripwire (failed step with tripwire property)
-  const isTripwire = step?.status === 'failed' && (step as any)?.tripwire;
+  const isTripwire = step?.status === 'failed' && step?.tripwire !== undefined;
   const displayStatus = isTripwire ? 'tripwire' : step?.status;
 
   const { isSleepNode, isForEachNode, isMapNode, hasSpecialBadge } = getNodeBadgeInfo({
@@ -160,7 +160,7 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
           output={step?.output}
           suspendOutput={step?.suspendOutput}
           error={isTripwire ? undefined : step?.error}
-          tripwire={isTripwire ? (step as any)?.tripwire : undefined}
+          tripwire={isTripwire ? step?.tripwire : undefined}
           mapConfig={mapConfig}
           status={displayStatus as any}
           stepKey={stepKey}
