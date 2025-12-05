@@ -1,10 +1,10 @@
-import type { WritableStream } from 'node:stream/web';
 import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../observability';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
+import type { OutputWriter } from '../../../workflows';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
@@ -14,14 +14,24 @@ import { isControllerOpen } from '../stream';
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
   extends LoopRun<Tools, OUTPUT> {
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
-  writer: WritableStream<ChunkType<OUTPUT>>;
+  outputWriter: OutputWriter;
 }
 
 export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
   params: AgenticLoopParams<Tools, OUTPUT>,
 ) {
-  const { models, _internal, messageId, runId, toolChoice, messageList, modelSettings, controller, writer, ...rest } =
-    params;
+  const {
+    models,
+    _internal,
+    messageId,
+    runId,
+    toolChoice,
+    messageList,
+    modelSettings,
+    controller,
+    outputWriter,
+    ...rest
+  } = params;
 
   // Track accumulated steps across iterations to pass to stopWhen
   const accumulatedSteps: StepResult<Tools>[] = [];
@@ -35,7 +45,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     modelSettings,
     toolChoice,
     controller,
-    writer,
+    outputWriter,
     messageList,
     runId,
     ...rest,

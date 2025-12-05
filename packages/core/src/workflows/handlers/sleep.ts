@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../../di';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
-import type { ChunkType } from '../../stream/types';
 import { ToolStream } from '../../tools/stream';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
@@ -13,6 +11,7 @@ import type {
   DefaultEngineType,
   Emitter,
   ExecutionContext,
+  OutputWriter,
   SerializedStepFlowEntry,
   StepFlowEntry,
   StepResult,
@@ -41,7 +40,7 @@ export interface ExecuteSleepParams {
   emitter: Emitter;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   tracingContext: TracingContext;
 }
 
@@ -56,7 +55,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     abortController,
     requestContext,
     executionContext,
-    writableStream,
+    outputWriter,
     tracingContext,
   } = params;
 
@@ -108,7 +107,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
             name: 'sleep',
             runId,
           },
-          writableStream,
+          outputWriter,
         ),
       });
     });
@@ -153,7 +152,7 @@ export interface ExecuteSleepUntilParams {
   emitter: Emitter;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   tracingContext: TracingContext;
 }
 
@@ -171,7 +170,7 @@ export async function executeSleepUntil(
     abortController,
     requestContext,
     executionContext,
-    writableStream,
+    outputWriter,
     tracingContext,
   } = params;
 
@@ -224,7 +223,7 @@ export async function executeSleepUntil(
             name: 'sleepUntil',
             runId,
           },
-          writableStream,
+          outputWriter,
         ),
       });
     });

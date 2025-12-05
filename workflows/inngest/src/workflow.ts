@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { WritableStream } from 'node:stream/web';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
@@ -261,11 +260,9 @@ export class InngestWorkflow<
           abortController: new AbortController(),
           // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
           outputOptions,
-          writableStream: new WritableStream<WorkflowStreamEvent>({
-            write(chunk) {
-              void emitter.emit('watch', chunk).catch(() => {});
-            },
-          }),
+          outputWriter: async (chunk: WorkflowStreamEvent) => {
+            void emitter.emit('watch', chunk).catch(() => {});
+          },
         });
 
         // Final step to check workflow status and throw NonRetriableError if failed

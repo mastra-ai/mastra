@@ -1,13 +1,11 @@
-import type { WritableStream } from 'node:stream/web';
-
 import type { RequestContext } from '../../di';
 import type { TracingContext } from '../../observability';
-import type { ChunkType } from '../../stream/types';
 import type { DefaultExecutionEngine } from '../default';
 import type {
   Emitter,
   EntryExecutionResult,
   ExecutionContext,
+  OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
   StepFlowEntry,
@@ -105,7 +103,7 @@ export interface ExecuteEntryParams {
   emitter: Emitter;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
 }
 
@@ -129,7 +127,7 @@ export async function executeEntry(
     emitter,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
   } = params;
 
@@ -154,7 +152,7 @@ export async function executeEntry(
       emitter,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
       serializedStepGraph,
     });
@@ -189,7 +187,7 @@ export async function executeEntry(
       emitter,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
     });
 
@@ -272,7 +270,7 @@ export async function executeEntry(
       emitter,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
     });
   } else if (entry.type === 'conditional') {
@@ -291,7 +289,7 @@ export async function executeEntry(
       emitter,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
     });
   } else if (entry.type === 'loop') {
@@ -310,7 +308,7 @@ export async function executeEntry(
       emitter,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
       serializedStepGraph,
     });
@@ -330,7 +328,7 @@ export async function executeEntry(
       emitter,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
       serializedStepGraph,
     });
@@ -379,7 +377,7 @@ export async function executeEntry(
       emitter,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
     });
 
     delete executionContext.activeStepsPath[entry.id];
@@ -471,7 +469,7 @@ export async function executeEntry(
       emitter,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
     });
 
     delete executionContext.activeStepsPath[entry.id];

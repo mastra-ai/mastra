@@ -177,6 +177,49 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
+### `writableStream` to `outputWriter` in `Run.start()` & `Run.timeTravel()`
+
+The `writableStream` parameter in `Run.start()` and `Run.timeTravel()` has been replaced with `outputWriter`. Instead of passing a `WritableStream`, you now pass an async callback function that receives each workflow event chunk directly.
+
+This change simplifies the API - rather than creating a `WritableStream` wrapper, you handle chunks directly in the callback.
+
+**Example:** Streaming workflow events to an HTTP response (SSE):
+
+```diff
+  const run = await workflow.createRun();
+
+- const stream = new WritableStream({
+-   write(chunk) {
+-     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+-   }
+- });
+- await run.start({ inputData, writableStream: stream });
+
++ await run.start({
++   inputData,
++   outputWriter: async (chunk) => {
++     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
++   },
++ });
+```
+
+:::note
+
+The `writer` parameter passed to step `execute` functions is not affected by this change. It remains a `ToolStream` that extends `WritableStream<unknown>` and provides `.write()` and `.custom()` methods:
+
+```ts
+createStep({
+  id: 'my-step',
+  execute: async ({ writer }) => {
+    // This API is unchanged
+    await writer.write({ data: 'some output' });
+    await writer.custom({ type: 'custom-event', payload: {} });
+  },
+});
+```
+
+:::
+
 ## Removed
 
 ### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods

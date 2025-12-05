@@ -1,4 +1,4 @@
-import { ReadableStream, WritableStream } from 'node:stream/web';
+import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from 'ai-v5';
 import { getErrorFromUnknown } from '../../error';
 import { RequestContext } from '../../request-context';
@@ -45,11 +45,9 @@ export function workflowLoopStream<
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
-      const writer = new WritableStream<ChunkType<OUTPUT>>({
-        write: chunk => {
-          controller.enqueue(chunk);
-        },
-      });
+      const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
+        void controller.enqueue(chunk);
+      };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
@@ -59,7 +57,7 @@ export function workflowLoopStream<
         modelSettings,
         toolChoice,
         controller,
-        writer,
+        outputWriter,
         runId,
         messageList,
         startTimestamp,

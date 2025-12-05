@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../../di';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
-import type { ChunkType } from '../../stream/types';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -14,6 +12,7 @@ import type {
   DefaultEngineType,
   Emitter,
   ExecutionContext,
+  OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
   StepFailure,
@@ -52,7 +51,7 @@ export interface ExecuteParallelParams {
   emitter: Emitter;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
 }
 
@@ -76,7 +75,7 @@ export async function executeParallel(
     emitter,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
   } = params;
 
@@ -153,7 +152,7 @@ export async function executeParallel(
         emitter,
         abortController,
         requestContext,
-        writableStream,
+        outputWriter,
         disableScorers,
       });
       // Apply context changes from parallel step execution
@@ -227,7 +226,7 @@ export interface ExecuteConditionalParams {
   emitter: Emitter;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
 }
 
@@ -251,7 +250,7 @@ export async function executeConditional(
     emitter,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
   } = params;
 
@@ -314,7 +313,7 @@ export async function executeConditional(
                 name: 'conditional',
                 runId,
               },
-              writableStream,
+              outputWriter,
             ),
           },
           {
@@ -412,7 +411,7 @@ export async function executeConditional(
         emitter,
         abortController,
         requestContext,
-        writableStream,
+        outputWriter,
         disableScorers,
       });
 
@@ -490,7 +489,7 @@ export interface ExecuteLoopParams {
   emitter: Emitter;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
 }
@@ -514,7 +513,7 @@ export async function executeLoop(
     emitter,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
     serializedStepGraph,
   } = params;
@@ -558,7 +557,7 @@ export async function executeLoop(
       emitter,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
       serializedStepGraph,
       iterationCount: iteration + 1,
@@ -632,7 +631,7 @@ export async function executeLoop(
               name: 'loop',
               runId,
             },
-            writableStream,
+            outputWriter,
           ),
         },
         {
@@ -687,7 +686,7 @@ export interface ExecuteForeachParams {
   emitter: Emitter;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
 }
@@ -711,7 +710,7 @@ export async function executeForeach(
     emitter,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
     serializedStepGraph,
   } = params;
@@ -801,7 +800,7 @@ export async function executeForeach(
           abortController,
           requestContext,
           skipEmits: true,
-          writableStream,
+          outputWriter,
           disableScorers,
           serializedStepGraph,
         });
