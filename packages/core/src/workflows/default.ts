@@ -25,7 +25,7 @@ import type { ExecuteSleepParams, ExecuteSleepUntilParams } from './handlers/sle
 import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepUntilHandler } from './handlers/sleep';
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
-import type { ConditionFunction, ExecuteFunctionParams, Step } from './step';
+import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import type {
   DefaultEngineType,
   Emitter,
@@ -176,7 +176,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async evaluateCondition(
     conditionFn: ConditionFunction<any, any, any, any, DefaultEngineType>,
     index: number,
-    context: ExecuteFunctionParams<any, any, any, any, DefaultEngineType>,
+    context: ConditionFunctionParams<any, any, any, any, DefaultEngineType>,
     operationId: string,
   ): Promise<number | null> {
     return this.wrapDurableOperation(operationId, async () => {
@@ -419,7 +419,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Apply mutable context changes back to the execution context.
    */
   applyMutableContext(executionContext: ExecutionContext, mutableContext: MutableContext): void {
-    executionContext.state = mutableContext.state;
+    Object.assign(executionContext.state, mutableContext.state);
     Object.assign(executionContext.suspendedPaths, mutableContext.suspendedPaths);
     Object.assign(executionContext.resumeLabels, mutableContext.resumeLabels);
   }

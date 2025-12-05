@@ -1,6 +1,6 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_SPANS } from '@mastra/core/storage';
+import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_SPANS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -96,7 +96,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -289,7 +289,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('LIBSQL', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -323,7 +323,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_BATCH_UPDATE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'BATCH_UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -377,7 +377,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_BATCH_DELETE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'BATCH_DELETE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -452,7 +452,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_ALTER_TABLE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'ALTER_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -471,7 +471,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     } catch (e) {
       const mastraError = new MastraError(
         {
-          id: 'LIBSQL_STORE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -492,7 +492,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     } catch (e) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_DROP_TABLE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'DROP_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

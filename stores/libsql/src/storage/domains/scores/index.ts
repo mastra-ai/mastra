@@ -3,6 +3,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
+  createStorageErrorId,
   TABLE_SCORERS,
   ScoresStorage,
   calculatePagination,
@@ -74,7 +75,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -167,7 +168,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -201,7 +202,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('LIBSQL', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -234,7 +235,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -298,7 +299,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -350,7 +351,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

@@ -198,33 +198,26 @@ new OtelExporter({
 
 ## OpenTelemetry Semantic Conventions
 
-The exporter follows [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/), ensuring compatibility with observability platforms:
+The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai), ensuring compatibility with observability platforms:
 
 ### Span Naming
 
-- **LLM Operations**: `chat {model}` or `tool_selection {model}`
-- **Tool Execution**: `tool.execute {tool_name}`
-- **Agent Runs**: `agent.{agent_id}`
-- **Workflow Runs**: `workflow.{workflow_id}`
+- **LLM Operations**: `chat {model}`
+- **Tool Execution**: `execute_tool {tool_name}`
+- **Agent Runs**: `invoke_agent {agent_id}`
+- **Workflow Runs**: `invoke_workflow {workflow_id}`
 
 ### Key Attributes
 
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, etc.)
-- `gen_ai.system` - AI provider (openai, anthropic, etc.)
+- `gen_ai.provider.name` - AI provider (openai, anthropic, etc.)
 - `gen_ai.request.model` - Model identifier
+- `gen_ai.input.messages` - Chat history provided to the model
+- `gen_ai.output.messages` - Messages returned by the model
 - `gen_ai.usage.input_tokens` - Number of input tokens
 - `gen_ai.usage.output_tokens` - Number of output tokens
 - `gen_ai.request.temperature` - Sampling temperature
-- `gen_ai.response.finish_reasons` - Completion reason
-
-## Buffering Strategy
-
-The exporter buffers spans until a trace is complete:
-
-1. Collects all spans for a trace
-2. Waits 5 seconds after root span completes
-3. Exports complete trace with preserved parent-child relationships
-4. Ensures no orphaned spans
+- `gen_ai.response.finish_reasons` - Completion reasons
 
 ## Protocol Selection Guide
 
@@ -264,7 +257,6 @@ Install the suggested package for your provider.
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
 2. **Invalid endpoint**: Check endpoint format matches provider requirements
 3. **Authentication failures**: Verify API keys and headers are correct
-4. **No traces appearing**: Check that traces complete (root span must end)
 
 ## Using Tags
 
@@ -288,6 +280,6 @@ Tags are exported as a JSON string in the `mastra.tags` span attribute for broad
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
-- [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel) - For bidirectional OTEL context integration
-- [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
+- [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel)
+- [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai)
 - [OTEL Exporter Reference](/reference/v1/observability/tracing/exporters/otel)
