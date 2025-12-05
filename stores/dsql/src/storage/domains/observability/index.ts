@@ -138,12 +138,19 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     try {
-      const data = { ...updates };
+      const data: Partial<UpdateSpanRecord> & {
+        endedAtZ?: string;
+        startedAtZ?: string;
+      } = { ...updates };
       if (data.endedAt instanceof Date) {
-        data.endedAt = data.endedAt.toISOString() as any;
+        const endedAt = data.endedAt.toISOString();
+        data.endedAt = endedAt as any;
+        data.endedAtZ = endedAt;
       }
       if (data.startedAt instanceof Date) {
-        data.startedAt = data.startedAt.toISOString() as any;
+        const startedAt = data.startedAt.toISOString();
+        data.startedAt = startedAt as any;
+        data.startedAtZ = startedAt;
       }
       // Note: updatedAt/updatedAtZ will be set in operations.update() method
       // Aurora DSQL doesn't support triggers
