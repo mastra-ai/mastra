@@ -378,7 +378,8 @@ describe('BraintrustExporter', () => {
         type: SpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'Hello' }] },
-        output: { content: 'Hi there!' },
+        // Note: LLM output uses 'text' field, not 'content'
+        output: { text: 'Hi there!' },
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -409,8 +410,10 @@ describe('BraintrustExporter', () => {
         name: 'gpt-4-call',
         type: 'llm',
         // No parentSpanIds for root spans!
-        input: { messages: [{ role: 'user', content: 'Hello' }] },
-        output: { content: 'Hi there!' },
+        // Input is transformed: { messages: [...] } -> [...] for Braintrust Thread view
+        input: [{ role: 'user', content: 'Hello' }],
+        // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
+        output: { role: 'assistant', content: 'Hi there!' },
         metrics: {
           prompt_tokens: 10,
           completion_tokens: 5,
@@ -459,6 +462,57 @@ describe('BraintrustExporter', () => {
           model: 'gpt-3.5-turbo',
         },
       });
+    });
+
+    /**
+     * Test for GitHub issue #9848: Braintrust Thread view not showing data
+     *
+     * According to Braintrust documentation, the Thread view expects the `input`
+     * field for LLM spans to be a direct array of messages in OpenAI format:
+     *
+     *   input: [{ role: 'user', content: 'Hello' }]
+     *
+     * NOT wrapped in an object:
+     *
+     *   input: { messages: [{ role: 'user', content: 'Hello' }] }
+     *
+     * This test verifies that the BraintrustExporter transforms the input format
+     * correctly for LLM spans so the Thread view displays messages properly.
+     *
+     * @see https://github.com/mastra-ai/mastra/issues/9848
+     * @see https://www.braintrust.dev/docs/guides/traces/customize
+     */
+    it('should format LLM input as direct messages array for Thread view (issue #9848)', async () => {
+      // Mastra currently passes messages wrapped in an object
+      const llmSpan = createMockSpan({
+        id: 'thread-view-llm',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'What is the weather?' }] },
+        // Note: LLM output uses 'text' field, not 'content'
+        output: { text: 'The weather is sunny.' },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Braintrust Thread view expects:
+      // - input to be a direct array of messages in OpenAI format
+      // - output to be { role: 'assistant', content: '...' } format
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // Thread view requires direct array format for messages to display
+          input: [{ role: 'user', content: 'What is the weather?' }],
+          output: { role: 'assistant', content: 'The weather is sunny.' },
+        }),
+      );
     });
   });
 
@@ -519,7 +573,8 @@ describe('BraintrustExporter', () => {
         ...llmSpan.attributes,
         usage: { totalTokens: 150 },
       } as ModelGenerationAttributes;
-      llmSpan.output = { content: 'Updated response' };
+      // Note: LLM output uses 'text' field, not 'content'
+      llmSpan.output = { text: 'Updated response' };
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_UPDATED,
@@ -527,7 +582,8 @@ describe('BraintrustExporter', () => {
       });
 
       expect(mockSpan.log).toHaveBeenCalledWith({
-        output: { content: 'Updated response' },
+        // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
+        output: { role: 'assistant', content: 'Updated response' },
         metrics: { tokens: 150 },
         metadata: {
           spanType: 'model_generation',

@@ -160,7 +160,10 @@ describe('OtelBridge', () => {
       // This test verifies that tags are included in the OTEL span attributes
       // OtelBridge uses SpanConverter which should set mastra.tags on root spans
       const { SpanConverter } = await import('@mastra/otel-exporter');
-      const converter = new SpanConverter();
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
 
       const rootSpanWithTags = {
         id: 'root-with-tags',
@@ -174,7 +177,7 @@ describe('OtelBridge', () => {
         tags: ['production', 'experiment-v2', 'user-request'],
       } as any;
 
-      const readableSpan = converter.convertSpan(rootSpanWithTags);
+      const readableSpan = await converter.convertSpan(rootSpanWithTags);
 
       // Tags should be present as mastra.tags attribute (JSON-stringified for backend compatibility)
       expect(readableSpan.attributes['mastra.tags']).toBeDefined();
@@ -185,7 +188,10 @@ describe('OtelBridge', () => {
 
     it('should not include mastra.tags attribute for child spans', async () => {
       const { SpanConverter } = await import('@mastra/otel-exporter');
-      const converter = new SpanConverter();
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
 
       const childSpanWithTags = {
         id: 'child-with-tags',
@@ -200,7 +206,7 @@ describe('OtelBridge', () => {
         tags: ['should-not-appear'],
       } as any;
 
-      const readableSpan = converter.convertSpan(childSpanWithTags);
+      const readableSpan = await converter.convertSpan(childSpanWithTags);
 
       // Tags should NOT be present on child spans
       expect(readableSpan.attributes['mastra.tags']).toBeUndefined();
@@ -208,7 +214,10 @@ describe('OtelBridge', () => {
 
     it('should not include mastra.tags attribute when tags is empty or undefined', async () => {
       const { SpanConverter } = await import('@mastra/otel-exporter');
-      const converter = new SpanConverter();
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
 
       const rootSpanNoTags = {
         id: 'root-no-tags',
@@ -222,7 +231,7 @@ describe('OtelBridge', () => {
         tags: [],
       } as any;
 
-      const readableSpan = converter.convertSpan(rootSpanNoTags);
+      const readableSpan = await converter.convertSpan(rootSpanNoTags);
 
       // Tags should NOT be present when array is empty
       expect(readableSpan.attributes['mastra.tags']).toBeUndefined();

@@ -1,6 +1,7 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  createStorageErrorId,
   StoreOperations,
   TABLE_MESSAGES,
   TABLE_SCORERS,
@@ -56,7 +57,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -65,8 +66,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
         },
         error,
       );
-
-      throw error;
     }
   }
 
@@ -79,7 +78,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_DROP_TABLE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'DROP_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -88,8 +87,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
         },
         error,
       );
-
-      throw error;
     }
   }
 
@@ -436,7 +433,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_INSERT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -462,7 +459,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LOAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -493,7 +490,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error in batch insert for table ${input.tableName}`,
@@ -584,7 +581,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -593,8 +590,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
         },
         error,
       );
-
-      throw error;
     }
   }
 
@@ -622,7 +617,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_NAMESPACE_KEYS_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_NAMESPACE_KEYS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -631,8 +626,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
         },
         error,
       );
-
-      throw error;
     }
   }
 

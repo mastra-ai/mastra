@@ -6,6 +6,7 @@ export const PROVIDERS_WITH_INSTALLED_PACKAGES = [
   'mistral',
   'openai',
   'openrouter',
+  'perplexity',
   'xai',
 ];
 
