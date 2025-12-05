@@ -150,7 +150,6 @@ describe('processInputStep', () => {
       messageList0.add([createMessage('Hello')], 'input');
 
       await runner.runProcessInputStep({
-        messages: messageList0.get.all.db(),
         messageList: messageList0,
         stepNumber: 0,
       });
@@ -197,7 +196,6 @@ describe('processInputStep', () => {
       );
 
       await runner.runProcessInputStep({
-        messages: messageList1.get.all.db(),
         messageList: messageList1,
         stepNumber: 1,
       });
@@ -275,7 +273,6 @@ describe('processInputStep', () => {
       );
 
       await runner.runProcessInputStep({
-        messages: messageList.get.all.db(),
         messageList,
         stepNumber: 1,
       });
@@ -320,7 +317,6 @@ describe('processInputStep', () => {
       messageList.add([createMessage('Hello')], 'input');
 
       await runner.runProcessInputStep({
-        messages: messageList.get.all.db(),
         messageList,
         stepNumber: 0,
       });
@@ -360,7 +356,6 @@ describe('processInputStep', () => {
 
       // runProcessInputStep is called at step 0
       await runner.runProcessInputStep({
-        messages: messageList.get.all.db(),
         messageList,
         stepNumber: 0,
       });
@@ -399,7 +394,6 @@ describe('processInputStep', () => {
 
       // runProcessInputStep is called at step 1
       await runner.runProcessInputStep({
-        messages: messageList.get.all.db(),
         messageList,
         stepNumber: 1,
       });
@@ -439,7 +433,6 @@ describe('processInputStep', () => {
       await runner.runInputProcessors(messageList);
 
       await runner.runProcessInputStep({
-        messages: messageList.get.all.db(),
         messageList,
         stepNumber: 0,
       });
