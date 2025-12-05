@@ -25,30 +25,48 @@ export interface BraintrustUsageMetrics {
 
 export function normalizeUsageMetrics(modelAttr: ModelGenerationAttributes): BraintrustUsageMetrics {
   const metrics: BraintrustUsageMetrics = {};
+  const usage = modelAttr.usage;
 
-  if (modelAttr.usage?.inputTokens !== undefined) {
-    metrics.prompt_tokens = modelAttr.usage?.inputTokens;
-  } else if (modelAttr.usage?.promptTokens !== undefined) {
-    metrics.prompt_tokens = modelAttr.usage?.promptTokens;
-  }
-
-  if (modelAttr.usage?.outputTokens !== undefined) {
-    metrics.completion_tokens = modelAttr.usage?.outputTokens;
-  } else if (modelAttr.usage?.completionTokens !== undefined) {
-    metrics.completion_tokens = modelAttr.usage?.completionTokens;
+  // Input tokens (prompt_tokens)
+  if (usage?.inputTokens !== undefined) {
+    metrics.prompt_tokens = usage.inputTokens;
+  } else if (usage?.promptTokens !== undefined) {
+    metrics.prompt_tokens = usage.promptTokens;
   }
 
-  if (modelAttr.usage?.totalTokens !== undefined) {
-    metrics.tokens = modelAttr.usage?.totalTokens;
+  // Output tokens (completion_tokens)
+  if (usage?.outputTokens !== undefined) {
+    metrics.completion_tokens = usage.outputTokens;
+  } else if (usage?.completionTokens !== undefined) {
+    metrics.completion_tokens = usage.completionTokens;
   }
-  if (modelAttr.usage?.reasoningTokens !== undefined) {
-    metrics.completion_reasoning_tokens = modelAttr.usage?.reasoningTokens;
+
+  // Total tokens
+  if (usage?.totalTokens !== undefined) {
+    metrics.tokens = usage.totalTokens;
   }
-  if (modelAttr.usage?.promptCacheHitTokens !== undefined) {
-    metrics.prompt_cached_tokens = modelAttr.usage?.promptCacheHitTokens;
+
+  // Reasoning tokens - prefer new inputDetails/outputDetails, fallback to legacy
+  if (usage?.outputDetails?.reasoning !== undefined) {
+    metrics.completion_reasoning_tokens = usage.outputDetails.reasoning;
+  } else if (usage?.reasoningTokens !== undefined) {
+    metrics.completion_reasoning_tokens = usage.reasoningTokens;
   }
-  if (modelAttr.usage?.promptCacheMissTokens !== undefined) {
-    metrics.prompt_cache_creation_tokens = modelAttr.usage?.promptCacheMissTokens;
+
+  // Cache read tokens (prompt_cached_tokens) - prefer new inputDetails, fallback to legacy
+  if (usage?.inputDetails?.cacheRead !== undefined) {
+    metrics.prompt_cached_tokens = usage.inputDetails.cacheRead;
+  } else if (usage?.cachedInputTokens !== undefined) {
+    metrics.prompt_cached_tokens = usage.cachedInputTokens;
+  } else if (usage?.promptCacheHitTokens !== undefined) {
+    metrics.prompt_cached_tokens = usage.promptCacheHitTokens;
+  }
+
+  // Cache write tokens (prompt_cache_creation_tokens) - prefer new inputDetails, fallback to legacy
+  if (usage?.inputDetails?.cacheWrite !== undefined) {
+    metrics.prompt_cache_creation_tokens = usage.inputDetails.cacheWrite;
+  } else if (usage?.promptCacheMissTokens !== undefined) {
+    metrics.prompt_cache_creation_tokens = usage.promptCacheMissTokens;
   }
 
   // Time to first token (TTFT) for streaming responses

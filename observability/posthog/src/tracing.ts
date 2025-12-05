@@ -1,8 +1,61 @@
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, UsageStats } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { BaseExporter } from '@mastra/observability';
 import { PostHog } from 'posthog-node';
+
+/**
+ * PostHog usage properties interface
+ */
+export interface PostHogUsageProperties {
+  $ai_input_tokens?: number;
+  $ai_output_tokens?: number;
+  $ai_total_tokens?: number;
+  reasoning_tokens?: number;
+  cached_input_tokens?: number;
+  cache_write_tokens?: number;
+  audio_input_tokens?: number;
+  audio_output_tokens?: number;
+}
+
+/**
+ * Extracts and normalizes token usage from UsageStats to PostHog property format.
+ * Handles both new inputDetails/outputDetails and legacy fields.
+ *
+ * @param usage - The UsageStats from span attributes
+ * @returns PostHog-formatted usage properties
+ */
+export function extractUsageProperties(usage: UsageStats | undefined): PostHogUsageProperties {
+  if (!usage) return {};
+
+  const props: PostHogUsageProperties = {};
+
+  const inputTokens = usage.inputTokens ?? usage.promptTokens;
+  const outputTokens = usage.outputTokens ?? usage.completionTokens;
+  const totalTokens = usage.totalTokens;
+
+  if (inputTokens !== undefined) props.$ai_input_tokens = inputTokens;
+  if (outputTokens !== undefined) props.$ai_output_tokens = outputTokens;
+  if (totalTokens !== undefined) props.$ai_total_tokens = totalTokens;
+
+  // Reasoning tokens - prefer new outputDetails, fallback to legacy
+  const reasoningTokens = usage.outputDetails?.reasoning ?? usage.reasoningTokens;
+  if (reasoningTokens !== undefined) props.reasoning_tokens = reasoningTokens;
+
+  // Cache read tokens - prefer new inputDetails, fallback to legacy
+  const cacheRead = usage.inputDetails?.cacheRead ?? usage.cachedInputTokens ?? usage.promptCacheHitTokens;
+  if (cacheRead !== undefined) props.cached_input_tokens = cacheRead;
+
+  // Cache write tokens - prefer new inputDetails, fallback to legacy
+  const cacheWrite = usage.inputDetails?.cacheWrite ?? usage.promptCacheMissTokens;
+  if (cacheWrite !== undefined) props.cache_write_tokens = cacheWrite;
+
+  // Audio tokens from inputDetails/outputDetails
+  if (usage.inputDetails?.audio !== undefined) props.audio_input_tokens = usage.inputDetails.audio;
+  if (usage.outputDetails?.audio !== undefined) props.audio_output_tokens = usage.outputDetails.audio;
+
+  return props;
+}
 
 interface PostHogMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -329,19 +382,8 @@ export class PosthogExporter extends BaseExporter {
     if (span.input) props.$ai_input = this.formatMessages(span.input, 'user');
     if (span.output) props.$ai_output_choices = this.formatMessages(span.output, 'assistant');
 
-    if (attrs.usage) {
-      const { usage } = attrs;
-      const inputTokens = usage.inputTokens ?? usage.promptTokens;
-      const outputTokens = usage.outputTokens ?? usage.completionTokens;
-      const totalTokens = usage.totalTokens;
-
-      if (inputTokens !== undefined) props.$ai_input_tokens = inputTokens;
-      if (outputTokens !== undefined) props.$ai_output_tokens = outputTokens;
-      if (totalTokens !== undefined) props.$ai_total_tokens = totalTokens;
-
-      if (usage.reasoningTokens !== undefined) props.reasoning_tokens = usage.reasoningTokens;
-      if (usage.cachedInputTokens !== undefined) props.cached_input_tokens = usage.cachedInputTokens;
-    }
+    // Extract usage properties using the shared utility
+    Object.assign(props, extractUsageProperties(attrs.usage));
 
     if (attrs.parameters) {
       if (attrs.parameters.temperature !== undefined) props.$ai_temperature = attrs.parameters.temperature;

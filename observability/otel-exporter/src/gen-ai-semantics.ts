@@ -174,23 +174,68 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
       attributes[ATTR_GEN_AI_PROVIDER_NAME] = normalizeProvider(modelAttrs.provider);
     }
 
-    // Token usage - use OTEL standard naming
+    // Token usage - use OTEL standard naming + OpenInference conventions
     if (modelAttrs.usage) {
-      const inputTokens = modelAttrs.usage.inputTokens ?? modelAttrs.usage.promptTokens;
-      const outputTokens = modelAttrs.usage.outputTokens ?? modelAttrs.usage.completionTokens;
+      const usage = modelAttrs.usage;
+      const inputTokens = usage.inputTokens ?? usage.promptTokens;
+      const outputTokens = usage.outputTokens ?? usage.completionTokens;
 
       if (inputTokens !== undefined) {
         attributes[ATTR_GEN_AI_USAGE_INPUT_TOKENS] = inputTokens;
+        // OpenInference: llm.token_count.prompt
+        attributes['llm.token_count.prompt'] = inputTokens;
       }
       if (outputTokens !== undefined) {
         attributes[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS] = outputTokens;
+        // OpenInference: llm.token_count.completion
+        attributes['llm.token_count.completion'] = outputTokens;
       }
-      // Add other token metrics if present
-      if (modelAttrs.usage.reasoningTokens !== undefined) {
-        attributes['gen_ai.usage.reasoning_tokens'] = modelAttrs.usage.reasoningTokens;
+
+      // Reasoning tokens - prefer new outputDetails, fallback to legacy
+      const reasoningTokens = usage.outputDetails?.reasoning ?? usage.reasoningTokens;
+      if (reasoningTokens !== undefined) {
+        attributes['gen_ai.usage.reasoning_tokens'] = reasoningTokens;
+        // OpenInference: llm.token_count.completion_details.reasoning
+        attributes['llm.token_count.completion_details.reasoning'] = reasoningTokens;
       }
-      if (modelAttrs.usage.cachedInputTokens !== undefined) {
-        attributes['gen_ai.usage.cached_input_tokens'] = modelAttrs.usage.cachedInputTokens;
+
+      // Cache read tokens - prefer new inputDetails, fallback to legacy
+      const cacheRead = usage.inputDetails?.cacheRead ?? usage.cachedInputTokens ?? usage.promptCacheHitTokens;
+      if (cacheRead !== undefined) {
+        attributes['gen_ai.usage.cached_input_tokens'] = cacheRead;
+        // OpenInference: llm.token_count.prompt_details.cache_read
+        attributes['llm.token_count.prompt_details.cache_read'] = cacheRead;
+      }
+
+      // Cache write tokens - prefer new inputDetails, fallback to legacy
+      const cacheWrite = usage.inputDetails?.cacheWrite ?? usage.promptCacheMissTokens;
+      if (cacheWrite !== undefined) {
+        // OpenInference: llm.token_count.prompt_details.cache_write
+        attributes['llm.token_count.prompt_details.cache_write'] = cacheWrite;
+      }
+
+      // Audio tokens from inputDetails/outputDetails
+      if (usage.inputDetails?.audio !== undefined) {
+        attributes['llm.token_count.prompt_details.audio'] = usage.inputDetails.audio;
+      }
+      if (usage.outputDetails?.audio !== undefined) {
+        attributes['llm.token_count.completion_details.audio'] = usage.outputDetails.audio;
+      }
+
+      // Image tokens from inputDetails/outputDetails
+      if (usage.inputDetails?.image !== undefined) {
+        attributes['llm.token_count.prompt_details.image'] = usage.inputDetails.image;
+      }
+      if (usage.outputDetails?.image !== undefined) {
+        attributes['llm.token_count.completion_details.image'] = usage.outputDetails.image;
+      }
+
+      // Text tokens from inputDetails/outputDetails
+      if (usage.inputDetails?.text !== undefined) {
+        attributes['llm.token_count.prompt_details.text'] = usage.inputDetails.text;
+      }
+      if (usage.outputDetails?.text !== undefined) {
+        attributes['llm.token_count.completion_details.text'] = usage.outputDetails.text;
       }
     }
 

@@ -64,7 +64,7 @@ type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerat
  * { input: 120, output: 60, total: 180, reasoning: 1000, cachedInput: 50 }
  * ```
  */
-interface NormalizedUsage {
+export interface NormalizedUsage {
   /**
    * Input tokens sent to the model
    * @source AI SDK v5: `inputTokens` | AI SDK v4: `promptTokens`
@@ -85,33 +85,100 @@ interface NormalizedUsage {
 
   /**
    * Reasoning tokens used by reasoning models
-   * @source AI SDK v5: `reasoningTokens`
-   * @since AI SDK v5.0.0
-   * @example Models like o1-preview, o1-mini
+   * @source inputDetails.reasoning or outputDetails.reasoning
+   * @example Models like o1-preview, o1-mini, Claude thinking
    */
   reasoning?: number;
 
   /**
-   * Cached input tokens (prompt cache hit)
-   * @source AI SDK v5: `cachedInputTokens`
-   * @since AI SDK v5.0.0
+   * Cached input tokens (cache read/hit)
+   * @source inputDetails.cacheRead or cachedInputTokens
    * @example Anthropic's prompt caching, OpenAI prompt caching
    */
   cachedInput?: number;
 
   /**
+   * Cache write tokens (cache creation - Anthropic only)
+   * @source inputDetails.cacheWrite or promptCacheMissTokens
+   * @example Anthropic's cache_creation_input_tokens
+   */
+  cacheWrite?: number;
+
+  /**
    * Prompt cache hit tokens (legacy format)
    * @source AI SDK v4: `promptCacheHitTokens`
-   * @deprecated Prefer `cachedInput` from v5 format
+   * @deprecated Prefer `cachedInput` from inputDetails.cacheRead
    */
   promptCacheHit?: number;
 
   /**
    * Prompt cache miss tokens (legacy format)
    * @source AI SDK v4: `promptCacheMissTokens`
-   * @deprecated Prefer v5 format which uses `cachedInputTokens`
+   * @deprecated Prefer `cacheWrite` from inputDetails.cacheWrite
    */
   promptCacheMiss?: number;
+}
+
+/**
+ * Normalize usage data to handle both AI SDK v4 and v5 formats.
+ *
+ * AI SDK v4 uses: promptTokens, completionTokens
+ * AI SDK v5 uses: inputTokens, outputTokens
+ *
+ * This function normalizes to a unified format that Langfuse can consume,
+ * prioritizing v5 format while maintaining backward compatibility.
+ *
+ * @param usage - Token usage data from AI SDK (v4 or v5 format)
+ * @returns Normalized usage object, or undefined if no usage data available
+ */
+export function normalizeUsage(usage: ModelGenerationAttributes['usage']): NormalizedUsage | undefined {
+  if (!usage) return undefined;
+
+  const normalized: NormalizedUsage = {};
+
+  // Handle input tokens (v5 'inputTokens' or v4 'promptTokens')
+  const inputTokens = usage.inputTokens ?? usage.promptTokens;
+  if (inputTokens !== undefined) {
+    normalized.input = inputTokens;
+  }
+
+  // Handle output tokens (v5 'outputTokens' or v4 'completionTokens')
+  const outputTokens = usage.outputTokens ?? usage.completionTokens;
+  if (outputTokens !== undefined) {
+    normalized.output = outputTokens;
+  }
+
+  // Total tokens - calculate if not provided
+  if (usage.totalTokens !== undefined) {
+    normalized.total = usage.totalTokens;
+  } else if (normalized.input !== undefined && normalized.output !== undefined) {
+    normalized.total = normalized.input + normalized.output;
+  }
+
+  // Reasoning tokens - prefer new outputDetails, fallback to legacy
+  if (usage.outputDetails?.reasoning !== undefined) {
+    normalized.reasoning = usage.outputDetails.reasoning;
+  } else if (usage.reasoningTokens !== undefined) {
+    normalized.reasoning = usage.reasoningTokens;
+  }
+
+  // Cache read tokens - prefer new inputDetails, fallback to legacy
+  if (usage.inputDetails?.cacheRead !== undefined) {
+    normalized.cachedInput = usage.inputDetails.cacheRead;
+  } else if (usage.cachedInputTokens !== undefined) {
+    normalized.cachedInput = usage.cachedInputTokens;
+  } else if (usage.promptCacheHitTokens !== undefined) {
+    normalized.promptCacheHit = usage.promptCacheHitTokens;
+  }
+
+  // Cache write tokens - prefer new inputDetails, fallback to legacy
+  if (usage.inputDetails?.cacheWrite !== undefined) {
+    normalized.cacheWrite = usage.inputDetails.cacheWrite;
+  } else if (usage.promptCacheMissTokens !== undefined) {
+    normalized.promptCacheMiss = usage.promptCacheMissTokens;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 export class LangfuseExporter extends BaseExporter {
@@ -395,64 +462,6 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   /**
-   * Normalize usage data to handle both AI SDK v4 and v5 formats.
-   *
-   * AI SDK v4 uses: promptTokens, completionTokens
-   * AI SDK v5 uses: inputTokens, outputTokens
-   *
-   * This function normalizes to a unified format that Langfuse can consume,
-   * prioritizing v5 format while maintaining backward compatibility.
-   *
-   * @param usage - Token usage data from AI SDK (v4 or v5 format)
-   * @returns Normalized usage object, or undefined if no usage data available
-   */
-  private normalizeUsage(usage: ModelGenerationAttributes['usage']): NormalizedUsage | undefined {
-    if (!usage) return undefined;
-
-    const normalized: NormalizedUsage = {};
-
-    // Handle input tokens (v5 'inputTokens' or v4 'promptTokens')
-    // Using ?? to prioritize v5 format while falling back to v4
-    const inputTokens = usage.inputTokens ?? usage.promptTokens;
-    if (inputTokens !== undefined) {
-      normalized.input = inputTokens;
-    }
-
-    // Handle output tokens (v5 'outputTokens' or v4 'completionTokens')
-    const outputTokens = usage.outputTokens ?? usage.completionTokens;
-    if (outputTokens !== undefined) {
-      normalized.output = outputTokens;
-    }
-
-    // Total tokens - calculate if not provided
-    if (usage.totalTokens !== undefined) {
-      normalized.total = usage.totalTokens;
-    } else if (normalized.input !== undefined && normalized.output !== undefined) {
-      normalized.total = normalized.input + normalized.output;
-    }
-
-    // AI SDK v5-specific: reasoning tokens
-    if (usage.reasoningTokens !== undefined) {
-      normalized.reasoning = usage.reasoningTokens;
-    }
-
-    // AI SDK v5-specific: cached tokens (cache hit)
-    if (usage.cachedInputTokens !== undefined) {
-      normalized.cachedInput = usage.cachedInputTokens;
-    }
-
-    // Legacy cache metrics (promptCacheHitTokens/promptCacheMissTokens)
-    if (usage.promptCacheHitTokens !== undefined) {
-      normalized.promptCacheHit = usage.promptCacheHitTokens;
-    }
-    if (usage.promptCacheMissTokens !== undefined) {
-      normalized.promptCacheMiss = usage.promptCacheMissTokens;
-    }
-
-    return Object.keys(normalized).length > 0 ? normalized : undefined;
-  }
-
-  /**
    * Look up the Langfuse prompt from the closest parent span that has one.
    * This enables prompt inheritance for MODEL_GENERATION spans when the prompt
    * is set on a parent span (e.g., AGENT_RUN) rather than directly on the generation.
@@ -517,7 +526,7 @@ export class LangfuseExporter extends BaseExporter {
 
       if (modelAttr.usage !== undefined) {
         // Normalize usage to handle both v4 and v5 formats
-        const normalizedUsage = this.normalizeUsage(modelAttr.usage);
+        const normalizedUsage = normalizeUsage(modelAttr.usage);
         if (normalizedUsage) {
           payload.usage = normalizedUsage;
         }

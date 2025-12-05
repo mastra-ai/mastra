@@ -78,19 +78,66 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
 }
 
+/**
+ * Detailed breakdown of input token usage by type.
+ * Based on OpenInference semantic conventions.
+ */
+export interface InputTokenDetails {
+  /** Regular text tokens (non-cached, non-audio, non-image) */
+  text?: number;
+  /** Tokens served from cache (cache hit/read) */
+  cacheRead?: number;
+  /** Tokens written to cache (cache creation - Anthropic only) */
+  cacheWrite?: number;
+  /** Audio input tokens */
+  audio?: number;
+  /** Image input tokens (includes PDF pages) */
+  image?: number;
+}
+
+/**
+ * Detailed breakdown of output token usage by type.
+ * Based on OpenInference semantic conventions.
+ */
+export interface OutputTokenDetails {
+  /** Regular text output tokens */
+  text?: number;
+  /** Reasoning/thinking tokens (o1, Claude thinking, Gemini thoughts) */
+  reasoning?: number;
+  /** Audio output tokens */
+  audio?: number;
+  /** Image output tokens (DALL-E, etc.) */
+  image?: number;
+}
+
 /** Token usage statistics - supports both v5 and legacy formats */
 export interface UsageStats {
-  // VNext paths
+  // ===== Totals =====
+  /** Total input tokens (sum of all input details) */
   inputTokens?: number;
+  /** Total output tokens (sum of all output details) */
   outputTokens?: number;
-  // Legacy format (for backward compatibility)
+
+  // ===== Token Details =====
+  /** Detailed breakdown of input token usage */
+  inputDetails?: InputTokenDetails;
+  /** Detailed breakdown of output token usage */
+  outputDetails?: OutputTokenDetails;
+
+  // ===== Legacy format (for backward compatibility) =====
+  /** @deprecated Use inputTokens instead */
   promptTokens?: number;
+  /** @deprecated Use outputTokens instead */
   completionTokens?: number;
-  // Common fields
+  /** @deprecated Compute from inputTokens + outputTokens */
   totalTokens?: number;
+  /** @deprecated Use outputDetails.reasoning instead */
   reasoningTokens?: number;
+  /** @deprecated Use inputDetails.cacheRead instead */
   cachedInputTokens?: number;
+  /** @deprecated Use inputDetails.cacheRead instead */
   promptCacheHitTokens?: number;
+  /** @deprecated Use inputDetails.cacheWrite instead */
   promptCacheMissTokens?: number;
 }
 
