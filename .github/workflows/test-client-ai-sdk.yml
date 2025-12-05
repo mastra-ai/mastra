@@ -23,7 +23,7 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Build core dependencies
-        run: pnpm turbo build --filter "@mastra/core"
+        run: pnpm turbo build --filter "@mastra/core" --filter "@mastra/libsql"
 
       - name: Run Client AI SDK tests
         run: pnpm --filter "@mastra/ai-sdk" test

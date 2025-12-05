@@ -47,7 +47,19 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Build your UI",
+      label: "Agent Frameworks",
+      collapsed: false,
+      items: [
+        {
+          type: "doc",
+          id: "agent-frameworks/ai-sdk",
+          label: "AI SDK",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Agentic UIs",
       collapsed: false,
       items: [
         {
