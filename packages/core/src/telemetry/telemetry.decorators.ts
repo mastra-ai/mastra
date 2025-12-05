@@ -3,6 +3,20 @@ import type { Span } from '@opentelemetry/api';
 
 import { hasActiveTelemetry, getBaggageValues } from './utility';
 
+function safeStringify(obj: unknown): string {
+  const seen = new WeakSet();
+  return JSON.stringify(obj, (_key, value) => {
+    if (typeof value === 'function') return '[Function]';
+    if (typeof value === 'bigint') return `${value}n`;
+    if (value instanceof Error) return { message: value.message, stack: value.stack };
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) return '[Circular]';
+      seen.add(value);
+    }
+    return value;
+  });
+}
+
 // Type interfaces for better type safety
 interface StreamFinishData {
   text?: string;
@@ -71,7 +85,7 @@ function enhanceStreamingArgumentsWithTelemetry(
           ...(finishData.object !== undefined && { object: finishData.object }),
         };
 
-        span.setAttribute(`${spanName}.result`, JSON.stringify(telemetryData));
+        span.setAttribute(`${spanName}.result`, safeStringify(telemetryData));
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
       } catch (error) {
@@ -139,7 +153,7 @@ export function withSpan(options: {
       // Record input arguments as span attributes
       args.forEach((arg, index) => {
         try {
-          span.setAttribute(`${spanName}.argument.${index}`, JSON.stringify(arg));
+          span.setAttribute(`${spanName}.argument.${index}`, safeStringify(arg));
         } catch {
           span.setAttribute(`${spanName}.argument.${index}`, '[Not Serializable]');
         }
@@ -203,7 +217,7 @@ export function withSpan(options: {
                 return resolvedValue;
               } else {
                 try {
-                  span.setAttribute(`${spanName}.result`, JSON.stringify(resolvedValue));
+                  span.setAttribute(`${spanName}.result`, safeStringify(resolvedValue));
                 } catch {
                   span.setAttribute(`${spanName}.result`, '[Not Serializable]');
                 }
@@ -220,7 +234,7 @@ export function withSpan(options: {
         // Record result for non-promise returns
         if (!isStreamingResult(result, methodName)) {
           try {
-            span.setAttribute(`${spanName}.result`, JSON.stringify(result));
+            span.setAttribute(`${spanName}.result`, safeStringify(result));
           } catch {
             span.setAttribute(`${spanName}.result`, '[Not Serializable]');
           }
