@@ -1,5 +1,43 @@
 # @mastra/otel-exporter
 
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- Updated OtelExporters, Bridge, and Arize packages to better implement GenAI v1.38.0 Otel Semantic Conventions. See: ([#10591](https://github.com/mastra-ai/mastra/pull/10591))
+  https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/README.md
+
+- feat(observability): Add tags support to OtelExporter, OtelBridge, and ArizeExporter ([#10843](https://github.com/mastra-ai/mastra/pull/10843))
+
+  This change adds support for the `tracingOptions.tags` feature to the OpenTelemetry-based exporters and bridge. Tags are now included as span attributes when present on root spans, following the same pattern as Braintrust and Langfuse exporters.
+
+  **Changes:**
+  - **OtelExporter**: Tags are now included as `mastra.tags` span attribute for root spans
+  - **OtelBridge**: Tags flow through the SpanConverter and are included in native OTEL spans as `mastra.tags`
+  - **ArizeExporter**: Tags are mapped to the native OpenInference `tag.tags` semantic convention
+
+  **Implementation Details:**
+  - Tags are only included on root spans (by design)
+  - Tags are stored as JSON-stringified arrays for maximum backend compatibility (many OTEL backends have limited native array support)
+  - Empty or undefined tag arrays are not included in span attributes
+
+  **Usage:**
+
+  ```typescript
+  const result = await agent.generate({
+    messages: [{ role: 'user', content: 'Hello' }],
+    tracingOptions: {
+      tags: ['production', 'experiment-v2'],
+    },
+  });
+  ```
+
+  Fixes #10771
+
+- Updated dependencies [[`6c59a40`](https://github.com/mastra-ai/mastra/commit/6c59a40e0ad160467bd13d63a8a287028d75b02d), [`3076c67`](https://github.com/mastra-ai/mastra/commit/3076c6778b18988ae7d5c4c5c466366974b2d63f), [`85d7ee1`](https://github.com/mastra-ai/mastra/commit/85d7ee18ff4e14d625a8a30ec6656bb49804989b), [`c6c1092`](https://github.com/mastra-ai/mastra/commit/c6c1092f8fbf76109303f69e000e96fd1960c4ce), [`81dc110`](https://github.com/mastra-ai/mastra/commit/81dc11008d147cf5bdc8996ead1aa61dbdebb6fc), [`7aedb74`](https://github.com/mastra-ai/mastra/commit/7aedb74883adf66af38e270e4068fd42e7a37036), [`8f02d80`](https://github.com/mastra-ai/mastra/commit/8f02d800777397e4b45d7f1ad041988a8b0c6630), [`d7aad50`](https://github.com/mastra-ai/mastra/commit/d7aad501ce61646b76b4b511e558ac4eea9884d0), [`ce0a73a`](https://github.com/mastra-ai/mastra/commit/ce0a73abeaa75b10ca38f9e40a255a645d50ebfb), [`a02e542`](https://github.com/mastra-ai/mastra/commit/a02e542d23179bad250b044b17ff023caa61739f), [`a372c64`](https://github.com/mastra-ai/mastra/commit/a372c640ad1fd12e8f0613cebdc682fc156b4d95), [`8846867`](https://github.com/mastra-ai/mastra/commit/8846867ffa9a3746767618e314bebac08eb77d87), [`0bada2f`](https://github.com/mastra-ai/mastra/commit/0bada2f2c1234932cf30c1c47a719ffb64b801c5), [`42a42cf`](https://github.com/mastra-ai/mastra/commit/42a42cf3132b9786feecbb8c13c583dce5b0e198), [`cc60ff6`](https://github.com/mastra-ai/mastra/commit/cc60ff616541a3b0fb531a7e469bf9ae7bb90528), [`ae08bf0`](https://github.com/mastra-ai/mastra/commit/ae08bf0ebc6a4e4da992b711c4a389c32ba84cf4), [`21735a7`](https://github.com/mastra-ai/mastra/commit/21735a7ef306963554a69a89b44f06c3bcd85141), [`1d877b8`](https://github.com/mastra-ai/mastra/commit/1d877b8d7b536a251c1a7a18db7ddcf4f68d6f8b)]:
+  - @mastra/observability@1.0.0-beta.3
+  - @mastra/core@1.0.0-beta.7
+
 ## 1.0.0-beta.2
 
 ### Minor Changes

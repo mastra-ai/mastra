@@ -346,16 +346,42 @@ export class BraintrustExporter extends BaseExporter {
     });
   }
 
+  /**
+   * Transforms MODEL_GENERATION input to Braintrust Thread view format.
+   */
+  private transformInput(input: any, spanType: SpanType): any {
+    if (spanType === SpanType.MODEL_GENERATION) {
+      if (input && Array.isArray(input.messages)) {
+        return input.messages;
+      } else if (input && typeof input === 'object' && 'content' in input) {
+        return [{ role: input.role, content: input.content }];
+      }
+    }
+
+    return input;
+  }
+
+  /**
+   * Transforms MODEL_GENERATION output to Braintrust Thread view format.
+   */
+  private transformOutput(output: any, spanType: SpanType): any {
+    if (spanType === SpanType.MODEL_GENERATION) {
+      const { text, ...rest } = output;
+      return { role: 'assistant', content: text, ...rest };
+    }
+
+    return output;
+  }
+
   private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
     const payload: Record<string, any> = {};
 
-    // Core span data
     if (span.input !== undefined) {
-      payload.input = span.input;
+      payload.input = this.transformInput(span.input, span.type);
     }
 
     if (span.output !== undefined) {
-      payload.output = span.output;
+      payload.output = this.transformOutput(span.output, span.type);
     }
 
     // Initialize metrics and metadata objects
