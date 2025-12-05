@@ -491,11 +491,11 @@ export class PrepareCommand {
       observationalMemory = new ObservationalMemory({
         storage: omStorage,
         observer: {
-          model: 'openai/gpt-4o-mini', // Use OpenAI to avoid Gemini rate limits
+          model: 'openai/gpt-4o-mini',
           historyThreshold: observationalMemoryConfig.historyThreshold,
         },
         reflector: {
-          model: 'openai/gpt-4o-mini', // Use OpenAI to avoid Gemini rate limits
+          model: 'openai/gpt-4o-mini',
           observationThreshold: observationalMemoryConfig.observationThreshold,
         },
         resourceScope: observationalMemoryConfig.resourceScope,
