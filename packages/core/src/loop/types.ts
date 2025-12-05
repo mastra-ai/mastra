@@ -50,7 +50,7 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
 
 export type PrepareStepFunction = <TOOLS extends ToolSet>(
   args: ProcessInputStepArgs<TOOLS>,
-) => Promise<ProcessInputStepResult<TOOLS> | undefined> | ProcessInputStepResult<TOOLS> | undefined;
+) => Promise<ProcessInputStepResult<TOOLS> | undefined | void> | ProcessInputStepResult<TOOLS> | undefined | void;
 
 export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
