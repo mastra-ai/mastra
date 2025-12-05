@@ -526,8 +526,8 @@ export class ProcessorRunner {
   ): Promise<RunProcessInputStepResult<TOOLS>> {
     const {
       providerOptions,
-      modelSettings,
-      structuredOutput,
+      // modelSettings,
+      // structuredOutput,
       messageList,
       stepNumber,
       model,
@@ -539,7 +539,7 @@ export class ProcessorRunner {
       requestContext,
     } = args;
 
-    let stepInputResult: RunProcessInputStepResult<TOOLS> = {};
+    const stepInputResult: RunProcessInputStepResult<TOOLS> = {};
 
     // Run through all input processors that have processInputStep
     for (const [index, processor] of this.inputProcessors.entries()) {
@@ -591,9 +591,9 @@ export class ProcessorRunner {
             model,
             activeTools,
 
-            providerOptions, // TODO
-            modelSettings, // TODO
-            structuredOutput, // TODO -- also need to somehow make the result.object and objectStream types work?
+            providerOptions,
+            // modelSettings, // TODO
+            // structuredOutput, // TODO -- also need to somehow make the result.object and objectStream types work?
           }),
           { messageList, processor, stepNumber },
         );
@@ -612,6 +612,9 @@ export class ProcessorRunner {
         }
         if (result.systemMessages) {
           messageList.replaceAllSystemMessages(result.systemMessages);
+        }
+        if (result.providerOptions) {
+          stepInputResult.providerOptions = result.providerOptions;
         }
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();

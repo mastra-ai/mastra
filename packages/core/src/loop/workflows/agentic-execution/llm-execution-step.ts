@@ -496,13 +496,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         let stepModel = model;
         let stepToolChoice = toolChoice;
         let stepTools = tools;
+        let stepProviderOptions = providerOptions;
 
         const messageListPromptArgs = {
           downloadRetries,
           downloadConcurrency,
           supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
         };
-        let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
         const inputStepProcessors = [
           ...(inputProcessors || []),
@@ -541,9 +541,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                 Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
               ) as typeof tools;
             }
-
-            // Re-fetch messages after processors have modified them
-            inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+            if (processInputStepResult.providerOptions) {
+              stepProviderOptions = processInputStepResult.providerOptions;
+            }
           } catch (error) {
             console.error('Error in processInputStep processors:', error);
             throw error;
@@ -555,6 +555,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           model: stepModel,
         });
 
+        const inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+
         switch (stepModel.specificationVersion) {
           case 'v2': {
             modelResult = executeWithContextSync({
@@ -563,7 +565,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                 execute({
                   runId,
                   model: stepModel,
-                  providerOptions,
+                  providerOptions: stepProviderOptions,
                   inputMessages,
                   tools: stepTools,
                   toolChoice: stepToolChoice,

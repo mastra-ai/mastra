@@ -6640,6 +6640,62 @@ describe('Agent Tests', () => {
       expect(systemMessagesSeenAtEachStep[1]).not.toContain('Modified system message from step 0');
       expect(systemMessagesSeenAtEachStep[1]).toContain('Original agent instructions');
     });
+
+    it('providerOptions can be modified via prepareStep', async () => {
+      let capturedProviderOptions: any = null;
+      let capturedPrepareStepProviderOptions: any = null;
+
+      // Create a model that captures the providerOptions it receives
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async ({ providerOptions }) => {
+          capturedProviderOptions = providerOptions;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test instructions',
+        model: mockModel,
+      });
+      agent.__setLogger(noopLogger);
+
+      await agent.generate('Hello', {
+        providerOptions: {
+          somethingElse: {
+            test: 'test',
+          },
+        },
+        prepareStep: async ({ stepNumber, providerOptions }) => {
+          capturedPrepareStepProviderOptions = providerOptions;
+          if (stepNumber === 0) {
+            return {
+              providerOptions: {
+                anthropic: {
+                  cacheControl: { type: 'ephemeral' },
+                },
+              },
+            };
+          }
+        },
+      });
+
+      expect(capturedPrepareStepProviderOptions).toBeDefined();
+      expect(capturedPrepareStepProviderOptions?.somethingElse?.test).toBe('test');
+      // Verify the model received the modified providerOptions
+      expect(capturedProviderOptions).toBeDefined();
+      expect(capturedProviderOptions?.anthropic?.cacheControl?.type).toBe('ephemeral');
+    });
   });
 
   agentTests({ version: 'v1' });
