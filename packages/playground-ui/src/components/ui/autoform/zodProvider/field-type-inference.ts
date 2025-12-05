@@ -45,8 +45,7 @@ export function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig):
   }
   if (schema instanceof z.ZodLiteral) {
     // For literal types, infer the field type based on the literal value
-    const values = schema._zod.def.values;
-    const literalValue = Array.isArray(values) ? values[0] : values;
+    const literalValue = schema._zod.def.value;
     if (typeof literalValue === 'number') return 'number';
     if (typeof literalValue === 'boolean') return 'boolean';
     return 'string';
