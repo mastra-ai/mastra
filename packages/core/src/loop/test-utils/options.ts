@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import type { loop } from '../loop';
 import type { ChunkType } from '../../stream/types';
+import { MessageList } from '../../agent/message-list';
 import {
   createTestModels,
   testUsage,
@@ -1881,6 +1882,157 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
           ]
         `);
+      });
+    });
+
+    describe('prepareStep preserves system messages when returning messages without system override', () => {
+      let doStreamCalls: Array<LanguageModelV2CallOptions>;
+
+      it('should preserve original system message when prepareStep returns messages without system', async () => {
+        const messageList = new MessageList();
+        messageList.addSystem('original-system-message');
+        messageList.add(
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'test-input' }],
+          },
+          'input',
+        );
+
+        doStreamCalls = [];
+
+        const result = await loopFn({
+          methodType: 'stream',
+          runId,
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async options => {
+                  doStreamCalls.push(options);
+                  return {
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: 'response' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                    response: { headers: {} },
+                  };
+                },
+              }),
+            },
+          ],
+          agentId: 'agent-id',
+          messageList,
+          stopWhen: stepCountIs(1),
+          options: {
+            prepareStep: async ({ messages }) => {
+              return {
+                messages: messages.map(m => {
+                  if (m.role === 'user') {
+                    return {
+                      ...m,
+                      content: [{ type: 'text' as const, text: 'modified-input' }],
+                    };
+                  }
+                  return m;
+                }),
+              };
+            },
+          },
+        });
+
+        await result.consumeStream();
+
+        expect(doStreamCalls.length).toBe(1);
+        expect(doStreamCalls[0]!.prompt[0]).toEqual({
+          role: 'system',
+          content: 'original-system-message',
+        });
+        expect(doStreamCalls[0]!.prompt[1]).toEqual({
+          role: 'user',
+          content: [{ type: 'text', text: 'modified-input' }],
+          providerOptions: undefined,
+        });
+      });
+
+      it('should use system from prepareStep when provided', async () => {
+        const messageList = new MessageList();
+        messageList.addSystem('original-system-message');
+        messageList.add(
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'test-input' }],
+          },
+          'input',
+        );
+
+        doStreamCalls = [];
+
+        const result = await loopFn({
+          methodType: 'stream',
+          runId,
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async options => {
+                  doStreamCalls.push(options);
+                  return {
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: 'response' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                    response: { headers: {} },
+                  };
+                },
+              }),
+            },
+          ],
+          agentId: 'agent-id',
+          messageList,
+          stopWhen: stepCountIs(1),
+          options: {
+            prepareStep: async () => {
+              return {
+                system: 'overridden-system-message',
+              };
+            },
+          },
+        });
+
+        await result.consumeStream();
+
+        expect(doStreamCalls.length).toBe(1);
+        expect(doStreamCalls[0]!.prompt[0]).toEqual({
+          role: 'system',
+          content: 'overridden-system-message',
+        });
       });
     });
 
