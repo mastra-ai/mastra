@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
-import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { createStorageErrorId, ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { createSqlBuilder } from '../../sql-builder';
 import type { SqlParam } from '../../sql-builder';
@@ -111,7 +111,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to persist workflow snapshot: ${error instanceof Error ? error.message : String(error)}`,
@@ -140,7 +140,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_LOAD_WORKFLOW_SNAPSHOT_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to load workflow snapshot: ${error instanceof Error ? error.message : String(error)}`,
@@ -236,7 +236,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_LIST_WORKFLOW_RUNS_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow runs: ${error instanceof Error ? error.message : String(error)}`,
@@ -277,7 +277,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_WORKFLOW_RUN_BY_ID_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow run by ID: ${error instanceof Error ? error.message : String(error)}`,

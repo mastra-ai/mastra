@@ -1,5 +1,6 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { WorkflowInfo, ChunkType, StreamEvent } from '@mastra/core/workflows';
+import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
@@ -86,15 +87,19 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/workflows',
   responseType: 'json',
+  queryParamSchema: z.object({
+    partial: z.string().optional(),
+  }),
   responseSchema: listWorkflowsResponseSchema,
   summary: 'List all workflows',
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
-  handler: async ({ mastra }) => {
+  handler: async ({ mastra, partial }) => {
     try {
       const workflows = mastra.listWorkflows({ serialized: false });
+      const isPartial = partial === 'true';
       const _workflows = Object.entries(workflows).reduce<Record<string, WorkflowInfo>>((acc, [key, workflow]) => {
-        acc[key] = getWorkflowInfo(workflow);
+        acc[key] = getWorkflowInfo(workflow, isPartial);
         return acc;
       }, {});
       return _workflows;

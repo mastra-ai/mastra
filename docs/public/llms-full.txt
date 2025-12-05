@@ -9792,6 +9792,12 @@ Use the `--import` flag to ensure instrumentation loads before your application:
 tsx --import ./instrumentation.ts ./src/index.ts
 ```
 
+## Semantic Conventions
+
+The OtelBridge exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
+
+For details on span naming and attributes, see the [OpenTelemetry Exporter semantic conventions](/docs/v1/observability/tracing/exporters/otel#opentelemetry-semantic-conventions).
+
 ## Trace Hierarchy
 
 With the OtelBridge, your traces maintain proper hierarchy across OTEL and Mastra boundaries:
@@ -9855,7 +9861,6 @@ If traces aren't appearing or connecting as expected:
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [OpenTelemetry Exporter](/docs/v1/observability/tracing/exporters/otel) - For sending traces to OTEL backends
 - [OtelBridge Reference](/reference/v1/observability/tracing/bridges/otel) - API documentation
-- [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 
 
 ---
@@ -10962,33 +10967,26 @@ new OtelExporter({
 
 ## OpenTelemetry Semantic Conventions
 
-The exporter follows [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/), ensuring compatibility with observability platforms:
+The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai), ensuring compatibility with observability platforms:
 
 ### Span Naming
 
-- **LLM Operations**: `chat {model}` or `tool_selection {model}`
-- **Tool Execution**: `tool.execute {tool_name}`
-- **Agent Runs**: `agent.{agent_id}`
-- **Workflow Runs**: `workflow.{workflow_id}`
+- **LLM Operations**: `chat {model}`
+- **Tool Execution**: `execute_tool {tool_name}`
+- **Agent Runs**: `invoke_agent {agent_id}`
+- **Workflow Runs**: `invoke_workflow {workflow_id}`
 
 ### Key Attributes
 
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, etc.)
-- `gen_ai.system` - AI provider (openai, anthropic, etc.)
+- `gen_ai.provider.name` - AI provider (openai, anthropic, etc.)
 - `gen_ai.request.model` - Model identifier
+- `gen_ai.input.messages` - Chat history provided to the model
+- `gen_ai.output.messages` - Messages returned by the model
 - `gen_ai.usage.input_tokens` - Number of input tokens
 - `gen_ai.usage.output_tokens` - Number of output tokens
 - `gen_ai.request.temperature` - Sampling temperature
-- `gen_ai.response.finish_reasons` - Completion reason
-
-## Buffering Strategy
-
-The exporter buffers spans until a trace is complete:
-
-1. Collects all spans for a trace
-2. Waits 5 seconds after root span completes
-3. Exports complete trace with preserved parent-child relationships
-4. Ensures no orphaned spans
+- `gen_ai.response.finish_reasons` - Completion reasons
 
 ## Protocol Selection Guide
 
@@ -11028,7 +11026,6 @@ Install the suggested package for your provider.
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
 2. **Invalid endpoint**: Check endpoint format matches provider requirements
 3. **Authentication failures**: Verify API keys and headers are correct
-4. **No traces appearing**: Check that traces complete (root span must end)
 
 ## Using Tags
 
@@ -11052,8 +11049,8 @@ Tags are exported as a JSON string in the `mastra.tags` span attribute for broad
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
-- [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel) - For bidirectional OTEL context integration
-- [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
+- [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel)
+- [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai)
 - [OTEL Exporter Reference](/reference/v1/observability/tracing/exporters/otel)
 
 
@@ -34530,7 +34527,7 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo="https://models.dev/logos/azure-openai.svg"
     />    <CardGridItem
       title="Netlify"
-      description="42 models"
+      description="43 models"
       href="/models/v1/gateways/netlify"
       logo={<NetlifyLogo />}
     />    <CardGridItem
@@ -34561,7 +34558,7 @@ import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 [EN] Source: https://mastra.ai/en/models/gateways/netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 42 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 43 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
@@ -34638,6 +34635,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1` |
 | `openai/gpt-5.1-2025-11-13` |
 | `openai/gpt-5.1-codex` |
+| `openai/gpt-5.1-codex-max` |
 | `openai/gpt-5.1-codex-mini` |
 | `openai/o3` |
 | `openai/o3-mini` |
@@ -34968,7 +34966,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 59+ AI providers and 1165+ models through Mastra's model router."
+description: "Access 58+ AI providers and 1149+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34981,7 +34979,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1165 models from 59 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1149 models from 58 providers through a single API.
 
 ## Features
 
@@ -35109,7 +35107,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 52 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 51 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -41921,7 +41919,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
 <CardGrid>
     <CardGridItem
       title="OpenAI"
-      description="35 models"
+      description="36 models"
       href="/models/v1/providers/openai"
       logo="https://models.dev/logos/openai.svg"
     />    <CardGridItem
@@ -41954,11 +41952,6 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="22 models"
       href="/models/v1/providers/xai"
       logo="https://models.dev/logos/xai.svg"
-    />    <CardGridItem
-      title="AgentRouter"
-      description="20 models"
-      href="/models/v1/providers/agentrouter"
-      logo="https://models.dev/logos/agentrouter.svg"
     />    <CardGridItem
       title="Alibaba"
       description="39 models"
@@ -42141,7 +42134,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/submodel.svg"
     />    <CardGridItem
       title="Synthetic"
-      description="23 models"
+      description="24 models"
       href="/models/v1/providers/synthetic"
       logo="https://models.dev/logos/synthetic.svg"
     />    <CardGridItem
@@ -42156,7 +42149,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="16 models"
+      description="17 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -45281,7 +45274,7 @@ npm install ollama-ai-provider-v2
 
 ---
 title: "OpenAI | Models | Mastra"
-description: "Use OpenAI models with Mastra. 35 models available."
+description: "Use OpenAI models with Mastra. 36 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -45292,7 +45285,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 [EN] Source: https://mastra.ai/en/models/providers/openai
 
-Access 35 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 36 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -45566,6 +45559,18 @@ for await (const chunk of stream) {
   },
   {
     "model": "openai/gpt-5.1-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "openai/gpt-5.1-codex-max",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -46581,12 +46586,6 @@ for await (const chunk of stream) {
 }
 ```
 
-:::info
-
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Perplexity documentation](https://docs.perplexity.ai) for details.
-
-:::
-
 ## Models
 
 <ProviderModelsTable
@@ -46651,7 +46650,6 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.perplexity.ai",
     id: "perplexity/sonar",
     apiKey: process.env.PERPLEXITY_API_KEY,
     headers: {
@@ -49697,7 +49695,7 @@ const agent = new Agent({
 
 ---
 title: "Synthetic | Models | Mastra"
-description: "Use Synthetic models with Mastra. 23 models available."
+description: "Use Synthetic models with Mastra. 24 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -49707,7 +49705,7 @@ description: "Use Synthetic models with Mastra. 23 models available."
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 [EN] Source: https://mastra.ai/en/models/providers/synthetic
 
-Access 23 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
+Access 24 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
 
 Learn more in the [Synthetic documentation](https://synthetic.new/pricing).
 
@@ -49816,6 +49814,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 1.2,
     "outputCost": 1.2
+  },
+  {
+    "model": "synthetic/hf:deepseek-ai/DeepSeek-V3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 162816,
+    "maxOutput": 8000,
+    "inputCost": 0.27,
+    "outputCost": 0.4
   },
   {
     "model": "synthetic/hf:meta-llama/Llama-3.1-405B-Instruct",
@@ -50350,7 +50360,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 16 models available."
+description: "Use Venice AI models with Mastra. 17 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -50360,7 +50370,7 @@ description: "Use Venice AI models with Mastra. 16 models available."
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 16 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 17 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -50445,6 +50455,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 2.5,
     "outputCost": 15
+  },
+  {
+    "model": "venice/grok-41-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.5,
+    "outputCost": 1.25
   },
   {
     "model": "venice/kimi-k2-thinking",
@@ -68269,12 +68291,6 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # OtelExporter
 [EN] Source: https://mastra.ai/en/reference/observability/tracing/exporters/otel
 
-:::warning
-
-The OtelExporter is currently **experimental**. APIs and configuration options may change in future releases.
-
-:::
-
 Sends Tracing data to any OpenTelemetry-compatible observability platform using standardized GenAI semantic conventions.
 
 ## Constructor
@@ -68579,38 +68595,6 @@ const exporter = new OtelExporter({
 });
 ```
 
-## Span Mapping
-
-The exporter maps Mastra AI spans to OpenTelemetry spans following GenAI semantic conventions:
-
-### Span Names
-
-- `MODEL_GENERATION` → `chat {model}` or `tool_selection {model}`
-- `TOOL_CALL` → `tool.execute {tool_name}`
-- `AGENT_RUN` → `agent.{agent_id}`
-- `WORKFLOW_RUN` → `workflow.{workflow_id}`
-
-### Span Kinds
-
-- Root agent/workflow spans → `SERVER`
-- LLM calls → `CLIENT`
-- Tool calls → `INTERNAL` or `CLIENT`
-- Workflow steps → `INTERNAL`
-
-### Attributes
-
-The exporter maps to standard OTEL GenAI attributes:
-
-| Mastra Attribute                    | OTEL Attribute                   |
-| ----------------------------------- | -------------------------------- |
-| `model`                             | `gen_ai.request.model`           |
-| `provider`                          | `gen_ai.system`                  |
-| `inputTokens` / `promptTokens`      | `gen_ai.usage.input_tokens`      |
-| `outputTokens` / `completionTokens` | `gen_ai.usage.output_tokens`     |
-| `temperature`                       | `gen_ai.request.temperature`     |
-| `maxOutputTokens`                   | `gen_ai.request.max_tokens`      |
-| `finishReason`                      | `gen_ai.response.finish_reasons` |
-
 ## Protocol Requirements
 
 Different providers require different OTEL exporter packages:
@@ -68622,13 +68606,6 @@ Different providers require different OTEL exporter packages:
 | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  | Traceloop, Custom          |
 | Zipkin        | `@opentelemetry/exporter-zipkin`           | Zipkin collectors          |
 
-## Parent-Child Relationships
-
-The exporter preserves span hierarchy from Mastra's Tracing:
-
-- Uses `parentSpanId` directly from Mastra spans
-- Maintains correct nesting for agents, workflows, LLM calls, and tools
-- Exports complete traces with all relationships intact
 
 ## Tags Support
 

@@ -2496,6 +2496,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       input: options.messages,
       attributes: {
         agentId: this.id,
+        agentName: this.name,
+        conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
       },
       metadata: {
@@ -2537,6 +2539,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
       executeOnFinish: this.#executeOnFinish.bind(this),
+      inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
+        this.listResolvedInputProcessors(requestContext),
       outputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
         this.listResolvedOutputProcessors(requestContext),
       llm,
