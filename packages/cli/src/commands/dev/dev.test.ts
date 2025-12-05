@@ -30,7 +30,7 @@ vi.mock('@mastra/deployer/build', async importOriginal => {
   const actual = await importOriginal<typeof import('@mastra/deployer/build')>();
 
   return {
-    normalizeServerBase: actual.normalizeServerBase,
+    normalizeStudioBase: actual.normalizeStudioBase,
     getServerOptions: vi.fn().mockResolvedValue({
       port: 4111,
       host: 'localhost',

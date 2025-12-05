@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <base href="%%MASTRA_BASE_PATH%%/" />
+    <base href="%%MASTRA_STUDIO_BASE_PATH%%/" />
     <link rel="icon" type="image/svg+xml" href="./mastra.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mastra Studio</title>
@@ -11,10 +11,10 @@
       window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
       window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
       window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
-      window.MASTRA_BASE_PATH = '%%MASTRA_BASE_PATH%%';
+      window.MASTRA_STUDIO_BASE_PATH = '%%MASTRA_STUDIO_BASE_PATH%%';
 
       function connectSSE() {
-        const basePath = window.MASTRA_BASE_PATH || '';
+        const basePath = window.MASTRA_STUDIO_BASE_PATH || '';
         const events = new EventSource(`${basePath}/refresh-events`);
 
         events.onmessage = event => {

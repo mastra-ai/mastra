@@ -95,7 +95,7 @@ export type ServerConfig = {
    * @default '/'
    * @example '/my-mastra-studio'
    */
-  base?: string;
+  studioBase?: string;
   /**
    * Timeout for the server
    */

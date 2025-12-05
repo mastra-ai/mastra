@@ -33,7 +33,7 @@ adding additional server behaviour.
 
 ## Server configuration
 
-You can configure server `port`, `host`, `base`, and `timeout` in the Mastra instance.
+You can configure server `port`, `host`, `studioBase`, and `timeout` in the Mastra instance.
 
 ```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
@@ -42,13 +42,13 @@ export const mastra = new Mastra({
   server: {
     port: 3000, // Defaults to 4111
     host: "0.0.0.0", // Defaults to 'localhost'
-    base: "/my-mastra-studio", // Sub-path for the studio (optional)
+    studioBase: "/my-mastra-studio", // Sub-path for the studio (optional)
     timeout: 10000, // Defaults to 3 * 60 * 1000 (3 minutes)
   },
 });
 ```
 
-The `base` option allows you to host Mastra Studio on a sub-path of your existing application. When configured, the studio will be available at `http://your-host:port/your-base` instead of the root.
+The `studioBase` option allows you to host Mastra Studio on a sub-path of your existing application. When configured, the studio will be available at `http://your-host:port/your-base` instead of the root.
 
 ## TypeScript configuration
 

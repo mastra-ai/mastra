@@ -51,7 +51,7 @@ export const mastra = new Mastra({
     build: {
       swaggerUI: true,
     },
-    base: '/my-studio',
+    studioBase: '/my-studio',
   },
   scorers: {
     testScorer,

@@ -9,7 +9,7 @@ import { Mastra } from '@mastra/core';
 
 export const mastra = new Mastra({
   server: {
-    base: '/my-mastra-studio',
+    studioBase: '/my-mastra-studio',
   },
 });
 ```

@@ -128,14 +128,14 @@ export const mastra = new Mastra({
 
 ### Sub-path Hosting
 
-You can host the Mastra Studio on a sub-path of your existing application using the `base` configuration:
+You can host the Mastra Studio on a sub-path of your existing application using the `studioBase` configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
-    base: "/my-mastra-studio",
+    studioBase: "/my-mastra-studio",
   },
 });
 ```

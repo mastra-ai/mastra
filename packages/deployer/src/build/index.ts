@@ -5,4 +5,4 @@ export { FileService } from '../services/fs';
 export { Deps } from '../services/deps';
 export { getServerOptions } from './serverOptions';
 export { getBundlerOptions } from './bundlerOptions';
-export { normalizeServerBase } from './utils';
+export { normalizeStudioBase } from './utils';

@@ -6,7 +6,7 @@ import { Layout } from '@/components/layout';
 // Extend window type for Mastra config
 declare global {
   interface Window {
-    MASTRA_BASE_PATH?: string;
+    MASTRA_STUDIO_BASE_PATH?: string;
     MASTRA_SERVER_HOST: string;
     MASTRA_SERVER_PORT: string;
     MASTRA_TELEMETRY_DISABLED?: string;
@@ -81,7 +81,7 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
-  const basePath = window.MASTRA_BASE_PATH || '';
+  const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, isLoading } = useStudioConfig();
 
   if (isLoading) {
@@ -94,7 +94,7 @@ function App() {
     <MastraReactProvider baseUrl={baseUrl} headers={headers}>
       <PlaygroundQueryClient>
         <PostHogProvider>
-          <BrowserRouter basename={basePath}>
+          <BrowserRouter basename={studioBasePath}>
             <LinkComponentWrapper>
               <Routes>
                 <Route
