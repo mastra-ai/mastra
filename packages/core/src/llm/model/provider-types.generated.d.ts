@@ -681,6 +681,7 @@ export type ProviderModelsMap = {
     'gpt-5.1',
     'gpt-5.1-chat-latest',
     'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
     'gpt-5.1-codex-mini',
     'o1',
     'o1-mini',
