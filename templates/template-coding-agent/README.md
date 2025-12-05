@@ -1,14 +1,14 @@
-# E2B Code Execution Agent
+# Code Execution Agent
 
-An advanced Mastra template that provides a coding agent capable of planning, writing, executing, and iterating on code in secure, isolated E2B sandboxes with comprehensive file management and development workflow capabilities.
+An advanced Mastra template that provides a coding agent capable of planning, writing, executing, and iterating on code in secure, isolated sandbox environments with comprehensive file management and development workflow capabilities.
 
 ## Overview
 
-This template demonstrates how to build an AI coding assistant that can work with real development environments. The agent can create sandboxes, manage files and directories, execute code in multiple languages, and monitor development workflows - all within secure, isolated E2B environments.
+This template demonstrates how to build an AI coding assistant that can work with real development environments. The agent can create sandboxes, manage files and directories, execute code in multiple languages, and monitor development workflows - all within secure, isolated sandbox environments.
 
 ## Features
 
-- **Secure Code Execution**: Run Python, JavaScript, and TypeScript code in isolated E2B sandboxes
+- **Secure Code Execution**: Run Python, JavaScript, and TypeScript code in isolated sandboxes
 - **Complete File Management**: Create, read, write, delete files and directories with batch operations
 - **Multi-Language Support**: Execute code in Python, JavaScript, and TypeScript environments
 - **Live Development Monitoring**: Watch directory changes and monitor development workflows
@@ -19,8 +19,8 @@ This template demonstrates how to build an AI coding assistant that can work wit
 ## Prerequisites
 
 - Node.js 20 or higher
-- E2B API key (sign up at [e2b.dev](https://e2b.dev))
-- API key for your chosen provider
+- API key for your chosen sandbox provider ([Daytona](https://www.daytona.io/) or [E2B](https://e2b.dev))
+- API key for your chosen model provider
 
 ## Setup
 
@@ -39,10 +39,21 @@ This template demonstrates how to build an AI coding assistant that can work wit
    # Edit .env and add your API keys
    ```
 
+   **Choose your sandbox provider** by setting the corresponding API key:
+
    ```env
-   E2B_API_KEY="your-e2b-api-key-here"
+   # Option 1: Use Daytona (set DAYTONA_API_KEY)
+   DAYTONA_API_KEY="your-daytona-api-key-here"
+
+   # Option 2: Use E2B (set E2B_API_KEY)
+   # E2B_API_KEY="your-e2b-api-key-here"
+
+
+   # Model provider (required)
    OPENAI_API_KEY="your-openai-api-key-here"
    ```
+
+   **Note:** Set only ONE sandbox provider API key. The agent will automatically use the provider you configure.
 
 3. **Start the development server:**
 
@@ -77,9 +88,13 @@ The main agent with comprehensive development capabilities:
 - **Development Monitoring**: Watches for changes and monitors workflows
 - **Memory Integration**: Maintains conversation context and project history
 
-#### **E2B Tools** (`src/mastra/tools/e2b.ts`)
+#### **Sandbox Tools** (`src/mastra/tools/`)
 
-Complete toolkit for sandbox interaction:
+Complete toolkit for sandbox interaction with support for multiple providers:
+
+**Provider Selection:**
+
+- Automatically uses **Daytona** or **E2B** based on which API key you set
 
 **Sandbox Management:**
 
@@ -125,8 +140,23 @@ The agent includes a configured memory system:
 
 ### Environment Variables
 
+**Sandbox Provider (choose one):**
+
 ```bash
+# Option 1: Daytona
+DAYTONA_API_KEY=your_daytona_api_key_here
+
+# Option 2: E2B
 E2B_API_KEY=your_e2b_api_key_here
+
+```
+
+> [!Note]
+> The agent will automatically detect and use the sandbox provider based on which API key you set.
+
+**Model Provider (required):**
+
+```bash
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
@@ -149,17 +179,18 @@ export const codingAgent = new Agent({
 
 ## Common Issues
 
-### "E2B_API_KEY is not set"
+### "Please set either DAYTONA_API_KEY or E2B_API_KEY environment variable"
 
-- Make sure you've set the environment variable
-- Check that your API key is valid and has sufficient credits
-- Verify your E2B account is properly configured
+- You need to configure a sandbox provider by setting one of the API keys
+- Add either `DAYTONA_API_KEY` or `E2B_API_KEY` to your `.env` file
+- Only set ONE provider API key (not both)
+- Restart the development server after adding the key
 
 ### "Sandbox creation failed"
 
-- Check your E2B API key and account status
-- Ensure you haven't exceeded sandbox limits
-- Verify network connectivity to E2B services
+- Check your sandbox provider API key and account status
+- Ensure you haven't exceeded sandbox limits for your provider
+- Verify network connectivity to your sandbox provider services
 
 ### "Code execution timeout"
 
@@ -186,6 +217,10 @@ src/mastra/
       agents/
         coding-agent.ts              # Main coding agent with development capabilities
       tools/
-        e2b.ts                      # Complete E2B sandbox interaction toolkit
-      index.ts                        # Mastra configuration with storage and logging
+        index.ts                     # Provider-agnostic tool exports
+        e2b.ts                       # E2B sandbox implementation
+        daytona/
+          tools.ts                   # Daytona sandbox implementation
+          utils.ts                   # Daytona helper functions
+      index.ts                       # Mastra configuration with storage and logging
 ```
