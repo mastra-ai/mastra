@@ -6,6 +6,11 @@ export function augmentWithInit(storage: MastraStorage): MastraStorage {
   let hasInitialized: null | Promise<void> = null;
 
   const ensureInit = async () => {
+    // Skip auto-initialization if disableInit is true
+    if (storage.disableInit) {
+      return;
+    }
+
     if (!hasInitialized) {
       hasInitialized = storage.init();
     }

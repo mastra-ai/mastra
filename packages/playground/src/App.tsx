@@ -52,7 +52,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentsLink: () => `/agents`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}?new=true`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
     messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
   workflowsLink: () => `/workflows`,

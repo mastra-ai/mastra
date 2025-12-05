@@ -9,6 +9,7 @@ import {
   TABLE_MESSAGES,
   normalizePerPage,
   calculatePagination,
+  createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -64,7 +65,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -86,7 +87,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: createStorageErrorId('UPSTASH', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -137,7 +138,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -170,7 +171,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -197,7 +198,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_STORAGE_UPDATE_THREAD_FAILED',
+        id: createStorageErrorId('UPSTASH', 'UPDATE_THREAD', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: `Thread ${id} not found`,
@@ -222,7 +223,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('UPSTASH', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -258,7 +259,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('UPSTASH', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -288,7 +289,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_MESSAGES_INVALID_ARGS',
+          id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -378,7 +379,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -542,7 +543,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -563,7 +564,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
@@ -580,7 +581,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_PAGE',
+            id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -729,7 +730,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -985,7 +986,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('UPSTASH', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1088,7 +1089,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_DELETE_MESSAGES_FAILED',
+          id: createStorageErrorId('UPSTASH', 'DELETE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: messageIds.join(', ') },

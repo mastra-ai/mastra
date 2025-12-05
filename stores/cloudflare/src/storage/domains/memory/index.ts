@@ -10,6 +10,7 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import {
+  createStorageErrorId,
   ensureDate,
   MemoryStorage,
   normalizePerPage,
@@ -59,7 +60,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -84,7 +85,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_CLOUDFLARE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -134,7 +135,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to get threads by resource ID with pagination',
@@ -151,7 +152,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -193,7 +194,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -250,7 +251,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -525,7 +526,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           } catch (error) {
             throw new MastraError(
               {
-                id: 'CLOUDFLARE_STORAGE_SAVE_MESSAGES_FAILED',
+                id: createStorageErrorId('CLOUDFLARE', 'SAVE_MESSAGES', 'FAILED'),
                 domain: ErrorDomain.STORAGE,
                 category: ErrorCategory.THIRD_PARTY,
                 details: {
@@ -548,7 +549,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -737,7 +738,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error retrieving messages by ID`,
@@ -765,7 +766,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !isValidThreadId(id))) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId) },
@@ -782,7 +783,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_PAGE',
+            id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -984,7 +985,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to list messages for thread ${Array.isArray(threadId) ? threadId.join(',') : threadId}: ${
@@ -1163,7 +1164,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to update messages',
@@ -1188,7 +1189,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1220,7 +1221,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

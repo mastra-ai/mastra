@@ -180,7 +180,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1165+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 58+ AI providers and 1149+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -224,7 +224,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Nebius Token Factory | Models | Mastra](https://mastra.ai/en/models/providers/nebius): Use Nebius Token Factory models with Mastra. 15 models available.
 - [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 20 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
-- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 35 models available.
+- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 36 models available.
 - [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 21 models available.
 - [OVHcloud AI Endpoints | Models | Mastra](https://mastra.ai/en/models/providers/ovhcloud): Use OVHcloud AI Endpoints models with Mastra. 15 models available.
 - [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 4 models available.
@@ -233,10 +233,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Scaleway | Models | Mastra](https://mastra.ai/en/models/providers/scaleway): Use Scaleway models with Mastra. 13 models available.
 - [SiliconFlow | Models | Mastra](https://mastra.ai/en/models/providers/siliconflow): Use SiliconFlow models with Mastra. 72 models available.
 - [submodel | Models | Mastra](https://mastra.ai/en/models/providers/submodel): Use submodel models with Mastra. 9 models available.
-- [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 23 models available.
+- [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 24 models available.
 - [Together AI | Models | Mastra](https://mastra.ai/en/models/providers/togetherai): Use Together AI models with Mastra. 6 models available.
 - [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 2 models available.
-- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 16 models available.
+- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 17 models available.
 - [Vultr | Models | Mastra](https://mastra.ai/en/models/providers/vultr): Use Vultr models with Mastra. 5 models available.
 - [Weights & Biases | Models | Mastra](https://mastra.ai/en/models/providers/wandb): Use Weights & Biases models with Mastra. 10 models available.
 - [xAI | Models | Mastra](https://mastra.ai/en/models/providers/xai): Use xAI models with Mastra. 22 models available.
@@ -404,6 +404,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Run.observeStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/observeStream): Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
 - [Reference: Run.resumeStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/resumeStream): Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 - [Reference: Run.stream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/stream): Documentation for the `Run.stream()` method in workflows, which enables real-time streaming of responses.
+- [Reference: Run.timeTravelStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/timeTravelStream): Documentation for the `Run.timeTravelStream()` method for streaming workflow time travel execution.
 - [Reference: LLM provider API keys (choose one or more) | Templates](https://mastra.ai/en/reference/templates/overview): Complete guide to creating, using, and contributing Mastra templates
 - [Reference: MastraMCPClient (Deprecated) | Tools & MCP](https://mastra.ai/en/reference/tools/client): API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
 - [Reference: createTool() | Tools & MCP](https://mastra.ai/en/reference/tools/create-tool): Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
@@ -460,6 +461,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Run.restart() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/restart): Documentation for the `Run.restart()` method in workflows, which restarts an active workflow run that lost connection to the server.
 - [Reference: Run.resume() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/resume): Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
 - [Reference: Run.start() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/start): Documentation for the `Run.start()` method in workflows, which starts a workflow run with input data.
+- [Reference: Run.timeTravel() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/timeTravel): Documentation for the `Run.timeTravel()` method in workflows, which re-executes a workflow from a specific step.
 - [Reference: Run Class | Workflows](https://mastra.ai/en/reference/workflows/run): Documentation for the Run class in Mastra, which represents a workflow execution instance.
 - [Reference: Step Class | Workflows](https://mastra.ai/en/reference/workflows/step): Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 - [Reference: Workflow.branch() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/branch): Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.

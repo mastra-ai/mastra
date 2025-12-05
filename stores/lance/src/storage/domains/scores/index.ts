@@ -2,7 +2,13 @@ import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { ScoresStorage, TABLE_SCORERS, calculatePagination, normalizePerPage } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  ScoresStorage,
+  TABLE_SCORERS,
+  calculatePagination,
+  normalizePerPage,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
@@ -20,7 +26,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_SCORE', 'INVALID_PAYLOAD'),
           text: 'Failed to save score in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -61,7 +67,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_SCORE', 'FAILED'),
           text: 'Failed to save score in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -85,7 +91,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'GET_SCORE_BY_ID', 'FAILED'),
           text: 'Failed to get score by id in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -183,7 +189,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           text: 'Failed to get scores by scorerId in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -238,7 +244,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           text: 'Failed to get scores by runId in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -298,7 +304,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           text: 'Failed to get scores by entityId and entityType in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -355,7 +361,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           text: 'Failed to get scores by traceId and spanId in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,

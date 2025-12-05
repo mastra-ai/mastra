@@ -93,11 +93,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/agentrouter",
-          label: "AgentRouter",
-        },
-        {
-          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },
