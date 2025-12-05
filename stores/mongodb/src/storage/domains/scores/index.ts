@@ -119,14 +119,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const collection = await this.operations.getCollection(TABLE_SCORERS);
       await collection.insertOne(dataToSave);
 
-      const savedScore: ScoreRowData = {
-        ...score,
-        id: scoreId,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      return { score: savedScore };
+      return { score: dataToSave as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {

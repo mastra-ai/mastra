@@ -15,8 +15,9 @@
 
 Fix saveScore not persisting ID correctly, breaking getScoreById retrieval
 
-Standardize saveScore across all stores:
-- Use SaveScorePayload type instead of Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>
-- Use crypto.randomUUID() consistently for ID generation
-- Use VALIDATION_FAILED error status consistently
-- Include verbose error details (scorer, entityId, entityType, traceId, spanId)
+**What Changed**
+- saveScore now correctly returns scores that can be retrieved with getScoreById
+- Validation errors now include contextual information (scorer, entity, trace details) for easier debugging
+
+**Impact**
+Previously, calling getScoreById after saveScore would return null because the generated ID wasn't persisted to the database. This is now fixed across all store implementations, ensuring consistent behavior and data integrity.

@@ -174,6 +174,7 @@ export class ScoresPG extends ScoresStorage {
     try {
       // Generate ID like other storage implementations
       const id = crypto.randomUUID();
+      const now = new Date();
 
       const {
         scorer,
@@ -198,15 +199,16 @@ export class ScoresPG extends ScoresStorage {
           scorer: scorer ? JSON.stringify(scorer) : null,
           preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
           analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
+          metadata: metadata ? JSON.stringify(metadata) : null,
+          additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
           requestContext: requestContext ? JSON.stringify(requestContext) : null,
           entity: entity ? JSON.stringify(entity) : null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...score, id, createdAt: now, updatedAt: now } };
     } catch (error) {
       throw new MastraError(
         {
