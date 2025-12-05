@@ -101,6 +101,21 @@ const DEFAULTS = {
 } as const;
 
 /**
+ * Tracks in-progress async buffering operations
+ */
+interface BufferingOperation {
+  /** Promise that resolves when buffering completes */
+  promise: Promise<void>;
+  /** Token count when buffering started */
+  startedAtTokens: number;
+  /** Timestamp when buffering started */
+  startedAt: Date;
+}
+
+/** Timeout for waiting on in-progress buffering (ms) */
+const BUFFERING_WAIT_TIMEOUT = 60_000; // 60 seconds
+
+/**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
  * This processor:
@@ -156,6 +171,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /** Internal Reflector agent - created lazily */
   private reflectorAgent?: Agent;
+
+  /**
+   * Track in-progress observation buffering per record.
+   * Key is recordId, value is the buffering operation.
+   */
+  private observationBuffering: Map<string, BufferingOperation> = new Map();
+
+  /**
+   * Track in-progress reflection buffering per record.
+   * Key is recordId, value is the buffering operation.
+   */
+  private reflectionBuffering: Map<string, BufferingOperation> = new Map();
 
   constructor(config: ObservationalMemoryConfig) {
     this.storage = config.storage;
@@ -341,6 +368,158 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private shouldReflect(observationTokens: number): boolean {
     const threshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
     return observationTokens > threshold;
+  }
+
+  /**
+   * Check if we should start buffering observations.
+   * Returns true if:
+   * - bufferEvery is configured
+   * - We've crossed the bufferEvery threshold
+   * - We haven't crossed the main threshold yet
+   * - No buffering is already in progress for this record
+   */
+  private shouldStartObservationBuffering(recordId: string, messageTokens: number, observationTokens: number): boolean {
+    const bufferEvery = this.observerConfig.bufferEvery;
+    if (!bufferEvery) return false;
+
+    // Check if buffering is already in progress
+    if (this.observationBuffering.has(recordId)) return false;
+
+    // Check if there's already buffered content waiting
+    // (This would be checked via record.bufferedObservations, but we keep it simple here)
+
+    // Check if we've crossed bufferEvery but not the main threshold
+    const mainThreshold = this.calculateDynamicThreshold(
+      this.observerConfig.historyThreshold,
+      observationTokens,
+      this.getMaxThreshold(this.reflectorConfig.observationThreshold),
+    );
+
+    return messageTokens >= bufferEvery && messageTokens < mainThreshold;
+  }
+
+  /**
+   * Check if we should start buffering reflections.
+   */
+  private shouldStartReflectionBuffering(recordId: string, observationTokens: number): boolean {
+    const bufferEvery = this.reflectorConfig.bufferEvery;
+    if (!bufferEvery) return false;
+
+    // Check if buffering is already in progress
+    if (this.reflectionBuffering.has(recordId)) return false;
+
+    // Check if we've crossed bufferEvery but not the main threshold
+    const mainThreshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
+
+    return observationTokens >= bufferEvery && observationTokens < mainThreshold;
+  }
+
+  /**
+   * Start async observation buffering in the background.
+   * Does NOT block - returns immediately and runs in background.
+   */
+  private startObservationBuffering(
+    record: ObservationalMemoryRecord,
+    threadId: string,
+    unobservedMessages: MastraDBMessage[],
+    currentTokens: number,
+  ): void {
+    const messageIds = unobservedMessages.map(m => m.id).filter((id): id is string => !!id);
+
+    console.log(`[OM Buffering] Starting async observation buffering for ${record.id} (${currentTokens} tokens)`);
+
+    // Create the async operation
+    const bufferingPromise = (async () => {
+      try {
+        // Mark messages as being buffered
+        await this.storage.markMessagesAsBuffering(record.id, messageIds);
+
+        // Call Observer agent
+        const result = await this.callObserver(record.activeObservations, unobservedMessages);
+
+        // In resource scope, add thread header
+        let observationsWithHeader = result.observations;
+        if (this.resourceScope) {
+          observationsWithHeader = `**Thread: ${threadId}**\n\n${result.observations}`;
+        }
+
+        // Store as buffered (NOT active yet)
+        await this.storage.updateBufferedObservations({
+          id: record.id,
+          observations: observationsWithHeader,
+          messageIds,
+          suggestedContinuation: result.suggestedContinuation,
+        });
+
+        console.log(`[OM Buffering] Observation buffering complete for ${record.id}`);
+      } catch (error) {
+        console.error(`[OM Buffering] Observation buffering failed for ${record.id}:`, error);
+        // Clear buffering state on failure
+        await this.storage.markMessagesAsBuffering(record.id, []);
+        throw error;
+      } finally {
+        // Remove from tracking
+        this.observationBuffering.delete(record.id);
+      }
+    })();
+
+    // Track the operation
+    this.observationBuffering.set(record.id, {
+      promise: bufferingPromise,
+      startedAtTokens: currentTokens,
+      startedAt: new Date(),
+    });
+  }
+
+  /**
+   * Start async reflection buffering in the background.
+   */
+  private startReflectionBuffering(record: ObservationalMemoryRecord, observations: string): void {
+    console.log(`[OM Buffering] Starting async reflection buffering for ${record.id}`);
+
+    const bufferingPromise = (async () => {
+      try {
+        const result = await this.callReflector(observations);
+
+        // Store as buffered reflection
+        await this.storage.updateBufferedReflection(record.id, result.observations);
+
+        console.log(`[OM Buffering] Reflection buffering complete for ${record.id}`);
+      } catch (error) {
+        console.error(`[OM Buffering] Reflection buffering failed for ${record.id}:`, error);
+        throw error;
+      } finally {
+        this.reflectionBuffering.delete(record.id);
+      }
+    })();
+
+    this.reflectionBuffering.set(record.id, {
+      promise: bufferingPromise,
+      startedAtTokens: record.observationTokenCount,
+      startedAt: new Date(),
+    });
+  }
+
+  /**
+   * Wait for in-progress buffering with timeout.
+   */
+  private async waitForBuffering(operation: BufferingOperation, type: 'observation' | 'reflection'): Promise<void> {
+    const elapsed = Date.now() - operation.startedAt.getTime();
+    const remaining = BUFFERING_WAIT_TIMEOUT - elapsed;
+
+    if (remaining <= 0) {
+      throw new Error(`[OM] ${type} buffering timeout exceeded (started ${elapsed}ms ago)`);
+    }
+
+    console.log(`[OM] Waiting for in-progress ${type} buffering (max ${remaining}ms)...`);
+
+    // Race between the operation and timeout
+    await Promise.race([
+      operation.promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`[OM] ${type} buffering wait timeout`)), remaining),
+      ),
+    ]);
   }
 
   /**
@@ -571,6 +750,7 @@ ${continuityMessage}
 
   /**
    * Process output - track messages and trigger Observer/Reflector.
+   * Supports async buffering when bufferEvery is configured.
    */
   async processOutputResult(args: ProcessOutputResultArgs): Promise<MessageList> {
     const { messageList, requestContext } = args;
@@ -582,7 +762,8 @@ ${continuityMessage}
 
     const { threadId, resourceId } = context;
 
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    // Re-fetch record to get latest state (buffering may have completed)
+    let record = await this.getOrCreateRecord(threadId, resourceId);
 
     const allMessages = messageList.get.all.db();
     const unobservedMessages = this.getUnobservedMessages(allMessages, record);
@@ -590,93 +771,210 @@ ${continuityMessage}
     const currentObservationTokens = record.observationTokenCount ?? 0;
 
     console.log(
-      `[OM processOutputResult] Message tokens: ${messageTokens}, Current observation tokens: ${currentObservationTokens}`,
-    );
-    console.log(
-      `[OM processOutputResult] Should observe: ${this.shouldObserve(messageTokens, currentObservationTokens)}`,
+      `[OM processOutputResult] Messages: ${allMessages.length}, Unobserved: ${unobservedMessages.length}, Tokens: ${messageTokens}, Threshold: ${this.getMaxThreshold(this.observerConfig.historyThreshold)}`,
     );
 
-    // Check if we need to observe
-    if (this.shouldObserve(messageTokens, currentObservationTokens)) {
+    // ═══════════════════════════════════════════════════════════════════
+    // STEP 1: Check if we should START async buffering (proactive)
+    // ═══════════════════════════════════════════════════════════════════
+    const bufferEvery = this.observerConfig.bufferEvery;
+    const shouldBuffer = this.shouldStartObservationBuffering(record.id, messageTokens, currentObservationTokens);
+    console.log(`[OM] Buffer check: tokens=${messageTokens}, bufferEvery=${bufferEvery}, shouldBuffer=${shouldBuffer}`);
+
+    if (shouldBuffer) {
+      console.log(`[OM] Starting async observation buffering (${messageTokens} >= ${bufferEvery})`);
+      this.startObservationBuffering(record, threadId, unobservedMessages, messageTokens);
+      // Don't wait - continue with normal flow
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // STEP 2: Check if we need to OBSERVE (threshold exceeded)
+    // ═══════════════════════════════════════════════════════════════════
+    const threshold = this.calculateDynamicThreshold(
+      this.observerConfig.historyThreshold,
+      currentObservationTokens,
+      this.getMaxThreshold(this.reflectorConfig.observationThreshold),
+    );
+    const shouldObserveNow = this.shouldObserve(messageTokens, currentObservationTokens);
+    console.log(`[OM] Observe check: tokens=${messageTokens} > threshold=${threshold} ? ${shouldObserveNow}`);
+
+    if (shouldObserveNow) {
       const threshold = this.calculateDynamicThreshold(
         this.observerConfig.historyThreshold,
         currentObservationTokens,
         this.getMaxThreshold(this.reflectorConfig.observationThreshold),
       );
 
-      console.log(`[OM] History threshold exceeded (${messageTokens} > ${threshold}), triggering Observer`);
+      console.log(`[OM] History threshold exceeded (${messageTokens} > ${threshold})`);
 
-      const messageIdsToObserve = unobservedMessages.map(m => m.id).filter((id): id is string => !!id);
+      // Check if buffering is in progress
+      const bufferingOp = this.observationBuffering.get(record.id);
 
-      await this.storage.setObservingFlag(record.id, true);
+      // Check if there's buffered content ready
+      record = await this.getOrCreateRecord(threadId, resourceId);
+      const hasBufferedContent = !!record.bufferedObservations;
 
-      try {
-        // Call Observer agent
-        const result = await this.callObserver(record.activeObservations, unobservedMessages);
+      if (hasBufferedContent) {
+        // ════════════════════════════════════════════════════════════
+        // FAST PATH: Activate buffered content (non-blocking!)
+        // ════════════════════════════════════════════════════════════
+        console.log(`[OM] Activating buffered observations (fast path)`);
 
-        console.log(`[OM] Observer returned observations (${result.observations.length} chars)`);
+        await this.storage.swapBufferedToActive(record.id);
 
-        // In resource scope, add thread header to observations
-        let observationsWithHeader = result.observations;
-        if (this.resourceScope) {
-          observationsWithHeader = `**Thread: ${threadId}**\n\n${result.observations}`;
-        }
-
-        // Combine with existing observations
-        const newObservations = record.activeObservations
-          ? `${record.activeObservations}\n\n${observationsWithHeader}`
-          : observationsWithHeader;
-
-        const totalTokenCount = this.tokenCounter.countObservations(newObservations);
-
-        console.log(`[OM] Storing observations: ${totalTokenCount} tokens, ${messageIdsToObserve.length} message IDs`);
-
-        // Update storage
-        await this.storage.updateActiveObservations({
-          id: record.id,
-          observations: newObservations,
-          messageIds: messageIdsToObserve,
-          tokenCount: totalTokenCount,
-          suggestedContinuation: result.suggestedContinuation,
-          // Track current thread in resource scope
-          currentThreadId: this.resourceScope ? threadId : undefined,
-        });
-
-        console.log(`[OM] Observations stored successfully`);
+        // Re-fetch to get updated token counts
+        record = await this.getOrCreateRecord(threadId, resourceId);
+        const totalTokenCount = record.observationTokenCount;
 
         // Check if we need to reflect
-        if (this.shouldReflect(totalTokenCount)) {
-          const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
-          console.log(
-            `[OM] Observation threshold exceeded (${totalTokenCount} > ${reflectThreshold}), triggering Reflector`,
-          );
+        await this.maybeReflect(record, totalTokenCount);
+      } else if (bufferingOp) {
+        // ════════════════════════════════════════════════════════════
+        // WAIT PATH: Buffering in progress, wait for it
+        // ════════════════════════════════════════════════════════════
+        console.log(`[OM] Waiting for in-progress buffering...`);
 
-          await this.storage.setReflectingFlag(record.id, true);
+        await this.waitForBuffering(bufferingOp, 'observation');
 
-          try {
-            const reflectResult = await this.callReflector(newObservations);
-            const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
-
-            await this.storage.createReflectionGeneration({
-              currentRecord: {
-                ...record,
-                activeObservations: newObservations,
-                observedMessageIds: [...record.observedMessageIds, ...messageIdsToObserve],
-              },
-              reflection: reflectResult.observations,
-              tokenCount: reflectionTokenCount,
-              suggestedContinuation: reflectResult.suggestedContinuation,
-            });
-          } finally {
-            await this.storage.setReflectingFlag(record.id, false);
-          }
+        // Now activate the buffered content
+        record = await this.getOrCreateRecord(threadId, resourceId);
+        if (record.bufferedObservations) {
+          await this.storage.swapBufferedToActive(record.id);
+          record = await this.getOrCreateRecord(threadId, resourceId);
+          await this.maybeReflect(record, record.observationTokenCount);
         }
-      } finally {
-        await this.storage.setObservingFlag(record.id, false);
+      } else {
+        // ════════════════════════════════════════════════════════════
+        // SYNC PATH: No buffering, do synchronous observation
+        // ════════════════════════════════════════════════════════════
+        console.log(`[OM] No buffering available, doing synchronous observation`);
+
+        await this.doSynchronousObservation(record, threadId, unobservedMessages);
       }
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // STEP 3: Check if we should START async reflection buffering
+    // ═══════════════════════════════════════════════════════════════════
+    record = await this.getOrCreateRecord(threadId, resourceId);
+    if (this.shouldStartReflectionBuffering(record.id, record.observationTokenCount)) {
+      console.log(
+        `[OM] Starting async reflection buffering (${record.observationTokenCount} >= ${this.reflectorConfig.bufferEvery})`,
+      );
+      this.startReflectionBuffering(record, record.activeObservations);
+    }
+
     return messageList;
+  }
+
+  /**
+   * Do synchronous observation (fallback when no buffering)
+   */
+  private async doSynchronousObservation(
+    record: ObservationalMemoryRecord,
+    threadId: string,
+    unobservedMessages: MastraDBMessage[],
+  ): Promise<void> {
+    const messageIdsToObserve = unobservedMessages.map(m => m.id).filter((id): id is string => !!id);
+
+    await this.storage.setObservingFlag(record.id, true);
+
+    try {
+      const result = await this.callObserver(record.activeObservations, unobservedMessages);
+
+      console.log(`[OM] Observer returned observations (${result.observations.length} chars)`);
+
+      // In resource scope, add thread header
+      let observationsWithHeader = result.observations;
+      if (this.resourceScope) {
+        observationsWithHeader = `**Thread: ${threadId}**\n\n${result.observations}`;
+      }
+
+      // Combine with existing
+      const newObservations = record.activeObservations
+        ? `${record.activeObservations}\n\n${observationsWithHeader}`
+        : observationsWithHeader;
+
+      const totalTokenCount = this.tokenCounter.countObservations(newObservations);
+
+      console.log(`[OM] Storing observations: ${totalTokenCount} tokens, ${messageIdsToObserve.length} message IDs`);
+
+      await this.storage.updateActiveObservations({
+        id: record.id,
+        observations: newObservations,
+        messageIds: messageIdsToObserve,
+        tokenCount: totalTokenCount,
+        suggestedContinuation: result.suggestedContinuation,
+        currentThreadId: this.resourceScope ? threadId : undefined,
+      });
+
+      console.log(`[OM] Observations stored successfully`);
+
+      // Check for reflection
+      await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount);
+    } finally {
+      await this.storage.setObservingFlag(record.id, false);
+    }
+  }
+
+  /**
+   * Check if reflection needed and trigger if so.
+   * Handles both sync and async (buffered) reflection.
+   */
+  private async maybeReflect(record: ObservationalMemoryRecord, observationTokens: number): Promise<void> {
+    if (!this.shouldReflect(observationTokens)) {
+      return;
+    }
+
+    const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
+    console.log(`[OM] Observation threshold exceeded (${observationTokens} > ${reflectThreshold})`);
+
+    // Check for buffered reflection
+    const reflectionBufferingOp = this.reflectionBuffering.get(record.id);
+
+    // Re-fetch record to check for buffered reflection
+    const ids = this.getStorageIds(record.threadId ?? '', record.resourceId);
+    const currentRecord = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+
+    if (currentRecord?.bufferedReflection) {
+      // ════════════════════════════════════════════════════════════
+      // FAST PATH: Activate buffered reflection
+      // ════════════════════════════════════════════════════════════
+      console.log(`[OM] Activating buffered reflection (fast path)`);
+      await this.storage.swapReflectionToActive(record.id);
+    } else if (reflectionBufferingOp) {
+      // ════════════════════════════════════════════════════════════
+      // WAIT PATH: Reflection buffering in progress
+      // ════════════════════════════════════════════════════════════
+      console.log(`[OM] Waiting for in-progress reflection buffering...`);
+      await this.waitForBuffering(reflectionBufferingOp, 'reflection');
+
+      const updatedRecord = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+      if (updatedRecord?.bufferedReflection) {
+        await this.storage.swapReflectionToActive(record.id);
+      }
+    } else {
+      // ════════════════════════════════════════════════════════════
+      // SYNC PATH: Do synchronous reflection
+      // ════════════════════════════════════════════════════════════
+      console.log(`[OM] Triggering synchronous Reflector`);
+
+      await this.storage.setReflectingFlag(record.id, true);
+
+      try {
+        const reflectResult = await this.callReflector(record.activeObservations);
+        const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+
+        await this.storage.createReflectionGeneration({
+          currentRecord: record,
+          reflection: reflectResult.observations,
+          tokenCount: reflectionTokenCount,
+          suggestedContinuation: reflectResult.suggestedContinuation,
+        });
+      } finally {
+        await this.storage.setReflectingFlag(record.id, false);
+      }
+    }
   }
 
   /**
