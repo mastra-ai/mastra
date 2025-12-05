@@ -147,16 +147,20 @@ export class MemoryDSQL extends MemoryStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
-      const rows = await this.client.manyOrNone<StorageThreadType>(dataQuery, [...queryParams, limitValue, offset]);
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
+      const rows = await this.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(dataQuery, [
+        ...queryParams,
+        limitValue,
+        offset,
+      ]);
 
       const threads: StorageThreadType[] = (rows || []).map(thread => ({
         id: thread.id,
         resourceId: thread.resourceId,
         title: thread.title,
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt, // Assuming already Date objects or ISO strings
-        updatedAt: thread.updatedAt,
+        createdAt: thread.createdAtZ || thread.createdAt,
+        updatedAt: thread.updatedAtZ || thread.updatedAt,
       }));
 
       return {
