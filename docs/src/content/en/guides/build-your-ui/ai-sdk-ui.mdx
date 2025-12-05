@@ -8,7 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # Using AI SDK UI
 
-[AI SDK UI](https://sdk.vercel.ai) is a free open-source library of React utilities and components for building AI-powered interfaces. Mastra has great integration with AI SDK UI through model routing, streaming support, custom React hooks, and custom tool/UI components.
+[AI SDK UI](https://sdk.vercel.ai) is a library of React utilities and components for building AI-powered interfaces. In this guide, you'll learn how to use `@mastra/ai-sdk` to convert Mastra's output to AI SDK-compatible formats, enabling you to use its hooks and components in your frontend.
 
 :::note
 Migrating from AI SDK v4 to v5? See the [migration guide](/guides/v1/migrations/ai-sdk-v4-to-v5).
@@ -16,60 +16,37 @@ Migrating from AI SDK v4 to v5? See the [migration guide](/guides/v1/migrations/
 
 :::tip
 
-Visit Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) to see real-world examples of AI SDK UI integrated with Mastra.
+Want to see more examples? Visit Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) or the [Next.js quickstart guide](/guides/v1/getting-started/next-js).
 
 :::
 
 ## Getting Started
 
-The recommended way of using Mastra and AI SDK UI together is by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. This includes chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
+Use Mastra and AI SDK UI together by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. This includes chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
+
+`@mastra/ai-sdk` integrates with AI SDK UI's three main hooks: [`useChat()`](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot), [`useCompletion()`](https://ai-sdk.dev/docs/ai-sdk-ui/completion), and [`useObject()`](https://ai-sdk.dev/docs/ai-sdk-ui/object-generation).
+
+Install the required packages to get started:
 
 <Tabs>
   <TabItem value="npm" label="npm">
     ```bash copy
-    npm install @mastra/ai-sdk@beta
+    npm install @mastra/ai-sdk@beta @ai-sdk/react ai
     ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
     ```bash copy
-    pnpm add @mastra/ai-sdk@beta
+    pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
     ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
     ```bash copy
-    yarn add @mastra/ai-sdk@beta
+    yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
     ```
   </TabItem>
   <TabItem value="bun" label="bun">
     ```bash copy
-    bun add @mastra/ai-sdk@beta
-    ```
-  </TabItem>
-</Tabs>
-
-The `@mastra/ai-sdk` route handlers integrate directly with AI SDK UI's hooks. AI SDK UI provides three main hooks: [`useChat()`](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot), [`useCompletion()`](https://ai-sdk.dev/docs/ai-sdk-ui/completion), and [`useObject()`](https://ai-sdk.dev/docs/ai-sdk-ui/object-generation).
-
-If you haven't already, install the required AI SDK packages:
-
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm install @ai-sdk/react ai
-    ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm add @ai-sdk/react ai
-    ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn add @ai-sdk/react ai
-    ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy
-    bun add @ai-sdk/react ai
+    bun add @mastra/ai-sdk@beta @ai-sdk/react ai
     ```
   </TabItem>
 </Tabs>
@@ -77,6 +54,13 @@ If you haven't already, install the required AI SDK packages:
 You're now ready to follow the integration guides and recipes below!
 
 ## Integration Guides
+
+Typically, you'll set up API routes that stream Mastra content in AI SDK-compatible format, and then use those routes in AI SDK UI hooks like `useChat()`. Below you'll find two main approaches to achieve this:
+
+- [Mastra's server](#mastras-server)
+- [Framework-agnostic](#framework-agnostic)
+
+Once you have your API routes set up, you can use them in the [`useChat()`](#usechat) hook.
 
 ### Mastra's server
 
@@ -289,12 +273,6 @@ export default function Chat() {
 
 Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent.
 
-:::info
-
-When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/v1/agents/agent-memory) for key implementation details.
-
-:::
-
 ### `useCompletion()`
 
 The `useCompletion()` hook handles single-turn completions between your frontend and a Mastra agent, allowing you to send a prompt and receive a streamed response over HTTP.
@@ -324,7 +302,7 @@ export default function Page() {
 }
 ```
 
-Two examples on how to implement the backend portion of it.
+Below are two approaches to implementing the backend:
 
 <Tabs>
 
@@ -348,7 +326,18 @@ export const mastra = new Mastra({
             mastra,
             agentId: 'weatherAgent',
             params: {
-              messages: [{ id: "1", role: 'user', parts: [{ type: 'text', text: prompt }] }],
+              messages: [
+                {
+                  id: "1",
+                  role: 'user',
+                  parts: [
+                    {
+                      type: 'text',
+                      text: prompt
+                    }
+                  ]
+                }
+              ],
             }
           })
 
@@ -379,7 +368,18 @@ export async function POST(req: Request) {
     mastra,
     agentId: 'weatherAgent',
     params: {
-      messages: [{ id: "1", role: 'user', parts: [{ type: 'text', text: prompt }] }],
+      messages: [
+        {
+          id: "1",
+          role: 'user',
+          parts: [
+            {
+              type: 'text',
+              text: prompt
+            }
+          ]
+        }
+      ],
     },
   });
   return createUIMessageStreamResponse({ stream });
@@ -398,7 +398,7 @@ To manually transform Mastra's streams to AI SDK-compatible format, use the [`to
 
 ### Passing additional data
 
-[`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RequestContext`.
+[`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`]((/docs/v1/server-db/request-context)).
 
 Here's an example of the frontend code:
 
@@ -459,16 +459,14 @@ export const mastra = new Mastra({
         const requestContext = c.get("requestContext");
 
         if (c.req.method === "POST") {
-          try {
-            const clonedReq = c.req.raw.clone();
-            const body = await clonedReq.json();
+          const clonedReq = c.req.raw.clone();
+          const body = await clonedReq.json();
 
-            if (body?.data) {
-              for (const [key, value] of Object.entries(body.data)) {
-                requestContext.set(key, value);
-              }
+          if (body?.data) {
+            for (const [key, value] of Object.entries(body.data)) {
+              requestContext.set(key, value);
             }
-          } catch {}
+          }
         }
         await next();
       },
@@ -546,7 +544,7 @@ import type { AgentDataPart } from "@mastra/ai-sdk";
 export default function Page() {
   const { messages } = useChat({
     transport: new DefaultChatTransport({
-    api: 'http://localhost:4111/chat',
+      api: 'http://localhost:4111/chat',
     }),
   });
 
@@ -592,7 +590,13 @@ export const AgentTool = ({ id, text, status }: AgentDataPart) => {
 
 ### Custom Tool streaming
 
-To stream custom data parts from within your tool execution function, use the `writer.custom()` method. It is **important** that you `await` the `writer.custom()` call.
+To stream custom data parts from within your tool execution function, use the `writer.custom()` method.
+
+:::tip
+
+It is important that you `await` the `writer.custom()` call.
+
+:::
 
 ```typescript {4,7-10,14-17} copy
 import { createTool } from "@mastra/core/tools";
@@ -601,14 +605,14 @@ export const testTool = createTool({
   execute: async ({ context, writer }) => {
     const { value } = context;
 
-   await writer?.custom({
+    await writer?.custom({
       type: "data-tool-progress",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await writer?.custom({
+    await writer?.custom({
       type: "data-tool-progress",
       status: "success"
     });
