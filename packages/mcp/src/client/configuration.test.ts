@@ -855,4 +855,144 @@ describe('MCPClient', () => {
       expect(contextXLeakInYLogs).toBe(false);
     }, 25000); // Increased timeout for multiple server ops
   });
+
+  describe('MCP Filesystem Server Directory Restrictions', () => {
+    it('should allow filesystem MCP server to write to specified directory instead of forcing .mastra/output', async () => {
+      // This test reproduces issue #8660 where the MCP filesystem server
+      // should respect the directory specified in server args, not default to .mastra/output
+      
+      const testDir = '/private/tmp/mastra-test-filesystem';
+      const testFile = 'test-file.txt';
+      const testContent = 'Hello from MCP filesystem server!';
+      
+      // Create test directory
+      const fs = await import('fs/promises');
+      try {
+        await fs.mkdir(testDir, { recursive: true });
+      } catch (error) {
+        // Directory might already exist, that's fine
+      }
+
+      const mcp = new MCPClient({
+        id: 'filesystem-test',
+        servers: {
+          filesystem: {
+            command: 'npx',
+            args: [
+              '-y',
+              '@modelcontextprotocol/server-filesystem',
+              testDir // This should be the allowed directory, not .mastra/output
+            ],
+            enableServerLogs: true
+          }
+        }
+      });
+
+      try {
+        // Get tools from the filesystem MCP server
+        const tools = await mcp.getTools();
+        
+        // Check if we have filesystem tools available
+        expect(tools).toBeDefined();
+        expect(Object.keys(tools).length).toBeGreaterThan(0);
+        
+        // Look for write_file tool
+        const writeFileTool = Object.values(tools).find(tool => 
+          tool.id?.includes('write_file') || tool.description?.includes('write')
+        );
+        
+        expect(writeFileTool).toBeDefined();
+        
+        // Try to write a file to the specified directory
+        console.log('Attempting to write file with tool:', writeFileTool.id);
+        console.log('Tool description:', writeFileTool.description);
+        
+        // Use absolute path within the allowed directory
+        const filePath = `${testDir}/${testFile}`;
+        
+        const result = await writeFileTool.execute({
+          context: {
+            path: filePath, // Use absolute path within the allowed directory
+            content: testContent
+          }
+        });
+        
+        console.log('Write result:', result);
+        
+        // The file should be written successfully
+        expect(result).toBeDefined();
+        expect(result.isError).toBeFalsy();
+        
+        // Verify the file was actually written to the correct location
+        const writtenContent = await fs.readFile(filePath, 'utf-8');
+        expect(writtenContent).toBe(testContent);
+        
+        // Clean up
+        await fs.unlink(`${testDir}/${testFile}`);
+        await fs.rmdir(testDir);
+        
+      } catch (error) {
+        // Clean up on error
+        try {
+          await fs.unlink(`${testDir}/${testFile}`);
+          await fs.rmdir(testDir);
+        } catch (cleanupError) {
+          // Ignore cleanup errors
+        }
+        
+        throw error;
+      } finally {
+        await mcp.disconnect();
+      }
+    }, 30000); // Increased timeout for filesystem operations
+
+    it('should demonstrate the issue from #8660 - MCP Roots warning message', async () => {
+      // This test demonstrates the warning message that appears in issue #8660
+      // The warning "Client does not support MCP Roots" is expected behavior
+      // and indicates that the server is using the allowed directories from server args
+      
+      const testDir = '/private/tmp/mastra-test-filesystem-roots-test';
+      const fs = await import('fs/promises');
+      
+      try {
+        await fs.mkdir(testDir, { recursive: true });
+      } catch (error) {
+        // Directory might already exist, that's fine
+      }
+
+      const mcp = new MCPClient({
+        id: 'filesystem-roots-test',
+        servers: {
+          filesystem: {
+            command: 'npx',
+            args: [
+              '-y',
+              '@modelcontextprotocol/server-filesystem',
+              testDir
+            ],
+            enableServerLogs: true
+          }
+        }
+      });
+
+      try {
+        // The warning message "Client does not support MCP Roots, using allowed directories set from server args"
+        // is expected behavior and indicates the server is working correctly
+        const tools = await mcp.getTools();
+        expect(tools).toBeDefined();
+        
+        // The server should be using the directory specified in args, not .mastra/output
+        // This is the correct behavior for security reasons
+        
+      } finally {
+        await mcp.disconnect();
+        // Clean up
+        try {
+          await fs.rmdir(testDir);
+        } catch (cleanupError) {
+          // Ignore cleanup errors
+        }
+      }
+    }, 30000);
+  });
 });

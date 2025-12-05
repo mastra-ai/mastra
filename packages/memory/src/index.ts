@@ -184,18 +184,20 @@ export class Memory extends MastraMemory {
             );
           }
 
+          // Build the filter combining scope-based filtering with user-provided filter
+          const scopeFilter = resourceScope ? { resource_id: resourceId } : { thread_id: threadId };
+
+          const userFilter = typeof config?.semanticRecall === 'object' ? config.semanticRecall.filter : undefined;
+
+          // Combine filters using $and to ensure both scope and user filters are applied
+          const combinedFilter = userFilter ? { $and: [scopeFilter, userFilter] } : scopeFilter;
+
           vectorResults.push(
             ...(await this.vector.query({
               indexName,
               queryVector: embedding,
               topK: vectorConfig.topK,
-              filter: resourceScope
-                ? {
-                    resource_id: resourceId,
-                  }
-                : {
-                    thread_id: threadId,
-                  },
+              filter: combinedFilter,
             })),
           );
         }),
@@ -612,6 +614,34 @@ ${workingMemory}`;
 
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
+
+      // Group messages by threadId to minimize database calls
+      const messagesByThread = new Map<string, (MastraMessageV1 | MastraMessageV2)[]>();
+      updatedMessages.forEach(message => {
+        if (message.threadId) {
+          if (!messagesByThread.has(message.threadId)) {
+            messagesByThread.set(message.threadId, []);
+          }
+          messagesByThread.get(message.threadId)!.push(message);
+        }
+      });
+
+      // Fetch thread metadata for all threads
+      const threadMetadataMap = new Map<string, Record<string, unknown>>();
+      await Promise.all(
+        Array.from(messagesByThread.keys()).map(async threadId => {
+          try {
+            const thread = await this.storage.getThreadById({ threadId });
+            if (thread?.metadata) {
+              threadMetadataMap.set(threadId, thread.metadata);
+            }
+          } catch (error) {
+            // Thread might not exist yet, continue without metadata
+            this.logger.warn(`Could not fetch metadata for thread ${threadId}:`, error);
+          }
+        }),
+      );
+
       await Promise.all(
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
@@ -646,10 +676,14 @@ ${workingMemory}`;
             );
           }
 
+          // Get thread metadata for this message's thread
+          const threadMetadata = message.threadId ? threadMetadataMap.get(message.threadId) || {} : {};
+
           await this.vector.upsert({
             indexName: await indexName,
             vectors: embeddings,
             metadata: chunks.map(() => ({
+              ...threadMetadata, // Include thread metadata for filtering
               message_id: message.id,
               thread_id: message.threadId,
               resource_id: message.resourceId,
