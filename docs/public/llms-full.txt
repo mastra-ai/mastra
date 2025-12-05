@@ -9792,6 +9792,12 @@ Use the `--import` flag to ensure instrumentation loads before your application:
 tsx --import ./instrumentation.ts ./src/index.ts
 ```
 
+## Semantic Conventions
+
+The OtelBridge exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
+
+For details on span naming and attributes, see the [OpenTelemetry Exporter semantic conventions](/docs/v1/observability/tracing/exporters/otel#opentelemetry-semantic-conventions).
+
 ## Trace Hierarchy
 
 With the OtelBridge, your traces maintain proper hierarchy across OTEL and Mastra boundaries:
@@ -9855,7 +9861,6 @@ If traces aren't appearing or connecting as expected:
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [OpenTelemetry Exporter](/docs/v1/observability/tracing/exporters/otel) - For sending traces to OTEL backends
 - [OtelBridge Reference](/reference/v1/observability/tracing/bridges/otel) - API documentation
-- [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 
 
 ---
@@ -10962,33 +10967,26 @@ new OtelExporter({
 
 ## OpenTelemetry Semantic Conventions
 
-The exporter follows [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/), ensuring compatibility with observability platforms:
+The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai), ensuring compatibility with observability platforms:
 
 ### Span Naming
 
-- **LLM Operations**: `chat {model}` or `tool_selection {model}`
-- **Tool Execution**: `tool.execute {tool_name}`
-- **Agent Runs**: `agent.{agent_id}`
-- **Workflow Runs**: `workflow.{workflow_id}`
+- **LLM Operations**: `chat {model}`
+- **Tool Execution**: `execute_tool {tool_name}`
+- **Agent Runs**: `invoke_agent {agent_id}`
+- **Workflow Runs**: `invoke_workflow {workflow_id}`
 
 ### Key Attributes
 
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, etc.)
-- `gen_ai.system` - AI provider (openai, anthropic, etc.)
+- `gen_ai.provider.name` - AI provider (openai, anthropic, etc.)
 - `gen_ai.request.model` - Model identifier
+- `gen_ai.input.messages` - Chat history provided to the model
+- `gen_ai.output.messages` - Messages returned by the model
 - `gen_ai.usage.input_tokens` - Number of input tokens
 - `gen_ai.usage.output_tokens` - Number of output tokens
 - `gen_ai.request.temperature` - Sampling temperature
-- `gen_ai.response.finish_reasons` - Completion reason
-
-## Buffering Strategy
-
-The exporter buffers spans until a trace is complete:
-
-1. Collects all spans for a trace
-2. Waits 5 seconds after root span completes
-3. Exports complete trace with preserved parent-child relationships
-4. Ensures no orphaned spans
+- `gen_ai.response.finish_reasons` - Completion reasons
 
 ## Protocol Selection Guide
 
@@ -11028,7 +11026,6 @@ Install the suggested package for your provider.
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
 2. **Invalid endpoint**: Check endpoint format matches provider requirements
 3. **Authentication failures**: Verify API keys and headers are correct
-4. **No traces appearing**: Check that traces complete (root span must end)
 
 ## Using Tags
 
@@ -11052,8 +11049,8 @@ Tags are exported as a JSON string in the `mastra.tags` span attribute for broad
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
-- [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel) - For bidirectional OTEL context integration
-- [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
+- [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel)
+- [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai)
 - [OTEL Exporter Reference](/reference/v1/observability/tracing/exporters/otel)
 
 
@@ -34530,7 +34527,7 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo="https://models.dev/logos/azure-openai.svg"
     />    <CardGridItem
       title="Netlify"
-      description="42 models"
+      description="43 models"
       href="/models/v1/gateways/netlify"
       logo={<NetlifyLogo />}
     />    <CardGridItem
@@ -34561,7 +34558,7 @@ import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 [EN] Source: https://mastra.ai/en/models/gateways/netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 42 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 43 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
@@ -34638,6 +34635,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1` |
 | `openai/gpt-5.1-2025-11-13` |
 | `openai/gpt-5.1-codex` |
+| `openai/gpt-5.1-codex-max` |
 | `openai/gpt-5.1-codex-mini` |
 | `openai/o3` |
 | `openai/o3-mini` |
@@ -34968,7 +34966,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 59+ AI providers and 1165+ models through Mastra's model router."
+description: "Access 58+ AI providers and 1149+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34981,7 +34979,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1165 models from 59 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1149 models from 58 providers through a single API.
 
 ## Features
 
@@ -35109,7 +35107,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 52 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 51 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -41921,7 +41919,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
 <CardGrid>
     <CardGridItem
       title="OpenAI"
-      description="35 models"
+      description="36 models"
       href="/models/v1/providers/openai"
       logo="https://models.dev/logos/openai.svg"
     />    <CardGridItem
@@ -41954,11 +41952,6 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="22 models"
       href="/models/v1/providers/xai"
       logo="https://models.dev/logos/xai.svg"
-    />    <CardGridItem
-      title="AgentRouter"
-      description="20 models"
-      href="/models/v1/providers/agentrouter"
-      logo="https://models.dev/logos/agentrouter.svg"
     />    <CardGridItem
       title="Alibaba"
       description="39 models"
@@ -42141,7 +42134,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/submodel.svg"
     />    <CardGridItem
       title="Synthetic"
-      description="23 models"
+      description="24 models"
       href="/models/v1/providers/synthetic"
       logo="https://models.dev/logos/synthetic.svg"
     />    <CardGridItem
@@ -42156,7 +42149,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="16 models"
+      description="17 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -45281,7 +45274,7 @@ npm install ollama-ai-provider-v2
 
 ---
 title: "OpenAI | Models | Mastra"
-description: "Use OpenAI models with Mastra. 35 models available."
+description: "Use OpenAI models with Mastra. 36 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -45292,7 +45285,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 [EN] Source: https://mastra.ai/en/models/providers/openai
 
-Access 35 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 36 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -45566,6 +45559,18 @@ for await (const chunk of stream) {
   },
   {
     "model": "openai/gpt-5.1-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "openai/gpt-5.1-codex-max",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -46581,12 +46586,6 @@ for await (const chunk of stream) {
 }
 ```
 
-:::info
-
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Perplexity documentation](https://docs.perplexity.ai) for details.
-
-:::
-
 ## Models
 
 <ProviderModelsTable
@@ -46651,7 +46650,6 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.perplexity.ai",
     id: "perplexity/sonar",
     apiKey: process.env.PERPLEXITY_API_KEY,
     headers: {
@@ -49697,7 +49695,7 @@ const agent = new Agent({
 
 ---
 title: "Synthetic | Models | Mastra"
-description: "Use Synthetic models with Mastra. 23 models available."
+description: "Use Synthetic models with Mastra. 24 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -49707,7 +49705,7 @@ description: "Use Synthetic models with Mastra. 23 models available."
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 [EN] Source: https://mastra.ai/en/models/providers/synthetic
 
-Access 23 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
+Access 24 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
 
 Learn more in the [Synthetic documentation](https://synthetic.new/pricing).
 
@@ -49816,6 +49814,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 1.2,
     "outputCost": 1.2
+  },
+  {
+    "model": "synthetic/hf:deepseek-ai/DeepSeek-V3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 162816,
+    "maxOutput": 8000,
+    "inputCost": 0.27,
+    "outputCost": 0.4
   },
   {
     "model": "synthetic/hf:meta-llama/Llama-3.1-405B-Instruct",
@@ -50350,7 +50360,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 16 models available."
+description: "Use Venice AI models with Mastra. 17 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -50360,7 +50370,7 @@ description: "Use Venice AI models with Mastra. 16 models available."
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 16 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 17 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -50445,6 +50455,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 2.5,
     "outputCost": 15
+  },
+  {
+    "model": "venice/grok-41-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.5,
+    "outputCost": 1.25
   },
   {
     "model": "venice/kimi-k2-thinking",
@@ -68269,12 +68291,6 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # OtelExporter
 [EN] Source: https://mastra.ai/en/reference/observability/tracing/exporters/otel
 
-:::warning
-
-The OtelExporter is currently **experimental**. APIs and configuration options may change in future releases.
-
-:::
-
 Sends Tracing data to any OpenTelemetry-compatible observability platform using standardized GenAI semantic conventions.
 
 ## Constructor
@@ -68579,38 +68595,6 @@ const exporter = new OtelExporter({
 });
 ```
 
-## Span Mapping
-
-The exporter maps Mastra AI spans to OpenTelemetry spans following GenAI semantic conventions:
-
-### Span Names
-
-- `MODEL_GENERATION` → `chat {model}` or `tool_selection {model}`
-- `TOOL_CALL` → `tool.execute {tool_name}`
-- `AGENT_RUN` → `agent.{agent_id}`
-- `WORKFLOW_RUN` → `workflow.{workflow_id}`
-
-### Span Kinds
-
-- Root agent/workflow spans → `SERVER`
-- LLM calls → `CLIENT`
-- Tool calls → `INTERNAL` or `CLIENT`
-- Workflow steps → `INTERNAL`
-
-### Attributes
-
-The exporter maps to standard OTEL GenAI attributes:
-
-| Mastra Attribute                    | OTEL Attribute                   |
-| ----------------------------------- | -------------------------------- |
-| `model`                             | `gen_ai.request.model`           |
-| `provider`                          | `gen_ai.system`                  |
-| `inputTokens` / `promptTokens`      | `gen_ai.usage.input_tokens`      |
-| `outputTokens` / `completionTokens` | `gen_ai.usage.output_tokens`     |
-| `temperature`                       | `gen_ai.request.temperature`     |
-| `maxOutputTokens`                   | `gen_ai.request.max_tokens`      |
-| `finishReason`                      | `gen_ai.response.finish_reasons` |
-
 ## Protocol Requirements
 
 Different providers require different OTEL exporter packages:
@@ -68622,13 +68606,6 @@ Different providers require different OTEL exporter packages:
 | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  | Traceloop, Custom          |
 | Zipkin        | `@opentelemetry/exporter-zipkin`           | Zipkin collectors          |
 
-## Parent-Child Relationships
-
-The exporter preserves span hierarchy from Mastra's Tracing:
-
-- Uses `parentSpanId` directly from Mastra spans
-- Maintains correct nesting for agents, workflows, LLM calls, and tools
-- Exports complete traces with all relationships intact
 
 ## Tags Support
 
@@ -81564,6 +81541,179 @@ The stream emits various event types during workflow execution. Each event has a
 - [Workflows overview](/docs/v1/workflows/overview#running-workflows)
 - [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
 - [Run.resumeStream()](./resumeStream)
+
+
+---
+title: "Reference: Run.timeTravelStream() | Streaming"
+description: Documentation for the `Run.timeTravelStream()` method for streaming workflow time travel execution.
+---
+
+# Run.timeTravelStream()
+[EN] Source: https://mastra.ai/en/reference/streaming/workflows/timeTravelStream
+
+The `.timeTravelStream()` method re-executes a workflow starting from any specific step with streaming events. This allows you to receive real-time updates during time travel execution while maintaining full visibility into each step's progress.
+
+## Usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+// Process events as they arrive
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+// Get the final result
+const result = await output.result;
+```
+
+## Parameters
+
+All parameters are the same as [`Run.timeTravel()`](../../workflows/run-methods/timeTravel#parameters). See the [timeTravel reference](../../workflows/run-methods/timeTravel#parameters) for detailed parameter documentation.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "An object containing both the stream and result promise",
+    },
+    {
+      name: "output.fullStream",
+      type: "ReadableStream<WorkflowStreamEvent>",
+      description:
+        "A readable stream that emits workflow events as execution progresses",
+    },
+    {
+      name: "output.result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "A promise that resolves to the final workflow execution result",
+    },
+    {
+      name: "output.traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "The trace ID associated with this execution when Tracing is enabled",
+    },
+  ]}
+/>
+
+## Stream events
+
+The stream emits various workflow events during execution:
+
+- `workflow-step-start`: Emitted when a step begins execution
+- `workflow-step-finish`: Emitted when a step completes successfully
+- `workflow-step-error`: Emitted when a step encounters an error
+- `workflow-step-suspended`: Emitted when a step suspends
+- Additional events depending on step types (agents, tools, etc.)
+
+## Extended usage examples
+
+### Processing events during time travel
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+for await (const event of output.fullStream) {
+  switch (event.type) {
+    case "workflow-step-start":
+      console.log(`Starting step: ${event.payload.stepName}`);
+      break;
+    case "workflow-step-finish":
+      console.log(`Completed step: ${event.payload.stepName}`);
+      break;
+    case "workflow-step-error":
+      console.error(`Error in step: ${event.payload.stepName}`, event.payload.error);
+      break;
+  }
+}
+
+const result = await output.result;
+console.log("Time travel completed:", result);
+```
+
+### Time travel stream with context
+
+```typescript showLineNumbers copy
+const output = run.timeTravelStream({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+
+for await (const event of output.fullStream) {
+  // Handle events
+  console.log(event);
+}
+
+const result = await output.result;
+```
+
+### Time travel stream with nested workflows
+
+```typescript showLineNumbers copy
+const output = run.timeTravelStream({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+const result = await output.result;
+```
+
+## Notes
+
+- The stream closes automatically when time travel execution completes or encounters an error
+- You can process events from the stream while the workflow is still executing
+- The `result` promise resolves only after all steps have completed
+- Stream events follow the same format as regular workflow streaming
+- Time travel streaming requires storage to be configured since it relies on persisted workflow snapshots
+
+## Related
+
+- [Run.timeTravel()](../../workflows/run-methods/timeTravel)
+- [Time Travel](/docs/v1/workflows/time-travel)
+- [Workflow Streaming](/docs/v1/streaming/workflow-streaming)
+- [Run.stream()](./stream)
+- [Run.resumeStream()](./resumeStream)
+
 
 
 ---
@@ -98074,6 +98224,319 @@ const result = await run.start({
 
 
 ---
+title: "Reference: Run.timeTravel() | Workflows"
+description: Documentation for the `Run.timeTravel()` method in workflows, which re-executes a workflow from a specific step.
+---
+
+# Run.timeTravel()
+[EN] Source: https://mastra.ai/en/reference/workflows/run-methods/timeTravel
+
+The `.timeTravel()` method re-executes a workflow starting from any specific step, using either stored snapshot data or custom context you provide. This is useful for debugging failed workflows, testing individual steps with different inputs, or recovering from errors without re-running the entire workflow.
+
+## Usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step<string, any, TInputSchema, any, any, any, TEngineType> | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, TInputSchema, any, any, any, TEngineType>] | string | string[]",
+      description:
+        "The target step to start execution from. It can be a Step instance, array of Steps (for nested workflows), step ID string, or array of step ID strings. Use dot notation or arrays for nested workflow steps (e.g., 'nestedWorkflow.step3' or ['nestedWorkflow', 'step3'])",
+      isOptional: false,
+    },
+    {
+      name: "inputData",
+      type: "z.infer<TInputSchema>",
+      description: "Input data for the target step. Must match the step's input schema. If not provided, uses data from the workflow snapshot",
+      isOptional: true,
+    },
+    {
+      name: "resumeData",
+      type: "any",
+      description: "Resume data to provide if the workflow was previously suspended",
+      isOptional: true,
+    },
+    {
+      name: "initialState",
+      type: "z.infer<TState>",
+      description: "Initial state to set for the workflow run. Used to set workflow-level state before execution",
+      isOptional: true,
+    },
+    {
+      name: "context",
+      type: "TimeTravelContext<any, any, any, any>",
+      description:
+        "Execution context containing step results for steps before the target step. Each key is a step ID with a StepResult object containing status, payload, output, startedAt, endedAt, suspendPayload, and resumePayload",
+      isOptional: true,
+    },
+    {
+      name: "nestedStepsContext",
+      type: "Record<string, TimeTravelContext<any, any, any, any>>",
+      description:
+        "Context for nested workflow steps. Keyed by nested workflow ID, each containing step results for that nested workflow",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during time travel execution",
+      isOptional: true,
+    },
+    {
+      name: "writableStream",
+      type: "WritableStream<ChunkType>",
+      description: "Optional writable stream for streaming workflow output during time travel",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "Options for Tracing configuration.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "Options for output configuration.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "includeState",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Whether to include the workflow run state in the result.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "includeResumeLabels",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Whether to include resume labels in the result.",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "A promise that resolves to the workflow execution result containing step outputs and status",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+    },
+  ]}
+/>
+
+## Extended usage examples
+
+### Time travel with custom context
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+```
+
+### Time travel to nested workflow step
+
+```typescript showLineNumbers copy
+// Using dot notation
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  inputData: { value: 10 },
+});
+
+// Using array of step IDs
+const result = await run.timeTravel({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+});
+```
+
+### Time travel with initial state
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+  initialState: {
+    counter: 5,
+    metadata: { source: "time-travel" },
+  },
+});
+```
+
+### Time travel with nested workflows context
+
+```typescript showLineNumbers copy
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+    nestedWorkflow: {
+      status: "running",
+      payload: { step1Result: 2 },
+      startedAt: Date.now(),
+    },
+  },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+```
+
+## Notes
+
+- Time travel requires storage to be configured since it relies on persisted workflow snapshots
+- When re-executing a workflow, the workflow loads the existing snapshot from storage (if available)
+- Step results before the target step are reconstructed from the snapshot or provided context
+- Execution begins from the specified step with the provided or reconstructed input data
+- The workflow continues to completion from that point forward
+- Time travel can be used on workflows that have not been run yet by providing custom context or input data for the step to start from.
+
+
+## Related
+
+- [Time Travel](/docs/v1/workflows/time-travel)
+- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
+- [Workflow.createRun()](../workflow-methods/create-run)
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+
+
+
+---
 title: "Reference: Run Class | Workflows"
 description: Documentation for the Run class in Mastra, which represents a workflow execution instance.
 ---
@@ -98139,6 +98602,18 @@ if (result.status === "suspended") {
       description: "Restarts the workflow execution from last active step",
       required: true,
     },
+    {
+      name: "timeTravel",
+      type: "(options?: TimeTravelOptions) => Promise<WorkflowResult>",
+      description: "Re-executes a workflow starting from any specific step, using either stored snapshot data or custom context you provide.",
+      required: true,
+    },
+    {
+      name: "timeTravelStream",
+      type: "(options?: TimeTravelOptions) => MastraWorkflowStream",
+      description: "Time travels a workflow execution with streaming support",
+      required: true,
+    },
   ]}
 />
 
@@ -98175,8 +98650,9 @@ A workflow run's `status` indicates its current execution state. The possible va
 - [Run.resume()](./run-methods/resume)
 - [Run.cancel()](./run-methods/cancel)
 - [Run.restart()](./run-methods/restart)
+- [Run.timeTravel()](./run-methods/timeTravel)
 - [Run.stream()](/docs/v1/streaming/workflow-streaming)
-
+- [Run.timeTravelStream()](../streaming/workflows/timeTravelStream)
 
 ---
 title: "Reference: Step Class | Workflows"

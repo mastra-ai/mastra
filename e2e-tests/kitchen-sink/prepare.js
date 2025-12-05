@@ -17,7 +17,7 @@ export async function setupTestProject(pathToStoreFiles, registryUrl) {
 
   console.log('[Setup Test Project] Installing dependencies');
 
-  spawnSync('pnpm', ['install'], {
+  const installResult = spawnSync('pnpm', ['install'], {
     cwd: newPath,
     stdio: 'inherit',
     env: {
@@ -26,10 +26,29 @@ export async function setupTestProject(pathToStoreFiles, registryUrl) {
     },
   });
 
+  if (installResult.status !== 0) {
+    throw new Error(`[Setup Test Project] pnpm install failed with exit code ${installResult.status}`);
+  }
+
   console.log('[Setup Test Project] Starting dev server');
 
-  spawn('pnpm', ['dev'], {
+  const devServer = spawn('pnpm', ['dev'], {
     cwd: newPath,
     stdio: 'inherit',
+    // Create a process group so we can kill it cleanly later
+    detached: process.platform !== 'win32',
   });
+
+  // Return cleanup function
+  return () => {
+    try {
+      if (process.platform !== 'win32') {
+        process.kill(-devServer.pid, 'SIGTERM');
+      } else {
+        devServer.kill('SIGTERM');
+      }
+    } catch {
+      // Process may have already exited
+    }
+  };
 }

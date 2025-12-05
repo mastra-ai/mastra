@@ -4,6 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   MastraStorage,
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -76,7 +77,7 @@ export class CloudflareStore extends MastraStorage {
   }
 
   constructor(config: CloudflareStoreConfig) {
-    super({ id: config.id, name: 'Cloudflare' });
+    super({ id: config.id, name: 'Cloudflare', disableInit: config.disableInit });
 
     try {
       if (isWorkersConfig(config)) {
@@ -122,7 +123,7 @@ export class CloudflareStore extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_INIT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

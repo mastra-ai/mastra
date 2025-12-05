@@ -1,6 +1,6 @@
 {
   "name": "@mastra/chroma",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "Chroma vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "chromadb": "^3.0.17"
+    "chromadb": "^3.1.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
