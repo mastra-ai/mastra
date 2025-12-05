@@ -63,6 +63,14 @@ export type StepSuccess<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+/** Tripwire data attached to a failed step when triggered by a processor */
+export interface StepTripwireInfo {
+  reason: string;
+  retry?: boolean;
+  metadata?: Record<string, unknown>;
+  processorId?: string;
+}
+
 export type StepFailure<P, R, S, T> = {
   status: 'failed';
   error: string | Error;
@@ -75,6 +83,8 @@ export type StepFailure<P, R, S, T> = {
   suspendedAt?: number;
   resumedAt?: number;
   metadata?: StepMetadata;
+  /** Tripwire data when step failed due to processor rejection */
+  tripwire?: StepTripwireInfo;
 };
 
 export type StepSuspended<P, S, T> = {
@@ -270,6 +280,14 @@ export interface WorkflowRunState {
   >;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
+  /** Tripwire reason when status is 'tripwire' */
+  reason?: string;
+  /** Whether retry was requested when status is 'tripwire' */
+  retry?: boolean;
+  /** Tripwire metadata when status is 'tripwire' */
+  metadata?: unknown;
+  /** Processor ID that triggered the tripwire when status is 'tripwire' */
+  processorId?: string;
 }
 
 export interface WorkflowOptions {

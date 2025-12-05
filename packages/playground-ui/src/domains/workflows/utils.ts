@@ -12,7 +12,7 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
     if (stepId !== 'input' && 'status' in stepResult) {
       const result = stepResult as StepResult<any, any, any, any>;
       // Check if this is a tripwire (failed step with tripwire property)
-      const hasTripwire = 'tripwire' in result && (result as any).tripwire;
+      const hasTripwire = result.status === 'failed' && result.tripwire !== undefined;
 
       steps[stepId] = {
         status: result.status,
@@ -23,7 +23,7 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
         resumePayload: 'resumePayload' in result ? result.resumePayload : undefined,
         // Don't include error when tripwire is present - tripwire takes precedence
         error: hasTripwire ? undefined : 'error' in result ? result.error : undefined,
-        tripwire: hasTripwire ? (result as any).tripwire : undefined,
+        tripwire: hasTripwire ? result.tripwire : undefined,
         startedAt: 'startedAt' in result ? result.startedAt : Date.now(),
         endedAt: 'endedAt' in result ? result.endedAt : undefined,
         suspendedAt: 'suspendedAt' in result ? result.suspendedAt : undefined,
@@ -56,10 +56,10 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
     ...(runState.status === 'suspended' ? { suspended: suspendedStepIds, suspendPayload: suspendPayload } : {}),
     ...(runState.status === 'tripwire'
       ? {
-          reason: (runState as any).reason,
-          retry: (runState as any).retry,
-          metadata: (runState as any).metadata,
-          processorId: (runState as any).processorId,
+          reason: runState.reason,
+          retry: runState.retry,
+          metadata: runState.metadata,
+          processorId: runState.processorId,
         }
       : {}),
   } as WorkflowRunStreamResult;
