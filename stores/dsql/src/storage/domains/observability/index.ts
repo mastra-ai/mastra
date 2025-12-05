@@ -12,6 +12,7 @@ import type {
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsDSQL } from '../operations';
 import { withRetry } from '../../../shared/retry';
+import { splitIntoBatches, DEFAULT_MAX_ROWS_PER_BATCH } from '../../../shared/batch';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityDSQL extends ObservabilityStorage {
@@ -366,33 +367,37 @@ export class ObservabilityDSQL extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+    const { batches } = splitIntoBatches(args.traceIds, { maxRows: DEFAULT_MAX_ROWS_PER_BATCH });
+
     const tableName = getTableName({
       indexName: TABLE_SPANS,
       schemaName: getSchemaName(this.schema),
     });
 
-    const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
+    for (const batchTraceIds of batches) {
+      const placeholders = batchTraceIds.map((_, i) => `$${i + 1}`).join(', ');
 
-    await withRetry(
-      async () => {
-        await this.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
-      },
-      {
-        onRetry: (error, attempt, delay) => {
-          this.logger?.warn?.(
-            `batchDeleteTraces retry ${attempt} for ${args.traceIds.length} traces after ${delay}ms: ${error.message}`,
-          );
+      await withRetry(
+        async () => {
+          await this.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, batchTraceIds);
         },
-      },
-    ).catch(error => {
-      throw new MastraError(
         {
-          id: 'DSQL_STORE_BATCH_DELETE_TRACES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          onRetry: (error, attempt, delay) => {
+            this.logger?.warn?.(
+              `batchDeleteTraces retry ${attempt} for ${batchTraceIds.length} traces after ${delay}ms: ${error.message}`,
+            );
+          },
         },
-        error,
-      );
-    });
+      ).catch(error => {
+        throw new MastraError(
+          {
+            id: 'DSQL_STORE_BATCH_DELETE_TRACES_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+          },
+          error,
+        );
+      });
+    }
   }
 }
