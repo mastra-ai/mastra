@@ -7,11 +7,15 @@ import {
   buildObserverPrompt,
   parseObserverOutput,
   optimizeObservationsForContext,
-  DEFAULT_OBSERVER_CONFIG,
-  type ObserverAgentConfig,
 } from './observer-agent';
+import {
+  REFLECTOR_SYSTEM_PROMPT,
+  buildReflectorPrompt,
+  parseReflectorOutput,
+  validateCompression,
+} from './reflector-agent';
 import { TokenCounter } from './token-counter';
-import type { ObserverConfig, ReflectorConfig } from './types';
+import type { ObserverConfig, ReflectorConfig, ThresholdRange, ModelSettings, ProviderOptions } from './types';
 
 /**
  * Configuration for ObservationalMemory
@@ -26,7 +30,7 @@ export interface ObservationalMemoryConfig {
   /**
    * Observer configuration
    */
-  observer?: ObserverConfig & ObserverAgentConfig;
+  observer?: ObserverConfig;
 
   /**
    * Reflector configuration
@@ -42,16 +46,57 @@ export interface ObservationalMemoryConfig {
 }
 
 /**
- * Default configuration values
+ * Internal resolved config with all defaults applied
+ */
+interface ResolvedObserverConfig {
+  model: string;
+  historyThreshold: number | ThresholdRange;
+  bufferEvery?: number;
+  modelSettings: Required<ModelSettings>;
+  providerOptions: ProviderOptions;
+}
+
+interface ResolvedReflectorConfig {
+  model: string;
+  observationThreshold: number | ThresholdRange;
+  bufferEvery?: number;
+  modelSettings: Required<ModelSettings>;
+  providerOptions: ProviderOptions;
+}
+
+/**
+ * Default configuration values matching the spec
  */
 const DEFAULTS = {
   observer: {
-    historyThreshold: 10000,
-    model: 'google:gemini-2.0-flash',
+    model: 'google/gemini-2.5-flash',
+    historyThreshold: 10_000,
+    modelSettings: {
+      temperature: 0.3,
+      maxOutputTokens: 100_000,
+    },
+    providerOptions: {
+      google: {
+        thinkingConfig: {
+          thinkingBudget: 215,
+        },
+      },
+    },
   },
   reflector: {
-    observationThreshold: 20000,
-    model: 'google:gemini-2.0-flash',
+    model: 'google/gemini-2.5-flash',
+    observationThreshold: 30_000,
+    modelSettings: {
+      temperature: 0.3,
+      maxOutputTokens: 100_000,
+    },
+    providerOptions: {
+      google: {
+        thinkingConfig: {
+          thinkingBudget: 1024,
+        },
+      },
+    },
   },
 } as const;
 
@@ -71,10 +116,23 @@ const DEFAULTS = {
  * ```ts
  * import { ObservationalMemory } from '@mastra/memory/experiments';
  *
+ * // Minimal configuration
+ * const om = new ObservationalMemory({ storage });
+ *
+ * // Full configuration
  * const om = new ObservationalMemory({
- *   storage: mastra.getStorage().stores.memory,
- *   observer: { historyThreshold: 10000 },
- *   reflector: { observationThreshold: 20000 },
+ *   storage,
+ *   observer: {
+ *     model: 'google/gemini-2.5-flash',
+ *     historyThreshold: 10_000, // or { min: 8_000, max: 15_000 }
+ *     bufferEvery: 4_000,
+ *     modelSettings: { temperature: 0.3 },
+ *   },
+ *   reflector: {
+ *     model: 'google/gemini-2.5-flash',
+ *     observationThreshold: 30_000,
+ *     bufferEvery: 15_000,
+ *   },
  * });
  *
  * const agent = new Agent({
@@ -90,8 +148,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   private resourceScope: boolean;
-  private observerConfig: Required<ObserverConfig> & ObserverAgentConfig;
-  private reflectorConfig: Required<ReflectorConfig>;
+  private observerConfig: ResolvedObserverConfig;
+  private reflectorConfig: ResolvedReflectorConfig;
 
   /** Internal Observer agent - created lazily */
   private observerAgent?: Agent;
@@ -103,22 +161,96 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.storage = config.storage;
     this.resourceScope = config.resourceScope ?? false;
 
+    // Resolve observer config with defaults
     this.observerConfig = {
-      historyThreshold: config.observer?.historyThreshold ?? DEFAULTS.observer.historyThreshold,
       model: config.observer?.model ?? DEFAULTS.observer.model,
+      historyThreshold: config.observer?.historyThreshold ?? DEFAULTS.observer.historyThreshold,
       bufferEvery: config.observer?.bufferEvery,
-      temperature: config.observer?.temperature ?? DEFAULT_OBSERVER_CONFIG.temperature,
-      maxOutputTokens: config.observer?.maxOutputTokens ?? DEFAULT_OBSERVER_CONFIG.maxOutputTokens,
-      thinkingBudget: config.observer?.thinkingBudget ?? DEFAULT_OBSERVER_CONFIG.thinkingBudget,
+      modelSettings: {
+        temperature: config.observer?.modelSettings?.temperature ?? DEFAULTS.observer.modelSettings.temperature,
+        maxOutputTokens:
+          config.observer?.modelSettings?.maxOutputTokens ?? DEFAULTS.observer.modelSettings.maxOutputTokens,
+      },
+      providerOptions: config.observer?.providerOptions ?? DEFAULTS.observer.providerOptions,
     };
 
+    // Resolve reflector config with defaults
     this.reflectorConfig = {
-      observationThreshold: config.reflector?.observationThreshold ?? DEFAULTS.reflector.observationThreshold,
       model: config.reflector?.model ?? DEFAULTS.reflector.model,
+      observationThreshold: config.reflector?.observationThreshold ?? DEFAULTS.reflector.observationThreshold,
       bufferEvery: config.reflector?.bufferEvery,
+      modelSettings: {
+        temperature: config.reflector?.modelSettings?.temperature ?? DEFAULTS.reflector.modelSettings.temperature,
+        maxOutputTokens:
+          config.reflector?.modelSettings?.maxOutputTokens ?? DEFAULTS.reflector.modelSettings.maxOutputTokens,
+      },
+      providerOptions: config.reflector?.providerOptions ?? DEFAULTS.reflector.providerOptions,
     };
 
     this.tokenCounter = new TokenCounter();
+
+    // Validate bufferEvery is less than threshold
+    this.validateBufferConfig();
+  }
+
+  /**
+   * Validate that bufferEvery is less than the threshold
+   */
+  private validateBufferConfig(): void {
+    const observerThreshold = this.getMaxThreshold(this.observerConfig.historyThreshold);
+    if (this.observerConfig.bufferEvery && this.observerConfig.bufferEvery >= observerThreshold) {
+      throw new Error(
+        `observer.bufferEvery (${this.observerConfig.bufferEvery}) must be less than historyThreshold (${observerThreshold})`,
+      );
+    }
+
+    const reflectorThreshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
+    if (this.reflectorConfig.bufferEvery && this.reflectorConfig.bufferEvery >= reflectorThreshold) {
+      throw new Error(
+        `reflector.bufferEvery (${this.reflectorConfig.bufferEvery}) must be less than observationThreshold (${reflectorThreshold})`,
+      );
+    }
+  }
+
+  /**
+   * Get the maximum value from a threshold (simple number or range)
+   */
+  private getMaxThreshold(threshold: number | ThresholdRange): number {
+    if (typeof threshold === 'number') {
+      return threshold;
+    }
+    return threshold.max;
+  }
+
+  /**
+   * Get the minimum value from a threshold (simple number or range)
+   */
+  private getMinThreshold(threshold: number | ThresholdRange): number {
+    if (typeof threshold === 'number') {
+      return threshold;
+    }
+    return threshold.min;
+  }
+
+  /**
+   * Calculate dynamic threshold based on observation space.
+   * When observations are full, use min threshold.
+   * When observations have room, use max threshold.
+   */
+  private calculateDynamicThreshold(
+    threshold: number | ThresholdRange,
+    currentObservationTokens: number,
+    maxObservationTokens: number,
+  ): number {
+    if (typeof threshold === 'number') {
+      return threshold;
+    }
+
+    // Calculate how "full" observations are (0 = empty, 1 = full)
+    const fullness = Math.min(currentObservationTokens / maxObservationTokens, 1);
+
+    // Interpolate: full observations = min threshold, empty = max threshold
+    return Math.round(threshold.max - fullness * (threshold.max - threshold.min));
   }
 
   /**
@@ -134,6 +266,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       });
     }
     return this.observerAgent;
+  }
+
+  /**
+   * Get or create the Reflector agent
+   */
+  private getReflectorAgent(): Agent {
+    if (!this.reflectorAgent) {
+      this.reflectorAgent = new Agent({
+        id: 'observational-memory-reflector',
+        name: 'Reflector',
+        instructions: REFLECTOR_SYSTEM_PROMPT,
+        model: this.reflectorConfig.model,
+      });
+    }
+    return this.reflectorAgent;
   }
 
   /**
@@ -177,16 +324,23 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Check if we need to trigger observation.
+   * Uses dynamic threshold if range is configured.
    */
-  private shouldObserve(messageTokens: number): boolean {
-    return messageTokens > this.observerConfig.historyThreshold;
+  private shouldObserve(messageTokens: number, observationTokens: number = 0): boolean {
+    const threshold = this.calculateDynamicThreshold(
+      this.observerConfig.historyThreshold,
+      observationTokens,
+      this.getMaxThreshold(this.reflectorConfig.observationThreshold),
+    );
+    return messageTokens > threshold;
   }
 
   /**
    * Check if we need to trigger reflection.
    */
   private shouldReflect(observationTokens: number): boolean {
-    return observationTokens > this.reflectorConfig.observationThreshold;
+    const threshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
+    return observationTokens > threshold;
   }
 
   /**
@@ -213,9 +367,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     const result = await agent.generate(prompt, {
       modelSettings: {
-        temperature: this.observerConfig.temperature,
-        maxOutputTokens: this.observerConfig.maxOutputTokens,
+        temperature: this.observerConfig.modelSettings.temperature,
+        maxOutputTokens: this.observerConfig.modelSettings.maxOutputTokens,
       },
+      providerOptions: this.observerConfig.providerOptions,
     });
 
     const parsed = parseObserverOutput(result.text);
@@ -228,16 +383,63 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Call the Reflector agent to condense observations.
-   * TODO: Implement in task 1.4
+   * Includes compression validation and retry logic.
    */
   private async callReflector(
-    _observations: string,
+    observations: string,
+    manualPrompt?: string,
   ): Promise<{ observations: string; suggestedContinuation?: string }> {
-    // TODO: Implement actual Reflector agent call in task 1.4
-    console.log('[OM] Reflector would be called here');
+    const agent = this.getReflectorAgent();
+    const originalTokens = this.tokenCounter.countObservations(observations);
+
+    // First attempt
+    let prompt = buildReflectorPrompt(observations, manualPrompt, false);
+    let result = await agent.generate(prompt, {
+      modelSettings: {
+        temperature: this.reflectorConfig.modelSettings.temperature,
+        maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
+      },
+      providerOptions: this.reflectorConfig.providerOptions,
+    });
+
+    let parsed = parseReflectorOutput(result.text);
+    let reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+
+    // Check if compression was successful
+    if (!validateCompression(originalTokens, reflectedTokens)) {
+      console.log(
+        `[OM] Reflection did not compress (${originalTokens} -> ${reflectedTokens}), retrying with compression guidance`,
+      );
+
+      // Retry with compression prompt
+      prompt = buildReflectorPrompt(observations, manualPrompt, true);
+      result = await agent.generate(prompt, {
+        modelSettings: {
+          temperature: this.reflectorConfig.modelSettings.temperature,
+          maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
+        },
+        providerOptions: this.reflectorConfig.providerOptions,
+      });
+
+      parsed = parseReflectorOutput(result.text);
+      reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+
+      // Log result of retry
+      if (!validateCompression(originalTokens, reflectedTokens)) {
+        console.warn(
+          `[OM] Reflection still did not compress after retry (${originalTokens} -> ${reflectedTokens}). ` +
+            `This may indicate the observations cannot be further condensed.`,
+        );
+      } else {
+        console.log(`[OM] Compression successful after retry (${originalTokens} -> ${reflectedTokens})`);
+      }
+    } else {
+      console.log(`[OM] Compression successful (${originalTokens} -> ${reflectedTokens})`);
+    }
+
     return {
-      observations: '## Reflected Observations\n\n(Reflector not yet implemented)',
-      suggestedContinuation: undefined,
+      observations: parsed.observations,
+      suggestedContinuation: parsed.suggestedContinuation,
     };
   }
 
@@ -322,12 +524,17 @@ ${suggestedContinuation}
     const allMessages = messageList.get.all.db();
     const unobservedMessages = this.getUnobservedMessages(allMessages, record);
     const messageTokens = this.tokenCounter.countMessages(unobservedMessages);
+    const currentObservationTokens = record.observationTokenCount ?? 0;
 
     // Check if we need to observe
-    if (this.shouldObserve(messageTokens)) {
-      console.log(
-        `[OM] History threshold exceeded (${messageTokens} > ${this.observerConfig.historyThreshold}), triggering Observer`,
+    if (this.shouldObserve(messageTokens, currentObservationTokens)) {
+      const threshold = this.calculateDynamicThreshold(
+        this.observerConfig.historyThreshold,
+        currentObservationTokens,
+        this.getMaxThreshold(this.reflectorConfig.observationThreshold),
       );
+
+      console.log(`[OM] History threshold exceeded (${messageTokens} > ${threshold}), triggering Observer`);
 
       const messageIdsToObserve = unobservedMessages.map(m => m.id).filter((id): id is string => !!id);
 
@@ -355,8 +562,9 @@ ${suggestedContinuation}
 
         // Check if we need to reflect
         if (this.shouldReflect(totalTokenCount)) {
+          const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
           console.log(
-            `[OM] Observation threshold exceeded (${totalTokenCount} > ${this.reflectorConfig.observationThreshold}), triggering Reflector`,
+            `[OM] Observation threshold exceeded (${totalTokenCount} > ${reflectThreshold}), triggering Reflector`,
           );
 
           await this.storage.setReflectingFlag(record.id, true);
@@ -397,12 +605,43 @@ ${suggestedContinuation}
   }
 
   /**
-   * Manually trigger reflection.
+   * Manually trigger reflection with optional guidance prompt.
+   *
+   * @example
+   * ```ts
+   * // Trigger reflection with specific focus
+   * await om.reflect(threadId, resourceId,
+   *   "focus on the authentication implementation, only keep minimal details about UI styling"
+   * );
+   * ```
    */
-  async reflect(threadId: string, resourceId?: string, _prompt?: string): Promise<void> {
+  async reflect(threadId: string, resourceId?: string, prompt?: string): Promise<void> {
     const record = await this.getOrCreateRecord(threadId, resourceId);
+
+    if (!record.activeObservations) {
+      console.log(`[OM] No observations to reflect on for ${record.id}`);
+      return;
+    }
+
     console.log(`[OM] Manual reflection triggered for ${record.id}`);
-    // TODO: Implement manual reflection
+
+    await this.storage.setReflectingFlag(record.id, true);
+
+    try {
+      const reflectResult = await this.callReflector(record.activeObservations, prompt);
+      const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+
+      await this.storage.createReflectionGeneration({
+        currentRecord: record,
+        reflection: reflectResult.observations,
+        tokenCount: reflectionTokenCount,
+        suggestedContinuation: reflectResult.suggestedContinuation,
+      });
+
+      console.log(`[OM] Manual reflection complete, new generation created`);
+    } finally {
+      await this.storage.setReflectingFlag(record.id, false);
+    }
   }
 
   /**
@@ -450,5 +689,19 @@ ${suggestedContinuation}
    */
   getTokenCounter(): TokenCounter {
     return this.tokenCounter;
+  }
+
+  /**
+   * Get current observer configuration
+   */
+  getObserverConfig(): ResolvedObserverConfig {
+    return this.observerConfig;
+  }
+
+  /**
+   * Get current reflector configuration
+   */
+  getReflectorConfig(): ResolvedReflectorConfig {
+    return this.reflectorConfig;
   }
 }

@@ -93,38 +93,6 @@ Note that the user messages are extremely important. The most recent user messag
 Finally it can be very helpful to give the agent a hint on what it's immediate first message should be when reviewing these reflections. eg should the agent call a specific tool? or should they respond with some text. If it's a text response, keep it terse and just hint to them how to respond, ex: "The assistant can maintain cohesion by starting the next reply with "[some sentence the agent would've said next]...". Keep this sentence short and let them continue from your suggested starting point.`;
 
 /**
- * Configuration for the Observer agent
- */
-export interface ObserverAgentConfig {
-  /**
-   * Model ID for the Observer agent.
-   * @default 'google:gemini-2.0-flash'
-   */
-  model?: string;
-
-  /**
-   * Temperature for generation.
-   * Lower values produce more consistent extraction.
-   * @default 0.3
-   */
-  temperature?: number;
-
-  /**
-   * Maximum output tokens.
-   * High value prevents truncation.
-   * @default 100000
-   */
-  maxOutputTokens?: number;
-
-  /**
-   * Thinking budget for Gemini models.
-   * Small value helps prevent repetition loops.
-   * @default 215
-   */
-  thinkingBudget?: number;
-}
-
-/**
  * Result from the Observer agent
  */
 export interface ObserverResult {
@@ -262,13 +230,3 @@ export function optimizeObservationsForContext(observations: string): string {
 
   return optimized.trim();
 }
-
-/**
- * Default configuration for the Observer agent
- */
-export const DEFAULT_OBSERVER_CONFIG: Required<ObserverAgentConfig> = {
-  model: 'google:gemini-2.0-flash',
-  temperature: 0.3,
-  maxOutputTokens: 100000,
-  thinkingBudget: 215,
-};
