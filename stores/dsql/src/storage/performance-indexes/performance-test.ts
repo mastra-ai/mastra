@@ -107,7 +107,7 @@ export class DSQLPerformanceTest {
       await db.none('DROP TABLE mastra_scorers');
       console.info('🧨 All tables dropped');
     } catch (error) {
-      console.warn('Could not truncate tables:', error);
+      console.warn('Could not drop tables:', error);
     }
   }
 
