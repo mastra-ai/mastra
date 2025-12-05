@@ -68,16 +68,16 @@ describe('RequestContext Type Tests', () => {
     it('should accept correct value types in set()', () => {
       const context = new RequestContext<MyContext>();
 
-      // set() has correct typing
+      // Verify correct types work
       context.set('name', 'John');
       context.set('age', 25);
       context.set('isActive', true);
 
-      // @ts-expect-error - age should be number, not string
-      context.set('age', 'invalid');
+      // Assert the value type for 'age' must be number
+      expectTypeOf<string>().not.toMatchTypeOf<Parameters<typeof context.set<'age'>>[1]>();
 
-      // @ts-expect-error - unknown key should not be allowed
-      context.set('unknownKey', 'value');
+      // Assert 'unknownKey' is not a valid key
+      expectTypeOf<'unknownKey'>().not.toMatchTypeOf<keyof MyContext>();
     });
 
     it('should work with nested object types', () => {
@@ -93,6 +93,22 @@ describe('RequestContext Type Tests', () => {
 
       const settings = context.get('settings');
       expectTypeOf(settings).toEqualTypeOf<{ theme: 'light' | 'dark' }>();
+    });
+
+    it('should infer correct value types from values()', () => {
+      const context = new RequestContext<MyContext>();
+      const values = context.values();
+      expectTypeOf(values).toEqualTypeOf<IterableIterator<string | number | boolean>>();
+    });
+
+    it('should provide typed callback in forEach()', () => {
+      const context = new RequestContext<MyContext>();
+      context.forEach((value, key) => {
+        // Key should be typed as keyof MyContext
+        expectTypeOf(key).toEqualTypeOf<keyof MyContext>();
+        // Value is the union of all value types (no narrowing in forEach)
+        expectTypeOf(value).toEqualTypeOf<string | number | boolean>();
+      });
     });
   });
 
