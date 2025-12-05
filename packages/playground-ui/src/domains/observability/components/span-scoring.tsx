@@ -18,6 +18,8 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
   const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer();
   const [notificationIsVisible, setNotificationIsVisible] = useState(false);
 
+  console.log('Scorers data:', scorers);
+
   useEffect(() => {
     if (isSuccess) {
       setNotificationIsVisible(true);
