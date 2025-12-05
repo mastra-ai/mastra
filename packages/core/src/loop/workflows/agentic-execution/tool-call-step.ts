@@ -21,6 +21,7 @@ export function createToolCallStep<
   streamState,
   modelSpanTracker,
   _internal,
+  autoResumeSuspendedTools,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -176,6 +177,7 @@ export function createToolCallStep<
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
+                willAutoResume: autoResumeSuspendedTools,
               },
             });
 
@@ -223,7 +225,12 @@ export function createToolCallStep<
               type: 'tool-call-suspended',
               runId,
               from: ChunkFrom.AGENT,
-              payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
+              payload: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                suspendPayload,
+                willAutoResume: autoResumeSuspendedTools,
+              },
             });
 
             // Flush messages before suspension to ensure they are persisted

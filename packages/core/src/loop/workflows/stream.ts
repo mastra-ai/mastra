@@ -1,7 +1,6 @@
 import { ReadableStream, WritableStream } from 'node:stream/web';
 import type { ToolSet } from 'ai-v5';
 import type z from 'zod';
-import { MessageList } from '../../agent';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
@@ -44,7 +43,6 @@ export function workflowLoopStream<
   streamState,
   agentId,
   toolCallId,
-  autoResumeSuspendedTools,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
@@ -131,19 +129,17 @@ export function workflowLoopStream<
             requestContext,
           });
 
-      if (autoResumeSuspendedTools && executionResult.status === 'suspended') {
+      if (rest.autoResumeSuspendedTools && executionResult.status === 'suspended') {
         while (executionResult.status === 'suspended') {
-          console.dir(
-            { suspendedSteps: executionResult.suspended, suspendPayload: executionResult.suspendPayload },
-            { depth: null },
-          );
-          const agent = rest.mastra?.getAgent(agentId)!;
+          const agent = rest.mastra?.getAgentById(agentId)!;
           let resumeSchema: z.ZodType<any> | undefined = undefined;
-          const toolName: string = executionResult.suspendPayload['executionWorkflow'].toolName;
+          const requireToolApproval: Record<string, any> | undefined =
+            executionResult.suspendPayload['executionWorkflow'].requireToolApproval;
+          const toolName: string = executionResult.suspendPayload['executionWorkflow'].toolName || '';
           const resumeLabel: string[] = executionResult.suspendPayload['executionWorkflow'].resumeLabel ?? [];
           let suspendedStepId: string | undefined = undefined;
           let suspendWorkflowId: string | undefined = undefined;
-          if (toolName.startsWith('workflow-')) {
+          if (toolName.startsWith('workflow-') && !requireToolApproval) {
             const stepPath = resumeLabel?.[0];
             const stepId = stepPath?.split('.')?.[0];
             const workflowId = toolName.substring('workflow-'.length);
@@ -155,9 +151,19 @@ export function workflowLoopStream<
               const step = workflow.steps?.[stepId];
               if (step) {
                 resumeSchema = step.resumeSchema;
+              } else {
+                rest.logger?.warn(
+                  `[Agent:${agentId}] - Suspended step ${stepId} not found in workflow ${workflowId}, auto resume will not be possible, please resume the agent manually`,
+                );
+                continue;
               }
+            } else {
+              rest.logger?.warn(
+                `[Agent:${agentId}] - Suspended workflow ${workflowId} not found, auto resume will not be possible, please resume the agent manually`,
+              );
+              continue;
             }
-          } else {
+          } else if (toolName && !requireToolApproval) {
             const agentTools = await agent.listTools();
             const tool = agentTools[toolName];
             if (tool && 'resumeSchema' in tool) {
@@ -165,40 +171,54 @@ export function workflowLoopStream<
             }
           }
 
-          if (!resumeSchema) {
-            // throw new Error(`No resume schema found for tool ${toolName}`);
-            continue;
-          }
+          let resumeDataForAutoResume = {
+            approved: true,
+          };
 
-          const llm = await agent.getLLM({ requestContext });
+          if (!requireToolApproval) {
+            if (!resumeSchema) {
+              rest.logger?.warn(
+                `[Agent:${agentId}] - No resumeSchema found for suspended ${suspendWorkflowId ? `step ${suspendedStepId} in workflow tool ${suspendWorkflowId}` : `tool ${toolName}`}, auto resume will not be possible, please resume the agent manually`,
+              );
+              continue;
+            }
 
-          const systemInstructions = `
+            try {
+              const llm = await agent.getLLM({ requestContext });
+
+              const systemInstructions = `
             You are an assistant used to resume a suspended tool call.
             Your job is to create the resume data for the tool call using the schema passed as the structure for the data.
             You will generate an object that matches the schema.
           `;
 
-          const messageList = new MessageList()
-            .add(systemInstructions, 'system')
-            .add(initialData.messages.all, 'memory');
+              const messageListToUse = messageList.addSystem(systemInstructions);
 
-          const result = (llm as MastraLLMVNext).stream({
-            methodType: 'generate',
-            requestContext,
-            messageList,
-            agentId,
-            tracingContext: rest.modelSpanTracker?.getTracingContext()!,
-            structuredOutput: {
-              schema: resumeSchema,
-            },
-          });
+              const result = (llm as MastraLLMVNext).stream({
+                methodType: 'generate',
+                requestContext,
+                messageList: messageListToUse,
+                agentId,
+                tracingContext: rest.modelSpanTracker?.getTracingContext()!,
+                structuredOutput: {
+                  schema: resumeSchema,
+                },
+              });
 
-          const resumeDataForAutoResume = await result.object;
+              resumeDataForAutoResume = await result.object;
+            } catch (error) {
+              rest.logger?.error(
+                `[Agent:${agentId}] - Error generating resumeData for suspended ${suspendWorkflowId ? `step ${suspendedStepId} in workflow ${suspendWorkflowId}` : `tool ${toolName}`}:`,
+                error,
+              );
+              continue;
+            }
+          }
 
           executionResult = await run.resume({
             resumeData: resumeDataForAutoResume,
             tracingContext: rest.modelSpanTracker?.getTracingContext(),
-            label: toolCallId,
+            ...(requireToolApproval ? { label: requireToolApproval.toolCallId } : {}),
           });
         }
       }

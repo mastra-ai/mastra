@@ -202,10 +202,121 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(mockFindUser).toHaveBeenCalled();
         expect(name).toBe('Dero Israel');
       }, 500000);
+
+      it('should automatically approve findUserTool call with requireToolApproval on tool when autoResumeSuspendedTools is true', async () => {
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          requireApproval: true,
+          execute: async input => {
+            return mockFindUser(input) as Promise<Record<string, any>>;
+          },
+        });
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool },
+          defaultOptions: {
+            autoResumeSuspendedTools: true,
+          },
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+
+        for await (const _chunk of stream.fullStream) {
+        }
+
+        const toolResults = await stream.toolResults;
+
+        const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload as {
+          result: { name: string };
+        };
+
+        const name = toolCall?.result?.name;
+
+        expect(mockFindUser).toHaveBeenCalled();
+        expect(name).toBe('Dero Israel');
+      }, 500000);
     });
 
     describe.skipIf(version === 'v1')('suspension', () => {
-      it.only('should call findUserTool with suspend and resume', async () => {
+      it('should call findUserTool with suspend and resume', async () => {
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          suspendSchema: z.object({
+            message: z.string(),
+          }),
+          resumeSchema: z.object({
+            name: z.string(),
+          }),
+          execute: async (inputData, context) => {
+            // console.log('context', context);
+            if (!context?.agent?.resumeData) {
+              return await context?.agent?.suspend({ message: 'Please provide the name of the user' });
+            }
+
+            return {
+              name: context?.agent?.resumeData?.name,
+              email: 'test@test.com',
+            };
+          },
+        });
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool },
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        let toolCall;
+        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        for await (const _chunk of stream.fullStream) {
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
+        for await (const _chunk of resumeStream.fullStream) {
+        }
+
+        const toolResults = await resumeStream.toolResults;
+
+        toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
+
+        const name = toolCall?.result?.name;
+        const email = toolCall?.result?.email;
+
+        expect(name).toBe('Dero Israel');
+        expect(email).toBe('test@test.com');
+      }, 15000);
+
+      it('should automatically resume suspended findUserTool when autoResumeSuspendedTools is true', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
           description: 'This is a test tool that returns the name and email',
@@ -254,12 +365,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const stream = await agentOne.stream('Find the user with name - Dero Israel');
         for await (const _chunk of stream.fullStream) {
         }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
-        for await (const _chunk of resumeStream.fullStream) {
-        }
 
-        const toolResults = await resumeStream.toolResults;
+        const toolResults = await stream.toolResults;
 
         toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
 
@@ -271,6 +378,100 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
       }, 15000);
 
       it('should call findUserWorkflow with suspend and resume', async () => {
+        const findUserStep = createStep({
+          id: 'find-user-step',
+          description: 'This is a test step that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          suspendSchema: z.object({
+            message: z.string(),
+          }),
+          resumeSchema: z.object({
+            name: z.string(),
+          }),
+          outputSchema: z.object({
+            name: z.string(),
+            email: z.string(),
+          }),
+          execute: async ({ suspend, resumeData }) => {
+            if (!resumeData) {
+              return await suspend({ message: 'Please provide the name of the user' });
+            }
+
+            return {
+              name: resumeData?.name,
+              email: 'test@test.com',
+            };
+          },
+        });
+
+        const findUserWorkflow = createWorkflow({
+          id: 'find-user-workflow',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          outputSchema: z.object({
+            name: z.string(),
+            email: z.string(),
+          }),
+        })
+          .then(findUserStep)
+          .commit();
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserWorkflow.',
+          model: openaiModel,
+          workflows: { findUserWorkflow },
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        let toolCall;
+        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        const suspendData = {
+          suspendPayload: null,
+          suspendedToolName: '',
+        };
+        for await (const _chunk of stream.fullStream) {
+          if (_chunk.type === 'tool-call-suspended') {
+            suspendData.suspendPayload = _chunk.payload.suspendPayload;
+            suspendData.suspendedToolName = _chunk.payload.toolName;
+          }
+        }
+        if (suspendData.suspendPayload) {
+          const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
+          for await (const _chunk of resumeStream.fullStream) {
+          }
+
+          const toolResults = await resumeStream.toolResults;
+
+          toolCall = toolResults?.find(
+            (result: any) => result.payload.toolName === 'workflow-findUserWorkflow',
+          )?.payload;
+
+          const name = toolCall?.result?.result?.name;
+          const email = toolCall?.result?.result?.email;
+
+          expect(name).toBe('Dero Israel');
+          expect(email).toBe('test@test.com');
+        }
+
+        expect(suspendData.suspendPayload).toBeDefined();
+        expect(suspendData.suspendedToolName).toBe('workflow-findUserWorkflow');
+        expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the name of the user');
+      }, 15000);
+
+      it('should automatically resume suspended findUserWorkflow when autoResumeSuspendedTools is true', async () => {
         const findUserStep = createStep({
           id: 'find-user-step',
           description: 'This is a test step that returns the name and email',
@@ -344,23 +545,16 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             suspendData.suspendedToolName = _chunk.payload.toolName;
           }
         }
-        if (suspendData.suspendPayload) {
-          const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
-          for await (const _chunk of resumeStream.fullStream) {
-          }
 
-          const toolResults = await resumeStream.toolResults;
+        const toolResults = await stream.toolResults;
 
-          toolCall = toolResults?.find(
-            (result: any) => result.payload.toolName === 'workflow-findUserWorkflow',
-          )?.payload;
+        toolCall = toolResults?.find((result: any) => result.payload.toolName === 'workflow-findUserWorkflow')?.payload;
 
-          const name = toolCall?.result?.result?.name;
-          const email = toolCall?.result?.result?.email;
+        const name = toolCall?.result?.result?.name;
+        const email = toolCall?.result?.result?.email;
 
-          expect(name).toBe('Dero Israel');
-          expect(email).toBe('test@test.com');
-        }
+        expect(name).toBe('Dero Israel');
+        expect(email).toBe('test@test.com');
 
         expect(suspendData.suspendPayload).toBeDefined();
         expect(suspendData.suspendedToolName).toBe('workflow-findUserWorkflow');
