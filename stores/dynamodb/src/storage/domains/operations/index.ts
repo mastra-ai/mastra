@@ -2,6 +2,7 @@ import { DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  createStorageErrorId,
   StoreOperations,
   TABLE_SPANS,
   TABLE_MESSAGES,
@@ -135,7 +136,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       // For other errors (like permissions issues), we should throw
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_VALIDATE_TABLE_EXISTS_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'VALIDATE_TABLE_EXISTS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName: this.tableName },
@@ -173,7 +174,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       this.logger.error('Error validating table access', { tableName: this.tableName, error });
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_VALIDATE_TABLE_ACCESS_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'VALIDATE_TABLE_ACCESS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName: this.tableName },
@@ -189,7 +190,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     const entityName = this.getEntityNameForTable(tableName);
     if (!entityName || !this.service.entities[entityName]) {
       throw new MastraError({
-        id: 'STORAGE_DYNAMODB_STORE_INSERT_INVALID_ARGS',
+        id: createStorageErrorId('DYNAMODB', 'INSERT', 'INVALID_ARGS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No entity defined for tableName',
@@ -204,7 +205,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_INSERT_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -232,7 +233,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
 
     if (!entityName || !this.service.entities[entityName]) {
       throw new MastraError({
-        id: 'STORAGE_DYNAMODB_STORE_CLEAR_TABLE_INVALID_ARGS',
+        id: createStorageErrorId('DYNAMODB', 'CLEAR_TABLE', 'INVALID_ARGS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No entity defined for tableName',
@@ -319,7 +320,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -338,7 +339,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     const entityName = this.getEntityNameForTable(tableName);
     if (!entityName || !this.service.entities[entityName]) {
       throw new MastraError({
-        id: 'STORAGE_DYNAMODB_STORE_BATCH_INSERT_INVALID_ARGS',
+        id: createStorageErrorId('DYNAMODB', 'BATCH_INSERT', 'INVALID_ARGS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No entity defined for tableName',
@@ -375,7 +376,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -394,7 +395,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     const entityName = this.getEntityNameForTable(tableName);
     if (!entityName || !this.service.entities[entityName]) {
       throw new MastraError({
-        id: 'STORAGE_DYNAMODB_STORE_LOAD_INVALID_ARGS',
+        id: createStorageErrorId('DYNAMODB', 'LOAD', 'INVALID_ARGS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No entity defined for tableName',
@@ -426,7 +427,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_LOAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },

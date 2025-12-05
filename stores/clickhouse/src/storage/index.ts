@@ -4,7 +4,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_SCHEMAS,
   PaginationInfo,
@@ -141,7 +141,7 @@ export class ClickhouseStore extends MastraStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_OPTIMIZE_TABLE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'OPTIMIZE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -159,7 +159,7 @@ export class ClickhouseStore extends MastraStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_MATERIALIZE_TTL_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'MATERIALIZE_TTL', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },

@@ -4,7 +4,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
   PaginationInfo,
@@ -98,7 +98,7 @@ export class LanceStorage extends MastraStorage {
     } catch (e: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_CONNECT_FAILED',
+          id: createStorageErrorId('LANCE', 'CONNECT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to connect to LanceDB: ${e.message || e}`,
