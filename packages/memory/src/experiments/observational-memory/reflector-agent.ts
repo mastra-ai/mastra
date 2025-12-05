@@ -177,7 +177,7 @@ export function parseReflectorOutput(output: string): ReflectorResult {
 
   // Extract continuation hint if present
   const continuationMatch = output.match(/<continuation>([\s\S]*?)<\/continuation>/i);
-  if (continuationMatch) {
+  if (continuationMatch?.[1]) {
     suggestedContinuation = continuationMatch[1].trim();
     // Remove the continuation block from observations
     observations = output.replace(/<continuation>[\s\S]*?<\/continuation>/i, '').trim();
@@ -188,7 +188,7 @@ export function parseReflectorOutput(output: string): ReflectorResult {
     const altMatch = output.match(
       /(?:^|\n)(?:Suggested continuation|Continuation hint|First message):?\s*(.+?)(?:\n|$)/i,
     );
-    if (altMatch) {
+    if (altMatch?.[1]) {
       suggestedContinuation = altMatch[1].trim();
     }
   }

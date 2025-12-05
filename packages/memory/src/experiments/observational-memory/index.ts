@@ -24,8 +24,6 @@ export {
   parseObserverOutput,
   optimizeObservationsForContext,
   formatMessagesForObserver,
-  DEFAULT_OBSERVER_CONFIG,
-  type ObserverAgentConfig,
   type ObserverResult as ObserverAgentResult,
 } from './observer-agent';
 
