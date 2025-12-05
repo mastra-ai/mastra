@@ -31,6 +31,15 @@ export type MultiPrimitiveExecutionOptions = {
 
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
   modelSettings?: LoopOptions['modelSettings'];
+
+  /**
+   * Signal to abort the network execution.
+   * When aborted, the signal propagates to all sub-agents, workflows, and tool executions.
+   */
+  abortSignal?: LoopConfig['abortSignal'];
+
+  /** Callback fired when network execution is aborted */
+  onAbort?: LoopConfig['onAbort'];
 };
 
 export type AgentExecutionOptions<
