@@ -247,10 +247,12 @@ export const listFiles = createTool({
 
       const fileList = await sandbox.fs.listFiles(normalizedPath);
 
+      const basePath = normalizedPath.endsWith('/') ? normalizedPath.slice(0, -1) : normalizedPath;
+
       return {
         files: fileList.map(file => ({
           name: file.name,
-          path: normalizeSandboxPath(file.name),
+          path: `${basePath}/${file.name}`,
           isDirectory: file.isDir,
         })),
         path: normalizedPath,

@@ -32,6 +32,11 @@ export const normalizeSandboxPath = (path: string): string => {
     return path;
   }
 
+  // If path starts with ./, remove the dot and treat as relative
+  if (path.startsWith('./')) {
+    return `${DEFAULT_WORKING_DIR}${path.slice(1)}`;
+  }
+
   // If path starts with /, treat it as relative to working directory
   if (path.startsWith('/')) {
     return `${DEFAULT_WORKING_DIR}${path}`;
