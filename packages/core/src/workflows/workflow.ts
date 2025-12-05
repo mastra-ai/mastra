@@ -147,7 +147,7 @@ export function createStep<TProcessorId extends string>(
   `processor:${TProcessorId}`,
   any,
   typeof ProcessorStepSchema,
-  typeof ProcessorStepSchema,
+  typeof ProcessorStepOutputSchema,
   any,
   any,
   DefaultEngineType
