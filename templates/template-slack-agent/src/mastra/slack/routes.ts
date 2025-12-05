@@ -124,12 +124,6 @@ const slackApps: SlackAppConfig[] = [
     signingSecret: process.env.SLACK_CAPS_SIGNING_SECRET!,
     agentName: 'capsAgent',
   },
-  {
-    name: 'numbers',
-    botToken: process.env.SLACK_NUMBERS_BOT_TOKEN!,
-    signingSecret: process.env.SLACK_NUMBERS_SIGNING_SECRET!,
-    agentName: 'numbersAgent',
-  },
 ];
 
 // Generate routes for all configured apps

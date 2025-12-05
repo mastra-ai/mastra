@@ -7,7 +7,7 @@ import { formatName } from './utils.js';
  * These can't be directly matched in switch because they're typed as
  * `agent-execution-event-${string}` and `workflow-execution-event-${string}`
  */
-export function handleNestedChunkEvents(chunk: ChunkType, state: StreamState, stepQueue: string[]): void {
+export function handleNestedChunkEvents(chunk: ChunkType, state: StreamState): void {
   // Guard: some chunk types (like "object") don't have payload
   if (!('payload' in chunk)) return;
 
@@ -18,7 +18,7 @@ export function handleNestedChunkEvents(chunk: ChunkType, state: StreamState, st
       const payload = (innerChunk as { payload?: { text?: string } }).payload;
       if (payload?.text) {
         state.text += payload.text;
-        state.status = 'responding';
+        state.chunkType = 'text-delta';
       }
     }
     return;
@@ -34,10 +34,8 @@ export function handleNestedChunkEvents(chunk: ChunkType, state: StreamState, st
       innerChunk.type === 'workflow-step-start'
     ) {
       const payload = (innerChunk as { payload?: { id?: string } }).payload;
-      state.status = 'workflow_step';
-      const stepId = payload?.id ?? 'Processing';
-      state.stepName = formatName(stepId);
-      stepQueue.push(state.stepName);
+      state.chunkType = 'workflow-step-start';
+      state.stepName = formatName(payload?.id ?? 'step');
     }
   }
 }

@@ -2,7 +2,7 @@
 
 A pattern for connecting Slack bots to Mastra agents with streaming responses and conversation memory.
 
-This example includes three demo agents (reverse, caps, numbers) — each gets its own Slack app and webhook route.
+This example includes two demo agents (reverse, caps) — each gets its own Slack app and webhook route.
 
 ## How It Works
 
@@ -35,9 +35,6 @@ SLACK_REVERSE_SIGNING_SECRET=...
 
 SLACK_CAPS_BOT_TOKEN=xoxb-...
 SLACK_CAPS_SIGNING_SECRET=...
-
-SLACK_NUMBERS_BOT_TOKEN=xoxb-...
-SLACK_NUMBERS_SIGNING_SECRET=...
 ```
 
 ### 3. Create Slack Apps
@@ -116,16 +113,26 @@ Follow the Slack app setup above, then add the credentials to `.env`.
 
 ```
 src/mastra/
-├── agents/           # Agent definitions
+├── agents/
+│   ├── caps-agent.ts       # Simple text transformation agent
+│   └── reverse-agent.ts    # Agent with tool + workflow capabilities
 ├── slack/
-│   ├── routes.ts     # Slack webhook handlers (one per app)
-│   ├── streaming.ts  # Stream agent responses to Slack with live updates
-│   └── verify.ts     # Slack request signature verification
-└── index.ts          # Mastra instance with agents and routes
+│   ├── chunks.ts           # Handle nested streaming chunk events
+│   ├── constants.ts        # Animation timing configuration
+│   ├── routes.ts           # Slack webhook handlers (creates one per app)
+│   ├── status.ts           # Format status text with spinners
+│   ├── streaming.ts        # Stream agent responses to Slack
+│   ├── types.ts            # TypeScript type definitions
+│   ├── utils.ts            # Helper functions
+│   └── verify.ts           # Slack request signature verification
+├── workflows/
+│   └── reverse-workflow.ts # Multi-step text transformation workflow
+└── index.ts                # Mastra instance with agents and routes
 ```
 
 ## Key Files
 
-- **`routes.ts`** — Defines the webhook endpoints and maps them to agents
-- **`streaming.ts`** — Handles streaming responses with spinner animations and tool/workflow call indicators
+- **`routes.ts`** — Defines webhook endpoints and maps Slack apps to agents
+- **`streaming.ts`** — Streams responses with animated spinners and tool/workflow indicators
+- **`status.ts`** — Formats status messages (thinking, tool calls, workflow steps)
 - **`verify.ts`** — Validates Slack request signatures for security

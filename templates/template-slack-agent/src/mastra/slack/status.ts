@@ -1,24 +1,33 @@
 import { SPINNER, TOOL_ICONS, WORKFLOW_ICONS } from './constants.js';
 import type { StreamState } from './types.js';
 
+/** Format chunk type for display: "tool-call" → "Tool Call" */
+function formatChunkType(type: string): string {
+  return type
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 /** Get animated status text for Slack message */
 export function getStatusText(state: StreamState, frame: number): string {
   const spinner = SPINNER[frame % SPINNER.length];
   const toolIcon = TOOL_ICONS[frame % TOOL_ICONS.length];
   const workflowIcon = WORKFLOW_ICONS[frame % WORKFLOW_ICONS.length];
 
-  switch (state.status) {
-    case 'thinking':
-      return `${spinner} Thinking...`;
-    case 'routing':
-      return `${spinner} Routing...`;
-    case 'tool_call':
-      return `${toolIcon} Using ${state.toolName}...`;
-    case 'workflow_step':
-      return `${workflowIcon} ${state.workflowName}: ${state.stepName}...`;
-    case 'agent_call':
-      return `${spinner} Calling ${state.agentName}...`;
-    case 'responding':
-      return `${spinner} Responding...`;
+  const type = state.chunkType;
+  const label = formatChunkType(type);
+
+  // Add context for specific chunk types
+  if (type.startsWith('tool-') && state.toolName) {
+    return `${toolIcon} ${label}: ${state.toolName}...`;
   }
+  if (type.startsWith('workflow-') && state.stepName) {
+    return `${workflowIcon} ${label}: ${state.stepName}...`;
+  }
+  if (type.includes('agent') && state.agentName) {
+    return `${spinner} ${label}: ${state.agentName}...`;
+  }
+
+  return `${spinner} ${label}...`;
 }

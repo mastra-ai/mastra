@@ -12,11 +12,9 @@ export interface StreamingOptions {
   threadId: string;
 }
 
-export type Status = 'thinking' | 'routing' | 'tool_call' | 'workflow_step' | 'agent_call' | 'responding';
-
 export interface StreamState {
   text: string;
-  status: Status;
+  chunkType: string;
   toolName?: string;
   workflowName?: string;
   stepName?: string;

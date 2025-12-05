@@ -1,6 +1,5 @@
 import type { WebClient } from '@slack/web-api';
 import { ANIMATION_INTERVAL, STEP_DISPLAY_DELAY, TOOL_DISPLAY_DELAY } from './constants.js';
-import { handleNestedChunkEvents } from './chunks.js';
 import { getStatusText } from './status.js';
 import { formatName, sleep } from './utils.js';
 import type { StreamingOptions, StreamState } from './types.js';
@@ -10,8 +9,7 @@ export type { StreamingOptions } from './types.js';
 export async function streamToSlack(options: StreamingOptions): Promise<void> {
   const { mastra, slackClient, channel, threadTs, agentName, message, resourceId, threadId } = options;
 
-  const state: StreamState = { text: '', status: 'thinking' };
-  const stepQueue: string[] = [];
+  const state: StreamState = { text: '', chunkType: 'start' };
 
   let messageTs: string | undefined;
   let frame = 0;
@@ -47,24 +45,6 @@ export async function streamToSlack(options: StreamingOptions): Promise<void> {
     await retrySlackUpdate(slackClient, channel, messageTs!, text);
   };
 
-  const showToolCall = async (name: string) => {
-    state.status = 'tool_call';
-    state.toolName = name;
-    frame++;
-    await updateSlack();
-    await sleep(TOOL_DISPLAY_DELAY);
-  };
-
-  const showQueuedSteps = async () => {
-    for (const stepName of stepQueue) {
-      state.stepName = stepName;
-      frame++;
-      await updateSlack();
-      await sleep(STEP_DISPLAY_DELAY);
-    }
-    stepQueue.length = 0;
-  };
-
   // ─────────────────────────────────────────────────────────────────────────────
   // Main
   // ─────────────────────────────────────────────────────────────────────────────
@@ -90,58 +70,50 @@ export async function streamToSlack(options: StreamingOptions): Promise<void> {
     const agent = mastra.getAgent(agentName);
     if (!agent) throw new Error(`Agent "${agentName}" not found`);
 
-    const stream = await agent.network(message, {
-      memory: { thread: threadId, resource: resourceId },
+    const stream = await agent.stream(message, {
+      resourceId,
+      threadId,
     });
 
     // Process chunks
-    for await (const chunk of stream) {
-      switch (chunk.type) {
-        case 'routing-agent-start':
-          state.status = 'routing';
-          break;
+    for await (const chunk of stream.fullStream) {
+      state.chunkType = chunk.type;
 
-        case 'tool-execution-start':
-          await showToolCall(
-            formatName(String(chunk.payload.args.toolName ?? chunk.payload.args.primitiveId ?? 'tool')),
-          );
+      switch (chunk.type) {
+        case 'text-delta':
+          if (chunk.payload.text) {
+            state.text += chunk.payload.text;
+          }
           break;
 
         case 'tool-call':
-          state.status = 'tool_call';
           state.toolName = formatName(chunk.payload.toolName);
+          frame++;
+          await updateSlack();
+          await sleep(TOOL_DISPLAY_DELAY);
+          break;
+
+        case 'tool-output':
+          // Workflow events come wrapped in tool-output chunks
+          if (chunk.payload.output && typeof chunk.payload.output === 'object') {
+            const output = chunk.payload.output as { type?: string; payload?: { id?: string; stepId?: string } };
+            // Use the inner workflow event type for display
+            if (output.type) {
+              state.chunkType = output.type;
+            }
+            if (output.type === 'workflow-step-start') {
+              state.stepName = formatName(output.payload?.id || output.payload?.stepId || 'step');
+              frame++;
+              await updateSlack();
+              await sleep(STEP_DISPLAY_DELAY);
+            }
+          }
           break;
 
         case 'workflow-execution-start':
-          state.status = 'workflow_step';
           state.workflowName = formatName(chunk.payload.name || chunk.payload.workflowId);
           state.stepName = 'Starting';
           break;
-
-        case 'workflow-execution-end':
-          await showQueuedSteps();
-          break;
-
-        case 'agent-execution-start':
-          state.status = 'agent_call';
-          state.agentName = formatName(chunk.payload.agentId);
-          break;
-
-        case 'routing-agent-text-delta':
-          if (chunk.payload.text) {
-            state.text += chunk.payload.text;
-            state.status = 'responding';
-          }
-          break;
-
-        case 'network-execution-event-step-finish':
-          if (chunk.payload.result) {
-            state.text = chunk.payload.result;
-          }
-          break;
-
-        default:
-          handleNestedChunkEvents(chunk, state, stepQueue);
       }
     }
 
