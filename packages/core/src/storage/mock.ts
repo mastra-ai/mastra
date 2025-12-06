@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '../agent';
-import type { ScoreRowData, ScoringSource } from '../evals/types';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../evals/types';
 import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
@@ -246,7 +246,7 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 

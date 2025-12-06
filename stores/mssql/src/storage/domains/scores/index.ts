@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import {
@@ -71,7 +71,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let validatedScore: ValidatedSaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
@@ -80,7 +80,14 @@ export class ScoresMSSQL extends ScoresStorage {
         {
           id: createStorageErrorId('MSSQL', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
@@ -89,6 +96,7 @@ export class ScoresMSSQL extends ScoresStorage {
     try {
       // Generate ID like other storage implementations
       const scoreId = randomUUID();
+      const now = new Date();
 
       const {
         scorer,
@@ -117,13 +125,12 @@ export class ScoresMSSQL extends ScoresStorage {
           requestContext: requestContext || null,
           entity: entity || null,
           scorer: scorer || null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id: scoreId });
-      return { score: scoreFromDb! };
+      return { score: { ...validatedScore, id: scoreId, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
