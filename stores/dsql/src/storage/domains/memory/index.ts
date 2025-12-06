@@ -911,7 +911,19 @@ export class MemoryDSQL extends MemoryStorage {
           );
         },
       },
-    );
+    ).catch(error => {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_DSQL_STORE_UPDATE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageIdsLength: messageIds.length,
+          },
+        },
+        error,
+      );
+    });
 
     // Re-fetch to return the fully updated messages
     const updatedMessages = await this.client.manyOrNone<MessageRowFromDB>(selectQuery, [messageIds]);
