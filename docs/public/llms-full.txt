@@ -57199,19 +57199,26 @@ Retrieve a list of all available agents:
 const agents = await mastraClient.listAgents();
 ```
 
-Returns a record of agent IDs to their serialized agent configurations. See the [Agent class reference](/reference/v1/agents/agent) for details on agent properties.
+Returns a record of agent IDs to their serialized agent configurations.
 
 ## Working with a Specific Agent
 
-Get an instance of a specific agent:
+Get an instance of a specific agent by its ID:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+export const myAgent = new Agent({
+  id: "my-agent",
+  // ...
+});
+```
 
 ```typescript
-const agent = mastraClient.getAgent("agent-id");
+const agent = mastraClient.getAgent("my-agent");
 ```
 
 ## Agent Methods
 
-### Get Agent Details
+### details()
 
 Retrieve detailed information about an agent:
 
@@ -57219,9 +57226,7 @@ Retrieve detailed information about an agent:
 const details = await agent.details();
 ```
 
-Returns the serialized agent configuration. See the [Agent class reference](/reference/v1/agents/agent) for details on agent properties.
-
-### Generate Response
+### generate()
 
 Generate a response from the agent:
 
@@ -57239,7 +57244,16 @@ const response = await agent.generate({
 });
 ```
 
-### Stream Response
+You can also use the simplified string format:
+
+```typescript
+const response = await agent.generate("Hello, how are you?", {
+  threadId: "thread-1",
+  resourceId: "resource-1",
+});
+```
+
+### stream()
 
 Stream responses from the agent for real-time interactions:
 
@@ -57259,8 +57273,28 @@ response.processDataStream({
     console.log(chunk);
   },
 });
+```
 
-// You can also read from response body directly
+You can also use the simplified string format:
+
+```typescript
+const response = await agent.stream("Tell me a story", {
+  threadId: "thread-1",
+  clientTools: { colorChangeTool },
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    if (chunk.type === "text-delta") {
+      console.log(chunk.payload.text);
+    }
+  },
+});
+```
+
+You can also read from response body directly:
+
+```typescript
 const reader = response.body.getReader();
 while (true) {
   const { done, value } = await reader.read();
@@ -57269,11 +57303,119 @@ while (true) {
 }
 ```
 
-### Client tools
+#### AI SDK compatible format
+
+To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkStream`:
+
+```typescript title="client-ai-sdk-transform.ts" copy
+import { createUIMessageStream } from "ai";
+import { toAISdkStream } from "@mastra/ai-sdk";
+import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
+
+const response = await agent.stream({ messages: "Tell me a story" });
+
+const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
+  start(controller) {
+    response
+      .processDataStream({
+        onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
+      })
+      .finally(() => controller.close());
+  },
+});
+
+const uiMessageStream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkStream(
+      chunkStream as unknown as MastraModelOutput,
+      { from: "agent" },
+    )) {
+      writer.write(part);
+    }
+  },
+});
+
+for await (const part of uiMessageStream) {
+  console.log(part);
+}
+```
+
+### getTool()
+
+Retrieve information about a specific tool available to the agent:
+
+```typescript
+const tool = await agent.getTool("tool-id");
+```
+
+### executeTool()
+
+Execute a specific tool for the agent:
+
+```typescript
+const result = await agent.executeTool("tool-id", {
+  data: { input: "value" },
+});
+```
+
+### network()
+
+Stream responses from an agent network for multi-agent interactions:
+
+```typescript
+const response = await agent.network({
+  messages: [
+    {
+      role: "user",
+      content: "Research this topic and write a summary",
+    },
+  ],
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+### approveToolCall()
+
+Approve a pending tool call that requires human confirmation:
+
+```typescript
+const response = await agent.approveToolCall({
+  runId: "run-123",
+  toolCallId: "tool-call-456",
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+### declineToolCall()
+
+Decline a pending tool call that requires human confirmation:
+
+```typescript
+const response = await agent.declineToolCall({
+  runId: "run-123",
+  toolCallId: "tool-call-456",
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+## Client Tools
 
 Client-side tools allow you to execute custom functions on the client side when the agent requests them.
-
-#### Basic Usage
 
 ```typescript
 import { createTool } from "@mastra/client-js";
@@ -57316,92 +57458,134 @@ response.processDataStream({
 });
 ```
 
-### Get Agent Tool
+## Stored Agents
 
-Retrieve information about a specific tool available to the agent:
+Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, memory, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated.
+
+### listStoredAgents()
+
+Retrieve a paginated list of all stored agents:
 
 ```typescript
-const tool = await agent.getTool("tool-id");
+const result = await mastraClient.listStoredAgents();
+console.log(result.agents); // Array of stored agents
+console.log(result.total); // Total count
 ```
 
-### Get Agent Evaluations
-
-Get evaluation results for the agent:
+With pagination and ordering:
 
 ```typescript
-// Get CI evaluations
-const evals = await agent.evals();
-
-// Get live evaluations
-const liveEvals = await agent.liveEvals();
-```
-
-### Stream
-
-Stream responses using the enhanced API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for Mastra's native format.
-
-```typescript
-const response = await agent.stream("Tell me a story", {
-  threadId: "thread-1",
-  clientTools: { colorChangeTool },
-});
-
-// Process the stream
-response.processDataStream({
-  onChunk: async (chunk) => {
-    if (chunk.type === "text-delta") {
-      console.log(chunk.payload.text);
-    }
+const result = await mastraClient.listStoredAgents({
+  page: 0,
+  perPage: 20,
+  orderBy: {
+    field: "createdAt",
+    direction: "DESC",
   },
 });
 ```
 
-#### AI SDK compatible format
+### createStoredAgent()
 
-To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkStream`:
-
-```typescript title="client-ai-sdk-transform.ts" copy
-import { createUIMessageStream } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
-import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
-
-const response = await agent.stream({ messages: "Tell me a story" });
-
-const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
-  start(controller) {
-    response
-      .processDataStream({
-        onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
-      })
-      .finally(() => controller.close());
-  },
-});
-
-const uiMessageStream = createUIMessageStream({
-  execute: async ({ writer }) => {
-    for await (const part of toAISdkStream(
-      chunkStream as unknown as MastraModelOutput,
-      { from: "agent" },
-    )) {
-      writer.write(part);
-    }
-  },
-});
-
-for await (const part of uiMessageStream) {
-  console.log(part);
-}
-```
-
-### Generate
-
-Generate a response using the enhanced API with improved method signatures and AI SDK v5 compatibility:
+Create a new stored agent:
 
 ```typescript
-const response = await agent.generate("Hello, how are you?", {
-  threadId: "thread-1",
-  resourceId: "resource-1",
+const agent = await mastraClient.createStoredAgent({
+  id: "my-agent",
+  name: "My Assistant",
+  instructions: "You are a helpful assistant.",
+  model: {
+    provider: "openai",
+    name: "gpt-4",
+  },
 });
+```
+
+With all options:
+
+```typescript
+const agent = await mastraClient.createStoredAgent({
+  id: "full-agent",
+  name: "Full Agent",
+  description: "A fully configured agent",
+  instructions: "You are a helpful assistant.",
+  model: {
+    provider: "openai",
+    name: "gpt-4",
+  },
+  tools: ["calculator", "weather"],
+  workflows: ["data-processing"],
+  agents: ["sub-agent-1"],
+  memory: "my-memory",
+  scorers: {
+    "quality-scorer": {
+      sampling: { type: "ratio", rate: 0.1 },
+    },
+  },
+  defaultOptions: {
+    maxSteps: 10,
+  },
+  metadata: {
+    version: "1.0",
+    team: "engineering",
+  },
+});
+```
+
+### getStoredAgent()
+
+Get an instance of a specific stored agent:
+
+```typescript
+const storedAgent = mastraClient.getStoredAgent("my-agent");
+```
+
+## Stored Agent Methods
+
+### details()
+
+Retrieve the stored agent configuration:
+
+```typescript
+const details = await storedAgent.details();
+console.log(details.name);
+console.log(details.instructions);
+console.log(details.model);
+```
+
+### update()
+
+Update specific fields of a stored agent. All fields are optional:
+
+```typescript
+const updated = await storedAgent.update({
+  name: "Updated Agent Name",
+  instructions: "New instructions for the agent.",
+});
+```
+
+```typescript
+// Update just the tools
+await storedAgent.update({
+  tools: ["new-tool-1", "new-tool-2"],
+});
+
+// Update metadata
+await storedAgent.update({
+  metadata: {
+    version: "2.0",
+    lastModifiedBy: "admin",
+  },
+});
+```
+
+### delete()
+
+Delete a stored agent:
+
+```typescript
+const result = await storedAgent.delete();
+console.log(result.success); // true
 ```
 
 
@@ -58762,6 +58946,82 @@ const serverByKey = mastra.getMCPServer('customKey');
 
 
 ---
+title: "Reference: Mastra.getMemory() | Core"
+description: "Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves a registered memory instance by its registry key."
+---
+
+# Mastra.getMemory()
+[EN] Source: https://mastra.ai/en/reference/core/getMemory
+
+The `.getMemory()` method retrieves a memory instance from the Mastra registry by its key. Memory instances are registered in the Mastra constructor and can be referenced by stored agents.
+
+## Usage example
+
+```typescript copy
+const memory = mastra.getMemory("conversationMemory");
+
+// Use the memory instance
+const thread = await memory.createThread({
+  resourceId: "user-123",
+  title: "New Conversation",
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "key",
+      type: "TMemoryKey extends keyof TMemory",
+      description:
+        "The registry key of the memory instance to retrieve. Must match a key used when registering memory in the Mastra constructor.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "TMemory[TMemoryKey]",
+      description:
+        "The memory instance with the specified key. Throws an error if the memory is not found.",
+    },
+  ]}
+/>
+
+## Example: Registering and Retrieving Memory
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+const conversationMemory = new Memory({
+  storage: new LibSQLStore({ url: ":memory:" }),
+});
+
+const mastra = new Mastra({
+  memory: {
+    conversationMemory,
+  },
+});
+
+// Later, retrieve the memory instance
+const memory = mastra.getMemory("conversationMemory");
+```
+
+## Related
+
+- [Mastra.listMemory()](/reference/v1/core/listMemory)
+- [Memory overview](/docs/v1/memory/overview)
+- [Agent Memory](/docs/v1/agents/agent-memory)
+
+
+---
 title: "Reference: getScorer() | Core"
 description: "Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key."
 ---
@@ -59000,6 +59260,192 @@ This method does not accept any parameters.
 
 - [Storage overview](/docs/v1/server-db/storage)
 - [Storage reference](/reference/v1/storage/libsql)
+
+
+---
+title: "Reference: Mastra.getStoredAgentById() | Core"
+description: "Documentation for the `Mastra.getStoredAgentById()` method in Mastra, which retrieves an agent from storage and creates an executable Agent instance."
+---
+
+# Mastra.getStoredAgentById()
+[EN] Source: https://mastra.ai/en/reference/core/getStoredAgentById
+
+The `.getStoredAgentById()` method retrieves an agent configuration from storage by its ID and creates an executable `Agent` instance. Stored agents allow you to persist agent configurations in a database and dynamically load them at runtime.
+
+## Usage example
+
+```typescript copy
+// Get an Agent instance from storage
+const agent = await mastra.getStoredAgentById("my-stored-agent");
+
+if (agent) {
+  const response = await agent.generate({ messages: "Hello!" });
+  console.log(response.text);
+}
+```
+
+```typescript copy
+// Get the raw storage data instead of an Agent instance
+const storedConfig = await mastra.getStoredAgentById("my-stored-agent", { raw: true });
+
+if (storedConfig) {
+  console.log(storedConfig.instructions);
+  console.log(storedConfig.createdAt);
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "The unique identifier of the stored agent to retrieve.",
+    },
+    {
+      name: "options",
+      type: "{ raw?: boolean }",
+      description:
+        "Optional configuration object.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "raw",
+      type: "boolean",
+      description:
+        "When `true`, returns the raw `StorageAgentType` object from storage instead of creating an `Agent` instance. Useful for inspecting stored configuration or metadata.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Agent | StorageAgentType | null",
+      description:
+        "Returns an `Agent` instance by default, or `StorageAgentType` when `raw: true`. Returns `null` if no agent with the given ID exists.",
+    },
+  ]}
+/>
+
+## Primitive Resolution
+
+When creating an `Agent` instance from stored configuration, the method resolves references to registered primitives:
+
+- **Tools**: Resolved from `tools` registered in Mastra config
+- **Workflows**: Resolved from `workflows` registered in Mastra config
+- **Sub-agents**: Resolved from `agents` registered in Mastra config
+- **Memory**: Resolved from `memory` registered in Mastra config
+- **Scorers**: Resolved from `scorers` registered in Mastra config, including sampling configuration
+
+If a referenced primitive is not found in the registry, a warning is logged but the agent is still created.
+
+## StorageAgentType
+
+When using `raw: true`, the returned object has the following structure:
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the agent.",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Display name of the agent.",
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Optional description of the agent.",
+      isOptional: true,
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "System instructions for the agent.",
+    },
+    {
+      name: "model",
+      type: "Record<string, unknown>",
+      description: "Model configuration with provider and name.",
+    },
+    {
+      name: "tools",
+      type: "Record<string, unknown>",
+      description: "Tool references to resolve from registry.",
+      isOptional: true,
+    },
+    {
+      name: "workflows",
+      type: "Record<string, unknown>",
+      description: "Workflow references to resolve from registry.",
+      isOptional: true,
+    },
+    {
+      name: "agents",
+      type: "Record<string, unknown>",
+      description: "Sub-agent references to resolve from registry.",
+      isOptional: true,
+    },
+    {
+      name: "memory",
+      type: "Record<string, unknown>",
+      description: "Memory reference to resolve from registry.",
+      isOptional: true,
+    },
+    {
+      name: "scorers",
+      type: "Record<string, unknown>",
+      description: "Scorer references with optional sampling config.",
+      isOptional: true,
+    },
+    {
+      name: "defaultOptions",
+      type: "Record<string, unknown>",
+      description: "Default options passed to agent execution.",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "Custom metadata stored with the agent.",
+      isOptional: true,
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "Timestamp when the agent was created.",
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "Timestamp when the agent was last updated.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Mastra.listStoredAgents()](/reference/v1/core/listStoredAgents)
+- [Storage overview](/docs/v1/server-db/storage)
+- [Agents overview](/docs/v1/agents/overview)
 
 
 ---
@@ -59495,6 +59941,79 @@ This method does not accept any parameters.
 
 
 ---
+title: "Reference: Mastra.listMemory() | Core"
+description: "Documentation for the `Mastra.listMemory()` method in Mastra, which returns all registered memory instances."
+---
+
+# Mastra.listMemory()
+[EN] Source: https://mastra.ai/en/reference/core/listMemory
+
+The `.listMemory()` method returns all memory instances registered with the Mastra instance.
+
+## Usage example
+
+```typescript copy
+const memoryInstances = mastra.listMemory();
+
+for (const [key, memory] of Object.entries(memoryInstances)) {
+  console.log(`Memory "${key}": ${memory.id}`);
+}
+```
+
+## Parameters
+
+This method takes no parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "Record<string, MastraMemory>",
+      description:
+        "An object containing all registered memory instances, keyed by their registry keys.",
+    },
+  ]}
+/>
+
+## Example: Checking Registered Memory
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+const conversationMemory = new Memory({
+  id: "conversation-memory",
+  storage: new LibSQLStore({ url: ":memory:" }),
+});
+
+const analyticsMemory = new Memory({
+  id: "analytics-memory",
+  storage: new LibSQLStore({ url: ":memory:" }),
+});
+
+const mastra = new Mastra({
+  memory: {
+    conversationMemory,
+    analyticsMemory,
+  },
+});
+
+// List all registered memory instances
+const allMemory = mastra.listMemory();
+console.log(Object.keys(allMemory)); // ["conversationMemory", "analyticsMemory"]
+```
+
+## Related
+
+- [Mastra.getMemory()](/reference/v1/core/getMemory)
+- [Memory overview](/docs/v1/memory/overview)
+- [Agent Memory](/docs/v1/agents/agent-memory)
+
+
+---
 title: "Reference: listScorers() | Core"
 description: "Documentation for the `listScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs."
 ---
@@ -59538,6 +60057,160 @@ This method takes no parameters.
 - [getScorer()](/reference/v1/core/getScorer) - Get a specific scorer by key
 - [getScorerById()](/reference/v1/core/getScorerById) - Get a scorer by its id property
 - [Scorers Overview](/docs/v1/evals/overview) - Learn about creating and using scorers
+
+
+---
+title: "Reference: Mastra.listStoredAgents() | Core"
+description: "Documentation for the `Mastra.listStoredAgents()` method in Mastra, which retrieves a paginated list of agents from storage."
+---
+
+# Mastra.listStoredAgents()
+[EN] Source: https://mastra.ai/en/reference/core/listStoredAgents
+
+The `.listStoredAgents()` method retrieves a paginated list of agent configurations from storage. By default, it returns executable `Agent` instances, but can also return raw storage data.
+
+## Usage example
+
+```typescript copy
+// Get Agent instances from storage
+const { agents, total, hasMore } = await mastra.listStoredAgents();
+
+for (const agent of agents) {
+  console.log(agent.id, agent.name);
+  // Each agent is ready to use
+  // const response = await agent.generate({ messages: "Hello!" });
+}
+```
+
+```typescript copy
+// Get paginated results with raw storage data
+const result = await mastra.listStoredAgents({
+  page: 0,
+  perPage: 10,
+  raw: true,
+});
+
+console.log(`Showing ${result.agents.length} of ${result.total} agents`);
+console.log(`Has more: ${result.hasMore}`);
+
+for (const config of result.agents) {
+  console.log(config.id, config.name, config.createdAt);
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "args",
+      type: "object",
+      description:
+        "Optional configuration object for pagination and output format.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Args Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "page",
+      type: "number",
+      description: "Zero-indexed page number for pagination.",
+      isOptional: true,
+      defaultValue: "0",
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description:
+        "Number of items per page. Set to `false` to fetch all records without pagination.",
+      isOptional: true,
+      defaultValue: "100",
+    },
+    {
+      name: "raw",
+      type: "boolean",
+      description:
+        "When `true`, returns raw `StorageAgentType` objects instead of `Agent` instances.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "Agent[] | StorageAgentType[]",
+      description:
+        "Array of `Agent` instances by default, or `StorageAgentType` objects when `raw: true`.",
+    },
+    {
+      name: "total",
+      type: "number",
+      description: "Total number of stored agents across all pages.",
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "Current page number (zero-indexed).",
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description: "Number of items per page, or `false` if fetching all.",
+    },
+    {
+      name: "hasMore",
+      type: "boolean",
+      description: "Whether there are more pages available.",
+    },
+  ]}
+/>
+
+## Primitive Resolution
+
+When creating `Agent` instances (default behavior), each stored agent's configuration is resolved against registered primitives:
+
+- **Tools**: Resolved from `tools` registered in Mastra config
+- **Workflows**: Resolved from `workflows` registered in Mastra config
+- **Sub-agents**: Resolved from `agents` registered in Mastra config
+- **Memory**: Resolved from `memory` registered in Mastra config
+- **Scorers**: Resolved from `scorers` registered in Mastra config
+
+If a referenced primitive is not found, a warning is logged but the agent is still created.
+
+## Example: Iterating Through All Stored Agents
+
+```typescript copy
+async function getAllStoredAgents(mastra: Mastra) {
+  const allAgents: Agent[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const result = await mastra.listStoredAgents({ page, perPage: 50 });
+    allAgents.push(...result.agents);
+    hasMore = result.hasMore;
+    page++;
+  }
+
+  return allAgents;
+}
+```
+
+## Related
+
+- [Mastra.getStoredAgentById()](/reference/v1/core/getStoredAgentById)
+- [Storage overview](/docs/v1/server-db/storage)
+- [Agents overview](/docs/v1/agents/overview)
 
 
 ---
@@ -59775,6 +60448,14 @@ export const mastra = new Mastra({
       type: "Record<string, MastraModelGateway>",
       description:
         "Custom model gateways to register for accessing AI models through alternative providers or private deployments. Structured as a key-value pair, with keys being the registry key (used for getGateway()) and values being gateway instances.",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "memory",
+      type: "Record<string, MastraMemory>",
+      description:
+        "Memory instances to register. These can be referenced by stored agents and resolved at runtime. Structured as a key-value pair, with keys being the registry key and values being memory instances.",
       isOptional: true,
       defaultValue: "{}",
     },
