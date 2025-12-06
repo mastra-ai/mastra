@@ -104,7 +104,23 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
   summary: 'Create stored agent',
   description: 'Creates a new agent in storage with the provided configuration',
   tags: ['Stored Agents'],
-  handler: async ({ mastra, ...agentData }) => {
+  handler: async ({
+    mastra,
+    id,
+    name,
+    description,
+    instructions,
+    model,
+    tools,
+    defaultOptions,
+    workflows,
+    agents,
+    inputProcessors,
+    outputProcessors,
+    memory,
+    scorers,
+    metadata,
+  }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -117,27 +133,30 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
       }
 
       // Check if agent with this ID already exists
-      const existing = await storage.getAgentById({ id: agentData.id });
+      const existing = await storage.getAgentById({ id });
       if (existing) {
-        throw new HTTPException(409, { message: `Agent with id ${agentData.id} already exists` });
+        throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
+
+      // Only include tools if it's actually an array from the body (not {} from adapter)
+      const toolsFromBody = Array.isArray(tools) ? tools : undefined;
 
       const agent = await storage.createAgent({
         agent: {
-          id: agentData.id,
-          name: agentData.name,
-          description: agentData.description,
-          instructions: agentData.instructions,
-          model: agentData.model,
-          tools: agentData.tools,
-          defaultOptions: agentData.defaultOptions,
-          workflows: agentData.workflows,
-          agents: agentData.agents,
-          inputProcessors: agentData.inputProcessors,
-          outputProcessors: agentData.outputProcessors,
-          memory: agentData.memory,
-          scorers: agentData.scorers,
-          metadata: agentData.metadata,
+          id,
+          name,
+          description,
+          instructions,
+          model,
+          tools: toolsFromBody,
+          defaultOptions,
+          workflows,
+          agents,
+          inputProcessors,
+          outputProcessors,
+          memory,
+          scorers,
+          metadata,
         },
       });
 
@@ -161,7 +180,23 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   summary: 'Update stored agent',
   description: 'Updates an existing agent in storage with the provided fields',
   tags: ['Stored Agents'],
-  handler: async ({ mastra, storedAgentId, ...updates }) => {
+  handler: async ({
+    mastra,
+    storedAgentId,
+    name,
+    description,
+    instructions,
+    model,
+    tools,
+    defaultOptions,
+    workflows,
+    agents,
+    inputProcessors,
+    outputProcessors,
+    memory,
+    scorers,
+    metadata,
+  }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -179,9 +214,24 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
+      // Only include tools if it's actually an array from the body (not {} from adapter)
+      const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+
       const agent = await storage.updateAgent({
         id: storedAgentId,
-        ...updates,
+        name,
+        description,
+        instructions,
+        model,
+        tools: toolsFromBody,
+        defaultOptions,
+        workflows,
+        agents,
+        inputProcessors,
+        outputProcessors,
+        memory,
+        scorers,
+        metadata,
       });
 
       return agent;
