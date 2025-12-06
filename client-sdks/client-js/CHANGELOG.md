@@ -1,5 +1,18 @@
 # @mastra/client-js
 
+## 0.17.0-alpha.2
+
+### Patch Changes
+
+- The client-js package had its own simpler zodToJsonSchema implementation that was missing critical features from schema-compat. This could cause issues when users pass Zod schemas with `z.record()` or `z.date()` through the MastraClient. ([#10925](https://github.com/mastra-ai/mastra/pull/10925))
+
+  Now the client uses the same implementation as the rest of the codebase, which includes the Zod v4 `z.record()` bug fix, date-time format conversion for `z.date()`, and proper handling of unrepresentable types.
+
+  Also removes the now-unused `zod-to-json-schema` dependency from client-js.
+
+- Updated dependencies [[`b685c9c`](https://github.com/mastra-ai/mastra/commit/b685c9c0b89f49e0d4542c4ac72569682db69794)]:
+  - @mastra/core@0.24.7-alpha.2
+
 ## 0.17.0-alpha.1
 
 ### Minor Changes
