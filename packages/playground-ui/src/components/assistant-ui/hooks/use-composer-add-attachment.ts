@@ -23,8 +23,8 @@ export const useComposerAddAttachment = ({
     input.multiple = multiple;
     input.hidden = true;
 
-    const attachmentAccept = composerRuntime.getAttachmentAccept();
-    if (attachmentAccept !== '*') {
+    const attachmentAccept = composerRuntime.getState().attachmentAccept;
+    if (attachmentAccept && attachmentAccept !== '*') {
       input.accept = attachmentAccept;
     }
 
@@ -48,7 +48,7 @@ export const useComposerAddAttachment = ({
     };
 
     input.click();
-  }, [composerRuntime, multiple]);
+  }, [composerRuntime, multiple, onChange]);
 
   if (disabled) return undefined;
   return callback;
