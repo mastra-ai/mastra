@@ -24,9 +24,31 @@ export class AgentsLibSQL extends AgentsStorage {
     this.client = client;
   }
 
-  private parseJson(value: any): any {
+  private parseJson(value: any, fieldName?: string): any {
     if (!value) return undefined;
-    return typeof value === 'string' ? JSON.parse(value) : value;
+    if (typeof value !== 'string') return value;
+
+    try {
+      return JSON.parse(value);
+    } catch (error) {
+      const details: Record<string, string> = {
+        value: value.length > 100 ? value.substring(0, 100) + '...' : value,
+      };
+      if (fieldName) {
+        details.field = fieldName;
+      }
+
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'PARSE_JSON', 'INVALID_JSON'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Failed to parse JSON${fieldName ? ` for field "${fieldName}"` : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          details,
+        },
+        error,
+      );
+    }
   }
 
   private parseRow(row: any): StorageAgentType {
@@ -35,16 +57,16 @@ export class AgentsLibSQL extends AgentsStorage {
       name: row.name as string,
       description: row.description as string | undefined,
       instructions: row.instructions as string,
-      model: typeof row.model === 'string' ? JSON.parse(row.model) : row.model,
-      tools: this.parseJson(row.tools),
-      defaultOptions: this.parseJson(row.defaultOptions),
-      workflows: this.parseJson(row.workflows),
-      agents: this.parseJson(row.agents),
-      inputProcessors: this.parseJson(row.inputProcessors),
-      outputProcessors: this.parseJson(row.outputProcessors),
-      memory: this.parseJson(row.memory),
-      scorers: this.parseJson(row.scorers),
-      metadata: this.parseJson(row.metadata),
+      model: this.parseJson(row.model, 'model'),
+      tools: this.parseJson(row.tools, 'tools'),
+      defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
+      workflows: this.parseJson(row.workflows, 'workflows'),
+      agents: this.parseJson(row.agents, 'agents'),
+      inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
+      outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
+      memory: this.parseJson(row.memory, 'memory'),
+      scorers: this.parseJson(row.scorers, 'scorers'),
+      metadata: this.parseJson(row.metadata, 'metadata'),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
