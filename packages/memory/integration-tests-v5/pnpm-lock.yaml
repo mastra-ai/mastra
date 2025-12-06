@@ -11,6 +11,7 @@ overrides:
   '@mastra/memory': link:../../memory
   '@mastra/fastembed': link:../../fastembed
   '@mastra/libsql': link:../../../stores/libsql
+  '@mastra/pg': link:../../../stores/pg
 
 importers:
 
@@ -28,6 +29,9 @@ importers:
       '@mastra/memory':
         specifier: link:..
         version: link:..
+      '@mastra/pg':
+        specifier: link:../../../stores/pg
+        version: link:../../../stores/pg
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1

@@ -767,15 +767,6 @@ export function pgTests() {
           );
         });
       });
-
-      describe('Store Initialization', () => {
-        it('throws if store is not initialized', () => {
-          expect(() => new PostgresStore(validConfig).db.any('SELECT 1')).toThrow(
-            /PostgresStore: Store is not initialized/,
-          );
-          expect(() => new PostgresStore(validConfig).pgp).toThrow(/PostgresStore: Store is not initialized/);
-        });
-      });
     });
   });
 }

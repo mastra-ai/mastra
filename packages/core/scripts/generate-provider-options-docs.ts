@@ -137,6 +137,16 @@ function generateProviderDocs(providerName: string, typeName: string, project: P
 }
 
 /**
+ * Custom descriptions for provider options that need additional context
+ */
+const CUSTOM_OPTION_DESCRIPTIONS: Record<string, Record<string, string>> = {
+  openai: {
+    store:
+      'Controls whether OpenAI stores your API requests for model training. Required to be "false" if your organization has zero data retention enabled. See: https://platform.openai.com/docs/guides/your-data#zero-data-retention',
+  },
+};
+
+/**
  * Generate provider options section for a specific provider (for use in provider docs)
  */
 export function generateProviderOptionsSection(providerId: string): string {
@@ -221,12 +231,23 @@ export function generateProviderOptionsSection(providerId: string): string {
   markdown += `### Available Options\n\n`;
 
   // Generate PropertiesTable component with JSON data
-  const tableData = properties.map(prop => ({
-    name: prop.name,
-    type: prop.type,
-    description: prop.description || '',
-    isOptional: prop.optional,
-  }));
+  const customDescriptions = CUSTOM_OPTION_DESCRIPTIONS[providerId] || {};
+  const tableData = properties.map(prop => {
+    let description = prop.description || '';
+    const customDesc = customDescriptions[prop.name];
+
+    // Combine existing description with custom description
+    if (customDesc) {
+      description = description ? `${description}\n\n${customDesc}` : customDesc;
+    }
+
+    return {
+      name: prop.name,
+      type: prop.type,
+      description,
+      isOptional: prop.optional,
+    };
+  });
 
   markdown += `<PropertiesTable\n`;
   markdown += `  content={${JSON.stringify(tableData, null, 4)}}\n`;

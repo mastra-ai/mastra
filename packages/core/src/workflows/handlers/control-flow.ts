@@ -288,17 +288,12 @@ export async function executeConditional(
             requestContext,
             inputData: prevOutput,
             state: executionContext.state,
-            setState: (state: any) => {
-              executionContext.state = state;
-            },
             retryCount: -1,
             tracingContext: {
               currentSpan: evalSpan,
             },
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(null, stepResults),
-            // TODO: this function shouldn't have suspend probably?
-            suspend: async (_suspendPayload: any): Promise<any> => {},
             bail: () => {},
             abort: () => {
               abortController?.abort();
@@ -606,9 +601,6 @@ export async function executeLoop(
           requestContext,
           inputData: result.output,
           state: executionContext.state,
-          setState: (state: any) => {
-            executionContext.state = state;
-          },
           retryCount: -1,
           tracingContext: {
             currentSpan: evalSpan,
@@ -616,7 +608,6 @@ export async function executeLoop(
           iterationCount: iteration + 1,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(null, stepResults),
-          suspend: async (_suspendPayload: any): Promise<any> => {},
           bail: () => {},
           abort: () => {
             abortController?.abort();

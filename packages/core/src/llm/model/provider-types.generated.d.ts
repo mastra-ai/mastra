@@ -103,6 +103,7 @@ export type ProviderModelsMap = {
     'google/gemma-3-27b-it',
     'microsoft/phi-4-mini-instruct',
     'minimaxai/minimax-m2',
+    'mistralai/mistral-large-3-675b-instruct-2512',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
     'nvidia/cosmos-nemotron-34b',
@@ -485,6 +486,7 @@ export type ProviderModelsMap = {
   ];
   readonly baseten: readonly [
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    'deepseek-ai/DeepSeek-V3.2',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
     'zai-org/GLM-4.6',
@@ -597,6 +599,7 @@ export type ProviderModelsMap = {
     'gpt-5-nano',
     'gpt-5.1',
     'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
     'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',

@@ -96,7 +96,7 @@ export class StepExecutor extends MastraBase {
             requestContext,
             inputData,
             state: params.state,
-            setState: (state: any) => {
+            setState: async (state: any) => {
               // TODO
               params.state = state;
             },
@@ -109,6 +109,7 @@ export class StepExecutor extends MastraBase {
               const { suspendData, validationError } = await validateStepSuspendData({
                 suspendData: suspendPayload,
                 step,
+                validateInputs: params.validateInputs ?? true,
               });
               if (validationError) {
                 throw validationError;
@@ -275,16 +276,10 @@ export class StepExecutor extends MastraBase {
           requestContext,
           inputData,
           state,
-          setState: (_state: any) => {
-            // TODO
-          },
           retryCount,
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
-          suspend: async (_suspendPayload: any): Promise<any> => {
-            throw new Error('Not implemented');
-          },
           bail: (_result: any) => {
             throw new Error('Not implemented');
           },
@@ -345,7 +340,7 @@ export class StepExecutor extends MastraBase {
             inputData: params.input,
             // TODO: implement state
             state: {},
-            setState: (_state: any) => {
+            setState: async (_state: any) => {
               // TODO
             },
             retryCount,
@@ -418,7 +413,7 @@ export class StepExecutor extends MastraBase {
             inputData: params.input,
             // TODO: implement state
             state: {},
-            setState: (_state: any) => {
+            setState: async (_state: any) => {
               // TODO
             },
             retryCount,
