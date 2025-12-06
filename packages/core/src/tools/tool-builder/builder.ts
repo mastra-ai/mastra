@@ -16,6 +16,7 @@ import { SpanType, wrapMastra, executeWithContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
 import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
@@ -299,9 +300,9 @@ export class CoreToolBuilder extends MastraBase {
             ),
             tracingContext: { currentSpan: toolSpan },
             abortSignal: execOptions.abortSignal,
-            suspend: (args: any) => {
+            suspend: (args: any, opts?: SuspendOptions) => {
               suspendData = args;
-              return execOptions.suspend?.(args);
+              return execOptions.suspend?.(args, opts);
             },
             resumeData: execOptions.resumeData,
           };

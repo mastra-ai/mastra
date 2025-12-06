@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '../../../memory';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
+import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -20,6 +21,7 @@ export function createToolCallStep<
   streamState,
   modelSpanTracker,
   _internal,
+  autoResumeSuspendedTools,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -175,6 +177,7 @@ export function createToolCallStep<
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
+                willAutoResume: autoResumeSuspendedTools,
               },
             });
 
@@ -217,12 +220,17 @@ export function createToolCallStep<
           writableStream: writer,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
-          suspend: async (suspendPayload: any) => {
+          suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             controller.enqueue({
               type: 'tool-call-suspended',
               runId,
               from: ChunkFrom.AGENT,
-              payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
+              payload: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                suspendPayload,
+                willAutoResume: autoResumeSuspendedTools,
+              },
             });
 
             // Flush messages before suspension to ensure they are persisted
@@ -232,6 +240,8 @@ export function createToolCallStep<
               {
                 toolCallSuspended: suspendPayload,
                 __streamState: streamState.serialize(),
+                toolName: inputData.toolName,
+                resumeLabel: options?.resumeLabel,
               },
               {
                 resumeLabel: inputData.toolCallId,

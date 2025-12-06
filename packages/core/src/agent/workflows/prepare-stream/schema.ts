@@ -22,6 +22,7 @@ export type AgentCapabilities = {
   inputProcessors?: DynamicArgument<InputProcessor[]>;
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
   llm: MastraLLMVNext;
+  mastra?: Mastra;
 };
 
 const coreToolSchema = z.object({

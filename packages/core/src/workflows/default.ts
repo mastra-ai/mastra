@@ -352,15 +352,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (lastOutput.status === 'failed') {
       base.error = this.formatResultError(error, lastOutput);
     } else if (lastOutput.status === 'suspended') {
+      const suspendPayload: Record<string, any> = {};
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
-          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+          const { __workflow_meta, ...rest } = stepResult?.suspendPayload ?? {};
+          suspendPayload[stepId] = rest;
+          const nestedPath = __workflow_meta?.path;
           return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
         }
 
         return [];
       });
       base.suspended = suspendedStepIds;
+      base.suspendPayload = suspendPayload;
     }
 
     return base as TOutput;
