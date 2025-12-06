@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 0.14.5-alpha.0
+
+### Patch Changes
+
+- add flag to skip sessions and streaming in serverless mcp ([#10927](https://github.com/mastra-ai/mastra/pull/10927))
+
+- Updated dependencies [[`b685c9c`](https://github.com/mastra-ai/mastra/commit/b685c9c0b89f49e0d4542c4ac72569682db69794)]:
+  - @mastra/core@0.24.7-alpha.2
+
 ## 0.14.4
 
 ### Patch Changes
