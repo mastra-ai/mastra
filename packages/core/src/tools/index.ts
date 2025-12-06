@@ -1,5 +1,4 @@
 export * from './tool';
 export * from './types';
-export * from './ui-types';
-export { isVercelTool } from './toolchecks';
-export { ToolStream } from './stream';
+export { createToolSearch } from './tool-search';
+export type { ToolSearchConfig, ToolSearchMethod, ToolSearchResult } from './tool-search';
