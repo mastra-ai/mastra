@@ -5,6 +5,8 @@ import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';
+import { InMemoryAgentsStorage } from './domains/agents/inmemory';
+import type { InMemoryAgents } from './domains/agents/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
@@ -60,12 +62,18 @@ export class InMemoryStore extends MastraStorage {
       operations: operationsStorage,
     });
 
+    const agentsCollection: InMemoryAgents = new Map();
+    const agentsStorage = new InMemoryAgentsStorage({
+      collection: agentsCollection,
+    });
+
     this.stores = {
       operations: operationsStorage,
       workflows: workflowsStorage,
       scores: scoresStorage,
       memory: memoryStorage,
       observability: observabilityStorage,
+      agents: agentsStorage,
     };
   }
 
@@ -79,6 +87,7 @@ export class InMemoryStore extends MastraStorage {
       observabilityInstance: true,
       indexManagement: false,
       listScoresBySpan: true,
+      agents: true,
     };
   }
 
