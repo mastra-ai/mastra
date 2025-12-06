@@ -6,7 +6,7 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
-import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
+import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 
@@ -26,7 +26,22 @@ export type HonoVariables = {
 
 export type HonoBindings = {};
 
-export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequest, Context> {
+/**
+ * Minimal interface representing what MastraServer needs from a Hono app.
+ * This allows any Hono app instance to be passed without strict generic matching,
+ * avoiding the version mismatch issues that occur with Hono's strict generic types.
+ */
+export interface HonoApp {
+  use(path: string, ...handlers: MiddlewareHandler[]): unknown;
+  get(path: string, ...handlers: MiddlewareHandler[]): unknown;
+  post(path: string, ...handlers: MiddlewareHandler[]): unknown;
+  put(path: string, ...handlers: MiddlewareHandler[]): unknown;
+  delete(path: string, ...handlers: MiddlewareHandler[]): unknown;
+  patch(path: string, ...handlers: MiddlewareHandler[]): unknown;
+  all(path: string, ...handlers: MiddlewareHandler[]): unknown;
+}
+
+export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
       // Parse request context from request body and add to context
@@ -203,11 +218,7 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
     }
   }
 
-  async registerRoute<E extends Env = any>(
-    app: Hono<E, any, any>,
-    route: ServerRoute,
-    { prefix }: { prefix?: string },
-  ): Promise<void> {
+  async registerRoute(app: HonoApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 

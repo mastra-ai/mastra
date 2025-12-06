@@ -16,7 +16,7 @@ import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
-const server = new MastraServer({ app: app as any, mastra });
+const server = new MastraServer({ app, mastra });
 
 await server.init();
 

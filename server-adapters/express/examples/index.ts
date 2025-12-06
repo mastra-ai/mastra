@@ -73,6 +73,7 @@ const newAgent = new Agent({
 });
 
 export const planningAgent = new Agent({
+  id: 'planningAgent',
   name: 'planningAgent',
   model: openai('gpt-4o'),
   instructions: `
@@ -231,6 +232,7 @@ const planActivities = createStep({
 });
 
 export const summaryAgent = new Agent({
+  id: 'summaryAgent',
   name: 'summaryAgent',
   model: openai('gpt-4o'),
   instructions: `
@@ -242,6 +244,7 @@ export const summaryAgent = new Agent({
   `,
 });
 export const travelAgent = new Agent({
+  id: 'travelAgent',
   name: 'travelAgent',
   model: openai('gpt-4o'),
   instructions: `
@@ -446,6 +449,7 @@ const weatherWorkflow = createWorkflow({
 weatherWorkflow.commit();
 
 export const weatherAgent = new Agent({
+  id: 'weatherAgent',
   name: 'Weather Agent',
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.
