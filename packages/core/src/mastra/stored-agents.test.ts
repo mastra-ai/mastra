@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Mastra } from './index';
+import { z } from 'zod';
 import { Agent } from '../agent';
+import { createScorer } from '../evals';
 import { InMemoryStore } from '../storage/mock';
 import { createTool } from '../tools';
 import { createWorkflow, createStep } from '../workflows';
-import { createScorer } from '../evals';
-import { z } from 'zod';
+import { Mastra } from './index';
 
 // Mock tool for testing
 const mockTool = createTool({

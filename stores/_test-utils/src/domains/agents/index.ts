@@ -341,7 +341,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           },
         });
 
-        const savedAgent = await storage.createAgent({ agent });
+        await storage.createAgent({ agent });
         const retrievedAgent = await storage.getAgentById({ id: agent.id });
 
         expect(retrievedAgent?.model).toEqual(agent.model);

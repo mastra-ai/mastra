@@ -1001,7 +1001,7 @@ export class Mastra<
     const resolvedTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
     const registeredTools = this.#tools;
 
-    for (const [toolKey, toolConfig] of Object.entries(storedTools)) {
+    for (const [toolKey, _toolConfig] of Object.entries(storedTools)) {
       // Try to find the tool in registered tools
       if (registeredTools && registeredTools[toolKey]) {
         resolvedTools[toolKey] = registeredTools[toolKey];

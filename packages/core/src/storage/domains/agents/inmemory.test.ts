@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { StorageCreateAgentInput } from '../../types';
-import { InMemoryAgentsStorage, type InMemoryAgents } from './inmemory';
+import { InMemoryAgentsStorage } from './inmemory';
+import type { InMemoryAgents } from './inmemory';
 
 describe('InMemoryAgentsStorage', () => {
   let storage: InMemoryAgentsStorage;
