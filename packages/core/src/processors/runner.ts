@@ -541,13 +541,6 @@ export class ProcessorRunner {
 
     const stepInputResult: RunProcessInputStepResult<TOOLS> = {};
 
-    // Track accumulated values that chain through processors
-    let currentModel = initialModel;
-    let currentToolChoice = initialToolChoice;
-    let currentActiveTools = initialActiveTools;
-    let currentProviderOptions = initialProviderOptions;
-    let currentModelSettings = initialModelSettings;
-
     // Run through all input processors that have processInputStep
     for (const [index, processor] of this.inputProcessors.entries()) {
       const processMethod = processor.processInputStep?.bind(processor);
@@ -564,9 +557,12 @@ export class ProcessorRunner {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
       };
 
+      // Get all system messages to pass to the processor
+      const currentSystemMessages = messageList.getAllSystemMessages();
+
+      // Use the current span (the step span) as the parent for processor spans
       const currentSpan = tracingContext?.currentSpan;
-      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
+      const processorSpan = currentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `input step processor: ${processor.id}`,
         attributes: {
@@ -574,14 +570,28 @@ export class ProcessorRunner {
           processorType: 'input',
           processorIndex: index,
         },
-        input: { messages: processableMessages, stepNumber },
+        input: {
+          messages: processableMessages,
+          stepNumber,
+          systemMessages: currentSystemMessages,
+          steps,
+          model:
+            (stepInputResult.model ?? initialModel)
+              ? {
+                  modelId: (stepInputResult.model ?? initialModel)?.modelId,
+                  provider: (stepInputResult.model ?? initialModel)?.provider,
+                  specificationVersion: (stepInputResult.model ?? initialModel)?.specificationVersion,
+                }
+              : undefined,
+          toolChoice: stepInputResult.toolChoice ?? initialToolChoice,
+          activeTools: stepInputResult.activeTools ?? initialActiveTools,
+          providerOptions: stepInputResult.providerOptions ?? initialProviderOptions,
+          modelSettings: stepInputResult.modelSettings ?? initialModelSettings,
+        },
       });
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
-
-      // Get all system messages to pass to the processor
-      const currentSystemMessages = messageList.getAllSystemMessages();
 
       try {
         const result = await this.validateAndFormatProcessInputStepResult(
@@ -594,27 +604,23 @@ export class ProcessorRunner {
             tracingContext: { currentSpan: processorSpan },
             requestContext,
             steps,
-            toolChoice: currentToolChoice,
-            model: currentModel,
-            activeTools: currentActiveTools,
-
-            providerOptions: currentProviderOptions,
-            modelSettings: currentModelSettings,
+            toolChoice: stepInputResult.toolChoice ?? initialToolChoice,
+            model: stepInputResult.model ?? initialModel,
+            activeTools: stepInputResult.activeTools ?? initialActiveTools,
+            providerOptions: stepInputResult.providerOptions ?? initialProviderOptions,
+            modelSettings: stepInputResult.modelSettings ?? initialModelSettings,
             // structuredOutput, // TODO -- also need to somehow make the result.object and objectStream types work?
           }),
           { messageList, processor, stepNumber },
         );
 
         if (result.model) {
-          currentModel = result.model;
           stepInputResult.model = result.model;
         }
         if (result.toolChoice) {
-          currentToolChoice = result.toolChoice;
           stepInputResult.toolChoice = result.toolChoice;
         }
         if (result.activeTools) {
-          currentActiveTools = result.activeTools;
           stepInputResult.activeTools = result.activeTools;
         }
         if (result.messages) {
@@ -624,11 +630,9 @@ export class ProcessorRunner {
           messageList.replaceAllSystemMessages(result.systemMessages);
         }
         if (result.providerOptions) {
-          currentProviderOptions = result.providerOptions;
           stepInputResult.providerOptions = result.providerOptions;
         }
         if (result.modelSettings) {
-          currentModelSettings = result.modelSettings;
           stepInputResult.modelSettings = result.modelSettings;
         }
         if (result.messageList) {
@@ -638,7 +642,22 @@ export class ProcessorRunner {
         const mutations = messageList.stopRecording();
 
         processorSpan?.end({
-          output: messageList.get.all.db(),
+          output: {
+            messages: messageList.get.all.db(),
+            systemMessages: messageList.getAllSystemMessages(),
+            model:
+              (stepInputResult.model ?? initialModel)
+                ? {
+                    modelId: (stepInputResult.model ?? initialModel)?.modelId,
+                    provider: (stepInputResult.model ?? initialModel)?.provider,
+                    specificationVersion: (stepInputResult.model ?? initialModel)?.specificationVersion,
+                  }
+                : undefined,
+            toolChoice: stepInputResult.toolChoice,
+            activeTools: stepInputResult.activeTools,
+            providerOptions: stepInputResult.providerOptions,
+            modelSettings: stepInputResult.modelSettings,
+          },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
