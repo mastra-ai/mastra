@@ -1,5 +1,5 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { openai } from '@ai-sdk/openai-v5';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from '../error';
@@ -763,7 +763,7 @@ describe('Agent - network - tool context validation', () => {
     });
 
     // Consume the stream to trigger tool execution through network
-    for await (const chunk of anStream) {
+    for await (const _chunk of anStream) {
       // Stream events are processed
     }
 
