@@ -420,22 +420,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       });
 
       it('should handle tools configuration', async () => {
-        const tools = {
-          calculator: {
-            type: 'function',
-            description: 'Performs mathematical calculations',
-            parameters: {
-              type: 'object',
-              properties: {
-                expression: { type: 'string' },
-              },
-            },
-          },
-          webSearch: {
-            type: 'function',
-            description: 'Searches the web',
-          },
-        };
+        const tools = ['calculator', 'webSearch', 'codeInterpreter'];
 
         const agent = createSampleAgent({ tools });
 

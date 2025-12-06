@@ -28,7 +28,10 @@ export class InMemoryAgentsStorage extends AgentsStorage {
           ...agent,
           metadata: agent.metadata ? { ...agent.metadata } : agent.metadata,
           model: { ...agent.model },
-          tools: agent.tools ? { ...agent.tools } : agent.tools,
+          tools: agent.tools ? [...agent.tools] : agent.tools,
+          workflows: agent.workflows ? [...agent.workflows] : agent.workflows,
+          agents: agent.agents ? [...agent.agents] : agent.agents,
+          scorers: agent.scorers ? { ...agent.scorers } : agent.scorers,
         }
       : null;
   }
@@ -119,7 +122,10 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       ...agent,
       metadata: agent.metadata ? { ...agent.metadata } : agent.metadata,
       model: { ...agent.model },
-      tools: agent.tools ? { ...agent.tools } : agent.tools,
+      tools: agent.tools ? [...agent.tools] : agent.tools,
+      workflows: agent.workflows ? [...agent.workflows] : agent.workflows,
+      agents: agent.agents ? [...agent.agents] : agent.agents,
+      scorers: agent.scorers ? { ...agent.scorers } : agent.scorers,
     }));
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);

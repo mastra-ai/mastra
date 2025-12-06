@@ -202,20 +202,48 @@ export interface TracesPaginatedArg {
 }
 
 // Agent Storage Types
+
+/**
+ * Scorer reference with optional sampling configuration
+ */
+export interface StorageScorerConfig {
+  /** Sampling configuration for this scorer */
+  sampling?: {
+    type: 'ratio' | 'count';
+    rate?: number;
+    count?: number;
+  };
+}
+
+/**
+ * Stored agent configuration type.
+ * Primitives (tools, workflows, agents, memory, scorers) are stored as references
+ * that get resolved from Mastra's registries at runtime.
+ */
 export interface StorageAgentType {
   id: string;
   name: string;
   description?: string;
   instructions: string;
+  /** Model configuration (provider, name, etc.) */
   model: Record<string, unknown>;
-  tools?: Record<string, unknown>;
+  /** Array of tool keys to resolve from Mastra's tool registry */
+  tools?: string[];
+  /** Default options for generate/stream calls */
   defaultOptions?: Record<string, unknown>;
-  workflows?: Record<string, unknown>;
-  agents?: Record<string, unknown>;
+  /** Array of workflow keys to resolve from Mastra's workflow registry */
+  workflows?: string[];
+  /** Array of agent keys to resolve from Mastra's agent registry */
+  agents?: string[];
+  /** Input processor configurations */
   inputProcessors?: Record<string, unknown>[];
+  /** Output processor configurations */
   outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
-  scorers?: Record<string, unknown>;
+  /** Memory key to resolve from Mastra's memory registry */
+  memory?: string;
+  /** Scorer keys with optional sampling config, to resolve from Mastra's scorer registry */
+  scorers?: Record<string, StorageScorerConfig>;
+  /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -229,14 +257,19 @@ export type StorageUpdateAgentInput = {
   description?: string;
   instructions?: string;
   model?: Record<string, unknown>;
-  tools?: Record<string, unknown>;
+  /** Array of tool keys to resolve from Mastra's tool registry */
+  tools?: string[];
   defaultOptions?: Record<string, unknown>;
-  workflows?: Record<string, unknown>;
-  agents?: Record<string, unknown>;
+  /** Array of workflow keys to resolve from Mastra's workflow registry */
+  workflows?: string[];
+  /** Array of agent keys to resolve from Mastra's agent registry */
+  agents?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
-  scorers?: Record<string, unknown>;
+  /** Memory key to resolve from Mastra's memory registry */
+  memory?: string;
+  /** Scorer keys with optional sampling config */
+  scorers?: Record<string, StorageScorerConfig>;
   metadata?: Record<string, unknown>;
 };
 

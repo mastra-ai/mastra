@@ -23,7 +23,7 @@ const sampleStoredAgent = {
   description: 'A test agent from storage',
   instructions: 'You are a helpful test assistant',
   model: { provider: 'openai', name: 'gpt-4' },
-  tools: { 'test-tool': { type: 'function' } },
+  tools: ['test-tool'],
   defaultOptions: { maxSteps: 5 },
   metadata: { version: '1.0' },
 };
@@ -233,7 +233,7 @@ describe('Mastra Stored Agents', () => {
         agent: {
           ...sampleStoredAgent,
           id: 'agent-with-workflow',
-          workflows: { 'my-workflow': { id: 'my-workflow' } },
+          workflows: ['my-workflow'],
         },
       });
 
@@ -264,7 +264,7 @@ describe('Mastra Stored Agents', () => {
         agent: {
           ...sampleStoredAgent,
           id: 'agent-with-sub-agent',
-          agents: { 'sub-agent': { id: 'sub-agent' } },
+          agents: ['sub-agent'],
         },
       });
 
@@ -401,15 +401,9 @@ describe('Mastra Stored Agents', () => {
         description: 'An agent with primitives',
         instructions: 'You are a comprehensive test assistant',
         model: { provider: 'openai', name: 'gpt-4' },
-        tools: {
-          'registered-tool': { type: 'function' },
-        },
-        workflows: {
-          'registered-workflow': { id: 'registered-workflow' },
-        },
-        agents: {
-          'registered-sub-agent': { id: 'registered-sub-agent' },
-        },
+        tools: ['registered-tool'],
+        workflows: ['registered-workflow'],
+        agents: ['registered-sub-agent'],
         defaultOptions: { maxSteps: 10 },
         metadata: { version: '2.0', feature: 'full-test' },
       };
@@ -447,7 +441,7 @@ describe('Mastra Stored Agents', () => {
         model: { provider: 'openai', name: 'gpt-4' },
         scorers: {
           'registered-scorer': {
-            sampling: { type: 'ratio', rate: 0.5 },
+            sampling: { type: 'ratio' as const, rate: 0.5 },
           },
         },
       };
@@ -473,16 +467,14 @@ describe('Mastra Stored Agents', () => {
         description: 'Scorer to find by ID',
       }).generateScore(() => 0.5);
 
-      // Store agent with scorer reference by ID (not by registry key)
+      // Store agent with scorer reference by ID (the key is used to look up by key first, then by ID)
       const storedAgent = {
         id: 'agent-with-id-ref',
         name: 'Agent With ID Reference',
         instructions: 'Test agent',
         model: { provider: 'openai', name: 'gpt-4' },
         scorers: {
-          'different-key': {
-            id: 'scorer-by-id', // Reference by ID, not by registry key
-          },
+          'scorer-by-id': {}, // Use the scorer's ID as the key
         },
       };
 
@@ -506,10 +498,10 @@ describe('Mastra Stored Agents', () => {
         name: 'Agent With Missing References',
         instructions: 'Test agent',
         model: { provider: 'openai', name: 'gpt-4' },
-        tools: { 'missing-tool': {} },
-        workflows: { 'missing-workflow': {} },
-        agents: { 'missing-agent': {} },
-        memory: { key: 'missing-memory' },
+        tools: ['missing-tool'],
+        workflows: ['missing-workflow'],
+        agents: ['missing-agent'],
+        memory: 'missing-memory',
         scorers: { 'missing-scorer': {} },
       };
 

@@ -20,7 +20,7 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage, WorkflowRuns, StorageAgentType } from '../storage';
+import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
@@ -913,20 +913,7 @@ export class Mastra<
    * Creates an Agent instance from a stored agent configuration.
    * @private
    */
-  #createAgentFromStoredConfig(storedAgent: {
-    id: string;
-    name: string;
-    description?: string;
-    instructions: string;
-    model: Record<string, unknown>;
-    tools?: Record<string, unknown>;
-    defaultOptions?: Record<string, unknown>;
-    workflows?: Record<string, unknown>;
-    agents?: Record<string, unknown>;
-    memory?: Record<string, unknown>;
-    scorers?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-  }): Agent {
+  #createAgentFromStoredConfig(storedAgent: StorageAgentType): Agent {
     // Build model config from stored data
     // The model field stores { provider, name, ...otherConfig }
     const modelConfig = storedAgent.model as { provider?: string; name?: string; [key: string]: unknown };
@@ -993,15 +980,15 @@ export class Mastra<
    * Resolves tool references from stored configuration to actual tool instances.
    * @private
    */
-  #resolveStoredTools(storedTools?: Record<string, unknown>): Record<string, ToolAction<any, any, any, any, any, any>> {
-    if (!storedTools) {
+  #resolveStoredTools(storedTools?: string[]): Record<string, ToolAction<any, any, any, any, any, any>> {
+    if (!storedTools || storedTools.length === 0) {
       return {};
     }
 
     const resolvedTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
     const registeredTools = this.#tools;
 
-    for (const [toolKey, _toolConfig] of Object.entries(storedTools)) {
+    for (const toolKey of storedTools) {
       // Try to find the tool in registered tools
       if (registeredTools && registeredTools[toolKey]) {
         resolvedTools[toolKey] = registeredTools[toolKey];
@@ -1018,31 +1005,24 @@ export class Mastra<
    * Resolves workflow references from stored configuration to actual workflow instances.
    * @private
    */
-  #resolveStoredWorkflows(
-    storedWorkflows?: Record<string, unknown>,
-  ): Record<string, Workflow<any, any, any, any, any, any>> {
-    if (!storedWorkflows) {
+  #resolveStoredWorkflows(storedWorkflows?: string[]): Record<string, Workflow<any, any, any, any, any, any>> {
+    if (!storedWorkflows || storedWorkflows.length === 0) {
       return {};
     }
 
     const resolvedWorkflows: Record<string, Workflow<any, any, any, any, any, any>> = {};
 
-    for (const [workflowKey, workflowConfig] of Object.entries(storedWorkflows)) {
+    for (const workflowKey of storedWorkflows) {
       // Try to find the workflow in registered workflows
       try {
         const workflow = this.getWorkflow(workflowKey);
         resolvedWorkflows[workflowKey] = workflow;
       } catch {
-        // Try by ID if the config has an id field
-        const config = workflowConfig as { id?: string };
-        if (config.id) {
-          try {
-            const workflow = this.getWorkflowById(config.id);
-            resolvedWorkflows[workflowKey] = workflow;
-          } catch {
-            this.#logger?.warn(`Workflow "${workflowKey}" referenced in stored agent but not registered in Mastra`);
-          }
-        } else {
+        // Try by ID
+        try {
+          const workflow = this.getWorkflowById(workflowKey);
+          resolvedWorkflows[workflowKey] = workflow;
+        } catch {
           this.#logger?.warn(`Workflow "${workflowKey}" referenced in stored agent but not registered in Mastra`);
         }
       }
@@ -1055,29 +1035,24 @@ export class Mastra<
    * Resolves agent references from stored configuration to actual agent instances.
    * @private
    */
-  #resolveStoredAgents(storedAgents?: Record<string, unknown>): Record<string, Agent<any>> {
-    if (!storedAgents) {
+  #resolveStoredAgents(storedAgents?: string[]): Record<string, Agent<any>> {
+    if (!storedAgents || storedAgents.length === 0) {
       return {};
     }
 
     const resolvedAgents: Record<string, Agent<any>> = {};
 
-    for (const [agentKey, agentConfig] of Object.entries(storedAgents)) {
+    for (const agentKey of storedAgents) {
       // Try to find the agent in registered agents
       try {
         const agent = this.getAgent(agentKey as keyof TAgents);
         resolvedAgents[agentKey] = agent;
       } catch {
-        // Try by ID if the config has an id field
-        const config = agentConfig as { id?: string };
-        if (config.id) {
-          try {
-            const agent = this.getAgentById(config.id as TAgents[keyof TAgents]['id']);
-            resolvedAgents[agentKey] = agent;
-          } catch {
-            this.#logger?.warn(`Agent "${agentKey}" referenced in stored agent but not registered in Mastra`);
-          }
-        } else {
+        // Try by ID
+        try {
+          const agent = this.getAgentById(agentKey as TAgents[keyof TAgents]['id']);
+          resolvedAgents[agentKey] = agent;
+        } catch {
           this.#logger?.warn(`Agent "${agentKey}" referenced in stored agent but not registered in Mastra`);
         }
       }
@@ -1090,36 +1065,23 @@ export class Mastra<
    * Resolves memory reference from stored configuration to actual memory instance.
    * @private
    */
-  #resolveStoredMemory(storedMemory?: Record<string, unknown>): MastraMemory | undefined {
+  #resolveStoredMemory(storedMemory?: string): MastraMemory | undefined {
     if (!storedMemory) {
       return undefined;
     }
 
-    // The stored memory config should have an id or key reference
-    const memoryConfig = storedMemory as { id?: string; key?: string };
-
     // Try by key first
-    if (memoryConfig.key) {
+    try {
+      return this.getMemory(storedMemory as keyof TMemory);
+    } catch {
+      // Try by id
       try {
-        return this.getMemory(memoryConfig.key as keyof TMemory);
+        return this.getMemoryById(storedMemory);
       } catch {
-        this.#logger?.warn(`Memory "${memoryConfig.key}" referenced in stored agent but not registered in Mastra`);
+        this.#logger?.warn(`Memory "${storedMemory}" referenced in stored agent but not registered in Mastra`);
       }
     }
 
-    // Try by id
-    if (memoryConfig.id) {
-      try {
-        return this.getMemoryById(memoryConfig.id);
-      } catch {
-        this.#logger?.warn(
-          `Memory with id "${memoryConfig.id}" referenced in stored agent but not registered in Mastra`,
-        );
-      }
-    }
-
-    // If no key or id, log warning
-    this.#logger?.warn('Memory configuration in stored agent has no key or id to resolve');
     return undefined;
   }
 
@@ -1127,7 +1089,7 @@ export class Mastra<
    * Resolves scorer references from stored configuration to actual scorer instances.
    * @private
    */
-  #resolveStoredScorers(storedScorers?: Record<string, unknown>): MastraScorers | undefined {
+  #resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): MastraScorers | undefined {
     if (!storedScorers) {
       return undefined;
     }
@@ -1135,28 +1097,22 @@ export class Mastra<
     const resolvedScorers: MastraScorers = {};
 
     for (const [scorerKey, scorerConfig] of Object.entries(storedScorers)) {
-      const config = scorerConfig as { id?: string; sampling?: ScoringSamplingConfig };
-
-      // Try to find the scorer in registered scorers
+      // Try to find the scorer in registered scorers by key
       try {
         const scorer = this.getScorer(scorerKey as keyof TScorers);
         resolvedScorers[scorerKey] = {
           scorer,
-          sampling: config.sampling,
+          sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
         };
       } catch {
-        // Try by ID if the config has an id field
-        if (config.id) {
-          try {
-            const scorer = this.getScorerById(config.id);
-            resolvedScorers[scorerKey] = {
-              scorer,
-              sampling: config.sampling,
-            };
-          } catch {
-            this.#logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
-          }
-        } else {
+        // Try by ID
+        try {
+          const scorer = this.getScorerById(scorerKey);
+          resolvedScorers[scorerKey] = {
+            scorer,
+            sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
+          };
+        } catch {
           this.#logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
         }
       }

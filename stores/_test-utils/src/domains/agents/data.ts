@@ -55,35 +55,18 @@ export const createFullSampleAgent = ({
     temperature: 0.7,
     maxTokens: 2000,
   },
-  tools: {
-    calculator: {
-      type: 'function',
-      description: 'Performs calculations',
-    },
-    webSearch: {
-      type: 'function',
-      description: 'Searches the web',
-    },
-  },
+  tools: ['calculator', 'webSearch'],
   defaultOptions: {
     maxSteps: 5,
     temperature: 0.5,
   },
-  workflows: {
-    orderProcessing: { id: 'order-workflow' },
-    customerSupport: { id: 'support-workflow' },
-  },
-  agents: {
-    subAgent: { id: 'helper-agent' },
-  },
+  workflows: ['order-workflow', 'support-workflow'],
+  agents: ['helper-agent'],
   inputProcessors: [{ type: 'sanitize', config: { stripHtml: true } }],
   outputProcessors: [{ type: 'format', config: { style: 'markdown' } }],
-  memory: {
-    type: 'thread',
-    maxMessages: 100,
-  },
+  memory: 'thread-memory',
   scorers: {
-    relevance: { threshold: 0.8 },
+    relevance: { sampling: { type: 'ratio', rate: 0.8 } },
   },
   metadata: {
     category: 'test',

@@ -67,9 +67,8 @@ describe('InMemoryAgentsStorage', () => {
         description: 'A fully configured agent',
         instructions: 'You are a helpful assistant',
         model: { provider: 'openai', name: 'gpt-4' },
-        tools: { calculator: { type: 'function' } },
-        defaultGenerateOptions: { maxTokens: 1000 },
-        defaultStreamOptions: { temperature: 0.7 },
+        tools: ['calculator'],
+        defaultOptions: { maxTokens: 1000 },
         metadata: { category: 'test' },
       };
 

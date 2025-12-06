@@ -36,6 +36,19 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
 // ============================================================================
 
 /**
+ * Scorer config schema with optional sampling
+ */
+const scorerConfigSchema = z.object({
+  sampling: z
+    .object({
+      type: z.enum(['ratio', 'count']),
+      rate: z.number().optional(),
+      count: z.number().optional(),
+    })
+    .optional(),
+});
+
+/**
  * Base stored agent schema (shared fields)
  */
 const storedAgentBaseSchema = z.object({
@@ -43,14 +56,14 @@ const storedAgentBaseSchema = z.object({
   description: z.string().optional().describe('Description of the agent'),
   instructions: z.string().describe('System instructions for the agent'),
   model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
-  tools: z.record(z.string(), z.unknown()).optional().describe('Serialized tool references/configurations'),
+  tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
   defaultOptions: z.record(z.string(), z.unknown()).optional().describe('Default options for generate/stream calls'),
-  workflows: z.record(z.string(), z.unknown()).optional().describe('Workflow references (IDs or configurations)'),
-  agents: z.record(z.string(), z.unknown()).optional().describe('Sub-agent references (IDs or configurations)'),
+  workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
+  agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
   inputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Input processor configurations'),
   outputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Output processor configurations'),
-  memory: z.record(z.string(), z.unknown()).optional().describe('Memory configuration'),
-  scorers: z.record(z.string(), z.unknown()).optional().describe('Scorer configurations'),
+  memory: z.string().optional().describe('Memory key to resolve from Mastra registry'),
+  scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
 });
 
