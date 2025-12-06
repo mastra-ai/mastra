@@ -30,11 +30,10 @@ import { WorkflowsPG } from './domains/workflows';
 export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
 
 export class PostgresStore extends MastraStorage {
-  #db?: pgPromise.IDatabase<{}>;
-  #pgp?: pgPromise.IMain;
-  #config: PostgresStoreConfig;
+  #db: pgPromise.IDatabase<{}>;
+  #pgp: pgPromise.IMain;
   private schema: string;
-  private isConnected: boolean = false;
+  private isInitialized: boolean = false;
 
   stores: StorageDomains;
 
@@ -44,8 +43,10 @@ export class PostgresStore extends MastraStorage {
       validateConfig('PostgresStore', config);
       super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
       this.schema = config.schemaName || 'public';
+
+      let pgConfig: PostgresStoreConfig;
       if (isConnectionStringConfig(config)) {
-        this.#config = {
+        pgConfig = {
           id: config.id,
           connectionString: config.connectionString,
           max: config.max,
@@ -54,14 +55,14 @@ export class PostgresStore extends MastraStorage {
         };
       } else if (isCloudSqlConfig(config)) {
         // Cloud SQL connector config
-        this.#config = {
+        pgConfig = {
           ...config,
           id: config.id,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
         };
       } else if (isHostConfig(config)) {
-        this.#config = {
+        pgConfig = {
           id: config.id,
           host: config.host,
           port: config.port,
@@ -78,29 +79,16 @@ export class PostgresStore extends MastraStorage {
           'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
         );
       }
-      this.stores = {} as StorageDomains;
-    } catch (e) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'INITIALIZATION', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-        },
-        e,
-      );
-    }
-  }
 
-  async init(): Promise<void> {
-    if (this.isConnected) {
-      return;
-    }
-
-    try {
-      this.isConnected = true;
+      // Initialize pg-promise and create database connection synchronously
+      // Note: pg-promise creates connections lazily when queries are executed,
+      // so this is safe to do in the constructor
       this.#pgp = pgPromise();
-      this.#db = this.#pgp(this.#config as any);
+      this.#db = this.#pgp(pgConfig as any);
 
+      // Create all domain instances synchronously in the constructor
+      // This is required for Memory to work correctly, as it checks for
+      // stores.memory during getInputProcessors() before init() is called
       const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
       const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
       const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
@@ -114,20 +102,39 @@ export class PostgresStore extends MastraStorage {
         memory,
         observability,
       };
+    } catch (e) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'INITIALIZATION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        e,
+      );
+    }
+  }
+
+  async init(): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+
+    try {
+      this.isInitialized = true;
 
       await super.init();
 
       // Create automatic performance indexes by default
       // This is done after table creation and is safe to run multiple times
       try {
-        await operations.createAutomaticIndexes();
+        await (this.stores.operations as StoreOperationsPG).createAutomaticIndexes();
       } catch (indexError) {
         // Log the error but don't fail initialization
         // Indexes are performance optimizations, not critical for functionality
         console.warn('Failed to create indexes:', indexError);
       }
     } catch (error) {
-      this.isConnected = false;
+      this.isInitialized = false;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'INIT', 'FAILED'),
@@ -140,16 +147,10 @@ export class PostgresStore extends MastraStorage {
   }
 
   public get db() {
-    if (!this.#db) {
-      throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
-    }
     return this.#db;
   }
 
   public get pgp() {
-    if (!this.#pgp) {
-      throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
-    }
     return this.#pgp;
   }
 
