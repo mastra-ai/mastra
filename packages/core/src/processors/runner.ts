@@ -631,6 +631,9 @@ export class ProcessorRunner {
           currentModelSettings = result.modelSettings;
           stepInputResult.modelSettings = result.modelSettings;
         }
+        if (result.messageList) {
+          stepInputResult.messageList = result.messageList;
+        }
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
 

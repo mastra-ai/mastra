@@ -115,6 +115,7 @@ describe('processInputStep', () => {
       // runProcessInputStep now returns a result object, not MessageList
       expect(result).toBeDefined();
       expect(typeof result).toBe('object');
+      expect(result.messageList).toBeInstanceOf(MessageList);
     });
   });
 
