@@ -201,6 +201,63 @@ export interface TracesPaginatedArg {
   pagination?: PaginationArgs;
 }
 
+// Agent Storage Types
+export interface StorageAgentType {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: Record<string, unknown>;
+  defaultOptions?: Record<string, unknown>;
+  workflows?: Record<string, unknown>;
+  agents?: Record<string, unknown>;
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: Record<string, unknown>;
+  scorers?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type StorageCreateAgentInput = Omit<StorageAgentType, 'createdAt' | 'updatedAt'>;
+
+export type StorageUpdateAgentInput = {
+  id: string;
+  name?: string;
+  description?: string;
+  instructions?: string;
+  model?: Record<string, unknown>;
+  tools?: Record<string, unknown>;
+  defaultOptions?: Record<string, unknown>;
+  workflows?: Record<string, unknown>;
+  agents?: Record<string, unknown>;
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: Record<string, unknown>;
+  scorers?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+};
+
+export type StorageListAgentsInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+};
+
+export type StorageListAgentsOutput = PaginationInfo & {
+  agents: StorageAgentType[];
+};
+
 // Basic Index Management Types
 export interface CreateIndexOptions {
   name: string;

@@ -21,6 +21,7 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
+import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { StoreOperationsPG } from './domains/operations';
@@ -94,6 +95,7 @@ export class PostgresStore extends MastraStorage {
       const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
       const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
       const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema });
+      const agents = new AgentsPG({ client: this.#db, schema: this.schema });
 
       this.stores = {
         operations,
@@ -101,6 +103,7 @@ export class PostgresStore extends MastraStorage {
         workflows,
         memory,
         observability,
+        agents,
       };
     } catch (e) {
       throw new MastraError(
@@ -164,6 +167,7 @@ export class PostgresStore extends MastraStorage {
       observabilityInstance: true,
       indexManagement: true,
       listScoresBySpan: true,
+      agents: true,
     };
   }
 
