@@ -269,7 +269,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
           total: count,
           page,
           perPage,
-          hasMore: spans.length === perPage,
+          hasMore: page * perPage + spans.length < count,
         },
         spans: spans.map(span =>
           transformFromSqlRow<SpanRecord>({
