@@ -45905,7 +45905,7 @@ const response = await agent.generate("Hello!", {
     {
         "name": "store",
         "type": "boolean | null | undefined",
-        "description": "",
+        "description": "Controls whether OpenAI stores your API requests for model training. Required to be \"false\" if your organization has zero data retention enabled. See: https://platform.openai.com/docs/guides/your-data#zero-data-retention",
         "isOptional": true
     },
     {
