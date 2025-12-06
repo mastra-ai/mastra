@@ -218,8 +218,9 @@ describe('InMemoryAgentsStorage', () => {
   });
 
   describe('deleteAgent', () => {
-    it('should throw error when deleting non-existent agent', async () => {
-      await expect(storage.deleteAgent({ id: 'non-existent' })).rejects.toThrow('Agent with id non-existent not found');
+    it('should be idempotent when deleting non-existent agent', async () => {
+      // Deleting a non-existent agent should not throw - it's a no-op
+      await expect(storage.deleteAgent({ id: 'non-existent' })).resolves.toBeUndefined();
     });
 
     it('should delete an existing agent', async () => {
@@ -235,6 +236,21 @@ describe('InMemoryAgentsStorage', () => {
 
       await storage.deleteAgent({ id: 'agent-1' });
       expect(collection.has('agent-1')).toBe(false);
+    });
+
+    it('should be idempotent when deleting same agent twice', async () => {
+      const agentInput: StorageCreateAgentInput = {
+        id: 'agent-1',
+        name: 'Test Agent',
+        instructions: 'You are a helpful assistant',
+        model: { provider: 'openai', name: 'gpt-4' },
+      };
+
+      await storage.createAgent({ agent: agentInput });
+      await storage.deleteAgent({ id: 'agent-1' });
+
+      // Second delete should not throw
+      await expect(storage.deleteAgent({ id: 'agent-1' })).resolves.toBeUndefined();
     });
   });
 

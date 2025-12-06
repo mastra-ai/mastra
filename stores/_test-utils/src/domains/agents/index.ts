@@ -213,6 +213,22 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const afterDelete = await storage.getAgentById({ id: agent.id });
         expect(afterDelete).toBeNull();
       });
+
+      it('should be idempotent when deleting non-existent agent', async () => {
+        // Deleting a non-existent agent should not throw - it's a no-op
+        await expect(storage.deleteAgent({ id: 'non-existent-agent-id' })).resolves.toBeUndefined();
+      });
+
+      it('should be idempotent when deleting same agent twice', async () => {
+        const agent = createSampleAgent();
+        await storage.createAgent({ agent });
+
+        // First delete
+        await storage.deleteAgent({ id: agent.id });
+
+        // Second delete should not throw
+        await expect(storage.deleteAgent({ id: agent.id })).resolves.toBeUndefined();
+      });
     });
 
     describe('listAgents', () => {

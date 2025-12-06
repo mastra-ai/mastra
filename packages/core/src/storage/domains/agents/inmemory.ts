@@ -87,11 +87,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
     this.logger.debug(`InMemoryAgentsStorage: deleteAgent called for ${id}`);
-
-    if (!this.collection.has(id)) {
-      throw new Error(`Agent with id ${id} not found`);
-    }
-
+    // Idempotent delete - no-op if agent doesn't exist
     this.collection.delete(id);
   }
 
