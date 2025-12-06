@@ -134,6 +134,7 @@
     "add-pino-logger-redact-option",
     "add-posthog-exporter",
     "add-posthog-tags-support",
+    "add-stored-agents-support",
     "afraid-flies-kiss",
     "automated-provider-registry-20251022-181340",
     "azure-gateway-deployment-discovery",

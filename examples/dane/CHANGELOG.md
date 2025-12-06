@@ -1,5 +1,13 @@
 # @mastra/dane
 
+## 1.0.0-beta.9
+
+### Patch Changes
+
+- Updated dependencies [[`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324)]:
+  - @mastra/core@1.0.0-beta.9
+  - @mastra/libsql@1.0.0-beta.6
+
 ## 1.0.0-beta.8
 
 ### Patch Changes
