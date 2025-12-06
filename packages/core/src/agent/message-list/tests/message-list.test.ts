@@ -124,7 +124,7 @@ describe('MessageList', () => {
         'response',
       );
 
-      let dbMessages = list.get.all.db();
+      let dbMessages = list.get.all.v2();
       expect(dbMessages).toHaveLength(1);
       expect(dbMessages[0].content.parts).toHaveLength(1);
       expect(dbMessages[0].content.parts[0].type).toBe('reasoning');
@@ -161,7 +161,7 @@ describe('MessageList', () => {
         'response',
       );
 
-      dbMessages = list.get.all.db();
+      dbMessages = list.get.all.v2();
       expect(dbMessages).toHaveLength(1);
       expect(dbMessages[0].content.parts).toHaveLength(2);
 
