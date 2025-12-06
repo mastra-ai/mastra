@@ -288,7 +288,7 @@ export const PackageMergeResultSchema = z.object({
 
 // Install schemas and types
 export const InstallInputSchema = z.object({
-  targetPath: z.string().describe('Path to the project to install packages in'),
+  targetPath: z.string().optional().describe('Path to the project to install packages in'),
 });
 
 export const InstallResultSchema = z.object({
