@@ -413,11 +413,11 @@ async function main() {
   // Get all messages across all threads
   const allMessages: any[] = [];
   for (const threadId of Object.values(threads)) {
-    const result = await storage.listMessages({ threadId, limit: 100 });
+    const result = await storage.listMessages({ threadId, perPage: 100 });
     allMessages.push(...result.messages);
   }
   // Add test thread messages
-  const testMessages = await storage.listMessages({ threadId: testThread, limit: 100 });
+  const testMessages = await storage.listMessages({ threadId: testThread, perPage: 100 });
   allMessages.push(...testMessages.messages);
 
   const fullHistoryTokens = tokenCounter.countMessages(allMessages);

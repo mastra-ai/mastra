@@ -11,6 +11,10 @@ import { existsSync } from 'fs';
 /**
  * Extended InMemoryMemory with persist/hydrate capabilities for benchmarking.
  * Allows saving and loading the in-memory state to/from disk.
+ *
+ * NOTE: We store a reference to the same Map instances that are passed to the parent class.
+ * When hydrating, we must clear and repopulate these maps instead of replacing them,
+ * otherwise the parent class won't see the updated data.
  */
 export class PersistableInMemoryMemory extends InMemoryMemory {
   private _collection: {
@@ -33,6 +37,7 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
       operations: {} as any, // Not needed for benchmark
     });
 
+    // Store the SAME map instances that were passed to super()
     this._collection = collection;
   }
 
@@ -51,7 +56,8 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
   }
 
   /**
-   * Hydrate storage state from a JSON file
+   * Hydrate storage state from a JSON file.
+   * IMPORTANT: We clear and repopulate the existing maps to preserve references.
    */
   async hydrate(filePath: string): Promise<void> {
     if (!existsSync(filePath)) {
@@ -61,18 +67,32 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
     const content = await readFile(filePath, 'utf-8');
     const data = JSON.parse(content);
 
-    // Restore Maps from arrays
+    // Clear existing data first
+    this._collection.threads.clear();
+    this._collection.resources.clear();
+    this._collection.messages.clear();
+    this._collection.observationalMemory.clear();
+
+    // Restore data into the SAME map instances (don't replace the maps!)
     if (data.threads) {
-      this._collection.threads = new Map(data.threads);
+      for (const [key, value] of data.threads) {
+        this._collection.threads.set(key, value);
+      }
     }
     if (data.resources) {
-      this._collection.resources = new Map(data.resources);
+      for (const [key, value] of data.resources) {
+        this._collection.resources.set(key, value);
+      }
     }
     if (data.messages) {
-      this._collection.messages = new Map(data.messages);
+      for (const [key, value] of data.messages) {
+        this._collection.messages.set(key, value);
+      }
     }
     if (data.observationalMemory) {
-      this._collection.observationalMemory = new Map(data.observationalMemory);
+      for (const [key, value] of data.observationalMemory) {
+        this._collection.observationalMemory.set(key, value);
+      }
     }
   }
 

@@ -549,7 +549,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         temperature: this.observerConfig.modelSettings.temperature,
         maxOutputTokens: this.observerConfig.modelSettings.maxOutputTokens,
       },
-      providerOptions: this.observerConfig.providerOptions,
+      providerOptions: this.observerConfig.providerOptions as any,
     });
 
     const parsed = parseObserverOutput(result.text);
@@ -578,7 +578,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         temperature: this.reflectorConfig.modelSettings.temperature,
         maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
       },
-      providerOptions: this.reflectorConfig.providerOptions,
+      providerOptions: this.reflectorConfig.providerOptions as any,
     });
 
     let parsed = parseReflectorOutput(result.text);
@@ -597,7 +597,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           temperature: this.reflectorConfig.modelSettings.temperature,
           maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
         },
-        providerOptions: this.reflectorConfig.providerOptions,
+        providerOptions: this.reflectorConfig.providerOptions as any,
       });
 
       parsed = parseReflectorOutput(result.text);

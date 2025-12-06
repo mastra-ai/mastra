@@ -42,23 +42,19 @@ export interface ModelSettings {
  */
 export interface GoogleProviderOptions {
   thinkingConfig?: {
-    /**
-     * Token budget for thinking/reasoning.
-     * Observer uses 215 (small), Reflector uses 1024 (larger for pattern analysis).
-     */
     thinkingBudget?: number;
-    /** Whether to include thinking in output */
     includeThoughts?: boolean;
   };
+  [key: string]: any;
 }
 
 /**
- * Provider-specific options for model configuration
- * Index signature required for compatibility with core's ProviderOptions
+ * Provider-specific options for model configuration.
+ * Compatible with core's ProviderOptions type.
  */
 export interface ProviderOptions {
   google?: GoogleProviderOptions;
-  [key: string]: unknown;
+  [key: string]: Record<string, any> | undefined;
 }
 
 /**

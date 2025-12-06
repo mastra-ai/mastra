@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { InMemoryStore } from '@mastra/core/storage';
 import { ObservationalMemory } from '@mastra/memory/experiments';
 import { MessageHistory } from '@mastra/core/processors';
 import { MockLanguageModelV1 } from '../test-utils/mock-model';
@@ -292,6 +293,7 @@ export class PrepareCommand {
           );
           mainSpinner.render();
         } catch (error) {
+          console.error(`Error processing question ${question.question_id}:`, error);
           // Check if this is a rate limit error
           const errorMessage = error instanceof Error ? error.message : String(error);
           const isRateLimitError =
@@ -422,11 +424,11 @@ export class PrepareCommand {
     wmTemplates?: Record<string, any>,
   ): Promise<void> {
     // Create fresh storage instances for this question
-    const benchmarkStore = new BenchmarkStore();
+    const benchmarkStore = new PersistableInMemoryMemory();
     const benchmarkVectorStore = new BenchmarkVectorStore();
 
     // Initialize stores
-    await benchmarkStore.init();
+    // await benchmarkStore.init();
 
     // Create vector index if using semantic recall
     if (options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined')) {
@@ -488,12 +490,12 @@ export class PrepareCommand {
 
       observationalMemory = new ObservationalMemory({
         storage: omStorage,
-        observerConfig: {
-          model: retry4o.model,
+        observer: {
+          model: 'openai/gpt-4o-mini',
           historyThreshold: observationalMemoryConfig.historyThreshold,
         },
-        reflectorConfig: {
-          model: retry4o.model,
+        reflector: {
+          model: 'openai/gpt-4o-mini',
           observationThreshold: observationalMemoryConfig.observationThreshold,
         },
         resourceScope: observationalMemoryConfig.resourceScope,
@@ -617,14 +619,43 @@ export class PrepareCommand {
     }
 
     // Apply session limit if specified
+    // IMPORTANT: Always include evidence sessions (answer_session_ids) to ensure the benchmark can succeed
     let sessionsToProcess = sessionsWithDates;
     if (options.sessionLimit) {
       const startIndex = processedSessionIds.size;
       const endIndex = Math.min(startIndex + options.sessionLimit, sessionsWithDates.length);
-      sessionsToProcess = sessionsWithDates.slice(0, endIndex);
-      console.log(
-        chalk.yellow(`\n📊 Processing limited to ${options.sessionLimit} sessions (${startIndex + 1} to ${endIndex})`),
+
+      // Get evidence session IDs that contain the answer
+      const evidenceSessionIds = new Set(question.answer_session_ids || []);
+
+      // Find which evidence sessions are NOT in the limited range
+      const sessionsInRange = sessionsWithDates.slice(0, endIndex);
+      const sessionIdsInRange = new Set(sessionsInRange.map(s => s.sessionId));
+
+      // Find evidence sessions that would be excluded
+      const excludedEvidenceSessions = sessionsWithDates.filter(
+        s => evidenceSessionIds.has(s.sessionId) && !sessionIdsInRange.has(s.sessionId),
       );
+
+      if (excludedEvidenceSessions.length > 0) {
+        // Include the excluded evidence sessions at the end
+        sessionsToProcess = [...sessionsInRange, ...excludedEvidenceSessions];
+        console.log(
+          chalk.yellow(
+            `\n📊 Processing ${sessionsToProcess.length} sessions (${options.sessionLimit} + ${excludedEvidenceSessions.length} evidence sessions)`,
+          ),
+        );
+        console.log(
+          chalk.gray(`   Evidence sessions included: ${excludedEvidenceSessions.map(s => s.sessionId).join(', ')}`),
+        );
+      } else {
+        sessionsToProcess = sessionsInRange;
+        console.log(
+          chalk.yellow(
+            `\n📊 Processing limited to ${options.sessionLimit} sessions (${startIndex + 1} to ${endIndex})`,
+          ),
+        );
+      }
     }
 
     for (let i = 0; i < sessionsToProcess.length; i += BATCH_SIZE) {
@@ -667,11 +698,15 @@ export class PrepareCommand {
           // Process through agent to save to memory
           try {
             await agent.generate(messages, {
-              threadId: sessionId, // Use haystack session ID as thread ID
-              resourceId,
-              memoryOptions: memoryOptions.options,
-              temperature: 0.3,
-              frequencyPenalty: 0.3,
+              memory: {
+                thread: sessionId, // Use haystack session ID as thread ID
+                resource: resourceId,
+                options: memoryOptions.options,
+              },
+              modelSettings: {
+                temperature: 0.3,
+                frequencyPenalty: 0.3,
+              },
             });
           } catch (error) {
             console.error(`Error in agent.generate for ${question.question_id}, session ${sessionId}:`, error);

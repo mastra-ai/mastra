@@ -307,11 +307,18 @@ export class RunCommand {
 
     // Load the prepared storage and vector store
     const questionDir = join(preparedDir, meta.questionId);
-    const benchmarkStore = new BenchmarkStore('read');
     const benchmarkVectorStore = new BenchmarkVectorStore('read');
 
-    await benchmarkStore.init();
-    await benchmarkStore.hydrate(join(questionDir, 'db.json'));
+    const memoryOptions = getMemoryOptions(options.memoryConfig);
+    const usesObservationalMemory = options.memoryConfig === 'observational-memory';
+
+    // Only load BenchmarkStore for non-OM configs (OM uses PersistableInMemoryMemory)
+    let benchmarkStore: BenchmarkStore | undefined;
+    if (!usesObservationalMemory) {
+      benchmarkStore = new BenchmarkStore('read');
+      await benchmarkStore.init();
+      await benchmarkStore.hydrate(join(questionDir, 'db.json'));
+    }
 
     // Hydrate vector store if it exists
     const vectorPath = join(questionDir, 'vector.json');
@@ -319,9 +326,6 @@ export class RunCommand {
       await benchmarkVectorStore.hydrate(vectorPath);
       updateStatus(`Loading vector embeddings for ${meta.questionId}...`);
     }
-
-    const memoryOptions = getMemoryOptions(options.memoryConfig);
-    const usesObservationalMemory = options.memoryConfig === 'observational-memory';
 
     // Create memory with the hydrated stores (for non-OM configs)
     const memory = usesObservationalMemory
