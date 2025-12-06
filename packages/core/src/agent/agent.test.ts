@@ -4,18 +4,19 @@ import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { CoreMessage, CoreSystemMessage, LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { APICallError, stepCountIs } from 'ai-v5';
+import { APICallError, stepCountIs, tool } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
+import { ModelRouterLanguageModel } from '../llm';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraDBMessage, StorageThreadType } from '../memory';
 import { MockMemory } from '../memory/mock';
-
+import type { ProcessInputStepArgs } from '../processors';
 import { RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -470,6 +471,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const testAgent = new Agent({
+        id: 'test-agent',
         name: 'Test agent',
         instructions: 'You are an agent that can use the noSchemaTool to get test data.',
         model: openaiModel,
@@ -6289,6 +6291,131 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 }
 
 describe('Agent Tests', () => {
+  describe('prepareStep', () => {
+    it('tools', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o',
+        tools: {
+          tool1: tool({
+            inputSchema: z.object({ value: z.string() }),
+            execute: async () => 'result1',
+          }),
+          tool2: tool({
+            inputSchema: z.object({ value: z.string() }),
+            execute: async () => 'result2',
+          }),
+        },
+      });
+
+      let prepareStepCallArgs: ProcessInputStepArgs<any> | undefined;
+      const result = await agent.generate('Hello', {
+        prepareStep: args => {
+          prepareStepCallArgs = args;
+          return {
+            model: 'openai/gpt-4o',
+            activeTools: args?.activeTools?.filter(t => t !== 'tool2'),
+            toolChoice: 'none',
+          };
+        },
+      });
+
+      expect(prepareStepCallArgs).toMatchObject({
+        model: expect.any(ModelRouterLanguageModel),
+        toolChoice: 'auto',
+        activeTools: ['tool1', 'tool2'],
+        stepNumber: 0,
+      });
+
+      expect((result.request.body as any).tools).toMatchObject([
+        {
+          type: 'function',
+          name: 'tool1',
+        },
+      ]);
+    });
+
+    it('should use mastra model config openai compatible object when set in prepareStep', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o',
+        tools: {
+          tool1: tool({
+            inputSchema: z.object({ value: z.string() }),
+            execute: async () => 'result1',
+          }),
+        },
+      });
+
+      const result = await agent.generate('Hello', {
+        prepareStep: ({ model, stepNumber }) => {
+          if (stepNumber === 0) {
+            expect(model.provider).toBe('openai');
+            expect(model.modelId).toBe('gpt-4o');
+
+            console.log('prepareStep', {
+              provider: model.provider,
+              modelId: model.modelId,
+              specificationVersion: model.specificationVersion,
+              stepNumber,
+            });
+
+            return {
+              model: {
+                providerId: 'openai',
+                modelId: 'gpt-4o-mini',
+              },
+            };
+          }
+        },
+      });
+      // const result = await output.getFullOutput();
+      console.log('result', result);
+      expect((result?.request?.body as any)?.model).toBe('gpt-4o-mini');
+      expect(result?.response?.modelMetadata).toMatchObject({
+        modelId: 'gpt-4o-mini',
+        modelProvider: 'openai',
+        modelVersion: 'v2',
+      });
+    });
+
+    it('should use model router magic string when set in prepareStep', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o',
+      });
+
+      const output = await agent.stream('Hello', {
+        prepareStep: ({ model, stepNumber }) => {
+          if (stepNumber === 0) {
+            expect(model.provider).toBe('openai');
+            expect(model.modelId).toBe('gpt-4o');
+
+            console.log('prepareStep', {
+              provider: model.provider,
+              modelId: model.modelId,
+              specificationVersion: model.specificationVersion,
+              stepNumber,
+            });
+
+            return {
+              model: 'openai/gpt-4o-mini',
+            };
+          }
+        },
+      });
+      const result = await output.getFullOutput();
+      console.log('result', result);
+      expect((result?.request?.body as any)?.model).toBe('gpt-4o-mini');
+    });
+  });
+
   it('should preserve empty assistant messages after tool use', () => {
     const messageList = new MessageList();
 
@@ -6424,6 +6551,200 @@ describe('Agent Tests', () => {
   // NOTE: Memory processor deduplication tests have been moved to @mastra/memory integration tests
   // since MessageHistory and WorkingMemory processors now live in @mastra/memory package.
   // See packages/memory/integration-tests-v5/src/input-processors.test.ts for comprehensive tests.
+
+  describe('prepareStep MessageList persistence across steps (v2 only)', () => {
+    it('system message modifications in prepareStep should not persist across steps', async () => {
+      const systemMessagesSeenAtEachStep: string[][] = [];
+      let callCount = 0;
+
+      // Create a model that makes a tool call on first step, then stops
+      const toolCallModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            // First call: return a tool call
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'testTool',
+                  input: '{ "input": "test" }',
+                },
+              ],
+              warnings: [],
+            };
+          } else {
+            // Second call: return text (stop)
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [{ type: 'text' as const, text: 'Done' }],
+              warnings: [],
+            };
+          }
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'A test tool',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async () => ({ output: 'tool result' }),
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Original agent instructions',
+        model: toolCallModel,
+        tools: { testTool },
+      });
+      agent.__setLogger(noopLogger);
+
+      await agent.generate('Hello', {
+        prepareStep: async ({ messageList, stepNumber }) => {
+          // Record what system messages we see at the start of this step
+          const currentSystemMessages = messageList.getAllSystemMessages();
+          systemMessagesSeenAtEachStep.push(currentSystemMessages.map(m => (m.content as string) || ''));
+
+          // On step 0, replace all system messages with a custom one
+          if (stepNumber === 0) {
+            messageList.replaceAllSystemMessages([
+              {
+                role: 'system',
+                content: `Modified system message from step ${stepNumber}`,
+              },
+            ]);
+            return { messageList };
+          }
+        },
+      });
+
+      // We should have been called at least twice (step 0 and step 1)
+      expect(systemMessagesSeenAtEachStep.length).toBeGreaterThanOrEqual(2);
+
+      // Step 0 should see the original agent instructions
+      expect(systemMessagesSeenAtEachStep[0]).toContain('Original agent instructions');
+
+      // Step 1 should see the modified system message (NOT the original)
+      // This proves MessageList persists across steps
+      expect(systemMessagesSeenAtEachStep[1]).not.toContain('Modified system message from step 0');
+      expect(systemMessagesSeenAtEachStep[1]).toContain('Original agent instructions');
+    });
+
+    it('providerOptions can be modified via prepareStep', async () => {
+      let capturedProviderOptions: any = null;
+      let capturedPrepareStepProviderOptions: any = null;
+
+      // Create a model that captures the providerOptions it receives
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async ({ providerOptions }) => {
+          capturedProviderOptions = providerOptions;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test instructions',
+        model: mockModel,
+      });
+      agent.__setLogger(noopLogger);
+
+      await agent.generate('Hello', {
+        providerOptions: {
+          somethingElse: {
+            test: 'test',
+          },
+        },
+        prepareStep: async ({ stepNumber, providerOptions }) => {
+          capturedPrepareStepProviderOptions = providerOptions;
+          if (stepNumber === 0) {
+            return {
+              providerOptions: {
+                anthropic: {
+                  cacheControl: { type: 'ephemeral' },
+                },
+              },
+            };
+          }
+        },
+      });
+
+      expect(capturedPrepareStepProviderOptions).toBeDefined();
+      expect(capturedPrepareStepProviderOptions?.somethingElse?.test).toBe('test');
+      // Verify the model received the modified providerOptions
+      expect(capturedProviderOptions).toBeDefined();
+      expect(capturedProviderOptions?.anthropic?.cacheControl?.type).toBe('ephemeral');
+    });
+
+    it('modelSettings can be modified via prepareStep', async () => {
+      let capturedOptions: any = null;
+
+      // Create a model that captures all options passed to doGenerate
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async options => {
+          // Capture the full options object to inspect modelSettings
+          capturedOptions = options;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test instructions',
+        model: mockModel,
+      });
+      agent.__setLogger(noopLogger);
+
+      await agent.generate('Hello', {
+        prepareStep: async ({ stepNumber }) => {
+          if (stepNumber === 0) {
+            return {
+              modelSettings: {
+                maxTokens: 500,
+                temperature: 0.7,
+              },
+            };
+          }
+        },
+      });
+
+      expect(capturedOptions).toBeDefined();
+      // ModelSettings are spread into the options passed to doGenerate
+      expect((capturedOptions as any)?.maxTokens).toBe(500);
+      expect((capturedOptions as any)?.temperature).toBe(0.7);
+    });
+  });
 
   agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
