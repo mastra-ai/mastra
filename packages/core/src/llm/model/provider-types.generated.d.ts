@@ -331,6 +331,7 @@ export type ProviderModelsMap = {
     'tongyi-intent-detect-v3',
   ];
   readonly venice: readonly [
+    'claude-opus-45',
     'deepseek-coder-v2-lite',
     'deepseek-r1-671b',
     'dolphin-2.9.2-qwen2-72b',
