@@ -1707,9 +1707,23 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
               let result: any;
               const slugify = await import(`@sindresorhus/slugify`);
-              const subAgentThreadId = inputData.threadId || context?.mastra?.generateId() || randomUUID();
+              const subAgentThreadId =
+                inputData.threadId ||
+                context?.mastra?.generateId({
+                  idType: 'thread',
+                  source: 'agent',
+                  entityId: agentName,
+                  resourceId,
+                }) ||
+                randomUUID();
               const subAgentResourceId =
-                inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
+                inputData.resourceId ||
+                context?.mastra?.generateId({
+                  idType: 'generic',
+                  source: 'agent',
+                  entityId: agentName,
+                }) ||
+                `${slugify.default(this.id)}-${agentName}`;
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
                 if (!agent.hasOwnMemory() && this.#memory) {
@@ -2485,7 +2499,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    const runId = options.runId || this.#mastra?.generateId() || randomUUID();
+    const runId =
+      options.runId ||
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.id,
+        threadId: threadFromArgs?.id,
+        resourceId,
+      }) ||
+      randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
     // Set Tracing context
@@ -2772,7 +2795,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * ```
    */
   async network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions) {
-    const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
+    const threadId =
+      typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id;
+    const resourceId = options?.memory?.resource;
+    const runId =
+      options?.runId ||
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.id,
+        threadId,
+        resourceId,
+      }) ||
+      randomUUID();
     const requestContextToUse = options?.requestContext || new RequestContext();
 
     return await networkLoop({
@@ -2784,11 +2819,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         modelSettings: options?.modelSettings,
         memory: options?.memory,
       },
-      generateId: () => this.#mastra?.generateId() || randomUUID(),
+      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: options?.maxSteps || 1,
       messages,
-      threadId: typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id,
-      resourceId: options?.memory?.resource,
+      threadId,
+      resourceId,
     });
   }
 

@@ -17,6 +17,7 @@ import type {
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
+import type { IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 
 import type {
@@ -375,7 +376,13 @@ https://mastra.ai/en/docs/memory/overview`,
     saveThread?: boolean;
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
-      id: threadId || this.generateId(),
+      id:
+        threadId ||
+        this.generateId({
+          idType: 'thread',
+          source: 'memory',
+          resourceId,
+        }),
       title: title || `New Thread ${new Date().toISOString()}`,
       resourceId,
       createdAt: new Date(),
@@ -420,10 +427,11 @@ https://mastra.ai/en/docs/memory/overview`,
 
   /**
    * Generates a unique identifier
+   * @param context - Optional context information for deterministic ID generation
    * @returns A unique string ID
    */
-  public generateId(): string {
-    return this.#mastra?.generateId() || crypto.randomUUID();
+  public generateId(context?: IdGeneratorContext): string {
+    return this.#mastra?.generateId(context) || crypto.randomUUID();
   }
 
   /**
