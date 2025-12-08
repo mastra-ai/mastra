@@ -1,14 +1,13 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, join } from 'node:path';
-import { rm, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import { join } from 'node:path';
+import { rm, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extractMastraOption } from './extract-mastra-option';
 import { removeAllOptionsExceptBundler } from '../babel/remove-all-options-bundler';
 
 describe('extractMastraOption', () => {
-  const _dirname = dirname(fileURLToPath(import.meta.url));
-  const testOutputDir = join(_dirname, '.test-output');
+  const testOutputDir = join(__dirname, '.test-output');
 
   afterEach(async () => {
     if (existsSync(testOutputDir)) {
@@ -17,10 +16,9 @@ describe('extractMastraOption', () => {
   });
 
   it('should generate valid file URLs for dynamic imports', async () => {
-    // Create output directory
     await mkdir(testOutputDir, { recursive: true });
 
-    const entryFile = join(_dirname, '../plugins/__fixtures__/basic-with-bundler.js');
+    const entryFile = join(__dirname, '../plugins/__fixtures__/basic-with-bundler.js');
     const result = await extractMastraOption('bundler', entryFile, removeAllOptionsExceptBundler, testOutputDir);
 
     // Check that the bundler-config.mjs file was created
@@ -29,34 +27,30 @@ describe('extractMastraOption', () => {
 
     // The key test: getConfig() should not throw a module resolution error
     // This is the operation that fails with Bun due to invalid file URL
-    if (result) {
-      await expect(result.getConfig()).resolves.toBeDefined();
-    }
+    expect(result).not.toBeNull();
+    await expect(result!.getConfig()).resolves.toBeDefined();
   });
 
   it('should use proper file:// URL protocol for absolute paths', async () => {
-    // Create output directory
     await mkdir(testOutputDir, { recursive: true });
 
-    const entryFile = join(_dirname, '../plugins/__fixtures__/basic-with-bundler.js');
+    const entryFile = join(__dirname, '../plugins/__fixtures__/basic-with-bundler.js');
 
     // Extract the option
     const result = await extractMastraOption('bundler', entryFile, removeAllOptionsExceptBundler, testOutputDir);
 
-    if (result) {
-      // The config file should exist
-      const configPath = join(testOutputDir, 'bundler-config.mjs');
-      expect(existsSync(configPath)).toBe(true);
+    // The config file should exist
+    const configPath = join(testOutputDir, 'bundler-config.mjs');
+    expect(existsSync(configPath)).toBe(true);
 
-      // Verify the file URL would be valid
-      // A valid file URL for an absolute path should start with file://
-      const expectedUrl = pathToFileURL(configPath).href;
-      expect(expectedUrl).toMatch(/^file:\/\/\//); // file:/// for Unix absolute paths
-    }
+    // Verify the file URL would be valid
+    // A valid file URL for an absolute path should start with file://
+    const expectedUrl = pathToFileURL(configPath).href;
+    expect(expectedUrl).toMatch(/^file:\/\/\//); // file:/// for Unix absolute paths
   });
 
   describe('file URL format validation', () => {
-    it('should correctly convert absolute Unix paths to file URLs', () => {
+    it.skipIf(process.platform === 'win32')('should correctly convert absolute Unix paths to file URLs', () => {
       // Test the expected format for absolute paths
       const absolutePath = '/app/.mastra/.build/bundler-config.mjs';
       const fileUrl = pathToFileURL(absolutePath).href;
