@@ -1020,7 +1020,7 @@ describe('ProcessorRunner', () => {
       expect(chunks[1]).toEqual({
         type: 'tripwire',
         payload: {
-          tripwireReason: 'Stream aborted',
+          reason: 'Stream aborted',
           retry: undefined,
           metadata: undefined,
           processorId: 'abortProcessor',

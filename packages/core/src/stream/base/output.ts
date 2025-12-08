@@ -264,7 +264,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 controller.enqueue({
                   type: 'tripwire',
                   payload: {
-                    tripwireReason: reason || 'Output processor blocked content',
+                    reason: reason || 'Output processor blocked content',
                     retry: tripwireOptions?.retry,
                     metadata: tripwireOptions?.metadata,
                     processorId,
@@ -511,7 +511,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             case 'tripwire':
               // Handle tripwire chunks from processors
               self.#tripwire = {
-                reason: chunk.payload?.tripwireReason || 'Content blocked',
+                reason: chunk.payload?.reason || 'Content blocked',
                 retry: chunk.payload?.retry,
                 metadata: chunk.payload?.metadata,
                 processorId: chunk.payload?.processorId,

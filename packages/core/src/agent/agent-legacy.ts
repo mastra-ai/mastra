@@ -106,8 +106,12 @@ export interface AgentLegacyCapabilities {
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
-    tripwireTriggered: boolean;
-    tripwireReason: string;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
   }>;
   /** Get most recent user message */
   getMostRecentUserMessage(
@@ -150,8 +154,12 @@ export interface AgentLegacyCapabilities {
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
-    tripwireTriggered: boolean;
-    tripwireReason: string;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
   }>;
   /** Run scorers */
   runScorers(args: {
@@ -291,22 +299,19 @@ export class AgentLegacyHandler {
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
-          const { tripwireTriggered, tripwireReason } = await this.capabilities.__runInputProcessors({
+          const { tripwire } = await this.capabilities.__runInputProcessors({
             requestContext,
             tracingContext: innerTracingContext,
             messageList,
           });
           return {
-            messageObjects: tripwireTriggered ? [] : messageList.get.all.prompt(),
+            messageObjects: tripwire ? [] : messageList.get.all.prompt(),
             convertedTools,
             threadExists: false,
             thread: undefined,
             messageList,
             agentSpan,
-            ...(tripwireTriggered && {
-              tripwire: true,
-              tripwireReason,
-            }),
+            tripwire,
           };
         }
         if (!threadId || !resourceId) {
@@ -373,11 +378,7 @@ export class AgentLegacyHandler {
         // Historical messages, semantic recall, and working memory will be added by input processors
         messageList.add(messages, 'user');
 
-        const {
-          messageList: processedMessageList,
-          tripwireTriggered,
-          tripwireReason,
-        } = await this.capabilities.__runInputProcessors({
+        const { messageList: processedMessageList, tripwire } = await this.capabilities.__runInputProcessors({
           requestContext,
           tracingContext: innerTracingContext,
           messageList,
@@ -395,10 +396,7 @@ export class AgentLegacyHandler {
           // add old processed messages + new input messages
           messageObjects: processedList,
           agentSpan,
-          ...(tripwireTriggered && {
-            tripwire: true,
-            tripwireReason,
-          }),
+          tripwire,
           threadExists: !!existingThread,
         };
       },
@@ -773,10 +771,7 @@ export class AgentLegacyHandler {
 
             return onStepFinish?.({ ...props, runId });
           },
-          ...(beforeResult.tripwire && {
-            tripwire: beforeResult.tripwire,
-            tripwireReason: beforeResult.tripwireReason,
-          }),
+          tripwire: beforeResult.tripwire,
           ...args,
           agentSpan,
         } as any;
@@ -894,8 +889,7 @@ export class AgentLegacyHandler {
         experimental_output: undefined,
         steps: undefined,
         experimental_providerMetadata: undefined,
-        tripwire: true,
-        tripwireReason: beforeResult.tripwireReason,
+        tripwire: beforeResult.tripwire,
         traceId,
       };
 
@@ -934,7 +928,7 @@ export class AgentLegacyHandler {
       });
 
       // Handle tripwire for output processors
-      if (outputProcessorResult.tripwireTriggered) {
+      if (outputProcessorResult.tripwire) {
         const tripwireResult = {
           text: '',
           object: undefined,
@@ -956,8 +950,7 @@ export class AgentLegacyHandler {
           experimental_output: undefined,
           steps: undefined,
           experimental_providerMetadata: undefined,
-          tripwire: true,
-          tripwireReason: outputProcessorResult.tripwireReason,
+          tripwire: outputProcessorResult.tripwire,
           traceId,
         };
 
@@ -1050,7 +1043,7 @@ export class AgentLegacyHandler {
     });
 
     // Handle tripwire for output processors
-    if (outputProcessorResult.tripwireTriggered) {
+    if (outputProcessorResult.tripwire) {
       const tripwireResult = {
         text: '',
         object: undefined,
@@ -1072,8 +1065,7 @@ export class AgentLegacyHandler {
         experimental_output: undefined,
         steps: undefined,
         experimental_providerMetadata: undefined,
-        tripwire: true,
-        tripwireReason: outputProcessorResult.tripwireReason,
+        tripwire: outputProcessorResult.tripwire,
         traceId,
       };
 
@@ -1180,8 +1172,7 @@ export class AgentLegacyHandler {
         text: Promise.resolve(''),
         usage: Promise.resolve({ totalTokens: 0, promptTokens: 0, completionTokens: 0 }),
         finishReason: Promise.resolve('other'),
-        tripwire: true,
-        tripwireReason: beforeResult.tripwireReason,
+        tripwire: beforeResult.tripwire,
         response: {
           id: randomUUID(),
           timestamp: new Date(),

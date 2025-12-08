@@ -668,13 +668,25 @@ describe('Processor Step in Workflow - TripWire handling', () => {
 
     const run = await workflow.createRun();
     const messageList = createMockMessageList([
-      { id: '1', role: 'user', content: { parts: [{ type: 'text', text: 'This is blocked content' }] } },
+      {
+        id: '1',
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'This is blocked content' }] },
+      },
     ]);
 
     const result = await run.start({
       inputData: {
         phase: 'input',
-        messages: [{ id: '1', role: 'user', content: { parts: [{ type: 'text', text: 'This is blocked content' }] } }],
+        messages: [
+          {
+            id: '1',
+            role: 'user',
+            createdAt: new Date(),
+            content: { format: 2, parts: [{ type: 'text', text: 'This is blocked content' }] },
+          },
+        ],
         messageList,
       },
     });
@@ -682,9 +694,9 @@ describe('Processor Step in Workflow - TripWire handling', () => {
     // Workflow should return tripwire status, not failed
     expect(result.status).toBe('tripwire');
     if (result.status === 'tripwire') {
-      expect((result as any).reason).toBe('Content blocked by policy');
-      expect((result as any).retry).toBe(true);
-      expect((result as any).metadata).toEqual({ severity: 'high' });
+      expect((result as any).tripwire?.reason).toBe('Content blocked by policy');
+      expect((result as any).tripwire?.retry).toBe(true);
+      expect((result as any).tripwire?.metadata).toEqual({ severity: 'high' });
     }
   });
 
@@ -721,13 +733,25 @@ describe('Processor Step in Workflow - TripWire handling', () => {
 
     const run = await workflow.createRun();
     const messageList = createMockMessageList([
-      { id: '1', role: 'user', content: { parts: [{ type: 'text', text: 'This is blocked content' }] } },
+      {
+        id: '1',
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'This is blocked content' }] },
+      },
     ]);
 
     const result = await run.start({
       inputData: {
         phase: 'input',
-        messages: [{ id: '1', role: 'user', content: { parts: [{ type: 'text', text: 'This is blocked content' }] } }],
+        messages: [
+          {
+            id: '1',
+            role: 'user',
+            createdAt: new Date(),
+            content: { format: 2, parts: [{ type: 'text', text: 'This is blocked content' }] },
+          },
+        ],
         messageList,
       },
     });
@@ -735,9 +759,9 @@ describe('Processor Step in Workflow - TripWire handling', () => {
     // Workflow should return tripwire status
     expect(result.status).toBe('tripwire');
     if (result.status === 'tripwire') {
-      expect((result as any).reason).toBe('Parallel processor blocked content');
-      expect((result as any).retry).toBe(false);
-      expect((result as any).metadata).toEqual({ source: 'parallel' });
+      expect((result as any).tripwire?.reason).toBe('Parallel processor blocked content');
+      expect((result as any).tripwire?.retry).toBe(false);
+      expect((result as any).tripwire?.metadata).toEqual({ source: 'parallel' });
     }
   });
 });

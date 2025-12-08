@@ -1455,15 +1455,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
-    tripwireTriggered: boolean;
-    tripwireReason: string;
-    tripwireOptions?: TripWireOptions<unknown>;
-    processorId?: string;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
   }> {
-    let tripwireTriggered = false;
-    let tripwireReason = '';
-    let tripwireOptions: TripWireOptions<unknown> | undefined;
-    let processorId: string | undefined;
+    let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
 
     if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
@@ -1474,10 +1473,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         messageList = await runner.runInputProcessors(messageList, tracingContext, requestContext);
       } catch (error) {
         if (error instanceof TripWire) {
-          tripwireTriggered = true;
-          tripwireReason = error.message;
-          tripwireOptions = error.options;
-          processorId = error.processorId;
+          tripwire = {
+            reason: error.message,
+            retry: error.options?.retry,
+            metadata: error.options?.metadata,
+            processorId: error.processorId,
+          };
         } else {
           throw new MastraError(
             {
@@ -1494,10 +1495,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     return {
       messageList,
-      tripwireTriggered,
-      tripwireReason,
-      tripwireOptions,
-      processorId,
+      tripwire,
     };
   }
 
@@ -1517,11 +1515,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
-    tripwireTriggered: boolean;
-    tripwireReason: string;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
   }> {
-    let tripwireTriggered = false;
-    let tripwireReason = '';
+    let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
 
     if (outputProcessorOverrides?.length || this.#outputProcessors || this.#memory) {
       const runner = await this.getProcessorRunner({
@@ -1533,8 +1534,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         messageList = await runner.runOutputProcessors(messageList, tracingContext, requestContext);
       } catch (e) {
         if (e instanceof TripWire) {
-          tripwireTriggered = true;
-          tripwireReason = e.message;
+          tripwire = {
+            reason: e.message,
+            retry: e.options?.retry,
+            metadata: e.options?.metadata,
+            processorId: e.processorId,
+          };
           this.logger.debug(`[Agent:${this.name}] - Output processor tripwire triggered: ${e.message}`);
         } else {
           throw e;
@@ -1544,8 +1549,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     return {
       messageList,
-      tripwireTriggered,
-      tripwireReason,
+      tripwire,
     };
   }
 

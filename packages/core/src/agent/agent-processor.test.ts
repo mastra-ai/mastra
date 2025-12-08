@@ -214,9 +214,9 @@ describe('Input and Output Processors', () => {
           format,
         });
 
-        expect(result.tripwire).toBe(true);
+        expect(result.tripwire).toBeDefined();
 
-        expect(result.tripwireReason).toBe('Tripwire triggered by abort-processor');
+        expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-processor');
 
         expect(await result.finishReason).toBe('other');
       }
@@ -248,8 +248,8 @@ describe('Input and Output Processors', () => {
           format,
         });
 
-        expect(result.tripwire).toBe(true);
-        expect(result.tripwireReason).toBe('Custom abort reason');
+        expect(result.tripwire).toBeDefined();
+        expect(result.tripwire?.reason).toBe('Custom abort reason');
       }
 
       // await testWithFormat('aisdk');
@@ -288,7 +288,7 @@ describe('Input and Output Processors', () => {
 
       const result = await agentWithAbortSequence.generate('Abort sequence test');
 
-      expect(result.tripwire).toBe(true);
+      expect(result.tripwire).toBeDefined();
       expect(secondProcessorExecuted).toBe(false);
     });
   });
@@ -415,8 +415,8 @@ describe('Input and Output Processors', () => {
       const stream = await agentWithStreamAbort.stream('Stream abort test');
 
       const fullOutput = await stream.getFullOutput();
-      expect(fullOutput.tripwire).toBe(true);
-      expect(fullOutput.tripwireReason).toBe('Stream aborted');
+      expect(fullOutput.tripwire).toBeDefined();
+      expect(fullOutput.tripwire?.reason).toBe('Stream aborted');
 
       // Stream should be empty
       let textReceived = '';
@@ -529,8 +529,8 @@ describe('Input and Output Processors', () => {
 
       // Test invalid content
       const invalidResult = await agentWithValidator.generate('This contains inappropriate content');
-      expect(invalidResult.tripwire).toBe(true);
-      expect(invalidResult.tripwireReason).toBe('Content validation failed');
+      expect(invalidResult.tripwire).toBeDefined();
+      expect(invalidResult.tripwire?.reason).toBe('Content validation failed');
     });
 
     it('should handle empty processors array', async () => {
@@ -768,8 +768,8 @@ describe('Input and Output Processors', () => {
           format,
         });
 
-        expect(result.tripwire).toBe(true);
-        expect(result.tripwireReason).toBe('Content flagged as inappropriate');
+        expect(result.tripwire).toBeDefined();
+        expect(result.tripwire?.reason).toBe('Content flagged as inappropriate');
         expect(result.finishReason).toBe('other');
       }
 
@@ -989,9 +989,9 @@ describe('Input and Output Processors', () => {
         expect(tripwireChunk).toBeDefined();
 
         if (format === 'aisdk') {
-          expect(tripwireChunk.tripwireReason).toBe('Content triggered abort');
+          expect(tripwireChunk.payload?.reason).toBe('Content triggered abort');
         } else {
-          expect(tripwireChunk.payload.tripwireReason).toBe('Content triggered abort');
+          expect(tripwireChunk.payload.reason).toBe('Content triggered abort');
         }
 
         // Should not have received the text after the abort trigger
@@ -1271,8 +1271,8 @@ describe('Input and Output Processors', () => {
             format,
           });
 
-          expect(result.tripwire).toBe(true);
-          expect(result.tripwireReason).toBe('Tripwire triggered by abort-output-processor');
+          expect(result.tripwire).toBeDefined();
+          expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-output-processor');
 
           expect(await result.finishReason).toBe('other');
         }
@@ -1318,9 +1318,9 @@ describe('Input and Output Processors', () => {
           const tripwireChunk = chunks.find(c => c.type === 'tripwire');
           expect(tripwireChunk).toBeDefined();
           if (format === 'aisdk') {
-            expect(tripwireChunk.tripwireReason).toBe('Tripwire triggered by abort-stream-output-processor');
+            expect(tripwireChunk.payload?.reason).toBe('Tripwire triggered by abort-stream-output-processor');
           } else {
-            expect(tripwireChunk.payload.tripwireReason).toBe('Tripwire triggered by abort-stream-output-processor');
+            expect(tripwireChunk.payload.reason).toBe('Tripwire triggered by abort-stream-output-processor');
           }
         }
 
@@ -1361,9 +1361,9 @@ describe('Input and Output Processors', () => {
           const tripwireChunk = chunks.find(c => c.type === 'tripwire');
           expect(tripwireChunk).toBeDefined();
           if (format === 'aisdk') {
-            expect(tripwireChunk.tripwireReason).toBe('Custom stream output abort reason');
+            expect(tripwireChunk.payload?.reason).toBe('Custom stream output abort reason');
           } else {
-            expect(tripwireChunk.payload.tripwireReason).toBe('Custom stream output abort reason');
+            expect(tripwireChunk.payload.reason).toBe('Custom stream output abort reason');
           }
         }
 
@@ -1757,7 +1757,7 @@ describe('New Processor Features', () => {
 
       const tripwireChunk = chunks.find(c => c.type === 'tripwire');
       expect(tripwireChunk).toBeDefined();
-      expect(tripwireChunk.payload.tripwireReason).toBe('Response needs improvement');
+      expect(tripwireChunk.payload.reason).toBe('Response needs improvement');
       expect(tripwireChunk.payload.retry).toBe(true);
     });
 
@@ -1804,7 +1804,7 @@ describe('New Processor Features', () => {
 
       const tripwireChunk = chunks.find(c => c.type === 'tripwire');
       expect(tripwireChunk).toBeDefined();
-      expect(tripwireChunk.payload.tripwireReason).toBe('Stream content needs retry');
+      expect(tripwireChunk.payload.reason).toBe('Stream content needs retry');
       expect(tripwireChunk.payload.retry).toBe(true);
     });
   });
@@ -1861,7 +1861,7 @@ describe('New Processor Features', () => {
 
       const tripwireChunk = chunks.find(c => c.type === 'tripwire');
       expect(tripwireChunk).toBeDefined();
-      expect(tripwireChunk.payload.tripwireReason).toBe('PII detected in input');
+      expect(tripwireChunk.payload.reason).toBe('PII detected in input');
       expect(tripwireChunk.payload.metadata).toEqual({
         fields: ['email', 'phone'],
         severity: 'high',
@@ -1922,7 +1922,7 @@ describe('New Processor Features', () => {
 
       const tripwireChunk = chunks.find(c => c.type === 'tripwire');
       expect(tripwireChunk).toBeDefined();
-      expect(tripwireChunk.payload.tripwireReason).toBe('Toxic content detected');
+      expect(tripwireChunk.payload.reason).toBe('Toxic content detected');
       expect(tripwireChunk.payload.retry).toBe(true);
       expect(tripwireChunk.payload.metadata).toEqual({
         category: 'hate_speech',
@@ -2212,8 +2212,8 @@ describe('New Processor Features', () => {
       expect(callCount).toBe(3);
 
       // Should return tripwire since max retries exceeded
-      expect(result.tripwire).toBe(true);
-      expect(result.tripwireReason).toBe('Never satisfied');
+      expect(result.tripwire).toBeDefined();
+      expect(result.tripwire?.reason).toBe('Never satisfied');
     });
   });
 
@@ -2467,8 +2467,8 @@ describe('v1 model - output processors', () => {
       // Should return tripwire result when processor aborts
       const result = await agent.generateLegacy('Generate inappropriate content');
 
-      expect(result.tripwire).toBe(true);
-      expect(result.tripwireReason).toBe('Content flagged as inappropriate');
+      expect(result.tripwire).toBeDefined();
+      expect(result.tripwire?.reason).toBe('Content flagged as inappropriate');
       expect(result.text).toBe('');
       expect(result.finishReason).toBe('other');
     });
@@ -2731,8 +2731,8 @@ describe('v1 model - output processors', () => {
 
         const result = await agent.generateLegacy('Hello');
 
-        expect(result.tripwire).toBe(true);
-        expect(result.tripwireReason).toBe('Tripwire triggered by abort-output-processor');
+        expect(result.tripwire).toBeDefined();
+        expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-output-processor');
         expect(result.text).toBe('');
         expect(result.finishReason).toBe('other');
       });
@@ -2764,8 +2764,8 @@ describe('v1 model - output processors', () => {
 
         const result = await agent.generateLegacy('Custom abort test');
 
-        expect(result.tripwire).toBe(true);
-        expect(result.tripwireReason).toBe('Custom output abort reason');
+        expect(result.tripwire).toBeDefined();
+        expect(result.tripwire?.reason).toBe('Custom output abort reason');
         expect(result.text).toBe('');
       });
 
@@ -2815,8 +2815,8 @@ describe('v1 model - output processors', () => {
 
         const result = await agent.generateLegacy('Abort sequence test');
 
-        expect(result.tripwire).toBe(true);
-        expect(result.tripwireReason).toBe('Stop here');
+        expect(result.tripwire).toBeDefined();
+        expect(result.tripwire?.reason).toBe('Stop here');
         expect(secondProcessorExecuted).toBe(false);
       });
     });
@@ -2949,7 +2949,7 @@ describe('Workflow as Processor', () => {
 
       const tripwireChunk = chunks.find(c => c.type === 'tripwire');
       expect(tripwireChunk).toBeDefined();
-      expect(tripwireChunk.payload.tripwireReason).toBe('Content contains blocked keywords');
+      expect(tripwireChunk.payload.reason).toBe('Content contains blocked keywords');
       expect(tripwireChunk.payload.retry).toBe(true);
       expect(tripwireChunk.payload.metadata).toEqual({ severity: 'high' });
     });
@@ -3063,8 +3063,8 @@ describe('Workflow as Processor', () => {
 
       const result = await agent.generate('Hello');
 
-      expect(result.tripwire).toBe(true);
-      expect(result.tripwireReason).toBe('Output contains inappropriate content');
+      expect(result.tripwire).toBeDefined();
+      expect(result.tripwire?.reason).toBe('Output contains inappropriate content');
     });
   });
 

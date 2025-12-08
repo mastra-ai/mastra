@@ -208,7 +208,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * Maximum number of times processors can trigger a retry per generation.
    * When a processor calls abort({ retry: true }), the agent will retry with feedback.
    * This limit prevents infinite retry loops.
-   * @default 3
+   * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
   /**
@@ -272,7 +272,7 @@ export type AgentGenerateOptions<
   /**
    * Maximum number of times processors can trigger a retry for this generation.
    * Overrides agent's default maxProcessorRetries.
-   * @default 3
+   * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
   /** tracing context for span hierarchy and metadata */

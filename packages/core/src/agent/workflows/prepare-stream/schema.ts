@@ -55,15 +55,15 @@ export const prepareMemoryStepOutputSchema = z.object({
   threadExists: z.boolean(),
   thread: storageThreadSchema.optional(),
   messageList: z.instanceof(MessageList),
-  tripwire: z.boolean().optional(),
-  tripwireReason: z.string().optional(),
-  tripwireOptions: z
+  /** Tripwire data when input processor triggered abort */
+  tripwire: z
     .object({
+      reason: z.string(),
       retry: z.boolean().optional(),
       metadata: z.unknown().optional(),
+      processorId: z.string().optional(),
     })
     .optional(),
-  processorId: z.string().optional(),
 });
 
 export type PrepareMemoryStepOutput = z.infer<typeof prepareMemoryStepOutputSchema>;

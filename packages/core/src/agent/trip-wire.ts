@@ -44,28 +44,34 @@ export class TripWire<TMetadata = unknown> extends Error {
   }
 }
 
+/**
+ * Tripwire data passed to getModelOutputForTripwire
+ */
+export interface TripwireData<TMetadata = unknown> {
+  reason: string;
+  retry?: boolean;
+  metadata?: TMetadata;
+  processorId?: string;
+}
+
 export const getModelOutputForTripwire = async <
   OUTPUT extends OutputSchema | undefined = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
   TMetadata = unknown,
 >({
-  tripwireReason,
-  tripwireOptions,
+  tripwire,
   runId,
   tracingContext,
   options,
   model,
   messageList,
-  processorId,
 }: {
-  tripwireReason: string;
-  tripwireOptions?: TripWireOptions<TMetadata>;
+  tripwire: TripwireData<TMetadata>;
   runId: string;
   tracingContext: TracingContext;
   options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
   model: MastraLanguageModel;
   messageList: MessageList;
-  processorId?: string;
 }) => {
   const tripwireStream = new ReadableStream<ChunkType<OUTPUT>>({
     start(controller) {
@@ -74,10 +80,10 @@ export const getModelOutputForTripwire = async <
         runId,
         from: ChunkFrom.AGENT,
         payload: {
-          tripwireReason: tripwireReason || '',
-          retry: tripwireOptions?.retry,
-          metadata: tripwireOptions?.metadata,
-          processorId,
+          reason: tripwire.reason || '',
+          retry: tripwire.retry,
+          metadata: tripwire.metadata,
+          processorId: tripwire.processorId,
         },
       });
       controller.close();

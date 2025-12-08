@@ -471,7 +471,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   requestContext,
   methodType,
   modelSpanTracker,
-  maxProcessorRetries = 3,
+  maxProcessorRetries,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -847,17 +847,21 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       const currentProcessorRetryCount = inputData.processorRetryCount || 0;
 
       // Check if this is a retry request from processOutputStep
-      // Only allow retry if we haven't exceeded maxProcessorRetries
+      // Only allow retry if maxProcessorRetries is set and we haven't exceeded it
       const retryRequested = processOutputStepTripwire?.options?.retry === true;
-      const canRetry = currentProcessorRetryCount < maxProcessorRetries;
+      const canRetry = maxProcessorRetries !== undefined && currentProcessorRetryCount < maxProcessorRetries;
       const shouldRetry = retryRequested && canRetry;
 
-      // Log if retry was requested but limit exceeded
+      // Log if retry was requested but not allowed
       if (retryRequested && !canRetry) {
-        logger?.warn?.(
-          `Processor requested retry but maxProcessorRetries (${maxProcessorRetries}) exceeded. ` +
-            `Current count: ${currentProcessorRetryCount}. Treating as abort.`,
-        );
+        if (maxProcessorRetries === undefined) {
+          logger?.warn?.(`Processor requested retry but maxProcessorRetries is not set. Treating as abort.`);
+        } else {
+          logger?.warn?.(
+            `Processor requested retry but maxProcessorRetries (${maxProcessorRetries}) exceeded. ` +
+              `Current count: ${currentProcessorRetryCount}. Treating as abort.`,
+          );
+        }
       }
 
       const steps = inputData.output?.steps || [];

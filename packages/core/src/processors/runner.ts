@@ -111,20 +111,17 @@ export class ProcessorRunner {
 
     // Check for tripwire status - this means a processor in the workflow called abort()
     if (result.status === 'tripwire') {
-      const tripwireResult = result as {
-        reason?: string;
-        retry?: boolean;
-        metadata?: unknown;
-        processorId?: string;
-      };
+      const tripwireData = (
+        result as { tripwire?: { reason?: string; retry?: boolean; metadata?: unknown; processorId?: string } }
+      ).tripwire;
       // Re-throw as TripWire so the agent handles it properly
       throw new TripWire(
-        tripwireResult.reason || `Tripwire triggered in workflow ${workflow.id}`,
+        tripwireData?.reason || `Tripwire triggered in workflow ${workflow.id}`,
         {
-          retry: tripwireResult.retry,
-          metadata: tripwireResult.metadata,
+          retry: tripwireData?.retry,
+          metadata: tripwireData?.metadata,
         },
-        tripwireResult.processorId || workflow.id,
+        tripwireData?.processorId || workflow.id,
       );
     }
 
@@ -502,7 +499,7 @@ export class ProcessorRunner {
               controller.enqueue({
                 type: 'tripwire',
                 payload: {
-                  tripwireReason: reason || 'Output processor blocked content',
+                  reason: reason || 'Output processor blocked content',
                   retry: tripwireOptions?.retry,
                   metadata: tripwireOptions?.metadata,
                   processorId,

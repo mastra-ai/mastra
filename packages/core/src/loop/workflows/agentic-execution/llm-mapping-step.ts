@@ -65,7 +65,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         rest.controller.enqueue({
           type: 'tripwire',
           payload: {
-            tripwireReason: reason || 'Output processor blocked content',
+            reason: reason || 'Output processor blocked content',
             retry: tripwireOptions?.retry,
             metadata: tripwireOptions?.metadata,
             processorId,

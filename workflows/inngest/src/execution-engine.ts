@@ -363,7 +363,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           payload: {
             id: step.id,
             status: 'success',
-            output: (result as any)?.result,
+            output: result?.result,
           },
         });
 
@@ -375,7 +375,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
         });
 
-        return { executionContext, result: { status: 'success', output: (result as any)?.result } };
+        return { executionContext, result: { status: 'success', output: result?.result } };
       },
     );
 

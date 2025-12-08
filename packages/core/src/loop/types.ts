@@ -100,7 +100,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   /**
    * Maximum number of times processors can trigger a retry per generation.
    * When a processor calls abort({ retry: true }), the agent will retry with feedback.
-   * @default 3
+   * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
 };

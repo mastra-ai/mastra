@@ -313,7 +313,8 @@ interface WatchPayload {
 }
 
 interface TripwirePayload<TMetadata = unknown> {
-  tripwireReason: string;
+  /** The reason for the tripwire */
+  reason: string;
   /** If true, the agent should retry with the tripwire reason as feedback */
   retry?: boolean;
   /** Strongly typed metadata from the processor */

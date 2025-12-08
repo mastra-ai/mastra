@@ -156,7 +156,7 @@ export function getSerializedProcessors(
     // Use the name property if available, otherwise fall back to constructor name
     return {
       id: processor.id,
-      name: (processor as any).name || processor.constructor.name,
+      name: processor.name || processor.constructor.name,
     };
   });
 }
