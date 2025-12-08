@@ -168,6 +168,77 @@ This is useful for:
 - Filtering or modifying semantic recall content to prevent "prompt too long" errors
 - Dynamically adjusting system instructions based on the conversation
 
+### Per-step processing with processInputStep
+
+While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
+
+```typescript title="src/mastra/processors/step-processor.ts" showLineNumbers copy
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+
+export class DynamicModelProcessor implements Processor {
+  id = "dynamic-model";
+
+  async processInputStep({
+    stepNumber,
+    model,
+    toolChoice,
+    messageList,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // Use a fast model for initial response
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+
+    // Disable tools after 5 steps to force completion
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+
+    // No changes for other steps
+    return {};
+  }
+}
+```
+
+The `processInputStep` method receives:
+- `stepNumber`: Current step in the agentic loop (0-indexed)
+- `steps`: Results from previous steps
+- `messages`: Current messages snapshot (read-only)
+- `systemMessages`: Current system messages (read-only)
+- `messageList`: The full MessageList instance for mutations
+- `model`: Current model being used
+- `toolChoice`: Current tool choice setting
+- `activeTools`: Currently active tools
+- `providerOptions`: Provider-specific options
+- `modelSettings`: Model settings like temperature
+
+The method can return any combination of:
+- `model`: Change the model for this step
+- `toolChoice`: Change tool selection behavior
+- `activeTools`: Filter which tools are available
+- `messages`: Replace messages (applied to messageList)
+- `systemMessages`: Replace all system messages
+- `providerOptions`: Modify provider options
+- `modelSettings`: Modify model settings
+
+#### Using prepareStep callback
+
+For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
+
+```typescript
+await agent.generate({
+  prompt: "Complex task",
+  prepareStep: async ({ stepNumber, model }) => {
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+  },
+});
+```
+
 ### Custom output processor
 
 ```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy

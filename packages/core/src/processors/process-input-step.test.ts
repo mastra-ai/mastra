@@ -1241,6 +1241,252 @@ describe('processInputStep', () => {
     });
   });
 
+  describe('abort functionality', () => {
+    it('should allow processor to abort the run', async () => {
+      const processor: Processor = {
+        id: 'aborting-processor',
+        processInputStep: async ({ abort }) => {
+          abort('Aborting for test');
+          // This line should not be reached
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow('Aborting for test');
+    });
+
+    it('should stop the chain when processor aborts', async () => {
+      const executionLog: string[] = [];
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ abort }) => {
+          executionLog.push('processor-1');
+          abort('Abort from processor 1');
+          return {};
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async () => {
+          executionLog.push('processor-2');
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow('Abort from processor 1');
+
+      // Only processor-1 should have run
+      expect(executionLog).toEqual(['processor-1']);
+    });
+  });
+
+  describe('validation', () => {
+    it('should reject external MessageList (returning different instance)', async () => {
+      const externalMessageList = new MessageList({ threadId: 'external-thread' });
+
+      const processor: Processor = {
+        id: 'external-list-processor',
+        processInputStep: async () => {
+          // Return a different MessageList instance
+          return externalMessageList;
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow(/returned a MessageList instance other than the one that was passed in/);
+    });
+
+    it('should reject external MessageList in result object', async () => {
+      const externalMessageList = new MessageList({ threadId: 'external-thread' });
+
+      const processor: Processor = {
+        id: 'external-list-processor',
+        processInputStep: async () => {
+          return { messageList: externalMessageList };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow(/returned a MessageList instance other than the one that was passed in/);
+    });
+
+    it('should reject returning both messages and messageList together', async () => {
+      const processor: Processor = {
+        id: 'both-processor',
+        processInputStep: async ({ messages, messageList }) => {
+          return { messages, messageList };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow(/returned both messages and messageList/);
+    });
+
+    it('should reject v1 models', async () => {
+      const v1Model = {
+        modelId: 'v1-model',
+        specificationVersion: 'v1',
+        provider: 'test',
+        doGenerate: async () => ({}),
+        doStream: async () => ({}),
+      } as any;
+
+      const processor: Processor = {
+        id: 'v1-model-processor',
+        processInputStep: async () => {
+          return { model: v1Model };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow(/v1 models are not supported/);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should stop the chain when processor throws an error', async () => {
+      const executionLog: string[] = [];
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async () => {
+          executionLog.push('processor-1');
+          throw new Error('Error from processor 1');
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async () => {
+          executionLog.push('processor-2');
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow('Error from processor 1');
+
+      // Only processor-1 should have run
+      expect(executionLog).toEqual(['processor-1']);
+    });
+  });
+
   describe('messageList mutations', () => {
     it('should allow processor to mutate messageList directly and return it', async () => {
       const processor: Processor = {

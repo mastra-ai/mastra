@@ -239,17 +239,18 @@ class ReasoningTransformer implements Processor {
 
 #### ProcessorRunner.runProcessInputStep Tests
 
-- [ ] Single processor modifies model
-- [ ] Single processor modifies toolChoice
-- [ ] Single processor modifies activeTools
-- [ ] Single processor modifies messages
-- [ ] Multiple processors chain correctly (output of one affects next)
-- [ ] Processor can abort the run
-- [ ] Error in processor stops the chain
-- [ ] MessageList mutations are tracked correctly
-- [ ] Validation: rejects external MessageList
-- [ ] Validation: rejects messages + messageList together
-- [ ] Validation: rejects v1 models
+- [x] Single processor modifies model
+- [x] Single processor modifies toolChoice
+- [x] Single processor modifies activeTools
+- [x] Single processor modifies messages
+- [x] Single processor modifies systemMessages
+- [x] Multiple processors chain correctly (output of one affects next)
+- [x] Processor can abort the run
+- [x] Error in processor stops the chain
+- [x] MessageList mutations are tracked correctly
+- [x] Validation: rejects external MessageList
+- [x] Validation: rejects messages + messageList together
+- [x] Validation: rejects v1 models
 
 ### Integration Tests
 
@@ -289,11 +290,11 @@ class ReasoningTransformer implements Processor {
 
 ### Edge Cases
 
-- [ ] stepNumber increments correctly across tool calls
-- [ ] steps array contains previous step results
-- [ ] Empty inputProcessors array is handled
-- [ ] Processor returns nothing (undefined)
-- [ ] Processor only returns partial result (just toolChoice, not model)
+- [x] stepNumber increments correctly across tool calls
+- [x] steps array contains previous step results
+- [x] Empty inputProcessors array is handled
+- [x] Processor returns nothing (undefined)
+- [x] Processor only returns partial result (just toolChoice, not model)
 
 ## Implementation Status
 
@@ -329,7 +330,8 @@ class ReasoningTransformer implements Processor {
 
 ### 📝 TODO
 
-- [ ] Update 1.0 migration guide with prepareStep messages format breaking change
+- [x] Update 1.0 migration guide with prepareStep messages format breaking change (added to docs/src/content/en/guides/migrations/upgrade-to-v1/agent.mdx)
+- [x] Update processor docs with processInputStep section (added to docs/src/content/en/docs/agents/processors.mdx)
 
 ## System Message Behavior
 
