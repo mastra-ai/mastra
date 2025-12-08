@@ -578,3 +578,205 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
     expect(tools).toHaveProperty('greet');
   });
 });
+
+describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
+  /**
+   * Issue #7675: MCPClient fails to reconnect after MCP server restart
+   * 
+   * When an MCP server goes offline and comes back online, the session ID
+   * becomes invalid, causing "Bad Request: No valid session ID provided" errors.
+   * 
+   * The MCPClient should automatically detect session invalidation and reconnect.
+   */
+
+  it('should automatically reconnect when server restarts (issue #7675 fix)', async () => {
+    // Step 1: Create a stateful MCP server
+    const httpServer: HttpServer = createServer();
+    let mcpServer = new McpServer(
+      { name: 'session-test-server', version: '1.0.0' },
+      { capabilities: { logging: {}, tools: {} } },
+    );
+
+    mcpServer.tool(
+      'ping',
+      'Simple ping tool',
+      { message: z.string().default('pong') },
+      async ({ message }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Ping: ${message}` }] };
+      },
+    );
+
+    let serverTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+    });
+
+    await mcpServer.connect(serverTransport);
+
+    httpServer.on('request', async (req, res) => {
+      await serverTransport.handleRequest(req, res);
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    // Step 2: Connect client and execute tool successfully
+    const client = new InternalMastraMCPClient({
+      name: 'session-reconnect-test',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+
+    const tools = await client.tools();
+    const pingTool = tools['ping'];
+    expect(pingTool).toBeDefined();
+
+    // First call should succeed
+    const result1 = await pingTool.execute({ context: { message: 'hello' } });
+    expect(result1).toEqual({ content: [{ type: 'text', text: 'Ping: hello' }] });
+
+    // Verify we have a session ID
+    const originalSessionId = client.sessionId;
+    expect(originalSessionId).toBeDefined();
+
+    // Step 3: Simulate server restart - close transport and create new one
+    // This invalidates all existing sessions
+    await serverTransport.close();
+    await mcpServer.close();
+
+    // Create new server instance (simulating server restart)
+    mcpServer = new McpServer(
+      { name: 'session-test-server', version: '1.0.0' },
+      { capabilities: { logging: {}, tools: {} } },
+    );
+
+    mcpServer.tool(
+      'ping',
+      'Simple ping tool',
+      { message: z.string().default('pong') },
+      async ({ message }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Ping: ${message}` }] };
+      },
+    );
+
+    serverTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+    });
+
+    await mcpServer.connect(serverTransport);
+
+    // Step 4: Call tool again - should automatically reconnect and succeed
+    // The client should detect the session error, reconnect, and retry
+    const result2 = await pingTool.execute({ context: { message: 'after restart' } });
+    expect(result2).toEqual({ content: [{ type: 'text', text: 'Ping: after restart' }] });
+
+    // Verify we got a new session ID (different from the original)
+    const newSessionId = client.sessionId;
+    expect(newSessionId).toBeDefined();
+    expect(newSessionId).not.toBe(originalSessionId);
+
+    // Cleanup
+    await client.disconnect().catch(() => {});
+    await mcpServer.close().catch(() => {});
+    await serverTransport.close().catch(() => {});
+    httpServer.close();
+  });
+
+  it('should verify counter resets after server restart with reconnection', async () => {
+    // This test verifies that after server restart, the client reconnects
+    // and the server state (counter) is reset as expected
+    
+    // Step 1: Create a stateful MCP server
+    const httpServer: HttpServer = createServer();
+    let mcpServer = new McpServer(
+      { name: 'reconnect-test-server', version: '1.0.0' },
+      { capabilities: { logging: {}, tools: {} } },
+    );
+
+    let callCount = 0;
+    mcpServer.tool(
+      'counter',
+      'Counts calls',
+      {},
+      async (): Promise<CallToolResult> => {
+        callCount++;
+        return { content: [{ type: 'text', text: `Call #${callCount}` }] };
+      },
+    );
+
+    let serverTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+    });
+
+    await mcpServer.connect(serverTransport);
+
+    httpServer.on('request', async (req, res) => {
+      await serverTransport.handleRequest(req, res);
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    // Step 2: Connect client and execute tool
+    const client = new InternalMastraMCPClient({
+      name: 'auto-reconnect-test',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+
+    const tools = await client.tools();
+    const counterTool = tools['counter'];
+
+    // First call should succeed - counter = 1
+    const result1 = await counterTool.execute({ context: {} });
+    expect(result1).toEqual({ content: [{ type: 'text', text: 'Call #1' }] });
+
+    // Second call - counter = 2
+    const result2 = await counterTool.execute({ context: {} });
+    expect(result2).toEqual({ content: [{ type: 'text', text: 'Call #2' }] });
+
+    // Step 3: Simulate server restart
+    await serverTransport.close();
+    await mcpServer.close();
+
+    mcpServer = new McpServer(
+      { name: 'reconnect-test-server', version: '1.0.0' },
+      { capabilities: { logging: {}, tools: {} } },
+    );
+
+    callCount = 0; // Reset counter (simulating server restart losing state)
+    mcpServer.tool(
+      'counter',
+      'Counts calls',
+      {},
+      async (): Promise<CallToolResult> => {
+        callCount++;
+        return { content: [{ type: 'text', text: `Call #${callCount}` }] };
+      },
+    );
+
+    serverTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+    });
+
+    await mcpServer.connect(serverTransport);
+
+    // Step 4: Call tool again - should reconnect and succeed
+    // Counter should be 1 (not 3) because server restarted
+    const result3 = await counterTool.execute({ context: {} });
+    expect(result3).toEqual({ content: [{ type: 'text', text: 'Call #1' }] });
+
+    // Cleanup
+    await client.disconnect().catch(() => {});
+    await mcpServer.close().catch(() => {});
+    await serverTransport.close().catch(() => {});
+    httpServer.close();
+  });
+});
