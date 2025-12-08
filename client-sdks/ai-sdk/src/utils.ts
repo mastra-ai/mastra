@@ -21,6 +21,8 @@ export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSc
       'source',
       'tool-input-start',
       'tool-input-delta',
+      'tool-call-approval',
+      'tool-call-suspended',
       'tool-call',
       'tool-result',
       'tool-error',
@@ -31,6 +33,8 @@ export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSc
       'finish',
       'abort',
       'tool-input-end',
+      'object',
+      'tripwire',
       'raw',
     ].includes(chunk.type)
   );
