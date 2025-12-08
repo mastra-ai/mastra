@@ -874,7 +874,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       // This includes both retry scenarios and max retries exceeded
       const stepTripwireData = processOutputStepTripwire
         ? {
-            message: processOutputStepTripwire.message,
+            reason: processOutputStepTripwire.message,
             retry: processOutputStepTripwire.options?.retry,
             metadata: processOutputStepTripwire.options?.metadata,
             processorId: processOutputStepTripwire.processorId,

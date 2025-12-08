@@ -17,6 +17,7 @@ import type {
   LLMStepResult,
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
+  StepTripwireData,
 } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
@@ -95,8 +96,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #finishReason: LLMStepResult['finishReason'] = undefined;
   #request: LLMStepResult['request'] = {};
   #usageCount: LLMStepResult['usage'] = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
-  #tripwire = false;
-  #tripwireReason = '';
+  #tripwire: StepTripwireData | undefined = undefined;
 
   #delayedPromises = {
     suspendPayload: new DelayedPromise<any>(),
@@ -510,8 +510,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             }
             case 'tripwire':
               // Handle tripwire chunks from processors
-              self.#tripwire = true;
-              self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
+              self.#tripwire = {
+                reason: chunk.payload?.tripwireReason || 'Content blocked',
+                retry: chunk.payload?.retry,
+                metadata: chunk.payload?.metadata,
+                processorId: chunk.payload?.processorId,
+              };
               self.#finishReason = 'other';
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
@@ -550,14 +554,19 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
 
-              // Check if this is a tripwire case - set tripwire flag
+              // Check if this is a tripwire case - set tripwire data
               // This can happen when max retries is exceeded or a processor triggers a tripwire
               if ((chunk.payload.stepResult.reason as string) === 'tripwire') {
-                self.#tripwire = true;
-                // Try to get the tripwire reason from the last step's tripwire data (MastraStepResult)
+                // Try to get the tripwire data from the last step (MastraStepResult)
                 const outputSteps = chunk.payload.output?.steps;
                 const lastStep = outputSteps?.[outputSteps?.length - 1];
-                self.#tripwireReason = lastStep?.tripwire?.message || 'Processor tripwire triggered';
+                const stepTripwire = lastStep?.tripwire;
+                self.#tripwire = {
+                  reason: stepTripwire?.reason || 'Processor tripwire triggered',
+                  retry: stepTripwire?.retry,
+                  metadata: stepTripwire?.metadata,
+                  processorId: stepTripwire?.processorId,
+                };
               }
 
               // Add structured output to the latest assistant message metadata
@@ -628,8 +637,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 }
               } catch (error) {
                 if (error instanceof TripWire) {
-                  self.#tripwire = true;
-                  self.#tripwireReason = error.message;
+                  self.#tripwire = {
+                    reason: error.message,
+                    retry: error.options?.retry,
+                    metadata: error.options?.metadata,
+                    processorId: error.processorId,
+                  };
                   self.#delayedPromises.finishReason.resolve('other');
                   self.#delayedPromises.text.resolve('');
                 } else {
@@ -1011,7 +1024,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       object: await this.object,
       error: this.error,
       tripwire: this.#tripwire,
-      tripwireReason: this.#tripwireReason,
       ...(scoringData ? { scoringData } : {}),
       traceId: this.traceId,
     };
@@ -1020,17 +1032,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   /**
-   * The tripwire flag is set when the stream is aborted due to an output processor blocking the content.
+   * Tripwire data if the stream was aborted due to an output processor blocking the content.
+   * Returns undefined if no tripwire was triggered.
    */
-  get tripwire() {
+  get tripwire(): StepTripwireData | undefined {
     return this.#tripwire;
-  }
-
-  /**
-   * The reason for the tripwire.
-   */
-  get tripwireReason() {
-    return this.#tripwireReason;
   }
 
   /**
@@ -1287,7 +1293,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       request: this.#request,
       usageCount: this.#usageCount,
       tripwire: this.#tripwire,
-      tripwireReason: this.#tripwireReason,
       messageList: this.messageList.serialize(),
     };
   }
@@ -1311,7 +1316,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#request = state.request;
     this.#usageCount = state.usageCount;
     this.#tripwire = state.tripwire;
-    this.#tripwireReason = state.tripwireReason;
     this.messageList = this.messageList.deserialize(state.messageList);
   }
 }

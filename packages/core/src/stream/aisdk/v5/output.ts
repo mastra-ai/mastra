@@ -367,7 +367,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       totalUsage: await this.#modelOutput.totalUsage,
       error: this.error,
       tripwire: this.#modelOutput.tripwire,
-      tripwireReason: this.#modelOutput.tripwireReason,
       traceId: this.traceId,
       ...(object ? { object } : {}),
     };
@@ -379,10 +378,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
 
   get tripwire() {
     return this.#modelOutput.tripwire;
-  }
-
-  get tripwireReason() {
-    return this.#modelOutput.tripwireReason;
   }
 
   get error() {

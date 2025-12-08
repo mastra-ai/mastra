@@ -1,22 +1,25 @@
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { PartialSchemaOutput, OutputSchema, DataChunkType, ChunkType } from '@mastra/core/stream';
+import type {
+  PartialSchemaOutput,
+  OutputSchema,
+  DataChunkType,
+  ChunkType,
+  MastraFinishReason,
+} from '@mastra/core/stream';
 
-import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
+import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, FinishReason } from 'ai';
 import { isDataChunkType } from './utils';
-
-// Type alias for AI SDK's finish reason
-type AISDKFinishReason = 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown';
 
 /**
  * Maps Mastra's extended finish reasons to AI SDK-compatible values.
  * 'tripwire' and 'retry' are Mastra-specific reasons for processor scenarios,
  * which are mapped to 'other' for AI SDK compatibility.
  */
-function toAISDKFinishReason(reason: string): AISDKFinishReason {
+function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
   if (reason === 'tripwire' || reason === 'retry') {
     return 'other';
   }
-  return reason as AISDKFinishReason;
+  return reason;
 }
 
 export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =

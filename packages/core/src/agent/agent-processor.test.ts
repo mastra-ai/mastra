@@ -2120,7 +2120,7 @@ describe('New Processor Features', () => {
       expect(result.steps.length).toBe(2);
       // First step should have tripwire data (rejected)
       expect((result.steps[0] as any).tripwire).toBeDefined();
-      expect((result.steps[0] as any).tripwire.message).toBe('Response quality too low, please improve');
+      expect((result.steps[0] as any).tripwire.reason).toBe('Response quality too low, please improve');
       // Second step should not have tripwire (accepted)
       expect((result.steps[1] as any).tripwire).toBeUndefined();
     });

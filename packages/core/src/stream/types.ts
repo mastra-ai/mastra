@@ -705,8 +705,8 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
  * When a step has tripwire data, its text is excluded from the final output.
  */
 export interface StepTripwireData {
-  /** The tripwire message/reason */
-  message: string;
+  /** The tripwire reason */
+  reason: string;
   /** Whether retry was requested */
   retry?: boolean;
   /** Additional metadata from the tripwire */
