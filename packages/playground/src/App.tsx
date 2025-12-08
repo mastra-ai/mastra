@@ -80,109 +80,109 @@ function App() {
 
   return (
     <MastraReactProvider baseUrl={baseUrl} headers={headers}>
-      <PlaygroundQueryClient>
-        <PostHogProvider>
-          <BrowserRouter>
-            <LinkComponentWrapper>
-              <Routes>
+      <PostHogProvider>
+        <BrowserRouter>
+          <LinkComponentWrapper>
+            <Routes>
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/settings" element={<StudioSettingsPage />} />
+              </Route>
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/templates" element={<Templates />} />
+                <Route path="/templates/:templateSlug" element={<Template />} />
+              </Route>
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/scorers" element={<Scorers />} />
+                <Route path="/scorers/:scorerId" element={<Scorer />} />
+              </Route>
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/observability" element={<Observability />} />
+              </Route>
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/agents" element={<Agents />} />
+                <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
+                <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
                 <Route
+                  path="/agents/:agentId"
                   element={
-                    <Layout>
+                    <AgentLayout>
                       <Outlet />
-                    </Layout>
+                    </AgentLayout>
                   }
                 >
-                  <Route path="/settings" element={<StudioSettingsPage />} />
+                  <Route path="chat" element={<Agent />} />
+                  <Route path="chat/:threadId" element={<Agent />} />
                 </Route>
+                <Route path="/tools" element={<Tools />} />
+
+                <Route path="/tools/:toolId" element={<Tool />} />
+                <Route path="/mcps" element={<MCPs />} />
+
+                <Route path="/mcps/:serverId" element={<McpServerPage />} />
+                <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
+
+                <Route path="/workflows" element={<Workflows />} />
+                <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />
+
                 <Route
+                  path="/workflows/:workflowId"
                   element={
-                    <Layout>
+                    <WorkflowLayout>
                       <Outlet />
-                    </Layout>
+                    </WorkflowLayout>
                   }
                 >
-                  <Route path="/templates" element={<Templates />} />
-                  <Route path="/templates/:templateSlug" element={<Template />} />
+                  <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
+                  <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
                 </Route>
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
-                  <Route path="/scorers" element={<Scorers />} />
-                  <Route path="/scorers/:scorerId" element={<Scorer />} />
-                </Route>
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
-                  <Route path="/observability" element={<Observability />} />
-                </Route>
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
-                  <Route path="/agents" element={<Agents />} />
-                  <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
-                  <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
-                  <Route
-                    path="/agents/:agentId"
-                    element={
-                      <AgentLayout>
-                        <Outlet />
-                      </AgentLayout>
-                    }
-                  >
-                    <Route path="chat" element={<Agent />} />
-                    <Route path="chat/:threadId" element={<Agent />} />
-                  </Route>
-                  <Route path="/tools" element={<Tools />} />
 
-                  <Route path="/tools/:toolId" element={<Tool />} />
-                  <Route path="/mcps" element={<MCPs />} />
-
-                  <Route path="/mcps/:serverId" element={<McpServerPage />} />
-                  <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
-
-                  <Route path="/workflows" element={<Workflows />} />
-                  <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />
-
-                  <Route
-                    path="/workflows/:workflowId"
-                    element={
-                      <WorkflowLayout>
-                        <Outlet />
-                      </WorkflowLayout>
-                    }
-                  >
-                    <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
-                    <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
-                  </Route>
-
-                  <Route path="/" element={<NavigateTo to="/agents" />} />
-                  <Route path="/request-context" element={<RequestContext />} />
-                </Route>
-              </Routes>
-            </LinkComponentWrapper>
-          </BrowserRouter>
-        </PostHogProvider>
-      </PlaygroundQueryClient>
+                <Route path="/" element={<NavigateTo to="/agents" />} />
+                <Route path="/request-context" element={<RequestContext />} />
+              </Route>
+            </Routes>
+          </LinkComponentWrapper>
+        </BrowserRouter>
+      </PostHogProvider>
     </MastraReactProvider>
   );
 }
 
 export default function AppWrapper() {
   return (
-    <StudioConfigProvider>
-      <App />
-    </StudioConfigProvider>
+    <PlaygroundQueryClient>
+      <StudioConfigProvider>
+        <App />
+      </StudioConfigProvider>
+    </PlaygroundQueryClient>
   );
 }
