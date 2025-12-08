@@ -1,12 +1,17 @@
 import { test, expect, Page } from '@playwright/test';
 import { selectFixture } from '../../__utils__/select-fixture';
 import { nanoid } from 'nanoid';
+import { resetStorage } from '../../__utils__/reset-storage';
 
 let page: Page;
 
 test.beforeEach(async ({ browser }) => {
   const context = await browser.newContext();
   page = await context.newPage();
+});
+
+test.afterEach(async () => {
+  await resetStorage();
 });
 
 test('text stream', async () => {

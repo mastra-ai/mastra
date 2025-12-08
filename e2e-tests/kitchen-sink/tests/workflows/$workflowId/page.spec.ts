@@ -1,4 +1,9 @@
 import { test, expect, Page } from '@playwright/test';
+import { resetStorage } from '../../__utils__/reset-storage';
+
+test.afterEach(async () => {
+  await resetStorage();
+});
 
 test.beforeEach(async ({ page }) => {
   await page.goto('http://localhost:4111/workflows/complexWorkflow/graph');
