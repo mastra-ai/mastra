@@ -273,7 +273,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowId: string;
       runId: string;
     },
-  ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: string; endedAt: number } }> {
+  ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: Error; endedAt: number } }> {
     for (let i = 0; i < params.retries + 1; i++) {
       if (i > 0 && params.delay) {
         await new Promise(resolve => setTimeout(resolve, params.delay));
@@ -284,6 +284,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       } catch (e) {
         if (i === params.retries) {
           // Retries exhausted - return failed result
+          // Use getErrorFromUnknown directly on the original error to preserve custom properties
+          const errorInstance = getErrorFromUnknown(e, {
+            includeStack: false,
+            fallbackMessage: 'Unknown step execution error',
+          });
+
+          // Log the error for observability (but don't wrap it)
           const processedError = this.preprocessExecutionError(
             e,
             {
@@ -300,16 +307,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             attributes: { status: 'failed' },
           });
 
-          const errorInstance = getErrorFromUnknown(processedError, {
-            includeStack: false,
-            fallbackMessage: 'Unknown step execution error',
-          });
-
           return {
             ok: false,
             error: {
               status: 'failed',
-              error: `Error: ${errorInstance.message}`,
+              error: errorInstance,
               endedAt: Date.now(),
             },
           };
@@ -318,21 +320,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
     }
     // Should never reach here, but TypeScript needs it
-    return { ok: false, error: { status: 'failed', error: 'Unknown error', endedAt: Date.now() } };
+    return { ok: false, error: { status: 'failed', error: new Error('Unknown error'), endedAt: Date.now() } };
   }
 
   /**
    * Format an error for the workflow result.
    * Override to customize error formatting (e.g., include stack traces).
    */
-  protected formatResultError(error: Error | string | undefined, lastOutput: StepResult<any, any, any, any>): string {
+  protected formatResultError(error: Error | string | undefined, lastOutput: StepResult<any, any, any, any>): Error {
     const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
     const errorSource = error || outputError;
     const errorInstance = getErrorFromUnknown(errorSource, {
       includeStack: false,
       fallbackMessage: 'Unknown workflow error',
     });
-    return typeof errorSource === 'string' ? errorInstance.message : `Error: ${errorInstance.message}`;
+    return errorInstance;
   }
 
   protected async fmtReturnValue<TOutput>(

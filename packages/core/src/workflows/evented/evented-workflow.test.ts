@@ -3569,8 +3569,10 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toMatch(/^Error: Step execution failed/); // Now safe to access
+        // In evented workflows, errors are serialized through the event system
+        // so they become plain objects with name/message, not Error instances
+        expect(result.error).toBeDefined();
+        expect((result.error as any).message).toMatch(/Step execution failed/);
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -3586,7 +3588,9 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect((step1Result as any)?.error).toMatch(/^Error: Step execution failed/); // Check message prefix
+      // In evented workflows, errors are serialized objects with name/message
+      expect((step1Result as any)?.error).toBeDefined();
+      expect((step1Result as any)?.error.message).toMatch(/Step execution failed/);
 
       await mastra.stopEventEngine();
     });
@@ -3715,7 +3719,9 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
-      expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
+      // In evented workflows, errors are serialized objects
+      expect((result.steps?.step2 as any)?.error).toBeDefined();
+      expect((result.steps?.step2 as any)?.error.message).toMatch(/Step execution failed/);
 
       await mastra.stopEventEngine();
     });
@@ -3788,7 +3794,9 @@ describe('Workflow', () => {
         },
       });
 
-      expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Step execution failed/);
+      // In evented workflows, errors are serialized objects
+      expect((result.steps?.['test-workflow'] as any)?.error).toBeDefined();
+      expect((result.steps?.['test-workflow'] as any)?.error.message).toMatch(/Step execution failed/);
 
       await mastra.stopEventEngine();
     });

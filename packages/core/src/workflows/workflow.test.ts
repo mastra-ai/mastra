@@ -5237,7 +5237,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        expect((step1Result as any)?.error).toMatch(/^Error: Failed/);
+        expect((step1Result as any)?.error).toBeInstanceOf(Error);
+        expect(((step1Result as any)?.error as Error).message).toBe('Failed');
       });
 
       it('should support simple string conditions', async () => {
@@ -6025,8 +6026,9 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toMatch(/^Error: Step execution failed/); // Now safe to access
+        // result.error should be an Error instance
+        expect(result.error).toBeInstanceOf(Error);
+        expect((result.error as Error).message).toMatch(/Step execution failed/);
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -6042,7 +6044,9 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect((step1Result as any)?.error).toMatch(/^Error: Step execution failed/); // Check message prefix
+      // Step error should also be an Error instance
+      expect((step1Result as any)?.error).toBeInstanceOf(Error);
+      expect(((step1Result as any)?.error as Error).message).toMatch(/Step execution failed/);
     });
 
     it('should handle variable resolution errors', async () => {
@@ -6145,10 +6149,10 @@ describe('Workflow', () => {
 
       const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
       expect(failedStepResult.error).toBeDefined();
-      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
-      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
-      expect(String(failedStepResult.error)).not.toContain('at ');
-      expect(String(failedStepResult.error)).not.toContain('\n');
+      expect(failedStepResult.error).toBeInstanceOf(Error);
+      expect((failedStepResult.error as Error).message).toBe(errorMessage);
+      // Stack should not be included when includeStack is false
+      expect((failedStepResult.error as Error).stack).toBeUndefined();
     });
 
     it('should persist MastraError message without stack trace in snapshot', async () => {
@@ -6204,10 +6208,10 @@ describe('Workflow', () => {
 
       const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
       expect(failedStepResult.error).toBeDefined();
-      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
-      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
-      expect(String(failedStepResult.error)).not.toContain('at ');
-      expect(String(failedStepResult.error)).not.toContain('\n');
+      expect(failedStepResult.error).toBeInstanceOf(Error);
+      expect((failedStepResult.error as Error).message).toBe(errorMessage);
+      // Stack should not be included when includeStack is false
+      expect((failedStepResult.error as Error).stack).toBeUndefined();
     });
 
     it('should handle step execution errors within branches', async () => {
@@ -6266,7 +6270,8 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
-      expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
+      expect((result.steps?.step2 as any)?.error).toBeInstanceOf(Error);
+      expect(((result.steps?.step2 as any)?.error as Error).message).toMatch(/Step execution failed/);
     });
 
     it('should handle step execution errors within nested workflows', async () => {
@@ -6329,7 +6334,63 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
-      expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Error: Step execution failed/);
+      expect((result.steps?.['test-workflow'] as any)?.error).toBeInstanceOf(Error);
+      expect(((result.steps?.['test-workflow'] as any)?.error as Error).message).toMatch(/Step execution failed/);
+    });
+
+    it('should preserve custom error properties when step throws error with extra fields', async () => {
+      // Create an error with custom properties (like AIAPICallError from AI SDK)
+      const customError = new Error('API rate limit exceeded');
+      (customError as any).statusCode = 429;
+      (customError as any).responseHeaders = { 'retry-after': '60' };
+      (customError as any).isRetryable = true;
+
+      const failingAction = vi.fn<any>().mockImplementation(() => {
+        throw customError;
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // result.error should be an Error instance (not a string)
+        expect(result.error).toBeInstanceOf(Error);
+
+        // Custom properties should be preserved on the error
+        expect((result.error as any).statusCode).toBe(429);
+        expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((result.error as any).isRetryable).toBe(true);
+      }
+
+      // Also check step-level error
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      if (step1Result?.status === 'failed') {
+        // Step error should also be an Error instance with custom properties
+        expect(step1Result.error).toBeInstanceOf(Error);
+        expect((step1Result.error as any).statusCode).toBe(429);
+        expect((step1Result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((step1Result.error as any).isRetryable).toBe(true);
+      }
     });
   });
 
@@ -7831,8 +7892,10 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toContain('Error: Step input validation failed: \n- start: Required'); // Now safe to access
+        // result.error is now an Error instance
+        expect(result.error).toBeInstanceOf(Error);
+        expect((result.error as Error).message).toContain('Step input validation failed');
+        expect((result.error as Error).message).toContain('start: Required');
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -7856,9 +7919,10 @@ describe('Workflow', () => {
         payload: { result: 'success' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
-        error: expect.any(String),
+        error: expect.any(Error),
       });
-      expect((step2Result as any)?.error).toContain('Error: Step input validation failed: \n- start: Required');
+      expect(((step2Result as any)?.error as Error).message).toContain('Step input validation failed');
+      expect(((step2Result as any)?.error as Error).message).toContain('start: Required');
     });
 
     it('should use default value from inputSchema for step input', async () => {
