@@ -1,7 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
@@ -20,6 +20,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { AgentsLibSQL } from './domains/agents';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { StoreOperationsLibSQL } from './domains/operations';
@@ -125,6 +126,7 @@ export class LibSQLStore extends MastraStorage {
     const workflows = new WorkflowsLibSQL({ client: this.client, operations });
     const memory = new MemoryLibSQL({ client: this.client, operations });
     const observability = new ObservabilityLibSQL({ operations });
+    const agents = new AgentsLibSQL({ client: this.client, operations });
 
     this.stores = {
       operations,
@@ -132,6 +134,7 @@ export class LibSQLStore extends MastraStorage {
       workflows,
       memory,
       observability,
+      agents,
     };
   }
 
@@ -144,6 +147,7 @@ export class LibSQLStore extends MastraStorage {
       deleteMessages: true,
       observabilityInstance: true,
       listScoresBySpan: true,
+      agents: true,
     };
   }
 
@@ -247,7 +251,7 @@ export class LibSQLStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 

@@ -40,6 +40,7 @@ interface CreatePrepareStreamWorkflowOptions<
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
 }
 
@@ -63,6 +64,7 @@ export function createPrepareStreamWorkflow<
   requireToolApproval,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
@@ -98,6 +100,7 @@ export function createPrepareStreamWorkflow<
     requireToolApproval,
     resumeContext,
     agentId,
+    agentName,
     toolCallId,
     methodType,
     saveQueueManager,
