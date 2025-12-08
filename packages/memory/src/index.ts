@@ -611,7 +611,14 @@ ${workingMemory}`;
     });
 
     if (this.vector && config.semanticRecall) {
-      let indexName: Promise<string>;
+      // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
+      const embeddingData: Array<{
+        embeddings: number[][];
+        metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+      }> = [];
+      let dimension: number | undefined;
+
+      // Process embeddings concurrently - this doesn't use DB connections
       await Promise.all(
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
@@ -634,22 +641,12 @@ ${workingMemory}`;
 
           if (!textForEmbedding) return;
 
-          const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
+          const result = await this.embedMessageContent(textForEmbedding);
+          dimension = result.dimension;
 
-          if (typeof indexName === `undefined`) {
-            indexName = this.createEmbeddingIndex(dimension, config).then(result => result.indexName);
-          }
-
-          if (typeof this.vector === `undefined`) {
-            throw new Error(
-              `Tried to upsert embeddings to index ${indexName} but this Memory instance doesn't have an attached vector db.`,
-            );
-          }
-
-          await this.vector.upsert({
-            indexName: await indexName,
-            vectors: embeddings,
-            metadata: chunks.map(() => ({
+          embeddingData.push({
+            embeddings: result.embeddings,
+            metadata: result.chunks.map(() => ({
               message_id: message.id,
               thread_id: message.threadId,
               resource_id: message.resourceId,
@@ -657,6 +654,34 @@ ${workingMemory}`;
           });
         }),
       );
+
+      // Batch all vectors into a single upsert call to avoid pool exhaustion
+      if (embeddingData.length > 0 && dimension !== undefined) {
+        if (typeof this.vector === `undefined`) {
+          throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
+        }
+
+        const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+        // Flatten all embeddings and metadata into single arrays
+        const allVectors: number[][] = [];
+        const allMetadata: Array<{
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }> = [];
+
+        for (const data of embeddingData) {
+          allVectors.push(...data.embeddings);
+          allMetadata.push(...data.metadata);
+        }
+
+        await this.vector.upsert({
+          indexName,
+          vectors: allVectors,
+          metadata: allMetadata,
+        });
+      }
     }
 
     return result;

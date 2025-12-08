@@ -50,6 +50,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       [TABLE_TRACES]: 'trace',
       [TABLE_RESOURCES]: 'resource',
       [TABLE_SPANS]: 'ai_span',
+      mastra_agents: 'agent',
     };
     return mapping[tableName] || null;
   }

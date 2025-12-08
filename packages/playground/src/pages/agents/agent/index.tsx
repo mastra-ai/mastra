@@ -19,7 +19,7 @@ import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 
 function Agent() {
   const { agentId, threadId } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
@@ -60,6 +60,12 @@ function Agent() {
 
   const withSidebar = Boolean(memory?.result);
 
+  const handleRefreshThreadList = () => {
+    searchParams.delete('new');
+    setSearchParams(searchParams);
+    refreshThreads();
+  };
+
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
@@ -84,7 +90,7 @@ function Agent() {
                     modelVersion={agent?.modelVersion}
                     threadId={threadId}
                     memory={memory?.result}
-                    refreshThreadList={refreshThreads}
+                    refreshThreadList={handleRefreshThreadList}
                     modelList={agent?.modelList}
                     messageId={messageId}
                     isNewThread={isNewThread}
