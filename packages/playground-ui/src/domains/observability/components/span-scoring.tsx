@@ -1,4 +1,3 @@
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { Button } from '@/components/ui/elements/buttons';
 import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
