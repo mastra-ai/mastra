@@ -602,17 +602,17 @@ It is important that you `await` the `writer.custom()` call.
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
-  execute: async ({ context, writer }) => {
-    const { value } = context;
+  execute: async (inputData, context) => {
+    const { value } = inputData;
 
-    await writer?.custom({
+    await context?.writer?.custom({
       type: "data-tool-progress",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-    await writer?.custom({
+    await context?.writer?.custom({
       type: "data-tool-progress",
       status: "success"
     });
