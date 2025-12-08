@@ -4,7 +4,7 @@ import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web
 import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
-import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
+import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage } from '../agent';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import { MastraBase } from '../base';
@@ -57,6 +57,7 @@ import type {
   StepParams,
 } from './types';
 import { createTimeTravelExecutionParams, getZodErrors } from './utils';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -393,7 +394,15 @@ export function createStep<
         // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
         const passThrough = {
           phase,
-          messageList,
+          // Auto-create MessageList from messages if not provided
+          // This enables running processor workflows from the UI where messageList can't be serialized
+          messageList:
+            messageList ??
+            (messages
+              ? new MessageList()
+                  .add(messages as MastraDBMessage[], 'input')
+                  .addSystem((systemMessages ?? []) as CoreMessage[])
+              : undefined),
           stepNumber,
           systemMessages,
           streamParts,
@@ -404,17 +413,12 @@ export function createStep<
           retryCount,
         };
 
-        // Auto-create MessageList from messages if not provided
-        // This enables running processor workflows from the UI where messageList can't be serialized
-        const resolvedMessageList =
-          messageList ?? (messages ? new MessageList().add(messages as any, 'input') : undefined);
-
         // TripWire errors are NOT caught here - they bubble up to halt the workflow
         // The workflow engine handles TripWire errors and returns a 'tripwire' status
         switch (phase) {
           case 'input': {
             if (processor.processInput) {
-              if (!resolvedMessageList) {
+              if (!passThrough.messageList) {
                 throw new MastraError({
                   category: ErrorCategory.USER,
                   domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -424,17 +428,26 @@ export function createStep<
               }
               const result = await processor.processInput({
                 ...baseContext,
-                messages: messages as any,
-                messageList: resolvedMessageList,
-                systemMessages: (systemMessages ?? []) as any,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
               });
-              // Handle different return types
+
               if (result instanceof MessageList) {
-                return { ...passThrough, messages: result.get.all.db() };
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
               } else if (Array.isArray(result)) {
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
-                return { ...passThrough, messages: (result as any).messages };
+                return {
+                  ...passThrough,
+                  messages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] }).messages,
+                  systemMessages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] })
+                    .systemMessages,
+                };
               }
               return { ...passThrough, messages };
             }
@@ -443,7 +456,7 @@ export function createStep<
 
           case 'inputStep': {
             if (processor.processInputStep) {
-              if (!resolvedMessageList) {
+              if (!passThrough.messageList) {
                 throw new MastraError({
                   category: ErrorCategory.USER,
                   domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -453,12 +466,18 @@ export function createStep<
               }
               const result = await processor.processInputStep({
                 ...baseContext,
-                messages: messages as any,
-                messageList: resolvedMessageList,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList,
                 stepNumber: stepNumber ?? 0,
-                systemMessages: (systemMessages ?? []) as any,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
               });
-              if (Array.isArray(result)) {
+              if (result instanceof MessageList) {
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
+              } else if (Array.isArray(result)) {
                 return { ...passThrough, messages: result };
               }
               return { ...passThrough, messages };
@@ -470,10 +489,10 @@ export function createStep<
             if (processor.processOutputStream) {
               const result = await processor.processOutputStream({
                 ...baseContext,
-                part: part as any,
-                streamParts: (streamParts ?? []) as any,
+                part: part as ChunkType,
+                streamParts: (streamParts ?? []) as ChunkType[],
                 state: state ?? {},
-                messageList: resolvedMessageList, // Optional for stream processing
+                messageList: passThrough.messageList, // Optional for stream processing
               });
               return { ...passThrough, part: result };
             }
@@ -482,7 +501,7 @@ export function createStep<
 
           case 'outputResult': {
             if (processor.processOutputResult) {
-              if (!resolvedMessageList) {
+              if (!passThrough.messageList) {
                 throw new MastraError({
                   category: ErrorCategory.USER,
                   domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -492,10 +511,16 @@ export function createStep<
               }
               const result = await processor.processOutputResult({
                 ...baseContext,
-                messages: messages as any,
-                messageList: resolvedMessageList,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList,
               });
-              if (Array.isArray(result)) {
+              if (result instanceof MessageList) {
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
+              } else if (Array.isArray(result)) {
                 return { ...passThrough, messages: result };
               }
               return { ...passThrough, messages };
@@ -505,7 +530,7 @@ export function createStep<
 
           case 'outputStep': {
             if (processor.processOutputStep) {
-              if (!resolvedMessageList) {
+              if (!passThrough.messageList) {
                 throw new MastraError({
                   category: ErrorCategory.USER,
                   domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -515,15 +540,21 @@ export function createStep<
               }
               const result = await processor.processOutputStep({
                 ...baseContext,
-                messages: messages as any,
-                messageList: resolvedMessageList,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList,
                 stepNumber: stepNumber ?? 0,
                 finishReason,
                 toolCalls: toolCalls as any,
                 text,
-                systemMessages: (systemMessages ?? []) as any,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
               });
-              if (Array.isArray(result)) {
+              if (result instanceof MessageList) {
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
+              } else if (Array.isArray(result)) {
                 return { ...passThrough, messages: result };
               }
               return { ...passThrough, messages };
