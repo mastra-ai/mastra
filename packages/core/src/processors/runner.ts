@@ -532,6 +532,7 @@ export class ProcessorRunner {
       stepNumber,
       model: initialModel,
       steps,
+      tools: initialTools,
       toolChoice: initialToolChoice,
       activeTools: initialActiveTools,
 
@@ -604,6 +605,7 @@ export class ProcessorRunner {
             tracingContext: { currentSpan: processorSpan },
             requestContext,
             steps,
+            tools: (stepInputResult.tools ?? initialTools) as TOOLS | undefined,
             toolChoice: stepInputResult.toolChoice ?? initialToolChoice,
             model: stepInputResult.model ?? initialModel,
             activeTools: stepInputResult.activeTools ?? initialActiveTools,
@@ -616,6 +618,9 @@ export class ProcessorRunner {
 
         if (result.model) {
           stepInputResult.model = result.model;
+        }
+        if (result.tools) {
+          stepInputResult.tools = result.tools;
         }
         if (result.toolChoice) {
           stepInputResult.toolChoice = result.toolChoice;

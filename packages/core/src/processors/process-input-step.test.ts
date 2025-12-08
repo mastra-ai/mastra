@@ -671,6 +671,269 @@ describe('processInputStep', () => {
     });
   });
 
+  describe('tools', () => {
+    it('should pass tools to processor', async () => {
+      let receivedTools: any;
+
+      const processor: Processor = {
+        id: 'tools-reader',
+        processInputStep: async ({ tools }) => {
+          receivedTools = tools;
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const mockTools = {
+        myTool: { id: 'myTool', execute: () => 'result' },
+        anotherTool: { id: 'anotherTool', execute: () => 'another result' },
+      };
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        tools: mockTools as any,
+      });
+
+      expect(receivedTools).toBe(mockTools);
+    });
+
+    it('should allow processor to replace tools', async () => {
+      const originalTools = {
+        originalTool: { id: 'originalTool', execute: () => 'original' },
+      };
+
+      const newTools = {
+        newTool: { id: 'newTool', execute: () => 'new' },
+        anotherNewTool: { id: 'anotherNewTool', execute: () => 'another new' },
+      };
+
+      const processor: Processor = {
+        id: 'tools-replacer',
+        processInputStep: async () => {
+          return { tools: newTools as any };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        tools: originalTools as any,
+      });
+
+      expect(result.tools).toBe(newTools);
+    });
+
+    it('should chain tools changes through multiple processors', async () => {
+      const toolsSeenByEachProcessor: Array<{ processorId: string; toolNames: string[] }> = [];
+
+      const initialTools = {
+        tool1: { id: 'tool1' },
+        tool2: { id: 'tool2' },
+      };
+
+      const toolsFromProcessor1 = {
+        tool1: { id: 'tool1' },
+        newTool: { id: 'newTool' },
+      };
+
+      const toolsFromProcessor2 = {
+        finalTool: { id: 'finalTool' },
+      };
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ tools }) => {
+          toolsSeenByEachProcessor.push({
+            processorId: 'processor-1',
+            toolNames: Object.keys(tools || {}),
+          });
+          return { tools: toolsFromProcessor1 as any };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async ({ tools }) => {
+          toolsSeenByEachProcessor.push({
+            processorId: 'processor-2',
+            toolNames: Object.keys(tools || {}),
+          });
+          return { tools: toolsFromProcessor2 as any };
+        },
+      };
+
+      const processor3: Processor = {
+        id: 'processor-3',
+        processInputStep: async ({ tools }) => {
+          toolsSeenByEachProcessor.push({
+            processorId: 'processor-3',
+            toolNames: Object.keys(tools || {}),
+          });
+          // Don't change tools, just observe
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2, processor3],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        tools: initialTools as any,
+      });
+
+      // Verify what each processor saw
+      expect(toolsSeenByEachProcessor).toEqual([
+        { processorId: 'processor-1', toolNames: ['tool1', 'tool2'] },
+        { processorId: 'processor-2', toolNames: ['tool1', 'newTool'] },
+        { processorId: 'processor-3', toolNames: ['finalTool'] },
+      ]);
+
+      // Verify the final result has the last tools
+      expect(result.tools).toBe(toolsFromProcessor2);
+    });
+
+    it('should allow processor to merge tools by spreading', async () => {
+      const initialTools = {
+        existingTool: { id: 'existingTool', execute: () => 'existing' },
+      };
+
+      const processor: Processor = {
+        id: 'tools-merger',
+        processInputStep: async ({ tools }) => {
+          // Merge new tools with existing ones by spreading
+          return {
+            tools: {
+              ...tools,
+              addedTool: { id: 'addedTool', execute: () => 'added' },
+            } as any,
+          };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        tools: initialTools as any,
+      });
+
+      expect(Object.keys(result.tools || {})).toEqual(['existingTool', 'addedTool']);
+    });
+
+    it('should handle processor not returning tools (no change)', async () => {
+      const initialTools = {
+        myTool: { id: 'myTool' },
+      };
+
+      const processor: Processor = {
+        id: 'no-tools-change',
+        processInputStep: async () => {
+          // Return empty object - no tools change
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        tools: initialTools as any,
+      });
+
+      // Result should not have tools since processor didn't return any
+      expect(result.tools).toBeUndefined();
+    });
+
+    it('should handle undefined initial tools', async () => {
+      let receivedTools: any;
+
+      const processor: Processor = {
+        id: 'tools-reader',
+        processInputStep: async ({ tools }) => {
+          receivedTools = tools;
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        // No tools provided
+      });
+
+      expect(receivedTools).toBeUndefined();
+    });
+  });
+
   describe('modelSettings', () => {
     it('should allow processor to modify modelSettings', async () => {
       const processor: Processor = {

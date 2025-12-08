@@ -81,6 +81,7 @@ interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, OUTPUT extends O
 
   // READ-ONLY: Current configuration (return new values to change)
   model: MastraLanguageModelV2; // Current model
+  tools?: TOOLS; // Current tools available for this step
   toolChoice?: ToolChoice<TOOLS>; // Current tool choice
   activeTools?: Array<keyof TOOLS>; // Currently active tools
 
@@ -101,9 +102,9 @@ interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, OUTPUT extends O
 - `stepNumber`, `steps` - Read-only context, cannot be changed
 - `messages` - Read-only snapshot; return `messages` in result to apply changes
 - `systemMessages` - Read-only snapshot of current system messages; return `systemMessages` in result to replace them
-- `model`, `toolChoice`, `activeTools` - Read current values; return new values in result to change them
+- `model`, `tools`, `toolChoice`, `activeTools` - Read current values; return new values in result to change them
 - `providerOptions`, `modelSettings` - Read current values; return new values in result to change them
-- `structuredOutput` - Can be modified, but changing OUTPUT type mid-step has type complexity (see TODO)
+- `structuredOutput` - Can be modified; at runtime works correctly, but TypeScript types use `any` casts internally due to OUTPUT generic complexity
 - `messageList` - Mutable; can use its methods directly OR return `messages` array in result
 
 ### ProcessInputStepResult
@@ -116,6 +117,7 @@ type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet, OUTPUT extends Outp
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
 
   // Tool configuration
+  tools?: ToolSet; // Replace tools for this step (use spread to merge: { tools: { ...tools, newTool } })
   toolChoice?: ToolChoice<TOOLS>; // Change tool choice for this step
   activeTools?: Array<keyof TOOLS>; // Change active tools for this step
 
@@ -126,7 +128,7 @@ type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet, OUTPUT extends Outp
   // System message modifications
   systemMessages?: CoreMessageV4[]; // REPLACE all system messages with these
 
-  // Additional settings (TODO: full support)
+  // Additional settings
   providerOptions?: SharedV2ProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
@@ -302,10 +304,12 @@ class ReasoningTransformer implements Processor {
 
 1. **providerOptions support**: Pass through and allow modification - chains through multiple processors
 2. **modelSettings support**: Pass through and allow modification - chains through multiple processors
-3. **Processor chaining**: Each processor receives accumulated state from previous processors (model, toolChoice, activeTools, providerOptions, modelSettings)
-4. **Span logging**: Processor spans include all serializable input args and output results
-5. **System message isolation**: System messages reset to original at each step; modifications only affect current step
-6. **Test coverage**: Comprehensive tests for model/toolChoice/activeTools/providerOptions/modelSettings chaining and edge cases
+3. **structuredOutput support**: Pass through and allow modification - chains through multiple processors (uses `any` casts internally due to OUTPUT generic complexity)
+4. **tools support**: Pass through and allow modification - processors can replace tools entirely (use spread to merge: `{ tools: { ...tools, newTool } }`)
+5. **Processor chaining**: Each processor receives accumulated state from previous processors (model, tools, toolChoice, activeTools, providerOptions, modelSettings, structuredOutput)
+6. **Span logging**: Processor spans include all serializable input args and output results
+7. **System message isolation**: System messages reset to original at each step; modifications only affect current step
+8. **Test coverage**: Comprehensive tests for model/tools/toolChoice/activeTools/providerOptions/modelSettings/structuredOutput chaining and edge cases
 
 ### ⚠️ Breaking Changes (for 1.0 migration guide)
 
@@ -321,12 +325,7 @@ class ReasoningTransformer implements Processor {
 
 ### 🔜 Future Work
 
-1. **structuredOutput support**: Partially implemented - can be passed and returned, but:
-   - If a processor changes `structuredOutput` to a different schema, the `OUTPUT` type changes
-   - This affects the return type of `result.object` and `objectStream`
-   - Need to figure out how to handle type inference when OUTPUT changes mid-pipeline
-   - Options: (a) don't allow changing schema, only enabling/disabling, (b) use `unknown` for dynamic schemas, (c) require explicit type annotation
-2. **tools argument**: Should processors be able to modify the tools themselves? Currently `activeTools` only filters, cannot add new tools.
+1. **structuredOutput type safety**: Currently uses `any` casts internally. If a processor changes the schema, the OUTPUT type would change, affecting `result.object` and `objectStream` types. Options for future improvement: (a) use `unknown` for dynamic schemas, (b) require explicit type annotation when changing schema.
 
 ### 📝 TODO
 
@@ -411,19 +410,26 @@ After `runProcessInputStep` returns:
 if (processInputStepResult.model) {
   stepModel = processInputStepResult.model;
 }
+if (processInputStepResult.tools) {
+  stepTools = processInputStepResult.tools as TOOLS;
+}
 if (processInputStepResult.toolChoice) {
   stepToolChoice = processInputStepResult.toolChoice;
 }
-if (processInputStepResult.activeTools && stepTools) {
-  const activeToolsSet = new Set(processInputStepResult.activeTools);
-  stepTools = Object.fromEntries(
-    Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
-  ) as typeof tools;
+if (processInputStepResult.activeTools) {
+  stepActiveTools = processInputStepResult.activeTools;
 }
 
-// Re-fetch messages after processors have modified them
-inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+// ...then when calling execute():
+execute({
+  // ...
+  tools: stepTools,
+  options: stepActiveTools ? { ...options, activeTools: stepActiveTools } : options,
+  // ...
+});
 ```
+
+**Note**: `activeTools` is passed to `execute()` which uses `prepareToolsAndToolChoice()` to filter tools internally. This is cleaner than filtering in llm-execution-step since the filtering logic is already implemented in execute.
 
 ## Open Questions
 
@@ -437,5 +443,7 @@ inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
    - Both methods handle system messages in `messages[]` array the same way: they are **added** (not replaced) via `messageList.addSystem()`
    - **Key difference for processInputStep**: System messages are **reset to original** at the start of each step, so modifications only apply to that step
 
-3. Should `activeTools` filter from available tools, or can it add tools?
-   - Currently: filters only (see implementation above)
+3. ~~Should `activeTools` filter from available tools, or can it add tools?~~
+   - **Answered**: `activeTools` filters only, but `tools` can be used to add/replace tools entirely
+   - Return `{ tools: { ...tools, newTool } }` to add new tools
+   - Return `{ tools: newToolsSet }` to replace tools completely
