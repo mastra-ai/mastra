@@ -79,7 +79,7 @@ export const chefModelV2Agent = new Agent({
     role: 'system',
   },
   model: wrapLanguageModel({
-    model: 'openai/gpt-4o-mini',
+    model: openai('gpt-4o-mini'),
     middleware: logDataMiddleware,
   }),
   tools: {
