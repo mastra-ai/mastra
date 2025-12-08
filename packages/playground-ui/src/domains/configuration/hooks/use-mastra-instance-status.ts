@@ -7,10 +7,11 @@ export type UseMastraInstanceStatusResponse = {
 const getMastraInstanceStatus = async (
   endpoint: string = 'http://localhost:4111',
 ): Promise<UseMastraInstanceStatusResponse> => {
-  const response = await fetch(endpoint);
-  if (response.ok) {
-    return { status: 'active' };
-  } else {
+  try {
+    const response = await fetch(endpoint);
+
+    return { status: response.ok ? 'active' : 'inactive' };
+  } catch {
     return { status: 'inactive' };
   }
 };

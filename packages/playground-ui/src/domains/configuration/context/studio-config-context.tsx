@@ -33,6 +33,8 @@ export const StudioConfigProvider = ({ children, endpoint = 'http://localhost:41
     isLoading: true,
   });
 
+  console.log('instanceStatus', instanceStatus);
+
   useLayoutEffect(() => {
     // Don't run the effect during the fetch request
     if (!instanceStatus?.status) return;
