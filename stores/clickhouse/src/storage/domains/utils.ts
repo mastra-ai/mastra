@@ -19,6 +19,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_RESOURCES]: `ReplacingMergeTree()`,
   // TODO: verify this is the correct engine for Spans when implementing clickhouse storage
   [TABLE_SPANS]: `ReplacingMergeTree()`,
+  mastra_agents: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

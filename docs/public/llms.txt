@@ -180,7 +180,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 58+ AI providers and 1152+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1231+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -192,11 +192,12 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 5 models available.
 - [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 3 models available.
 - [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 54 models available.
+- [Cloudflare AI Gateway | Models | Mastra](https://mastra.ai/en/models/providers/cloudflare-ai-gateway): Use Cloudflare AI Gateway models with Mastra. 77 models available.
 - [Cloudflare Workers AI](https://mastra.ai/en/models/providers/cloudflare-workers-ai): Use Cloudflare Workers AI models via the AI SDK.
 - [Cohere](https://mastra.ai/en/models/providers/cohere): Use Cohere models via the AI SDK.
 - [Cortecs | Models | Mastra](https://mastra.ai/en/models/providers/cortecs): Use Cortecs models with Mastra. 11 models available.
 - [Deep Infra | Models | Mastra](https://mastra.ai/en/models/providers/deepinfra): Use Deep Infra models with Mastra. 6 models available.
-- [DeepSeek | Models | Mastra](https://mastra.ai/en/models/providers/deepseek): Use DeepSeek models with Mastra. 2 models available.
+- [DeepSeek | Models | Mastra](https://mastra.ai/en/models/providers/deepseek): Use DeepSeek models with Mastra. 3 models available.
 - [FastRouter | Models | Mastra](https://mastra.ai/en/models/providers/fastrouter): Use FastRouter models with Mastra. 14 models available.
 - [Fireworks AI | Models | Mastra](https://mastra.ai/en/models/providers/fireworks-ai): Use Fireworks AI models with Mastra. 12 models available.
 - [GitHub Models | Models | Mastra](https://mastra.ai/en/models/providers/github-models): Use GitHub Models models with Mastra. 55 models available.
@@ -236,7 +237,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 24 models available.
 - [Together AI | Models | Mastra](https://mastra.ai/en/models/providers/togetherai): Use Together AI models with Mastra. 6 models available.
 - [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 2 models available.
-- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 17 models available.
+- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 18 models available.
 - [Vultr | Models | Mastra](https://mastra.ai/en/models/providers/vultr): Use Vultr models with Mastra. 5 models available.
 - [Weights & Biases | Models | Mastra](https://mastra.ai/en/models/providers/wandb): Use Weights & Biases models with Mastra. 10 models available.
 - [xAI | Models | Mastra](https://mastra.ai/en/models/providers/xai): Use xAI models with Mastra. 22 models available.
@@ -299,10 +300,12 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Mastra.getLogger() | Core](https://mastra.ai/en/reference/core/getLogger): Documentation for the `Mastra.getLogger()` method in Mastra, which retrieves the configured logger instance.
 - [Reference: Mastra.getMCPServer() | Core](https://mastra.ai/en/reference/core/getMCPServer): Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version.
 - [Reference: Mastra.getMCPServerById() | Core](https://mastra.ai/en/reference/core/getMCPServerById): Documentation for the `Mastra.getMCPServerById()` method in Mastra, which retrieves a specific MCP server instance by its intrinsic id property.
+- [Reference: Mastra.getMemory() | Core](https://mastra.ai/en/reference/core/getMemory): Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves a registered memory instance by its registry key.
 - [Reference: getScorer() | Core](https://mastra.ai/en/reference/core/getScorer): Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key.
 - [Reference: getScorerById() | Core](https://mastra.ai/en/reference/core/getScorerById): Documentation for the `getScorerById()` method in Mastra, which retrieves a scorer by its id property rather than registration key.
 - [Reference: Mastra.getServer() | Core](https://mastra.ai/en/reference/core/getServer): Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration.
 - [Reference: Mastra.getStorage() | Core](https://mastra.ai/en/reference/core/getStorage): Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance.
+- [Reference: Mastra.getStoredAgentById() | Core](https://mastra.ai/en/reference/core/getStoredAgentById): Documentation for the `Mastra.getStoredAgentById()` method in Mastra, which retrieves an agent from storage and creates an executable Agent instance.
 - [Reference: Mastra.getTelemetry() | Core](https://mastra.ai/en/reference/core/getTelemetry): Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance.
 - [Reference: Mastra.getVector() | Core](https://mastra.ai/en/reference/core/getVector): Documentation for the `Mastra.getVector()` method in Mastra, which retrieves a vector store by name.
 - [Reference: Mastra.getWorkflow() | Core](https://mastra.ai/en/reference/core/getWorkflow): Documentation for the `Mastra.getWorkflow()` method in Mastra, which retrieves a workflow by ID.
@@ -311,7 +314,9 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Mastra.listLogs() | Core](https://mastra.ai/en/reference/core/listLogs): Documentation for the `Mastra.listLogs()` method in Mastra, which retrieves all logs for a specific transport ID.
 - [Reference: Mastra.listLogsByRunId() | Core](https://mastra.ai/en/reference/core/listLogsByRunId): Documentation for the `Mastra.listLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID.
 - [Reference: Mastra.listMCPServers() | Core](https://mastra.ai/en/reference/core/listMCPServers): Documentation for the `Mastra.listMCPServers()` method in Mastra, which retrieves all registered MCP server instances.
+- [Reference: Mastra.listMemory() | Core](https://mastra.ai/en/reference/core/listMemory): Documentation for the `Mastra.listMemory()` method in Mastra, which returns all registered memory instances.
 - [Reference: listScorers() | Core](https://mastra.ai/en/reference/core/listScorers): Documentation for the `listScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs.
+- [Reference: Mastra.listStoredAgents() | Core](https://mastra.ai/en/reference/core/listStoredAgents): Documentation for the `Mastra.listStoredAgents()` method in Mastra, which retrieves a paginated list of agents from storage.
 - [Reference: Mastra.listVectors() | Core](https://mastra.ai/en/reference/core/listVectors): Documentation for the `Mastra.listVectors()` method in Mastra, which retrieves all configured vector stores.
 - [Reference: Mastra.listWorkflows() | Core](https://mastra.ai/en/reference/core/listWorkflows): Documentation for the `Mastra.listWorkflows()` method in Mastra, which retrieves all configured workflows.
 - [Reference: Mastra Class | Core](https://mastra.ai/en/reference/core/mastra-class): Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints.

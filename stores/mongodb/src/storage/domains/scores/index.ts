@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
   createStorageErrorId,
@@ -54,7 +54,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let validatedScore: ValidatedSaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
@@ -63,14 +63,21 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         {
           id: createStorageErrorId('MONGODB', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
     }
     try {
       const now = new Date();
-      const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const scoreId = crypto.randomUUID();
 
       const scorer =
         typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer;
@@ -97,6 +104,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
 
       const dataToSave = {
         ...validatedScore,
+        id: scoreId,
         scorer,
         preprocessStepResult,
         analyzeStepResult,
@@ -111,14 +119,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const collection = await this.operations.getCollection(TABLE_SCORERS);
       await collection.insertOne(dataToSave);
 
-      const savedScore: ScoreRowData = {
-        ...score,
-        id: scoreId,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      return { score: savedScore };
+      return { score: dataToSave as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {

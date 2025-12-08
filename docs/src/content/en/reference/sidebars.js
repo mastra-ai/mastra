@@ -20,6 +20,16 @@ const sidebars = {
         { type: "doc", id: "core/getAgent", label: ".getAgent()" },
         { type: "doc", id: "core/listAgents", label: ".listAgents()" },
         { type: "doc", id: "core/getAgentById", label: ".getAgentById()" },
+        {
+          type: "doc",
+          id: "core/getStoredAgentById",
+          label: ".getStoredAgentById()",
+        },
+        {
+          type: "doc",
+          id: "core/listStoredAgents",
+          label: ".listStoredAgents()",
+        },
         { type: "doc", id: "core/getWorkflow", label: ".getWorkflow()" },
         { type: "doc", id: "core/listWorkflows", label: ".listWorkflows()" },
         { type: "doc", id: "core/setStorage", label: ".setStorage()" },
@@ -60,6 +70,8 @@ const sidebars = {
         },
         { type: "doc", id: "core/listGateways", label: ".listGateways()" },
         { type: "doc", id: "core/addGateway", label: ".addGateway()" },
+        { type: "doc", id: "core/getMemory", label: ".getMemory()" },
+        { type: "doc", id: "core/listMemory", label: ".listMemory()" },
         { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
         {
           type: "doc",

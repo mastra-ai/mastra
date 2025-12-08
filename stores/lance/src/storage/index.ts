@@ -2,7 +2,7 @@ import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions } from '@lancedb/lancedb';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
@@ -413,8 +413,8 @@ export class LanceStorage extends MastraStorage {
     return this.stores.scores.listScoresByScorerId({ scorerId, source, pagination, entityId, entityType });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async listScoresByRunId({
