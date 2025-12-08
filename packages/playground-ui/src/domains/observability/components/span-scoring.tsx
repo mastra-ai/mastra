@@ -3,7 +3,7 @@ import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
 import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';
 import { useEffect, useState } from 'react';
-import { type GetScorerResponse } from 'node_modules/@mastra/client-js/dist/types';
+import { type GetScorerResponse } from '@mastra/client-js';
 
 export interface SpanScoringProps {
   traceId?: string;
