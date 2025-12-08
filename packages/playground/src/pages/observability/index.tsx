@@ -19,6 +19,7 @@ import {
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
+  useScorers,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { EyeIcon } from 'lucide-react';
@@ -43,6 +44,7 @@ export default function Observability() {
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
 
   const { data: Trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
+  const { data: scorers = {}, isLoading: isLoadingScorers } = useScorers();
 
   const traceId = searchParams.get('traceId');
   const spanId = searchParams.get('spanId');
@@ -225,6 +227,8 @@ export default function Observability() {
         onPrevious={toPreviousTrace}
         isLoadingSpans={isLoadingTrace}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
+        scorers={scorers}
+        isLoadingScorers={isLoadingScorers}
       />
     </>
   );

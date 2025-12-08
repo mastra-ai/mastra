@@ -32,6 +32,7 @@ import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores
 import { Button } from '@/components/ui/elements/buttons';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
+import { GetScorerResponse } from '@mastra/client-js';
 
 type TraceDialogProps = {
   traceSpans?: SpanRecord[];
@@ -48,6 +49,8 @@ type TraceDialogProps = {
   initialSpanId?: string;
   initialSpanTab?: string;
   initialScoreId?: string;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 };
 
 export function TraceDialog({
@@ -65,6 +68,8 @@ export function TraceDialog({
   initialSpanId,
   initialSpanTab,
   initialScoreId,
+  scorers,
+  isLoadingScorers,
 }: TraceDialogProps) {
   const { Link, navigate } = useLinkComponent();
 
@@ -294,6 +299,8 @@ export function TraceDialog({
           defaultActiveTab={spanDialogDefaultTab}
           initialScoreId={initialScoreId}
           computeTraceLink={computeTraceLink}
+          scorers={scorers}
+          isLoadingScorers={isLoadingScorers}
         />
       )}
     </>
