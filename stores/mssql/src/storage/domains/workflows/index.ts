@@ -381,6 +381,11 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       await deleteRequest.query(`DELETE FROM ${table} WHERE workflow_name = @workflow_name AND run_id = @run_id`);
       await transaction.commit();
     } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Ignore rollback errors
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),

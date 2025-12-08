@@ -26,8 +26,13 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
   const { mutateAsync: deleteRun } = useDeleteWorkflowRun(workflowId);
 
   const handleDelete = async (runId: string) => {
-    await deleteRun({ runId });
-    navigate(paths.workflowLink(workflowId));
+    try {
+      await deleteRun({ runId });
+      setDeleteRunId(null);
+      navigate(paths.workflowLink(workflowId));
+    } catch (_error) {
+      setDeleteRunId(null);
+    }
   };
 
   const actualRuns = runs || [];
@@ -69,7 +74,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                     <WorkflowRunStatusBadge status={run.snapshot.status} />
                   </div>
                 )}
-                <span className="truncate max-w-[8rem] text-muted-foreground">{run.runId}</span>
+                <span className="truncate max-w-32 text-muted-foreground">{run.runId}</span>
                 <span>
                   {typeof run?.snapshot === 'string'
                     ? ''
