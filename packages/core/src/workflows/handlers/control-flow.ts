@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../../di';
+import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream/types';
@@ -331,19 +332,21 @@ export async function executeConditional(
 
           return result;
         } catch (e: unknown) {
-          const error = engine.preprocessExecutionError(
-            e,
+          const errorInstance = getErrorFromUnknown(e, { includeStack: false });
+          const mastraError = new MastraError(
             {
               id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
-              domain: 'MASTRA_WORKFLOW' as any,
-              category: 'USER' as any,
+              domain: ErrorDomain.MASTRA_WORKFLOW,
+              category: ErrorCategory.USER,
               details: { workflowId, runId },
             },
-            'Error evaluating condition: ',
+            errorInstance,
           );
+          engine.getLogger()?.trackException(mastraError);
+          engine.getLogger()?.error('Error evaluating condition: ' + errorInstance?.stack);
 
           evalSpan?.error({
-            error,
+            error: mastraError,
             attributes: {
               result: false,
             },

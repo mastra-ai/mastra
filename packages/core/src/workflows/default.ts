@@ -1,6 +1,5 @@
 import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../di';
-import type { IErrorDefinition } from '../error';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { Span, SpanType, TracingContext } from '../observability';
@@ -48,29 +47,6 @@ export type { ExecutionContext } from './types';
  * Default implementation of the ExecutionEngine
  */
 export class DefaultExecutionEngine extends ExecutionEngine {
-  /**
-   * Preprocesses an error caught during workflow execution.
-   *
-   * - Wraps a non-MastraError exception
-   * - Logs error details
-   */
-  preprocessExecutionError(
-    e: unknown,
-    errorDefinition: IErrorDefinition<ErrorDomain, ErrorCategory>,
-    logPrefix: string,
-  ): MastraError {
-    const error = e instanceof MastraError ? e : new MastraError(errorDefinition, e);
-
-    // Preserve original stack trace
-    if (!(e instanceof MastraError) && e instanceof Error && e.stack) {
-      error.stack = e.stack;
-    }
-
-    this.logger?.trackException(error);
-    this.logger?.error(logPrefix + error?.stack);
-    return error;
-  }
-
   /**
    * The retryCounts map is used to keep track of the retry count for each step.
    * The step id is used as the key and the retry count is the value.
@@ -290,20 +266,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             fallbackMessage: 'Unknown step execution error',
           });
 
-          // Log the error for observability (but don't wrap it)
-          const processedError = this.preprocessExecutionError(
-            e,
+          // Log the error for observability
+          const mastraError = new MastraError(
             {
               id: 'WORKFLOW_STEP_INVOKE_FAILED',
               domain: ErrorDomain.MASTRA_WORKFLOW,
               category: ErrorCategory.USER,
               details: { workflowId: params.workflowId, runId: params.runId, stepId },
             },
-            `Error executing step ${stepId}: `,
+            errorInstance,
           );
+          this.logger?.trackException(mastraError);
+          this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
 
           params.stepSpan?.error({
-            error: processedError,
+            error: mastraError,
             attributes: { status: 'failed' },
           });
 
