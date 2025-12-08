@@ -27,18 +27,24 @@ export type HonoVariables = {
 export type HonoBindings = {};
 
 /**
+ * Generic handler function type compatible across Hono versions.
+ * Uses a minimal signature that all Hono middleware handlers satisfy.
+ */
+type HonoRouteHandler = (...args: any[]) => any;
+
+/**
  * Minimal interface representing what MastraServer needs from a Hono app.
  * This allows any Hono app instance to be passed without strict generic matching,
  * avoiding the version mismatch issues that occur with Hono's strict generic types.
  */
 export interface HonoApp {
-  use(path: string, ...handlers: MiddlewareHandler[]): unknown;
-  get(path: string, ...handlers: MiddlewareHandler[]): unknown;
-  post(path: string, ...handlers: MiddlewareHandler[]): unknown;
-  put(path: string, ...handlers: MiddlewareHandler[]): unknown;
-  delete(path: string, ...handlers: MiddlewareHandler[]): unknown;
-  patch(path: string, ...handlers: MiddlewareHandler[]): unknown;
-  all(path: string, ...handlers: MiddlewareHandler[]): unknown;
+  use(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  get(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  post(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  put(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  delete(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  patch(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  all(path: string, ...handlers: HonoRouteHandler[]): unknown;
 }
 
 export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
