@@ -4,8 +4,20 @@ import type { PartialSchemaOutput, OutputSchema, DataChunkType, ChunkType } from
 import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
 import { isDataChunkType } from './utils';
 
-// Type alias for AI SDK's finish reason - used for casting from Mastra's extended MastraFinishReason
+// Type alias for AI SDK's finish reason
 type AISDKFinishReason = 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown';
+
+/**
+ * Maps Mastra's extended finish reasons to AI SDK-compatible values.
+ * 'tripwire' and 'retry' are Mastra-specific reasons for processor scenarios,
+ * which are mapped to 'other' for AI SDK compatibility.
+ */
+function toAISDKFinishReason(reason: string): AISDKFinishReason {
+  if (reason === 'tripwire' || reason === 'retry') {
+    return 'other';
+  }
+  return reason as AISDKFinishReason;
+}
 
 export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
   | TextStreamPart<ToolSet>
@@ -45,8 +57,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'finish': {
       return {
         type: 'finish',
-        // Cast needed: Mastra's MastraFinishReason includes 'tripwire' | 'retry' for processor scenarios
-        finishReason: chunk.payload.stepResult.reason as AISDKFinishReason,
+        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
         totalUsage: chunk.payload.output.usage,
       };
     }
@@ -186,7 +197,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           ...rest,
         },
         usage: chunk.payload.output.usage,
-        finishReason: chunk.payload.stepResult.reason,
+        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
         providerMetadata,
       };
     }
