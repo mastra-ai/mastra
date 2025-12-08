@@ -207,19 +207,23 @@ The `processInputStep` method receives:
 - `systemMessages`: Current system messages (read-only)
 - `messageList`: The full MessageList instance for mutations
 - `model`: Current model being used
+- `tools`: Current tools available for this step
 - `toolChoice`: Current tool choice setting
 - `activeTools`: Currently active tools
 - `providerOptions`: Provider-specific options
 - `modelSettings`: Model settings like temperature
+- `structuredOutput`: Structured output configuration
 
 The method can return any combination of:
 - `model`: Change the model for this step
+- `tools`: Replace or add tools (use spread to merge: `{ tools: { ...tools, newTool } }`)
 - `toolChoice`: Change tool selection behavior
 - `activeTools`: Filter which tools are available
 - `messages`: Replace messages (applied to messageList)
 - `systemMessages`: Replace all system messages
 - `providerOptions`: Modify provider options
 - `modelSettings`: Modify model settings
+- `structuredOutput`: Modify structured output configuration
 
 #### Using prepareStep callback
 

@@ -897,8 +897,8 @@ describe('processInputStep', () => {
         tools: initialTools as any,
       });
 
-      // Result should not have tools since processor didn't return any
-      expect(result.tools).toBeUndefined();
+      // Result should have initial tools since processor didn't change them
+      expect(result.tools).toBe(initialTools);
     });
 
     it('should handle undefined initial tools', async () => {
@@ -1226,15 +1226,16 @@ describe('processInputStep', () => {
       const messageList = new MessageList({ threadId: 'test-thread' });
       messageList.add([createMessage('Hello')], 'input');
 
+      const mockModel = createMockModel();
       const result = await runner.runProcessInputStep({
         messageList,
         stepNumber: 0,
-        model: createMockModel(),
+        model: mockModel,
         steps: [],
       });
 
-      // Should return empty result object
-      expect(result).toEqual({});
+      // Should return result with initial values (no processors to modify them)
+      expect(result.model).toBe(mockModel);
     });
 
     it('should handle processor returning undefined', async () => {
@@ -1255,15 +1256,16 @@ describe('processInputStep', () => {
       const messageList = new MessageList({ threadId: 'test-thread' });
       messageList.add([createMessage('Hello')], 'input');
 
+      const mockModel = createMockModel();
       const result = await runner.runProcessInputStep({
         messageList,
         stepNumber: 0,
-        model: createMockModel(),
+        model: mockModel,
         steps: [],
       });
 
-      // Should not throw, result should be empty
-      expect(result).toEqual({});
+      // Should not throw, result should contain the initial model
+      expect(result.model).toBe(mockModel);
     });
 
     it('should handle processor returning empty object', async () => {
@@ -1284,14 +1286,16 @@ describe('processInputStep', () => {
       const messageList = new MessageList({ threadId: 'test-thread' });
       messageList.add([createMessage('Hello')], 'input');
 
+      const mockModel = createMockModel();
       const result = await runner.runProcessInputStep({
         messageList,
         stepNumber: 0,
-        model: createMockModel(),
+        model: mockModel,
         steps: [],
       });
 
-      expect(result).toEqual({});
+      // Result should contain the initial model (processor returned empty, so no changes)
+      expect(result.model).toBe(mockModel);
     });
 
     it('should handle processor returning only partial result (just toolChoice)', async () => {
@@ -1312,18 +1316,19 @@ describe('processInputStep', () => {
       const messageList = new MessageList({ threadId: 'test-thread' });
       messageList.add([createMessage('Hello')], 'input');
 
+      const mockModel = createMockModel();
       const result = await runner.runProcessInputStep({
         messageList,
         stepNumber: 0,
-        model: createMockModel(),
+        model: mockModel,
         steps: [],
         toolChoice: 'auto',
       });
 
-      // Only toolChoice should be in result, not model or other fields
+      // toolChoice should be updated to 'none', model should be initial model
       expect(result.toolChoice).toBe('none');
-      expect(result.model).toBeUndefined();
-      expect(result.activeTools).toBeUndefined();
+      expect(result.model).toBe(mockModel);
+      expect(result.activeTools).toBeUndefined(); // activeTools was not provided initially
     });
 
     it('should receive steps array with previous step results', async () => {

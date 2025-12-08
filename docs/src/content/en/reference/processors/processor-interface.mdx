@@ -185,8 +185,8 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
 #### Execution order in the agentic loop
 
 1. `processInput` (once at start)
-2. `processInputStep` (at each step, before LLM call)
-3. `prepareStep` callback (if provided)
+2. `processInputStep` from inputProcessors (at each step, before LLM call)
+3. `prepareStep` callback (runs as part of the processInputStep pipeline, after inputProcessors)
 4. LLM execution
 5. Tool execution (if needed)
 6. Repeat from step 2 if tools were called
@@ -244,6 +244,12 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
       isOptional: true,
     },
     {
+      name: "tools",
+      type: "ToolSet",
+      description: "Current tools available for this step. Return in result to add/replace tools.",
+      isOptional: true,
+    },
+    {
       name: "providerOptions",
       type: "SharedV2ProviderOptions",
       description: "Provider-specific options (e.g., Anthropic cacheControl, OpenAI reasoningEffort).",
@@ -253,6 +259,12 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
       name: "modelSettings",
       type: "CallSettings",
       description: "Model settings like temperature, maxTokens, topP.",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Structured output configuration (schema, output mode). Return in result to modify.",
       isOptional: true,
     },
     {
@@ -301,6 +313,12 @@ The method can return any combination of these properties:
       isOptional: true,
     },
     {
+      name: "tools",
+      type: "ToolSet",
+      description: "Replace or modify tools for this step. Use spread to merge: { tools: { ...tools, newTool } }.",
+      isOptional: true,
+    },
+    {
       name: "messages",
       type: "MastraDBMessage[]",
       description: "Replace all messages. Cannot be used with messageList.",
@@ -330,6 +348,12 @@ The method can return any combination of these properties:
       description: "Change model settings for this step.",
       isOptional: true,
     },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Change structured output configuration for this step.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -351,10 +375,12 @@ System messages are **reset to their original values** at the start of each step
 
 - Dynamic model switching based on step number or context
 - Disabling tools after a certain number of steps
+- Dynamically adding or replacing tools based on conversation context
 - Transforming message part types between providers (e.g., `reasoning` → `thinking` for Anthropic)
 - Modifying messages based on step number or accumulated context
 - Adding step-specific system instructions
 - Adjusting provider options per step (e.g., cache control)
+- Modifying structured output schema based on step context
 
 ---
 

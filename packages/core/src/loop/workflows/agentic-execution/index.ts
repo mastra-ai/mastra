@@ -65,7 +65,9 @@ export function createAgenticExecutionWorkflow<
     .map(
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-        return typedInputData.output.toolCalls || [];
+        const tools = typedInputData.output.tools;
+        // Pass tools along with each tool call so toolCallStep can access tools modified in prepareStep/processInputStep
+        return (typedInputData.output.toolCalls || []).map(tc => ({ ...tc, tools }));
       },
       { id: 'map-tool-calls' },
     )

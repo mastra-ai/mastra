@@ -262,14 +262,27 @@ class ReasoningTransformer implements Processor {
 - [ ] inputProcessors run on every stream call
 - [ ] Multiple inputProcessors chain correctly
 - [ ] inputProcessors receive correct step context
+- [ ] inputProcessors can modify providerOptions
+- [ ] inputProcessors can modify modelSettings
+- [ ] inputProcessors can modify structuredOutput
+- [ ] inputProcessors can modify tools
+- [ ] inputProcessors can modify toolChoice
+- [ ] inputProcessors can modify activeTools
 
-#### Agent with prepareStep (defaultGenerateOptions)
+#### Agent with prepareStep (defaultOptions)
 
 - [ ] prepareStep runs on every generate call
 - [ ] prepareStep runs on every stream call
-- [ ] prepareStep can modify model
-- [ ] prepareStep can modify toolChoice
-- [ ] prepareStep can modify activeTools
+- [x] prepareStep can modify model
+- [x] prepareStep can modify toolChoice
+- [x] prepareStep can modify activeTools
+- [x] prepareStep can add new tools (via spreading)
+- [x] prepareStep can replace all tools
+- [x] prepareStep can execute tools added via tool({}) (AI SDK)
+- [x] prepareStep can execute tools added via createTool({}) (Mastra)
+- [x] prepareStep can modify providerOptions
+- [x] prepareStep can modify modelSettings
+- [ ] prepareStep can modify structuredOutput
 
 #### Agent.generate with inputProcessors
 
@@ -280,7 +293,7 @@ class ReasoningTransformer implements Processor {
 #### Agent.generate with prepareStep
 
 - [ ] Per-call prepareStep works
-- [ ] Per-call prepareStep overrides defaultGenerateOptions.prepareStep
+- [ ] Per-call prepareStep overrides defaultOptions.prepareStep
 
 #### Agent.stream with inputProcessors
 

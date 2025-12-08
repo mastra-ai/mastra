@@ -107,8 +107,8 @@ export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
  */
 export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
-  /** Replace tools for this step */
-  tools?: ToolSet;
+  /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
+  tools?: ToolSet | Record<string, unknown>;
   toolChoice?: ToolChoice<TOOLS | any>;
   activeTools?: Array<keyof TOOLS>;
 

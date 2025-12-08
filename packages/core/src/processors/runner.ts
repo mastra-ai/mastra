@@ -524,23 +524,18 @@ export class ProcessorRunner {
   async runProcessInputStep<TOOLS extends ToolSet = ToolSet>(
     args: RunProcessInputStepArgs<TOOLS>,
   ): Promise<RunProcessInputStepResult<TOOLS>> {
-    const {
-      providerOptions: initialProviderOptions,
-      modelSettings: initialModelSettings,
-      structuredOutput: initialStructuredOutput,
-      messageList,
-      stepNumber,
-      model: initialModel,
-      steps,
-      tools: initialTools,
-      toolChoice: initialToolChoice,
-      activeTools: initialActiveTools,
+    const { messageList, stepNumber, steps, tracingContext, requestContext } = args;
 
-      tracingContext,
-      requestContext,
-    } = args;
-
-    const stepInputResult: RunProcessInputStepResult<TOOLS> = {};
+    // Initialize with all provided values - processors will modify this object in order
+    const stepInput: RunProcessInputStepResult<TOOLS> = {
+      tools: args.tools as TOOLS | undefined,
+      toolChoice: args.toolChoice,
+      model: args.model,
+      activeTools: args.activeTools,
+      providerOptions: args.providerOptions,
+      modelSettings: args.modelSettings,
+      structuredOutput: args.structuredOutput,
+    };
 
     // Run through all input processors that have processInputStep
     for (const [index, processor] of this.inputProcessors.entries()) {
@@ -561,6 +556,21 @@ export class ProcessorRunner {
       // Get all system messages to pass to the processor
       const currentSystemMessages = messageList.getAllSystemMessages();
 
+      const inputData = {
+        messages: processableMessages,
+        stepNumber,
+        steps,
+        systemMessages: currentSystemMessages,
+        tools: stepInput.tools as TOOLS | undefined,
+        toolChoice: stepInput.toolChoice,
+        model: stepInput.model!,
+        activeTools: stepInput.activeTools,
+        providerOptions: stepInput.providerOptions,
+        modelSettings: stepInput.modelSettings,
+        structuredOutput: stepInput.structuredOutput,
+        requestContext,
+      };
+
       // Use the current span (the step span) as the parent for processor spans
       const currentSpan = tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
@@ -572,22 +582,12 @@ export class ProcessorRunner {
           processorIndex: index,
         },
         input: {
-          messages: processableMessages,
-          stepNumber,
-          systemMessages: currentSystemMessages,
-          steps,
-          model:
-            (stepInputResult.model ?? initialModel)
-              ? {
-                  modelId: (stepInputResult.model ?? initialModel)?.modelId,
-                  provider: (stepInputResult.model ?? initialModel)?.provider,
-                  specificationVersion: (stepInputResult.model ?? initialModel)?.specificationVersion,
-                }
-              : undefined,
-          toolChoice: stepInputResult.toolChoice ?? initialToolChoice,
-          activeTools: stepInputResult.activeTools ?? initialActiveTools,
-          providerOptions: stepInputResult.providerOptions ?? initialProviderOptions,
-          modelSettings: stepInputResult.modelSettings ?? initialModelSettings,
+          ...inputData,
+          model: {
+            id: inputData.model.modelId,
+            provider: inputData.model.provider,
+            specificationVersion: inputData.model.specificationVersion,
+          },
         },
       });
 
@@ -597,55 +597,27 @@ export class ProcessorRunner {
       try {
         const result = await this.validateAndFormatProcessInputStepResult(
           await processMethod({
-            messages: processableMessages,
             messageList,
-            stepNumber,
-            systemMessages: currentSystemMessages,
+            ...inputData,
             abort,
             tracingContext: { currentSpan: processorSpan },
-            requestContext,
-            steps,
-            tools: (stepInputResult.tools ?? initialTools) as TOOLS | undefined,
-            toolChoice: stepInputResult.toolChoice ?? initialToolChoice,
-            model: stepInputResult.model ?? initialModel,
-            activeTools: stepInputResult.activeTools ?? initialActiveTools,
-            providerOptions: stepInputResult.providerOptions ?? initialProviderOptions,
-            modelSettings: stepInputResult.modelSettings ?? initialModelSettings,
-            structuredOutput: stepInputResult.structuredOutput ?? initialStructuredOutput,
           }),
-          { messageList, processor, stepNumber },
+          {
+            messageList,
+            processor,
+            stepNumber,
+          },
         );
+        const { messages, systemMessages, ...rest } = result;
+        if (messages) {
+          this.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
+        }
+        if (systemMessages) {
+          messageList.replaceAllSystemMessages(systemMessages);
+        }
 
-        if (result.model) {
-          stepInputResult.model = result.model;
-        }
-        if (result.tools) {
-          stepInputResult.tools = result.tools;
-        }
-        if (result.toolChoice) {
-          stepInputResult.toolChoice = result.toolChoice;
-        }
-        if (result.activeTools) {
-          stepInputResult.activeTools = result.activeTools;
-        }
-        if (result.messages) {
-          this.applyMessagesToMessageList(result.messages, messageList, idsBeforeProcessing, check);
-        }
-        if (result.systemMessages) {
-          messageList.replaceAllSystemMessages(result.systemMessages);
-        }
-        if (result.providerOptions) {
-          stepInputResult.providerOptions = result.providerOptions;
-        }
-        if (result.modelSettings) {
-          stepInputResult.modelSettings = result.modelSettings;
-        }
-        if (result.structuredOutput) {
-          stepInputResult.structuredOutput = result.structuredOutput;
-        }
-        if (result.messageList) {
-          stepInputResult.messageList = result.messageList;
-        }
+        Object.assign(stepInput, rest);
+
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
 
@@ -653,18 +625,17 @@ export class ProcessorRunner {
           output: {
             messages: messageList.get.all.db(),
             systemMessages: messageList.getAllSystemMessages(),
-            model:
-              (stepInputResult.model ?? initialModel)
-                ? {
-                    modelId: (stepInputResult.model ?? initialModel)?.modelId,
-                    provider: (stepInputResult.model ?? initialModel)?.provider,
-                    specificationVersion: (stepInputResult.model ?? initialModel)?.specificationVersion,
-                  }
-                : undefined,
-            toolChoice: stepInputResult.toolChoice,
-            activeTools: stepInputResult.activeTools,
-            providerOptions: stepInputResult.providerOptions,
-            modelSettings: stepInputResult.modelSettings,
+            model: stepInput.model
+              ? {
+                  modelId: stepInput.model.modelId,
+                  provider: stepInput.model.provider,
+                  specificationVersion: stepInput.model.specificationVersion,
+                }
+              : undefined,
+            toolChoice: stepInput.toolChoice,
+            activeTools: stepInput.activeTools,
+            providerOptions: stepInput.providerOptions,
+            modelSettings: stepInput.modelSettings,
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
@@ -684,7 +655,7 @@ export class ProcessorRunner {
       }
     }
 
-    return stepInputResult;
+    return stepInput;
   }
 
   /**

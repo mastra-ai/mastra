@@ -1,9 +1,10 @@
 import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import type { ToolSet } from 'ai-v5';
+import type { LanguageModelV2Usage, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { CallSettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { MessageList, MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
@@ -24,6 +25,7 @@ import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
+import type { StructuredOutputOptions } from '../../../agent';
 
 type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   tools?: ToolSet;
@@ -482,10 +484,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
       let request: any;
       let rawResponse: any;
 
-      const { outputStream, callBail, runState } = await executeStreamWithFallbackModels<{
+      const { outputStream, callBail, runState, stepTools } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT | undefined>;
         runState: AgenticRunState;
         callBail?: boolean;
+        stepTools?: TOOLS;
       }>(models)(async (model, isLastModel) => {
         // Reset system messages to original before each step execution
         // This ensures that system message modifications in prepareStep/processInputStep/processors
@@ -494,13 +497,31 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           messageList.replaceAllSystemMessages(initialSystemMessages);
         }
 
-        let stepModel = model;
-        let stepToolChoice = toolChoice;
-        let stepTools = tools;
-        let stepActiveTools = activeTools;
-        let stepProviderOptions = providerOptions;
-        let stepModelSettings = modelSettings;
-        let stepStructuredOutput = structuredOutput;
+        const currentStep: {
+          model: MastraLanguageModelV2;
+          tools: TOOLS | undefined;
+          toolChoice: ToolChoice<TOOLS> | undefined;
+          activeTools: (keyof TOOLS)[] | undefined;
+          providerOptions: SharedV2ProviderOptions | undefined;
+          modelSettings: Omit<CallSettings, 'abortSignal'> | undefined;
+          structuredOutput: StructuredOutputOptions<OUTPUT> | undefined;
+        } = {
+          model,
+          tools,
+          toolChoice,
+          activeTools,
+          providerOptions,
+          modelSettings,
+          structuredOutput,
+        };
+
+        // let stepModel = model;
+        // let stepToolChoice = toolChoice;
+        // let stepTools = tools;
+        // let stepActiveTools = activeTools;
+        // let stepProviderOptions = providerOptions;
+        // let stepModelSettings = modelSettings;
+        // let stepStructuredOutput = structuredOutput;
 
         const inputStepProcessors = [
           ...(inputProcessors || []),
@@ -524,36 +545,46 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               steps: inputData.output?.steps || [],
               tools,
               toolChoice,
-              activeTools: activeTools ?? Object.keys(tools || {}),
+              activeTools,
               providerOptions,
               modelSettings,
               structuredOutput,
             });
+            Object.assign(currentStep, processInputStepResult);
 
-            if (processInputStepResult.model) {
-              stepModel = processInputStepResult.model;
-            }
-            if (processInputStepResult.tools) {
-              stepTools = processInputStepResult.tools as TOOLS;
-            }
-            if (processInputStepResult.toolChoice) {
-              // Cast needed: ToolChoice<any> from processor result is compatible at runtime
-              stepToolChoice = processInputStepResult.toolChoice as typeof stepToolChoice;
-            }
-            if (processInputStepResult.activeTools) {
-              stepActiveTools = processInputStepResult.activeTools as typeof stepActiveTools;
-            }
-            if (processInputStepResult.providerOptions) {
-              stepProviderOptions = processInputStepResult.providerOptions;
-            }
-            if (processInputStepResult.modelSettings) {
-              stepModelSettings = processInputStepResult.modelSettings;
-            }
-            if (processInputStepResult.structuredOutput) {
-              // Cast needed: processor returns StructuredOutputOptions<OutputSchema>, but we need OUTPUT type
-              // This is safe because at runtime the schema type flows through correctly
-              stepStructuredOutput = processInputStepResult.structuredOutput as typeof stepStructuredOutput;
-            }
+            // if (processInputStepResult.model) {
+            //   stepModel = processInputStepResult.model;
+            // }
+            // Check if tools were modified (different reference)
+            // const toolsWereModified = processInputStepResult.tools && processInputStepResult.tools !== tools;
+            // if (toolsWereModified) {
+            //   stepTools = processInputStepResult.tools as TOOLS;
+            //   // When tools are modified, reset activeTools to undefined so all new tools are active
+            //   // (unless activeTools was also explicitly modified by the processor)
+            //   const activeToolsWereModified =
+            //     processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
+            //   if (!activeToolsWereModified) {
+            //     stepActiveTools = undefined;
+            //   }
+            // }
+            // if (processInputStepResult.toolChoice) {
+            //   // Cast needed: ToolChoice<any> from processor result is compatible at runtime
+            //   stepToolChoice = processInputStepResult.toolChoice as typeof stepToolChoice;
+            // }
+            // if (processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools) {
+            //   stepActiveTools = processInputStepResult.activeTools as typeof stepActiveTools;
+            // }
+            // if (processInputStepResult.providerOptions) {
+            //   stepProviderOptions = processInputStepResult.providerOptions;
+            // }
+            // if (processInputStepResult.modelSettings) {
+            //   stepModelSettings = processInputStepResult.modelSettings;
+            // }
+            // if (processInputStepResult.structuredOutput) {
+            //   // Cast needed: processor returns StructuredOutputOptions<OutputSchema>, but we need OUTPUT type
+            //   // This is safe because at runtime the schema type flows through correctly
+            //   stepStructuredOutput = processInputStepResult.structuredOutput as typeof stepStructuredOutput;
+            // }
           } catch (error) {
             console.error('Error in processInputStep processors:', error);
             throw error;
@@ -562,32 +593,32 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
 
         const runState = new AgenticRunState({
           _internal: _internal!,
-          model: stepModel,
+          model: currentStep.model,
         });
         const messageListPromptArgs = {
           downloadRetries,
           downloadConcurrency,
-          supportedUrls: stepModel?.supportedUrls as Record<string, RegExp[]>,
+          supportedUrls: currentStep.model?.supportedUrls as Record<string, RegExp[]>,
         };
         const inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
-        switch (stepModel.specificationVersion) {
+        switch (currentStep.model.specificationVersion) {
           case 'v2': {
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
               fn: () =>
                 execute({
                   runId,
-                  model: stepModel,
-                  providerOptions: stepProviderOptions,
+                  model: currentStep.model,
+                  providerOptions: currentStep.providerOptions,
                   inputMessages,
-                  tools: stepTools,
-                  toolChoice: stepToolChoice,
-                  activeTools: stepActiveTools as string[] | undefined,
+                  tools: currentStep.tools,
+                  toolChoice: currentStep.toolChoice,
+                  activeTools: currentStep.activeTools as string[] | undefined,
                   options,
-                  modelSettings: stepModelSettings,
+                  modelSettings: currentStep.modelSettings,
                   includeRawChunks,
-                  structuredOutput: stepStructuredOutput,
+                  structuredOutput: currentStep.structuredOutput,
                   headers,
                   methodType,
                   generateId: _internal?.generateId,
@@ -629,9 +660,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
 
         const outputStream = new MastraModelOutput({
           model: {
-            modelId: stepModel.modelId,
-            provider: stepModel.provider,
-            version: stepModel.specificationVersion,
+            modelId: currentStep.model.modelId,
+            provider: currentStep.model.provider,
+            version: currentStep.model.specificationVersion,
           },
           stream: modelResult as ReadableStream<ChunkType>,
           messageList,
@@ -640,7 +671,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             runId,
             toolCallStreaming,
             includeRawChunks,
-            structuredOutput: stepStructuredOutput,
+            structuredOutput: currentStep.structuredOutput,
             outputProcessors,
             isLLMExecutionStep: true,
             tracingContext,
@@ -677,7 +708,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
             }
 
-            return { callBail: true, outputStream, runState };
+            return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
           }
 
           if (isLastModel) {
@@ -702,7 +733,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           }
         }
 
-        return { outputStream, callBail: false, runState };
+        return { outputStream, callBail: false, runState, stepTools: currentStep.tools };
       });
 
       if (callBail) {
@@ -835,6 +866,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         output: {
           text,
           toolCalls,
+          tools: stepTools,
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),

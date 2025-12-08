@@ -46,6 +46,7 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT exte
   dynamicToolCalls?: DynamicToolCall[];
   staticToolResults?: StaticToolResult<Tools>[];
   dynamicToolResults?: DynamicToolResult[];
+  tools?: Tools;
   usage: LanguageModelUsage;
   steps: StepResult<Tools>[];
   object?: InferSchemaOutput<OUTPUT>;
@@ -148,6 +149,7 @@ export const toolCallInputSchema = z.object({
   providerMetadata: z.record(z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
+  tools: z.record(z.any()).optional(),
 });
 
 export const toolCallOutputSchema = toolCallInputSchema.extend({

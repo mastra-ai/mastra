@@ -1664,15 +1664,27 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               "messages": [
                 {
-                  "content": [
-                    {
-                      "text": "test-input",
-                      "type": "text",
-                    },
-                  ],
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "text": "test-input",
+                        "type": "text",
+                      },
+                    ],
+                  },
+                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "id": "c53540fe-3289-4a9a-8da1-ba8d5d84d46e",
+                  "resourceId": undefined,
                   "role": "user",
+                  "threadId": undefined,
                 },
               ],
+              "model": {
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
+                "specificationVersion": "v2",
+              },
               "stepNumber": 0,
               "steps": [
                 DefaultStepResult {
@@ -1729,34 +1741,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       {
                         "content": [
                           {
-                            "input": {
-                              "value": "value",
-                            },
-                            "providerExecuted": undefined,
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-call",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                      {
-                        "content": [
-                          {
-                            "output": {
-                              "type": "text",
-                              "value": "result1",
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-result",
-                          },
-                        ],
-                        "role": "tool",
-                      },
-                      {
-                        "content": [
-                          {
                             "text": "Hello, world!",
                             "type": "text",
                           },
@@ -1781,43 +1765,60 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               "messages": [
                 {
-                  "content": [
-                    {
-                      "text": "test-input",
-                      "type": "text",
-                    },
-                  ],
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "text": "new input from prepareStep",
+                        "type": "text",
+                      },
+                    ],
+                  },
+                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "id": "user-0",
                   "role": "user",
                 },
                 {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "toolInvocation": {
+                          "args": {
+                            "value": "value",
+                          },
+                          "result": "result1",
+                          "state": "result",
+                          "step": undefined,
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                        },
+                        "type": "tool-invocation",
                       },
-                      "providerExecuted": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
+                    ],
+                    "toolInvocations": [
+                      {
+                        "args": {
+                          "value": "value",
+                        },
+                        "result": "result1",
+                        "state": "result",
+                        "step": undefined,
+                        "toolCallId": "call-1",
+                        "toolName": "tool1",
+                      },
+                    ],
+                  },
+                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "id": "isn6SQnEJx50uDT9",
                   "role": "assistant",
                 },
-                {
-                  "content": [
-                    {
-                      "output": {
-                        "type": "text",
-                        "value": "result1",
-                      },
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-result",
-                    },
-                  ],
-                  "role": "tool",
-                },
               ],
+              "model": {
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
+                "specificationVersion": "v2",
+              },
               "stepNumber": 1,
               "steps": [
                 DefaultStepResult {
@@ -1871,34 +1872,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     },
                     "id": "id-1",
                     "messages": [
-                      {
-                        "content": [
-                          {
-                            "input": {
-                              "value": "value",
-                            },
-                            "providerExecuted": undefined,
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-call",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                      {
-                        "content": [
-                          {
-                            "output": {
-                              "type": "text",
-                              "value": "result1",
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-result",
-                          },
-                        ],
-                        "role": "tool",
-                      },
                       {
                         "content": [
                           {
