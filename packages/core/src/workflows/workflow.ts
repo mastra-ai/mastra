@@ -429,7 +429,9 @@ export function createStep<
                 systemMessages: (systemMessages ?? []) as any,
               });
               // Handle different return types
-              if (Array.isArray(result)) {
+              if (result instanceof MessageList) {
+                return { ...passThrough, messages: result.get.all.db() };
+              } else if (Array.isArray(result)) {
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
                 return { ...passThrough, messages: (result as any).messages };
