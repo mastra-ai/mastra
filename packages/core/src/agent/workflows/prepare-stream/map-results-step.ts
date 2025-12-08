@@ -133,6 +133,17 @@ export function createMapResultsStep<
         : [structuredProcessor];
     }
 
+    // Resolve input processors from options override or agent capability
+    const effectiveInputProcessors =
+      options.inputProcessors ||
+      (capabilities.inputProcessors
+        ? typeof capabilities.inputProcessors === 'function'
+          ? await capabilities.inputProcessors({
+              requestContext: result.requestContext!,
+            })
+          : capabilities.inputProcessors
+        : []);
+
     const messageList = memoryData.messageList!;
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
@@ -207,6 +218,7 @@ export function createMapResultsStep<
         abortSignal: options.abortSignal,
       },
       structuredOutput: options.structuredOutput,
+      inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       modelSettings: {
         temperature: 0,

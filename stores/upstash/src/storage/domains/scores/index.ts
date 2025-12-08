@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
   calculatePagination,
@@ -7,6 +7,7 @@ import {
   ScoresStorage,
   TABLE_SCORERS,
   transformScoreRow as coreTransformScoreRow,
+  createStorageErrorId,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
@@ -42,7 +43,7 @@ export class ScoresUpstash extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -120,31 +121,51 @@ export class ScoresUpstash extends ScoresStorage {
     };
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let validatedScore: ValidatedSaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_SCORE_VALIDATION_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
     }
-    const { key, processedRecord } = processRecord(TABLE_SCORERS, validatedScore);
+
+    const now = new Date();
+    const id = crypto.randomUUID();
+    const createdAt = now;
+    const updatedAt = now;
+
+    const scoreWithId = {
+      ...validatedScore,
+      id,
+      createdAt,
+      updatedAt,
+    };
+
+    const { key, processedRecord } = processRecord(TABLE_SCORERS, scoreWithId);
     try {
       await this.client.set(key, processedRecord);
-      return { score };
+      return { score: { ...validatedScore, id, createdAt, updatedAt } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { id: score.id },
+          details: { id },
         },
         error,
       );

@@ -1,4 +1,4 @@
-import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { RequestHandlerExtra, RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
   ElicitRequest,
   ElicitResult,
@@ -81,8 +81,14 @@ export type MCPServerPrompts = {
  * Actions for handling elicitation requests (interactive user input collection).
  */
 export type ElicitationActions = {
-  /** Function to send an elicitation request to the client */
-  sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
+  /**
+   * Function to send an elicitation request to the client.
+   *
+   * @param request - The elicitation request parameters
+   * @param options - Optional request options (timeout, signal, etc.)
+   * @returns Promise resolving to the client's elicitation response
+   */
+  sendRequest: (request: ElicitRequest['params'], options?: RequestOptions) => Promise<ElicitResult>;
 };
 
 /**
@@ -95,5 +101,6 @@ export type MCPRequestHandlerExtra = RequestHandlerExtra<any, any>;
  *
  * - `Resource`: Represents a data resource exposed by the server
  * - `ResourceTemplate`: URI template for dynamic resource generation
+ * - `RequestOptions`: Options for MCP requests (timeout, signal, etc.)
  */
-export type { Resource, ResourceTemplate };
+export type { Resource, ResourceTemplate, RequestOptions };

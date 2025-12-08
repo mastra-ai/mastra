@@ -18,9 +18,8 @@ By combining writable tool streams with agent streaming, you gain fine grained c
 
 Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
 
-```typescript {3,9} showLineNumbers copy
+```typescript {2,9} showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
-
 import { testTool } from "../tools/test-tool";
 
 export const testAgent = new Agent({
@@ -34,30 +33,29 @@ export const testAgent = new Agent({
 
 ### Using `context.writer`
 
-The `context.writer` object is available in a tool's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
+The `context.writer` object is available in a tool's `execute()` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
 
 :::warning
 
-You must `await` the call to `writer.write(...)` or else you will lock the stream and get a `WritableStream is locked` error.
+You must `await` the call to `writer.write()` or else you will lock the stream and get a `WritableStream is locked` error.
 
 :::
 
-```typescript {5,8,15} showLineNumbers copy
+```typescript {4,7,14} showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
-  // ...
   execute: async (inputData, context) => {
     const { value } = inputData;
 
-   await context?.writer?.write({
+    await context?.writer?.write({
       type: "custom-event",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await context?.writer?.write({
+    await context?.writer?.write({
       type: "custom-event",
       status: "success"
     });
@@ -69,14 +67,13 @@ export const testTool = createTool({
 });
 ```
 
-You can also use `writer.custom` if you want to emit top level stream chunks, This useful and relevant when
+You can also use `writer.custom()` if you want to emit top level stream chunks, This useful and relevant when
 integrating with UI Frameworks
 
-```typescript {5,8,15} showLineNumbers copy
+```typescript {4,7,14} showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
-  // ...
   execute: async (inputData, context) => {
     const { value } = inputData;
 
@@ -169,12 +166,11 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 export const testTool = createTool({
-  // ...
   execute: async (inputData, context) => {
     const { city } = inputData;
 
-    const testAgent = context?.mastra?.getAgent("testAgent");
-    const stream = await testAgent?.stream(`What is the weather in ${city}?`);
+    const agent = context?.mastra?.getAgent("testAgent");
+    const stream = await agent?.stream(`What is the weather in ${city}?`);
 
     await stream!.fullStream.pipeTo(context?.writer!);
 

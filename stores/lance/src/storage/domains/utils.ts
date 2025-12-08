@@ -1,6 +1,6 @@
 import type { Connection, FieldLike, SchemaLike } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 
 export function getPrimaryKeys(tableName: TABLE_NAMES): string[] {
@@ -117,7 +117,7 @@ export async function getTableSchema({
   } catch (validationError: any) {
     throw new MastraError(
       {
-        id: 'STORAGE_LANCE_STORAGE_GET_TABLE_SCHEMA_INVALID_ARGS',
+        id: createStorageErrorId('LANCE', 'GET_TABLE_SCHEMA', 'INVALID_ARGS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: validationError.message,
@@ -143,7 +143,7 @@ export async function getTableSchema({
   } catch (error: any) {
     throw new MastraError(
       {
-        id: 'STORAGE_LANCE_STORAGE_GET_TABLE_SCHEMA_FAILED',
+        id: createStorageErrorId('LANCE', 'GET_TABLE_SCHEMA', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         details: { tableName },

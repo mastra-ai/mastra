@@ -38,12 +38,6 @@ for await (const chunk of stream) {
 }
 ```
 
-:::info
-
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Perplexity documentation](https://docs.perplexity.ai) for details.
-
-:::
-
 ## Models
 
 <ProviderModelsTable
@@ -108,7 +102,6 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.perplexity.ai",
     id: "perplexity/sonar",
     apiKey: process.env.PERPLEXITY_API_KEY,
     headers: {

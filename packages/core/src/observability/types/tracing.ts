@@ -64,6 +64,10 @@ export interface AIBaseAttributes {}
 export interface AgentRunAttributes extends AIBaseAttributes {
   /** Agent identifier */
   agentId: string;
+  /** Human-readable agent name */
+  agentName?: string;
+  /** Conversation/thread/session identifier for multi-turn interactions */
+  conversationId?: string;
   /** Agent Instructions **/
   instructions?: string;
   /** Agent Prompt **/
@@ -126,6 +130,14 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string;
+  /** Unique identifier for the response */
+  responseId?: string;
+  /** Server address for the model endpoint */
+  serverAddress?: string;
+  /** Server port for the model endpoint */
+  serverPort?: number;
 }
 
 /**
