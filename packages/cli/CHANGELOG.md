@@ -1,5 +1,25 @@
 # mastra
 
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Add `mastra studio` CLI command to serve the built playground as a static server ([#10283](https://github.com/mastra-ai/mastra/pull/10283))
+
+- Fix default value showing on workflow form after user submits ([#10983](https://github.com/mastra-ai/mastra/pull/10983))
+
+- Move to @posthog/react which is the actual way to use posthog in React. It also fixes ([#10967](https://github.com/mastra-ai/mastra/pull/10967))
+
+- Move useScorers down to trace page to trigger it once for all trace spans ([#10985](https://github.com/mastra-ai/mastra/pull/10985))
+
+- Update Observability Trace Spans list UI, so a user can expand/collapse span children/descendants and can filter the list by span type or name ([#10378](https://github.com/mastra-ai/mastra/pull/10378))
+
+- Fix workflow trigger form overflow ([#10986](https://github.com/mastra-ai/mastra/pull/10986))
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`7761c77`](https://github.com/mastra-ai/mastra/commit/7761c778b7b083cb01f7587cfa66010307204d00), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+  - @mastra/deployer@1.0.0-beta.9
+
 ## 1.0.0-beta.6
 
 ### Patch Changes

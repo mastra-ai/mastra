@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 0.1.0-beta.4
+
+### Patch Changes
+
+- Fixed a bug where `[native code]` was incorrectly added to the output ([#10971](https://github.com/mastra-ai/mastra/pull/10971))
+
 ## 0.1.0-beta.3
 
 ### Patch Changes
