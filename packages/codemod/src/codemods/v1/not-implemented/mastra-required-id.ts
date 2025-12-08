@@ -62,37 +62,55 @@ export default createTransformer((fileInfo, api, options, context) => {
         });
 
         if (!hasId) {
-          // Find the parent statement to add comment
+          // Check if the NewExpression is nested inside an object property (e.g., storage: new LibSQLStore({}))
+          // or inside an array (e.g., tools: [new Agent({})])
+          // In these cases, add the comment to the appropriate node
           let parent = path.parent;
-          const statementTypes = new Set([
-            'VariableDeclaration',
-            'ExpressionStatement',
-            'ReturnStatement',
-            'ExportDefaultDeclaration',
-            'ExportNamedDeclaration',
-            'Program',
-          ]);
 
-          while (parent && !statementTypes.has(parent.value.type)) {
-            parent = parent.parent;
-          }
-
-          if (parent && parent.value) {
-            // For export declarations, add comment to the export itself
-            let targetNode = parent.value;
-            if (
-              targetNode.type !== 'ExportDefaultDeclaration' &&
-              targetNode.type !== 'ExportNamedDeclaration' &&
-              parent.parent &&
-              (parent.parent.value.type === 'ExportDefaultDeclaration' ||
-                parent.parent.value.type === 'ExportNamedDeclaration')
-            ) {
-              targetNode = parent.parent.value;
-            }
-
-            const added = insertCommentOnce(targetNode, j, COMMENT_MESSAGE);
+          // If the direct parent is an object property, add comment to that property
+          if (parent && parent.value && (parent.value.type === 'Property' || parent.value.type === 'ObjectProperty')) {
+            const added = insertCommentOnce(parent.value, j, COMMENT_MESSAGE);
             if (added) {
               context.hasChanges = true;
+            }
+          } else if (parent && parent.value && parent.value.type === 'ArrayExpression') {
+            // If the parent is an array, add comment directly to the expression
+            const added = insertCommentOnce(path.value, j, COMMENT_MESSAGE);
+            if (added) {
+              context.hasChanges = true;
+            }
+          } else {
+            // Find the parent statement to add comment
+            const statementTypes = new Set([
+              'VariableDeclaration',
+              'ExpressionStatement',
+              'ReturnStatement',
+              'ExportDefaultDeclaration',
+              'ExportNamedDeclaration',
+              'Program',
+            ]);
+
+            while (parent && !statementTypes.has(parent.value.type)) {
+              parent = parent.parent;
+            }
+
+            if (parent && parent.value) {
+              // For export declarations, add comment to the export itself
+              let targetNode = parent.value;
+              if (
+                targetNode.type !== 'ExportDefaultDeclaration' &&
+                targetNode.type !== 'ExportNamedDeclaration' &&
+                parent.parent &&
+                (parent.parent.value.type === 'ExportDefaultDeclaration' ||
+                  parent.parent.value.type === 'ExportNamedDeclaration')
+              ) {
+                targetNode = parent.parent.value;
+              }
+
+              const added = insertCommentOnce(targetNode, j, COMMENT_MESSAGE);
+              if (added) {
+                context.hasChanges = true;
+              }
             }
           }
         }
@@ -120,37 +138,53 @@ export default createTransformer((fileInfo, api, options, context) => {
         });
 
         if (!hasId) {
-          // Find the parent statement to add comment
+          // Check if the CallExpression is nested inside an object property or array
           let parent = path.parent;
-          const statementTypes = new Set([
-            'VariableDeclaration',
-            'ExpressionStatement',
-            'ReturnStatement',
-            'ExportDefaultDeclaration',
-            'ExportNamedDeclaration',
-            'Program',
-          ]);
 
-          while (parent && !statementTypes.has(parent.value.type)) {
-            parent = parent.parent;
-          }
-
-          if (parent && parent.value) {
-            // For export declarations, add comment to the export itself
-            let targetNode = parent.value;
-            if (
-              targetNode.type !== 'ExportDefaultDeclaration' &&
-              targetNode.type !== 'ExportNamedDeclaration' &&
-              parent.parent &&
-              (parent.parent.value.type === 'ExportDefaultDeclaration' ||
-                parent.parent.value.type === 'ExportNamedDeclaration')
-            ) {
-              targetNode = parent.parent.value;
-            }
-
-            const added = insertCommentOnce(targetNode, j, COMMENT_MESSAGE);
+          // If the direct parent is an object property, add comment to that property
+          if (parent && parent.value && (parent.value.type === 'Property' || parent.value.type === 'ObjectProperty')) {
+            const added = insertCommentOnce(parent.value, j, COMMENT_MESSAGE);
             if (added) {
               context.hasChanges = true;
+            }
+          } else if (parent && parent.value && parent.value.type === 'ArrayExpression') {
+            // If the parent is an array, add comment directly to the expression
+            const added = insertCommentOnce(path.value, j, COMMENT_MESSAGE);
+            if (added) {
+              context.hasChanges = true;
+            }
+          } else {
+            // Find the parent statement to add comment
+            const statementTypes = new Set([
+              'VariableDeclaration',
+              'ExpressionStatement',
+              'ReturnStatement',
+              'ExportDefaultDeclaration',
+              'ExportNamedDeclaration',
+              'Program',
+            ]);
+
+            while (parent && !statementTypes.has(parent.value.type)) {
+              parent = parent.parent;
+            }
+
+            if (parent && parent.value) {
+              // For export declarations, add comment to the export itself
+              let targetNode = parent.value;
+              if (
+                targetNode.type !== 'ExportDefaultDeclaration' &&
+                targetNode.type !== 'ExportNamedDeclaration' &&
+                parent.parent &&
+                (parent.parent.value.type === 'ExportDefaultDeclaration' ||
+                  parent.parent.value.type === 'ExportNamedDeclaration')
+              ) {
+                targetNode = parent.parent.value;
+              }
+
+              const added = insertCommentOnce(targetNode, j, COMMENT_MESSAGE);
+              if (added) {
+                context.hasChanges = true;
+              }
             }
           }
         }

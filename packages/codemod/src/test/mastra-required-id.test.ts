@@ -43,29 +43,4 @@ const store = new MyCustomStore({ url: 'test' });
     // Should remain unchanged
     expect(output).toBe(input);
   });
-
-  it('does not add comment to Mastra instance', () => {
-    const input = `
-import { Mastra } from "@mastra/core/mastra";
-import { ghibliAgent } from "./agents/ghibli-agent";
-import { activitiesWorkflow } from "./workflows/activities-workflow";
-import { LibSQLStore } from "@mastra/libsql";
-
-export const mastra = new Mastra({
-  agents: {
-    ghibliAgent,
-  },
-  workflows: {
-    activitiesWorkflow,
-  },
-  storage: new LibSQLStore({
-    url: ":memory:",
-  }),
-});`.trim();
-
-    const output = applyTransform(transformer, input);
-
-    // Should remain unchanged
-    expect(output).toBe(input);
-  });
 });
