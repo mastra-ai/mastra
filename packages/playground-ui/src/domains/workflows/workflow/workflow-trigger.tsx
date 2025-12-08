@@ -342,7 +342,7 @@ export function WorkflowTrigger({
                           : undefined;
 
                     // Show tripwire status for failed steps with tripwire info
-                    const displayStatus = step.status === 'failed' && (step as any).tripwire ? 'tripwire' : status;
+                    const displayStatus = step.status === 'failed' && step.tripwire ? 'tripwire' : status;
 
                     return (
                       <WorkflowStatus

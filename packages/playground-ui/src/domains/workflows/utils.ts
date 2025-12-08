@@ -56,10 +56,12 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
     ...(runState.status === 'suspended' ? { suspended: suspendedStepIds, suspendPayload: suspendPayload } : {}),
     ...(runState.status === 'tripwire' && runState.tripwire
       ? {
-          reason: runState.tripwire.reason,
-          retry: runState.tripwire.retry,
-          metadata: runState.tripwire.metadata,
-          processorId: runState.tripwire.processorId,
+          tripwire: {
+            reason: runState.tripwire.reason,
+            retry: runState.tripwire.retry,
+            metadata: runState.tripwire.metadata,
+            processorId: runState.tripwire.processorId,
+          },
         }
       : {}),
   } as WorkflowRunStreamResult;
