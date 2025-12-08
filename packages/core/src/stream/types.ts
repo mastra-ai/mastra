@@ -617,6 +617,8 @@ export type WorkflowStreamEvent =
         payload?: Record<string, any>;
         resumePayload?: Record<string, any>;
         suspendPayload?: Record<string, any>;
+        /** Tripwire data when step failed due to processor rejection */
+        tripwire?: StepTripwireData;
       };
     });
 

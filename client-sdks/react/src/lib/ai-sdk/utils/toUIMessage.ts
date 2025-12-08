@@ -42,7 +42,9 @@ export const mapWorkflowStreamChunkToWatchResult = (
         ? { result: lastStep?.output }
         : finalStatus === 'failed' && lastStep?.status === 'failed'
           ? { error: lastStep?.error }
-          : {}),
+          : finalStatus === 'tripwire' && chunk.payload.tripwire
+            ? { tripwire: chunk.payload.tripwire }
+            : {}),
     };
   }
 

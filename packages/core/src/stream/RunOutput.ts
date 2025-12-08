@@ -13,6 +13,7 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
   implements MastraBaseStream<WorkflowStreamEvent>
 {
   #status: WorkflowRunStatus = 'running';
+  #tripwireData: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
   #usageCount: Required<LanguageModelUsage> = {
     inputTokens: 0,
     outputTokens: 0,
@@ -98,7 +99,13 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
             } else if (chunk.type === 'workflow-step-suspended') {
               self.#status = 'suspended';
             } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
-              self.#status = 'failed';
+              // Check if the failure was due to a tripwire
+              if (chunk.payload.tripwire) {
+                self.#status = 'tripwire';
+                self.#tripwireData = chunk.payload.tripwire;
+              } else {
+                self.#status = 'failed';
+              }
             }
           },
           close() {
@@ -122,6 +129,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
                   // @ts-ignore
                   usage: self.#usageCount,
                 },
+                // Include tripwire data when status is 'tripwire'
+                ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
               },
             });
 
@@ -261,7 +270,13 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
             } else if (chunk.type === 'workflow-step-suspended') {
               self.#status = 'suspended';
             } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
-              self.#status = 'failed';
+              // Check if the failure was due to a tripwire
+              if (chunk.payload.tripwire) {
+                self.#status = 'tripwire';
+                self.#tripwireData = chunk.payload.tripwire;
+              } else {
+                self.#status = 'failed';
+              }
             }
           },
           close() {
@@ -285,6 +300,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
                   // @ts-ignore
                   usage: self.#usageCount,
                 },
+                // Include tripwire data when status is 'tripwire'
+                ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
               },
             });
 

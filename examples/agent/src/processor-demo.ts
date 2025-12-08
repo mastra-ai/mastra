@@ -73,7 +73,7 @@ async function main() {
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tripwire') {
         console.log('🚫 Tripwire detected during streaming!');
-        console.log('  Reason:', chunk.payload?.tripwireReason);
+        console.log('  Reason:', chunk.payload?.reason);
         console.log('  Retry allowed:', chunk.payload?.retry);
         console.log('  Metadata:', JSON.stringify(chunk.payload?.metadata, null, 2));
         console.log('  Processor ID:', chunk.payload?.processorId);
@@ -100,7 +100,7 @@ async function main() {
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tripwire') {
         console.log('🚫 Toxic content detected!');
-        console.log('  Reason:', chunk.payload?.tripwireReason);
+        console.log('  Reason:', chunk.payload?.reason);
         console.log('  Toxicity metadata:', JSON.stringify(chunk.payload?.metadata, null, 2));
         break;
       }
@@ -122,7 +122,7 @@ async function main() {
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tripwire') {
         console.log('🚫 Processor workflow blocked the content!');
-        console.log('  Reason:', chunk.payload?.tripwireReason);
+        console.log('  Reason:', chunk.payload?.reason);
         console.log('  Metadata:', JSON.stringify(chunk.payload?.metadata, null, 2));
         break;
       }
