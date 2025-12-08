@@ -31,6 +31,7 @@ export const formatHierarchicalSpans = (spans: SpanRecord[]): UISpan[] => {
       startTime: startDate.toISOString(),
       endTime: endDate ? endDate.toISOString() : undefined,
       spans: [],
+      parentSpanId: spanRecord.parentSpanId,
     };
 
     spanMap.set(spanRecord.spanId, uiSpan);

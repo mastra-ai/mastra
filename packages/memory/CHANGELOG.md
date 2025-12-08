@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Fix connection pool exhaustion when saving many messages with semantic recall enabled. Instead of calling vector.upsert() for each message individually (which acquires a separate DB connection), all embeddings are now batched into a single upsert call. ([#10954](https://github.com/mastra-ai/mastra/pull/10954))
+
+- Updated dependencies [[`0d41fe2`](https://github.com/mastra-ai/mastra/commit/0d41fe245355dfc66d61a0d9c85d9400aac351ff), [`6b3ba91`](https://github.com/mastra-ai/mastra/commit/6b3ba91494cc10394df96782f349a4f7b1e152cc), [`7907fd1`](https://github.com/mastra-ai/mastra/commit/7907fd1c5059813b7b870b81ca71041dc807331b)]:
+  - @mastra/core@1.0.0-beta.8
+
 ## 1.0.0-beta.3
 
 ### Minor Changes

@@ -50,7 +50,7 @@ export default function Observability() {
   const scoreId = searchParams.get('scoreId');
 
   const {
-    data: Traces = [],
+    data: traces = [],
     isLoading: isTracesLoading,
     isFetchingNextPage,
     hasNextPage,
@@ -142,12 +142,12 @@ export default function Observability() {
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 
   const toNextTrace = getToNextEntryFn({
-    entries: Traces.map(item => ({ id: item.traceId })),
+    entries: traces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
   const toPreviousTrace = getToPreviousEntryFn({
-    entries: Traces.map(item => ({ id: item.traceId })),
+    entries: traces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
@@ -196,7 +196,7 @@ export default function Observability() {
               <EntryListSkeleton columns={tracesListColumns} />
             ) : (
               <TracesList
-                traces={Traces}
+                traces={traces}
                 selectedTraceId={selectedTraceId}
                 onTraceClick={handleTraceClick}
                 errorMsg={error?.error}
@@ -215,7 +215,7 @@ export default function Observability() {
         initialSpanId={spanId || undefined}
         initialSpanTab={spanTab === 'scores' ? 'scores' : 'details'}
         initialScoreId={scoreId || undefined}
-        traceDetails={Traces.find(t => t.traceId === selectedTraceId)}
+        traceDetails={traces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => {
           navigate(`/observability`);

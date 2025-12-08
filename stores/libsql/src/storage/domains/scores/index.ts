@@ -1,7 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
   createStorageErrorId,
   TABLE_SCORERS,
@@ -195,7 +195,7 @@ export class ScoresLibSQL extends ScoresStorage {
     return result.rows?.[0] ? this.transformScoreRow(result.rows[0]) : null;
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let parsedScore: ValidatedSaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
@@ -206,11 +206,11 @@ export class ScoresLibSQL extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.id,
-            entityId: score.entityId,
-            entityType: score.entityType,
-            traceId: score.traceId || '',
-            spanId: score.spanId || '',
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
           },
         },
         error,
@@ -219,19 +219,19 @@ export class ScoresLibSQL extends ScoresStorage {
 
     try {
       const id = crypto.randomUUID();
+      const now = new Date();
 
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
-          id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
           ...parsedScore,
+          id,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {

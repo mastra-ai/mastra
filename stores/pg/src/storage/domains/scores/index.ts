@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import {
@@ -149,22 +149,22 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let parsedScore: ValidatedSaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'SAVE_SCORE', 'INVALID_PAYLOAD'),
+          id: createStorageErrorId('PG', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.id,
-            entityId: score.entityId,
-            entityType: score.entityType,
-            traceId: score.traceId || '',
-            spanId: score.spanId || '',
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
           },
         },
         error,
@@ -174,6 +174,7 @@ export class ScoresPG extends ScoresStorage {
     try {
       // Generate ID like other storage implementations
       const id = crypto.randomUUID();
+      const now = new Date();
 
       const {
         scorer,
@@ -198,15 +199,16 @@ export class ScoresPG extends ScoresStorage {
           scorer: scorer ? JSON.stringify(scorer) : null,
           preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
           analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
+          metadata: metadata ? JSON.stringify(metadata) : null,
+          additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
           requestContext: requestContext ? JSON.stringify(requestContext) : null,
           entity: entity ? JSON.stringify(entity) : null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {

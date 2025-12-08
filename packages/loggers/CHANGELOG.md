@@ -1,5 +1,33 @@
 # @mastra/loggers
 
+## 1.0.0-beta.3
+
+### Minor Changes
+
+- Add redact option to PinoLogger for PII protection ([#10919](https://github.com/mastra-ai/mastra/pull/10919))
+
+  Exposes Pino's native `redact` option in `PinoLogger`, allowing sensitive data to be automatically redacted from logs.
+
+  ```typescript
+  import { PinoLogger } from '@mastra/loggers';
+
+  const logger = new PinoLogger({
+    name: 'MyApp',
+    redact: {
+      paths: ['*.password', '*.token', '*.apiKey', '*.email'],
+      censor: '[REDACTED]',
+    },
+  });
+
+  logger.info('User login', { username: 'john', password: 'secret123' });
+  // Output: { username: "john", password: "[REDACTED]", msg: "User login" }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`0d41fe2`](https://github.com/mastra-ai/mastra/commit/0d41fe245355dfc66d61a0d9c85d9400aac351ff), [`6b3ba91`](https://github.com/mastra-ai/mastra/commit/6b3ba91494cc10394df96782f349a4f7b1e152cc), [`7907fd1`](https://github.com/mastra-ai/mastra/commit/7907fd1c5059813b7b870b81ca71041dc807331b)]:
+  - @mastra/core@1.0.0-beta.8
+
 ## 1.0.0-beta.2
 
 ### Minor Changes

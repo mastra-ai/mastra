@@ -1,4 +1,4 @@
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   StorageColumn,
@@ -258,7 +258,7 @@ export class ConvexStore extends MastraStorage {
     return this.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.scores.saveScore(score);
   }
 

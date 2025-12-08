@@ -8,16 +8,19 @@ import {
   TABLE_SCORERS,
   TABLE_TRACES,
   TABLE_SPANS,
+  TABLE_AGENTS,
 } from '@mastra/core/storage';
 import { createScoresTest } from './domains/scores';
 import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
 import { createOperationsTests } from './domains/operations';
 import { createObservabilityTests } from './domains/observability';
+import { createAgentsTests } from './domains/agents';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
 export * from './domains/observability/data';
+export * from './domains/agents/data';
 
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {
@@ -39,6 +42,7 @@ export function createTestSuite(storage: MastraStorage) {
         storage.clearTable({ tableName: TABLE_SCORERS }),
         storage.clearTable({ tableName: TABLE_TRACES }),
         storage.supports.observabilityInstance && storage.clearTable({ tableName: TABLE_SPANS }),
+        storage.supports.agents && storage.clearTable({ tableName: TABLE_AGENTS }),
       ]);
     });
 
@@ -53,5 +57,8 @@ export function createTestSuite(storage: MastraStorage) {
     if (storage.supports.observabilityInstance) {
       createObservabilityTests({ storage });
     }
+
+    // Agents tests are conditionally run based on storage.supports.agents inside the test suite
+    createAgentsTests({ storage });
   });
 }
