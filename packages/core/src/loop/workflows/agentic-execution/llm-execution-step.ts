@@ -496,6 +496,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         let stepModel = model;
         let stepToolChoice = toolChoice;
         let stepTools = tools;
+        let stepActiveTools = options?.activeTools;
         let stepProviderOptions = providerOptions;
         let stepModelSettings = modelSettings;
         let stepStructuredOutput = structuredOutput;
@@ -520,8 +521,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               requestContext,
               model,
               steps: inputData.output?.steps || [],
-              toolChoice: stepToolChoice,
-              activeTools: Object.keys(stepTools || {}),
+              tools,
+              toolChoice,
+              activeTools: options?.activeTools ?? Object.keys(tools || {}),
               providerOptions,
               modelSettings,
               structuredOutput,
@@ -530,15 +532,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             if (processInputStepResult.model) {
               stepModel = processInputStepResult.model;
             }
+            if (processInputStepResult.tools) {
+              stepTools = processInputStepResult.tools as TOOLS;
+            }
             if (processInputStepResult.toolChoice) {
               // Cast needed: ToolChoice<any> from processor result is compatible at runtime
               stepToolChoice = processInputStepResult.toolChoice as typeof stepToolChoice;
             }
-            if (processInputStepResult.activeTools && stepTools) {
-              const activeToolsSet = new Set(processInputStepResult.activeTools);
-              stepTools = Object.fromEntries(
-                Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
-              ) as typeof tools;
+            if (processInputStepResult.activeTools) {
+              stepActiveTools = processInputStepResult.activeTools as typeof stepActiveTools;
             }
             if (processInputStepResult.providerOptions) {
               stepProviderOptions = processInputStepResult.providerOptions;
@@ -580,6 +582,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                   inputMessages,
                   tools: stepTools,
                   toolChoice: stepToolChoice,
+                  activeTools: stepActiveTools,
                   options,
                   modelSettings: stepModelSettings,
                   includeRawChunks,
