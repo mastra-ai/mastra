@@ -26,6 +26,12 @@ export enum ChunkFrom {
   NETWORK = 'NETWORK',
 }
 
+/**
+ * Extended finish reason that includes Mastra-specific values.
+ * 'tripwire' and 'retry' are used for processor scenarios.
+ */
+export type MastraFinishReason = LanguageModelV2FinishReason | 'tripwire' | 'retry';
+
 interface BaseChunkType {
   runId: string;
   from: ChunkFrom;

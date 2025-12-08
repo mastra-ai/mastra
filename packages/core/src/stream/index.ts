@@ -6,6 +6,7 @@ export type {
   AgentChunkType,
   StepFinishPayload,
   StepStartPayload,
+  MastraFinishReason,
 } from './types';
 export { ChunkFrom } from './types';
 export { MastraModelOutput } from './base/output';

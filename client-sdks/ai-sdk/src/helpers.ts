@@ -4,6 +4,9 @@ import type { PartialSchemaOutput, OutputSchema, DataChunkType, ChunkType } from
 import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
 import { isDataChunkType } from './utils';
 
+// Type alias for AI SDK's finish reason - used for casting from Mastra's extended MastraFinishReason
+type AISDKFinishReason = 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown';
+
 export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
   | TextStreamPart<ToolSet>
   | ObjectStreamPart<PartialSchemaOutput<OUTPUT>>
@@ -42,7 +45,8 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'finish': {
       return {
         type: 'finish',
-        finishReason: chunk.payload.stepResult.reason,
+        // Cast needed: Mastra's MastraFinishReason includes 'tripwire' | 'retry' for processor scenarios
+        finishReason: chunk.payload.stepResult.reason as AISDKFinishReason,
         totalUsage: chunk.payload.output.usage,
       };
     }
