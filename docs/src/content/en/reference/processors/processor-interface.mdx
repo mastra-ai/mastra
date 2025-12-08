@@ -76,7 +76,7 @@ interface Processor<TId extends string = string> {
   readonly name?: string;
 
   processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
-  processInputStream?(args: ProcessInputStepArgs): ProcessorMessageResult;
+  processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
   processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
   processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
   processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;

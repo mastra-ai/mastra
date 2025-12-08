@@ -7,7 +7,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
-import { ProcessorRunner, TokenLimiter, ToolCallFilter } from '@mastra/core/processors';
+import { TokenLimiter, ToolCallFilter } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { fastembed } from '@mastra/fastembed';
@@ -394,8 +394,6 @@ describe('Memory with Processors', () => {
       throw new Error(`responseMessages should be an array`);
     }
 
-    console.log('requestInputMessages', JSON.stringify(requestInputMessages, null, 2));
-
     const userMessagesByContent = requestInputMessages.filter(m => m.content?.[0]?.text === userMessage);
     expect(userMessagesByContent).toEqual([
       expect.objectContaining({ role: 'user', content: [expect.objectContaining({ text: userMessage })] }),
@@ -423,8 +421,6 @@ describe('Memory with Processors', () => {
       throw new Error(`responseMessages should be an array`);
     }
 
-    console.log('requestInputMessages2', JSON.stringify(requestInputMessages2, null, 2));
-
     const userMessagesByContent2 = requestInputMessages2.filter((m: any) => m.content?.[0]?.text === userMessage2);
     expect(userMessagesByContent2).toEqual([
       expect.objectContaining({ role: 'user', content: [expect.objectContaining({ text: userMessage2 })] }),
@@ -444,7 +440,7 @@ describe('Memory with Processors', () => {
     expect(remembered.messages.length).toBe(4); // 2 user, 2 assistant. These wont be filtered because they come from memory.recall() directly
   });
 
-  it.skip('should apply processors with a real Mastra agent', async () => {
+  it('should apply processors with a real Mastra agent', async () => {
     // Create a thread
     const thread = await memory.createThread({
       title: 'Real Agent Processor Test Thread',
@@ -558,48 +554,50 @@ describe('Memory with Processors', () => {
     // Calculator tool calls should still be present
     expect(filterToolCallsByName(weatherFilteredResult, 'calculator').length).toBeGreaterThan(0);
 
-    // Test token limiting
+    // Test token limiting - call processor directly (ProcessorRunner only processes 'input' source messages)
     const tokenLimitQuery = await memory.recall({
       threadId,
       perPage: 20,
     });
     const tokenLimitList = new MessageList({ threadId, resourceId }).add(tokenLimitQuery.messages, 'memory');
-    const mockLogger = {
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      trackException: () => {},
-      getTransports: () => new Map(),
-      listLogs: async () => ({ logs: [], total: 0, page: 0, perPage: 0, hasMore: false }),
-      listLogsByRunId: async () => ({ logs: [], total: 0, page: 0, perPage: 0, hasMore: false }),
-    };
-    const tokenLimitRunner = new ProcessorRunner({
-      inputProcessors: [new TokenLimiter(100)],
-      outputProcessors: [],
-      logger: mockLogger,
-      agentName: 'test-agent',
+    // Use a very small token limit (10 tokens) to ensure messages get filtered
+    const tokenLimiter = new TokenLimiter(10);
+    const tokenLimitedMessages = await tokenLimiter.processInput({
+      messages: tokenLimitList.get.all.db(),
+      abort,
+      requestContext: new RequestContext(),
     });
-    const tokenLimitedMessageList = await tokenLimitRunner.runInputProcessors(tokenLimitList, {});
-    const tokenLimitedResult = v2ToCoreMessages(tokenLimitedMessageList.get.all.db());
+    const tokenLimitedResult = v2ToCoreMessages(tokenLimitedMessages);
 
-    // Should have fewer messages after token limiting
+    // Should have fewer messages after token limiting (10 tokens is very restrictive)
     expect(tokenLimitedResult.length).toBeLessThan(baselineResult.length);
 
-    // Test combining processors
+    // Test combining processors - call processors directly in sequence
     const combinedQuery = await memory.recall({
       threadId,
       perPage: 20,
     });
     const combinedList = new MessageList({ threadId, resourceId }).add(combinedQuery.messages, 'memory');
-    const combinedRunner = new ProcessorRunner({
-      inputProcessors: [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
-      outputProcessors: [],
-      logger: mockLogger,
-      agentName: 'test-agent',
+    const toolCallFilter2 = new ToolCallFilter({ exclude: ['get_weather', 'calculator'] });
+    const tokenLimiter2 = new TokenLimiter(500);
+    const requestContext = new RequestContext();
+
+    // First filter tool calls
+    const filteredResult = await toolCallFilter2.processInput({
+      messages: combinedList.get.all.db(),
+      messageList: combinedList,
+      abort,
+      requestContext,
     });
-    const combinedMessageList = await combinedRunner.runInputProcessors(combinedList, {}, new RequestContext());
-    const combinedResult = v2ToCoreMessages(combinedMessageList.get.all.db());
+    const filteredArray = Array.isArray(filteredResult) ? filteredResult : filteredResult.get.all.db();
+
+    // Then apply token limit
+    const combinedMessages = await tokenLimiter2.processInput({
+      messages: filteredArray,
+      abort,
+      requestContext,
+    });
+    const combinedResult = v2ToCoreMessages(combinedMessages);
 
     // No tool calls should remain
     expect(filterToolCallsByName(combinedResult, 'get_weather').length).toBe(0);
