@@ -25,12 +25,11 @@ export function Shortcut({ shortcut }: { shortcut: string }) {
     }
   }, []);
 
-  const shortCut = os === "mac" ? "⌘ K" : "CTRL K";
   return (
     <>
       {os ? (
         <kbd className="flex items-center py-2 gap-1 text-xs font-medium text-(--mastra-icons-3)">
-          {shortCut}
+          {os === "mac" ? `⌘ ${shortcut}` : `CTRL + ${shortcut}`}
         </kbd>
       ) : null}
     </>
