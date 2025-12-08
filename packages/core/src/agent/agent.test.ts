@@ -6338,11 +6338,28 @@ describe('Agent Tests', () => {
     });
 
     it('should allow adding new tools via prepareStep', async () => {
+      let capturedTools: any;
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async options => {
+          capturedTools = options.tools;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
       const agent = new Agent({
         id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
-        model: 'openai/gpt-4o',
+        model: mockModel,
         tools: {
           existingTool: tool({
             inputSchema: z.object({ value: z.string() }),
@@ -6350,8 +6367,9 @@ describe('Agent Tests', () => {
           }),
         },
       });
+      agent.__setLogger(noopLogger);
 
-      const result = await agent.generate('Hello', {
+      await agent.generate('Hello', {
         prepareStep: ({ tools }) => {
           return {
             tools: {
@@ -6365,23 +6383,36 @@ describe('Agent Tests', () => {
         },
       });
 
-      // Both tools should be in the request
-      const requestTools = (result.request.body as any).tools;
-      expect(requestTools).toHaveLength(2);
-      expect(requestTools).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ type: 'function', name: 'existingTool' }),
-          expect.objectContaining({ type: 'function', name: 'dynamicTool' }),
-        ]),
-      );
+      // Both tools should be passed to the model
+      expect(capturedTools).toHaveLength(2);
+      const toolNames = capturedTools.map((t: any) => t.name);
+      expect(toolNames).toContain('existingTool');
+      expect(toolNames).toContain('dynamicTool');
     });
 
     it('should allow replacing all tools via prepareStep', async () => {
+      let capturedTools: any;
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async options => {
+          capturedTools = options.tools;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
       const agent = new Agent({
         id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
-        model: 'openai/gpt-4o',
+        model: mockModel,
         tools: {
           originalTool: tool({
             inputSchema: z.object({ value: z.string() }),
@@ -6389,8 +6420,9 @@ describe('Agent Tests', () => {
           }),
         },
       });
+      agent.__setLogger(noopLogger);
 
-      const result = await agent.generate('Hello', {
+      await agent.generate('Hello', {
         prepareStep: () => {
           return {
             tools: {
@@ -6403,13 +6435,9 @@ describe('Agent Tests', () => {
         },
       });
 
-      // Only the replacement tool should be in the request
-      const requestTools = (result.request.body as any).tools;
-      expect(requestTools).toHaveLength(1);
-      expect(requestTools[0]).toMatchObject({
-        type: 'function',
-        name: 'replacementTool',
-      });
+      // Only the replacement tool should be passed to the model
+      expect(capturedTools).toHaveLength(1);
+      expect(capturedTools[0].name).toBe('replacementTool');
     });
 
     it('should use mastra model config openai compatible object when set in prepareStep', async () => {
