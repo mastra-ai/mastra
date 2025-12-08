@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import EventEmitter from 'node:events';
 import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
@@ -57,7 +58,6 @@ import type {
   StepParams,
 } from './types';
 import { createTimeTravelExecutionParams, getZodErrors } from './utils';
-import type { CoreMessage } from '@internal/ai-sdk-v4';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
