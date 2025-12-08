@@ -15,7 +15,7 @@ function NavbarContentDesktop() {
         <Link href="/docs/v1">
           <Logo />
         </Link>
-        <div className="hidden overflow-x-scroll min-[1145px]:block">
+        <div className="hidden min-[1145px]:block">
           <TabSwitcher />
         </div>
         <div className="w-[200px] hidden min-[996px]:block min-[1145px]:hidden">
