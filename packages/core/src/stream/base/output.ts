@@ -608,17 +608,34 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
+                  // Run output processors when NOT in LLM execution step context
+                  // (i.e., when this is the final MastraModelOutput for the agent)
+
+                  // Capture original text before processing for comparison
+                  const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
+                  const originalText = lastStep?.text || '';
+
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
                     options.tracingContext,
                     self.#options.requestContext,
                   );
-                  const outputText = self.messageList.get.response.aiV4
-                    .core()
-                    .map(m => MessageList.coreContentToString(m.content))
-                    .join('\n');
 
-                  self.#delayedPromises.text.resolve(outputText);
+                  // Get text from the latest response message (the last assistant message)
+                  const responseMessages = self.messageList.get.response.aiV4.core();
+                  const lastResponseMessage = responseMessages[responseMessages.length - 1];
+                  const outputText = lastResponseMessage
+                    ? MessageList.coreContentToString(lastResponseMessage.content)
+                    : '';
+
+                  // Only update the last step's text if output processors actually modified it
+                  // This preserves text from retry scenarios where step.text is already correct
+                  if (lastStep && outputText && outputText !== originalText) {
+                    lastStep.text = outputText;
+                  }
+
+                  // Use the processed text if available, otherwise keep original
+                  self.#delayedPromises.text.resolve(outputText || originalText);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
 
                   // Update response with processed messages after output processors have run
@@ -630,11 +647,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                       uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
-                } else {
+                } else if (!self.#options.isLLMExecutionStep) {
+                  // No processor runner, not in LLM execution step - resolve with buffered text
                   const textContent = self.#bufferedText.join('');
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
                 }
+                // If isLLMExecutionStep is true, don't resolve text here - let the outer MastraModelOutput handle it
               } catch (error) {
                 if (error instanceof TripWire) {
                   self.#tripwire = {
