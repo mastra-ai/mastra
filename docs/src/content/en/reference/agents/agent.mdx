@@ -212,17 +212,24 @@ export const agent = new Agent({
     },
     {
       name: "inputProcessors",
-      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
+      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
       isOptional: true,
       description:
-        "Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+        "Input processors that can modify or validate messages before they are processed by the agent. Can be individual Processor objects or workflows created with `createWorkflow()` using ProcessorStepSchema.",
     },
     {
       name: "outputProcessors",
-      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
+      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
       isOptional: true,
       description:
-        "Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+        "Output processors that can modify or validate messages from the agent before they are sent to the client. Can be individual Processor objects or workflows.",
+    },
+    {
+      name: "maxProcessorRetries",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of times a processor can request retrying the LLM step.",
     },
   ]}
 />
