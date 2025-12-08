@@ -449,6 +449,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   runId,
   tools,
   toolChoice,
+  activeTools,
   messageList,
   includeRawChunks,
   modelSettings,
@@ -496,7 +497,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         let stepModel = model;
         let stepToolChoice = toolChoice;
         let stepTools = tools;
-        let stepActiveTools = options?.activeTools;
+        let stepActiveTools = activeTools;
         let stepProviderOptions = providerOptions;
         let stepModelSettings = modelSettings;
         let stepStructuredOutput = structuredOutput;
@@ -523,7 +524,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               steps: inputData.output?.steps || [],
               tools,
               toolChoice,
-              activeTools: options?.activeTools ?? Object.keys(tools || {}),
+              activeTools: activeTools ?? Object.keys(tools || {}),
               providerOptions,
               modelSettings,
               structuredOutput,
@@ -582,7 +583,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                   inputMessages,
                   tools: stepTools,
                   toolChoice: stepToolChoice,
-                  activeTools: stepActiveTools,
+                  activeTools: stepActiveTools as string[] | undefined,
                   options,
                   modelSettings: stepModelSettings,
                   includeRawChunks,

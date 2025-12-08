@@ -64,7 +64,6 @@ export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;
   onAbort?: (event: any) => Promise<void> | void;
-  activeTools?: Array<keyof ToolSet> | undefined;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;
@@ -88,6 +87,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSc
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   headers?: Record<string, string>;
   toolChoice?: ToolChoice<TOOLS>;
+  activeTools?: Array<keyof TOOLS>;
   options?: LoopConfig<OUTPUT>;
   providerOptions?: SharedV2ProviderOptions;
   tools?: TOOLS;

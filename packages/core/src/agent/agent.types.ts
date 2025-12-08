@@ -84,7 +84,7 @@ export type AgentExecutionOptions<
   /** Callback fired when streaming is aborted */
   onAbort?: LoopConfig['onAbort'];
   /** Tools that are active for this execution */
-  activeTools?: LoopConfig['activeTools'];
+  activeTools?: LoopOptions['activeTools'];
   /**
    * Signal to abort the streaming operation
    */
