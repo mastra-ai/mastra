@@ -228,10 +228,11 @@ describe('StepExecutor', () => {
 
     expect(result.status).toBe('failed');
     const failedResult = result as Extract<typeof result, { status: 'failed' }>;
-    expect(failedResult.error).toBe('Error: ' + errorMessage);
-    expect(String(failedResult.error)).not.toContain('at Object.execute');
-    expect(String(failedResult.error)).not.toContain('at ');
-    expect(String(failedResult.error)).not.toContain('\n');
+    // Error is now preserved as Error instance instead of string
+    expect(failedResult.error).toBeInstanceOf(Error);
+    expect((failedResult.error as Error).message).toBe(errorMessage);
+    // Verify stack is not included (per getErrorFromUnknown with includeStack: false)
+    expect((failedResult.error as Error).stack).toBeUndefined();
   });
 
   it('should save MastraError message without stack trace when step fails', async () => {
@@ -266,9 +267,15 @@ describe('StepExecutor', () => {
 
     expect(result.status).toBe('failed');
     const failedResult = result as Extract<typeof result, { status: 'failed' }>;
-    expect(failedResult.error).toBe('Error: ' + errorMessage);
-    expect(String(failedResult.error)).not.toContain('at Object.execute');
-    expect(String(failedResult.error)).not.toContain('at ');
-    expect(String(failedResult.error)).not.toContain('\n');
+    // Error is now preserved as Error instance instead of string, including MastraError properties
+    expect(failedResult.error).toBeInstanceOf(Error);
+    expect((failedResult.error as Error).message).toBe(errorMessage);
+    // MastraError properties should be preserved
+    expect((failedResult.error as any).id).toBe('VALIDATION_ERROR');
+    expect((failedResult.error as any).domain).toBe('MASTRA_WORKFLOW');
+    expect((failedResult.error as any).category).toBe('USER');
+    expect((failedResult.error as any).details).toEqual({ field: 'test' });
+    // Verify stack is not included (per getErrorFromUnknown with includeStack: false)
+    expect((failedResult.error as Error).stack).toBeUndefined();
   });
 });

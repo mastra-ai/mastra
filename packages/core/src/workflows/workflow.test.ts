@@ -8069,10 +8069,10 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toContain(
-          'Error: Step input validation failed: \n- start: Expected string, received number',
-        ); // Now safe to access
+        // result.error is now an Error instance
+        expect(result.error).toBeInstanceOf(Error);
+        expect((result.error as Error).message).toContain('Step input validation failed');
+        expect((result.error as Error).message).toContain('start: Expected string, received number');
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -8096,11 +8096,10 @@ describe('Workflow', () => {
         payload: { start: 2 },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
-        error: expect.any(String),
+        error: expect.any(Error),
       });
-      expect((step2Result as any)?.error).toContain(
-        'Error: Step input validation failed: \n- start: Expected string, received number',
-      );
+      expect(((step2Result as any)?.error as Error).message).toContain('Step input validation failed');
+      expect(((step2Result as any)?.error as Error).message).toContain('start: Expected string, received number');
     });
 
     it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
@@ -8371,8 +8370,10 @@ describe('Workflow', () => {
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
       // @ts-ignore
-      expect(result.steps['nested-workflow-a'].error).toContain(
-        'Error: Step input validation failed: \n- newValue: Required',
+      expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
+      // @ts-ignore
+      expect(result.steps['nested-workflow-a'].error.message).toContain(
+        'Step input validation failed: \n- newValue: Required',
       );
 
       // @ts-ignore
@@ -8610,9 +8611,10 @@ describe('Workflow', () => {
       });
       expect(errorResult.status).toBe('failed');
       expect(errorResult.steps['extra-required-key-step'].status).toBe('failed');
-      expect((errorResult.steps['extra-required-key-step'] as StepFailure<any, any, any, any>).error).toBe(
-        'Error: Step input validation failed: \n- c: Required',
-      );
+      // error is now an Error instance
+      const stepError = (errorResult.steps['extra-required-key-step'] as StepFailure<any, any, any, any>).error;
+      expect(stepError).toBeInstanceOf(Error);
+      expect((stepError as Error).message).toBe('Step input validation failed: \n- c: Required');
 
       const distinctTypeStep = createStep({
         id: 'distinct-type-step',
@@ -8637,8 +8639,11 @@ describe('Workflow', () => {
       });
       expect(errorResult2.status).toBe('failed');
       expect(errorResult2.steps['distinct-type-step'].status).toBe('failed');
-      expect((errorResult2.steps['distinct-type-step'] as StepFailure<any, any, any, any>).error).toBe(
-        'Error: Step input validation failed: \n- : Expected string, received object',
+      // error is now an Error instance
+      const stepError2 = (errorResult2.steps['distinct-type-step'] as StepFailure<any, any, any, any>).error;
+      expect(stepError2).toBeInstanceOf(Error);
+      expect((stepError2 as Error).message).toBe(
+        'Step input validation failed: \n- : Expected string, received object',
       );
     });
   });
@@ -8873,8 +8878,10 @@ describe('Workflow', () => {
       // Type guard for result.error
       if (result.status === 'failed') {
         // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toContain(
-          'Error: Step input validation failed: \n- start: Invalid input: expected string, received undefined',
+        // result.error is now an Error instance
+        expect(result.error).toBeInstanceOf(Error);
+        expect((result.error as Error).message).toContain(
+          'Step input validation failed: \n- start: Invalid input: expected string, received undefined',
         ); // Now safe to access
       } else {
         // This case should not be reached in this specific test.
@@ -8899,10 +8906,11 @@ describe('Workflow', () => {
         payload: { result: 'success' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
-        error: expect.any(String),
+        error: expect.any(Error),
       });
-      expect((step2Result as any)?.error).toContain(
-        'Error: Step input validation failed: \n- start: Invalid input: expected string, received undefined',
+      expect((step2Result as any)?.error).toBeInstanceOf(Error);
+      expect((step2Result as any)?.error.message).toContain(
+        'Step input validation failed: \n- start: Invalid input: expected string, received undefined',
       );
     });
 
@@ -9060,8 +9068,10 @@ describe('Workflow', () => {
       // Type guard for result.error
       if (result.status === 'failed') {
         // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toContain(
-          'Error: Step input validation failed: \n- start: Invalid input: expected string, received number',
+        // result.error is now an Error instance
+        expect(result.error).toBeInstanceOf(Error);
+        expect((result.error as Error).message).toContain(
+          'Step input validation failed: \n- start: Invalid input: expected string, received number',
         ); // Now safe to access
       } else {
         // This case should not be reached in this specific test.
@@ -9086,10 +9096,11 @@ describe('Workflow', () => {
         payload: { start: 2 },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
-        error: expect.any(String),
+        error: expect.any(Error),
       });
-      expect((step2Result as any)?.error).toContain(
-        'Error: Step input validation failed: \n- start: Invalid input: expected string, received number',
+      expect((step2Result as any)?.error).toBeInstanceOf(Error);
+      expect((step2Result as any)?.error.message).toContain(
+        'Step input validation failed: \n- start: Invalid input: expected string, received number',
       );
     });
 
@@ -9397,8 +9408,10 @@ describe('Workflow', () => {
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
       // @ts-ignore
-      expect(result.steps['nested-workflow-a'].error).toContain(
-        'Error: Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
+      expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
+      // @ts-ignore
+      expect(result.steps['nested-workflow-a'].error.message).toContain(
+        'Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
       );
 
       // @ts-ignore
@@ -9548,8 +9561,9 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // ADD THIS SEPARATE ASSERTION
-      expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
+      // ADD THIS SEPARATE ASSERTION - error is now an Error instance
+      expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
+      expect((result.steps.step2 as any)?.error.message).toMatch(/Step failed/);
       expect(step1Spy).toHaveBeenCalledTimes(1);
       expect(step2Spy).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
@@ -9609,8 +9623,9 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // ADD THIS SEPARATE ASSERTION
-      expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
+      // ADD THIS SEPARATE ASSERTION - error is now an Error instance
+      expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
+      expect((result.steps.step2 as any)?.error.message).toMatch(/Step failed/);
       expect(step1Spy).toHaveBeenCalledTimes(1);
       expect(step2Spy).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
     });
@@ -12731,13 +12746,15 @@ describe('Workflow', () => {
       const run = await workflow.createRun();
       const failedRun = await run.start({ inputData: { value: 0 } });
       expect(failedRun.status).toBe('failed');
-      expect(failedRun.steps.step2).toEqual({
+      expect(failedRun.steps.step2).toMatchObject({
         status: 'failed',
         payload: { step1Result: 2 },
-        error: 'Error: Simulated error',
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      // error is now an Error instance
+      expect((failedRun.steps.step2 as any).error).toBeInstanceOf(Error);
+      expect((failedRun.steps.step2 as any).error.message).toBe('Simulated error');
 
       const result = await run.timeTravel({
         step: step2,
