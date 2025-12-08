@@ -2212,10 +2212,10 @@ describe('MastraInngestWorkflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).not.toHaveBeenCalled();
-      expect(result?.steps).toMatchObject({
-        input: {},
-        step1: { status: 'failed', error: 'Error: Failed' },
-      });
+      expect(result?.steps?.input).toEqual({});
+      expect(result?.steps?.step1.status).toBe('failed');
+      expect(result?.steps?.step1.error).toBeInstanceOf(Error);
+      expect((result?.steps?.step1.error as Error).message).toBe('Failed');
     });
 
     it('should support simple string conditions', async ctx => {
@@ -2464,14 +2464,94 @@ describe('MastraInngestWorkflow', () => {
 
       const run = await workflow.createRun();
 
-      await expect(run.start({ inputData: {} })).resolves.toMatchObject({
-        steps: {
-          step1: {
-            error: 'Error: Step execution failed',
-            status: 'failed',
-          },
+      const result = await run.start({ inputData: {} });
+
+      expect(result.steps.step1.status).toBe('failed');
+      // Error should be an Error instance (re-hydrated from serialized form)
+      expect(result.steps.step1.error).toBeInstanceOf(Error);
+      expect((result.steps.step1.error as Error).message).toBe('Step execution failed');
+
+      srv.close();
+    });
+
+    it('should preserve custom error properties through Inngest serialization', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      // Create an error with custom properties (like AIAPICallError from AI SDK)
+      const customError = new Error('API rate limit exceeded');
+      (customError as any).statusCode = 429;
+      (customError as any).responseHeaders = { 'retry-after': '60' };
+      (customError as any).isRetryable = true;
+
+      const failingAction = vi.fn<any>().mockRejectedValue(customError);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-error-props-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-error-props-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
         },
       });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Step-level error should be an Error instance with custom properties preserved
+      const stepError = result.steps.step1;
+      expect(stepError.status).toBe('failed');
+      expect(stepError.error).toBeInstanceOf(Error);
+      expect((stepError.error as Error).message).toBe('API rate limit exceeded');
+      // Custom properties should be preserved through serialization/deserialization
+      expect((stepError.error as any).statusCode).toBe(429);
+      expect((stepError.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+      expect((stepError.error as any).isRetryable).toBe(true);
+
+      // Workflow-level error should also be an Error instance
+      if (result.status === 'failed') {
+        expect(result.error).toBeInstanceOf(Error);
+        expect((result.error as Error).message).toContain('API rate limit exceeded');
+      }
 
       srv.close();
     });
@@ -2550,15 +2630,11 @@ describe('MastraInngestWorkflow', () => {
       const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps).toMatchObject({
-        step1: {
-          status: 'success',
-        },
-        step2: {
-          status: 'failed',
-          error: 'Error: Step execution failed',
-        },
-      });
+      expect(result.steps.step1.status).toBe('success');
+      expect(result.steps.step2.status).toBe('failed');
+      // Error should be an Error instance (re-hydrated from serialized form)
+      expect(result.steps.step2.error).toBeInstanceOf(Error);
+      expect((result.steps.step2.error as Error).message).toBe('Step execution failed');
 
       srv.close();
     });
@@ -2645,12 +2721,10 @@ describe('MastraInngestWorkflow', () => {
       const run = await mainWorkflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps).toMatchObject({
-        'test-workflow': {
-          status: 'failed',
-          error: 'Error: Step execution failed',
-        },
-      });
+      expect(result.steps['test-workflow'].status).toBe('failed');
+      // Error should be an Error instance (re-hydrated from serialized form)
+      expect(result.steps['test-workflow'].error).toBeInstanceOf(Error);
+      expect((result.steps['test-workflow'].error as Error).message).toBe('Step execution failed');
 
       srv.close();
     });
@@ -3750,7 +3824,9 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
 
       expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toMatchObject({ status: 'failed', error: 'Error: Step failed' });
+      expect(result.steps.step2.status).toBe('failed');
+      expect(result.steps.step2.error).toBeInstanceOf(Error);
+      expect((result.steps.step2.error as Error).message).toBe('Step failed');
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
@@ -5196,13 +5272,12 @@ describe('MastraInngestWorkflow', () => {
       const run = await workflow.createRun();
       const failedRun = await run.start({ inputData: { value: 0 } });
       expect(failedRun.status).toBe('failed');
-      expect(failedRun.steps.step2).toEqual({
-        status: 'failed',
-        payload: { step1Result: 2 },
-        error: 'Error: Simulated error',
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
+      expect(failedRun.steps.step2.status).toBe('failed');
+      expect(failedRun.steps.step2.payload).toEqual({ step1Result: 2 });
+      expect(failedRun.steps.step2.error).toBeInstanceOf(Error);
+      expect((failedRun.steps.step2.error as Error).message).toBe('Simulated error');
+      expect(failedRun.steps.step2.startedAt).toEqual(expect.any(Number));
+      expect(failedRun.steps.step2.endedAt).toEqual(expect.any(Number));
 
       const result = await run.timeTravel({
         step: step2,
@@ -10202,7 +10277,7 @@ describe('MastraInngestWorkflow', () => {
         {
           payload: {
             id: 'step2',
-            error: 'Error: Step input validation failed: \n- value: Required',
+            error: expect.any(Error),
             endedAt: expect.any(Number),
             startedAt: expect.any(Number),
             payload: {
@@ -10238,15 +10313,12 @@ describe('MastraInngestWorkflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect(executionResult.steps.step2).toMatchObject({
-        status: 'failed',
-        error: 'Error: Step input validation failed: \n- value: Required',
-        payload: {
-          result: 'success1',
-        },
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
+      expect(executionResult.steps.step2.status).toBe('failed');
+      expect(executionResult.steps.step2.error).toBeInstanceOf(Error);
+      expect((executionResult.steps.step2.error as Error).message).toMatch(/Step input validation failed/);
+      expect(executionResult.steps.step2.payload).toEqual({ result: 'success1' });
+      expect(executionResult.steps.step2.startedAt).toEqual(expect.any(Number));
+      expect(executionResult.steps.step2.endedAt).toEqual(expect.any(Number));
     });
 
     it('should generate a stream with custom events', async ctx => {

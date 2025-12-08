@@ -6443,6 +6443,104 @@ describe('Workflow', () => {
         expect(result.error).toBe(stepResult.error);
       }
     });
+
+    it('should preserve error.cause chain in result.error', async () => {
+      // Create a nested error chain (common with API errors that wrap underlying causes)
+      const rootCauseMessage = 'Network connection refused';
+      const rootCause = new Error(rootCauseMessage);
+
+      const intermediateMessage = 'HTTP request failed';
+      const intermediateCause = new Error(intermediateMessage, { cause: rootCause });
+
+      const topLevelMessage = 'API call failed';
+      const topLevelError = new Error(topLevelMessage, { cause: intermediateCause });
+      // Add custom properties typical of API errors
+      (topLevelError as any).statusCode = 500;
+      (topLevelError as any).isRetryable = true;
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn<any>().mockImplementation(() => {
+          throw topLevelError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'cause-chain-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Verify the top-level error is preserved
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error).toBe(topLevelError);
+        expect(result.error.message).toBe(topLevelMessage);
+        expect((result.error as any).statusCode).toBe(500);
+        expect((result.error as any).isRetryable).toBe(true);
+
+        // Verify the full error.cause chain is preserved
+        expect(result.error.cause).toBeInstanceOf(Error);
+        expect((result.error.cause as Error).message).toBe(intermediateMessage);
+
+        // Verify nested cause (intermediate error's cause)
+        expect((result.error.cause as Error).cause).toBeInstanceOf(Error);
+        expect(((result.error.cause as Error).cause as Error).message).toBe(rootCauseMessage);
+      }
+    });
+
+    it('should preserve error details in streaming workflow', async () => {
+      const customErrorProps = {
+        statusCode: 429,
+        responseHeaders: {
+          'x-ratelimit-reset': '1234567890',
+          'retry-after': '30',
+        },
+      };
+      const testError = new Error('Rate limit exceeded');
+      (testError as any).statusCode = customErrorProps.statusCode;
+      (testError as any).responseHeaders = customErrorProps.responseHeaders;
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn<any>().mockImplementation(() => {
+          throw testError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'streaming-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const streamOutput = run.stream({ inputData: {} });
+      const result = await streamOutput.result;
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error).toBe(testError);
+        expect((result.error as Error).message).toBe('Rate limit exceeded');
+        expect((result.error as any).statusCode).toBe(429);
+        expect((result.error as any).responseHeaders).toEqual(customErrorProps.responseHeaders);
+      }
+    });
   });
 
   describe('Complex Conditions', () => {
