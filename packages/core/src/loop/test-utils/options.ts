@@ -211,7 +211,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         },
         messageList,
         activeTools: ['tool1'],
-        options: {},
         agentId: 'agent-id',
       });
 
