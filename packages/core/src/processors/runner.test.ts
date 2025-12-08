@@ -580,7 +580,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'hello world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.blocked).toBe(false);
@@ -609,7 +609,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'blocked content', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'blocked content', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part).toBe(null); // When aborted, part is null
@@ -637,7 +637,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'test content', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'test content', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('test content'); // Should return original text on error
@@ -694,7 +694,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('HELLO!');
@@ -711,7 +711,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'original text', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'original text', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('original text');
@@ -753,13 +753,13 @@ describe('ProcessorRunner', () => {
 
       // Process chunks
       const result1 = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'Hello world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'Hello world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result1.part).toBe(null); // No period, so no emission
 
       const result2 = await runner.processPart(
-        { type: 'text-delta', payload: { text: '.', id: '2' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: '.', id: 'text-2' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result2.part?.type === 'text-delta' ? result2.part?.payload.text : '').toBe('Hello world.'); // Complete sentence, should emit
@@ -794,20 +794,20 @@ describe('ProcessorRunner', () => {
 
       // Process harmless chunks
       const result1 = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'i want to ', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'i want to ', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result1.part?.type === 'text-delta' ? result1.part?.payload.text : '').toBe('i want to ');
 
       const result2 = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'punch', id: '2' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'punch', id: 'text-2' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result2.part?.type === 'text-delta' ? result2.part?.payload.text : '').toBe('punch');
 
       // This part should trigger the violence detection
       const result3 = await runner.processPart(
-        { type: 'text-delta', payload: { text: ' you in the face', id: '3' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' you in the face', id: 'text-3' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result3.part).toBe(null); // When aborted, part is null
@@ -853,13 +853,13 @@ describe('ProcessorRunner', () => {
       const processorStates = new Map();
 
       const result1 = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'hello world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result1.part).toBe(null);
 
       const result2 = await runner.processPart(
-        { type: 'text-delta', payload: { text: ' goodbye', id: '2' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' goodbye', id: 'text-2' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result2.part?.type === 'text-delta' ? result2.part?.payload.text : '').toBe(' GOODBYE');
@@ -902,18 +902,18 @@ describe('ProcessorRunner', () => {
 
       // Process chunks without emitting
       await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       await runner.processPart(
-        { type: 'text-delta', payload: { text: ' world', id: '2' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' world', id: 'text-2' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
 
       // Simulate stream end by processing an empty part
 
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: '', id: '3' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: '', id: 'text-3' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('HELLO WORLD');
@@ -1140,7 +1140,7 @@ describe('ProcessorRunner', () => {
       await runner.processPart(
         {
           type: 'text-delta',
-          payload: { text: 'test response', id: '1' },
+          payload: { text: 'test response', id: 'text-1' },
           runId: 'test-run',
           from: ChunkFrom.AGENT,
         },
@@ -1229,7 +1229,7 @@ describe('ProcessorRunner', () => {
       await runner.processPart(
         {
           type: 'text-delta',
-          payload: { text: 'The product costs $99', id: '1' },
+          payload: { text: 'The product costs $99', id: 'text-1' },
           runId: 'test-run',
           from: ChunkFrom.AGENT,
         },

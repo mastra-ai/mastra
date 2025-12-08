@@ -88,7 +88,7 @@ export interface MCPToolExecutionContext {
 export type MastraToolInvocationOptions = ToolInvocationOptions & {
   suspend?: (suspendPayload: any) => Promise<any>;
   resumeData?: any;
-  writableStream?: WritableStream<any> | ToolStream<any>;
+  writableStream?: WritableStream<any> | ToolStream;
   tracingContext?: TracingContext;
   /**
    * Optional MCP-specific context passed when tool is executed in MCP server.
@@ -197,7 +197,7 @@ export interface ToolExecutionContext<
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
-  writer?: ToolStream<any>;
+  writer?: ToolStream;
 
   // ============ Context-specific nested properties ============
 

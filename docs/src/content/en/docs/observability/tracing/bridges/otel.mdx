@@ -129,6 +129,12 @@ Use the `--import` flag to ensure instrumentation loads before your application:
 tsx --import ./instrumentation.ts ./src/index.ts
 ```
 
+## Semantic Conventions
+
+The OtelBridge exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
+
+For details on span naming and attributes, see the [OpenTelemetry Exporter semantic conventions](/docs/v1/observability/tracing/exporters/otel#opentelemetry-semantic-conventions).
+
 ## Trace Hierarchy
 
 With the OtelBridge, your traces maintain proper hierarchy across OTEL and Mastra boundaries:
@@ -160,6 +166,25 @@ Both services must have:
 2. W3C Trace Context propagator enabled
 3. Mastra with OtelBridge configured
 
+## Using Tags
+
+Tags help you categorize and filter traces in your OTEL backend. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+Tags are exported as a JSON string in the `mastra.tags` span attribute for broad backend compatibility. Common use cases include:
+
+- Environment labels: `"production"`, `"staging"`
+- Experiment tracking: `"experiment-v1"`, `"control-group"`
+- Priority levels: `"priority-high"`, `"batch-job"`
+
 ## Troubleshooting
 
 If traces aren't appearing or connecting as expected:
@@ -173,4 +198,3 @@ If traces aren't appearing or connecting as expected:
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [OpenTelemetry Exporter](/docs/v1/observability/tracing/exporters/otel) - For sending traces to OTEL backends
 - [OtelBridge Reference](/reference/v1/observability/tracing/bridges/otel) - API documentation
-- [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)

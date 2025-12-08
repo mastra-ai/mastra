@@ -64,6 +64,10 @@ export interface AIBaseAttributes {}
 export interface AgentRunAttributes extends AIBaseAttributes {
   /** Agent identifier */
   agentId: string;
+  /** Human-readable agent name */
+  agentName?: string;
+  /** Conversation/thread/session identifier for multi-turn interactions */
+  conversationId?: string;
   /** Agent Instructions **/
   instructions?: string;
   /** Agent Prompt **/
@@ -120,6 +124,20 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   streaming?: boolean;
   /** Reason the generation finished */
   finishReason?: string;
+  /**
+   * When the first token/chunk of the completion was received.
+   * Used to calculate time-to-first-token (TTFT) metrics.
+   * Only applicable for streaming responses.
+   */
+  completionStartTime?: Date;
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string;
+  /** Unique identifier for the response */
+  responseId?: string;
+  /** Server address for the model endpoint */
+  serverAddress?: string;
+  /** Server port for the model endpoint */
+  serverPort?: number;
 }
 
 /**
@@ -337,6 +355,8 @@ interface BaseSpan<TType extends SpanType> {
   attributes?: SpanTypeMap[TType];
   /** User-defined metadata */
   metadata?: Record<string, any>;
+  /** Labels used to categorize and filter traces. Only valid on root spans. */
+  tags?: string[];
   /** Input passed at the start of the span */
   input?: any;
   /** Output generated at the end of the span */
@@ -497,6 +517,11 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   parentSpanId?: string;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
+  /**
+   * Tags for this trace (only present on root spans).
+   * Tags are string labels used to categorize and filter traces.
+   */
+  tags?: string[];
 }
 
 export interface IModelSpanTracker {
@@ -592,6 +617,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   input?: any;
   /** Output data (for event spans) */
   output?: any;
+  /** Labels used to categorize and filter traces. Only valid on root spans. */
+  tags?: string[];
   /** Parent span */
   parent?: AnySpan;
   /** Is an event span? */
@@ -773,6 +800,12 @@ export interface TracingOptions {
    * If provided, the root span will be created as a child of this span.
    */
   parentSpanId?: string;
+  /**
+   * Tags to apply to this trace.
+   * Tags are string labels that can be used to categorize and filter traces
+   * Note: Tags are only applied to the root span of a trace.
+   */
+  tags?: string[];
 }
 
 export interface SpanIds {

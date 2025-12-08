@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
-import type { OutputProcessorOrWorkflow } from '../../../processors';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../../../processors';
 import type { DynamicArgument } from '../../../types';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
@@ -20,6 +20,7 @@ export type AgentCapabilities = {
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
   outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   llm: MastraLLMVNext;
 };
 

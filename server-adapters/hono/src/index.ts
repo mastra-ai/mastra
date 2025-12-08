@@ -3,10 +3,10 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import { MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
+import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
-import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
+import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 
@@ -26,7 +26,28 @@ export type HonoVariables = {
 
 export type HonoBindings = {};
 
-export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequest, Context> {
+/**
+ * Generic handler function type compatible across Hono versions.
+ * Uses a minimal signature that all Hono middleware handlers satisfy.
+ */
+type HonoRouteHandler = (...args: any[]) => any;
+
+/**
+ * Minimal interface representing what MastraServer needs from a Hono app.
+ * This allows any Hono app instance to be passed without strict generic matching,
+ * avoiding the version mismatch issues that occur with Hono's strict generic types.
+ */
+export interface HonoApp {
+  use(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  get(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  post(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  put(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  delete(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  patch(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  all(path: string, ...handlers: HonoRouteHandler[]): unknown;
+}
+
+export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
       // Parse request context from request body and add to context
@@ -203,11 +224,7 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
     }
   }
 
-  async registerRoute<E extends Env = any>(
-    app: Hono<E, any, any>,
-    route: ServerRoute,
-    { prefix }: { prefix?: string },
-  ): Promise<void> {
+  async registerRoute(app: HonoApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 

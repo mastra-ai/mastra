@@ -195,8 +195,8 @@ export function WorkflowTrigger({
   const doneStatuses = ['success', 'failed', 'canceled', 'tripwire'];
 
   return (
-    <div className="h-full pt-3">
-      <div className="space-y-4 px-5 pb-8 border-b-sm border-border1">
+    <div className="h-full pt-3 pb-12 overflow-y-auto">
+      <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
         {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>

@@ -41,7 +41,7 @@ export function processRecord(tableName: TABLE_NAMES, record: Record<string, any
       ...(record.resourceId ? { resourceId: record.resourceId } : {}),
     });
   } else if (tableName === TABLE_SCORERS) {
-    key = getKey(tableName, { runId: record.runId });
+    key = getKey(tableName, { id: record.id });
   } else {
     key = getKey(tableName, { id: record.id });
   }

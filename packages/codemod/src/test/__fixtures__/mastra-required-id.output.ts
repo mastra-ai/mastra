@@ -1,5 +1,6 @@
 // @ts-nocheck
 
+import { Mastra } from "@mastra/core/mastra";
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow } from '@mastra/core/workflows';
@@ -155,4 +156,69 @@ export default createTool({
   description: 'Default tool',
   inputSchema: z.object({}),
   execute: async () => ({}),
+});
+
+export const mastra = new Mastra({
+  /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+});
+
+// Edge case: Nested createTool (CallExpression) inside MCPServer
+/* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+const mcpServerWithInlineTool = new MCPServer({
+  name: 'Inline Tool Server',
+  version: '1.0.0',
+  tools: {
+    /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+    inlineTool: createTool({
+      description: 'Inline tool without id',
+      inputSchema: z.object({}),
+      execute: async () => ({}),
+    }),
+  },
+});
+
+// Edge case: Nested primitive WITH id already present (should NOT add comment)
+export const mastraWithId = new Mastra({
+  storage: new LibSQLStore({
+    id: 'my-storage',
+    url: ":memory:",
+  }),
+});
+
+// Edge case: Multiple nested primitives in same Mastra config
+export const mastraMultiple = new Mastra({
+  /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL!,
+  }),
+  vectors: {
+    /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+    default: new PgVector({
+      connectionString: process.env.DATABASE_URL!,
+    }),
+  },
+});
+
+// Edge case: Array of inline tools
+/* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+const mcpServerWithToolArray = new MCPServer({
+  name: 'Array Tool Server',
+  version: '1.0.0',
+  tools: [
+    /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+    createTool({
+      description: 'First tool',
+      inputSchema: z.object({}),
+      execute: async () => ({}),
+    }),
+    /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+    createTool({
+      description: 'Second tool',
+      inputSchema: z.object({}),
+      execute: async () => ({}),
+    }),
+  ],
 });

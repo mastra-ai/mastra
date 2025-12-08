@@ -302,6 +302,7 @@ export type WorkflowInfo = {
   inputSchema: string | undefined;
   outputSchema: string | undefined;
   options?: WorkflowOptions;
+  stepCount?: number;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
 };

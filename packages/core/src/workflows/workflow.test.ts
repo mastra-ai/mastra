@@ -2072,9 +2072,9 @@ describe('Workflow', () => {
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Paris' },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Paris' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'finish',
                   id: '2',
@@ -2097,9 +2097,9 @@ describe('Workflow', () => {
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'London' },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'London' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'finish',
                   id: '2',
@@ -2679,8 +2679,8 @@ describe('Workflow', () => {
         return {
           stream: simulateReadableStream({
             chunks: [
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Response' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Response' },
               {
                 type: 'finish',
                 id: '2',
@@ -3358,9 +3358,11 @@ describe('Workflow', () => {
       let calls = 0;
       const step1 = createStep({
         id: 'step1',
-        execute: async ({ state }) => {
+        execute: async ({ state, setState }) => {
           calls++;
-          return { result: 'success', value: state.value };
+          const newState = state.value + '!!!';
+          await setState({ value: newState });
+          return { result: 'success', value: newState };
         },
         inputSchema: z.object({}),
         outputSchema: z.object({ result: z.string(), value: z.string() }),
@@ -3390,16 +3392,20 @@ describe('Workflow', () => {
       const result = await run.start({
         inputData: {},
         initialState: { value: 'test-state', otherValue: 'test-other-state' },
+        outputOptions: {
+          includeState: true,
+        },
       });
 
       expect(calls).toBe(1);
       expect(result.steps['step1']).toEqual({
         status: 'success',
-        output: { result: 'success', value: 'test-state' },
+        output: { result: 'success', value: 'test-state!!!' },
         payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      expect(result.state).toEqual({ value: 'test-state!!!', otherValue: 'test-other-state' });
     });
 
     it('should execute a single step nested workflow successfully with state', async () => {
@@ -3469,7 +3475,7 @@ describe('Workflow', () => {
         id: 'step1',
         execute: async ({ state, setState }) => {
           calls++;
-          setState({ ...state, value: state.value + '!!!' });
+          await setState({ ...state, value: state.value + '!!!' });
           return {};
         },
         inputSchema: z.object({}),
@@ -3933,6 +3939,207 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+    });
+
+    it('should update state after each concurrent batch in foreach step', async () => {
+      const subWorkflow1 = createWorkflow({
+        id: 's1',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .then(
+          createStep({
+            id: 's1s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              expect(ctx.state.output).toBe(2);
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const subWorkflow2 = createWorkflow({
+        id: 's2',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .then(
+          createStep({
+            id: 's2s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              ctx.setState({ ...ctx.state, output: 2 });
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const routing = createWorkflow({
+        id: 'routing',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .branch([
+          [async s => s.inputData === 1, subWorkflow1],
+          [async s => s.inputData === 2, subWorkflow2],
+        ])
+        .map(async ({ inputData }) => {
+          return (inputData.s1 ?? 0) + (inputData.s2 ?? 0);
+        })
+        .commit();
+
+      const workflows = createWorkflow({
+        id: 'root',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .foreach(routing)
+        .commit();
+
+      const run = await workflows.createRun();
+      const result = await run.start({
+        inputData: [2, 1],
+        initialState: { output: 0 },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ output: 2 });
+    });
+
+    it('should bail foreach execution when called in a concurrent batch', async () => {
+      const bailResult = [15];
+
+      const workflows = createWorkflow({
+        id: 'root',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+        stateSchema: z.object({ output: z.number() }),
+      })
+        .foreach(
+          createStep({
+            id: 's1s',
+            inputSchema: z.number(),
+            outputSchema: z.number(),
+            stateSchema: z.object({ output: z.number() }),
+            execute: async ctx => {
+              console.log('running step 111');
+              console.log('state===', ctx.state);
+              if (ctx.state.output > 1) {
+                return ctx.bail(bailResult);
+              }
+              await ctx.setState({ ...ctx.state, output: ctx.inputData });
+              return ctx.inputData;
+            },
+          }),
+        )
+        .commit();
+
+      const run = await workflows.createRun();
+      const result = await run.start({
+        inputData: [1, 2, 3, 4],
+        initialState: { output: 0 },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state?.output).toBe(2);
+      if (result.status === 'success') {
+        expect(result.result).toEqual(bailResult);
+      }
+    });
+
+    it('should properly update state when executing multiple steps in parallel', async () => {
+      const shareSchema = z.object({
+        name: z.string(),
+        age: z.number(),
+        test: z.string(),
+        random: z.string(),
+      });
+
+      const setSteps = createStep({
+        id: 'setSteps',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: shareSchema.pick({ test: true }),
+        execute: async ({ state, setState }) => {
+          const newState = { ...state, test: 'asdf' };
+          await setState(newState);
+          return {};
+        },
+      });
+
+      const workflow2 = createWorkflow({
+        id: 'workflow2',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: shareSchema.pick({ test: true }),
+      })
+        .then(setSteps)
+        .commit();
+
+      const step1 = createStep({
+        id: 'step1',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: shareSchema.pick({ name: true, age: true }),
+        execute: async ({ state, setState }) => {
+          const newState = { ...state, name: 'name', age: 18 };
+          await setState(newState);
+          return {};
+        },
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({}),
+        outputSchema: shareSchema,
+        stateSchema: shareSchema,
+        execute: async ({ state }) => {
+          return state;
+        },
+      });
+
+      const workflow1 = createWorkflow({
+        id: 'workflow1',
+        inputSchema: z.object({}),
+        outputSchema: shareSchema,
+        stateSchema: shareSchema,
+      })
+        .parallel([step1, workflow2])
+        .then(step2)
+        .commit();
+
+      const run = await workflow1.createRun();
+      const result = await run.start({
+        inputData: {},
+        initialState: {
+          name: '',
+          test: '',
+          age: 0,
+          random: 'random',
+        },
+        outputOptions: {
+          includeState: true,
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ name: 'name', age: 18, test: 'asdf', random: 'random' });
     });
 
     it('should have runId in the step execute function - bug #4260', async () => {
@@ -9829,7 +10036,7 @@ describe('Workflow', () => {
       const improveResponseAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend, state, setState }) => {
-          setState({ ...state, value: 'test state' });
+          await setState({ ...state, value: 'test state' });
           await suspend();
           return undefined;
         })
@@ -10817,7 +11024,7 @@ describe('Workflow', () => {
 
           if (!resumeData) {
             // First run: update state and suspend
-            setState({ ...state, count: state.count + 1, items: [...state.items, 'item-1'] });
+            await setState({ ...state, count: state.count + 1, items: [...state.items, 'item-1'] });
             await suspend({});
             return {};
           }

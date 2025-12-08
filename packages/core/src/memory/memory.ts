@@ -86,6 +86,12 @@ export const memoryDefaultOptions = {
  * - Handles memory processors to manipulate messages before they are sent to the LLM
  */
 export abstract class MastraMemory extends MastraBase {
+  /**
+   * Unique identifier for the memory instance.
+   * If not provided, defaults to a static name 'default-memory'.
+   */
+  readonly id: string;
+
   MAX_CONTEXT_TOKENS?: number;
 
   protected _storage?: MastraStorage;
@@ -94,8 +100,9 @@ export abstract class MastraMemory extends MastraBase {
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
   #mastra?: Mastra;
 
-  constructor(config: { name: string } & SharedMemoryConfig) {
+  constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
+    this.id = config.id ?? config.name ?? 'default-memory';
 
     if (config.options) this.threadConfig = this.getMergedThreadConfig(config.options);
 

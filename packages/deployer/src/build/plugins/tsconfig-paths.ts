@@ -2,12 +2,30 @@ import fs from 'node:fs';
 import path, { normalize } from 'node:path';
 import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
+import stripJsonComments from 'strip-json-comments';
 import type { RegisterOptions } from 'typescript-paths';
 import { createHandler } from 'typescript-paths';
 
 const PLUGIN_NAME = 'tsconfig-paths';
 
 export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?: boolean };
+
+/**
+ * Check if a tsconfig file has path mappings configured.
+ * Exported for testing purposes.
+ *
+ * @param tsConfigPath - Path to the tsconfig.json file
+ * @returns true if the tsconfig has paths configured, false otherwise
+ */
+export function hasPaths(tsConfigPath: string): boolean {
+  try {
+    const content = fs.readFileSync(tsConfigPath, 'utf8');
+    const config = JSON.parse(stripJsonComments(content));
+    return !!(config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0);
+  } catch {
+    return false;
+  }
+}
 
 export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }: PluginOptions = {}): Plugin {
   const handlerCache = new Map<string, ReturnType<typeof createHandler>>();
@@ -39,16 +57,6 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
     }
 
     return null;
-  }
-
-  // Check if a tsconfig file has path mappings
-  function hasPaths(tsConfigPath: string): boolean {
-    try {
-      const config = JSON.parse(fs.readFileSync(tsConfigPath, 'utf8'));
-      return !!(config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0);
-    } catch {
-      return false;
-    }
   }
 
   // Get or create handler for a specific tsconfig file
@@ -106,7 +114,7 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
   return {
     name: PLUGIN_NAME,
     async resolveId(request, importer, options) {
-      if (!importer || request.startsWith('\0')) {
+      if (!importer || request.startsWith('\0') || importer.charCodeAt(0) === 0) {
         return null;
       }
 
