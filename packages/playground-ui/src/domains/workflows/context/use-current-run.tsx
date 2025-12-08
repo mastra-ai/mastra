@@ -1,12 +1,18 @@
 import { useContext } from 'react';
 import { WorkflowRunContext } from './workflow-run-context';
 
+/**
+ * Tripwire data from workflow steps.
+ * This matches the core TripwireData schema in packages/core/src/agent/trip-wire.ts
+ */
 export type TripwireData = {
-  message?: string;
-  options?: {
-    retry?: boolean;
-    metadata?: unknown;
-  };
+  /** The reason for the tripwire */
+  reason: string;
+  /** If true, the agent should retry with the tripwire reason as feedback */
+  retry?: boolean;
+  /** Strongly typed metadata from the processor */
+  metadata?: unknown;
+  /** The ID of the processor that triggered the tripwire */
   processorId?: string;
 };
 

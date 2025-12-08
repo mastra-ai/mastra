@@ -328,20 +328,16 @@ export function WorkflowTrigger({
                     }
 
                     // Build tripwire info from step or workflow-level result
+                    // TripwireData is aligned with core schema: { reason, retry?, metadata?, processorId? }
                     const tripwireInfo =
-                      step.status === 'failed' && (step as any).tripwire
-                        ? {
-                            reason: (step as any).tripwire?.message,
-                            retry: (step as any).tripwire?.options?.retry,
-                            metadata: (step as any).tripwire?.options?.metadata,
-                            processorId: (step as any).tripwire?.processorId,
-                          }
+                      step.status === 'failed' && step.tripwire
+                        ? step.tripwire
                         : streamResultToUse?.status === 'tripwire'
                           ? {
-                              reason: (streamResultToUse as any)?.reason,
-                              retry: (streamResultToUse as any)?.retry,
-                              metadata: (streamResultToUse as any)?.metadata,
-                              processorId: (streamResultToUse as any)?.processorId,
+                              reason: streamResultToUse?.tripwire?.reason,
+                              retry: streamResultToUse?.tripwire?.retry,
+                              metadata: streamResultToUse?.tripwire?.metadata,
+                              processorId: streamResultToUse?.tripwire?.processorId,
                             }
                           : undefined;
 

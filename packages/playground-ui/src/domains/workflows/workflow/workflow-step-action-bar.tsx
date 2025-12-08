@@ -176,9 +176,9 @@ export const WorkflowStepActionBar = ({
                   <div className="px-4 overflow-hidden">
                     <CodeDialogContent
                       data={{
-                        reason: tripwire.message,
-                        retry: tripwire.options?.retry,
-                        metadata: tripwire.options?.metadata,
+                        reason: tripwire.reason,
+                        retry: tripwire.retry,
+                        metadata: tripwire.metadata,
                         processorId: tripwire.processorId,
                       }}
                     />
