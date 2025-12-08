@@ -1,5 +1,5 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
@@ -264,7 +264,7 @@ export class UpstashStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id: _id });
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 

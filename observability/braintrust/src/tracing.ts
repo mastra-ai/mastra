@@ -249,6 +249,13 @@ export class BraintrustExporter extends BaseExporter {
 
   private initTraceMap(params: { traceId: string; isExternal: boolean; logger: Logger<true> | Span }): void {
     const { traceId, isExternal, logger } = params;
+
+    // Check if trace already exists - reuse existing trace data
+    if (this.traceMap.has(traceId)) {
+      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId });
+      return;
+    }
+
     this.traceMap.set(traceId, {
       logger,
       spans: new Map(),
@@ -261,6 +268,12 @@ export class BraintrustExporter extends BaseExporter {
    * Creates a new logger per trace using config credentials
    */
   private async initLoggerPerTrace(span: AnyExportedSpan): Promise<void> {
+    // Check if trace already exists - reuse existing trace data
+    if (this.traceMap.has(span.traceId)) {
+      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId: span.traceId });
+      return;
+    }
+
     const logger = await initLogger({
       projectName: this.config.projectName ?? 'mastra-tracing',
       apiKey: this.config.apiKey,
@@ -277,6 +290,12 @@ export class BraintrustExporter extends BaseExporter {
    * Otherwise, uses the provided logger instance.
    */
   private async initLoggerOrUseContext(span: AnyExportedSpan): Promise<void> {
+    // Check if trace already exists - reuse existing trace data
+    if (this.traceMap.has(span.traceId)) {
+      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId: span.traceId });
+      return;
+    }
+
     // Try to find a Braintrust span to attach to:
     // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
     // 2. Fall back to the configured logger

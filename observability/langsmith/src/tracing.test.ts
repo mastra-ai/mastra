@@ -237,6 +237,64 @@ describe('LangSmithExporter', () => {
       // Should post the child run
       expect(mockRunTree.postRun).toHaveBeenCalledTimes(2);
     });
+
+    it('should reuse existing trace when multiple root spans share the same traceId', async () => {
+      const sharedTraceId = 'shared-trace-123';
+
+      // First root span (e.g., first agent.stream call)
+      const firstRootSpan = createMockSpan({
+        id: 'root-span-1',
+        name: 'agent-call-1',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      firstRootSpan.traceId = sharedTraceId;
+
+      // Second root span with same traceId (e.g., second agent.stream call after client-side tool)
+      const secondRootSpan = createMockSpan({
+        id: 'root-span-2',
+        name: 'agent-call-2',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      secondRootSpan.traceId = sharedTraceId;
+
+      // Process both root spans
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondRootSpan,
+      });
+
+      // Access internal traceMap to verify trace data is shared (not overwritten)
+      const traceData = (exporter as any).traceMap.get(sharedTraceId);
+      expect(traceData).toBeDefined();
+
+      // Both root spans should be tracked in the same trace
+      expect(traceData.spans.has('root-span-1')).toBe(true);
+      expect(traceData.spans.has('root-span-2')).toBe(true);
+
+      // Both root spans should be active
+      expect(traceData.activeIds.has('root-span-1')).toBe(true);
+      expect(traceData.activeIds.has('root-span-2')).toBe(true);
+
+      // Only one trace entry should exist (not two separate ones)
+      expect((exporter as any).traceMap.size).toBe(1);
+    });
   });
 
   describe('Span Type Mappings', () => {
