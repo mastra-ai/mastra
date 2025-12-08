@@ -358,6 +358,110 @@ describe('WorkflowStreamToAISDKTransformer', () => {
       expect(toolOutputAvailableChunk.output).toEqual({ results: ['result 1', 'result 2'] });
     });
 
+    it('should transform tool-call-suspended chunks from workflow-step-output', async () => {
+      const mockStream = new ReadableStream<ChunkType>({
+        async start(controller) {
+          // Workflow starts
+          controller.enqueue({
+            type: 'workflow-start',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              workflowId: 'test-workflow',
+            },
+          });
+
+          // Step starts
+          controller.enqueue({
+            id: 'agent-step',
+            type: 'workflow-step-start',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              id: 'agent-step',
+              stepCallId: 'call-1',
+              status: 'running',
+            },
+          });
+
+          // Tool call suspended chunk (Mastra chunk format)
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              output: {
+                type: 'tool-call-suspended',
+                from: ChunkFrom.AGENT,
+                runId: 'agent-run-id',
+                payload: {
+                  toolCallId: 'tool-call-1',
+                  toolName: 'suspendable-tool',
+                  suspendPayload: {
+                    reason: 'Waiting for user approval',
+                    data: { value: 42 },
+                  },
+                },
+              },
+            },
+          });
+
+          // Step result
+          controller.enqueue({
+            type: 'workflow-step-result',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              id: 'agent-step',
+              stepCallId: 'call-1',
+              status: 'success',
+              output: {},
+            },
+          });
+
+          // Workflow finish
+          controller.enqueue({
+            type: 'workflow-finish',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              metadata: {},
+              workflowStatus: 'success',
+              output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const transformedStream = mockStream.pipeThrough(
+        WorkflowStreamToAISDKTransformer({ includeTextStreamParts: true }),
+      );
+
+      const chunks: any[] = [];
+      for await (const chunk of transformedStream) {
+        chunks.push(chunk);
+      }
+
+      // Find the tool-call-suspended chunk (converted to data-tool-call-suspended)
+      const toolCallSuspendedChunk = chunks.find(chunk => chunk.type === 'data-tool-call-suspended');
+
+      // Verify tool-call-suspended is transformed and passed through
+      expect(toolCallSuspendedChunk).toBeDefined();
+      expect(toolCallSuspendedChunk.type).toBe('data-tool-call-suspended');
+      expect(toolCallSuspendedChunk.id).toBe('tool-call-1');
+      expect(toolCallSuspendedChunk.data).toEqual({
+        runId: 'agent-run-id',
+        toolCallId: 'tool-call-1',
+        toolName: 'suspendable-tool',
+        suspendPayload: {
+          reason: 'Waiting for user approval',
+          data: { value: 42 },
+        },
+      });
+    });
+
     it('should not include text stream chunks when includeTextStreamParts is false', async () => {
       const mockStream = new ReadableStream<ChunkType>({
         async start(controller) {
