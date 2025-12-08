@@ -7070,8 +7070,10 @@ When running a workflow, you can also view detailed traces showing tool calls, r
 Run tools in isolation to observe their behavior. Test them before assigning them to your agent, or isolate them to debug issues should something go wrong.
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4" />
-### MCP List the MCP servers attached to your Mastra instance and explore their
-available tools.
+
+### MCP
+
+List the MCP servers attached to your Mastra instance and explore their available tools.
 
 ![MCP Servers Studio](/img/local-dev/local-dev-mcp-server-playground.jpg)
 
@@ -16321,9 +16323,8 @@ By combining writable tool streams with agent streaming, you gain fine grained c
 
 Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
 
-```typescript {3,9} showLineNumbers copy
+```typescript {2,9} showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
-
 import { testTool } from "../tools/test-tool";
 
 export const testAgent = new Agent({
@@ -16337,30 +16338,29 @@ export const testAgent = new Agent({
 
 ### Using `context.writer`
 
-The `context.writer` object is available in a tool's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
+The `context.writer` object is available in a tool's `execute()` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
 
 :::warning
 
-You must `await` the call to `writer.write(...)` or else you will lock the stream and get a `WritableStream is locked` error.
+You must `await` the call to `writer.write()` or else you will lock the stream and get a `WritableStream is locked` error.
 
 :::
 
-```typescript {5,8,15} showLineNumbers copy
+```typescript {4,7,14} showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
-  // ...
   execute: async (inputData, context) => {
     const { value } = inputData;
 
-   await context?.writer?.write({
+    await context?.writer?.write({
       type: "custom-event",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await context?.writer?.write({
+    await context?.writer?.write({
       type: "custom-event",
       status: "success"
     });
@@ -16372,14 +16372,13 @@ export const testTool = createTool({
 });
 ```
 
-You can also use `writer.custom` if you want to emit top level stream chunks, This useful and relevant when
+You can also use `writer.custom()` if you want to emit top level stream chunks, This useful and relevant when
 integrating with UI Frameworks
 
-```typescript {5,8,15} showLineNumbers copy
+```typescript {4,7,14} showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
-  // ...
   execute: async (inputData, context) => {
     const { value } = inputData;
 
@@ -16472,12 +16471,11 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 export const testTool = createTool({
-  // ...
   execute: async (inputData, context) => {
     const { city } = inputData;
 
-    const testAgent = context?.mastra?.getAgent("testAgent");
-    const stream = await testAgent?.stream(`What is the weather in ${city}?`);
+    const agent = context?.mastra?.getAgent("testAgent");
+    const stream = await agent?.stream(`What is the weather in ${city}?`);
 
     await stream!.fullStream.pipeTo(context?.writer!);
 
@@ -25490,17 +25488,17 @@ It is important that you `await` the `writer.custom()` call.
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
-  execute: async ({ context, writer }) => {
-    const { value } = context;
+  execute: async (inputData, context) => {
+    const { value } = inputData;
 
-    await writer?.custom({
+    await context?.writer?.custom({
       type: "data-tool-progress",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-    await writer?.custom({
+    await context?.writer?.custom({
       type: "data-tool-progress",
       status: "success"
     });
@@ -32409,11 +32407,11 @@ Tool execution signatures have been updated to use separate input and context pa
 
 ### `createTool` execute signature to `(inputData, context)` format
 
-All **`createTool`** execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
+All `createTool` execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
 
 **Note:** This change only applies to `createTool`. If you're using `createStep` for workflows, the signature remains `async (inputData, context)` and does not need to be changed.
 
-To migrate, update **`createTool`** signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
+To migrate, update `createTool` signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
 
 ```diff
   createTool({
@@ -32433,7 +32431,7 @@ To migrate, update **`createTool`** signatures to use `inputData` as the first p
 
 ### `createTool` context properties organization
 
-Context properties in **`createTool`** are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
+Context properties in `createTool` are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
 
 For tools that are executed inside an agent, access agent-specific properties through `context.agent`.
 
@@ -34960,7 +34958,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 59+ AI providers and 1231+ models through Mastra's model router."
+description: "Access 59+ AI providers and 1233+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34973,7 +34971,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1231 models from 59 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1233 models from 59 providers through a single API.
 
 ## Features
 
@@ -42976,7 +42974,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/groq.svg"
     />    <CardGridItem
       title="Mistral"
-      description="19 models"
+      description="21 models"
       href="/models/v1/providers/mistral"
       logo="https://models.dev/logos/mistral.svg"
     />    <CardGridItem
@@ -44765,7 +44763,7 @@ npm install @ai-sdk/anthropic
 
 ---
 title: "Mistral | Models | Mastra"
-description: "Use Mistral models with Mastra. 19 models available."
+description: "Use Mistral models with Mastra. 21 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -44776,7 +44774,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
 [EN] Source: https://mastra.ai/en/models/providers/mistral
 
-Access 19 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
+Access 21 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
 
 Learn more in the [Mistral documentation](https://docs.mistral.ai/getting-started/models/).
 
@@ -44905,7 +44903,7 @@ for await (const chunk of stream) {
     "outputCost": 0.1
   },
   {
-    "model": "mistral/mistral-large-latest",
+    "model": "mistral/mistral-large-2411",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -44915,6 +44913,30 @@ for await (const chunk of stream) {
     "maxOutput": 16384,
     "inputCost": 2,
     "outputCost": 6
+  },
+  {
+    "model": "mistral/mistral-large-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "mistral/mistral-large-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.5,
+    "outputCost": 1.5
   },
   {
     "model": "mistral/mistral-medium-2505",
