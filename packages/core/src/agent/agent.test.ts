@@ -6299,7 +6299,9 @@ describe('Agent Tests', () => {
         instructions: 'You are a helpful assistant.',
         model: 'openai/gpt-4o',
         tools: {
-          tool1: tool({
+          tool1: createTool({
+            id: 'tool1',
+            description: 'tool1',
             inputSchema: z.object({ value: z.string() }),
             execute: async () => 'result1',
           }),
@@ -6316,7 +6318,7 @@ describe('Agent Tests', () => {
           prepareStepCallArgs = args;
           return {
             model: 'openai/gpt-4o',
-            activeTools: args?.activeTools?.filter(t => t !== 'tool2'),
+            activeTools: Object.keys(args.tools ?? {}).filter(toolName => toolName !== 'tool2'),
             toolChoice: 'none',
           };
         },
@@ -6325,7 +6327,10 @@ describe('Agent Tests', () => {
       expect(prepareStepCallArgs).toMatchObject({
         model: expect.any(ModelRouterLanguageModel),
         toolChoice: 'auto',
-        activeTools: ['tool1', 'tool2'],
+        tools: {
+          tool1: expect.any(Object),
+          tool2: expect.any(Object),
+        },
         stepNumber: 0,
       });
 
@@ -6335,6 +6340,176 @@ describe('Agent Tests', () => {
           name: 'tool1',
         },
       ]);
+    });
+
+    it('should execute a new tool added in prepareStep with toolChoice required', async () => {
+      const firstToolExecute = vi.fn().mockResolvedValue('result1');
+      const secondToolExecute = vi.fn().mockResolvedValue('result2');
+      const thirdToolExecute = vi.fn().mockResolvedValue('result3');
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o',
+        tools: {
+          tool1: createTool({
+            id: 'tool1',
+            description: 'tool1',
+            inputSchema: z.object({ value: z.string() }),
+            execute: firstToolExecute,
+          }),
+        },
+      });
+
+      let prepareStepCalls: any[] = [];
+      const result = await agent.generate('Hello', {
+        maxSteps: 4,
+        prepareStep: ({ stepNumber, tools, toolChoice }) => {
+          prepareStepCalls.push({ stepNumber, tools: Object.keys(tools ?? {}), toolChoice });
+          if (stepNumber === 0) {
+            return {
+              toolChoice: {
+                type: 'tool',
+                toolName: 'tool1',
+              },
+            };
+          } else if (stepNumber === 1) {
+            return {
+              tools: {
+                tool2: tool({
+                  inputSchema: z.object({ value: z.string() }),
+                  execute: secondToolExecute,
+                }),
+              },
+              toolChoice: {
+                type: 'tool',
+                toolName: 'tool2',
+              },
+            };
+          } else if (stepNumber === 2) {
+            return {
+              tools: {
+                tool3: createTool({
+                  id: 'tool-3',
+                  description: 'tool 3',
+                  inputSchema: z.object({ value: z.string() }),
+                  execute: thirdToolExecute,
+                }),
+              },
+              toolChoice: {
+                type: 'tool',
+                toolName: 'tool3',
+              },
+            };
+          } else if (stepNumber === 3) {
+            return {
+              toolChoice: {
+                type: 'tool',
+                toolName: 'tool1',
+              },
+            };
+          }
+        },
+      });
+
+      expect(firstToolExecute).toHaveBeenCalledTimes(2);
+      expect(secondToolExecute).toHaveBeenCalledTimes(1);
+      expect(thirdToolExecute).toHaveBeenCalledTimes(1);
+
+      expect((result.request.body as any)?.tools).toMatchObject([
+        {
+          type: 'function',
+          name: 'tool1',
+          description: 'tool1',
+          parameters: {
+            type: 'object',
+            properties: {
+              value: {
+                type: 'string',
+              },
+            },
+            required: ['value'],
+            additionalProperties: false,
+            $schema: 'http://json-schema.org/draft-07/schema#',
+          },
+        },
+      ]);
+
+      expect(result.steps).toMatchObject([
+        {
+          toolCalls: [
+            {
+              type: 'tool-call',
+              runId: expect.any(String),
+              from: 'AGENT',
+              payload: {
+                toolCallId: expect.any(String),
+                toolName: 'tool1',
+                args: {
+                  value: expect.any(String),
+                },
+              },
+            },
+          ],
+        },
+        {
+          toolCalls: [
+            {
+              type: 'tool-call',
+              runId: expect.any(String),
+              from: 'AGENT',
+              payload: {
+                toolCallId: expect.any(String),
+                toolName: 'tool2',
+                args: {
+                  value: expect.any(String),
+                },
+              },
+            },
+          ],
+        },
+        {
+          toolCalls: [
+            {
+              type: 'tool-call',
+              runId: expect.any(String),
+              from: 'AGENT',
+              payload: {
+                toolCallId: expect.any(String),
+                toolName: 'tool3',
+                args: {
+                  value: expect.any(String),
+                },
+              },
+            },
+          ],
+        },
+        {
+          toolCalls: [
+            {
+              type: 'tool-call',
+              runId: expect.any(String),
+              from: 'AGENT',
+              payload: {
+                toolCallId: expect.any(String),
+                toolName: 'tool1',
+                args: {
+                  value: expect.any(String),
+                },
+              },
+            },
+          ],
+        },
+      ]);
+
+      expect(prepareStepCalls).toMatchObject([
+        { stepNumber: 0, tools: ['tool1'], toolChoice: 'auto' },
+        { stepNumber: 1, tools: ['tool1'], toolChoice: 'auto' },
+        { stepNumber: 2, tools: ['tool1'], toolChoice: 'auto' },
+        { stepNumber: 3, tools: ['tool1'], toolChoice: 'auto' },
+      ]);
+      expect(result.toolCalls).toHaveLength(4);
     });
 
     it('should allow adding new tools via prepareStep', async () => {
