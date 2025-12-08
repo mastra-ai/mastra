@@ -97,7 +97,7 @@ export type AgentExecutionOptions<
   /**
    * Maximum number of times processors can trigger a retry for this generation.
    * Overrides agent's default maxProcessorRetries.
-   * If not set, no retries are performed.
+   * If not set, defaults to the agent's maxProcessorRetries (which defaults to no retries if also unset).
    */
   maxProcessorRetries?: number;
 
