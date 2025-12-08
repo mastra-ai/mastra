@@ -315,7 +315,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   protected async fmtReturnValue<TOutput>(
-    emitter: Emitter,
+    _emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | string,
