@@ -46,26 +46,28 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
      */
     supportSerialization?: SERIALIZABLE;
     /**
-     * Whether to include the stack of the error.
+     * Whether to include the stack in JSON serialization.
+     * The stack is always preserved on the Error instance for debugging.
+     * This option only controls whether it appears in toJSON() output.
+     * @default true
      */
-    includeStack?: boolean;
+    serializeStack?: boolean;
   } = {},
 ): SERIALIZABLE extends true ? SerializableError : Error {
   const defaultOptions = {
     fallbackMessage: 'Unknown error',
     maxDepth: 5,
     supportSerialization: true,
-    includeStack: true,
+    serializeStack: true,
   };
   const mergedOptions = options ? { ...defaultOptions, ...options } : defaultOptions;
-  const { fallbackMessage, maxDepth, supportSerialization, includeStack } = mergedOptions;
+  const { fallbackMessage, maxDepth, supportSerialization, serializeStack } = mergedOptions;
 
   if (unknown && unknown instanceof Error) {
-    if (includeStack === false) {
-      unknown.stack = undefined;
-    }
+    // Stack is always preserved on the instance for debugging
+    // serializeStack only controls whether it appears in toJSON() output
     if (supportSerialization) {
-      addErrorToJSON(unknown);
+      addErrorToJSON(unknown, serializeStack);
     }
     return unknown as SERIALIZABLE extends true ? SerializableError : Error;
   }
@@ -91,28 +93,28 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
 
     const { stack: _, ...propsWithoutStack } = unknown as any;
     Object.assign(error as Error, propsWithoutStack);
-    if (includeStack) {
-      error.stack = 'stack' in unknown && typeof unknown.stack === 'string' ? unknown.stack : undefined;
+    // Always preserve stack on the instance for debugging
+    if ('stack' in unknown && typeof unknown.stack === 'string') {
+      error.stack = unknown.stack;
     }
   } else if (unknown && typeof unknown === 'string') {
     error = new Error(unknown);
-    error.stack = undefined;
   } else {
     error = new Error(fallbackMessage);
-    error.stack = undefined;
   }
 
   if (supportSerialization) {
-    addErrorToJSON(error);
+    addErrorToJSON(error, serializeStack);
   }
   return error as SERIALIZABLE extends true ? SerializableError : Error;
 }
 
 /**
  * Adds a toJSON method to an Error instance for proper serialization.
- * Ensures that message, name, stack, cause, and custom properties are all serialized.
+ * Ensures that message, name, cause, and custom properties are all serialized.
+ * Stack is only included in JSON output if serializeStack is true.
  */
-function addErrorToJSON(error: Error): void {
+function addErrorToJSON(error: Error, serializeStack: boolean = true): void {
   if ((error as SerializableError).toJSON) {
     return;
   }
@@ -124,7 +126,8 @@ function addErrorToJSON(error: Error): void {
         message: this.message,
         name: this.name,
       };
-      if (this.stack !== undefined) {
+      // Only include stack in JSON if serializeStack is true
+      if (serializeStack && this.stack !== undefined) {
         json.stack = this.stack;
       }
       if (this.cause !== undefined) {

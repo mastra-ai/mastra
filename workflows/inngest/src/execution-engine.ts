@@ -43,7 +43,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
     const errorSource = error || outputError;
     const errorInstance = getErrorFromUnknown(errorSource, {
-      includeStack: true, // Include stack for better debugging in Inngest
+      serializeStack: true, // Include stack in JSON for better debugging in Inngest
       fallbackMessage: 'Unknown workflow error',
     });
     return errorInstance;
@@ -95,14 +95,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
         // Ensure cause.error is an Error instance
         if (cause.error && !(cause.error instanceof Error)) {
-          cause.error = getErrorFromUnknown(cause.error, { includeStack: false });
+          cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
         }
         return { ok: false, error: cause };
       }
 
       // Fallback for other errors - preserve the original error instance
       const errorInstance = getErrorFromUnknown(e, {
-        includeStack: false,
+        serializeStack: false,
         fallbackMessage: 'Unknown step execution error',
       });
       params.stepSpan?.error({
@@ -152,7 +152,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           // Throw RetryAfterError INSIDE step.run() to trigger step-level retry
           // Preserve the original error instance with all its properties
           const errorInstance = getErrorFromUnknown(e, {
-            includeStack: false,
+            serializeStack: false,
             fallbackMessage: 'Unknown step execution error',
           });
           throw new RetryAfterError(errorInstance.message, retryConfig.delay, {

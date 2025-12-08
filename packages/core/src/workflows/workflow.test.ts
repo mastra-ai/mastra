@@ -6151,8 +6151,12 @@ describe('Workflow', () => {
       expect(failedStepResult.error).toBeDefined();
       expect(failedStepResult.error).toBeInstanceOf(Error);
       expect((failedStepResult.error as Error).message).toBe(errorMessage);
-      // Stack should not be included when includeStack is false
-      expect((failedStepResult.error as Error).stack).toBeUndefined();
+      // Stack is preserved on instance for debugging, but excluded from JSON serialization
+      // (per getErrorFromUnknown with serializeStack: false)
+      expect((failedStepResult.error as Error).stack).toBeDefined();
+      // Verify stack is not in JSON output
+      const serialized = JSON.stringify(failedStepResult.error);
+      expect(serialized).not.toContain('stack');
     });
 
     it('should persist MastraError message without stack trace in snapshot', async () => {
@@ -6210,8 +6214,12 @@ describe('Workflow', () => {
       expect(failedStepResult.error).toBeDefined();
       expect(failedStepResult.error).toBeInstanceOf(Error);
       expect((failedStepResult.error as Error).message).toBe(errorMessage);
-      // Stack should not be included when includeStack is false
-      expect((failedStepResult.error as Error).stack).toBeUndefined();
+      // Stack is preserved on instance for debugging, but excluded from JSON serialization
+      // (per getErrorFromUnknown with serializeStack: false)
+      expect((failedStepResult.error as Error).stack).toBeDefined();
+      // Verify stack is not in JSON output
+      const serialized = JSON.stringify(failedStepResult.error);
+      expect(serialized).not.toContain('stack');
     });
 
     it('should handle step execution errors within branches', async () => {

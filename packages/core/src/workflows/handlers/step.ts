@@ -476,7 +476,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
         requestContext: requestContext,
       });
     } catch (e) {
-      const errorInstance = getErrorFromUnknown(e, { includeStack: false });
+      const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
       const mastraError = new MastraError(
         {
           id: 'WORKFLOW_FAILED_TO_FETCH_SCORERS',

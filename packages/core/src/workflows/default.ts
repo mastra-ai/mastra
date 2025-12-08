@@ -262,7 +262,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           // Retries exhausted - return failed result
           // Use getErrorFromUnknown directly on the original error to preserve custom properties
           const errorInstance = getErrorFromUnknown(e, {
-            includeStack: false,
+            serializeStack: false,
             fallbackMessage: 'Unknown step execution error',
           });
 
@@ -308,7 +308,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
     const errorSource = error || outputError;
     const errorInstance = getErrorFromUnknown(errorSource, {
-      includeStack: false,
+      serializeStack: false,
       fallbackMessage: 'Unknown workflow error',
     });
     return errorInstance;

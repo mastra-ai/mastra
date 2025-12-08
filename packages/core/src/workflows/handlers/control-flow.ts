@@ -332,7 +332,7 @@ export async function executeConditional(
 
           return result;
         } catch (e: unknown) {
-          const errorInstance = getErrorFromUnknown(e, { includeStack: false });
+          const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
           const mastraError = new MastraError(
             {
               id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',

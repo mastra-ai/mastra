@@ -231,8 +231,12 @@ describe('StepExecutor', () => {
     // Error is now preserved as Error instance instead of string
     expect(failedResult.error).toBeInstanceOf(Error);
     expect((failedResult.error as Error).message).toBe(errorMessage);
-    // Verify stack is not included (per getErrorFromUnknown with includeStack: false)
-    expect((failedResult.error as Error).stack).toBeUndefined();
+    // Stack is preserved on instance for debugging, but excluded from JSON serialization
+    // (per getErrorFromUnknown with serializeStack: false)
+    expect((failedResult.error as Error).stack).toBeDefined();
+    // Verify stack is not in JSON output
+    const serialized = JSON.stringify(failedResult.error);
+    expect(serialized).not.toContain('stack');
   });
 
   it('should save MastraError message without stack trace when step fails', async () => {
@@ -275,7 +279,11 @@ describe('StepExecutor', () => {
     expect((failedResult.error as any).domain).toBe('MASTRA_WORKFLOW');
     expect((failedResult.error as any).category).toBe('USER');
     expect((failedResult.error as any).details).toEqual({ field: 'test' });
-    // Verify stack is not included (per getErrorFromUnknown with includeStack: false)
-    expect((failedResult.error as Error).stack).toBeUndefined();
+    // Stack is preserved on instance for debugging, but excluded from JSON serialization
+    // (per getErrorFromUnknown with serializeStack: false)
+    expect((failedResult.error as Error).stack).toBeDefined();
+    // Verify stack is not in JSON output
+    const serialized = JSON.stringify(failedResult.error);
+    expect(serialized).not.toContain('stack');
   });
 });

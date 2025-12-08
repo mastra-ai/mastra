@@ -89,7 +89,7 @@ export class InngestRun<
             result: {
               steps: context,
               status: 'failed',
-              error: getErrorFromUnknown(runs?.[0]?.output?.message, { includeStack: false }),
+              error: getErrorFromUnknown(runs?.[0]?.output?.message, { serializeStack: false }),
             },
           },
         };
@@ -210,7 +210,7 @@ export class InngestRun<
 
     if (result.status === 'failed') {
       // Ensure error is a proper Error instance with all properties preserved
-      result.error = getErrorFromUnknown(result.error, { includeStack: false });
+      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
       // Re-hydrate serialized errors in step results
       if (result.steps) {
         hydrateSerializedStepErrors(result.steps);
@@ -303,7 +303,7 @@ export class InngestRun<
     const result = runOutput?.output?.result;
     if (result.status === 'failed') {
       // Ensure error is a proper Error instance with all properties preserved
-      result.error = getErrorFromUnknown(result.error, { includeStack: false });
+      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
       // Re-hydrate serialized errors in step results
       if (result.steps) {
         hydrateSerializedStepErrors(result.steps);
@@ -448,7 +448,7 @@ export class InngestRun<
     const result = runOutput?.output?.result;
     if (result.status === 'failed') {
       // Ensure error is a proper Error instance with all properties preserved
-      result.error = getErrorFromUnknown(result.error, { includeStack: false });
+      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
       // Re-hydrate serialized errors in step results
       if (result.steps) {
         hydrateSerializedStepErrors(result.steps);
