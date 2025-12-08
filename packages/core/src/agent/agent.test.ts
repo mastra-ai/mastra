@@ -6337,6 +6337,81 @@ describe('Agent Tests', () => {
       ]);
     });
 
+    it('should allow adding new tools via prepareStep', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o',
+        tools: {
+          existingTool: tool({
+            inputSchema: z.object({ value: z.string() }),
+            execute: async () => 'existing result',
+          }),
+        },
+      });
+
+      const result = await agent.generate('Hello', {
+        prepareStep: ({ tools }) => {
+          return {
+            tools: {
+              ...tools,
+              dynamicTool: tool({
+                inputSchema: z.object({ query: z.string() }),
+                execute: async () => 'dynamic result',
+              }),
+            },
+          };
+        },
+      });
+
+      // Both tools should be in the request
+      const requestTools = (result.request.body as any).tools;
+      expect(requestTools).toHaveLength(2);
+      expect(requestTools).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'function', name: 'existingTool' }),
+          expect.objectContaining({ type: 'function', name: 'dynamicTool' }),
+        ]),
+      );
+    });
+
+    it('should allow replacing all tools via prepareStep', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o',
+        tools: {
+          originalTool: tool({
+            inputSchema: z.object({ value: z.string() }),
+            execute: async () => 'original result',
+          }),
+        },
+      });
+
+      const result = await agent.generate('Hello', {
+        prepareStep: () => {
+          return {
+            tools: {
+              replacementTool: tool({
+                inputSchema: z.object({ data: z.string() }),
+                execute: async () => 'replacement result',
+              }),
+            },
+          };
+        },
+      });
+
+      // Only the replacement tool should be in the request
+      const requestTools = (result.request.body as any).tools;
+      expect(requestTools).toHaveLength(1);
+      expect(requestTools[0]).toMatchObject({
+        type: 'function',
+        name: 'replacementTool',
+      });
+    });
+
     it('should use mastra model config openai compatible object when set in prepareStep', async () => {
       const agent = new Agent({
         id: 'test-agent',
