@@ -837,6 +837,27 @@ export function transformNetwork(
       } as const;
     }
     default: {
+      // Check for custom data chunks first (before processing as events)
+      if (isAgentExecutionDataChunkType(payload)) {
+        if (!('data' in payload.payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+
+        const { type, data } = payload.payload;
+        return { type, data };
+      }
+      if (isWorkflowExecutionDataChunkType(payload)) {
+        if (!('data' in payload.payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+        const { type, data } = payload.payload;
+        return { type, data };
+      }
+
       if (payload.type.startsWith('agent-execution-event-')) {
         const stepId = payload.payload.runId;
         const current = bufferedNetworks.get(payload.runId!);
@@ -853,6 +874,16 @@ export function transformNetwork(
           const { request, response, ...data } = result.data;
           step.task = data;
         }
+
+        bufferedNetworks.set(payload.runId!, current);
+        return {
+          type: isNested ? 'data-tool-network' : 'data-network',
+          id: payload.runId!,
+          data: {
+            ...current,
+            status: 'running',
+          },
+        } as const;
       }
 
       if (payload.type.startsWith('workflow-execution-event-')) {
@@ -875,6 +906,16 @@ export function transformNetwork(
             step.task.id = data.name;
           }
         }
+
+        bufferedNetworks.set(payload.runId!, current);
+        return {
+          type: isNested ? 'data-tool-network' : 'data-network',
+          id: payload.runId!,
+          data: {
+            ...current,
+            status: 'running',
+          },
+        } as const;
       }
 
       // return the chunk as is if it's not a known type
@@ -886,25 +927,6 @@ export function transformNetwork(
         }
 
         const { type, data } = payload;
-        return { type, data };
-      }
-      if (isAgentExecutionDataChunkType(payload)) {
-        if (!('data' in payload.payload)) {
-          throw new Error(
-            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
-          );
-        }
-
-        const { type, data } = payload.payload;
-        return { type, data };
-      }
-      if (isWorkflowExecutionDataChunkType(payload)) {
-        if (!('data' in payload.payload)) {
-          throw new Error(
-            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
-          );
-        }
-        const { type, data } = payload.payload;
         return { type, data };
       }
       return null;

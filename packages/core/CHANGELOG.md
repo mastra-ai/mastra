@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- Fix saveScore not persisting ID correctly, breaking getScoreById retrieval ([#10915](https://github.com/mastra-ai/mastra/pull/10915))
+
+  **What Changed**
+  - saveScore now correctly returns scores that can be retrieved with getScoreById
+  - Validation errors now include contextual information (scorer, entity, trace details) for easier debugging
+
+  **Impact**
+  Previously, calling getScoreById after saveScore would return null because the generated ID wasn't persisted to the database. This is now fixed across all store implementations, ensuring consistent behavior and data integrity.
+
+- `setState` is now async ([#10944](https://github.com/mastra-ai/mastra/pull/10944))
+  - `setState` must now be awaited: `await setState({ key: value })`
+  - State updates are merged automatically—no need to spread the previous state
+  - State data is validated against the step's `stateSchema` when `validateInputs` is enabled (default: `true`)
+
+- Add human-in-the-loop support for workflows used in agent ([#10871](https://github.com/mastra-ai/mastra/pull/10871))
+
 ## 1.0.0-beta.7
 
 ### Minor Changes
