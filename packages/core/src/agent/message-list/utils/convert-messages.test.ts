@@ -202,9 +202,6 @@ describe('convertMessages', () => {
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe('assistant');
 
-      // Log parts for debugging
-      // console.log('AIV5.UI parts:', JSON.stringify(result[0].parts, null, 2));
-
       // Check that text part is preserved
       const textPart = result[0].parts.find(p => p.type === 'text');
       expect(textPart).toBeDefined();
