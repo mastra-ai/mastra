@@ -6684,6 +6684,310 @@ describe('Agent Tests', () => {
       console.log('result', result);
       expect((result?.request?.body as any)?.model).toBe('gpt-4o-mini');
     });
+
+    it('should allow adding structuredOutput schema via prepareStep', async () => {
+      const structuredOutputSchema = z.object({
+        analysis: z.string(),
+        confidence: z.number(),
+      });
+
+      let capturedCallOptions: Array<{ stepNumber: number; responseFormat: any }> = [];
+      let callCount = 0;
+
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async options => {
+          callCount++;
+          capturedCallOptions.push({
+            stepNumber: callCount - 1,
+            responseFormat: options.responseFormat,
+          });
+
+          // Return valid structured output that matches the schema
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({ analysis: 'Test analysis', confidence: 0.95 }),
+              },
+            ],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+      });
+      agent.__setLogger(noopLogger);
+
+      const structuredOutputConfigs: Array<{ stepNumber: number; hasStructuredOutput: boolean }> = [];
+
+      const result = await agent.generate('Analyze this data', {
+        prepareStep: async ({ stepNumber, structuredOutput }) => {
+          structuredOutputConfigs.push({
+            stepNumber,
+            hasStructuredOutput: !!structuredOutput?.schema,
+          });
+
+          if (stepNumber === 0) {
+            // Add structuredOutput dynamically for step 0
+            return {
+              structuredOutput: {
+                schema: structuredOutputSchema,
+              },
+            };
+          }
+          return {};
+        },
+      });
+
+      // Verify prepareStep was called
+      expect(structuredOutputConfigs).toEqual([{ stepNumber: 0, hasStructuredOutput: false }]);
+      // Verify the model was called with json responseFormat containing our schema
+      expect(capturedCallOptions.length).toBe(1);
+      expect(capturedCallOptions[0].stepNumber).toBe(0);
+      expect(capturedCallOptions[0].responseFormat?.type).toBe('json');
+      expect(capturedCallOptions[0].responseFormat?.schema?.properties?.analysis?.type).toBe('string');
+      expect(capturedCallOptions[0].responseFormat?.schema?.properties?.confidence?.type).toBe('number');
+
+      // Verify we got an object result
+      expect(result.object).toEqual({ analysis: 'Test analysis', confidence: 0.95 });
+    });
+
+    it('should allow modifying existing structuredOutput schema via prepareStep', async () => {
+      const initialSchema = z.object({
+        name: z.string(),
+      });
+
+      const modifiedSchema = z.object({
+        name: z.string(),
+        age: z.number(),
+      });
+
+      let capturedStructuredOutput: any;
+
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({ name: 'John', age: 30 }),
+              },
+            ],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+      });
+      agent.__setLogger(noopLogger);
+
+      const result = await agent.generate('Get user info', {
+        structuredOutput: { schema: initialSchema },
+        prepareStep: async ({ stepNumber, structuredOutput }) => {
+          capturedStructuredOutput = structuredOutput;
+
+          if (stepNumber === 0) {
+            // Modify the structuredOutput to use a different schema
+            return {
+              structuredOutput: {
+                schema: modifiedSchema,
+              },
+            };
+          }
+          return {};
+        },
+      });
+
+      // Verify prepareStep received the initial structuredOutput config
+      expect(capturedStructuredOutput?.schema).toBeDefined();
+
+      // The result should match the modified schema (with age)
+      expect(result.object).toEqual({ name: 'John', age: 30 });
+    });
+
+    it('should get text on step without structuredOutput and object on step with structuredOutput', async () => {
+      const structuredOutputSchema = z.object({
+        sentiment: z.string(),
+        score: z.number(),
+      });
+
+      let callCount = 0;
+      let capturedResponseFormats: Array<{ stepNumber: number; responseFormat: any }> = [];
+
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async options => {
+          callCount++;
+          const stepNumber = callCount - 1;
+
+          capturedResponseFormats.push({
+            stepNumber,
+            responseFormat: options.responseFormat,
+          });
+
+          if (stepNumber === 0) {
+            // Step 0: No structuredOutput - tool call to trigger multi-step
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'analyzeSentiment',
+                  args: { text: 'Hello world' },
+                },
+              ],
+              warnings: [],
+            };
+          } else {
+            // Step 1: With structuredOutput - return object
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'text' as const,
+                  text: JSON.stringify({ sentiment: 'positive', score: 0.9 }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const analyzeTool = createTool({
+        id: 'analyzeSentiment',
+        description: 'Analyze sentiment',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async () => ({ result: 'analyzed' }),
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        tools: { analyzeSentiment: analyzeTool },
+      });
+      agent.__setLogger(noopLogger);
+
+      const result = await agent.generate('Analyze this text', {
+        prepareStep: async ({ stepNumber }) => {
+          if (stepNumber === 0) {
+            // Step 0: Force tool call with toolChoice
+            return {
+              toolChoice: 'required' as const,
+            };
+          }
+          // Step 1: Remove toolChoice and add structuredOutput
+          return {
+            toolChoice: 'none' as const,
+            structuredOutput: { schema: structuredOutputSchema },
+          };
+        },
+      });
+
+      // Verify step 0 had no responseFormat (tool call step)
+      expect(capturedResponseFormats[0].responseFormat).toBeUndefined();
+
+      // Verify step 1 had json responseFormat (structuredOutput step)
+      expect(capturedResponseFormats[1].responseFormat?.type).toBe('json');
+      expect(capturedResponseFormats[1].responseFormat?.schema?.properties?.sentiment?.type).toBe('string');
+
+      // Verify we got the object result from the final step
+      expect(result.object).toEqual({ sentiment: 'positive', score: 0.9 });
+
+      // Verify step 0 was a tool call
+      expect(result.steps[0].toolCalls?.length).toBe(1);
+    });
+
+    it.skip('should dynamically add structuredOutput with real model', async () => {
+      const structuredOutputSchema = z.object({
+        sentiment: z.enum(['positive', 'negative', 'neutral']),
+        score: z.number().min(0).max(1),
+        summary: z.string(),
+      });
+
+      const analyzeTool = createTool({
+        id: 'analyzeSentiment',
+        description: 'Analyze the sentiment of the given text and return raw analysis data',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ rawAnalysis: z.string() }),
+        execute: async ({ text }) => {
+          console.log('executing analyzeSentiment', text);
+          return {
+            rawAnalysis: `Analyzed: "${text}" - This text appears to have positive sentiment with high confidence.`,
+          };
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions:
+          'You are a sentiment analysis assistant. When asked to analyze text, first use the analyzeSentiment tool, then provide structured output based on the tool result.',
+        model: 'anthropic/claude-3-7-sonnet-latest',
+      });
+
+      const result = await agent.generate('Analyze the sentiment of: "I love this product!"', {
+        prepareStep: async ({ stepNumber }) => {
+          if (stepNumber === 0) {
+            return {
+              tools: { analyzeSentiment: analyzeTool },
+              toolChoice: 'required' as const,
+            };
+          }
+          // Disable tools and add structuredOutput
+          return {
+            structuredOutput: { schema: structuredOutputSchema },
+          };
+        },
+      });
+
+      console.log('Steps:', result.steps.length);
+      console.log('Step 0 tool calls:', result.steps[0]?.toolCalls);
+      console.log('Step 0 tool results:', result.steps[0]?.toolResults);
+      console.log('Final object:', result.object);
+      console.log('Final text:', result.text);
+
+      // Verify we got tool call in step 0
+      expect(result.steps[0].toolCalls?.length).toBe(1);
+
+      // Verify we got structured output in the final result
+      expect(result.object).toBeDefined();
+      expect(result.object?.sentiment).toMatch(/positive|negative|neutral/);
+      expect(typeof result.object?.score).toBe('number');
+      expect(typeof result.object?.summary).toBe('string');
+    });
   });
 
   it('should preserve empty assistant messages after tool use', () => {
