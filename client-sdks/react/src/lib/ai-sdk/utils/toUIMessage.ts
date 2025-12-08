@@ -120,7 +120,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         parts: [
           {
             type: 'text',
-            text: chunk.payload.tripwireReason,
+            text: chunk.payload.reason,
           },
         ],
         metadata: {

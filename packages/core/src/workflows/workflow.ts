@@ -276,7 +276,7 @@ export function createStep<
         // If a tripwire was detected, throw TripWire to abort the workflow step
         if (tripwireChunk) {
           throw new TripWire(
-            tripwireChunk.payload?.tripwireReason || 'Agent tripwire triggered',
+            tripwireChunk.payload?.reason || 'Agent tripwire triggered',
             {
               retry: tripwireChunk.payload?.retry,
               metadata: tripwireChunk.payload?.metadata,

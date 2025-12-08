@@ -437,7 +437,7 @@ describe('toUIMessage', () => {
     it('should create a new assistant message for tripwire chunk', () => {
       const chunk: ChunkType = {
         type: 'tripwire',
-        payload: { tripwireReason: 'Security warning detected' },
+        payload: { reason: 'Security warning detected' },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
       };
@@ -471,7 +471,7 @@ describe('toUIMessage', () => {
       const chunk: ChunkType = {
         type: 'tripwire',
         payload: {
-          tripwireReason: 'PII detected in message',
+          reason: 'PII detected in message',
           retry: false,
           metadata: { detectedPII: ['email', 'phone'], severity: 'high' },
           processorId: 'pii-detection',
