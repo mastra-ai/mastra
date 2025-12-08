@@ -6373,6 +6373,9 @@ describe('Workflow', () => {
         // result.error should be an Error instance (not a string)
         expect(result.error).toBeInstanceOf(Error);
 
+        // The exact same error instance should be preserved
+        expect(result.error).toBe(customError);
+
         // Custom properties should be preserved on the error
         expect((result.error as any).statusCode).toBe(429);
         expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
@@ -6385,11 +6388,59 @@ describe('Workflow', () => {
       expect(step1Result?.status).toBe('failed');
 
       if (step1Result?.status === 'failed') {
-        // Step error should also be an Error instance with custom properties
+        // Step error should also be the exact same error instance
         expect(step1Result.error).toBeInstanceOf(Error);
+        expect(step1Result.error).toBe(customError);
         expect((step1Result.error as any).statusCode).toBe(429);
         expect((step1Result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
         expect((step1Result.error as any).isRetryable).toBe(true);
+      }
+    });
+
+    it('should propagate step error to workflow-level error', async () => {
+      // Test that when a step fails, the error is accessible both at step level and workflow level
+      const testError = new Error('Step failed with details');
+      (testError as any).code = 'STEP_FAILURE';
+      (testError as any).details = { reason: 'test failure' };
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn<any>().mockImplementation(() => {
+          throw testError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'error-propagation-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Workflow-level error
+      if (result.status === 'failed') {
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error).toBe(testError);
+        expect((result.error as Error).message).toBe('Step failed with details');
+        expect((result.error as any).code).toBe('STEP_FAILURE');
+        expect((result.error as any).details).toEqual({ reason: 'test failure' });
+      }
+
+      // Step-level error should be the same instance
+      const stepResult = result.steps?.['failing-step'];
+      expect(stepResult?.status).toBe('failed');
+      if (stepResult?.status === 'failed') {
+        expect(stepResult.error).toBe(testError);
+        // Verify workflow error and step error are the same instance
+        expect(result.error).toBe(stepResult.error);
       }
     });
   });

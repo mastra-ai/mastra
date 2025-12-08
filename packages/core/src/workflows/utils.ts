@@ -1,5 +1,6 @@
 import { isEmpty } from 'radash';
 import type z from 'zod';
+import { getErrorFromUnknown } from '../error/utils.js';
 import type { IMastraLogger } from '../logger';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
@@ -342,3 +343,22 @@ export const createTimeTravelExecutionParams = (params: {
 
   return timeTravelData;
 };
+
+/**
+ * Re-hydrates serialized errors in step results back into proper Error instances.
+ * This is useful when errors have been serialized through an event system (e.g., evented engine, Inngest)
+ * and need to be converted back to Error instances with their custom properties preserved.
+ *
+ * @param steps - The workflow step results (context) that may contain serialized errors
+ * @returns The same steps object with errors hydrated as Error instances
+ */
+export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) {
+  if (steps) {
+    for (const step of Object.values(steps)) {
+      if (step.status === 'failed' && 'error' in step && step.error) {
+        step.error = getErrorFromUnknown(step.error, { includeStack: false });
+      }
+    }
+  }
+  return steps;
+}
