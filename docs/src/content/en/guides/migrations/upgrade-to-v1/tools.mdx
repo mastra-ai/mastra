@@ -11,11 +11,11 @@ Tool execution signatures have been updated to use separate input and context pa
 
 ### `createTool` execute signature to `(inputData, context)` format
 
-All **`createTool`** execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
+All `createTool` execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
 
 **Note:** This change only applies to `createTool`. If you're using `createStep` for workflows, the signature remains `async (inputData, context)` and does not need to be changed.
 
-To migrate, update **`createTool`** signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
+To migrate, update `createTool` signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
 
 ```diff
   createTool({
@@ -35,7 +35,7 @@ To migrate, update **`createTool`** signatures to use `inputData` as the first p
 
 ### `createTool` context properties organization
 
-Context properties in **`createTool`** are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
+Context properties in `createTool` are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
 
 For tools that are executed inside an agent, access agent-specific properties through `context.agent`.
 
