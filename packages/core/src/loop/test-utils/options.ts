@@ -1664,6 +1664,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1723,6 +1724,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:01.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
                     "cachedInputTokens": 3,
                     "inputTokens": 3,
@@ -1809,6 +1811,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1868,6 +1871,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:01.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
                     "cachedInputTokens": 3,
                     "inputTokens": 3,
@@ -6520,6 +6524,15 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               "type": "abort",
             },
+            {
+              "finishReason": "tripwire",
+              "totalUsage": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0,
+              },
+              "type": "finish",
+            },
           ]
         `);
       });
@@ -6545,6 +6558,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "type": "abort",
+            },
+            {
+              "type": "finish",
             },
           ]
         `);
@@ -6821,6 +6837,15 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               "type": "abort",
             },
+            {
+              "finishReason": "tripwire",
+              "totalUsage": {
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "totalTokens": 13,
+              },
+              "type": "finish",
+            },
           ]
         `);
       });
@@ -6865,6 +6890,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "type": "abort",
+            },
+            {
+              "type": "finish",
             },
           ]
         `);

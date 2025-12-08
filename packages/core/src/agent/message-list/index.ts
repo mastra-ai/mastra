@@ -271,12 +271,14 @@ export class MessageList {
     memory: Set<string>;
     input: Set<string>;
     output: Set<string>;
+    context: Set<string>;
     getSource: (message: MastraDBMessage) => MessageSource | null;
   } {
     const sources = {
       memory: new Set(Array.from(this.memoryMessages.values()).map(m => m.id)),
       output: new Set(Array.from(this.newResponseMessages.values()).map(m => m.id)),
       input: new Set(Array.from(this.newUserMessages.values()).map(m => m.id)),
+      context: new Set(Array.from(this.userContextMessages.values()).map(m => m.id)),
     };
 
     return {
@@ -285,6 +287,7 @@ export class MessageList {
         if (sources.memory.has(msg.id)) return 'memory';
         if (sources.input.has(msg.id)) return 'input';
         if (sources.output.has(msg.id)) return 'response';
+        if (sources.context.has(msg.id)) return 'context';
         return null;
       },
     };
