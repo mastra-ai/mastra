@@ -2,6 +2,7 @@ import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CallSettings, ToolChoice, ToolSet } from 'ai-v5';
+import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList, MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
@@ -25,7 +26,6 @@ import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
-import type { StructuredOutputOptions } from '../../../agent';
 
 type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   tools?: ToolSet;
@@ -499,12 +499,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
 
         const currentStep: {
           model: MastraLanguageModelV2;
-          tools: TOOLS | undefined;
-          toolChoice: ToolChoice<TOOLS> | undefined;
-          activeTools: (keyof TOOLS)[] | undefined;
-          providerOptions: SharedV2ProviderOptions | undefined;
-          modelSettings: Omit<CallSettings, 'abortSignal'> | undefined;
-          structuredOutput: StructuredOutputOptions<OUTPUT> | undefined;
+          tools?: TOOLS | undefined;
+          toolChoice?: ToolChoice<TOOLS> | undefined;
+          activeTools?: (keyof TOOLS)[] | undefined;
+          providerOptions?: SharedV2ProviderOptions | undefined;
+          modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
+          structuredOutput?: StructuredOutputOptions<OUTPUT> | undefined;
         } = {
           model,
           tools,
@@ -514,14 +514,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           modelSettings,
           structuredOutput,
         };
-
-        // let stepModel = model;
-        // let stepToolChoice = toolChoice;
-        // let stepTools = tools;
-        // let stepActiveTools = activeTools;
-        // let stepProviderOptions = providerOptions;
-        // let stepModelSettings = modelSettings;
-        // let stepStructuredOutput = structuredOutput;
 
         const inputStepProcessors = [
           ...(inputProcessors || []),
@@ -551,40 +543,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               structuredOutput,
             });
             Object.assign(currentStep, processInputStepResult);
-
-            // if (processInputStepResult.model) {
-            //   stepModel = processInputStepResult.model;
-            // }
-            // Check if tools were modified (different reference)
-            // const toolsWereModified = processInputStepResult.tools && processInputStepResult.tools !== tools;
-            // if (toolsWereModified) {
-            //   stepTools = processInputStepResult.tools as TOOLS;
-            //   // When tools are modified, reset activeTools to undefined so all new tools are active
-            //   // (unless activeTools was also explicitly modified by the processor)
-            //   const activeToolsWereModified =
-            //     processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
-            //   if (!activeToolsWereModified) {
-            //     stepActiveTools = undefined;
-            //   }
-            // }
-            // if (processInputStepResult.toolChoice) {
-            //   // Cast needed: ToolChoice<any> from processor result is compatible at runtime
-            //   stepToolChoice = processInputStepResult.toolChoice as typeof stepToolChoice;
-            // }
-            // if (processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools) {
-            //   stepActiveTools = processInputStepResult.activeTools as typeof stepActiveTools;
-            // }
-            // if (processInputStepResult.providerOptions) {
-            //   stepProviderOptions = processInputStepResult.providerOptions;
-            // }
-            // if (processInputStepResult.modelSettings) {
-            //   stepModelSettings = processInputStepResult.modelSettings;
-            // }
-            // if (processInputStepResult.structuredOutput) {
-            //   // Cast needed: processor returns StructuredOutputOptions<OutputSchema>, but we need OUTPUT type
-            //   // This is safe because at runtime the schema type flows through correctly
-            //   stepStructuredOutput = processInputStepResult.structuredOutput as typeof stepStructuredOutput;
-            // }
           } catch (error) {
             console.error('Error in processInputStep processors:', error);
             throw error;
@@ -688,8 +646,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             messageId,
             messageList,
             runState,
-            // Cast is safe: LoopConfig<OUTPUT> is compatible at runtime with LoopConfig<OUTPUT | undefined>
-            options: options as LoopConfig<OUTPUT | undefined>,
+            options,
             controller,
             responseFromModel: {
               warnings,
