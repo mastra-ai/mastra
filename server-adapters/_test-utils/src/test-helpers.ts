@@ -422,6 +422,19 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       error: null,
       isEvent: false,
     });
+
+    // Add test stored agent for stored agents routes
+    if (storage.supports.agents) {
+      await storage.createAgent({
+        agent: {
+          id: 'test-stored-agent',
+          name: 'Test Stored Agent',
+          description: 'A test stored agent for integration tests',
+          instructions: 'Test instructions for stored agent',
+          model: { provider: 'openai', name: 'gpt-4o' },
+        },
+      });
+    }
   }
 
   return {

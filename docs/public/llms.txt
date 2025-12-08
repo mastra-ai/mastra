@@ -87,11 +87,13 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [RAG (Retrieval-Augmented Generation) in Mastra | RAG](https://mastra.ai/en/docs/rag/overview): Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
 - [Retrieval, Semantic Search, Reranking | RAG](https://mastra.ai/en/docs/rag/retrieval): Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 - [Storing Embeddings in A Vector Database | RAG](https://mastra.ai/en/docs/rag/vector-databases): Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+- [Custom Adapters | Server & DB](https://mastra.ai/en/docs/server-db/custom-adapters): Create a custom server adapter for frameworks other than Hono or Express.
 - [Custom API Routes | Server & DB](https://mastra.ai/en/docs/server-db/custom-api-routes): Expose additional HTTP endpoints from your Mastra server.
 - [Mastra Client SDK | Server & DB](https://mastra.ai/en/docs/server-db/mastra-client): Learn how to set up and use the Mastra Client SDK
-- [Mastra Server | Server & DB](https://mastra.ai/en/docs/server-db/mastra-server): Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more
+- [Server Configuration | Server & DB](https://mastra.ai/en/docs/server-db/mastra-server): Configure the Mastra server with custom settings for port, timeout, CORS, and more.
 - [Middleware | Server & DB](https://mastra.ai/en/docs/server-db/middleware): Apply custom middleware functions to intercept requests.
 - [Request Context | Server & DB](https://mastra.ai/en/docs/server-db/request-context): Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
+- [Server Adapters | Server & DB](https://mastra.ai/en/docs/server-db/server-adapters): Manually configure a Mastra server using Hono or Express adapters.
 - [MastraStorage | Server & DB](https://mastra.ai/en/docs/server-db/storage): Overview of Mastra's storage system and data persistence capabilities.
 - [Streaming Events | Streaming](https://mastra.ai/en/docs/streaming/events): Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications.
 - [Streaming Overview | Streaming](https://mastra.ai/en/docs/streaming/overview): Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced.
@@ -178,7 +180,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1164+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1231+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -187,14 +189,15 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Anthropic | Models | Mastra](https://mastra.ai/en/models/providers/anthropic): Use Anthropic models with Mastra. 21 models available.
 - [Azure](https://mastra.ai/en/models/providers/azure): Use Azure models via the AI SDK.
 - [Bailing | Models | Mastra](https://mastra.ai/en/models/providers/bailing): Use Bailing models with Mastra. 2 models available.
-- [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 4 models available.
+- [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 5 models available.
 - [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 3 models available.
 - [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 54 models available.
+- [Cloudflare AI Gateway | Models | Mastra](https://mastra.ai/en/models/providers/cloudflare-ai-gateway): Use Cloudflare AI Gateway models with Mastra. 77 models available.
 - [Cloudflare Workers AI](https://mastra.ai/en/models/providers/cloudflare-workers-ai): Use Cloudflare Workers AI models via the AI SDK.
 - [Cohere](https://mastra.ai/en/models/providers/cohere): Use Cohere models via the AI SDK.
 - [Cortecs | Models | Mastra](https://mastra.ai/en/models/providers/cortecs): Use Cortecs models with Mastra. 11 models available.
 - [Deep Infra | Models | Mastra](https://mastra.ai/en/models/providers/deepinfra): Use Deep Infra models with Mastra. 6 models available.
-- [DeepSeek | Models | Mastra](https://mastra.ai/en/models/providers/deepseek): Use DeepSeek models with Mastra. 2 models available.
+- [DeepSeek | Models | Mastra](https://mastra.ai/en/models/providers/deepseek): Use DeepSeek models with Mastra. 3 models available.
 - [FastRouter | Models | Mastra](https://mastra.ai/en/models/providers/fastrouter): Use FastRouter models with Mastra. 14 models available.
 - [Fireworks AI | Models | Mastra](https://mastra.ai/en/models/providers/fireworks-ai): Use Fireworks AI models with Mastra. 12 models available.
 - [GitHub Models | Models | Mastra](https://mastra.ai/en/models/providers/github-models): Use GitHub Models models with Mastra. 55 models available.
@@ -220,10 +223,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Moonshot AI | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai): Use Moonshot AI models with Mastra. 5 models available.
 - [Morph | Models | Mastra](https://mastra.ai/en/models/providers/morph): Use Morph models with Mastra. 3 models available.
 - [Nebius Token Factory | Models | Mastra](https://mastra.ai/en/models/providers/nebius): Use Nebius Token Factory models with Mastra. 15 models available.
-- [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 20 models available.
+- [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 21 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
-- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 35 models available.
-- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 21 models available.
+- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 36 models available.
+- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 22 models available.
 - [OVHcloud AI Endpoints | Models | Mastra](https://mastra.ai/en/models/providers/ovhcloud): Use OVHcloud AI Endpoints models with Mastra. 15 models available.
 - [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 4 models available.
 - [Poe | Models | Mastra](https://mastra.ai/en/models/providers/poe): Use Poe models with Mastra. 100 models available.
@@ -231,10 +234,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Scaleway | Models | Mastra](https://mastra.ai/en/models/providers/scaleway): Use Scaleway models with Mastra. 13 models available.
 - [SiliconFlow | Models | Mastra](https://mastra.ai/en/models/providers/siliconflow): Use SiliconFlow models with Mastra. 72 models available.
 - [submodel | Models | Mastra](https://mastra.ai/en/models/providers/submodel): Use submodel models with Mastra. 9 models available.
-- [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 23 models available.
+- [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 24 models available.
 - [Together AI | Models | Mastra](https://mastra.ai/en/models/providers/togetherai): Use Together AI models with Mastra. 6 models available.
 - [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 2 models available.
-- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 16 models available.
+- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 18 models available.
 - [Vultr | Models | Mastra](https://mastra.ai/en/models/providers/vultr): Use Vultr models with Mastra. 5 models available.
 - [Weights & Biases | Models | Mastra](https://mastra.ai/en/models/providers/wandb): Use Weights & Biases models with Mastra. 10 models available.
 - [xAI | Models | Mastra](https://mastra.ai/en/models/providers/xai): Use xAI models with Mastra. 22 models available.
@@ -263,6 +266,13 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Agent.listTools() | Agents](https://mastra.ai/en/reference/agents/listTools): Documentation for the `Agent.listTools()` method in Mastra agents, which retrieves the tools that the agent can use.
 - [Reference: Agent.listWorkflows() | Agents](https://mastra.ai/en/reference/agents/listWorkflows): Documentation for the `Agent.listWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute.
 - [Reference: Agent.network() | Agents](https://mastra.ai/en/reference/agents/network): Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing.
+- [Reference: chatRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/chat-route): API reference for chatRoute(), a function to create chat route handlers for streaming agent conversations in AI SDK-compatible format.
+- [Reference: handleChatStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/handle-chat-stream): API reference for handleChatStream(), a framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
+- [Reference: handleNetworkStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/handle-network-stream): API reference for handleNetworkStream(), a framework-agnostic handler for streaming network execution in AI SDK-compatible format.
+- [Reference: handleWorkflowStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/handle-workflow-stream): API reference for handleWorkflowStream(), a framework-agnostic handler for streaming workflow execution in AI SDK-compatible format.
+- [Reference: networkRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/network-route): API reference for networkRoute(), a function to create network route handlers for streaming network execution in AI SDK-compatible format.
+- [Reference: toAISdkStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/to-ai-sdk-stream): API reference for toAISdkStream(), a function to convert Mastra streams to AI SDK-compatible streams.
+- [Reference: workflowRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/workflow-route): API reference for workflowRoute(), a function to create workflow route handlers for streaming workflow execution in AI SDK-compatible format.
 - [Reference: MastraAuthAuth0 Class | Auth](https://mastra.ai/en/reference/auth/auth0): API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.
 - [Reference: MastraAuthClerk Class | Auth](https://mastra.ai/en/reference/auth/clerk): API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.
 - [Reference: MastraAuthFirebase Class | Auth](https://mastra.ai/en/reference/auth/firebase): API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication.
@@ -290,10 +300,12 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Mastra.getLogger() | Core](https://mastra.ai/en/reference/core/getLogger): Documentation for the `Mastra.getLogger()` method in Mastra, which retrieves the configured logger instance.
 - [Reference: Mastra.getMCPServer() | Core](https://mastra.ai/en/reference/core/getMCPServer): Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version.
 - [Reference: Mastra.getMCPServerById() | Core](https://mastra.ai/en/reference/core/getMCPServerById): Documentation for the `Mastra.getMCPServerById()` method in Mastra, which retrieves a specific MCP server instance by its intrinsic id property.
+- [Reference: Mastra.getMemory() | Core](https://mastra.ai/en/reference/core/getMemory): Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves a registered memory instance by its registry key.
 - [Reference: getScorer() | Core](https://mastra.ai/en/reference/core/getScorer): Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key.
 - [Reference: getScorerById() | Core](https://mastra.ai/en/reference/core/getScorerById): Documentation for the `getScorerById()` method in Mastra, which retrieves a scorer by its id property rather than registration key.
 - [Reference: Mastra.getServer() | Core](https://mastra.ai/en/reference/core/getServer): Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration.
 - [Reference: Mastra.getStorage() | Core](https://mastra.ai/en/reference/core/getStorage): Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance.
+- [Reference: Mastra.getStoredAgentById() | Core](https://mastra.ai/en/reference/core/getStoredAgentById): Documentation for the `Mastra.getStoredAgentById()` method in Mastra, which retrieves an agent from storage and creates an executable Agent instance.
 - [Reference: Mastra.getTelemetry() | Core](https://mastra.ai/en/reference/core/getTelemetry): Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance.
 - [Reference: Mastra.getVector() | Core](https://mastra.ai/en/reference/core/getVector): Documentation for the `Mastra.getVector()` method in Mastra, which retrieves a vector store by name.
 - [Reference: Mastra.getWorkflow() | Core](https://mastra.ai/en/reference/core/getWorkflow): Documentation for the `Mastra.getWorkflow()` method in Mastra, which retrieves a workflow by ID.
@@ -302,7 +314,9 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Mastra.listLogs() | Core](https://mastra.ai/en/reference/core/listLogs): Documentation for the `Mastra.listLogs()` method in Mastra, which retrieves all logs for a specific transport ID.
 - [Reference: Mastra.listLogsByRunId() | Core](https://mastra.ai/en/reference/core/listLogsByRunId): Documentation for the `Mastra.listLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID.
 - [Reference: Mastra.listMCPServers() | Core](https://mastra.ai/en/reference/core/listMCPServers): Documentation for the `Mastra.listMCPServers()` method in Mastra, which retrieves all registered MCP server instances.
+- [Reference: Mastra.listMemory() | Core](https://mastra.ai/en/reference/core/listMemory): Documentation for the `Mastra.listMemory()` method in Mastra, which returns all registered memory instances.
 - [Reference: listScorers() | Core](https://mastra.ai/en/reference/core/listScorers): Documentation for the `listScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs.
+- [Reference: Mastra.listStoredAgents() | Core](https://mastra.ai/en/reference/core/listStoredAgents): Documentation for the `Mastra.listStoredAgents()` method in Mastra, which retrieves a paginated list of agents from storage.
 - [Reference: Mastra.listVectors() | Core](https://mastra.ai/en/reference/core/listVectors): Documentation for the `Mastra.listVectors()` method in Mastra, which retrieves all configured vector stores.
 - [Reference: Mastra.listWorkflows() | Core](https://mastra.ai/en/reference/core/listWorkflows): Documentation for the `Mastra.listWorkflows()` method in Mastra, which retrieves all configured workflows.
 - [Reference: Mastra Class | Core](https://mastra.ai/en/reference/core/mastra-class): Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints.
@@ -380,6 +394,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Metadata Filters | RAG](https://mastra.ai/en/reference/rag/metadata-filters): Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 - [Reference: rerank() | RAG](https://mastra.ai/en/reference/rag/rerank): Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 - [Reference: rerankWithScorer() | RAG](https://mastra.ai/en/reference/rag/rerankWithScorer): Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
+- [Reference: createRoute() | Server](https://mastra.ai/en/reference/server/create-route): API reference for createRoute() function used to define type-safe routes with validation and OpenAPI generation.
+- [Reference: Express Adapter | Server](https://mastra.ai/en/reference/server/express-adapter): API reference for the @mastra/express server adapter.
+- [Reference: Hono Adapter | Server](https://mastra.ai/en/reference/server/hono-adapter): API reference for the @mastra/hono server adapter.
+- [Reference: MastraServer | Server](https://mastra.ai/en/reference/server/mastra-server): API reference for the MastraServer abstract class used to create server adapters.
+- [Reference: Server Routes | Server](https://mastra.ai/en/reference/server/routes): API reference for HTTP routes registered by Mastra server adapters.
 - [Reference: Cloudflare D1 Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare-d1): Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 - [Reference: Cloudflare Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare): Documentation for the Cloudflare KV storage implementation in Mastra.
 - [Reference: Convex Storage | Storage](https://mastra.ai/en/reference/storage/convex): Documentation for the Convex storage implementation in Mastra.
@@ -397,6 +416,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Run.observeStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/observeStream): Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
 - [Reference: Run.resumeStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/resumeStream): Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 - [Reference: Run.stream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/stream): Documentation for the `Run.stream()` method in workflows, which enables real-time streaming of responses.
+- [Reference: Run.timeTravelStream() | Streaming](https://mastra.ai/en/reference/streaming/workflows/timeTravelStream): Documentation for the `Run.timeTravelStream()` method for streaming workflow time travel execution.
 - [Reference: LLM provider API keys (choose one or more) | Templates](https://mastra.ai/en/reference/templates/overview): Complete guide to creating, using, and contributing Mastra templates
 - [Reference: MastraMCPClient (Deprecated) | Tools & MCP](https://mastra.ai/en/reference/tools/client): API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
 - [Reference: createTool() | Tools & MCP](https://mastra.ai/en/reference/tools/create-tool): Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
@@ -453,6 +473,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Run.restart() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/restart): Documentation for the `Run.restart()` method in workflows, which restarts an active workflow run that lost connection to the server.
 - [Reference: Run.resume() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/resume): Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
 - [Reference: Run.start() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/start): Documentation for the `Run.start()` method in workflows, which starts a workflow run with input data.
+- [Reference: Run.timeTravel() | Workflows](https://mastra.ai/en/reference/workflows/run-methods/timeTravel): Documentation for the `Run.timeTravel()` method in workflows, which re-executes a workflow from a specific step.
 - [Reference: Run Class | Workflows](https://mastra.ai/en/reference/workflows/run): Documentation for the Run class in Mastra, which represents a workflow execution instance.
 - [Reference: Step Class | Workflows](https://mastra.ai/en/reference/workflows/step): Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 - [Reference: Workflow.branch() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/branch): Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.

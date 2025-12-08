@@ -163,7 +163,7 @@ describe('ArizeExporter', () => {
     expect(exportedSpans[0].attributes).toMatchInlineSnapshot(`
       {
         "input.mime_type": "application/json",
-        "input.value": "{"messages":[{"role":"system","content":[{"type":"text","text":"You are a helpful weather assistant."}]},{"role":"user","content":[{"type":"text","text":"What is the weather in Tokyo?"}]},{"role":"assistant","content":[{"type":"text","text":"Let me check the weather for you."},{"type":"tool-call","toolName":"weatherTool","toolCallId":"weatherTool-1","input":{"city":"Tokyo"}}]},{"role":"tool","content":[{"type":"tool-result","toolName":"weatherTool","toolCallId":"weatherTool-1","output":{"value":{"city":"Tokyo","temperature":70,"condition":"sunny"}}}]}]}",
+        "input.value": "[{"role":"system","parts":[{"type":"text","content":"You are a helpful weather assistant."}]},{"role":"user","parts":[{"type":"text","content":"What is the weather in Tokyo?"}]},{"role":"assistant","parts":[{"type":"text","content":"Let me check the weather for you."},{"type":"tool_call","id":"weatherTool-1","name":"weatherTool","arguments":"{\\"city\\":\\"Tokyo\\"}"}]},{"role":"tool","parts":[{"type":"tool_call_response","id":"weatherTool-1","name":"weatherTool","response":"{\\"city\\":\\"Tokyo\\",\\"temperature\\":70,\\"condition\\":\\"sunny\\"}"}]}]",
         "llm.input_messages.0.message.contents.0.message_content.text": "You are a helpful weather assistant.",
         "llm.input_messages.0.message.contents.0.message_content.type": "text",
         "llm.input_messages.0.message.role": "system",
@@ -185,12 +185,14 @@ describe('ArizeExporter', () => {
         "llm.output_messages.0.message.contents.0.message_content.text": "The weather in Tokyo is sunny.",
         "llm.output_messages.0.message.contents.0.message_content.type": "text",
         "llm.output_messages.0.message.role": "assistant",
+        "llm.provider": "openai",
         "llm.token_count.completion": 5,
         "llm.token_count.prompt": 10,
         "llm.token_count.total": 15,
+        "mastra.span.type": "model_generation",
         "openinference.span.kind": "LLM",
         "output.mime_type": "application/json",
-        "output.value": "{"text":"The weather in Tokyo is sunny."}",
+        "output.value": "[{"role":"assistant","parts":[{"type":"text","content":"The weather in Tokyo is sunny."}]}]",
       }
     `);
   });
@@ -254,10 +256,7 @@ describe('ArizeExporter', () => {
         companyId: 'acme-co',
         featureFlag: 'beta',
         correlation_id: 'corr-123',
-        // reserved fields should not be present in metadata blob
-        input: 'raw-input',
-        output: 'raw-output',
-        sessionId: 'should-not-appear',
+        threadId: 'should-not-appear',
       },
     } as unknown as AnyExportedSpan;
 
@@ -275,9 +274,7 @@ describe('ArizeExporter', () => {
       featureFlag: 'beta',
       correlation_id: 'corr-123',
     });
-    expect(parsed.input).toBeUndefined();
-    expect(parsed.output).toBeUndefined();
-    expect(parsed.sessionId).toBeUndefined();
+    expect(parsed.threadId).toBeUndefined();
   });
 
   describe('Tags Support', () => {
@@ -319,6 +316,7 @@ describe('ArizeExporter', () => {
       expect(exportedAttributes[SemanticConventions.TAG_TAGS]).toBe(
         JSON.stringify(['production', 'experiment-v2', 'user-request']),
       );
+      expect(exportedAttributes['mastra.tags']).toBeUndefined();
     });
 
     it('does not include tags for child spans', async () => {

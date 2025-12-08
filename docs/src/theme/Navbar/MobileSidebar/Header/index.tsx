@@ -6,6 +6,7 @@ import { Button } from "@site/src/components/ui/button";
 import { cn } from "@site/src/css/utils";
 import { type ReactNode } from "react";
 import { Logo } from "../../logo";
+import VersionControl from "@site/src/components/version-control";
 
 function CloseButton() {
   const mobileSidebar = useNavbarMobileSidebar();
@@ -71,8 +72,9 @@ export default function NavbarMobileSidebarHeader(): ReactNode {
         </div>
         <CloseButton />
       </div>
-      <div className="px-4">
-        <MobileDocsDropdown />
+      <div className="px-4 flex flex-col gap-2">
+        <VersionControl className="pr-[17px]" />
+        <MobileDocsDropdown className="rounded-md" />
       </div>
     </div>
   );

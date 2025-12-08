@@ -1137,7 +1137,7 @@ export class Workflow<
     inputData: z.infer<TInput>;
     resumeData?: any;
     state: z.infer<TState>;
-    setState: (state: z.infer<TState>) => void;
+    setState: (state: z.infer<TState>) => Promise<void>;
     getStepResult<T extends Step<any, any, any, any, any, any, TEngineType>>(
       stepId: T,
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
@@ -1258,7 +1258,7 @@ export class Workflow<
     });
 
     if (res.state) {
-      setState(res.state);
+      await setState(res.state);
     }
 
     if (suspendedSteps?.length) {

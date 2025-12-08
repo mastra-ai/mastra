@@ -93,11 +93,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/agentrouter",
-          label: "AgentRouter",
-        },
-        {
-          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },
@@ -140,6 +135,11 @@ const sidebars = {
           type: "doc",
           id: "providers/chutes",
           label: "Chutes",
+        },
+        {
+          type: "doc",
+          id: "providers/cloudflare-ai-gateway",
+          label: "Cloudflare AI Gateway",
         },
         {
           type: "doc",

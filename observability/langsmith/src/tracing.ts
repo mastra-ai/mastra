@@ -96,6 +96,16 @@ export class LangSmithExporter extends BaseExporter {
   }
 
   private initializeRootSpan(span: AnyExportedSpan) {
+    // Check if trace already exists - reuse existing trace data
+    if (this.traceMap.has(span.traceId)) {
+      this.logger.debug('LangSmith exporter: Reusing existing trace from local map', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+      });
+      return;
+    }
+
     this.traceMap.set(span.traceId, { spans: new Map(), activeIds: new Set() });
   }
 
