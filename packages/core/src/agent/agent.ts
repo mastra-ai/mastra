@@ -755,8 +755,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
     if (typeof this.#defaultOptions !== 'function') {
-      // Cast via unknown: defaultOptions is stored with OutputSchema, caller specifies OUTPUT
-      return this.#defaultOptions as unknown as AgentExecutionOptions<OUTPUT>;
+      return this.#defaultOptions as AgentExecutionOptions<OUTPUT>;
     }
 
     const result = this.#defaultOptions({ requestContext, mastra: this.#mastra }) as
