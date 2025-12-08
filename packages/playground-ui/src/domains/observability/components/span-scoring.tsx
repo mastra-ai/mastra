@@ -4,16 +4,25 @@ import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
 import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';
 import { useEffect, useState } from 'react';
+import { type GetScorerResponse } from 'node_modules/@mastra/client-js/dist/types';
 
 export interface SpanScoringProps {
   traceId?: string;
   spanId?: string;
   entityType?: string;
   isTopLevelSpan?: boolean;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 }
 
-export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: SpanScoringProps) => {
-  const { data: scorers = {}, isLoading, error } = useScorers();
+export const SpanScoring = ({
+  traceId,
+  spanId,
+  entityType,
+  isTopLevelSpan,
+  scorers,
+  isLoadingScorers,
+}: SpanScoringProps) => {
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer();
   const [notificationIsVisible, setNotificationIsVisible] = useState(false);
@@ -24,7 +33,7 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
     }
   }, [isSuccess]);
 
-  let scorerList = Object.entries(scorers)
+  let scorerList = Object.entries(scorers || {})
     .map(([key, scorer]) => ({
       id: key,
       name: scorer.scorer.config.name,
@@ -39,7 +48,7 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
     scorerList = scorerList.filter(scorer => scorer.type !== 'agent');
   }
 
-  const isWaiting = isPending || isLoading;
+  const isWaiting = isPending || isLoadingScorers;
 
   const handleStartScoring = () => {
     if (selectedScorer) {
@@ -59,10 +68,10 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
 
   const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
 
-  if (error) {
+  if (scorers === undefined && !isLoadingScorers) {
     return (
       <Notification isVisible={true} autoDismiss={false} type="error">
-        <InfoIcon /> {error?.message ? error.message : 'Failed to load scorers.'}
+        <InfoIcon /> Failed to load scorers.
       </Notification>
     );
   }
