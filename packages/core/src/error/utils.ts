@@ -22,7 +22,22 @@ export function safeParseErrorObject(obj: unknown): string {
   }
 }
 
-type SerializableError = Error & { toJSON: () => Record<string, any> };
+/**
+ * Represents a serialized error structure for JSON output.
+ */
+export type SerializedError = {
+  name: string;
+  message: string;
+  stack?: string;
+  cause?: SerializedError | unknown;
+} & Record<string, any>;
+
+/**
+ * An Error instance with a toJSON method for proper serialization.
+ */
+export type SerializableError = Error & {
+  toJSON: () => SerializedError;
+};
 
 /**
  * Safely converts an unknown error to an Error instance.
