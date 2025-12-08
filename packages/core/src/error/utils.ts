@@ -67,7 +67,7 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
     // Stack is always preserved on the instance for debugging
     // serializeStack only controls whether it appears in toJSON() output
     if (supportSerialization) {
-      addErrorToJSON(unknown, serializeStack);
+      addErrorToJSON(unknown, serializeStack, { maxDepth });
     }
     return unknown as SERIALIZABLE extends true ? SerializableError : Error;
   }
@@ -104,19 +104,34 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
   }
 
   if (supportSerialization) {
-    addErrorToJSON(error, serializeStack);
+    addErrorToJSON(error, serializeStack, { maxDepth });
   }
   return error as SERIALIZABLE extends true ? SerializableError : Error;
 }
+
+const DEFAULT_MAX_DEPTH = 10;
 
 /**
  * Adds a toJSON method to an Error instance for proper serialization.
  * Ensures that message, name, cause, and custom properties are all serialized.
  * Stack is only included in JSON output if serializeStack is true.
+ * Recursively adds toJSON to the cause chain for proper nested error serialization.
  */
-function addErrorToJSON(error: Error, serializeStack: boolean = true): void {
+function addErrorToJSON(
+  error: Error,
+  serializeStack: boolean = true,
+  options?: { maxDepth?: number; currentDepth?: number },
+): void {
+  const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH;
+  const currentDepth = options?.currentDepth ?? 0;
+
   if ((error as SerializableError).toJSON) {
     return;
+  }
+
+  // Recursively add toJSON to cause chain (with depth protection)
+  if (error.cause instanceof Error && currentDepth < maxDepth) {
+    addErrorToJSON(error.cause, serializeStack, { maxDepth, currentDepth: currentDepth + 1 });
   }
 
   // Define toJSON as non-enumerable to avoid interfering with object comparisons

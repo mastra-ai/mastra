@@ -204,10 +204,11 @@ describe('StepExecutor', () => {
 
   it('should save only error message without stack trace when step fails', async () => {
     const errorMessage = 'Test error: step execution failed.';
+    const thrownError = new Error(errorMessage);
     const failingStep = createStep({
       id: 'failing-step',
       execute: vi.fn().mockImplementation(() => {
-        throw new Error(errorMessage);
+        throw thrownError;
       }),
       inputSchema: z.object({}),
       outputSchema: z.object({}),
@@ -230,6 +231,8 @@ describe('StepExecutor', () => {
     const failedResult = result as Extract<typeof result, { status: 'failed' }>;
     // Error is now preserved as Error instance instead of string
     expect(failedResult.error).toBeInstanceOf(Error);
+    // Verify exact same error instance is preserved
+    expect(failedResult.error).toBe(thrownError);
     expect((failedResult.error as Error).message).toBe(errorMessage);
     // Stack is preserved on instance for debugging, but excluded from JSON serialization
     // (per getErrorFromUnknown with serializeStack: false)
@@ -241,16 +244,17 @@ describe('StepExecutor', () => {
 
   it('should save MastraError message without stack trace when step fails', async () => {
     const errorMessage = 'Test MastraError: step execution failed.';
+    const thrownError = new MastraError({
+      id: 'VALIDATION_ERROR',
+      domain: 'MASTRA_WORKFLOW',
+      category: 'USER',
+      text: errorMessage,
+      details: { field: 'test' },
+    });
     const failingStep = createStep({
       id: 'failing-step',
       execute: vi.fn().mockImplementation(() => {
-        throw new MastraError({
-          id: 'VALIDATION_ERROR',
-          domain: 'MASTRA_WORKFLOW',
-          category: 'USER',
-          text: errorMessage,
-          details: { field: 'test' },
-        });
+        throw thrownError;
       }),
       inputSchema: z.object({}),
       outputSchema: z.object({}),
@@ -273,6 +277,8 @@ describe('StepExecutor', () => {
     const failedResult = result as Extract<typeof result, { status: 'failed' }>;
     // Error is now preserved as Error instance instead of string, including MastraError properties
     expect(failedResult.error).toBeInstanceOf(Error);
+    // Verify exact same error instance is preserved
+    expect(failedResult.error).toBe(thrownError);
     expect((failedResult.error as Error).message).toBe(errorMessage);
     // MastraError properties should be preserved
     expect((failedResult.error as any).id).toBe('VALIDATION_ERROR');

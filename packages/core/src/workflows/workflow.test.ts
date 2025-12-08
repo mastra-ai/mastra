@@ -6111,8 +6111,9 @@ describe('Workflow', () => {
       });
 
       const errorMessage = 'Test error: step execution failed.';
+      const thrownError = new Error(errorMessage);
       const failingAction = vi.fn().mockImplementation(() => {
-        throw new Error(errorMessage);
+        throw thrownError;
       });
 
       const step1 = createStep({
@@ -6150,6 +6151,8 @@ describe('Workflow', () => {
       const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
       expect(failedStepResult.error).toBeDefined();
       expect(failedStepResult.error).toBeInstanceOf(Error);
+      // Verify exact same error instance is preserved
+      expect(failedStepResult.error).toBe(thrownError);
       expect((failedStepResult.error as Error).message).toBe(errorMessage);
       // Stack is preserved on instance for debugging, but excluded from JSON serialization
       // (per getErrorFromUnknown with serializeStack: false)
@@ -6168,14 +6171,15 @@ describe('Workflow', () => {
       });
 
       const errorMessage = 'Step execution failed.';
+      const thrownError = new MastraError({
+        id: 'VALIDATION_ERROR',
+        domain: 'MASTRA_WORKFLOW',
+        category: 'USER',
+        text: errorMessage,
+        details: { field: 'test' },
+      });
       const failingAction = vi.fn().mockImplementation(() => {
-        throw new MastraError({
-          id: 'VALIDATION_ERROR',
-          domain: 'MASTRA_WORKFLOW',
-          category: 'USER',
-          text: errorMessage,
-          details: { field: 'test' },
-        });
+        throw thrownError;
       });
 
       const step1 = createStep({
@@ -6213,6 +6217,8 @@ describe('Workflow', () => {
       const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
       expect(failedStepResult.error).toBeDefined();
       expect(failedStepResult.error).toBeInstanceOf(Error);
+      // Verify exact same error instance is preserved
+      expect(failedStepResult.error).toBe(thrownError);
       expect((failedStepResult.error as Error).message).toBe(errorMessage);
       // Stack is preserved on instance for debugging, but excluded from JSON serialization
       // (per getErrorFromUnknown with serializeStack: false)
