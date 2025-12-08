@@ -54,12 +54,12 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
     ...(runState.status === 'success' ? { result: runState.result } : {}),
     ...(runState.status === 'failed' ? { error: runState.error } : {}),
     ...(runState.status === 'suspended' ? { suspended: suspendedStepIds, suspendPayload: suspendPayload } : {}),
-    ...(runState.status === 'tripwire'
+    ...(runState.status === 'tripwire' && runState.tripwire
       ? {
-          reason: runState.reason,
-          retry: runState.retry,
-          metadata: runState.metadata,
-          processorId: runState.processorId,
+          reason: runState.tripwire.reason,
+          retry: runState.tripwire.retry,
+          metadata: runState.tripwire.metadata,
+          processorId: runState.tripwire.processorId,
         }
       : {}),
   } as WorkflowRunStreamResult;

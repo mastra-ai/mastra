@@ -343,7 +343,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             payload: {
               id: step.id,
               status: 'tripwire',
-              error: result?.reason,
+              error: result?.tripwire?.reason,
               payload: prevOutput,
             },
           });
@@ -352,10 +352,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             executionContext,
             result: {
               status: 'tripwire',
-              reason: result?.reason,
-              retry: result?.retry,
-              metadata: result?.metadata,
-              processorId: result?.processorId,
+              tripwire: result?.tripwire,
             },
           };
         }

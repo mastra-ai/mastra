@@ -372,10 +372,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       if (tripwireError instanceof TripWire) {
         // Use 'tripwire' status instead of 'failed' for tripwire errors
         base.status = 'tripwire';
-        base.reason = tripwireError.message;
-        base.retry = tripwireError.options?.retry;
-        base.metadata = tripwireError.options?.metadata;
-        base.processorId = tripwireError.processorId;
+        base.tripwire = {
+          reason: tripwireError.message,
+          retry: tripwireError.options?.retry,
+          metadata: tripwireError.options?.metadata,
+          processorId: tripwireError.processorId,
+        };
       } else {
         base.error = this.formatResultError(error, lastOutput);
       }

@@ -280,14 +280,8 @@ export interface WorkflowRunState {
   >;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
-  /** Tripwire reason when status is 'tripwire' */
-  reason?: string;
-  /** Whether retry was requested when status is 'tripwire' */
-  retry?: boolean;
-  /** Tripwire metadata when status is 'tripwire' */
-  metadata?: unknown;
-  /** Processor ID that triggered the tripwire when status is 'tripwire' */
-  processorId?: string;
+  /** Tripwire data when status is 'tripwire' */
+  tripwire?: StepTripwireInfo;
 }
 
 export interface WorkflowOptions {
@@ -498,14 +492,8 @@ export type WorkflowResult<
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
-      /** The reason the tripwire was triggered */
-      reason: string;
-      /** Whether the tripwire requested a retry */
-      retry?: boolean;
-      /** Metadata from the tripwire */
-      metadata?: unknown;
-      /** ID of the processor that triggered the tripwire */
-      processorId?: string;
+      /** Tripwire data including reason, retry flag, metadata, and processor ID */
+      tripwire: StepTripwireInfo;
     } & TracingProperties)
   | ({
       status: 'suspended';
