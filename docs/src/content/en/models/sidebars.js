@@ -138,6 +138,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/cloudflare-ai-gateway",
+          label: "Cloudflare AI Gateway",
+        },
+        {
+          type: "doc",
           id: "providers/cloudflare-workers-ai",
           label: "Cloudflare Workers AI",
         },

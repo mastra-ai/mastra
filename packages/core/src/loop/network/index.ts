@@ -957,6 +957,7 @@ export async function createNetworkLoop({
           mastra: agent.getMastraInstance(),
           agent: {
             resourceId: initData.threadResourceId || networkName,
+            toolCallId,
             threadId: initData.threadId,
           },
           runId,

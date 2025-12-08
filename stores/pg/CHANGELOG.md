@@ -1,5 +1,25 @@
 # @mastra/pg
 
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fix saveScore not persisting ID correctly, breaking getScoreById retrieval ([#10915](https://github.com/mastra-ai/mastra/pull/10915))
+
+  **What Changed**
+  - saveScore now correctly returns scores that can be retrieved with getScoreById
+  - Validation errors now include contextual information (scorer, entity, trace details) for easier debugging
+
+  **Impact**
+  Previously, calling getScoreById after saveScore would return null because the generated ID wasn't persisted to the database. This is now fixed across all store implementations, ensuring consistent behavior and data integrity.
+
+- PostgresStore was setting `this.stores = {}` in the constructor and only populating it in the async `init()` method. This broke Memory because it checks `storage.stores.memory` synchronously in `getInputProcessors()` before `init()` is called. ([#10943](https://github.com/mastra-ai/mastra/pull/10943))
+
+  The fix moves domain instance creation to the constructor. This is safe because pg-promise creates database connections lazily when queries are executed.
+
+- Updated dependencies [[`0d41fe2`](https://github.com/mastra-ai/mastra/commit/0d41fe245355dfc66d61a0d9c85d9400aac351ff), [`6b3ba91`](https://github.com/mastra-ai/mastra/commit/6b3ba91494cc10394df96782f349a4f7b1e152cc), [`7907fd1`](https://github.com/mastra-ai/mastra/commit/7907fd1c5059813b7b870b81ca71041dc807331b)]:
+  - @mastra/core@1.0.0-beta.8
+
 ## 1.0.0-beta.4
 
 ### Minor Changes

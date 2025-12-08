@@ -1906,19 +1906,28 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 resourceId,
               });
 
-              const run = await workflow.createRun();
+              const run = await workflow.createRun({ runId });
 
               const { initialState, inputData: workflowInputData } = inputData;
+              const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
               if (methodType === 'generate' || methodType === 'generateLegacy') {
-                result = await run.start({
-                  inputData: workflowInputData,
-                  requestContext,
-                  tracingContext: context?.tracingContext,
-                  ...(initialState && { initialState }),
-                });
+                if (resumeData) {
+                  result = await run.resume({
+                    resumeData,
+                    requestContext,
+                    tracingContext: context?.tracingContext,
+                  });
+                } else {
+                  result = await run.start({
+                    inputData: workflowInputData,
+                    requestContext,
+                    tracingContext: context?.tracingContext,
+                    ...(initialState && { initialState }),
+                  });
+                }
               } else if (methodType === 'streamLegacy') {
                 const streamResult = run.streamLegacy({
                   inputData: workflowInputData,
@@ -1936,12 +1945,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
-                const streamResult = run.stream({
-                  inputData: workflowInputData,
-                  requestContext,
-                  tracingContext: context?.tracingContext,
-                  ...(initialState && { initialState }),
-                });
+                const streamResult = resumeData
+                  ? run.resumeStream({
+                      resumeData,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                    })
+                  : run.stream({
+                      inputData: workflowInputData,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(initialState && { initialState }),
+                    });
 
                 if (context?.writer) {
                   await streamResult.fullStream.pipeTo(context.writer);
@@ -1960,10 +1975,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   runId: run.runId,
                 };
               } else if (result?.status === 'suspended') {
-                return {
-                  error: `Workflow ended with status: "suspended". This is not currently handled in the basic agent workflow tool transformation. To achieve this you'll need to write your own tool that uses a workflow internally.`,
-                  runId: run.runId,
-                };
+                const suspendedStep = result?.suspended?.[0]?.[0]!;
+                const suspendPayload = result?.steps?.[suspendedStep]?.suspendPayload;
+
+                if (suspendPayload?.__workflow_meta) {
+                  delete suspendPayload.__workflow_meta;
+                }
+                return suspend?.(suspendPayload);
               } else {
                 // This is to satisfy the execute fn's return value for typescript
                 return {
