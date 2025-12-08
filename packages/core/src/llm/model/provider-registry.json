@@ -371,7 +371,7 @@
       "url": "https://api.deepseek.com",
       "apiKeyEnvVar": "DEEPSEEK_API_KEY",
       "name": "DeepSeek",
-      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "models": ["deepseek-chat", "deepseek-reasoner", "deepseek-v3.2"],
       "docUrl": "https://platform.deepseek.com/api-docs/pricing",
       "gateway": "models.dev"
     },
@@ -1994,7 +1994,7 @@
       "zai-org/glm-4.5",
       "zai-org/glm-4.5-air"
     ],
-    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    "deepseek": ["deepseek-chat", "deepseek-reasoner", "deepseek-v3.2"],
     "alibaba-cn": [
       "deepseek-r1",
       "deepseek-r1-0528",

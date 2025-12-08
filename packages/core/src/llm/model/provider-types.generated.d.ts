@@ -266,7 +266,7 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.5',
     'zai-org/glm-4.5-air',
   ];
-  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner'];
+  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v3.2'];
   readonly 'alibaba-cn': readonly [
     'deepseek-r1',
     'deepseek-r1-0528',
