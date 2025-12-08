@@ -149,6 +149,8 @@ export type ProviderModelsMap = {
     'magistral-small',
     'ministral-3b-latest',
     'ministral-8b-latest',
+    'mistral-large-2411',
+    'mistral-large-2512',
     'mistral-large-latest',
     'mistral-medium-2505',
     'mistral-medium-2508',
