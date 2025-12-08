@@ -6621,6 +6621,76 @@ describe('Workflow', () => {
         expect((result.error as any).responseHeaders).toEqual(customErrorProps.responseHeaders);
       }
     });
+
+    it('should load serialized error from storage via getWorkflowRunById', async () => {
+      // This test verifies the full round-trip: error is serialized to storage,
+      // and when loaded via getWorkflowRunById, it's a plain object (not Error instance)
+      const mockStorage = new MockStore();
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+      });
+
+      const errorMessage = 'Test error for storage round-trip';
+      const thrownError = new Error(errorMessage);
+      (thrownError as any).statusCode = 500;
+      (thrownError as any).errorCode = 'INTERNAL_ERROR';
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockImplementation(() => {
+          throw thrownError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'storage-roundtrip-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        mastra,
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Now load the workflow run from storage
+      const workflowRun = await mockStorage.getWorkflowRunById({
+        runId: run.runId,
+        workflowName: 'storage-roundtrip-workflow',
+      });
+
+      expect(workflowRun).toBeDefined();
+      expect(workflowRun?.snapshot).toBeDefined();
+
+      const snapshot = workflowRun?.snapshot as any;
+      expect(snapshot.status).toBe('failed');
+
+      // The error in storage should be serialized (plain object, not Error instance)
+      // because storage serializes via JSON
+      const storedStepResult = snapshot.context?.['failing-step'];
+      expect(storedStepResult).toBeDefined();
+      expect(storedStepResult.status).toBe('failed');
+
+      // Verify the stored error contains the serialized properties
+      const storedError = storedStepResult.error;
+      expect(storedError).toBeDefined();
+
+      // The stored error should be a plain object with message and custom properties
+      // (Error instances don't survive JSON serialization without toJSON)
+      expect(storedError.message).toBe(errorMessage);
+      expect(storedError.name).toBe('Error');
+      expect(storedError.statusCode).toBe(500);
+      expect(storedError.errorCode).toBe('INTERNAL_ERROR');
+
+      // Stack should NOT be in the serialized output (per serializeStack: false)
+      expect(storedError.stack).toBeUndefined();
+    });
   });
 
   describe('Complex Conditions', () => {
