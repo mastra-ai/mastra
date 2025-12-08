@@ -48,6 +48,12 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
   messages?: Array<MessageInput>;
 };
 
+/**
+ * Function called before each step of multi-step execution.
+ *
+ * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
+ * processors run in a chain and any previous processor may have modified structuredOutput.
+ */
 export type PrepareStepFunction = <TOOLS extends ToolSet>(
   args: ProcessInputStepArgs<TOOLS>,
 ) => Promise<ProcessInputStepResult<TOOLS> | undefined | void> | ProcessInputStepResult<TOOLS> | undefined | void;

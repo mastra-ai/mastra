@@ -527,7 +527,7 @@ export class ProcessorRunner {
     const {
       providerOptions: initialProviderOptions,
       modelSettings: initialModelSettings,
-      // structuredOutput,
+      structuredOutput: initialStructuredOutput,
       messageList,
       stepNumber,
       model: initialModel,
@@ -609,7 +609,7 @@ export class ProcessorRunner {
             activeTools: stepInputResult.activeTools ?? initialActiveTools,
             providerOptions: stepInputResult.providerOptions ?? initialProviderOptions,
             modelSettings: stepInputResult.modelSettings ?? initialModelSettings,
-            // structuredOutput, // TODO -- also need to somehow make the result.object and objectStream types work?
+            structuredOutput: stepInputResult.structuredOutput ?? initialStructuredOutput,
           }),
           { messageList, processor, stepNumber },
         );
@@ -634,6 +634,9 @@ export class ProcessorRunner {
         }
         if (result.modelSettings) {
           stepInputResult.modelSettings = result.modelSettings;
+        }
+        if (result.structuredOutput) {
+          stepInputResult.structuredOutput = result.structuredOutput;
         }
         if (result.messageList) {
           stepInputResult.messageList = result.messageList;

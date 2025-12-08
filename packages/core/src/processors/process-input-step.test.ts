@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
@@ -763,6 +764,190 @@ describe('processInputStep', () => {
       expect(modelSettingsSeenByEachProcessor[0].settings).toEqual({ topP: 0.9 });
       expect(modelSettingsSeenByEachProcessor[1].settings).toEqual({ topP: 0.9, maxTokens: 1000 });
       expect(result.modelSettings).toEqual({ topP: 0.9, maxTokens: 1000, temperature: 0.5 });
+    });
+  });
+
+  describe('structuredOutput', () => {
+    it('should allow processor to modify structuredOutput', async () => {
+      const nameSchema = z.object({ name: z.string() });
+
+      const processor: Processor = {
+        id: 'schema-modifier',
+        processInputStep: async () => {
+          return {
+            structuredOutput: {
+              schema: nameSchema,
+            },
+          };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(result.structuredOutput?.schema).toBe(nameSchema);
+    });
+
+    it('should chain structuredOutput changes through multiple processors', async () => {
+      const nameSchema = z.object({ name: z.string() });
+      const structuredOutputSeenByEachProcessor: Array<{ processorId: string; output: any }> = [];
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ structuredOutput }) => {
+          structuredOutputSeenByEachProcessor.push({
+            processorId: 'processor-1',
+            output: structuredOutput ? { ...structuredOutput } : undefined,
+          });
+          return {
+            structuredOutput: {
+              schema: nameSchema,
+            },
+          };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async ({ structuredOutput }) => {
+          structuredOutputSeenByEachProcessor.push({
+            processorId: 'processor-2',
+            output: structuredOutput ? { ...structuredOutput } : undefined,
+          });
+          // Only modify if structuredOutput exists with a schema
+          if (structuredOutput?.schema) {
+            return {
+              structuredOutput: {
+                ...structuredOutput,
+                instructions: 'Return a valid JSON object',
+              },
+            };
+          }
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      // First processor should see undefined (no initial structuredOutput)
+      expect(structuredOutputSeenByEachProcessor[0].output).toBeUndefined();
+
+      // Second processor should see the schema from processor 1
+      expect(structuredOutputSeenByEachProcessor[1].output?.schema).toBe(nameSchema);
+
+      // Final result should have both schema and instructions
+      expect(result.structuredOutput?.schema).toBe(nameSchema);
+      expect(result.structuredOutput?.instructions).toBe('Return a valid JSON object');
+    });
+
+    it('should pass initial structuredOutput to processors', async () => {
+      const countSchema = z.object({ count: z.number() });
+      let receivedStructuredOutput: any;
+
+      const processor: Processor = {
+        id: 'reader-processor',
+        processInputStep: async ({ structuredOutput }) => {
+          receivedStructuredOutput = structuredOutput;
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        structuredOutput: { schema: countSchema },
+      });
+
+      expect(receivedStructuredOutput?.schema).toBe(countSchema);
+    });
+
+    it('should allow processor to extend the schema with additional fields', async () => {
+      const baseSchema = z.object({ name: z.string() });
+      let extendedSchema: z.ZodObject<any> | undefined;
+
+      const processor: Processor = {
+        id: 'schema-extender',
+        processInputStep: async ({ structuredOutput }) => {
+          if (structuredOutput?.schema && structuredOutput.schema instanceof z.ZodObject) {
+            extendedSchema = structuredOutput.schema.extend({ age: z.number() });
+            return {
+              structuredOutput: {
+                ...structuredOutput,
+                schema: extendedSchema,
+              },
+            };
+          }
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        structuredOutput: { schema: baseSchema },
+      });
+
+      // Verify the schema was extended
+      expect(result.structuredOutput?.schema).toBe(extendedSchema);
+      expect(extendedSchema).toBeDefined();
+
+      // Verify the extended schema has both original and new fields
+      const shape = extendedSchema!.shape;
+      expect(shape.name).toBeDefined();
+      expect(shape.age).toBeDefined();
     });
   });
 

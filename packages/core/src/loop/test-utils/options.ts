@@ -1456,9 +1456,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           messageList,
           stopWhen: stepCountIs(3),
           options: {
-            // @ts-expect-error -- TODO
-            prepareStep: async ({ model, stepNumber, steps, messages, tools, messageList: ml }) => {
-              console.log('tools', tools);
+            prepareStep: async ({ model, stepNumber, steps, messages }) => {
               prepareStepCalls.push({
                 model: {
                   modelId: model.modelId,
@@ -1478,12 +1476,22 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   },
                   messages: [
                     {
+                      id: 'sys-0',
                       role: 'system' as const,
-                      content: 'system-message-0',
+                      createdAt: new Date(),
+                      content: {
+                        format: 2 as const,
+                        parts: [{ type: 'text' as const, text: 'system-message-0' }],
+                      },
                     },
                     {
+                      id: 'user-0',
                       role: 'user' as const,
-                      content: 'new input from prepareStep',
+                      createdAt: new Date(),
+                      content: {
+                        format: 2 as const,
+                        parts: [{ type: 'text' as const, text: 'new input from prepareStep' }],
+                      },
                     },
                   ],
                 };
@@ -1494,12 +1502,22 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   activeTools: [],
                   messages: [
                     {
-                      role: 'system',
-                      content: 'system-message-1',
+                      id: 'sys-1',
+                      role: 'system' as const,
+                      createdAt: new Date(),
+                      content: {
+                        format: 2 as const,
+                        parts: [{ type: 'text' as const, text: 'system-message-1' }],
+                      },
                     },
                     {
-                      role: 'user',
-                      content: 'another new input from prepareStep 222',
+                      id: 'user-1',
+                      role: 'user' as const,
+                      createdAt: new Date(),
+                      content: {
+                        format: 2 as const,
+                        parts: [{ type: 'text' as const, text: 'another new input from prepareStep 222' }],
+                      },
                     },
                   ],
                 };

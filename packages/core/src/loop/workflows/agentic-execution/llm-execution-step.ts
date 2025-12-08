@@ -498,6 +498,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         let stepTools = tools;
         let stepProviderOptions = providerOptions;
         let stepModelSettings = modelSettings;
+        let stepStructuredOutput = structuredOutput;
 
         const inputStepProcessors = [
           ...(inputProcessors || []),
@@ -523,6 +524,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               activeTools: Object.keys(stepTools || {}),
               providerOptions,
               modelSettings,
+              structuredOutput,
             });
 
             if (processInputStepResult.model) {
@@ -543,6 +545,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             }
             if (processInputStepResult.modelSettings) {
               stepModelSettings = processInputStepResult.modelSettings;
+            }
+            if (processInputStepResult.structuredOutput) {
+              // Cast needed: processor returns StructuredOutputOptions<OutputSchema>, but we need OUTPUT type
+              // This is safe because at runtime the schema type flows through correctly
+              stepStructuredOutput = processInputStepResult.structuredOutput as typeof stepStructuredOutput;
             }
           } catch (error) {
             console.error('Error in processInputStep processors:', error);
@@ -576,7 +583,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                   options,
                   modelSettings: stepModelSettings,
                   includeRawChunks,
-                  structuredOutput,
+                  structuredOutput: stepStructuredOutput,
                   headers,
                   methodType,
                   generateId: _internal?.generateId,
@@ -629,7 +636,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             runId,
             toolCallStreaming,
             includeRawChunks,
-            structuredOutput,
+            structuredOutput: stepStructuredOutput,
             outputProcessors,
             isLLMExecutionStep: true,
             tracingContext,
@@ -646,7 +653,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             messageId,
             messageList,
             runState,
-            options,
+            // Cast is safe: LoopConfig<OUTPUT> is compatible at runtime with LoopConfig<OUTPUT | undefined>
+            options: options as LoopConfig<OUTPUT | undefined>,
             controller,
             responseFromModel: {
               warnings,

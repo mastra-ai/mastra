@@ -66,9 +66,12 @@ export interface ProcessOutputResultArgs extends ProcessorMessageContext {}
 
 /**
  * Arguments for processInputStep method
+ *
+ * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
+ * processors run in a chain and any previous processor may have modified structuredOutput.
+ * The actual schema type is only known at the generate()/stream() call site.
  */
-export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
-  extends ProcessorMessageContext {
+export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> extends ProcessorMessageContext {
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<TOOLS>>;
@@ -77,12 +80,18 @@ export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, OUTPUT ex
   systemMessages: CoreMessageV4[];
 
   model: MastraLanguageModelV2;
+  /** Current tools available for this step */
+  tools?: TOOLS;
   toolChoice?: ToolChoice<TOOLS> | ToolChoice<any>;
   activeTools?: Array<keyof TOOLS>;
 
   providerOptions?: SharedV2ProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  /**
+   * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
+   * because processors can modify it, and the actual type is only known at runtime.
+   */
+  structuredOutput?: StructuredOutputOptions<OutputSchema>;
 }
 
 export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
@@ -90,7 +99,13 @@ export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
   'messages' | 'systemMessages' | 'abort'
 >;
 
-export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
+/**
+ * Result from processInputStep method
+ *
+ * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
+ * processors can modify it dynamically, and the actual type is only known at runtime.
+ */
+export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS | any>;
   activeTools?: Array<keyof TOOLS>;
@@ -101,7 +116,11 @@ export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet, OUTPUT exten
   systemMessages?: CoreMessageV4[];
   providerOptions?: SharedV2ProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  /**
+   * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
+   * because processors can modify it, and the actual type is only known at runtime.
+   */
+  structuredOutput?: StructuredOutputOptions<OutputSchema>;
 };
 
 export type RunProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = Omit<
