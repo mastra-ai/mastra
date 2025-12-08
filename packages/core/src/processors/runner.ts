@@ -615,7 +615,6 @@ export class ProcessorRunner {
         if (systemMessages) {
           messageList.replaceAllSystemMessages(systemMessages);
         }
-
         Object.assign(stepInput, rest);
 
         // Stop recording and get mutations for this processor
@@ -623,6 +622,7 @@ export class ProcessorRunner {
 
         processorSpan?.end({
           output: {
+            ...stepInput,
             messages: messageList.get.all.db(),
             systemMessages: messageList.getAllSystemMessages(),
             model: stepInput.model
@@ -632,10 +632,6 @@ export class ProcessorRunner {
                   specificationVersion: stepInput.model.specificationVersion,
                 }
               : undefined,
-            toolChoice: stepInput.toolChoice,
-            activeTools: stepInput.activeTools,
-            providerOptions: stepInput.providerOptions,
-            modelSettings: stepInput.modelSettings,
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
