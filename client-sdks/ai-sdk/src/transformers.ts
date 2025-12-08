@@ -45,7 +45,7 @@ type StepResult = {
   output: unknown | null;
   suspendPayload: Record<string, unknown> | null;
   resumePayload: Record<string, unknown> | null;
-  task?: null | Record<string, unknown>
+  task?: null | Record<string, unknown>;
 };
 
 export type WorkflowDataPart = {

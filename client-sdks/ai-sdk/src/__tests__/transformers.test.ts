@@ -608,8 +608,8 @@ describe('WorkflowStreamToAISDKTransformer', () => {
 
       // Verify that agent-execution-event-start returns a NetworkDataPart
       // The chunk should have the step with updated task from transformAgent
-      const agentEventChunk = networkChunks.find(
-        chunk => chunk.data?.steps?.some((step: any) => step.name === 'test-agent' && step.task),
+      const agentEventChunk = networkChunks.find(chunk =>
+        chunk.data?.steps?.some((step: any) => step.name === 'test-agent' && step.task),
       );
       expect(agentEventChunk).toBeDefined();
       expect(agentEventChunk?.type).toBe('data-network');
@@ -619,8 +619,8 @@ describe('WorkflowStreamToAISDKTransformer', () => {
 
       // Verify that workflow-execution-event-workflow-start returns a NetworkDataPart
       // The chunk should have the step with updated task from transformWorkflow
-      const workflowEventChunk = networkChunks.find(
-        chunk => chunk.data?.steps?.some((step: any) => step.name === 'test-workflow' && step.task),
+      const workflowEventChunk = networkChunks.find(chunk =>
+        chunk.data?.steps?.some((step: any) => step.name === 'test-workflow' && step.task),
       );
       expect(workflowEventChunk).toBeDefined();
       expect(workflowEventChunk?.type).toBe('data-network');
