@@ -357,8 +357,10 @@ export function createStep<
       outputSchema: ProcessorStepOutputSchema,
       execute: async ({
         inputData,
+        requestContext,
       }: {
         inputData: z.infer<typeof ProcessorStepSchema>;
+        requestContext: RequestContext;
       }): Promise<ProcessorStepOutput> => {
         // Cast to output type for easier property access - the discriminated union
         // ensures type safety at the schema level, but inside the execute function
@@ -384,10 +386,11 @@ export function createStep<
           throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
         };
 
-        // Base context for all processor methods
+        // Base context for all processor methods - includes requestContext for memory processors
         const baseContext = {
           abort,
           retryCount: retryCount ?? 0,
+          requestContext,
         };
 
         // Pass-through data that should flow to the next processor in a chain
@@ -398,7 +401,7 @@ export function createStep<
           // This enables running processor workflows from the UI where messageList can't be serialized
           messageList:
             messageList ??
-            (messages
+            (Array.isArray(messages)
               ? new MessageList()
                   .add(messages as MastraDBMessage[], 'input')
                   .addSystem((systemMessages ?? []) as CoreMessage[])
@@ -479,6 +482,13 @@ export function createStep<
                 };
               } else if (Array.isArray(result)) {
                 return { ...passThrough, messages: result };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                return {
+                  ...passThrough,
+                  messages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] }).messages,
+                  systemMessages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] })
+                    .systemMessages,
+                };
               }
               return { ...passThrough, messages };
             }
@@ -522,6 +532,13 @@ export function createStep<
                 };
               } else if (Array.isArray(result)) {
                 return { ...passThrough, messages: result };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                return {
+                  ...passThrough,
+                  messages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] }).messages,
+                  systemMessages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] })
+                    .systemMessages,
+                };
               }
               return { ...passThrough, messages };
             }
@@ -556,6 +573,13 @@ export function createStep<
                 };
               } else if (Array.isArray(result)) {
                 return { ...passThrough, messages: result };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                return {
+                  ...passThrough,
+                  messages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] }).messages,
+                  systemMessages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] })
+                    .systemMessages,
+                };
               }
               return { ...passThrough, messages };
             }

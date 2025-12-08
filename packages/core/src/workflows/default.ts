@@ -39,6 +39,7 @@ import type {
   StepFailure,
   StepFlowEntry,
   StepResult,
+  StepTripwireInfo,
   TimeTravelExecutionParams,
 } from './types';
 
@@ -285,7 +286,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           status: 'failed';
           error: string;
           endedAt: number;
-          tripwire?: TripWire;
+          tripwire?: StepTripwireInfo;
         };
       }
   > {
@@ -326,8 +327,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               status: 'failed',
               error: `Error: ${errorInstance.message}`,
               endedAt: Date.now(),
-              // Preserve TripWire for proper handling in workflow result
-              tripwire: e instanceof TripWire ? e : undefined,
+              // Preserve TripWire data as plain object for proper serialization
+              tripwire:
+                e instanceof TripWire
+                  ? {
+                      reason: e.message,
+                      retry: e.options?.retry,
+                      metadata: e.options?.metadata,
+                      processorId: e.processorId,
+                    }
+                  : undefined,
             },
           };
         }
@@ -368,16 +377,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
       // Check if the failure was due to a TripWire
-      const tripwireError = (lastOutput as any)?.tripwire;
-      if (tripwireError instanceof TripWire) {
-        // Use 'tripwire' status instead of 'failed' for tripwire errors
+      const tripwireData = lastOutput?.tripwire;
+      if (tripwireData instanceof TripWire) {
+        // Use 'tripwire' status instead of 'failed' for tripwire errors (TripWire instance)
         base.status = 'tripwire';
         base.tripwire = {
-          reason: tripwireError.message,
-          retry: tripwireError.options?.retry,
-          metadata: tripwireError.options?.metadata,
-          processorId: tripwireError.processorId,
+          reason: tripwireData.message,
+          retry: tripwireData.options?.retry,
+          metadata: tripwireData.options?.metadata,
+          processorId: tripwireData.processorId,
         };
+      } else if (tripwireData && typeof tripwireData === 'object' && 'reason' in tripwireData) {
+        // Use 'tripwire' status for plain tripwire data objects (already serialized)
+        base.status = 'tripwire';
+        base.tripwire = tripwireData;
       } else {
         base.error = this.formatResultError(error, lastOutput);
       }

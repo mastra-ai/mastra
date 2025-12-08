@@ -7,13 +7,13 @@ import { DelayedPromise } from './aisdk/v5/compat';
 import type { MastraBaseStream } from './base/base';
 import { consumeStream } from './base/consume-stream';
 import { ChunkFrom } from './types';
-import type { WorkflowStreamEvent } from './types';
+import type { StepTripwireData, WorkflowStreamEvent } from './types';
 
 export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>>
   implements MastraBaseStream<WorkflowStreamEvent>
 {
   #status: WorkflowRunStatus = 'running';
-  #tripwireData: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+  #tripwireData: StepTripwireData | undefined;
   #usageCount: Required<LanguageModelUsage> = {
     inputTokens: 0,
     outputTokens: 0,

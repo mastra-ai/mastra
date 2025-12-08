@@ -52,7 +52,6 @@ import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
-import type { TripWireOptions } from './trip-wire';
 import type {
   AgentConfig,
   AgentGenerateOptions,
