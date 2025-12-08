@@ -32,7 +32,7 @@ import type {
   MastraMessageV1,
   WorkingMemoryTemplate,
   MessageDeleteInput,
-  MemoryRuntimeContext,
+  MemoryRequestContext,
 } from './types';
 
 export type MemoryProcessorOpts = {
@@ -503,7 +503,7 @@ https://mastra.ai/en/docs/memory/overview`,
     const processors: InputProcessor[] = [];
 
     // Extract runtime memoryConfig from context if available
-    const memoryContext = context?.get('MastraMemory') as MemoryRuntimeContext | undefined;
+    const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 
@@ -636,7 +636,7 @@ https://mastra.ai/en/docs/memory/overview`,
     const processors: OutputProcessor[] = [];
 
     // Extract runtime memoryConfig from context if available
-    const memoryContext = context?.get('MastraMemory') as MemoryRuntimeContext | undefined;
+    const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 

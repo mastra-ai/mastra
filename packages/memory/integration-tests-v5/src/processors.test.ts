@@ -6,14 +6,8 @@ import { openai } from '@ai-sdk/openai';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
-import {
-  ProcessInputArgs,
-  ProcessInputResult,
-  Processor,
-  ProcessorRunner,
-  TokenLimiter,
-  ToolCallFilter,
-} from '@mastra/core/processors';
+import type { ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
+import { ProcessorRunner, TokenLimiter, ToolCallFilter } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { fastembed } from '@mastra/fastembed';
@@ -345,7 +339,7 @@ describe('Memory with Processors', () => {
     expect(filterToolCallsByName(result, `weather`)).toHaveLength(0);
   });
 
-  it.only('should apply multiple processors without duplicating messages', async () => {
+  it('should apply multiple processors without duplicating messages', async () => {
     class ConversationOnlyFilter implements Processor {
       id = 'conversation-only-filter';
       name = 'ConversationOnlyFilter';

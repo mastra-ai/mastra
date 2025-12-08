@@ -17813,10 +17813,10 @@ describe('Workflow', () => {
       // Workflow should return tripwire status
       expect(result.status).toBe('tripwire');
       if (result.status === 'tripwire') {
-        expect(result.reason).toBe('Content blocked by policy');
-        expect(result.retry).toBe(true);
-        expect(result.metadata).toEqual({ severity: 'high' });
-        expect(result.processorId).toBe('tripwire-processor');
+        expect(result.tripwire.reason).toBe('Content blocked by policy');
+        expect(result.tripwire.retry).toBe(true);
+        expect(result.tripwire.metadata).toEqual({ severity: 'high' });
+        expect(result.tripwire.processorId).toBe('tripwire-processor');
       }
     }, 30000);
 
@@ -17901,10 +17901,10 @@ describe('Workflow', () => {
       // Workflow should return tripwire status even when streaming
       expect(result.status).toBe('tripwire');
       if (result.status === 'tripwire') {
-        expect(result.reason).toBe('Forbidden content detected');
-        expect(result.retry).toBe(false);
-        expect(result.metadata).toEqual({ type: 'forbidden' });
-        expect(result.processorId).toBe('stream-tripwire-processor');
+        expect(result.tripwire.reason).toBe('Forbidden content detected');
+        expect(result.tripwire.retry).toBe(false);
+        expect(result.tripwire.metadata).toEqual({ type: 'forbidden' });
+        expect(result.tripwire.processorId).toBe('stream-tripwire-processor');
       }
     }, 30000);
 
@@ -17981,9 +17981,9 @@ describe('Workflow', () => {
       // Workflow should return tripwire status
       expect(result.status).toBe('tripwire');
       if (result.status === 'tripwire') {
-        expect(result.reason).toBe('Output contains inappropriate content');
-        expect(result.retry).toBe(true);
-        expect(result.processorId).toBe('output-stream-tripwire-processor');
+        expect(result.tripwire.reason).toBe('Output contains inappropriate content');
+        expect(result.tripwire.retry).toBe(true);
+        expect(result.tripwire.processorId).toBe('output-stream-tripwire-processor');
       }
     }, 30000);
   });

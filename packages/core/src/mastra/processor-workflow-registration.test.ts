@@ -50,9 +50,9 @@ describe('Processor Workflow Registration', () => {
       await waitForWorkflowRegistration();
 
       // Should have registered the input processor workflow
-      const workflow = mastra.getWorkflow('input-processor-workflow-test-agent');
+      const workflow = mastra.getWorkflow('test-agent-input-processor');
       expect(workflow).toBeDefined();
-      expect(workflow.id).toBe('input-processor-workflow-test-agent');
+      expect(workflow.id).toBe('test-agent-input-processor');
     });
 
     it('should register output processor workflow when agent has static outputProcessors', async () => {
@@ -78,9 +78,9 @@ describe('Processor Workflow Registration', () => {
       await waitForWorkflowRegistration();
 
       // Should have registered the output processor workflow
-      const workflow = mastra.getWorkflow('output-processor-workflow-test-agent-output');
+      const workflow = mastra.getWorkflow('test-agent-output-output-processor');
       expect(workflow).toBeDefined();
-      expect(workflow.id).toBe('output-processor-workflow-test-agent-output');
+      expect(workflow.id).toBe('test-agent-output-output-processor');
     });
 
     it('should register both input and output processor workflows', async () => {
@@ -112,8 +112,8 @@ describe('Processor Workflow Registration', () => {
       await waitForWorkflowRegistration();
 
       // Should have registered both workflows
-      const inputWorkflow = mastra.getWorkflow('input-processor-workflow-test-agent-both');
-      const outputWorkflow = mastra.getWorkflow('output-processor-workflow-test-agent-both');
+      const inputWorkflow = mastra.getWorkflow('test-agent-both-input-processor');
+      const outputWorkflow = mastra.getWorkflow('test-agent-both-output-processor');
 
       expect(inputWorkflow).toBeDefined();
       expect(outputWorkflow).toBeDefined();
@@ -136,8 +136,8 @@ describe('Processor Workflow Registration', () => {
       await waitForWorkflowRegistration();
 
       // Should not have registered any processor workflows
-      expect(() => mastra.getWorkflow('input-processor-workflow-test-agent-no-processors')).toThrow();
-      expect(() => mastra.getWorkflow('output-processor-workflow-test-agent-no-processors')).toThrow();
+      expect(() => mastra.getWorkflow('test-agent-no-processors-input-processor')).toThrow();
+      expect(() => mastra.getWorkflow('test-agent-no-processors-output-processor')).toThrow();
     });
   });
 
@@ -170,7 +170,7 @@ describe('Processor Workflow Registration', () => {
       expect(processorFn).toHaveBeenCalled();
 
       // Should have registered the workflow
-      const workflow = mastra.getWorkflow('input-processor-workflow-test-agent-fn');
+      const workflow = mastra.getWorkflow('test-agent-fn-input-processor');
       expect(workflow).toBeDefined();
     });
 
@@ -202,7 +202,7 @@ describe('Processor Workflow Registration', () => {
       expect(processorFn).toHaveBeenCalled();
 
       // Should have registered the workflow
-      const workflow = mastra.getWorkflow('output-processor-workflow-test-agent-output-fn');
+      const workflow = mastra.getWorkflow('test-agent-output-fn-output-processor');
       expect(workflow).toBeDefined();
     });
   });
@@ -279,7 +279,7 @@ describe('Processor Workflow Registration', () => {
       await waitForWorkflowRegistration();
 
       // Should have registered a single combined workflow
-      const workflow = mastra.getWorkflow('input-processor-workflow-test-agent-chain');
+      const workflow = mastra.getWorkflow('test-agent-chain-input-processor');
       expect(workflow).toBeDefined();
 
       // The workflow should contain all three processors as steps
@@ -314,7 +314,7 @@ describe('Processor Workflow Registration', () => {
       expect(mastra.getAgent('testAgent')).toBe(agent);
 
       // But no workflow should be registered
-      expect(() => mastra.getWorkflow('input-processor-workflow-test-agent-error')).toThrow();
+      expect(() => mastra.getWorkflow('test-agent-error-input-processor')).toThrow();
     });
   });
 
@@ -343,7 +343,7 @@ describe('Processor Workflow Registration', () => {
       await waitForWorkflowRegistration();
 
       // Should have registered the workflow
-      const workflow = mastra.getWorkflow('input-processor-workflow-late-added-agent');
+      const workflow = mastra.getWorkflow('late-added-agent-input-processor');
       expect(workflow).toBeDefined();
     });
   });

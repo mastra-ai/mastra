@@ -415,7 +415,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Combine all processors into a single workflow
     // Memory processors should run last (to persist messages after other processing)
     const allProcessors = [...configuredProcessors, ...memoryProcessors];
-    return this.combineProcessorsIntoWorkflow(allProcessors, `output-processor-workflow-${this.id}`);
+    return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
   /**
@@ -440,7 +440,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     const allProcessors = [...memoryProcessors, ...configuredProcessors];
-    return this.combineProcessorsIntoWorkflow(allProcessors, `input-processor-workflow-${this.id}`);
+    return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
   }
 
   /**
@@ -472,7 +472,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           ? await this.#inputProcessors({ requestContext: new RequestContext() })
           : this.#inputProcessors;
 
-      const combined = this.combineProcessorsIntoWorkflow(inputProcessors, `input-processor-workflow-${this.id}`);
+      const combined = this.combineProcessorsIntoWorkflow(inputProcessors, `${this.id}-input-processor`);
       for (const p of combined) {
         if (isProcessorWorkflow(p)) {
           workflows.push(p);
@@ -487,7 +487,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           ? await this.#outputProcessors({ requestContext: new RequestContext() })
           : this.#outputProcessors;
 
-      const combined = this.combineProcessorsIntoWorkflow(outputProcessors, `output-processor-workflow-${this.id}`);
+      const combined = this.combineProcessorsIntoWorkflow(outputProcessors, `${this.id}-output-processor`);
       for (const p of combined) {
         if (isProcessorWorkflow(p)) {
           workflows.push(p);

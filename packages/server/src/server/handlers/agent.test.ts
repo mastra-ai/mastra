@@ -184,14 +184,14 @@ describe('Agent Handlers', () => {
         description: 'A test agent with input and output processors',
         inputProcessors: [
           {
-            id: 'input-processor-workflow-agent-with-core-processors',
-            name: 'input-processor-workflow-agent-with-core-processors',
+            id: 'agent-with-core-processors-input-processor',
+            name: 'agent-with-core-processors-input-processor',
           },
         ],
         outputProcessors: [
           {
-            id: 'output-processor-workflow-agent-with-core-processors',
-            name: 'output-processor-workflow-agent-with-core-processors',
+            id: 'agent-with-core-processors-output-processor',
+            name: 'agent-with-core-processors-output-processor',
           },
         ],
       });
