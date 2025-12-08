@@ -6629,19 +6629,11 @@ describe('Agent Tests', () => {
         },
       });
 
+      let capturedModel: any;
       const result = await agent.generate('Hello', {
         prepareStep: ({ model, stepNumber }) => {
+          capturedModel = model;
           if (stepNumber === 0) {
-            expect(model.provider).toBe('openai');
-            expect(model.modelId).toBe('gpt-4o');
-
-            console.log('prepareStep', {
-              provider: model.provider,
-              modelId: model.modelId,
-              specificationVersion: model.specificationVersion,
-              stepNumber,
-            });
-
             return {
               model: {
                 providerId: 'openai',
@@ -6651,8 +6643,8 @@ describe('Agent Tests', () => {
           }
         },
       });
-      // const result = await output.getFullOutput();
-      console.log('result', result);
+      expect(capturedModel.provider).toBe('openai');
+      expect(capturedModel.modelId).toBe('gpt-4o');
       expect((result?.request?.body as any)?.model).toBe('gpt-4o-mini');
       expect(result?.response?.modelMetadata).toMatchObject({
         modelId: 'gpt-4o-mini',
