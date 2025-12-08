@@ -254,6 +254,10 @@ export class ConvexStore extends MastraStorage {
     return this.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.scores.getScoreById({ id });
   }

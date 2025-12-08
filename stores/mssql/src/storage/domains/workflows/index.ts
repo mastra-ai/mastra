@@ -370,6 +370,32 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     }
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+    const transaction = this.pool.transaction();
+    try {
+      await transaction.begin();
+      const deleteRequest = new sql.Request(transaction);
+      deleteRequest.input('workflow_name', workflowName);
+      deleteRequest.input('run_id', runId);
+      await deleteRequest.query(`DELETE FROM ${table} WHERE workflow_name = @workflow_name AND run_id = @run_id`);
+      await transaction.commit();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId,
+            workflowName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
   async listWorkflowRuns({
     workflowName,
     fromDate,

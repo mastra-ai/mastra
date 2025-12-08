@@ -283,4 +283,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
     return parsedRun as WorkflowRun;
   }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    this.collection.delete(workflowName ? `${workflowName}-${runId}` : runId);
+  }
 }
