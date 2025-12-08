@@ -295,16 +295,41 @@ class ReasoningTransformer implements Processor {
 - [ ] Processor returns nothing (undefined)
 - [ ] Processor only returns partial result (just toolChoice, not model)
 
-## TODO Items
+## Implementation Status
 
-1. ~~**providerOptions support**: Pass through and allow modification~~ ✅ Implemented
-2. ~~**modelSettings support**: Pass through and allow modification~~ ✅ Implemented (including proper chaining through multiple processors)
-3. **structuredOutput support**: Partially implemented - can be passed and returned, but:
+### ✅ Completed
+
+1. **providerOptions support**: Pass through and allow modification - chains through multiple processors
+2. **modelSettings support**: Pass through and allow modification - chains through multiple processors
+3. **Processor chaining**: Each processor receives accumulated state from previous processors (model, toolChoice, activeTools, providerOptions, modelSettings)
+4. **Span logging**: Processor spans include all serializable input args and output results
+5. **System message isolation**: System messages reset to original at each step; modifications only affect current step
+6. **Test coverage**: Comprehensive tests for model/toolChoice/activeTools/providerOptions/modelSettings chaining and edge cases
+
+### ⚠️ Breaking Changes (for 1.0 migration guide)
+
+1. **prepareStep messages format changed**: `prepareStep` used to receive `messages` formatted as AI SDK v5 model messages. Now that it's unified with `processInputStep`, messages are in `MastraDBMessage` format.
+   - **Migration**: Use `messageList.get.all.aiV5.model()` if you need the old format
+   - Example:
+     ```typescript
+     prepareStep: async ({ messageList }) => {
+       const aiSdkMessages = messageList.get.all.aiV5.model();
+       // ... use aiSdkMessages
+     };
+     ```
+
+### 🔜 Future Work
+
+1. **structuredOutput support**: Partially implemented - can be passed and returned, but:
    - If a processor changes `structuredOutput` to a different schema, the `OUTPUT` type changes
    - This affects the return type of `result.object` and `objectStream`
    - Need to figure out how to handle type inference when OUTPUT changes mid-pipeline
    - Options: (a) don't allow changing schema, only enabling/disabling, (b) use `unknown` for dynamic schemas, (c) require explicit type annotation
-4. **tools argument**: Should processors be able to modify the tools themselves? Currently `activeTools` only filters, cannot add new tools.
+2. **tools argument**: Should processors be able to modify the tools themselves? Currently `activeTools` only filters, cannot add new tools.
+
+### 📝 TODO
+
+- [ ] Update 1.0 migration guide with prepareStep messages format breaking change
 
 ## System Message Behavior
 

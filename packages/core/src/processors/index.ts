@@ -77,7 +77,7 @@ export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, OUTPUT ex
   systemMessages: CoreMessageV4[];
 
   model: MastraLanguageModelV2;
-  toolChoice?: ToolChoice<TOOLS>;
+  toolChoice?: ToolChoice<TOOLS> | ToolChoice<any>;
   activeTools?: Array<keyof TOOLS>;
 
   providerOptions?: SharedV2ProviderOptions;
@@ -92,7 +92,7 @@ export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
 
 export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
-  toolChoice?: ToolChoice<TOOLS>;
+  toolChoice?: ToolChoice<TOOLS | any>;
   activeTools?: Array<keyof TOOLS>;
 
   messages?: MastraDBMessage[];
@@ -158,15 +158,18 @@ export interface Processor<TId extends string = string> {
    * Unlike processInput which runs once at the start, this runs at every step (including tool call continuations).
    *
    * @returns Either:
+   *  - ProcessInputStepResult object with model, toolChoice, messages, etc.
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
+   *  - undefined/void: No changes
    */
   processInputStep?<TOOLS extends ToolSet = ToolSet>(
     args: ProcessInputStepArgs<TOOLS>,
   ):
-    | Promise<ProcessInputStepResult<TOOLS> | undefined | void>
+    | Promise<ProcessInputStepResult<TOOLS> | MessageList | MastraDBMessage[] | undefined | void>
     | ProcessInputStepResult<TOOLS>
-    | ProcessorMessageResult
+    | MessageList
+    | MastraDBMessage[]
     | void
     | undefined;
 }

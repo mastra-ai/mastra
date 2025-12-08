@@ -514,6 +514,408 @@ describe('processInputStep', () => {
     });
   });
 
+  describe('toolChoice and activeTools', () => {
+    it('should allow processor to modify toolChoice', async () => {
+      const processor: Processor = {
+        id: 'toolchoice-processor',
+        processInputStep: async () => {
+          return { toolChoice: 'none' as const };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        toolChoice: 'auto',
+      });
+
+      expect(result.toolChoice).toBe('none');
+    });
+
+    it('should chain toolChoice changes through multiple processors', async () => {
+      const toolChoicesSeenByEachProcessor: Array<{ processorId: string; toolChoice: any }> = [];
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ toolChoice }) => {
+          toolChoicesSeenByEachProcessor.push({
+            processorId: 'processor-1',
+            toolChoice,
+          });
+          return { toolChoice: { type: 'tool', toolName: 'specificTool' } };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async ({ toolChoice }) => {
+          toolChoicesSeenByEachProcessor.push({
+            processorId: 'processor-2',
+            toolChoice,
+          });
+          return { toolChoice: 'none' as const };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        toolChoice: 'auto',
+      });
+
+      expect(toolChoicesSeenByEachProcessor[0].toolChoice).toBe('auto');
+      expect(toolChoicesSeenByEachProcessor[1].toolChoice).toEqual({ type: 'tool', toolName: 'specificTool' });
+      expect(result.toolChoice).toBe('none');
+    });
+
+    it('should allow processor to modify activeTools', async () => {
+      const processor: Processor = {
+        id: 'activetools-processor',
+        processInputStep: async () => {
+          return { activeTools: ['tool1', 'tool2'] };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        activeTools: ['tool1', 'tool2', 'tool3'],
+      });
+
+      expect(result.activeTools).toEqual(['tool1', 'tool2']);
+    });
+
+    it('should chain activeTools changes through multiple processors', async () => {
+      const activeToolsSeenByEachProcessor: Array<{ processorId: string; activeTools: any }> = [];
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ activeTools }) => {
+          activeToolsSeenByEachProcessor.push({
+            processorId: 'processor-1',
+            activeTools: [...(activeTools || [])],
+          });
+          return { activeTools: ['tool1', 'tool2'] };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async ({ activeTools }) => {
+          activeToolsSeenByEachProcessor.push({
+            processorId: 'processor-2',
+            activeTools: [...(activeTools || [])],
+          });
+          return { activeTools: ['tool1'] };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        activeTools: ['tool1', 'tool2', 'tool3'],
+      });
+
+      expect(activeToolsSeenByEachProcessor[0].activeTools).toEqual(['tool1', 'tool2', 'tool3']);
+      expect(activeToolsSeenByEachProcessor[1].activeTools).toEqual(['tool1', 'tool2']);
+      expect(result.activeTools).toEqual(['tool1']);
+    });
+  });
+
+  describe('modelSettings', () => {
+    it('should allow processor to modify modelSettings', async () => {
+      const processor: Processor = {
+        id: 'modelsettings-processor',
+        processInputStep: async () => {
+          return {
+            modelSettings: {
+              maxTokens: 500,
+              temperature: 0.7,
+            },
+          };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(result.modelSettings).toEqual({
+        maxTokens: 500,
+        temperature: 0.7,
+      });
+    });
+
+    it('should chain modelSettings changes through multiple processors', async () => {
+      const modelSettingsSeenByEachProcessor: Array<{ processorId: string; settings: any }> = [];
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ modelSettings }) => {
+          modelSettingsSeenByEachProcessor.push({
+            processorId: 'processor-1',
+            settings: { ...modelSettings },
+          });
+          return {
+            modelSettings: {
+              ...modelSettings,
+              maxTokens: 1000,
+            },
+          };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async ({ modelSettings }) => {
+          modelSettingsSeenByEachProcessor.push({
+            processorId: 'processor-2',
+            settings: { ...modelSettings },
+          });
+          return {
+            modelSettings: {
+              ...modelSettings,
+              temperature: 0.5,
+            },
+          };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        modelSettings: { topP: 0.9 },
+      });
+
+      expect(modelSettingsSeenByEachProcessor[0].settings).toEqual({ topP: 0.9 });
+      expect(modelSettingsSeenByEachProcessor[1].settings).toEqual({ topP: 0.9, maxTokens: 1000 });
+      expect(result.modelSettings).toEqual({ topP: 0.9, maxTokens: 1000, temperature: 0.5 });
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle empty inputProcessors array', async () => {
+      const runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      // Should return empty result object
+      expect(result).toEqual({});
+    });
+
+    it('should handle processor returning undefined', async () => {
+      const processor: Processor = {
+        id: 'undefined-processor',
+        processInputStep: async () => {
+          return undefined;
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      // Should not throw, result should be empty
+      expect(result).toEqual({});
+    });
+
+    it('should handle processor returning empty object', async () => {
+      const processor: Processor = {
+        id: 'empty-processor',
+        processInputStep: async () => {
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(result).toEqual({});
+    });
+
+    it('should handle processor returning only partial result (just toolChoice)', async () => {
+      const processor: Processor = {
+        id: 'partial-processor',
+        processInputStep: async () => {
+          return { toolChoice: 'none' as const };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        toolChoice: 'auto',
+      });
+
+      // Only toolChoice should be in result, not model or other fields
+      expect(result.toolChoice).toBe('none');
+      expect(result.model).toBeUndefined();
+      expect(result.activeTools).toBeUndefined();
+    });
+
+    it('should receive steps array with previous step results', async () => {
+      let receivedSteps: any[] = [];
+
+      const processor: Processor = {
+        id: 'steps-processor',
+        processInputStep: async ({ steps }) => {
+          receivedSteps = steps;
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const mockSteps = [
+        { text: 'First response', toolCalls: [], toolResults: [] },
+        { text: 'Second response', toolCalls: [{ toolName: 'test' }], toolResults: [{ result: 'done' }] },
+      ];
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 2,
+        model: createMockModel(),
+        steps: mockSteps as any,
+      });
+
+      expect(receivedSteps).toEqual(mockSteps);
+      expect(receivedSteps.length).toBe(2);
+    });
+  });
+
   describe('processInput and processInputStep interaction', () => {
     it('processInput runs once at start, processInputStep runs at each step', async () => {
       const executionLog: string[] = [];
@@ -633,6 +1035,303 @@ describe('processInputStep', () => {
       });
 
       expect(executionLog).toEqual(['input-only-processInput', 'step-only-processInputStep-0']);
+    });
+  });
+
+  describe('messages modification', () => {
+    it('should allow processor to return modified messages array', async () => {
+      const processor: Processor = {
+        id: 'message-modifier',
+        processInputStep: async ({ messages }) => {
+          // Add a new message to the array
+          const newMessage: MastraDBMessage = {
+            id: 'injected-msg',
+            role: 'user',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'Injected by processor' }],
+            },
+            createdAt: new Date(),
+            threadId: 'test-thread',
+          };
+          return { messages: [...messages, newMessage] };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Original message')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      // The messageList should now contain the injected message
+      const allMessages = messageList.get.all.db();
+      expect(allMessages.length).toBe(2);
+      expect(allMessages[1].id).toBe('injected-msg');
+    });
+
+    it('should chain messages modifications through multiple processors', async () => {
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ messages }) => {
+          const newMessage: MastraDBMessage = {
+            id: 'msg-from-p1',
+            role: 'user',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'From processor 1' }],
+            },
+            createdAt: new Date(),
+            threadId: 'test-thread',
+          };
+          return { messages: [...messages, newMessage] };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async ({ messages }) => {
+          // Processor 2 should see messages including the one added by processor 1
+          const newMessage: MastraDBMessage = {
+            id: 'msg-from-p2',
+            role: 'user',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'From processor 2' }],
+            },
+            createdAt: new Date(),
+            threadId: 'test-thread',
+          };
+          return { messages: [...messages, newMessage] };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Original')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      const allMessages = messageList.get.all.db();
+      expect(allMessages.length).toBe(3);
+      expect(allMessages.map((m: MastraDBMessage) => m.id)).toEqual(
+        expect.arrayContaining([expect.any(String), 'msg-from-p1', 'msg-from-p2']),
+      );
+    });
+  });
+
+  describe('systemMessages modification', () => {
+    it('should allow processor to return modified systemMessages', async () => {
+      const processor: Processor = {
+        id: 'system-modifier',
+        processInputStep: async ({ systemMessages }) => {
+          // Add a new system message
+          return {
+            systemMessages: [...systemMessages, { role: 'system' as const, content: 'Additional instruction' }],
+          };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User message')], 'input');
+      // Set initial system messages on messageList
+      messageList.replaceAllSystemMessages([{ role: 'system', content: 'Original instruction' }]);
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      // Check system messages via messageList (they're applied directly, not returned in result)
+      const systemMessages = messageList.getAllSystemMessages();
+      expect(systemMessages.length).toBe(2);
+      expect(systemMessages[0].content).toBe('Original instruction');
+      expect(systemMessages[1].content).toBe('Additional instruction');
+    });
+
+    it('should chain systemMessages modifications through multiple processors', async () => {
+      const systemMessagesSeenByEachProcessor: { processorId: string; count: number }[] = [];
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async ({ systemMessages }) => {
+          systemMessagesSeenByEachProcessor.push({
+            processorId: 'processor-1',
+            count: systemMessages.length,
+          });
+          return {
+            systemMessages: [...systemMessages, { role: 'system' as const, content: 'From P1' }],
+          };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async ({ systemMessages }) => {
+          systemMessagesSeenByEachProcessor.push({
+            processorId: 'processor-2',
+            count: systemMessages.length,
+          });
+          return {
+            systemMessages: [...systemMessages, { role: 'system' as const, content: 'From P2' }],
+          };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('User message')], 'input');
+      // Set initial system messages on messageList
+      messageList.replaceAllSystemMessages([{ role: 'system', content: 'Initial' }]);
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      // Processor 1 saw 1 system message
+      // Processor 2 saw 2 system messages (processor 1 added one)
+      expect(systemMessagesSeenByEachProcessor).toEqual([
+        { processorId: 'processor-1', count: 1 },
+        { processorId: 'processor-2', count: 2 },
+      ]);
+
+      // Final result has 3 system messages (check via messageList)
+      const systemMessages = messageList.getAllSystemMessages();
+      expect(systemMessages.length).toBe(3);
+    });
+  });
+
+  describe('messageList mutations', () => {
+    it('should allow processor to mutate messageList directly and return it', async () => {
+      const processor: Processor = {
+        id: 'mutator',
+        processInputStep: async ({ messageList }) => {
+          // Mutate messageList directly
+          messageList.add(
+            [
+              {
+                id: 'mutated-msg',
+                role: 'user',
+                content: {
+                  format: 2 as const,
+                  parts: [{ type: 'text' as const, text: 'Added via mutation' }],
+                },
+                createdAt: new Date(),
+                threadId: 'test-thread',
+              } as MastraDBMessage,
+            ],
+            'input',
+          );
+          // Return the same messageList instance
+          return messageList;
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Original')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      const allMessages = messageList.get.all.db();
+      expect(allMessages.length).toBe(2);
+      expect(allMessages[1].id).toBe('mutated-msg');
+    });
+
+    it('should allow processor to return messageList in result object', async () => {
+      const processor: Processor = {
+        id: 'mutator',
+        processInputStep: async ({ messageList }) => {
+          messageList.add(
+            [
+              {
+                id: 'result-msg',
+                role: 'user',
+                content: {
+                  format: 2 as const,
+                  parts: [{ type: 'text' as const, text: 'Added and returned in result' }],
+                },
+                createdAt: new Date(),
+                threadId: 'test-thread',
+              } as MastraDBMessage,
+            ],
+            'input',
+          );
+          return { messageList };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Original')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      const allMessages = messageList.get.all.db();
+      expect(allMessages.length).toBe(2);
+      expect(allMessages[1].id).toBe('result-msg');
     });
   });
 });

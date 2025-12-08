@@ -529,7 +529,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               stepModel = processInputStepResult.model;
             }
             if (processInputStepResult.toolChoice) {
-              stepToolChoice = processInputStepResult.toolChoice;
+              // Cast needed: ToolChoice<any> from processor result is compatible at runtime
+              stepToolChoice = processInputStepResult.toolChoice as typeof stepToolChoice;
             }
             if (processInputStepResult.activeTools && stepTools) {
               const activeToolsSet = new Set(processInputStepResult.activeTools);
