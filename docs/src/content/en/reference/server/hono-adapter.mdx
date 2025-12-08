@@ -5,6 +5,7 @@ description: "API reference for the @mastra/hono server adapter."
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Hono Adapter
 
@@ -76,6 +77,59 @@ await server.init();
 
 export default app;
 ```
+
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "Hono",
+      description: "Hono app instance",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+      isOptional: true,
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "{ maxSize: number, onError: (err) => unknown }",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "{ redact?: boolean }",
+      description: "Stream redaction config. When true, redacts sensitive data from streams.",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+      isOptional: true,
+    },
+  ]}
+/>
+
 
 ## Adding custom routes
 

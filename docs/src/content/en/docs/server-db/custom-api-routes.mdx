@@ -5,11 +5,11 @@ description: "Expose additional HTTP endpoints from your Mastra server."
 
 # Custom API Routes
 
-By default Mastra automatically exposes registered agents and workflows via the server. For additional behavior you can define your own HTTP routes.
+By default, Mastra automatically exposes registered agents and workflows via its server. For additional behavior you can define your own HTTP routes.
 
-Routes are provided with a helper `registerApiRoute` from `@mastra/core/server`. Routes can live in the same file as the `Mastra` instance but separating them helps keep configuration concise.
+Routes are provided with a helper `registerApiRoute()` from `@mastra/core/server`. Routes can live in the same file as the `Mastra` instance but separating them helps keep configuration concise.
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 
@@ -39,9 +39,9 @@ curl http://localhost:4111/my-custom-route
 
 Each route's handler receives the Hono `Context`. Within the handler you can access the `Mastra` instance to fetch or call agents and workflows.
 
-To add route-specific middleware pass a `middleware` array when calling `registerApiRoute`.
+To add route-specific middleware pass a `middleware` array when calling `registerApiRoute()`.
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 

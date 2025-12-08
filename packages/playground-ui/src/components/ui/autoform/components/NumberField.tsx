@@ -1,17 +1,9 @@
 import { Input } from '@/components/ui/input';
 import { AutoFormFieldProps } from '@autoform/react';
-import React, { useEffect } from 'react';
+import React from 'react';
 
 export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, error, field, id }) => {
   const { key, ...props } = inputProps;
-
-  useEffect(() => {
-    if (field.default !== undefined) {
-      props.onChange({
-        target: { value: Number(field.default), name: inputProps.name },
-      });
-    }
-  }, [field.default]);
 
   return (
     <Input

@@ -1,5 +1,18 @@
 # @mastra/langsmith
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Fix traceMap overwrite when multiple root spans share the same traceId ([#10903](https://github.com/mastra-ai/mastra/pull/10903))
+
+  Previously, when multiple root spans shared the same traceId (e.g., multiple `agent.stream` calls in the same trace), the trace data would be overwritten instead of reused. This could cause spans to be orphaned or lost.
+
+  Now both exporters check if a trace already exists before creating a new one, matching the behavior of the Langfuse and PostHog exporters.
+
+- Updated dependencies [[`0d41fe2`](https://github.com/mastra-ai/mastra/commit/0d41fe245355dfc66d61a0d9c85d9400aac351ff), [`6b3ba91`](https://github.com/mastra-ai/mastra/commit/6b3ba91494cc10394df96782f349a4f7b1e152cc), [`7907fd1`](https://github.com/mastra-ai/mastra/commit/7907fd1c5059813b7b870b81ca71041dc807331b)]:
+  - @mastra/core@1.0.0-beta.8
+
 ## 1.0.0-beta.3
 
 ### Patch Changes

@@ -1,12 +1,17 @@
 import { test, expect, Page } from '@playwright/test';
 import { selectFixture } from '../../__utils__/select-fixture';
 import { nanoid } from 'nanoid';
+import { resetStorage } from '../../__utils__/reset-storage';
 
 let page: Page;
 
 test.beforeEach(async ({ browser }) => {
   const context = await browser.newContext();
   page = await context.newPage();
+});
+
+test.afterEach(async () => {
+  await resetStorage();
 });
 
 test('text stream', async () => {
@@ -118,6 +123,7 @@ test('workflow stream', async () => {
   });
 
   // Memory
+  await expect(page.getByTestId('thread-list').locator('li')).toHaveCount(2); // One is the new button, second is the new thread
   await page.reload();
   await expect(page.locator('[data-workflow-node]').nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(1)).toHaveAttribute('data-workflow-step-status', 'success');
