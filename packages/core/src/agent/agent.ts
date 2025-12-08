@@ -347,8 +347,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Single item that's already a workflow - mark it as processor type and return
     if (processors.length === 1 && isProcessorWorkflow(processors[0]!)) {
       const workflow = processors[0]!;
-      // Mark the workflow as a processor workflow
-      workflow.type = 'processor';
+      // Mark the workflow as a processor workflow if not already set
+      // Note: This mutates the workflow, but processor workflows are expected to be
+      // dedicated to this purpose and not reused as regular workflows
+      if (!workflow.type) {
+        workflow.type = 'processor';
+      }
       return [workflow];
     }
 
@@ -362,8 +366,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // If after filtering we have a single workflow, mark it as processor type and return
     if (validProcessors.length === 1 && isProcessorWorkflow(validProcessors[0]!)) {
       const workflow = validProcessors[0]!;
-      // Mark the workflow as a processor workflow
-      workflow.type = 'processor';
+      // Mark the workflow as a processor workflow if not already set
+      if (!workflow.type) {
+        workflow.type = 'processor';
+      }
       return [workflow];
     }
 
