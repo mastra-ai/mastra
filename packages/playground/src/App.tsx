@@ -23,6 +23,7 @@ import { McpServerPage } from './pages/mcps/[serverId]';
 import {
   LinkComponentProvider,
   LinkComponentProviderProps,
+  PlaygroundConfigGuard,
   PlaygroundQueryClient,
   StudioConfigProvider,
   useStudioConfig,
@@ -76,6 +77,10 @@ function App() {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
     return null;
+  }
+
+  if (!baseUrl) {
+    return <PlaygroundConfigGuard />;
   }
 
   return (
