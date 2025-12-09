@@ -1,5 +1,14 @@
 # @mastra/agent-builder
 
+## 0.2.6-alpha.1
+
+### Patch Changes
+
+- Fix install step validation error by making targetPath optional in InstallInputSchema. This resolves the "expected string, received undefined" error when running the agent builder template workflow without explicitly providing a targetPath parameter. ([#10923](https://github.com/mastra-ai/mastra/pull/10923))
+
+- Updated dependencies []:
+  - @mastra/core@0.24.7-alpha.3
+
 ## 0.2.6-alpha.0
 
 ### Patch Changes

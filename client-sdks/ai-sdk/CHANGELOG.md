@@ -1,5 +1,20 @@
 # @mastra/ai-sdk
 
+## 0.3.3-alpha.0
+
+### Patch Changes
+
+- Return NetworkDataPart on each agent-execution-event and workflow-execution-event in network streams ([#10979](https://github.com/mastra-ai/mastra/pull/10979))
+
+- Fixed tool-call-suspended chunks being dropped in workflow-step-output when using AI SDK. Previously, when an agent inside a workflow step called a tool that got suspended, the tool-call-suspended chunk was not received on the frontend even though tool-input-available chunks were correctly received. ([#10988](https://github.com/mastra-ai/mastra/pull/10988))
+
+  The issue occurred because tool-call-suspended was not included in the isMastraTextStreamChunk list, causing it to be filtered out in transformWorkflow. Now tool-call-suspended, tool-call-approval, object, and tripwire chunks are properly included in the text stream chunk list and will be transformed and passed through correctly.
+
+  Fixes #10978
+
+- Updated dependencies []:
+  - @mastra/core@0.24.7-alpha.3
+
 ## 0.3.2
 
 ### Patch Changes
