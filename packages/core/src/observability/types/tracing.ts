@@ -5,6 +5,7 @@ import type { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
+import type { LanguageModelUsage, ProviderMetadata } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 
 // ============================================================================
@@ -78,20 +79,48 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
 }
 
-/** Token usage statistics - supports both v5 and legacy formats */
+/**
+ * Detailed breakdown of input token usage by type.
+ * Based on OpenInference semantic conventions.
+ */
+export interface InputTokenDetails {
+  /** Regular text tokens (non-cached, non-audio, non-image) */
+  text?: number;
+  /** Tokens served from cache (cache hit/read) */
+  cacheRead?: number;
+  /** Tokens written to cache (cache creation - Anthropic only) */
+  cacheWrite?: number;
+  /** Audio input tokens */
+  audio?: number;
+  /** Image input tokens (includes PDF pages) */
+  image?: number;
+}
+
+/**
+ * Detailed breakdown of output token usage by type.
+ * Based on OpenInference semantic conventions.
+ */
+export interface OutputTokenDetails {
+  /** Regular text output tokens */
+  text?: number;
+  /** Reasoning/thinking tokens (o1, Claude thinking, Gemini thoughts) */
+  reasoning?: number;
+  /** Audio output tokens */
+  audio?: number;
+  /** Image output tokens (DALL-E, etc.) */
+  image?: number;
+}
+
+/** Token usage statistics */
 export interface UsageStats {
-  // VNext paths
+  /** Total input tokens (sum of all input details) */
   inputTokens?: number;
+  /** Total output tokens (sum of all output details) */
   outputTokens?: number;
-  // Legacy format (for backward compatibility)
-  promptTokens?: number;
-  completionTokens?: number;
-  // Common fields
-  totalTokens?: number;
-  reasoningTokens?: number;
-  cachedInputTokens?: number;
-  promptCacheHitTokens?: number;
-  promptCacheMissTokens?: number;
+  /** Detailed breakdown of input token usage */
+  inputDetails?: InputTokenDetails;
+  /** Detailed breakdown of output token usage */
+  outputDetails?: OutputTokenDetails;
 }
 
 /**
@@ -108,7 +137,7 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   provider?: string;
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
-  /** Token usage statistics - supports both v5 and legacy formats */
+  /** Token usage statistics */
   usage?: UsageStats;
   /** Model parameters */
   parameters?: {
@@ -528,10 +557,20 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   tags?: string[];
 }
 
+/**
+ * Options for ending a model generation span
+ */
+export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENERATION> {
+  /** Raw usage data from AI SDK - will be converted to UsageStats with cache token details */
+  usage?: LanguageModelUsage;
+  /** Provider-specific metadata for extracting cache tokens */
+  providerMetadata?: ProviderMetadata;
+}
+
 export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
-  endGeneration(options?: EndSpanOptions<SpanType.MODEL_GENERATION>): void;
+  endGeneration(options?: EndGenerationOptions): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
 }
 
