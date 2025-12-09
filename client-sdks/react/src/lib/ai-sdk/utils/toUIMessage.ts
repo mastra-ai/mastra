@@ -111,6 +111,39 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
   // Always return a new array reference for React
   const result = [...conversation];
 
+  // Handle data-* chunks (custom data chunks from writer.custom())
+  if (chunk.type.startsWith('data-')) {
+    const lastMessage = result[result.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') {
+      // Create a new assistant message with the data part
+      const newMessage: MastraUIMessage = {
+        id: `data-${chunk.runId}-${Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: chunk.type as `data-${string}`,
+            data: 'data' in chunk ? chunk.data : undefined,
+          },
+        ],
+        metadata,
+      };
+      return [...result, newMessage];
+    }
+
+    // Add data part to existing assistant message
+    const updatedMessage: MastraUIMessage = {
+      ...lastMessage,
+      parts: [
+        ...lastMessage.parts,
+        {
+          type: chunk.type as `data-${string}`,
+          data: 'data' in chunk ? chunk.data : undefined,
+        },
+      ],
+    };
+    return [...result.slice(0, -1), updatedMessage];
+  }
+
   switch (chunk.type) {
     case 'tripwire': {
       // Create a new assistant message

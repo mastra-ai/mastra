@@ -14,7 +14,7 @@ export function createToolCallStep<
   tools,
   messageList,
   options,
-  writer,
+  outputWriter,
   controller,
   runId,
   streamState,
@@ -218,7 +218,7 @@ export function createToolCallStep<
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
           messages: messageList.get.input.aiV5.model(),
-          writableStream: writer,
+          outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
           suspend: async (suspendPayload: any) => {

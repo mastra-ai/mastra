@@ -531,6 +531,7 @@ const sidebars = {
           id: "ai-sdk/to-ai-sdk-stream",
           label: "toAISdkStream()",
         },
+        { type: "doc", id: "ai-sdk/with-mastra", label: "withMastra()" },
         { type: "doc", id: "ai-sdk/workflow-route", label: "workflowRoute()" },
       ],
     },

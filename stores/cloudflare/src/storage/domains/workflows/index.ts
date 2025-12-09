@@ -315,4 +315,27 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       return null;
     }
   }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      if (!runId || !workflowName) {
+        throw new Error('runId and workflowName are required');
+      }
+      const key = this.operations.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId });
+      await this.operations.deleteKV(TABLE_WORKFLOW_SNAPSHOT, key);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
+  }
 }

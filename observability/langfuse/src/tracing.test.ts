@@ -426,9 +426,8 @@ describe('LangfuseExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            promptTokens: 10,
-            completionTokens: 5,
-            totalTokens: 15,
+            inputTokens: 10,
+            outputTokens: 5,
           },
           parameters: {
             temperature: 0.7,
@@ -461,17 +460,17 @@ describe('LangfuseExporter', () => {
         },
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
-        usage: {
+        usageDetails: {
           input: 10,
           output: 5,
           total: 15,
         },
-        metadata: {
+        metadata: expect.objectContaining({
           provider: 'openai',
           resultType: 'response_generation',
           spanType: 'model_generation',
           streaming: false,
-        },
+        }),
       });
     });
 
@@ -663,7 +662,7 @@ describe('LangfuseExporter', () => {
       // Then update it
       llmSpan.attributes = {
         ...llmSpan.attributes,
-        usage: { totalTokens: 150 },
+        usage: { inputTokens: 100, outputTokens: 50 },
       } as ModelGenerationAttributes;
       llmSpan.output = { content: 'Updated response' };
 
@@ -678,7 +677,9 @@ describe('LangfuseExporter', () => {
         }),
         model: 'gpt-4',
         output: { content: 'Updated response' },
-        usage: {
+        usageDetails: {
+          input: 100,
+          output: 50,
           total: 150,
         },
       });
@@ -1365,256 +1366,142 @@ describe('LangfuseExporter', () => {
     });
   });
 
-  describe('AI SDK v4 and v5 Compatibility', () => {
-    describe('Token Usage Normalization', () => {
-      it('should handle AI SDK v4 token format (promptTokens/completionTokens)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v4-span',
-          name: 'llm-generation-v4',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              promptTokens: 100,
-              completionTokens: 50,
-              totalTokens: 150,
-            },
+  describe('Token Usage Normalization', () => {
+    it('should handle token format with inputTokens/outputTokens', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-v5-span',
+        name: 'llm-generation-v5',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4o',
+          provider: 'openai',
+          usage: {
+            inputTokens: 120,
+            outputTokens: 60,
           },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 100,
-              output: 50,
-              total: 150,
-            },
-          }),
-        );
+        },
       });
 
-      it('should handle AI SDK v5 token format (inputTokens/outputTokens)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v5-span',
-          name: 'llm-generation-v5',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4o',
-            provider: 'openai',
-            usage: {
-              inputTokens: 120,
-              outputTokens: 60,
-              totalTokens: 180,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4o',
-            usage: {
-              input: 120,
-              output: 60,
-              total: 180,
-            },
-          }),
-        );
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
       });
 
-      it('should handle AI SDK v5 reasoning tokens', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v5-reasoning-span',
-          name: 'llm-generation-reasoning',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'o1-preview',
-            provider: 'openai',
-            usage: {
-              inputTokens: 100,
-              outputTokens: 50,
-              reasoningTokens: 1000,
-              totalTokens: 1150,
-            },
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gpt-4o',
+          usageDetails: {
+            input: 120,
+            output: 60,
+            total: 180,
           },
-        });
+        }),
+      );
+    });
 
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'o1-preview',
-            usage: {
-              input: 100,
-              output: 50,
-              reasoning: 1000,
-              total: 1150,
-            },
-          }),
-        );
+    it('should handle reasoning tokens from outputDetails', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-v5-reasoning-span',
+        name: 'llm-generation-reasoning',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'o1-preview',
+          provider: 'openai',
+          usage: {
+            inputTokens: 100,
+            outputTokens: 1050,
+            outputDetails: { reasoning: 1000 },
+          },
+        },
       });
 
-      it('should handle AI SDK v5 cached input tokens', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v5-cached-span',
-          name: 'llm-generation-cached',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'claude-3-5-sonnet',
-            provider: 'anthropic',
-            usage: {
-              inputTokens: 150,
-              outputTokens: 75,
-              cachedInputTokens: 100,
-              totalTokens: 225,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'claude-3-5-sonnet',
-            usage: {
-              input: 150,
-              output: 75,
-              cachedInput: 100,
-              total: 225,
-            },
-          }),
-        );
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
       });
 
-      it('should handle legacy cache metrics (promptCacheHitTokens/promptCacheMissTokens)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-cache-legacy-span',
-          name: 'llm-generation-cache-legacy',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              promptTokens: 200,
-              completionTokens: 100,
-              totalTokens: 300,
-              promptCacheHitTokens: 150,
-              promptCacheMissTokens: 50,
-            },
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'o1-preview',
+          usageDetails: {
+            input: 100,
+            output: 1050,
+            reasoning: 1000,
+            total: 1150,
           },
-        });
+        }),
+      );
+    });
 
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 200,
-              output: 100,
-              total: 300,
-              promptCacheHit: 150,
-              promptCacheMiss: 50,
-            },
-          }),
-        );
+    it('should handle cached input tokens from inputDetails', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-v5-cached-span',
+        name: 'llm-generation-cached',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'claude-3-5-sonnet',
+          provider: 'anthropic',
+          usage: {
+            inputTokens: 150,
+            outputTokens: 75,
+            inputDetails: { cacheRead: 100 },
+          },
+        },
       });
 
-      it('should calculate total tokens when not provided', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-calculated-total',
-          name: 'llm-generation-calc',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              inputTokens: 80,
-              outputTokens: 40,
-              // no totalTokens provided
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 80,
-              output: 40,
-              total: 120, // calculated
-            },
-          }),
-        );
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
       });
 
-      it('should handle mixed v4/v5 format gracefully (prioritizing v5)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-mixed-span',
-          name: 'llm-generation-mixed',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              // Both formats present - v5 should take precedence
-              inputTokens: 100,
-              promptTokens: 90,
-              outputTokens: 50,
-              completionTokens: 45,
-              totalTokens: 150,
-            },
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-3-5-sonnet',
+          usageDetails: {
+            input: 150,
+            output: 75,
+            cache_read_input_tokens: 100,
+            total: 225,
           },
-        });
+        }),
+      );
+    });
 
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 100, // v5 value, not 90
-              output: 50, // v5 value, not 45
-              total: 150,
-            },
-          }),
-        );
+    it('should calculate total tokens when not provided', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-calculated-total',
+        name: 'llm-generation-calc',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+          usage: {
+            inputTokens: 80,
+            outputTokens: 40,
+            // no totalTokens provided
+          },
+        },
       });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gpt-4',
+          usageDetails: {
+            input: 80,
+            output: 40,
+            total: 120, // calculated
+          },
+        }),
+      );
     });
   });
 

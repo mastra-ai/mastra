@@ -1,4 +1,3 @@
-import type { WritableStream } from 'node:stream/web';
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet } from 'ai-v5';
 import z from 'zod';
@@ -28,6 +27,7 @@ import type {
   ModelManagerModelConfig,
 } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
+import type { OutputWriter } from '../workflows/types';
 
 export type StreamInternal = {
   now?: () => number;
@@ -127,7 +127,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
-  writer: WritableStream<ChunkType<OUTPUT>>;
+  outputWriter: OutputWriter;
 } & LoopRun<Tools, OUTPUT>;
 
 export const PRIMITIVE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);

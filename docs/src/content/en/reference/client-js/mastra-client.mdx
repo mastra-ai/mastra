@@ -101,8 +101,8 @@ export const mastraClient = new MastraClient({
     },
     {
       name: "saveMessageToMemory(params)",
-      type: "Promise<void>",
-      description: "Saves one or more messages to the memory system.",
+      type: "Promise<{ messages: (MastraMessageV1 | MastraDBMessage)[] }>",
+      description: "Saves one or more messages to the memory system. Returns the saved messages.",
     },
     {
       name: "getMemoryStatus()",

@@ -12,12 +12,14 @@ import { TransformStream } from 'node:stream/web';
 import { SpanType } from '@mastra/core/observability';
 import type {
   Span,
-  EndSpanOptions,
+  EndGenerationOptions,
   ErrorSpanOptions,
   TracingContext,
   UpdateSpanOptions,
 } from '@mastra/core/observability';
 import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
+
+import { extractUsageMetrics } from './usage';
 
 /**
  * Manages MODEL_STEP and MODEL_CHUNK span tracking for streaming Model responses.
@@ -44,8 +46,7 @@ export class ModelSpanTracker {
   #accumulator: Record<string, any> = {};
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
-  /** Tracks whether completionStartTime has been captured for this generation */
-  #completionStartTimeCaptured: boolean = false;
+  #completionStartTime?: Date;
   /** Tracks tool output accumulators by toolCallId for consolidating sub-agent streams */
   #toolOutputAccumulators: Map<string, ToolOutputAccumulator> = new Map();
   /** Tracks toolCallIds that had streaming output (to skip redundant tool-result spans) */
@@ -57,19 +58,12 @@ export class ModelSpanTracker {
 
   /**
    * Capture the completion start time (time to first token) when the first content chunk arrives.
-   * This is used by observability providers like Langfuse to calculate TTFT metrics.
    */
   #captureCompletionStartTime(): void {
-    if (this.#completionStartTimeCaptured || !this.#modelSpan) {
+    if (this.#completionStartTime) {
       return;
     }
-
-    this.#completionStartTimeCaptured = true;
-    this.#modelSpan.update({
-      attributes: {
-        completionStartTime: new Date(),
-      },
-    });
+    this.#completionStartTime = new Date();
   }
 
   /**
@@ -90,10 +84,18 @@ export class ModelSpanTracker {
   }
 
   /**
-   * End the generation span
+   * End the generation span with optional raw usage data.
+   * If usage is provided, it will be converted to UsageStats with cache token details.
    */
-  endGeneration(options?: EndSpanOptions<SpanType.MODEL_GENERATION>): void {
-    this.#modelSpan?.end(options);
+  endGeneration(options?: EndGenerationOptions): void {
+    const { usage, providerMetadata, ...spanOptions } = options ?? {};
+
+    if (spanOptions.attributes) {
+      spanOptions.attributes.completionStartTime = this.#completionStartTime;
+      spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
+    }
+
+    this.#modelSpan?.end(spanOptions);
   }
 
   /**
@@ -129,9 +131,12 @@ export class ModelSpanTracker {
 
     // Extract all data from step-finish chunk
     const output = payload.output;
-    const { usage, ...otherOutput } = output;
+    const { usage: rawUsage, ...otherOutput } = output;
     const stepResult = payload.stepResult;
     const metadata = payload.metadata;
+
+    // Convert raw usage to UsageStats with cache token details
+    const usage = extractUsageMetrics(rawUsage, metadata?.providerMetadata);
 
     // Remove request object from metadata (too verbose)
     const cleanMetadata = metadata ? { ...metadata } : undefined;
@@ -454,13 +459,16 @@ export class ModelSpanTracker {
    * create MODEL_STEP and MODEL_CHUNK spans for each semantic unit in the stream.
    */
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T {
-    let captureCompletionStartTime = false;
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
-          if (!captureCompletionStartTime) {
-            captureCompletionStartTime = true;
-            this.#captureCompletionStartTime();
+          // Capture completion start time on first actual content (for time-to-first-token)
+          switch (chunk.type) {
+            case 'text-delta':
+            case 'tool-call-delta':
+            case 'reasoning-delta':
+              this.#captureCompletionStartTime();
+              break;
           }
 
           controller.enqueue(chunk);
