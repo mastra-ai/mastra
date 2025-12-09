@@ -27,7 +27,7 @@ export function useMastraPackageVersions() {
     {
       name: '@mastra/storage',
       used: '0.9.0',
-      usedDeprecated: true,
+      //usedDeprecated: true,
       latest: '0.9.0',
     },
   ];
@@ -35,9 +35,9 @@ export function useMastraPackageVersions() {
   return {
     data: {
       version: packages.find(pkg => pkg.name === '@mastra/core')?.used || '?',
-      outdated: packages.filter(pkg => pkg.used !== pkg.latest)?.length || 0,
-      deprecated: packages.filter(pkg => pkg.usedDeprecated)?.length || 0,
-      packages,
+      allPackages: packages,
+      outdatedPackagesCount: packages.filter(pkg => pkg.used !== pkg.latest).length,
+      deprecatedPackagesCount: packages.filter(pkg => pkg.usedDeprecated).length,
     },
     loading: false,
     error: null,
