@@ -1,5 +1,5 @@
 ---
-'@mastra/pg': minor
+'@mastra/pg': patch
 ---
 
 Add halfvec type support for large dimension embeddings
