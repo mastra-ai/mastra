@@ -13,6 +13,7 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { join } from 'node:path';
 import { slash } from './utils';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
+import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 
 export async function getInputOptions(
   entryFile: string,
@@ -46,9 +47,11 @@ export async function getInputOptions(
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
 
-  const externals = Array.from(externalsCopy);
+  // TODO: Only do this for externals: true or always?
+  const externals: string[] = []
 
   const normalizedEntryFile = slash(entryFile);
+  console.log({ normalizedEntryFile, externals, isDev })
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
@@ -128,7 +131,10 @@ export async function getInputOptions(
         },
       }),
       enableEsmShim ? esmShim() : undefined,
-      nodeResolvePlugin,
+      // TODO: if externalsPreset true, then do nodeModulesExtensionResolver, otherwise nodeResolve
+      nodeModulesExtensionResolver(),
+      // TODO: asdf
+      // nodeResolvePlugin,
       // for debugging
       // {
       //   name: 'logger',

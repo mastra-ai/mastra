@@ -77,7 +77,7 @@ export async function getInputOptions(
     inputOptions.plugins = plugins;
     inputOptions.plugins.push(aliasHono());
     // fixes imports like lodash/fp/get
-    inputOptions.plugins.push(nodeModulesExtensionResolver());
+    inputOptions.plugins.push(nodeModulesExtensionResolver()); // TODO: Investigate if we can remove this and line 61. Try with mastra dev
   }
 
   return inputOptions;

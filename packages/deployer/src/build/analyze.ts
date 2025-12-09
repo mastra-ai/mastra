@@ -12,7 +12,7 @@ import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { isDependencyPartOfPackage } from './utils';
+import { getPackageName, isDependencyPartOfPackage } from './utils';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
 import * as stackTraceParser from 'stacktrace-parser';
 
@@ -334,7 +334,7 @@ If you think your configuration is valid, please open an issue.`);
       sourcemapEnabled: userBundlerOptions?.sourcemap ?? false,
       workspaceMap,
       projectRoot,
-      shouldCheckTransitiveDependencies: isDev,
+      shouldCheckTransitiveDependencies: isDev || userBundlerOptions?.externals === true,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
@@ -343,7 +343,8 @@ If you think your configuration is valid, please open an issue.`);
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
       const isPartOfExternals = allExternals.some(external => isDependencyPartOfPackage(dep, external));
-      if (isPartOfExternals) {
+      if (isPartOfExternals || userBundlerOptions?.externals === true && !metadata.isWorkspace) {
+        // Add all packages coming from src/mastra
         allUsedExternals.add(dep);
         continue;
       }
@@ -366,13 +367,15 @@ If you think your configuration is valid, please open an issue.`);
    *
    * Note: When `bundler.externals: true`, the filtering is handled inside bundleExternals.
    */
-  if (isDev) {
+  if (isDev || userBundlerOptions?.externals === true) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
       if (!metadata.isWorkspace) {
         depsToOptimize.delete(dep);
       }
     }
   }
+
+  console.log({ depsToOptimize })
 
   const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
@@ -389,6 +392,24 @@ If you think your configuration is valid, please open an issue.`);
     workspaceRoot,
     workspaceMap,
   });
+
+  for (const o of output) {
+    if (o.type === 'asset') {
+      continue
+    }
+    o.imports.forEach((imp) => {
+      // TODO: Not hardcode "packages"
+      if (!imp.startsWith('packages') && !imp.startsWith('node:')) {
+        const pkgName = getPackageName(imp)
+        if (pkgName) {
+          // Add packages from workspace dependencies (not workspace packages themselves)
+          allUsedExternals.add(pkgName)
+        }
+      }
+    })
+  }
+
+  console.log({ allUsedExternals })
 
   const result = await validateOutput(
     {

@@ -154,6 +154,8 @@ export abstract class Bundler extends MastraBundler {
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
     const projectRoot = closestPkgJson ? dirname(closestPkgJson) : process.cwd();
 
+    console.log({ serverFile, mastraEntryFile })
+
     const inputOptions: InputOptions = await getInputOptions(
       mastraEntryFile,
       analyzedBundleInfo,
@@ -319,6 +321,7 @@ export abstract class Bundler extends MastraBundler {
       await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
 
       this.logger.info('Bundling Mastra application');
+      console.log({ serverFile })
       const inputOptions: InputOptions = await this.getBundlerOptions(
         serverFile,
         mastraEntryFile,

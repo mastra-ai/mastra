@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
 import { builtinModules } from 'node:module';
+import nodeResolve from '@rollup/plugin-node-resolve';
 import { getPackageName } from '../utils';
 
 /**
@@ -30,7 +31,7 @@ function safeResolve(id: string, importer: string) {
 export function nodeModulesExtensionResolver(): Plugin {
   return {
     name: 'node-modules-extension-resolver',
-    resolveId(id, importer) {
+    async resolveId(id, importer, options) {
       // if is relative, skip
       if (id.startsWith('.') || id.startsWith('/') || !importer) {
         return null;
@@ -55,21 +56,31 @@ export function nodeModulesExtensionResolver(): Plugin {
         return null;
       }
 
-      try {
         // if we cannot resolve it, it means it's a legacy module
-        const resolved = import.meta.resolve(id);
-
-        if (!extname(resolved)) {
-          throw new Error(`Cannot resolve ${id} from ${importer}`);
-        }
-
-        return null;
-      } catch (e) {
+        // @ts-expect-error - todo
+        const nodeResolved = await nodeResolve().resolveId.handler.bind(this)(id, importer, options)
+        if (!nodeResolved?.resolvedBy) {
+          return null
+        } else {
         // try to do a node like resolve first
         const resolved = safeResolve(id, importer);
         if (resolved) {
+          const pkgName = getPackageName(id);
+          if (!pkgName) {
+            return null;
+          }
+
+          const pkgJsonPath = safeResolve(`${pkgName}/package.json`, importer);
+          if (!pkgJsonPath) {
+            return null;
+          }
+
+          const newImportWithExtension = resolved.replace(dirname(pkgJsonPath), pkgName);
+
+          const test = pathToFileURL(newImportWithExtension).href
+          // console.log(`${resolved} - ${id} - ${test} - ${importer} - ${newImportWithExtension}`);
           return {
-            id: pathToFileURL(resolved).href,
+            id: newImportWithExtension,
             external: true,
           };
         }
@@ -90,12 +101,12 @@ export function nodeModulesExtensionResolver(): Plugin {
             const newImportWithExtension = resolved.replace(dirname(pkgJsonPath), pkgName);
 
             return {
-              id: pathToFileURL(newImportWithExtension).href,
+              id: newImportWithExtension,
               external: true,
             };
           }
         }
-      }
+        }
 
       return null;
     },
