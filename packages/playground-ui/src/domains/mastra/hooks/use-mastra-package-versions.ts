@@ -17,18 +17,18 @@ export function useMastraPackageVersions() {
     {
       name: '@mastra/evals',
       used: '0.9.0',
-      latest: '0.9.0',
+      latest: '0.12.0',
     },
     {
       name: '@mastra/observability',
       used: '0.9.0',
-      latest: '0.9.0',
+      latest: '0.10.0',
     },
     {
       name: '@mastra/storage',
       used: '0.9.0',
-      //usedDeprecated: true,
-      latest: '0.9.0',
+      usedDeprecated: true,
+      latest: '0.12.0',
     },
   ];
 

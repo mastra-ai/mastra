@@ -15,7 +15,7 @@ export function MastraPackageVersions() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [commandStr, setCommandStr] = useState('pnpm add');
 
-  const commandParams = allPackages.map(pkg => (pkg.used !== pkg.latest ? `${pkg.name}@${pkg.latest} ` : '')).join('');
+  const commandParams = allPackages.map(pkg => (pkg.used !== pkg.latest ? `${pkg.name}@latest ` : '')).join('');
 
   const { handleCopy } = useCopyToClipboard({
     text: `${commandStr} ${commandParams}`,
@@ -116,11 +116,11 @@ export function MastraPackageVersions() {
             <>
               <div
                 className={cn(
-                  'text-[0.875rem] text-icon3 grid grid-cols-[auto_1fr] gap-2 ',
-                  '[&>svg]:w-[1.5em] [&>svg]:h-[1.5em] [&>svg]:translate-y-1',
+                  'text-[0.875rem] text-icon3 grid grid-cols-[auto_1fr] gap-2 items-center',
+                  '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em]',
                 )}
               >
-                <InfoIcon /> Use the below command to update your @mastra packages to the latest versions
+                <InfoIcon /> Use the command below to update your Mastra packages
               </div>
 
               <pre className="text-[0.875rem] text-icon3 bg-surface2 rounded-md p-3 overflow-x-auto block w-full whitespace-break-spaces text-left">{`${commandStr} ${commandParams}`}</pre>
