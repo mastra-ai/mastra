@@ -39,6 +39,8 @@ export type StreamInternal = {
   resourceId?: string;
   memory?: MastraMemory; // MastraMemory from memory/memory
   threadExists?: boolean;
+  // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization
+  stepTools?: ToolSet;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

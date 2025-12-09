@@ -693,6 +693,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         return { outputStream, callBail: false, runState, stepTools: currentStep.tools };
       });
 
+      // Store modified tools in _internal so toolCallStep can access them
+      // without going through workflow serialization (which would lose execute functions)
+      if (_internal) {
+        _internal.stepTools = stepTools;
+      }
+
       if (callBail) {
         const usage = outputStream._getImmediateUsage();
         const responseMetadata = runState.state.responseMetadata;

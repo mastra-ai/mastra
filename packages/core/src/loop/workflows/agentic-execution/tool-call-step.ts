@@ -26,9 +26,14 @@ export function createToolCallStep<
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData, requestContext }) => {
-      // Use tools from inputData if available (passed from llmExecutionStep via prepareStep/processInputStep)
-      // Otherwise fall back to the original tools from the closure
-      const stepTools = inputData?.tools || tools;
+      // Use tools from _internal.stepTools if available (set by llmExecutionStep via prepareStep/processInputStep)
+      // This avoids serialization issues - _internal is a mutable object that preserves execute functions
+      // Fall back to the original tools from the closure if not set
+      const stepTools = (_internal?.stepTools as Tools) || tools;
+
+      const tool =
+        stepTools?.[inputData.toolName] ||
+        Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
       // Helper function to add tool approval metadata to the assistant message
       const addToolApprovalMetadata = (toolCallId: string, toolName: string, args: unknown) => {
         // Find the last assistant message in the response (which should contain this tool call)
@@ -140,10 +145,6 @@ export function createToolCallStep<
           result: inputData.output,
         };
       }
-
-      const tool =
-        stepTools?.[inputData.toolName] ||
-        Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
 
       if (!tool) {
         throw new Error(`Tool ${inputData.toolName} not found`);

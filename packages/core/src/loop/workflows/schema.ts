@@ -149,7 +149,6 @@ export const toolCallInputSchema = z.object({
   providerMetadata: z.record(z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
-  tools: z.record(z.any()).optional(),
 });
 
 export const toolCallOutputSchema = toolCallInputSchema.extend({

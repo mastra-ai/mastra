@@ -1383,6 +1383,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         prepareStepCalls = [];
 
         result = loopFn({
+          ...defaultSettings(),
           methodType: 'stream',
           runId,
           models: [
@@ -1674,7 +1675,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     ],
                   },
                   "createdAt": 2024-01-01T00:00:00.000Z,
-                  "id": "c53540fe-3289-4a9a-8da1-ba8d5d84d46e",
+                  "id": "msg-1",
                   "resourceId": undefined,
                   "role": "user",
                   "threadId": undefined,
@@ -1810,7 +1811,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     ],
                   },
                   "createdAt": 2024-01-01T00:00:00.000Z,
-                  "id": "isn6SQnEJx50uDT9",
+                  "id": "msg-0",
                   "role": "assistant",
                 },
               ],
