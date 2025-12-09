@@ -236,6 +236,23 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      await collection.deleteOne({ workflow_name: workflowName, run_id: runId });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
+        },
+        error,
+      );
+    }
+  }
+
   private parseWorkflowRun(row: any): WorkflowRun {
     let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
     if (typeof parsedSnapshot === 'string') {
