@@ -319,12 +319,12 @@ async function formatAgent({
   mastra,
   agent,
   requestContext,
-  isPlayground,
+  isStudio,
 }: {
   mastra: Context['mastra'];
   agent: Agent;
   requestContext: RequestContext;
-  isPlayground: boolean;
+  isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
   const tools = await agent.listTools({ requestContext });
@@ -369,7 +369,7 @@ async function formatAgent({
   }
 
   let proxyRequestContext = requestContext;
-  if (isPlayground) {
+  if (isStudio) {
     proxyRequestContext = new Proxy(requestContext, {
       get(target, prop) {
         if (prop === 'get') {
@@ -482,12 +482,12 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   handler: async ({ agentId, mastra, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
-      const isPlayground = false; // TODO: Get from context if needed
+      const isStudio = false; // TODO: Get from context if needed
       const result = await formatAgent({
         mastra,
         agent,
         requestContext,
-        isPlayground,
+        isStudio,
       });
       return result;
     } catch (error) {
