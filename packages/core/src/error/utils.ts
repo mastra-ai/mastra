@@ -149,7 +149,7 @@ function addErrorToJSON(
   // Define toJSON as non-enumerable to avoid interfering with object comparisons
   Object.defineProperty(error, 'toJSON', {
     value: function (this: Error) {
-      const json: Record<string, any> = {
+      const json: SerializedError = {
         message: this.message,
         name: this.name,
       };
