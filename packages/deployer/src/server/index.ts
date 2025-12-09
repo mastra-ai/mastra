@@ -88,8 +88,6 @@ export async function createHonoServer(
     mastra,
     tools: options.tools,
     taskStore: a2aTaskStore,
-    playground: options.playground,
-    isDev: options.isDev,
     bodyLimitOptions,
     openapiPath: '/openapi.json',
     customRouteAuthConfig,
