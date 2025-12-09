@@ -11,6 +11,7 @@ import {
   GET_WORKFLOW_BY_ID_ROUTE,
   START_ASYNC_WORKFLOW_ROUTE,
   GET_WORKFLOW_RUN_BY_ID_ROUTE,
+  DELETE_WORKFLOW_RUN_BY_ID_ROUTE,
   CREATE_WORKFLOW_RUN_ROUTE,
   START_WORKFLOW_RUN_ROUTE,
   RESUME_ASYNC_WORKFLOW_ROUTE,
@@ -367,6 +368,68 @@ describe('vNext Workflow Handlers', () => {
       });
 
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('DELETE_WORKFLOW_RUN_BY_ID_ROUTE', () => {
+    it('should throw error when workflowId is not provided', async () => {
+      await expect(
+        DELETE_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          runId: 'test-run',
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+    });
+
+    it('should throw error when runId is not provided', async () => {
+      await expect(
+        DELETE_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: 'test-workflow',
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
+    });
+
+    it('should throw error when workflow is not found', async () => {
+      await expect(
+        DELETE_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: 'non-existent',
+          runId: 'test-run',
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+    });
+
+    it('should delete workflow run successfully', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run',
+      });
+
+      await run.start({ inputData: {} });
+
+      const result = await GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+        runId: 'test-run',
+      });
+
+      expect(result).toBeDefined();
+
+      const deleteResponse = await DELETE_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+        runId: 'test-run',
+      });
+
+      expect(deleteResponse).toEqual({ message: 'Workflow run deleted' });
+
+      await expect(
+        GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: 'test-workflow',
+          runId: 'test-run',
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
   });
 

@@ -274,6 +274,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: handleWorkflowStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/handle-workflow-stream): API reference for handleWorkflowStream(), a framework-agnostic handler for streaming workflow execution in AI SDK-compatible format.
 - [Reference: networkRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/network-route): API reference for networkRoute(), a function to create network route handlers for streaming network execution in AI SDK-compatible format.
 - [Reference: toAISdkStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/to-ai-sdk-stream): API reference for toAISdkStream(), a function to convert Mastra streams to AI SDK-compatible streams.
+- [Reference: withMastra() | AI SDK](https://mastra.ai/en/reference/ai-sdk/with-mastra): API reference for withMastra(), a function to use Mastra functionality in AI SDK.
 - [Reference: workflowRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/workflow-route): API reference for workflowRoute(), a function to create workflow route handlers for streaming workflow execution in AI SDK-compatible format.
 - [Reference: MastraAuthAuth0 Class | Auth](https://mastra.ai/en/reference/auth/auth0): API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.
 - [Reference: MastraAuthClerk Class | Auth](https://mastra.ai/en/reference/auth/clerk): API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.
