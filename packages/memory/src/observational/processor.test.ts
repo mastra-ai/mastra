@@ -5,20 +5,10 @@ import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraStorage } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { buildObserverUserPrompt, OBSERVER_INSTRUCTIONS } from './observer-agent';
 import { ObservationalMemory } from './processor';
-import {
-  buildObserverUserPrompt,
-  OBSERVER_INSTRUCTIONS,
-} from './observer-agent';
-import {
-  buildReflectorUserPrompt,
-  REFLECTOR_INSTRUCTIONS,
-} from './reflector-agent';
-import {
-  estimateTokenCount,
-  compressObservationTokens,
-  getMessageTextContent,
-} from './utils';
+import { buildReflectorUserPrompt, REFLECTOR_INSTRUCTIONS } from './reflector-agent';
+import { estimateTokenCount, compressObservationTokens, getMessageTextContent } from './utils';
 
 // ============================================================================
 // Test Utilities
@@ -36,6 +26,7 @@ function createMockStorage(): MastraStorage & { _observations: Map<string, any> 
   store._observations = observations;
 
   // Override the memory store methods
+  if (!store.stores) throw new Error(`store.stores must exist for this test to work`);
   store.stores = {
     ...store.stores,
     memory: {
@@ -57,11 +48,7 @@ function createMockStorage(): MastraStorage & { _observations: Map<string, any> 
 /**
  * Create a test message
  */
-function createMessage(
-  role: 'user' | 'assistant' | 'system',
-  content: string,
-  id?: string
-): MastraDBMessage {
+function createMessage(role: 'user' | 'assistant' | 'system', content: string, id?: string): MastraDBMessage {
   return {
     id: id || crypto.randomUUID(),
     role,
@@ -126,10 +113,7 @@ function createAbort(): (reason?: string) => never {
 /**
  * Create ProcessInputArgs for testing
  */
-function createProcessInputArgs(
-  messageList: MessageList,
-  requestContext?: any
-): ProcessInputArgs {
+function createProcessInputArgs(messageList: MessageList, requestContext?: any): ProcessInputArgs {
   return {
     messageList,
     messages: messageList.get.all.db(),
@@ -145,7 +129,7 @@ function createProcessInputArgs(
 function createProcessOutputResultArgs(
   messages: MastraDBMessage[],
   messageList: MessageList,
-  requestContext?: any
+  requestContext?: any,
 ): ProcessOutputResultArgs {
   return {
     messages,
@@ -311,10 +295,7 @@ describe('Observer Agent', () => {
 
     it('should handle mixed messages', () => {
       const exchange = {
-        relevantMessages: [
-          createMessage('user', 'Hello'),
-          createMessage('assistant', 'Hello back'),
-        ],
+        relevantMessages: [createMessage('user', 'Hello'), createMessage('assistant', 'Hello back')],
         timestamp: new Date(),
       };
 
@@ -662,9 +643,7 @@ describe('processInput', () => {
     const messages = [createMessage('user', 'Hello')];
     const messageList = createMessageList(messages);
 
-    const result = await processor.processInput(
-      createProcessInputArgs(messageList, undefined)
-    );
+    const result = await processor.processInput(createProcessInputArgs(messageList, undefined));
 
     expect(result).toBe(messageList);
   });
@@ -701,7 +680,7 @@ describe('processInput', () => {
       aiSystemMessages.some(m => {
         const content = typeof m.content === 'string' ? m.content : '';
         return content.includes('observational_memory');
-      })
+      }),
     ).toBe(true);
   });
 
@@ -723,7 +702,7 @@ describe('processInput', () => {
     // Use aiV5.prompt() to get system messages
     const aiPrompt = messageList.get.all.aiV5.prompt();
     const systemMessage = aiPrompt.find(
-      m => m.role === 'system' && typeof m.content === 'string' && m.content.includes('observational_memory')
+      m => m.role === 'system' && typeof m.content === 'string' && m.content.includes('observational_memory'),
     );
 
     // Should contain high priority but not low priority emoji
@@ -752,16 +731,11 @@ describe('processOutputResult', () => {
       observer: { historyThreshold: 10_000 }, // High threshold
     });
 
-    const messages = [
-      createMessage('user', 'Short message'),
-      createMessage('assistant', 'Short response'),
-    ];
+    const messages = [createMessage('user', 'Short message'), createMessage('assistant', 'Short response')];
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('test-thread', 'test-resource');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     // Should not have saved any observations
     expect(storage._observations.size).toBe(0);
@@ -788,9 +762,7 @@ describe('processOutputResult', () => {
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('test-thread', 'test-resource');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     // Check that observation was saved with message IDs
     expect(storage._observations.size).toBe(1);
@@ -823,15 +795,11 @@ describe('processOutputResult', () => {
       }),
     };
 
-    const messages = [
-      createMessage('user', generateTokenText(50), 'new-msg'),
-    ];
+    const messages = [createMessage('user', generateTokenText(50), 'new-msg')];
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('test-thread', 'test-resource');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     // Should have updated the observation
     const savedObs = storage._observations.get('obs-1');
@@ -872,15 +840,11 @@ describe('Reflection Triggering', () => {
       }),
     };
 
-    const messages = [
-      createMessage('user', generateTokenText(50), 'msg-1'),
-    ];
+    const messages = [createMessage('user', generateTokenText(50), 'msg-1')];
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('test-thread', 'test-resource');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     // Reflector should have been called
     expect((processor as any).reflectorAgent.generate).toHaveBeenCalled();
@@ -908,15 +872,11 @@ describe('Reflection Triggering', () => {
       generate: vi.fn(),
     };
 
-    const messages = [
-      createMessage('user', generateTokenText(50), 'msg-1'),
-    ];
+    const messages = [createMessage('user', generateTokenText(50), 'msg-1')];
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('test-thread', 'test-resource');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     // Reflector should NOT have been called
     expect((processor as any).reflectorAgent.generate).not.toHaveBeenCalled();
@@ -957,15 +917,11 @@ describe('Reflection Triggering', () => {
       }),
     };
 
-    const messages = [
-      createMessage('user', generateTokenText(50), 'new-msg'),
-    ];
+    const messages = [createMessage('user', generateTokenText(50), 'new-msg')];
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('test-thread', 'test-resource');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     // Should have created a new record with previousGenerationId
     expect(storage._observations.size).toBe(2);
@@ -1015,9 +971,7 @@ describe('Message State Tracking', () => {
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('test-thread', 'test-resource');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     // Should NOT have triggered observation because only msg-3 is unobserved
     // and it's below the threshold

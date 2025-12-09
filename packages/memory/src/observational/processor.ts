@@ -1,5 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MessageList, MastraDBMessage } from '@mastra/core/agent';
 import { parseMemoryRuntimeContext } from '@mastra/core/memory';
 import type {
   ProcessInputArgs,
@@ -23,20 +22,9 @@ import {
   buildReflectorUserPrompt,
   REFLECTOR_INSTRUCTIONS,
 } from './reflector-agent';
-import type {
-  ObservationalMemoryConfig,
-  ObservationalMemoryRecord,
-  ThresholdRange,
-} from './types';
-import {
-  DEFAULT_HISTORY_THRESHOLD,
-  DEFAULT_OBSERVATION_THRESHOLD,
-} from './types';
-import {
-  estimateTokenCount,
-  compressObservationTokens,
-  getMessageTextContent,
-} from './utils';
+import type { ObservationalMemoryConfig, ObservationalMemoryRecord, ThresholdRange } from './types';
+import { DEFAULT_HISTORY_THRESHOLD, DEFAULT_OBSERVATION_THRESHOLD } from './types';
+import { estimateTokenCount, compressObservationTokens, getMessageTextContent } from './utils';
 
 // Re-export types for external use
 export type {
@@ -124,7 +112,7 @@ export class ObservationalMemory implements Processor {
 
   private log(message: string, ...args: unknown[]) {
     if (this.debug) {
-      console.log(`[ObservationalMemory] ${message}`, ...args);
+      console.info(`[ObservationalMemory] ${message}`, ...args);
     }
   }
 
@@ -180,7 +168,7 @@ export class ObservationalMemory implements Processor {
    */
   private async getOrCreateMemoryRecord(
     threadId: string | undefined,
-    resourceId: string | undefined
+    resourceId: string | undefined,
   ): Promise<ObservationalMemoryRecord | null> {
     if (!threadId && !resourceId) return null;
 
@@ -273,10 +261,7 @@ ${compressedObservations}
 
         // Per the spec: exclude observed and buffered messages from context
         // They are now represented by observations
-        const excludedIds = new Set([
-          ...record.observedMessageIds,
-          ...record.bufferedMessageIds,
-        ]);
+        const excludedIds = new Set([...record.observedMessageIds, ...record.bufferedMessageIds]);
 
         if (excludedIds.size > 0) {
           // Filter out observed/buffered messages from the message list
@@ -286,7 +271,9 @@ ${compressedObservations}
 
           // Only update if we actually filtered something
           if (filteredMessages.length < allMessages.length) {
-            this.log(`Excluded ${allMessages.length - filteredMessages.length} observed/buffered messages from context`);
+            this.log(
+              `Excluded ${allMessages.length - filteredMessages.length} observed/buffered messages from context`,
+            );
             // TODO: Need a way to replace messages in the list
             // For now, this is handled by the message tracking
           }
@@ -349,7 +336,7 @@ ${compressedObservations}
       const threshold = this.getCurrentHistoryThreshold(currentObservationTokens);
 
       this.log(
-        `Unobserved history: ${unobservedTokens} tokens, threshold: ${threshold}, observations: ${currentObservationTokens} tokens`
+        `Unobserved history: ${unobservedTokens} tokens, threshold: ${threshold}, observations: ${currentObservationTokens} tokens`,
       );
 
       // Check if we should create observations
@@ -360,17 +347,14 @@ ${compressedObservations}
         const existingObservations = record?.activeObservations || '';
         const userPrompt = buildObserverUserPrompt(
           { relevantMessages: unobservedMessages, timestamp: new Date() },
-          existingObservations
+          existingObservations,
         );
 
         // Run the observer agent
-        const observerResult = await this.observerAgent.generate(
-          `${OBSERVER_INSTRUCTIONS}\n\n${userPrompt}`,
-          {
-            modelSettings: this.observerModelSettings,
-            providerOptions: this.observerProviderOptions as any,
-          }
-        );
+        const observerResult = await this.observerAgent.generate(`${OBSERVER_INSTRUCTIONS}\n\n${userPrompt}`, {
+          modelSettings: this.observerModelSettings,
+          providerOptions: this.observerProviderOptions as any,
+        });
 
         const newObservations = observerResult.text;
         this.log('Observer generated observations:', newObservations.substring(0, 200) + '...');
@@ -404,7 +388,7 @@ ${compressedObservations}
             {
               modelSettings: this.reflectorModelSettings,
               providerOptions: this.reflectorProviderOptions as any,
-            }
+            },
           );
 
           finalObservations = reflectorResult.text;
@@ -421,7 +405,7 @@ ${compressedObservations}
           const now = new Date();
           const newRecord: ObservationalMemoryRecord = {
             // Identity
-            id: originType === 'reflection' ? crypto.randomUUID() : (record?.id || crypto.randomUUID()),
+            id: originType === 'reflection' ? crypto.randomUUID() : record?.id || crypto.randomUUID(),
             scope: this.scope,
             threadId: this.scope === 'thread' ? scopeId : null,
             resourceId: resourceId || scopeId,
@@ -481,7 +465,7 @@ ${compressedObservations}
           });
 
           this.log(
-            `Saved observations: ${newRecord.observationTokenCount} tokens, originType: ${originType}, reflections: ${reflectionCount}`
+            `Saved observations: ${newRecord.observationTokenCount} tokens, originType: ${originType}, reflections: ${reflectionCount}`,
           );
         }
       }
@@ -500,11 +484,7 @@ ${compressedObservations}
    * @param options.resourceId - Resource ID (for resource-scoped memory)
    * @param options.prompt - Optional prompt to guide observation focus
    */
-  async observe(options: {
-    threadId: string;
-    resourceId?: string;
-    prompt?: string;
-  }): Promise<string | null> {
+  async observe(options: { threadId: string; resourceId?: string; prompt?: string }): Promise<string | null> {
     // This would be used for manual/API-triggered observations
     // Implementation would be similar to processOutputResult but callable directly
     this.log('Manual observe called:', options);
@@ -519,11 +499,7 @@ ${compressedObservations}
    * @param options.resourceId - Resource ID (for resource-scoped memory)
    * @param options.prompt - Optional prompt to guide reflection focus
    */
-  async reflect(options: {
-    threadId: string;
-    resourceId?: string;
-    prompt?: string;
-  }): Promise<string | null> {
+  async reflect(options: { threadId: string; resourceId?: string; prompt?: string }): Promise<string | null> {
     if (!this.reflectorAgent) {
       this.log('Reflector not configured');
       return null;

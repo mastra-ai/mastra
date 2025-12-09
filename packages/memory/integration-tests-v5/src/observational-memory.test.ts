@@ -131,7 +131,7 @@ describe('ObservationalMemory with Agent Integration', () => {
 
       // Find system messages containing observations
       const observationSystemMessage = requestMessages.find(
-        (msg) => msg.role === 'system' && messageContainsText(msg, 'observational_memory')
+        msg => msg.role === 'system' && messageContainsText(msg, 'observational_memory'),
       );
 
       expect(observationSystemMessage).toBeDefined();
@@ -179,7 +179,7 @@ describe('ObservationalMemory with Agent Integration', () => {
 
       // Should NOT have an observational_memory system message
       const observationSystemMessage = requestMessages.find(
-        (msg) => msg.role === 'system' && messageContainsText(msg, 'observational_memory')
+        msg => msg.role === 'system' && messageContainsText(msg, 'observational_memory'),
       );
 
       expect(observationSystemMessage).toBeUndefined();
@@ -224,7 +224,8 @@ describe('ObservationalMemory with Agent Integration', () => {
       });
 
       // Generate with a message that exceeds the threshold (~50 tokens)
-      const longMessage = 'Hello, I would like to know about the weather forecast for this week. Can you help me with that? I am planning a trip and need to know if it will rain or be sunny.';
+      const longMessage =
+        'Hello, I would like to know about the weather forecast for this week. Can you help me with that? I am planning a trip and need to know if it will rain or be sunny.';
 
       await agent.generate(longMessage, {
         threadId,
@@ -464,7 +465,7 @@ describe('ObservationalMemory with Agent Integration', () => {
       // Verify observations were injected
       const requestMessages: CoreMessage[] = (response.request.body as any).input;
       const observationMessage = requestMessages.find(
-        (msg) => msg.role === 'system' && messageContainsText(msg, 'observational_memory')
+        msg => msg.role === 'system' && messageContainsText(msg, 'observational_memory'),
       );
 
       expect(observationMessage).toBeDefined();
