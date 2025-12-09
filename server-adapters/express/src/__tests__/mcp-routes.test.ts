@@ -24,8 +24,6 @@ describe('Express MCP Registry Routes Integration', () => {
         mastra: context.mastra,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        playground: context.playground,
-        isDev: context.isDev,
       });
 
       // Register context middleware
