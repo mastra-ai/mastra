@@ -49,13 +49,13 @@ export function workflowLoopStream<
       const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
-        if (chunk.type.startsWith('data-')) {
+        if (chunk.type.startsWith('data-') && messageId) {
           const dataPart = {
             type: chunk.type as `data-${string}`,
             data: 'data' in chunk ? chunk.data : undefined,
           };
           const message: MastraDBMessage = {
-            id: messageId!,
+            id: messageId,
             role: 'assistant',
             content: {
               format: 2,
