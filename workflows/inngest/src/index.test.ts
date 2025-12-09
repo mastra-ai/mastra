@@ -2548,9 +2548,17 @@ describe('MastraInngestWorkflow', () => {
       expect((stepError.error as any).isRetryable).toBe(true);
 
       // Workflow-level error should also be an Error instance
+      // Note: In Inngest, the workflow-level error comes from formatResultError
+      // which uses the step's error (the original error with all its properties)
       if (result.status === 'failed') {
         expect(result.error).toBeInstanceOf(Error);
-        expect((result.error as Error).message).toContain('API rate limit exceeded');
+        // The workflow-level error should have the original error message
+        // (formatResultError gets the error from the step result)
+        expect((result.error as Error).message).toBe('API rate limit exceeded');
+        // Custom properties should also be preserved on workflow-level error
+        expect((result.error as any).statusCode).toBe(429);
+        expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((result.error as any).isRetryable).toBe(true);
       }
 
       srv.close();

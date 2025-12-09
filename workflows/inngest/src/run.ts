@@ -84,12 +84,15 @@ export class InngestRun<
         });
         // Hydrate serialized errors back to Error instances
         const context = snapshot?.context ? hydrateSerializedStepErrors(snapshot.context) : undefined;
+        // Use the error from snapshot if available (preserves original error with custom properties)
+        // Fall back to the Inngest run output message if no snapshot error
+        const errorSource = snapshot?.error ?? runs?.[0]?.output?.message;
         return {
           output: {
             result: {
               steps: context,
               status: 'failed',
-              error: getErrorFromUnknown(runs?.[0]?.output?.message, { serializeStack: false }),
+              error: getErrorFromUnknown(errorSource, { serializeStack: false }),
             },
           },
         };

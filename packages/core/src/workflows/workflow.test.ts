@@ -8224,6 +8224,58 @@ describe('Workflow', () => {
       expect(((step2Result as any)?.error as Error).message).toContain('start: Required');
     });
 
+    it('should preserve ZodError as cause when input validation fails', async () => {
+      const successAction = vi.fn().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: successAction,
+        inputSchema: z.object({
+          requiredField: z.string(),
+          numberField: z.number(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'zod-cause-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: true },
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+
+      // Pass invalid input that will fail Zod validation
+      const result = await run.start({
+        inputData: {},
+      });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Error should be a MastraError
+        expect(result.error).toBeInstanceOf(MastraError);
+        expect((result.error as Error).message).toContain('Step input validation failed');
+
+        // The cause should be the original ZodError
+        const mastraError = result.error as MastraError;
+        expect(mastraError.cause).toBeDefined();
+        expect(mastraError.cause).toBeInstanceOf(Error);
+        // ZodError has an 'issues' array
+        expect((mastraError.cause as any).issues).toBeDefined();
+        expect(Array.isArray((mastraError.cause as any).issues)).toBe(true);
+        // Should have issues for both missing fields
+        expect((mastraError.cause as any).issues.length).toBeGreaterThanOrEqual(2);
+      }
+    });
+
     it('should use default value from inputSchema for step input', async () => {
       const successAction = vi.fn().mockImplementation(() => {
         return { result: 'success' };
