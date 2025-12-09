@@ -167,6 +167,10 @@ export function workflowLoopStream<
         return;
       }
 
+      // if (executionResult.status !== 'suspended') {
+      //   // agenticLoopWorkflow.
+      // }
+
       controller.enqueue({
         type: 'finish',
         runId,

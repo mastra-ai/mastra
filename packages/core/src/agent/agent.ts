@@ -1323,6 +1323,124 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
+
+    //tool to determine resumption
+    const toolObj = createTool({
+      id: 'find-suspended-tools-tool',
+      description: 'Tool to use determine if there are any suspended tools to resume',
+      outputSchema: z.array(
+        z.object({
+          toolName: z.string().describe('The name of the suspended tool to resume'),
+          resumeSchema: z
+            .any()
+            .describe(
+              'The resume schema of the suspended tool to resume, this is used as guide to create resumeData passed to the tool during tool call',
+            ),
+        }),
+      ),
+      mastra: this.#mastra,
+      execute: async () => {
+        try {
+          const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+            workflowName: 'agentic-loop',
+            runId: runId || '',
+          });
+          if (!existingSnapshot) {
+            return [];
+          }
+          const suspendedSteps = existingSnapshot.suspendedPaths;
+          if (!suspendedSteps || Object.keys(suspendedSteps).length === 0) {
+            return [];
+          }
+          const suspendedStepIds = Object.keys(suspendedSteps);
+          if (!suspendedStepIds?.includes('executionWorkflow')) {
+            return [];
+          }
+          const executionWorkflow = existingSnapshot.context?.executionWorkflow;
+          if (!executionWorkflow || !executionWorkflow?.suspendPayload) {
+            return [];
+          }
+          const executionWorkflowSuspendPayload = executionWorkflow.suspendPayload;
+          let resumeSchema: z.ZodType<any> | undefined = undefined;
+          const requireToolApproval: Record<string, any> | undefined =
+            executionWorkflowSuspendPayload.requireToolApproval;
+          const toolName: string = executionWorkflowSuspendPayload.toolName || '';
+          const resumeLabel: string[] = executionWorkflowSuspendPayload.resumeLabel ?? [];
+          if (requireToolApproval) {
+            resumeSchema = z.object({
+              approve: z.boolean().describe('Whether to approve the tool call'),
+            });
+          } else if (toolName.startsWith('workflow-')) {
+            const stepPath = resumeLabel?.[0] ?? '';
+            const stepId = stepPath?.split('.')?.[0];
+            const workflowId = toolName.substring('workflow-'.length);
+            const agentWorkflows = await this.listWorkflows();
+            const workflow = agentWorkflows[workflowId];
+            if (workflow && stepId) {
+              const step = workflow.steps?.[stepId];
+              if (step) {
+                resumeSchema = step.resumeSchema;
+              }
+            }
+          } else if (toolName) {
+            const agentTools = await this.listTools();
+            const tool = agentTools[toolName];
+            if (tool && 'resumeSchema' in tool) {
+              resumeSchema = tool.resumeSchema;
+            }
+          }
+
+          if (toolName && resumeSchema) {
+            return [
+              {
+                toolName,
+                resumeSchema,
+              },
+            ];
+          }
+
+          return [];
+        } catch (error) {
+          const mastraError = new MastraError(
+            {
+              id: 'AGENT_RESUME_TOOL_ERROR',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              details: {
+                agentName: this.name,
+                runId: runId || '',
+                threadId: threadId || '',
+                resourceId: resourceId || '',
+              },
+              text: `[Agent:${this.name}] - Failed resume tool execution`,
+            },
+            error,
+          );
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+      },
+    });
+
+    const options: ToolOptions = {
+      name: 'find-suspended-tools-tool',
+      runId,
+      threadId,
+      resourceId,
+      logger: this.logger,
+      mastra: mastraProxy as MastraUnion | undefined,
+      memory,
+      agentName: this.name,
+      requestContext,
+      tracingContext,
+      model: await this.getModel({ requestContext }),
+      tracingPolicy: this.#options?.tracingPolicy,
+      requireApproval: (toolObj as any).requireApproval,
+    };
+    const convertedToCoreTool = makeCoreTool(toolObj, options);
+    convertedMemoryTools['find-suspended-tools-tool'] = convertedToCoreTool;
+
     return convertedMemoryTools;
   }
 
@@ -1977,11 +2095,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               } else if (result?.status === 'suspended') {
                 const suspendedStep = result?.suspended?.[0]?.[0]!;
                 const suspendPayload = result?.steps?.[suspendedStep]?.suspendPayload;
+                const suspendedStepIds = result?.suspended?.map(stepPath => stepPath.join('.'));
 
                 if (suspendPayload?.__workflow_meta) {
                   delete suspendPayload.__workflow_meta;
                 }
-                return suspend?.(suspendPayload);
+                return suspend?.(suspendPayload, { resumeLabel: suspendedStepIds });
               } else {
                 // This is to satisfy the execute fn's return value for typescript
                 return {
