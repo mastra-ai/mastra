@@ -20,7 +20,7 @@ import {
   STREAM_GENERATE_LEGACY_ROUTE,
   STREAM_GENERATE_ROUTE,
 } from './agents';
-import { createTestRuntimeContext } from './test-utils';
+import { createTestServerContext } from './test-utils';
 class MockAgent extends Agent {
   constructor(config: AgentConfig) {
     super(config);
@@ -94,7 +94,7 @@ describe('Agent Handlers', () => {
   describe('listAgentsHandler', () => {
     it('should return serialized agents', async () => {
       const result = await LIST_AGENTS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         requestContext,
       });
 
@@ -175,7 +175,7 @@ describe('Agent Handlers', () => {
       });
 
       const result = await LIST_AGENTS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mastraWithCoreProcessors }),
+        ...createTestServerContext({ mastra: mastraWithCoreProcessors }),
         requestContext,
       });
 
@@ -241,7 +241,7 @@ describe('Agent Handlers', () => {
       });
 
       const result = await LIST_AGENTS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mastraWithSchemas }),
+        ...createTestServerContext({ mastra: mastraWithSchemas }),
         requestContext,
         partial: 'true',
       });
@@ -309,7 +309,7 @@ describe('Agent Handlers', () => {
       });
 
       const result = await LIST_AGENTS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mastraWithSchemas }),
+        ...createTestServerContext({ mastra: mastraWithSchemas }),
         requestContext,
         // No partial parameter provided
       });
@@ -363,7 +363,7 @@ describe('Agent Handlers', () => {
       mockAgent = makeMockAgent({ workflows: { hello: workflow } });
       mockMastra = makeMastraMock({ agents: { 'test-agent': mockAgent } });
       const result = await GET_AGENT_BY_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-agent',
       });
 
@@ -402,7 +402,7 @@ describe('Agent Handlers', () => {
 
     it('should return serialized agent with model list', async () => {
       const result = await GET_AGENT_BY_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-multi-model-agent',
         requestContext,
       });
@@ -433,7 +433,7 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        GET_AGENT_BY_ID_ROUTE.handler({ ...createTestRuntimeContext({ mastra: mockMastra }), agentId: 'non-existing' }),
+        GET_AGENT_BY_ID_ROUTE.handler({ ...createTestServerContext({ mastra: mockMastra }), agentId: 'non-existing' }),
       ).rejects.toThrow(
         new HTTPException(404, {
           message: 'Agent with id non-existing not found',
@@ -448,7 +448,7 @@ describe('Agent Handlers', () => {
       (mockAgent.generate as any).mockResolvedValue(mockResult);
 
       const result = await GENERATE_AGENT_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-agent',
         messages: ['test message'],
         resourceId: 'test-resource',
@@ -462,7 +462,7 @@ describe('Agent Handlers', () => {
     it('should throw 404 when agent not found', async () => {
       await expect(
         GENERATE_AGENT_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           agentId: 'non-existing',
           messages: ['test message'],
           resourceId: 'test-resource',
@@ -482,7 +482,7 @@ describe('Agent Handlers', () => {
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
 
       const result = await STREAM_GENERATE_LEGACY_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-agent',
         messages: ['test message'],
         resourceId: 'test-resource',
@@ -496,7 +496,7 @@ describe('Agent Handlers', () => {
     it('should throw 404 when agent not found', async () => {
       await expect(
         STREAM_GENERATE_LEGACY_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           agentId: 'non-existing',
           messages: ['test message'],
           resourceId: 'test-resource',
@@ -517,7 +517,7 @@ describe('Agent Handlers', () => {
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
       const updateResult = await UPDATE_AGENT_MODEL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-agent',
         modelId: 'gpt-4o-mini',
         provider: 'openai',
@@ -531,7 +531,7 @@ describe('Agent Handlers', () => {
       //confirm that stream works fine after the model update
 
       const result = await STREAM_GENERATE_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-agent',
         messages: ['test message'],
         resourceId: 'test-resource',
@@ -556,7 +556,7 @@ describe('Agent Handlers', () => {
       const reversedModelListIds = modelListIds.reverse();
 
       await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-multi-model-agent',
         reorderedModelIds: reversedModelListIds,
       });
@@ -576,7 +576,7 @@ describe('Agent Handlers', () => {
       expect(modelList?.length).toBe(3);
       const model1Id = modelList?.[1].id!;
       await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-multi-model-agent',
         modelConfigId: model1Id,
         model: {

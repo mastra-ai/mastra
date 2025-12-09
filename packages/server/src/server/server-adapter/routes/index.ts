@@ -20,11 +20,11 @@ import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
 
 /**
- * Runtime context fields that are available to route handlers.
+ * Server context fields that are available to route handlers.
  * These are injected by the server adapters (Express, Hono, etc.)
  * Fields other than `mastra` are optional to allow direct handler testing.
  */
-export type RuntimeContext = {
+export type ServerContext = {
   mastra: Mastra;
   requestContext: RequestContext;
   tools?: Record<string, Tool>;
@@ -59,7 +59,7 @@ export type ServerRouteHandler<
   TResponse = unknown,
   TResponseType extends ResponseType = 'json',
 > = (
-  params: TParams & RuntimeContext,
+  params: TParams & ServerContext,
 ) => Promise<
   TResponseType extends 'stream'
     ? MastraStreamReturn
