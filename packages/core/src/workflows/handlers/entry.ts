@@ -24,7 +24,7 @@ export interface PersistStepUpdateParams {
   executionContext: ExecutionContext;
   workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
   result?: Record<string, any>;
-  error?: string | Error;
+  error?: Error;
   requestContext: RequestContext;
 }
 

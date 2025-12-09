@@ -106,14 +106,11 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
 
     error = new Error(errorMessage, errorCause ? { cause: errorCause } : undefined);
 
-    const { stack: _, ...propsWithoutStack } = unknown as any;
-    Object.assign(error as Error, propsWithoutStack);
-    // Always preserve stack on the instance for debugging
-    if ('stack' in unknown && typeof unknown.stack === 'string') {
-      error.stack = unknown.stack;
-    }
+    Object.assign(error as Error, unknown);
+    error.stack = 'stack' in unknown && typeof unknown.stack === 'string' ? unknown.stack : undefined;
   } else if (unknown && typeof unknown === 'string') {
     error = new Error(unknown);
+    error.stack = undefined;
   } else {
     error = new Error(fallbackMessage);
   }
@@ -160,9 +157,16 @@ function addErrorToJSON(
       if (serializeStack && this.stack !== undefined) {
         json.stack = this.stack;
       }
+
+      // Serialize cause if it's an Error and has a toJSON method, else include as is
       if (this.cause !== undefined) {
-        json.cause = this.cause;
+        if (this.cause instanceof Error && 'toJSON' in this.cause && typeof this.cause.toJSON === 'function') {
+          json.cause = this.cause.toJSON();
+        } else {
+          json.cause = this.cause;
+        }
       }
+
       // Include all enumerable custom properties
       const errorAsAny = this as any;
       for (const key in errorAsAny) {

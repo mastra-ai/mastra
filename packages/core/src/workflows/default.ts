@@ -38,6 +38,7 @@ import type {
   StepFlowEntry,
   StepResult,
   TimeTravelExecutionParams,
+  WorkflowStepStatus,
 } from './types';
 
 // Re-export ExecutionContext for backwards compatibility
@@ -304,7 +305,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Format an error for the workflow result.
    * Override to customize error formatting (e.g., include stack traces).
    */
-  protected formatResultError(error: Error | string | undefined, lastOutput: StepResult<any, any, any, any>): Error {
+  protected formatResultError(error: Error | unknown, lastOutput: StepResult<any, any, any, any>): Error {
     const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
     const errorSource = error || outputError;
     const errorInstance = getErrorFromUnknown(errorSource, {
@@ -318,9 +319,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     _emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
-    error?: Error | string,
+    error?: Error | unknown,
   ): Promise<TOutput> {
-    const base: any = {
+    const base: {
+      status: WorkflowStepStatus;
+      steps: Record<string, StepResult<any, any, any, any>>;
+      input: StepResult<any, any, any, any> | undefined;
+      result?: any;
+      error?: Error;
+      suspended?: string[][];
+    } = {
       status: lastOutput.status,
       steps: stepResults,
       input: stepResults.input,
