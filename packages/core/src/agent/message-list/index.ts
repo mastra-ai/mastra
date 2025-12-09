@@ -2682,13 +2682,88 @@ export class MessageList {
   private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
     const sanitized = this.sanitizeV5UIMessages(messages);
     const preprocessed = this.addStartStepPartsForAIV5(sanitized);
+    
+    // Build a mapping from UI parts to their source UI message and index before conversion
+    // This allows us to efficiently restore providerOptions even after convertToModelMessages splits messages
+    const uiPartToSource = new Map<
+      string,
+      { uiMsg: AIV5Type.UIMessage; uiPart: AIV5Type.UIMessage['parts'][number]; uiPartIndex: number }
+    >();
+    
+    for (const uiMsg of preprocessed) {
+      if (uiMsg.role === 'assistant') {
+        for (const [uiPartIndex, uiPart] of uiMsg.parts.entries()) {
+          // Create a unique key for each part based on its content
+          let key: string;
+          if (uiPart.type === 'reasoning') {
+            key = `reasoning:${uiPart.text}`;
+          } else if (AIV5.isToolUIPart(uiPart)) {
+            key = `tool:${uiPart.toolCallId}`;
+          } else {
+            // For other parts, use index within message as fallback
+            key = `part:${uiMsg.id || 'unknown'}:${uiPartIndex}`;
+          }
+          uiPartToSource.set(key, { uiMsg, uiPart, uiPartIndex });
+        }
+      }
+    }
+    
     const result = AIV5.convertToModelMessages(preprocessed);
+
+    // Helper function to find UI message that contains the content from a model message
+    // Uses the pre-built mapping for efficient lookup
+    const findSourceUIMessage = (modelMsg: AIV5Type.ModelMessage): AIV5Type.UIMessage | undefined => {
+      if (modelMsg.role !== 'assistant' || typeof modelMsg.content === 'string' || !Array.isArray(modelMsg.content)) {
+        // For non-assistant messages or string content, try index-based matching first
+        const index = result.indexOf(modelMsg);
+        return preprocessed[index];
+      }
+
+      // For assistant messages, find by matching any part in the model message
+      for (const modelPart of modelMsg.content) {
+        if (typeof modelPart === 'string') continue;
+        
+        let key: string;
+        if (modelPart.type === 'reasoning') {
+          key = `reasoning:${modelPart.text}`;
+        } else if (modelPart.type === 'tool-call') {
+          key = `tool:${modelPart.toolCallId}`;
+        } else {
+          continue;
+        }
+        
+        const source = uiPartToSource.get(key);
+        if (source) {
+          return source.uiMsg;
+        }
+      }
+
+      // Fallback to index-based matching if mapping lookup fails
+      const index = result.indexOf(modelMsg);
+      return preprocessed[index];
+    };
+
+    // Helper function to find UI part using the pre-built mapping
+    const findUIPart = (
+      modelPart: Exclude<AIV5Type.ModelMessage['content'][number], string>,
+    ): AIV5Type.UIMessage['parts'][number] | undefined => {
+      let key: string;
+      if (modelPart.type === 'reasoning') {
+        key = `reasoning:${modelPart.text}`;
+      } else if (modelPart.type === 'tool-call') {
+        key = `tool:${modelPart.toolCallId}`;
+      } else {
+        return undefined;
+      }
+      
+      return uiPartToSource.get(key)?.uiPart;
+    };
 
     // Restore message-level providerOptions from metadata.providerMetadata
     // AND restore part-level providerOptions for tool-call parts from callProviderMetadata
     // This preserves providerOptions through the DB → UI → Model conversion
-    const finalResult = result.map((modelMsg, index) => {
-      const uiMsg = preprocessed[index];
+    const finalResult = result.map((modelMsg) => {
+      const uiMsg = findSourceUIMessage(modelMsg);
       let updatedMsg = modelMsg;
 
       // Restore message-level providerOptions
@@ -2698,9 +2773,13 @@ export class MessageList {
         'providerMetadata' in uiMsg.metadata &&
         uiMsg.metadata.providerMetadata
       ) {
+        // Create a deep copy to avoid circular references
+        const providerMetadata = JSON.parse(
+          JSON.stringify(uiMsg.metadata.providerMetadata),
+        ) as AIV5Type.ProviderMetadata;
         updatedMsg = {
           ...updatedMsg,
-          providerOptions: uiMsg.metadata.providerMetadata as AIV5Type.ProviderMetadata,
+          providerOptions: providerMetadata,
         } satisfies AIV5Type.ModelMessage;
       }
 
@@ -2708,25 +2787,33 @@ export class MessageList {
       // For tool-call: restore from callProviderMetadata
       // For reasoning: restore from providerMetadata (required for OpenAI GPT-5 Responses API - see GitHub issue #9005)
       if (updatedMsg.role === 'assistant' && Array.isArray(updatedMsg.content)) {
-        const updatedContent = updatedMsg.content.map((part, partIndex) => {
+        const updatedContent = updatedMsg.content.map((part) => {
           if (part.type === 'tool-call') {
-            // Find corresponding UI part to get callProviderMetadata
-            const uiPart = uiMsg?.parts[partIndex];
+            // Find corresponding UI part to get callProviderMetadata using the pre-built mapping
+            const uiPart = findUIPart(part);
             if (uiPart && 'callProviderMetadata' in uiPart && uiPart.callProviderMetadata) {
+              // Create a deep copy to avoid circular references
+              const callProviderMetadata = JSON.parse(
+                JSON.stringify(uiPart.callProviderMetadata),
+              );
               return {
                 ...part,
-                providerOptions: uiPart.callProviderMetadata,
+                providerOptions: callProviderMetadata,
               };
             }
           }
           if (part.type === 'reasoning') {
-            // Find corresponding UI part to get providerMetadata
+            // Find corresponding UI part to get providerMetadata using the pre-built mapping
             // This is critical for OpenAI GPT-5 models which require itemId on reasoning parts
-            const uiPart = uiMsg?.parts[partIndex];
+            const uiPart = findUIPart(part);
             if (uiPart && 'providerMetadata' in uiPart && uiPart.providerMetadata) {
+              // Create a deep copy to avoid circular references
+              const providerMetadata = JSON.parse(
+                JSON.stringify(uiPart.providerMetadata),
+              );
               return {
                 ...part,
-                providerOptions: uiPart.providerMetadata,
+                providerOptions: providerMetadata,
               };
             }
           }
@@ -2742,7 +2829,39 @@ export class MessageList {
       return updatedMsg;
     });
 
-    return finalResult;
+    // Deduplicate reasoning parts that appear in multiple assistant messages
+    // convertToModelMessages can duplicate reasoning parts when splitting at step-start markers
+    // We keep reasoning parts only in the first message where they appear
+    const seenReasoningTexts = new Set<string>();
+    const deduplicated = finalResult.map((msg) => {
+      if (msg.role !== 'assistant' || typeof msg.content === 'string' || !Array.isArray(msg.content)) {
+        return msg;
+      }
+
+      const filteredContent = msg.content.filter((part) => {
+        if (part.type === 'reasoning') {
+          if (seenReasoningTexts.has(part.text)) {
+            // This reasoning part was already seen in a previous message, skip it
+            return false;
+          }
+          seenReasoningTexts.add(part.text);
+        }
+        return true;
+      });
+
+      // If all content was filtered out (all were duplicates), return the original message
+      // This shouldn't happen in practice, but handle it gracefully
+      if (filteredContent.length === 0 && msg.content.length > 0) {
+        return msg;
+      }
+
+      return {
+        ...msg,
+        content: filteredContent,
+      };
+    });
+
+    return deduplicated;
   }
   private addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
     for (const message of messages) {

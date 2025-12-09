@@ -1,5 +1,5 @@
 import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 'ai';
-import { isToolUIPart } from 'ai-v5';
+import { isToolUIPart, convertToModelMessages } from 'ai-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
 import type { MastraMessageV2 } from '../index';
@@ -1738,6 +1738,337 @@ describe('MessageList V5 Support', () => {
         expect((reasoningPart as any).providerOptions?.openai?.itemId).toBe('rs_001');
         expect((toolCallPart as any).providerOptions?.openai?.itemId).toBe('fc_001');
       }
+    });
+
+    it('should preserve providerOptions when step-start markers cause message splitting', () => {
+      // Regression test: When step-start markers cause convertToModelMessages to split one UI message
+      // into multiple assistant messages, providerOptions must be preserved for all reasoning parts
+      
+      const list = new MessageList({ threadId, resourceId });
+
+      const providerOptions = {
+        openai: {
+          itemId: 'rs_019f2a2d0dcf17d200693803dca130819db497a4f2ecef0d59',
+          reasoningEncryptedContent: null,
+        },
+      };
+
+      // UI message with step-start marker that causes splitting
+      const v5UIMessage: AIV5UIMessage = {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: 'First reasoning part',
+            providerMetadata: providerOptions,
+          },
+          {
+            type: 'step-start',
+          },
+          {
+            type: 'reasoning',
+            text: 'Second reasoning part',
+            providerMetadata: providerOptions,
+          },
+          {
+            type: 'tool-weatherTool',
+            state: 'output-available',
+            toolCallId: 'call_123',
+            input: { location: 'Kolkata' },
+            output: { type: 'json', value: { temperature: 23.1 } },
+          },
+        ],
+      };
+
+      list.add(v5UIMessage, 'response');
+
+      // Get UI messages and convert to model messages using the actual fixed code
+      // This will test if providerOptions are preserved when messages are split
+      const result = list.get.all.aiV5.model();
+
+      // Check for reasoning parts without providerOptions
+      const allReasoningParts = result.flatMap((msg) => {
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          return msg.content.filter((part: any) => part.type === 'reasoning');
+        }
+        return [];
+      });
+
+      const reasoningPartsWithoutProviderOptions = allReasoningParts.filter(
+        (p: any) => !p.providerOptions
+      );
+
+      // All reasoning parts should have providerOptions preserved
+      expect(reasoningPartsWithoutProviderOptions.length).toBe(0);
+      expect(allReasoningParts.every((p: any) => p.providerOptions)).toBe(true);
+
+      // Check for duplication: each reasoning part should appear only once
+      const reasoningTexts = allReasoningParts.map((p: any) => p.text);
+      const uniqueReasoningTexts = new Set(reasoningTexts);
+      expect(reasoningTexts.length).toBe(uniqueReasoningTexts.size);
+      
+      // Check that we don't have duplicate assistant messages with the same reasoning
+      const assistantMessages = result.filter((msg) => msg.role === 'assistant' && Array.isArray(msg.content));
+      const reasoningTextsByMessage = assistantMessages.map((msg) => {
+        if (Array.isArray(msg.content)) {
+          return msg.content
+            .filter((part: any) => part.type === 'reasoning')
+            .map((part: any) => part.text);
+        }
+        return [];
+      });
+      
+      // No reasoning text should appear in multiple messages
+      const allSeenTexts = new Set<string>();
+      for (const texts of reasoningTextsByMessage) {
+        for (const text of texts) {
+          expect(allSeenTexts.has(text)).toBe(false);
+          allSeenTexts.add(text);
+        }
+      }
+    });
+
+    it('should preserve providerOptions when tool-result is in assistant message and step-start markers cause splitting', () => {
+      // Regression test: When tool-result is part of the assistant message (not a separate tool message),
+      // convertToModelMessages may split differently, but providerOptions must still be preserved
+      
+      const list = new MessageList({ threadId, resourceId });
+
+      const providerOptions = {
+        openai: {
+          itemId: 'rs_019f2a2d0dcf17d200693803dca130819db497a4f2ecef0d59',
+          reasoningEncryptedContent: null,
+        },
+      };
+
+      // Try creating UI message with tool-result part (not separate tool message)
+      const v5UIMessage: AIV5UIMessage = {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: '**Fetching weather data**\n\nI need to act as a weather assistant.',
+            providerMetadata: providerOptions,
+          },
+          {
+            type: 'reasoning',
+            text: '**Calling the weather tool**\n\nThe weather tool will give me the current weather.',
+            providerMetadata: providerOptions,
+          },
+          {
+            type: 'tool-weatherTool',
+            state: 'output-available',
+            toolCallId: 'call_1T1o2E4cQSxiljy5vDhK5uif',
+            input: { location: 'Kolkata' },
+            output: {
+              type: 'json',
+              value: { temperature: 23.1 },
+            },
+          },
+        ],
+      };
+
+      list.add(v5UIMessage, 'response');
+
+      const uiMessages = list.get.all.aiV5.ui();
+      const sanitized = list['sanitizeV5UIMessages'](uiMessages);
+      const preprocessed = list['addStartStepPartsForAIV5'](sanitized);
+      const result = convertToModelMessages(preprocessed);
+      
+      console.log('Approach 1 - UI message with tool-result part');
+      console.log('Preprocessed:', preprocessed.length);
+      console.log('Result:', result.length);
+      console.log('Assistant messages:', result.filter(m => m.role === 'assistant').length);
+      
+      // Strip providerOptions and test restoration
+      const resultWithoutProviderOptions = result.map((msg) => {
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: msg.content.map((part: any) => {
+              if (part.type === 'reasoning' && part.providerOptions) {
+                const { providerOptions, ...rest } = part;
+                return rest;
+              }
+              return part;
+            }),
+          };
+        }
+        return msg;
+      });
+      
+      const buggyRestored = resultWithoutProviderOptions.map((modelMsg, index) => {
+        const uiMsg = preprocessed[index];
+        if (!uiMsg && modelMsg.role === 'assistant') {
+          console.log(`❌ BUG: preprocessed[${index}] is undefined for assistant message!`);
+        }
+        if (!uiMsg) return modelMsg;
+        
+        if (modelMsg.role === 'assistant' && Array.isArray(modelMsg.content)) {
+          const updatedContent = modelMsg.content.map((part: any, partIndex: number) => {
+            if (part.type === 'reasoning') {
+              const uiPart = uiMsg.parts[partIndex];
+              if (uiPart && 'providerMetadata' in uiPart && uiPart.providerMetadata) {
+                return { ...part, providerOptions: uiPart.providerMetadata };
+              }
+            }
+            return part;
+          });
+          return { ...modelMsg, content: updatedContent };
+        }
+        return modelMsg;
+      });
+
+      const allReasoningParts = buggyRestored.flatMap((msg, msgIndex) => {
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          return msg.content
+            .filter((part: any) => part.type === 'reasoning')
+            .map((part: any) => ({ ...part, messageIndex: msgIndex }));
+        }
+        return [];
+      });
+
+      const reasoningPartsWithoutProviderOptions = allReasoningParts.filter(
+        (p: any) => !p.providerOptions
+      );
+
+      console.log('Reasoning parts without providerOptions:', reasoningPartsWithoutProviderOptions.length);
+      console.log('Total reasoning parts:', allReasoningParts.length);
+      
+      if (reasoningPartsWithoutProviderOptions.length > 0) {
+        console.log('❌ FOUND BUG! Reasoning parts lost providerOptions:', reasoningPartsWithoutProviderOptions);
+      }
+
+      expect(reasoningPartsWithoutProviderOptions.length).toBe(0);
+      expect(allReasoningParts.every((p: any) => p.providerOptions)).toBe(true);
+    });
+
+    it('should preserve providerOptions during recursive tool calls when step-start markers cause message splitting', () => {
+      // Regression test: Reasoning parts must preserve providerOptions when step-start markers
+      // cause convertToModelMessages to split messages during recursive tool calls
+      //
+      // Flow:
+      // 1. First generate() call returns reasoning + tool-call
+      // 2. Tool executes, adding tool-result to message list
+      // 3. Second generate() call (recursive) needs to convert messages back to model format
+      // 4. addStartStepPartsForAIV5 adds step-start between tool-result and next part
+      // 5. convertToModelMessages splits the message, but providerOptions must still be preserved
+      
+      const providerOptions = {
+        openai: {
+          itemId: 'rs_019f2a2d0dcf17d200693803dca130819db497a4f2ecef0d59',
+          reasoningEncryptedContent: null,
+        },
+      };
+
+      // Simulate the scenario: messages from first generate() call (reasoning + tool-call + tool-result)
+      // Then when converting back to model format for recursive call, step-start is added
+      const list = new MessageList({ threadId, resourceId });
+
+      // Add assistant message with reasoning + tool-call (from first generate call)
+      list.add(
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'reasoning',
+              text: 'First reasoning part',
+              providerOptions,
+            },
+            {
+              type: 'reasoning',
+              text: 'Second reasoning part',
+              providerOptions,
+            },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-weather-1',
+              toolName: 'weatherTool',
+              input: { location: 'Kolkata' },
+            },
+          ],
+        },
+        'response',
+      );
+
+      // Add tool result (after tool execution)
+      list.add(
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call-weather-1',
+              toolName: 'weatherTool',
+              output: { type: 'json', value: { temperature: 23 } },
+            },
+          ],
+        },
+        'response',
+      );
+
+      // Now simulate what happens when converting back to model format for recursive generate() call
+      // This is where addStartStepPartsForAIV5 adds step-start markers and convertToModelMessages splits
+      const uiMessages = list.get.all.aiV5.ui();
+      const sanitized = list['sanitizeV5UIMessages'](uiMessages);
+      const preprocessed = list['addStartStepPartsForAIV5'](sanitized);
+      const result = convertToModelMessages(preprocessed);
+
+      // Simulate convertToModelMessages stripping providerOptions (as it does in production)
+      const resultWithoutProviderOptions = result.map((msg) => {
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: msg.content.map((part: any) => {
+              if (part.type === 'reasoning' && part.providerOptions) {
+                const { providerOptions, ...rest } = part;
+                return rest;
+              }
+              return part;
+            }),
+          };
+        }
+        return msg;
+      });
+
+      // Simulate buggy index-based restoration (current code)
+      const buggyRestored = resultWithoutProviderOptions.map((modelMsg, index) => {
+        const uiMsg = preprocessed[index]; // ❌ BUG: undefined when splitting occurs
+
+        if (!uiMsg) return modelMsg;
+
+        if (modelMsg.role === 'assistant' && Array.isArray(modelMsg.content)) {
+          const updatedContent = modelMsg.content.map((part: any, partIndex: number) => {
+            if (part.type === 'reasoning') {
+              const uiPart = uiMsg.parts[partIndex];
+              if (uiPart && 'providerMetadata' in uiPart && uiPart.providerMetadata) {
+                return { ...part, providerOptions: uiPart.providerMetadata };
+              }
+            }
+            return part;
+          });
+          return { ...modelMsg, content: updatedContent };
+        }
+        return modelMsg;
+      });
+
+      // Check for reasoning parts without providerOptions
+      const allReasoningParts = buggyRestored.flatMap((msg) => {
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          return msg.content.filter((part: any) => part.type === 'reasoning');
+        }
+        return [];
+      });
+
+      const reasoningPartsWithoutProviderOptions = allReasoningParts.filter(
+        (p: any) => !p.providerOptions
+      );
+
+      // All reasoning parts should have providerOptions preserved even when messages are split
+      expect(reasoningPartsWithoutProviderOptions.length).toBe(0);
+      expect(allReasoningParts.every((p: any) => p.providerOptions)).toBe(true);
     });
   });
 });
