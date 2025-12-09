@@ -35,7 +35,7 @@ npm install @mastra/express express
 
 Create your server file:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import express from 'express';
 import { MastraServer } from '@mastra/express';
 import { mastra } from './mastra';
@@ -63,7 +63,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 
 ## Full example
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import express from 'express';
 import { MastraServer } from '@mastra/express';
 import { mastra } from './mastra';
@@ -116,6 +116,7 @@ app.listen(4111);
       type: "string",
       description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
       isOptional: true,
+      defaultValue: "''",
     },
     {
       name: "bodyLimitOptions",
@@ -136,6 +137,32 @@ app.listen(4111);
       description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
       isOptional: true,
     },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
+    },
   ]}
 />
 
@@ -153,7 +180,7 @@ app.listen(4111);
 
 Add routes directly to the Express app:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 const app = express();
 app.use(express.json());
 
@@ -183,7 +210,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Express middleware and routes, access Mastra context via `res.locals`:
 
-```typescript copy showLineNumbers
+```typescript copy
 app.get('/custom', (req, res) => {
   const mastra = res.locals.mastra;
   const requestContext = res.locals.requestContext;
@@ -202,13 +229,17 @@ Available properties on `res.locals`:
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
 | `tools` | Available tools |
+| `taskStore` | Task store for A2A operations |
+| `playground` | Whether playground is enabled |
+| `isDev` | Whether running in development mode |
+| `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |
 
 ## Adding middleware
 
 Add Express middleware before or after `init()`:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 const app = express();
 app.use(express.json());
 

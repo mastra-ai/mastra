@@ -204,6 +204,28 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      await this.client.none(
+        `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} WHERE run_id = $1 AND workflow_name = $2`,
+        [runId, workflowName],
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId,
+            workflowName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
   async listWorkflowRuns({
     workflowName,
     fromDate,

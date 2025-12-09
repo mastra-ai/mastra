@@ -1,12 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../../di';
 import { ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import { SpanType, wrapMastra } from '../../observability';
 import type { TracingContext } from '../../observability';
-import type { ChunkType } from '../../stream/types';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -16,6 +14,7 @@ import { getStepResult } from '../step';
 import type {
   Emitter,
   ExecutionContext,
+  OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
   StepExecutionResult,
@@ -51,7 +50,7 @@ export interface ExecuteStepParams {
   abortController: AbortController;
   requestContext: RequestContext;
   skipEmits?: boolean;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
   tracingContext: TracingContext;
@@ -77,7 +76,7 @@ export async function executeStep(
     abortController,
     requestContext,
     skipEmits = false,
-    writableStream,
+    outputWriter,
     disableScorers,
     serializedStepGraph,
     tracingContext,
@@ -185,7 +184,7 @@ export async function executeStep(
       abortController,
       requestContext,
       tracingContext,
-      writableStream,
+      outputWriter,
       stepSpan,
     });
 
@@ -348,8 +347,9 @@ export async function executeStep(
             name: step.id,
             runId,
           },
-          writableStream,
+          outputWriter,
         ),
+        outputWriter,
         // Disable scorers must be explicitly set to false they are on by default
         scorers: disableScorers === false ? undefined : step.scorers,
         validateInputs: engine.options?.validateInputs,
