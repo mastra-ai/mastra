@@ -320,7 +320,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     const schemaShape = params.jsonSchema;
     const props = schemaShape.properties || {};
 
-    expect(Object.keys(props)).toEqual(expect.arrayContaining(['category', 'price', 'label']));
+    expect(Object.keys(props)).toEqual(['category', 'price', 'label']);
     const requiredFields = schemaShape?.required || [];
     expect(requiredFields).toEqual(['price']);
 
@@ -338,7 +338,6 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     expect(priceProp.minimum).toBe(1);
 
     expect(labelProp).toBeDefined();
-    // label may be represented as type string or an anyOf with string/null when optional
     expect(labelProp.type).toBe('string');
 
     // Execution should accept valid enum and numeric inputs and apply transform
