@@ -48,7 +48,7 @@ describe('Tool validation with transforms through Agent pipeline', () => {
             lastName: 'Smith',
             heightInches: 65,
           },
-        ] as any; // Type assertion needed due to Zod transform type inference limitation
+        ];
       },
     });
 
@@ -150,6 +150,8 @@ describe('Tool validation with transforms through Agent pipeline', () => {
     ];
 
     for (const input of testInputs) {
+      // Type assertion needed here because we're intentionally testing lenient input handling
+      // The transform will normalize these various formats to the canonical enum values
       const result = await tool.execute!(input as any, {});
       expect(['Enabled', 'Disabled']).toContain(result.status);
     }
