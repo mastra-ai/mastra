@@ -95,6 +95,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
+  agentName?: string;
   requestContext?: RequestContext;
   methodType: ModelMethodType;
 };

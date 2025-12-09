@@ -174,6 +174,14 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
       attributes[ATTR_GEN_AI_PROVIDER_NAME] = normalizeProvider(modelAttrs.provider);
     }
 
+    // Agent context - allows correlating model generation with the agent that invoked it
+    if (modelAttrs.agentId) {
+      attributes[ATTR_GEN_AI_AGENT_ID] = modelAttrs.agentId;
+    }
+    if (modelAttrs.agentName) {
+      attributes[ATTR_GEN_AI_AGENT_NAME] = modelAttrs.agentName;
+    }
+
     // Token usage - use OTEL standard naming
     if (modelAttrs.usage) {
       const inputTokens = modelAttrs.usage.inputTokens ?? modelAttrs.usage.promptTokens;
