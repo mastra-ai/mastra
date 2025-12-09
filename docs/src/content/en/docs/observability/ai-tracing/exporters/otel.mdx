@@ -183,11 +183,6 @@ export const mastra = new Mastra({
                 headers: {},
               },
             },
-            resourceAttributes: {
-              ["deployment.environment"]:
-                process.env.DD_ENV || "development",
-              ["service.version"]: process.env.DD_VERSION || "1.0.0",
-            },
           }),
         ],
       },
