@@ -642,7 +642,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           await processOutputStream({
             outputStream,
             includeRawChunks,
-            tools,
+            tools: currentStep.tools,
             messageId,
             messageList,
             runState,
