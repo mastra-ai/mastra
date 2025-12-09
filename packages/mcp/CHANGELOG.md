@@ -1,5 +1,16 @@
 # @mastra/mcp
 
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Add "Not connected" error detection to MCP auto-reconnection ([#10994](https://github.com/mastra-ai/mastra/pull/10994))
+
+  Enhanced the MCPClient auto-reconnection feature to also detect and handle "Not connected" protocol errors. When the MCP SDK's transport layer throws this error (typically when the connection is in a disconnected state), the client will now automatically reconnect and retry the operation.
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+
 ## 1.0.0-beta.5
 
 ### Minor Changes

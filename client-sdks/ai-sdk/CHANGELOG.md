@@ -1,5 +1,43 @@
 # @mastra/ai-sdk
 
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Return NetworkDataPart on each agent-execution-event and workflow-execution-event in network streams ([#10982](https://github.com/mastra-ai/mastra/pull/10982))
+
+- Fixed tool-call-suspended chunks being dropped in workflow-step-output when using AI SDK. Previously, when an agent inside a workflow step called a tool that got suspended, the tool-call-suspended chunk was not received on the frontend even though tool-input-available chunks were correctly received. ([#10987](https://github.com/mastra-ai/mastra/pull/10987))
+
+  The issue occurred because tool-call-suspended was not included in the isMastraTextStreamChunk list, causing it to be filtered out in transformWorkflow. Now tool-call-suspended, tool-call-approval, object, and tripwire chunks are properly included in the text stream chunk list and will be transformed and passed through correctly.
+
+  Fixes #10978
+
+- Adds `withMastra()` for wrapping AI SDK models with Mastra processors and memory. ([#10911](https://github.com/mastra-ai/mastra/pull/10911))
+
+  ```typescript
+  import { openai } from '@ai-sdk/openai';
+  import { generateText } from 'ai';
+  import { withMastra } from '@mastra/ai-sdk';
+
+  const model = withMastra(openai('gpt-4o'), {
+    inputProcessors: [myGuardProcessor],
+    outputProcessors: [myLoggingProcessor],
+    memory: {
+      storage,
+      threadId: 'thread-123',
+      resourceId: 'user-123',
+      lastMessages: 10,
+    },
+  });
+
+  const { text } = await generateText({ model, prompt: 'Hello!' });
+  ```
+
+  Works with `generateText`, `streamText`, `generateObject`, and `streamObject`.
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+
 ## 1.0.0-beta.6
 
 ### Patch Changes
