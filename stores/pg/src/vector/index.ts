@@ -818,7 +818,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       // Get the operator class based on vector type and metric
       // pgvector uses different operator classes for vector vs halfvec
-      const metricOp = this.getMetricOperatorClass(metric, vectorType);
+      // Use the detected vectorType from existing table if available, otherwise use the parameter
+      const effectiveVectorType = existingIndexInfo?.vectorType ?? vectorType;
+      const metricOp = this.getMetricOperatorClass(metric, effectiveVectorType);
 
       let indexSQL: string;
       if (indexType === 'hnsw') {
@@ -880,6 +882,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             if (this.schema && this.schema !== 'public') {
               try {
                 await client.query(`CREATE EXTENSION IF NOT EXISTS vector SCHEMA ${this.getSchemaName()}`);
+                // Re-detect to get the version info (needed for halfvec support check)
+                const installedSchema = await this.detectVectorExtensionSchema(client);
+                if (installedSchema) {
+                  this.vectorExtensionInstalled = true;
+                  this.logger.info(`Vector extension installed in schema: ${installedSchema}`);
+                  return;
+                }
+                // Fallback if detection failed but install succeeded
                 this.vectorExtensionInstalled = true;
                 this.vectorExtensionSchema = this.schema;
                 this.logger.info(`Vector extension installed in schema: ${this.schema}`);
