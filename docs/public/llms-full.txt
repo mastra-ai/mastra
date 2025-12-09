@@ -13870,17 +13870,20 @@ For Hono or Express, use the provided adapters instead:
 
 ## Abstract class
 
-The `MastraServer` abstract class from `@mastra/server` provides the foundation for all adapters. It handles route registration logic, parameter validation, and other shared functionality. Your custom adapter extends this class and implements the framework-specific parts.
+The `MastraServer` abstract class from `@mastra/server/server-adapter` provides the foundation for all adapters. It handles route registration logic, parameter validation, and other shared functionality. Your custom adapter extends this class and implements the framework-specific parts.
 
 The class takes three type parameters that represent your framework's types:
 
-```typescript title="my-framework-adapter.ts" copy showLineNumbers
-import { MastraServer } from '@mastra/server';
+```typescript title="my-framework-adapter.ts" copy
+import { MastraServer } from '@mastra/server/server-adapter';
 
 export class MyFrameworkServer extends MastraServer<
-  MyApp,      // Your framework's app type (e.g., FastifyInstance)
-  MyRequest,  // Your framework's request type (e.g., FastifyRequest)
-  MyResponse  // Your framework's response type (e.g., FastifyReply)
+  // Your framework's app type (e.g., FastifyInstance)
+  MyApp,
+  // Your framework's request type (e.g., FastifyRequest)
+  MyRequest,
+  // Your framework's response type (e.g., FastifyReply)
+  MyResponse
 > {
   // Implement abstract methods
 }
@@ -13894,9 +13897,9 @@ You must implement these six abstract methods. Each handles a specific part of t
 
 ### registerContextMiddleware()
 
-This method runs first and attaches Mastra context to every incoming request. Route handlers need access to the Mastra instance, tools, and other context to function. How you attach this context depends on your framework—Express uses `res.locals`, Hono uses `c.set()`, and other frameworks have their own patterns.
+This method runs first and attaches Mastra context to every incoming request. Route handlers need access to the Mastra instance, tools, and other context to function. How you attach this context depends on your framework — Express uses `res.locals`, Hono uses `c.set()`, and other frameworks have their own patterns.
 
-```typescript copy showLineNumbers
+```typescript copy
 registerContextMiddleware(): void {
   this.app.use('*', (req, res, next) => {
     // Attach context to your framework's request/response
@@ -13923,7 +13926,7 @@ Context to attach:
 
 Register authentication and authorization middleware. This method should check if authentication is configured on the Mastra instance and skip registration entirely if not. When auth is configured, you'll typically register two middleware functions: one for authentication (validating tokens and setting the user) and one for authorization (checking if the user can access the requested resource).
 
-```typescript copy showLineNumbers
+```typescript copy
 registerAuthMiddleware(): void {
   const authConfig = this.mastra.getServer()?.auth;
   if (!authConfig) return;
@@ -13959,7 +13962,7 @@ registerAuthMiddleware(): void {
 
 Register a single route with your framework. This method is called once for each Mastra route during initialization. It receives a `ServerRoute` object containing the path, HTTP method, handler function, and Zod schemas for validation. Your implementation should wire this up to your framework's routing system.
 
-```typescript copy showLineNumbers
+```typescript copy
 async registerRoute(
   app: MyApp,
   route: ServerRoute,
@@ -14006,7 +14009,7 @@ async registerRoute(
 
 Extract URL parameters, query parameters, and request body from the incoming request. Different frameworks expose these values in different ways—Express uses `req.params`, `req.query`, and `req.body`, while other frameworks may use different property names or require method calls. This method normalizes the extraction for your framework.
 
-```typescript copy showLineNumbers
+```typescript copy
 async getParams(
   route: ServerRoute,
   request: MyRequest
@@ -14016,9 +14019,12 @@ async getParams(
   body: unknown;
 }> {
   return {
-    urlParams: request.params,        // From route path (e.g., :agentId)
-    queryParams: request.query,       // From URL query string
-    body: request.body,               // From request body
+    // From route path (e.g., :agentId)
+    urlParams: request.params,
+    // From URL query string
+    queryParams: request.query,
+    // From request body
+    body: request.body,
   };
 }
 ```
@@ -14027,7 +14033,7 @@ async getParams(
 
 Send the response back to the client based on the route's response type. Mastra routes can return different response types: JSON for most API responses, streams for agent generation, and special types for MCP transports. Your implementation should handle each type appropriately for your framework.
 
-```typescript copy showLineNumbers
+```typescript copy
 async sendResponse(
   route: ServerRoute,
   response: MyResponse,
@@ -14062,7 +14068,7 @@ async sendResponse(
 
 Handle streaming responses for agent generation. When an agent generates a response, it produces a stream of chunks that should be sent to the client as they become available. This method reads from the stream, optionally applies redaction to hide sensitive data, and writes chunks to the response in the appropriate format (SSE or newline-delimited JSON).
 
-```typescript copy showLineNumbers
+```typescript copy
 async stream(
   route: ServerRoute,
   response: MyResponse,
@@ -14125,7 +14131,7 @@ The `parse*` methods use Zod schemas defined on each route to validate input and
 
 Your adapter's constructor should accept the same options as the base class and pass them to `super()`. You can add additional framework-specific options if needed:
 
-```typescript copy showLineNumbers
+```typescript copy
 constructor(options: {
   app: MyApp;
   mastra: Mastra;
@@ -14145,8 +14151,8 @@ See [Server Adapters](/docs/v1/server-db/server-adapters#constructor-options) fo
 
 Here's a skeleton implementation showing all the required methods. This uses pseudocode for framework-specific parts—replace with your framework's actual APIs:
 
-```typescript title="my-framework-adapter.ts" copy showLineNumbers
-import { MastraServer, ServerRoute } from '@mastra/server';
+```typescript title="my-framework-adapter.ts" copy
+import { MastraServer, ServerRoute } from '@mastra/server/server-adapter';
 import type { Mastra } from '@mastra/core';
 
 export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse> {
@@ -14202,7 +14208,7 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
 
 Once your adapter is implemented, use it the same way as the provided adapters:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { MyFrameworkServer } from './my-framework-adapter';
 import { mastra } from './mastra';
 
@@ -15065,13 +15071,15 @@ import TabItem from "@theme/TabItem";
 # Server Adapters
 [EN] Source: https://mastra.ai/en/docs/server-db/server-adapters
 
-Server adapters let you run Mastra with your own HTTP server instead of the Hono server generated by `mastra build`. They provide more control over the server setup, including custom middleware ordering, authentication, logging, and deployment configuration, while still letting you integrate Mastra into any Node.js application without changing how agents or workflows execute.
+Server adapters let you run Mastra with your own HTTP server instead of the Hono server generated by `mastra build`. They provide more control over the server setup, including custom middleware ordering, authentication, logging, and deployment configuration. You can still integrate Mastra into any Node.js application without changing how agents or workflows execute.
 
 ## When to use server adapters
 
-Use server adapters when you want Mastra’s endpoints added automatically to an existing application, when you need direct access to the server instance for custom configuration, or when your team prefers using Express instead of the Hono server created by `mastra build`.
+- You want Mastra’s endpoints added automatically to an existing application
+- You need direct access to the server instance for custom configuration
+- Your team prefers using another server framework instead of the Hono server created by `mastra build`.
 
-:::info
+:::tip
 
 For simple deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/v1/server-db/mastra-server).
 
@@ -15079,12 +15087,16 @@ For simple deployments without custom server requirements, use `mastra build` in
 
 ## Available adapters
 
-- [@mastra/express](/reference/v1/server/express-adapter): Express framework adapter.
-- [@mastra/hono](/reference/v1/server/hono-adapter): Hono framework adapter.
+Mastra currently provides two official server adapters:
+
+- [@mastra/express](/reference/v1/server/express-adapter): Express framework adapter
+- [@mastra/hono](/reference/v1/server/hono-adapter): Hono framework adapter
+
+You can build your own adapter, read [Custom Adapters](/docs/v1/server-db/custom-adapters) for details.
 
 ## Installation
 
-Install the adapter for the framework you’re using.
+Install the adapter for the framework of your choice.
 
 <Tabs>
   <TabItem value="express" label="Express">
@@ -15103,15 +15115,15 @@ npm install @mastra/hono@beta
 
 ## Configuration
 
-Initialize your Express or Hono app as usual, then create a `MastraServer` by passing in the `app` and your main `mastra` instance from `src/mastra`. Calling `init()` automatically registers Mastra middleware and all available endpoints. You can continue adding your own routes as normal, either before or after `init()`, and they’ll run alongside Mastra’s endpoints.
+Initialize your app as usual, then create a `MastraServer` by passing in the `app` and your main `mastra` instance from `src/mastra/index.ts`. Calling `init()` automatically registers Mastra middleware and all available endpoints. You can continue adding your own routes as normal, either before or after `init()`, and they’ll run alongside Mastra’s endpoints.
 
 <Tabs>
   <TabItem value="express" label="Express">
 
-```typescript {8} title="express-server.ts" showLineNumbers
+```typescript {8} title="src/express-server.ts"
 import express from "express";
 import { MastraServer } from "@mastra/express";
-import { mastra } from "./mastra"; // src/mastra/index.ts
+import { mastra } from "./mastra";
 
 const app = express();
 app.use(express.json());
@@ -15128,11 +15140,11 @@ app.listen(4111, () => {
   </TabItem>
   <TabItem value="hono" label="Hono">
 
-```typescript {8} title="hono-server.ts" showLineNumbers
+```typescript {8} title="src/hono-server.ts"
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { HonoBindings, HonoVariables, MastraServer } from "@mastra/hono";
-import { mastra } from "./mastra"; // src/mastra/index.ts
+import { mastra } from "./mastra";
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
@@ -15148,8 +15160,11 @@ serve({ fetch: app.fetch, port: 4111 }, () => {
   </TabItem>
 </Tabs>
 
-> See the [Express Adapter](/reference/v1/server/express-adapter) or [Hono Adapter](/reference/v1/server/hono-adapter)  docs for full configuration options.
+:::info
 
+See the [Express Adapter](/reference/v1/server/express-adapter) or [Hono Adapter](/reference/v1/server/hono-adapter) docs for full configuration options.
+
+:::
 
 ## Initialization flow
 
@@ -15163,7 +15178,7 @@ Calling `init()` runs three steps in order. Understanding this flow helps when y
 
 For custom middleware ordering, call each method separately instead of `init()`. This is useful when you need middleware that runs before Mastra's context is set up, or when you need to insert logic between the initialization steps.
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 const server = new MastraServer({ app, mastra });
 
 // Your middleware first
@@ -15194,14 +15209,17 @@ You can add your own routes to the app alongside Mastra's routes.
 - Routes added **before** `init()` won't have Mastra context available.
 - Routes added **after** `init()` have access to the Mastra context (the Mastra instance, request context, authenticated user, etc.).
 
-> See adding custom routes for [Express](/reference/v1/server/express-adapter#adding-custom-routes) and [Hono](/reference/v1/server/hono-adapter#adding-custom-routes) for more information.
+:::info
 
+Visit "Adding custom routes" for [Express](/reference/v1/server/express-adapter#adding-custom-routes) and [Hono](/reference/v1/server/hono-adapter#adding-custom-routes) for more information.
+
+:::
 
 ## Route prefixes
 
-By default, Mastra routes are registered at `/api/agents`, `/api/workflows`, etc. Use the `prefix` option to change this, which is useful for API versioning or when integrating with an existing app that has its own `/api` routes.
+By default, Mastra routes are registered at `/api/agents`, `/api/workflows`, etc. Use the `prefix` option to change this. This is useful for API versioning or when integrating with an existing app that has its own `/api` routes.
 
-```typescript showLineNumbers copy
+```typescript copy
 const server = new MastraServer({
   app,
   mastra,
@@ -15215,7 +15233,7 @@ With this prefix, Mastra routes become `/api/v2/agents`, `/api/v2/workflows`, et
 
 Mastra can generate an OpenAPI specification for all registered routes. This is useful for documentation, client generation, or integration with API tools. Enable it by setting the `openapiPath` option:
 
-```typescript showLineNumbers copy
+```typescript copy
 const server = new MastraServer({
   app,
   mastra,
@@ -15238,7 +15256,7 @@ This redaction happens at the HTTP boundary, so internal callbacks like `onStepF
 
 By default, redaction is enabled. Configure this behavior via `streamOptions`. Set `redact: false` only for internal services or debugging scenarios where you need access to the full request data in stream responses.
 
-```typescript showLineNumbers copy
+```typescript copy
 const server = new MastraServer({
   app,
   mastra,
@@ -15248,7 +15266,11 @@ const server = new MastraServer({
 });
 ```
 
-> See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+:::info
+
+See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+
+:::
 
 ## Per-route auth overrides
 
@@ -15256,29 +15278,36 @@ When authentication is configured on your Mastra instance, all routes require au
 
 Use `customRouteAuthConfig` to override authentication behavior for specific routes. Keys follow the format `METHOD:PATH` where method is `GET`, `POST`, `PUT`, `DELETE`, or `ALL`. Paths support wildcards (`*`) for matching multiple routes. Setting a value to `false` makes the route public, while `true` requires authentication.
 
-```typescript showLineNumbers copy
+```typescript copy
 const server = new MastraServer({
   app,
   mastra,
   customRouteAuthConfig: new Map([
-    ['GET:/api/health', false],       // Public health check
-    ['GET:/api/openapi.json', false], // Public API spec
-    ['POST:/api/webhooks/*', false],  // Public webhook endpoints
-    ['POST:/api/admin/reset', true],  // Require auth even if globally disabled
-    ['ALL:/api/internal/*', true],    // Protect all methods on internal routes
+    // Public health check
+    ['GET:/api/health', false],
+    // Public API spec
+    ['GET:/api/openapi.json', false],
+    // Public webhook endpoints
+    ['POST:/api/webhooks/*', false],
+    // Require auth even if globally disabled
+    ['POST:/api/admin/reset', true],
+    // Protect all methods on internal routes
+    ['ALL:/api/internal/*', true],
   ]),
 });
 ```
 
+:::info
 
+See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
 
-> See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+:::
 
 ## Accessing the app
 
 After creating the adapter, you may still need access to the underlying framework app. This is useful when passing it to a platform’s `serve` function or when adding routes from another module.
 
-```typescript showLineNumbers copy
+```typescript copy
 // Via the MastraServer instance
 const app = server.getApp();
 
@@ -20383,7 +20412,7 @@ if (activeRuns.runs.length > 0) {
 }
 ```
 
-:::Note
+:::note
 
 When running the local mastra server, all active workflow runs will be restarted automatically when the server starts.
 
@@ -24894,13 +24923,17 @@ import TabItem from "@theme/TabItem";
 # AI SDK
 [EN] Source: https://mastra.ai/en/guides/agent-frameworks/ai-sdk
 
-If you're already using the [Vercel AI SDK](https://sdk.vercel.ai) directly and want to add Mastra capabilities like [processors](/docs/v1/agents/processors) or [memory](/docs/v1/memory/memory-processors) without switching to the full Mastra agent API, `withMastra()` lets you wrap any AI SDK model with these features. This is useful when you want to keep your existing AI SDK code but add input/output processing, conversation persistence, or content filtering.
+If you're already using the [Vercel AI SDK](https://sdk.vercel.ai) directly and want to add Mastra capabilities like [processors](/docs/v1/agents/processors) or [memory](/docs/v1/memory/memory-processors) without switching to the full Mastra agent API, [`withMastra()`](/reference/v1/ai-sdk/with-mastra) lets you wrap any AI SDK model with these features. This is useful when you want to keep your existing AI SDK code but add input/output processing, conversation persistence, or content filtering.
 
-Learn more about the features you can add:
-- [Processors](/docs/v1/agents/processors) - Learn about input and output processors
-- [Memory](/docs/v1/memory/overview) - Overview of Mastra's memory system
+:::tip
+
+If you want to use Mastra together with AI SDK UI (e.g. `useChat()`), visit the [AI SDK UI guide](/guides/v1/build-your-ui/ai-sdk-ui).
+
+:::
 
 ## Installation
+
+Install `@mastra/ai-sdk` to begin using the `withMastra()` function.
 
 <Tabs>
   <TabItem value="npm" label="npm">
@@ -24925,7 +24958,9 @@ Learn more about the features you can add:
   </TabItem>
 </Tabs>
 
-## With Processors
+## Examples
+
+### With Processors
 
 Processors let you transform messages before they're sent to the model (`processInput`) and after responses are received (`processOutputResult`). This example creates a logging processor that logs message counts at each stage, then wraps an OpenAI model with it.
 
@@ -24958,7 +24993,7 @@ const { text } = await generateText({
 });
 ```
 
-## With Memory
+### With Memory
 
 Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a LibSQL storage backend to persist conversation history, loading the last 10 messages for context.
 
@@ -24989,7 +25024,7 @@ const { text } = await generateText({
 });
 ```
 
-## With Both
+### With Processors & Memory
 
 You can combine processors and memory together. Input processors run after memory loads historical messages, and output processors run before memory saves the response.
 
@@ -25019,32 +25054,12 @@ const { text } = await generateText({
 });
 ```
 
-## API Reference
-
-### `withMastra(model, options)`
-
-Wraps an AI SDK model with Mastra processors and/or memory.
-
-**Parameters:**
-
-- `model` - Any AI SDK language model (e.g., `openai('gpt-4o')`, `anthropic('claude-3-opus')`)
-- `options` - Configuration object:
-  - `inputProcessors` - Array of processors to run on input messages
-  - `outputProcessors` - Array of processors to run on output messages
-  - `memory` - Memory configuration object:
-    - `storage` - A Mastra storage instance (LibSQLStore, PostgresStore, etc.)
-    - `threadId` - Unique identifier for the conversation thread
-    - `resourceId` - Unique identifier for the user/resource
-    - `lastMessages` - Number of previous messages to load (default: 10)
-    - `semanticRecall` - Optional semantic search configuration
-
-**Returns:** A wrapped model compatible with `generateText`, `streamText`, `generateObject`, and `streamObject`.
-
 ## Related
 
+- [`withMastra()`](/reference/v1/ai-sdk/with-mastra) - API reference for `withMastra()`
 - [Processors](/docs/v1/agents/processors) - Learn about input and output processors
 - [Memory](/docs/v1/memory/overview) - Overview of Mastra's memory system
-- [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui) - Using AI SDK hooks with Mastra agents
+- [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui) - Using AI SDK UI hooks with Mastra agents, workflows, and networks
 
 
 ---
@@ -33295,13 +33310,54 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
-### `setState` is now async and the data passed is validated
+### `writableStream` to `outputWriter` in `Run.start()` & `Run.timeTravel()`
 
-The `setState` function is now async. The data passed is now validated against the `stateSchema` defined in the step.
-The state data validation also uses the `validateInputs` flag to determine whether to validate the state data or not.
-Also, when calling `setState`, you can now pass only the state data being updated, instead of adding the previous state spread (`...state`).
+The `writableStream` parameter in `Run.start()` and `Run.timeTravel()` has been replaced with `outputWriter`. Instead of passing a `WritableStream`, you now pass an async callback function that receives each workflow event chunk directly.
 
-To migrate, update the `setState` function to be async.
+This change simplifies the API - rather than creating a `WritableStream` wrapper, you handle chunks directly in the callback.
+
+**Example:** Streaming workflow events to an HTTP response (SSE):
+
+```diff
+  const run = await workflow.createRun();
+
+- const stream = new WritableStream({
+-   write(chunk) {
+-     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+-   }
+- });
+- await run.start({ inputData, writableStream: stream });
+
++ await run.start({
++   inputData,
++   outputWriter: async (chunk) => {
++     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
++   },
++ });
+```
+
+:::note
+
+The `writer` parameter passed to step `execute` functions is not affected by this change. It remains a `ToolStream` that extends `WritableStream<unknown>` and provides `.write()` and `.custom()` methods:
+
+```ts
+createStep({
+  id: 'my-step',
+  execute: async ({ writer }) => {
+    // This API is unchanged
+    await writer.write({ data: 'some output' });
+    await writer.custom({ type: 'custom-event', payload: {} });
+  },
+});
+```
+
+:::
+
+### `setState()` is now async and the data passed is validated
+
+The `setState()` function is now async. The data passed is now validated against the `stateSchema` defined in the step. The state data validation also uses the `validateInputs` flag to determine whether to validate the state data or not. Also, when calling `setState()`, you can now pass only the state data being updated, instead of adding the previous state spread `(...state)`.
+
+To migrate, update the `setState()` function to be async.
 
 ```diff
 - setState({ ...state, sharedCounter: state.sharedCounter + 1 });
@@ -58443,6 +58499,127 @@ for await (const part of uiMessageStream) {
 
 
 ---
+title: "Reference: withMastra() | AI SDK"
+description: API reference for withMastra(), a function to use Mastra functionality in AI SDK.
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# withMastra()
+[EN] Source: https://mastra.ai/en/reference/ai-sdk/with-mastra
+
+Wraps an AI SDK model with Mastra processors and/or memory.
+
+## Usage example
+
+```typescript title="src/example.ts" copy
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import type { Processor } from '@mastra/core/processors';
+
+const loggingProcessor: Processor<'logger'> = {
+  id: 'logger',
+  async processInput({ messages }) {
+    console.log('Input:', messages.length, 'messages');
+    return messages;
+  },
+};
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [loggingProcessor],
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What is 2 + 2?',
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModelV2",
+      description: "Any AI SDK language model (e.g., `openai('gpt-4o')`, `anthropic('claude-3-opus')`).",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "WithMastraOptions",
+      description: "Configuration object for processors and memory.",
+      isOptional: true,
+    },
+    {
+      name: "options.inputProcessors",
+      type: "InputProcessor[]",
+      description: "Input processors to run before the LLM call.",
+      isOptional: true,
+    },
+    {
+      name: "options.outputProcessors",
+      type: "OutputProcessor[]",
+      description: "Output processors to run on the LLM response.",
+      isOptional: true,
+    },
+    {
+      name: "options.memory",
+      type: "WithMastraMemoryOptions",
+      description: "Memory configuration - enables automatic message history persistence.",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.storage",
+      type: "MemoryStorage",
+      description: "Storage adapter for message persistence (e.g., LibSQLStore, PostgresStore).",
+      isOptional: false,
+    },
+    {
+      name: "options.memory.threadId",
+      type: "string",
+      description: "Thread ID for conversation persistence.",
+      isOptional: false,
+    },
+    {
+      name: "options.memory.resourceId",
+      type: "string",
+      description: "Resource ID (user/session identifier).",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.lastMessages",
+      type: "number | false",
+      description: "Number of recent messages to retrieve, or false to disable.",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.semanticRecall",
+      type: "WithMastraSemanticRecallOptions",
+      description: "Semantic recall configuration (RAG-based memory retrieval).",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.workingMemory",
+      type: "MemoryConfig['workingMemory']",
+      description: "Working memory configuration (persistent user data).",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.readOnly",
+      type: "boolean",
+      description: "Read-only mode - prevents saving new messages.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+A wrapped model compatible with `generateText`, `streamText`, `generateObject`, and `streamObject`.
+
+---
 title: "Reference: workflowRoute() | AI SDK"
 description: API reference for workflowRoute(), a function to create workflow route handlers for streaming workflow execution in AI SDK-compatible format.
 ---
@@ -59465,6 +59642,18 @@ The path to your built Mastra output directory. Defaults to `.mastra/output`.
 
 Disable the [OTEL Tracing](/docs/v1/observability/tracing/overview).
 
+## `mastra studio`
+
+Starts [Mastra Studio](/docs/v1/getting-started/studio) as a static server. After starting, you can enter your Mastra instance URL (e.g. `http://localhost:4111`) to connect Studio to your Mastra backend.
+
+### Flags
+
+The command accepts [common flags][common-flags] and the following additional flags:
+
+#### `--port`
+
+The port to run Studio on. Defaults to `3000`.
+
 ## `mastra lint`
 
 The `mastra lint` command validates the structure and code of your Mastra project to ensure it follows best practices and is error-free.
@@ -59553,7 +59742,7 @@ Enable verbose logging for Mastra's internals. Defaults to `false`.
 
 ### `--env`
 
-**Available in:** `dev`, `start`
+**Available in:** `dev`, `start`, `studio`
 
 Custom environment variables file to include. By default, includes `.env.development`, `.env.local`, and `.env`.
 
@@ -79114,7 +79303,7 @@ The `createRoute()` function creates type-safe routes with Zod validation. When 
 ## Import
 
 ```typescript copy
-import { createRoute } from '@mastra/server';
+import { createRoute } from '@mastra/server/server-adapter';
 ```
 
 ## Signature
@@ -79245,7 +79434,7 @@ Returns a `ServerRoute` object that can be registered with an adapter.
 ### GET route with path params
 
 ```typescript copy showLineNumbers
-import { createRoute } from '@mastra/server';
+import { createRoute } from '@mastra/server/server-adapter';
 import { z } from 'zod';
 
 const getAgent = createRoute({
@@ -79379,10 +79568,11 @@ const bodySchema = z.object({
 
 ## Error handling
 
-Throw `HTTPException` to return specific HTTP status codes from handlers:
+Throw an error with a `status` property to return specific HTTP status codes from handlers. If using Hono, you can use `HTTPException` from `hono/http-exception`:
 
 ```typescript copy showLineNumbers
-import { createRoute, HTTPException } from '@mastra/server';
+import { createRoute } from '@mastra/server/server-adapter';
+import { HTTPException } from 'hono/http-exception';
 
 const getAgent = createRoute({
   method: 'GET',
@@ -79397,6 +79587,19 @@ const getAgent = createRoute({
     return agent;
   },
 });
+```
+
+For Express or framework-agnostic code, throw an error with a `status` property:
+
+```typescript copy showLineNumbers
+class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+// In handler:
+throw new HttpError(404, `Agent '${agentId}' not found`);
 ```
 
 Common status codes:
@@ -79454,7 +79657,7 @@ npm install @mastra/express express
 
 Create your server file:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import express from 'express';
 import { MastraServer } from '@mastra/express';
 import { mastra } from './mastra';
@@ -79482,7 +79685,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 
 ## Full example
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import express from 'express';
 import { MastraServer } from '@mastra/express';
 import { mastra } from './mastra';
@@ -79535,6 +79738,7 @@ app.listen(4111);
       type: "string",
       description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
       isOptional: true,
+      defaultValue: "''",
     },
     {
       name: "bodyLimitOptions",
@@ -79555,6 +79759,32 @@ app.listen(4111);
       description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
       isOptional: true,
     },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
+    },
   ]}
 />
 
@@ -79572,7 +79802,7 @@ app.listen(4111);
 
 Add routes directly to the Express app:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 const app = express();
 app.use(express.json());
 
@@ -79602,7 +79832,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Express middleware and routes, access Mastra context via `res.locals`:
 
-```typescript copy showLineNumbers
+```typescript copy
 app.get('/custom', (req, res) => {
   const mastra = res.locals.mastra;
   const requestContext = res.locals.requestContext;
@@ -79621,13 +79851,17 @@ Available properties on `res.locals`:
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
 | `tools` | Available tools |
+| `taskStore` | Task store for A2A operations |
+| `playground` | Whether playground is enabled |
+| `isDev` | Whether running in development mode |
+| `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |
 
 ## Adding middleware
 
 Add Express middleware before or after `init()`:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 const app = express();
 app.use(express.json());
 
@@ -79702,7 +79936,7 @@ npm install @mastra/hono hono
 
 Create your server file:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
@@ -79721,7 +79955,7 @@ export default app;
 
 ## Full example
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
@@ -79744,7 +79978,6 @@ await server.init();
 
 export default app;
 ```
-
 
 ## Constructor parameters
 
@@ -79774,6 +80007,7 @@ export default app;
       type: "string",
       description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
       isOptional: true,
+      defaultValue: "''",
     },
     {
       name: "bodyLimitOptions",
@@ -79794,6 +80028,32 @@ export default app;
       description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
       isOptional: true,
     },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
+    },
   ]}
 />
 
@@ -79802,7 +80062,7 @@ export default app;
 
 Add routes directly to the Hono app:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
@@ -79831,7 +80091,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Hono middleware and route handlers, access Mastra context via `c.get()`:
 
-```typescript copy showLineNumbers
+```typescript copy
 app.get('/custom', async (c) => {
   const mastra = c.get('mastra');
   const requestContext = c.get('requestContext');
@@ -79850,13 +80110,17 @@ Available context keys:
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
 | `tools` | Available tools |
+| `taskStore` | Task store for A2A operations |
+| `playground` | Whether playground is enabled |
+| `isDev` | Whether running in development mode |
+| `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |
 
 ## Adding middleware
 
 Add Hono middleware before or after `init()`:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
@@ -79910,7 +80174,7 @@ The `MastraServer` abstract class is the base for all server adapters. Extend th
 ## Import
 
 ```typescript copy
-import { MastraServer } from '@mastra/server';
+import { MastraServer } from '@mastra/server/server-adapter';
 ```
 
 ## Type parameters
@@ -79959,6 +80223,7 @@ constructor(options: MastraServerOptions<TApp>)
       type: "string",
       description: "Path to serve OpenAPI spec",
       isOptional: true,
+      defaultValue: "''",
     },
     {
       name: "bodyLimitOptions",
@@ -79978,6 +80243,32 @@ constructor(options: MastraServerOptions<TApp>)
       type: "Map<string, boolean>",
       description: "Per-route auth overrides",
       isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values in adapters implementing the MastraServer",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
     },
   ]}
 />
@@ -80123,17 +80414,6 @@ async parseBody(
 ): Promise<unknown>
 ```
 
-### mergeRequestContext()
-
-Merge request context from multiple sources (query params and body).
-
-```typescript copy
-mergeRequestContext(options: {
-  paramsRequestContext?: Record<string, any>;
-  bodyRequestContext?: Record<string, any>;
-}): RequestContext
-```
-
 ### registerOpenAPIRoute()
 
 Register an endpoint that serves the OpenAPI specification.
@@ -80144,6 +80424,19 @@ async registerOpenAPIRoute(
   config: OpenAPIConfig,
   options: { prefix?: string }
 ): Promise<void>
+```
+
+## Protected methods
+
+### mergeRequestContext()
+
+Merge request context from multiple sources (query params and body).
+
+```typescript copy
+protected mergeRequestContext(options: {
+  paramsRequestContext?: Record<string, any>;
+  bodyRequestContext?: Record<string, any>;
+}): RequestContext
 ```
 
 ## Types
@@ -80167,8 +80460,8 @@ interface StreamOptions {
 
 ## Example
 
-```typescript copy showLineNumbers
-import { MastraServer, ServerRoute } from '@mastra/server';
+```typescript copy
+import { MastraServer, ServerRoute } from '@mastra/server/server-adapter';
 import type { Mastra } from '@mastra/core';
 
 export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
@@ -102242,9 +102535,9 @@ const result = await run.start({
       isOptional: true,
     },
     {
-      name: "writableStream",
-      type: "WritableStream<ChunkType>",
-      description: "Optional writable stream for streaming workflow output",
+      name: "outputWriter",
+      type: "(chunk: TOutput) => Promise<void>",
+      description: "Optional asynchronous function to handle output chunks as they are produced",
       isOptional: true,
     },
     {
@@ -102467,9 +102760,9 @@ const result = await run.timeTravel({
       isOptional: true,
     },
     {
-      name: "writableStream",
-      type: "WritableStream<ChunkType>",
-      description: "Optional writable stream for streaming workflow output during time travel",
+      name: "outputWriter",
+      type: "(chunk: TOutput) => Promise<void>",
+      description: "Optional asynchronous function to handle output chunks as they are produced",
       isOptional: true,
     },
     {
