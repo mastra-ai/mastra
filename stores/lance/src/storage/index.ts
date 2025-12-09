@@ -335,6 +335,10 @@ export class LanceStorage extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById(args);
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async updateWorkflowResults({
     workflowName,
     runId,
