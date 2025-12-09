@@ -33,7 +33,7 @@ Each provider requires specific protocol packages. Install the base exporter plu
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 ```
 
-### For gRPC Providers (Dash0)
+### For gRPC Providers (Dash0, Datadog)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
@@ -148,6 +148,71 @@ new OtelExporter({
 });
 ```
 
+### Datadog
+
+[Datadog](https://www.datadoghq.com/) APM provides application performance monitoring with distributed tracing. To send traces to Datadog via OTLP, you need the Datadog Agent running with OTLP ingestion enabled.
+
+Datadog uses gRPC for OTLP ingestion, which requires explicit imports and bundler configuration to work correctly:
+
+```typescript title="src/mastra/index.ts"
+// Explicitly import gRPC dependencies for the bundler
+import "@grpc/grpc-js";
+import "@opentelemetry/exporter-trace-otlp-grpc";
+import { Mastra } from "@mastra/core";
+import { OtelExporter, type ExportProtocol } from "@mastra/otel-exporter";
+
+export const mastra = new Mastra({
+  // Add grpc-js to externals so it's handled at runtime
+  bundler: {
+    externals: ["@grpc/grpc-js"],
+  },
+
+  observability: {
+    configs: {
+      default: {
+        serviceName: "my-service",
+        exporters: [
+          new OtelExporter({
+            provider: {
+              custom: {
+                endpoint:
+                  process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+                  "http://localhost:4317",
+                protocol: (process.env.OTEL_EXPORTER_OTLP_PROTOCOL ||
+                  "grpc") as ExportProtocol,
+                headers: {},
+              },
+            },
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+:::info
+
+The Datadog Agent must be configured with OTLP ingestion enabled. Add the following to your `datadog.yaml`:
+
+```yaml
+otlp_config:
+  receiver:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+```
+
+The default OTLP endpoint is `http://localhost:4317` when running the Datadog Agent locally.
+
+:::
+
+:::warning
+
+The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-grpc` at the top of the file, along with the `bundler.externals` configuration, are required for the gRPC transport to work correctly. Without these, you may encounter connection issues.
+
+:::
+
 ### Custom/Generic OTEL Endpoints
 
 For other OTEL-compatible platforms or custom collectors:
@@ -223,6 +288,7 @@ Choose the right protocol package based on your provider:
 | Provider  | Protocol      | Required Package                           |
 | --------- | ------------- | ------------------------------------------ |
 | Dash0     | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
+| Datadog   | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
 | SigNoz    | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
 | New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
 | Traceloop | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  |
