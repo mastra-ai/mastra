@@ -3817,6 +3817,50 @@ describe('PgVector halfvec Type Support', () => {
       expect(stats.dimension).toBe(largeDimension);
     });
 
+    it('should support halfvec with IVFFlat index', async () => {
+      if (!halfvecSupported) {
+        console.log('Skipping test: halfvec requires pgvector >= 0.7.0');
+        return;
+      }
+
+      const largeDimension = 3072;
+
+      // First create index with some vectors (IVFFlat requires data for training)
+      await halfvecVectorDB.createIndex({
+        indexName: testIndexName,
+        dimension: largeDimension,
+        metric: 'cosine',
+        vectorType: 'halfvec',
+        buildIndex: false, // Don't build index yet
+      });
+
+      // Insert some test vectors for IVFFlat training
+      const testVectors = Array.from({ length: 100 }, (_, i) =>
+        Array.from({ length: largeDimension }, (_, j) => (i + j) / (largeDimension * 100)),
+      );
+
+      await halfvecVectorDB.upsert({
+        indexName: testIndexName,
+        vectors: testVectors,
+        metadata: testVectors.map((_, i) => ({ index: i })),
+      });
+
+      // Now build the IVFFlat index
+      await halfvecVectorDB.buildIndex({
+        indexName: testIndexName,
+        metric: 'cosine',
+        indexConfig: {
+          type: 'ivfflat',
+          ivf: { lists: 10 },
+        },
+      });
+
+      const stats = await halfvecVectorDB.describeIndex({ indexName: testIndexName });
+      expect(stats.type).toBe('ivfflat');
+      expect(stats.vectorType).toBe('halfvec');
+      expect(stats.dimension).toBe(largeDimension);
+    });
+
     it('should default to vector type when vectorType is not specified', async () => {
       const smallDimension = 384;
 

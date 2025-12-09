@@ -218,9 +218,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     if (!this.vectorExtensionVersion) {
       return false;
     }
-    const parts = this.vectorExtensionVersion.split('.').map(Number);
-    const major = parts[0] ?? 0;
-    const minor = parts[1] ?? 0;
+    // Parse version string, handling non-numeric suffixes (e.g., "0.7.0-beta", "0.8.0+build")
+    const parts = this.vectorExtensionVersion.split('.');
+    const major = parseInt(parts[0] ?? '', 10);
+    const minor = parseInt(parts[1] ?? '', 10);
+    // If parsing failed (NaN), assume version doesn't support halfvec
+    if (isNaN(major) || isNaN(minor)) {
+      return false;
+    }
     // halfvec was introduced in pgvector 0.7.0
     return major > 0 || (major === 0 && minor >= 7);
   }
