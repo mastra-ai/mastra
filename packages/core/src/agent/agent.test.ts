@@ -6667,13 +6667,6 @@ describe('Agent Tests', () => {
             expect(model.provider).toBe('openai');
             expect(model.modelId).toBe('gpt-4o');
 
-            console.log('prepareStep', {
-              provider: model.provider,
-              modelId: model.modelId,
-              specificationVersion: model.specificationVersion,
-              stepNumber,
-            });
-
             return {
               model: 'openai/gpt-4o-mini',
             };
@@ -6681,7 +6674,6 @@ describe('Agent Tests', () => {
         },
       });
       const result = await output.getFullOutput();
-      console.log('result', result);
       expect((result?.request?.body as any)?.model).toBe('gpt-4o-mini');
     });
 
