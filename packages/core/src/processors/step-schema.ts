@@ -96,10 +96,23 @@ export const StepStartPartSchema = z
   .passthrough();
 
 /**
- * Discriminated union of all message part types.
- * Uses passthrough to allow additional fields from the AI SDK.
+ * Custom data part (for data-* custom parts from AI SDK writer.custom())
+ * This uses a regex to match any type starting with "data-"
  */
-export const MessagePartSchema = z.discriminatedUnion('type', [
+export const DataPartSchema = z
+  .object({
+    type: z.string().refine(t => t.startsWith('data-'), { message: 'Type must start with "data-"' }),
+    id: z.string().optional(),
+    data: z.unknown(),
+  })
+  .passthrough();
+
+/**
+ * Union of all message part types.
+ * Uses passthrough to allow additional fields from the AI SDK.
+ * Note: We can't use discriminatedUnion here because DataPartSchema uses a regex pattern.
+ */
+export const MessagePartSchema = z.union([
   TextPartSchema,
   ImagePartSchema,
   FilePartSchema,
@@ -107,6 +120,7 @@ export const MessagePartSchema = z.discriminatedUnion('type', [
   ReasoningPartSchema,
   SourcePartSchema,
   StepStartPartSchema,
+  DataPartSchema,
 ]);
 
 // =========================================================================

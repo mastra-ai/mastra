@@ -22,6 +22,7 @@ import type { ProcessorStepOutput } from '../processors/step-schema';
 import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
 import type { OutputSchema } from '../stream/base/schema';
 import { WorkflowRunOutput } from '../stream/RunOutput';
+import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
