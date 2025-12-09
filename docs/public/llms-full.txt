@@ -7070,8 +7070,10 @@ When running a workflow, you can also view detailed traces showing tool calls, r
 Run tools in isolation to observe their behavior. Test them before assigning them to your agent, or isolate them to debug issues should something go wrong.
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4" />
-### MCP List the MCP servers attached to your Mastra instance and explore their
-available tools.
+
+### MCP
+
+List the MCP servers attached to your Mastra instance and explore their available tools.
 
 ![MCP Servers Studio](/img/local-dev/local-dev-mcp-server-playground.jpg)
 
@@ -13868,17 +13870,20 @@ For Hono or Express, use the provided adapters instead:
 
 ## Abstract class
 
-The `MastraServer` abstract class from `@mastra/server` provides the foundation for all adapters. It handles route registration logic, parameter validation, and other shared functionality. Your custom adapter extends this class and implements the framework-specific parts.
+The `MastraServer` abstract class from `@mastra/server/server-adapter` provides the foundation for all adapters. It handles route registration logic, parameter validation, and other shared functionality. Your custom adapter extends this class and implements the framework-specific parts.
 
 The class takes three type parameters that represent your framework's types:
 
-```typescript title="my-framework-adapter.ts" copy showLineNumbers
-import { MastraServer } from '@mastra/server';
+```typescript title="my-framework-adapter.ts" copy
+import { MastraServer } from '@mastra/server/server-adapter';
 
 export class MyFrameworkServer extends MastraServer<
-  MyApp,      // Your framework's app type (e.g., FastifyInstance)
-  MyRequest,  // Your framework's request type (e.g., FastifyRequest)
-  MyResponse  // Your framework's response type (e.g., FastifyReply)
+  // Your framework's app type (e.g., FastifyInstance)
+  MyApp,
+  // Your framework's request type (e.g., FastifyRequest)
+  MyRequest,
+  // Your framework's response type (e.g., FastifyReply)
+  MyResponse
 > {
   // Implement abstract methods
 }
@@ -13892,9 +13897,9 @@ You must implement these six abstract methods. Each handles a specific part of t
 
 ### registerContextMiddleware()
 
-This method runs first and attaches Mastra context to every incoming request. Route handlers need access to the Mastra instance, tools, and other context to function. How you attach this context depends on your framework—Express uses `res.locals`, Hono uses `c.set()`, and other frameworks have their own patterns.
+This method runs first and attaches Mastra context to every incoming request. Route handlers need access to the Mastra instance, tools, and other context to function. How you attach this context depends on your framework — Express uses `res.locals`, Hono uses `c.set()`, and other frameworks have their own patterns.
 
-```typescript copy showLineNumbers
+```typescript copy
 registerContextMiddleware(): void {
   this.app.use('*', (req, res, next) => {
     // Attach context to your framework's request/response
@@ -13921,7 +13926,7 @@ Context to attach:
 
 Register authentication and authorization middleware. This method should check if authentication is configured on the Mastra instance and skip registration entirely if not. When auth is configured, you'll typically register two middleware functions: one for authentication (validating tokens and setting the user) and one for authorization (checking if the user can access the requested resource).
 
-```typescript copy showLineNumbers
+```typescript copy
 registerAuthMiddleware(): void {
   const authConfig = this.mastra.getServer()?.auth;
   if (!authConfig) return;
@@ -13957,7 +13962,7 @@ registerAuthMiddleware(): void {
 
 Register a single route with your framework. This method is called once for each Mastra route during initialization. It receives a `ServerRoute` object containing the path, HTTP method, handler function, and Zod schemas for validation. Your implementation should wire this up to your framework's routing system.
 
-```typescript copy showLineNumbers
+```typescript copy
 async registerRoute(
   app: MyApp,
   route: ServerRoute,
@@ -14004,7 +14009,7 @@ async registerRoute(
 
 Extract URL parameters, query parameters, and request body from the incoming request. Different frameworks expose these values in different ways—Express uses `req.params`, `req.query`, and `req.body`, while other frameworks may use different property names or require method calls. This method normalizes the extraction for your framework.
 
-```typescript copy showLineNumbers
+```typescript copy
 async getParams(
   route: ServerRoute,
   request: MyRequest
@@ -14014,9 +14019,12 @@ async getParams(
   body: unknown;
 }> {
   return {
-    urlParams: request.params,        // From route path (e.g., :agentId)
-    queryParams: request.query,       // From URL query string
-    body: request.body,               // From request body
+    // From route path (e.g., :agentId)
+    urlParams: request.params,
+    // From URL query string
+    queryParams: request.query,
+    // From request body
+    body: request.body,
   };
 }
 ```
@@ -14025,7 +14033,7 @@ async getParams(
 
 Send the response back to the client based on the route's response type. Mastra routes can return different response types: JSON for most API responses, streams for agent generation, and special types for MCP transports. Your implementation should handle each type appropriately for your framework.
 
-```typescript copy showLineNumbers
+```typescript copy
 async sendResponse(
   route: ServerRoute,
   response: MyResponse,
@@ -14060,7 +14068,7 @@ async sendResponse(
 
 Handle streaming responses for agent generation. When an agent generates a response, it produces a stream of chunks that should be sent to the client as they become available. This method reads from the stream, optionally applies redaction to hide sensitive data, and writes chunks to the response in the appropriate format (SSE or newline-delimited JSON).
 
-```typescript copy showLineNumbers
+```typescript copy
 async stream(
   route: ServerRoute,
   response: MyResponse,
@@ -14123,7 +14131,7 @@ The `parse*` methods use Zod schemas defined on each route to validate input and
 
 Your adapter's constructor should accept the same options as the base class and pass them to `super()`. You can add additional framework-specific options if needed:
 
-```typescript copy showLineNumbers
+```typescript copy
 constructor(options: {
   app: MyApp;
   mastra: Mastra;
@@ -14143,8 +14151,8 @@ See [Server Adapters](/docs/v1/server-db/server-adapters#constructor-options) fo
 
 Here's a skeleton implementation showing all the required methods. This uses pseudocode for framework-specific parts—replace with your framework's actual APIs:
 
-```typescript title="my-framework-adapter.ts" copy showLineNumbers
-import { MastraServer, ServerRoute } from '@mastra/server';
+```typescript title="my-framework-adapter.ts" copy
+import { MastraServer, ServerRoute } from '@mastra/server/server-adapter';
 import type { Mastra } from '@mastra/core';
 
 export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse> {
@@ -14200,7 +14208,7 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
 
 Once your adapter is implemented, use it the same way as the provided adapters:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { MyFrameworkServer } from './my-framework-adapter';
 import { mastra } from './mastra';
 
@@ -15063,13 +15071,15 @@ import TabItem from "@theme/TabItem";
 # Server Adapters
 [EN] Source: https://mastra.ai/en/docs/server-db/server-adapters
 
-Server adapters let you run Mastra with your own HTTP server instead of the Hono server generated by `mastra build`. They provide more control over the server setup, including custom middleware ordering, authentication, logging, and deployment configuration, while still letting you integrate Mastra into any Node.js application without changing how agents or workflows execute.
+Server adapters let you run Mastra with your own HTTP server instead of the Hono server generated by `mastra build`. They provide more control over the server setup, including custom middleware ordering, authentication, logging, and deployment configuration. You can still integrate Mastra into any Node.js application without changing how agents or workflows execute.
 
 ## When to use server adapters
 
-Use server adapters when you want Mastra’s endpoints added automatically to an existing application, when you need direct access to the server instance for custom configuration, or when your team prefers using Express instead of the Hono server created by `mastra build`.
+- You want Mastra’s endpoints added automatically to an existing application
+- You need direct access to the server instance for custom configuration
+- Your team prefers using another server framework instead of the Hono server created by `mastra build`.
 
-:::info
+:::tip
 
 For simple deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/v1/server-db/mastra-server).
 
@@ -15077,12 +15087,16 @@ For simple deployments without custom server requirements, use `mastra build` in
 
 ## Available adapters
 
-- [@mastra/express](/reference/v1/server/express-adapter): Express framework adapter.
-- [@mastra/hono](/reference/v1/server/hono-adapter): Hono framework adapter.
+Mastra currently provides two official server adapters:
+
+- [@mastra/express](/reference/v1/server/express-adapter): Express framework adapter
+- [@mastra/hono](/reference/v1/server/hono-adapter): Hono framework adapter
+
+You can build your own adapter, read [Custom Adapters](/docs/v1/server-db/custom-adapters) for details.
 
 ## Installation
 
-Install the adapter for the framework you’re using.
+Install the adapter for the framework of your choice.
 
 <Tabs>
   <TabItem value="express" label="Express">
@@ -15101,15 +15115,15 @@ npm install @mastra/hono@beta
 
 ## Configuration
 
-Initialize your Express or Hono app as usual, then create a `MastraServer` by passing in the `app` and your main `mastra` instance from `src/mastra`. Calling `init()` automatically registers Mastra middleware and all available endpoints. You can continue adding your own routes as normal, either before or after `init()`, and they’ll run alongside Mastra’s endpoints.
+Initialize your app as usual, then create a `MastraServer` by passing in the `app` and your main `mastra` instance from `src/mastra/index.ts`. Calling `init()` automatically registers Mastra middleware and all available endpoints. You can continue adding your own routes as normal, either before or after `init()`, and they’ll run alongside Mastra’s endpoints.
 
 <Tabs>
   <TabItem value="express" label="Express">
 
-```typescript {8} title="express-server.ts" showLineNumbers
+```typescript {8} title="src/express-server.ts"
 import express from "express";
 import { MastraServer } from "@mastra/express";
-import { mastra } from "./mastra"; // src/mastra/index.ts
+import { mastra } from "./mastra";
 
 const app = express();
 app.use(express.json());
@@ -15126,11 +15140,11 @@ app.listen(4111, () => {
   </TabItem>
   <TabItem value="hono" label="Hono">
 
-```typescript {8} title="hono-server.ts" showLineNumbers
+```typescript {8} title="src/hono-server.ts"
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { HonoBindings, HonoVariables, MastraServer } from "@mastra/hono";
-import { mastra } from "./mastra"; // src/mastra/index.ts
+import { mastra } from "./mastra";
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
@@ -15146,8 +15160,11 @@ serve({ fetch: app.fetch, port: 4111 }, () => {
   </TabItem>
 </Tabs>
 
-> See the [Express Adapter](/reference/v1/server/express-adapter) or [Hono Adapter](/reference/v1/server/hono-adapter)  docs for full configuration options.
+:::info
 
+See the [Express Adapter](/reference/v1/server/express-adapter) or [Hono Adapter](/reference/v1/server/hono-adapter) docs for full configuration options.
+
+:::
 
 ## Initialization flow
 
@@ -15161,7 +15178,7 @@ Calling `init()` runs three steps in order. Understanding this flow helps when y
 
 For custom middleware ordering, call each method separately instead of `init()`. This is useful when you need middleware that runs before Mastra's context is set up, or when you need to insert logic between the initialization steps.
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 const server = new MastraServer({ app, mastra });
 
 // Your middleware first
@@ -15192,14 +15209,17 @@ You can add your own routes to the app alongside Mastra's routes.
 - Routes added **before** `init()` won't have Mastra context available.
 - Routes added **after** `init()` have access to the Mastra context (the Mastra instance, request context, authenticated user, etc.).
 
-> See adding custom routes for [Express](/reference/v1/server/express-adapter#adding-custom-routes) and [Hono](/reference/v1/server/hono-adapter#adding-custom-routes) for more information.
+:::info
 
+Visit "Adding custom routes" for [Express](/reference/v1/server/express-adapter#adding-custom-routes) and [Hono](/reference/v1/server/hono-adapter#adding-custom-routes) for more information.
+
+:::
 
 ## Route prefixes
 
-By default, Mastra routes are registered at `/api/agents`, `/api/workflows`, etc. Use the `prefix` option to change this, which is useful for API versioning or when integrating with an existing app that has its own `/api` routes.
+By default, Mastra routes are registered at `/api/agents`, `/api/workflows`, etc. Use the `prefix` option to change this. This is useful for API versioning or when integrating with an existing app that has its own `/api` routes.
 
-```typescript showLineNumbers copy
+```typescript copy
 const server = new MastraServer({
   app,
   mastra,
@@ -15213,7 +15233,7 @@ With this prefix, Mastra routes become `/api/v2/agents`, `/api/v2/workflows`, et
 
 Mastra can generate an OpenAPI specification for all registered routes. This is useful for documentation, client generation, or integration with API tools. Enable it by setting the `openapiPath` option:
 
-```typescript showLineNumbers copy
+```typescript copy
 const server = new MastraServer({
   app,
   mastra,
@@ -15236,7 +15256,7 @@ This redaction happens at the HTTP boundary, so internal callbacks like `onStepF
 
 By default, redaction is enabled. Configure this behavior via `streamOptions`. Set `redact: false` only for internal services or debugging scenarios where you need access to the full request data in stream responses.
 
-```typescript showLineNumbers copy
+```typescript copy
 const server = new MastraServer({
   app,
   mastra,
@@ -15246,7 +15266,11 @@ const server = new MastraServer({
 });
 ```
 
-> See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+:::info
+
+See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+
+:::
 
 ## Per-route auth overrides
 
@@ -15254,29 +15278,36 @@ When authentication is configured on your Mastra instance, all routes require au
 
 Use `customRouteAuthConfig` to override authentication behavior for specific routes. Keys follow the format `METHOD:PATH` where method is `GET`, `POST`, `PUT`, `DELETE`, or `ALL`. Paths support wildcards (`*`) for matching multiple routes. Setting a value to `false` makes the route public, while `true` requires authentication.
 
-```typescript showLineNumbers copy
+```typescript copy
 const server = new MastraServer({
   app,
   mastra,
   customRouteAuthConfig: new Map([
-    ['GET:/api/health', false],       // Public health check
-    ['GET:/api/openapi.json', false], // Public API spec
-    ['POST:/api/webhooks/*', false],  // Public webhook endpoints
-    ['POST:/api/admin/reset', true],  // Require auth even if globally disabled
-    ['ALL:/api/internal/*', true],    // Protect all methods on internal routes
+    // Public health check
+    ['GET:/api/health', false],
+    // Public API spec
+    ['GET:/api/openapi.json', false],
+    // Public webhook endpoints
+    ['POST:/api/webhooks/*', false],
+    // Require auth even if globally disabled
+    ['POST:/api/admin/reset', true],
+    // Protect all methods on internal routes
+    ['ALL:/api/internal/*', true],
   ]),
 });
 ```
 
+:::info
 
+See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
 
-> See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+:::
 
 ## Accessing the app
 
 After creating the adapter, you may still need access to the underlying framework app. This is useful when passing it to a platform’s `serve` function or when adding routes from another module.
 
-```typescript showLineNumbers copy
+```typescript copy
 // Via the MastraServer instance
 const app = server.getApp();
 
@@ -16321,9 +16352,8 @@ By combining writable tool streams with agent streaming, you gain fine grained c
 
 Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
 
-```typescript {3,9} showLineNumbers copy
+```typescript {2,9} showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
-
 import { testTool } from "../tools/test-tool";
 
 export const testAgent = new Agent({
@@ -16337,30 +16367,29 @@ export const testAgent = new Agent({
 
 ### Using `context.writer`
 
-The `context.writer` object is available in a tool's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
+The `context.writer` object is available in a tool's `execute()` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
 
 :::warning
 
-You must `await` the call to `writer.write(...)` or else you will lock the stream and get a `WritableStream is locked` error.
+You must `await` the call to `writer.write()` or else you will lock the stream and get a `WritableStream is locked` error.
 
 :::
 
-```typescript {5,8,15} showLineNumbers copy
+```typescript {4,7,14} showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
-  // ...
   execute: async (inputData, context) => {
     const { value } = inputData;
 
-   await context?.writer?.write({
+    await context?.writer?.write({
       type: "custom-event",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await context?.writer?.write({
+    await context?.writer?.write({
       type: "custom-event",
       status: "success"
     });
@@ -16372,14 +16401,13 @@ export const testTool = createTool({
 });
 ```
 
-You can also use `writer.custom` if you want to emit top level stream chunks, This useful and relevant when
+You can also use `writer.custom()` if you want to emit top level stream chunks, This useful and relevant when
 integrating with UI Frameworks
 
-```typescript {5,8,15} showLineNumbers copy
+```typescript {4,7,14} showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
-  // ...
   execute: async (inputData, context) => {
     const { value } = inputData;
 
@@ -16472,12 +16500,11 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 export const testTool = createTool({
-  // ...
   execute: async (inputData, context) => {
     const { city } = inputData;
 
-    const testAgent = context?.mastra?.getAgent("testAgent");
-    const stream = await testAgent?.stream(`What is the weather in ${city}?`);
+    const agent = context?.mastra?.getAgent("testAgent");
+    const stream = await agent?.stream(`What is the weather in ${city}?`);
 
     await stream!.fullStream.pipeTo(context?.writer!);
 
@@ -20385,7 +20412,7 @@ if (activeRuns.runs.length > 0) {
 }
 ```
 
-:::Note
+:::note
 
 When running the local mastra server, all active workflow runs will be restarted automatically when the server starts.
 
@@ -24886,6 +24913,156 @@ For detailed information about flow control options and their behavior, see the 
 
 
 ---
+title: "AI SDK | Agent Frameworks"
+description: "Use Mastra processors and memory with the Vercel AI SDK"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# AI SDK
+[EN] Source: https://mastra.ai/en/guides/agent-frameworks/ai-sdk
+
+If you're already using the [Vercel AI SDK](https://sdk.vercel.ai) directly and want to add Mastra capabilities like [processors](/docs/v1/agents/processors) or [memory](/docs/v1/memory/memory-processors) without switching to the full Mastra agent API, [`withMastra()`](/reference/v1/ai-sdk/with-mastra) lets you wrap any AI SDK model with these features. This is useful when you want to keep your existing AI SDK code but add input/output processing, conversation persistence, or content filtering.
+
+:::tip
+
+If you want to use Mastra together with AI SDK UI (e.g. `useChat()`), visit the [AI SDK UI guide](/guides/v1/build-your-ui/ai-sdk-ui).
+
+:::
+
+## Installation
+
+Install `@mastra/ai-sdk` to begin using the `withMastra()` function.
+
+<Tabs>
+  <TabItem value="npm" label="npm">
+    ```bash copy
+    npm install @mastra/ai-sdk@beta
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash copy
+    pnpm add @mastra/ai-sdk@beta
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash copy
+    yarn add @mastra/ai-sdk@beta
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash copy
+    bun add @mastra/ai-sdk@beta
+    ```
+  </TabItem>
+</Tabs>
+
+## Examples
+
+### With Processors
+
+Processors let you transform messages before they're sent to the model (`processInput`) and after responses are received (`processOutputResult`). This example creates a logging processor that logs message counts at each stage, then wraps an OpenAI model with it.
+
+```typescript title="src/example.ts" copy
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import type { Processor } from '@mastra/core/processors';
+
+const loggingProcessor: Processor<'logger'> = {
+  id: 'logger',
+  async processInput({ messages }) {
+    console.log('Input:', messages.length, 'messages');
+    return messages;
+  },
+  async processOutputResult({ messages }) {
+    console.log('Output:', messages.length, 'messages');
+    return messages;
+  },
+};
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [loggingProcessor],
+  outputProcessors: [loggingProcessor],
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What is 2 + 2?',
+});
+```
+
+### With Memory
+
+Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a LibSQL storage backend to persist conversation history, loading the last 10 messages for context.
+
+```typescript title="src/memory-example.ts" copy
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import { LibSQLStore } from '@mastra/libsql';
+
+const storage = new LibSQLStore({
+  id: 'my-app',
+  url: 'file:./data.db',
+});
+await storage.init();
+
+const model = withMastra(openai('gpt-4o'), {
+  memory: {
+    storage,
+    threadId: 'user-thread-123',
+    resourceId: 'user-123',
+    lastMessages: 10,
+  },
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What did we talk about earlier?',
+});
+```
+
+### With Processors & Memory
+
+You can combine processors and memory together. Input processors run after memory loads historical messages, and output processors run before memory saves the response.
+
+```typescript title="src/combined-example.ts" copy
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import { LibSQLStore } from '@mastra/libsql';
+
+const storage = new LibSQLStore({ id: 'my-app', url: 'file:./data.db' });
+await storage.init();
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [myGuardProcessor],
+  outputProcessors: [myLoggingProcessor],
+  memory: {
+    storage,
+    threadId: 'thread-123',
+    resourceId: 'user-123',
+    lastMessages: 10,
+  },
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'Hello!',
+});
+```
+
+## Related
+
+- [`withMastra()`](/reference/v1/ai-sdk/with-mastra) - API reference for `withMastra()`
+- [Processors](/docs/v1/agents/processors) - Learn about input and output processors
+- [Memory](/docs/v1/memory/overview) - Overview of Mastra's memory system
+- [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui) - Using AI SDK UI hooks with Mastra agents, workflows, and networks
+
+
+---
 title: "Using AI SDK UI | Frameworks"
 description: "Learn how Mastra leverages the AI SDK UI library and how you can leverage it further with Mastra"
 ---
@@ -25490,17 +25667,17 @@ It is important that you `await` the `writer.custom()` call.
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
-  execute: async ({ context, writer }) => {
-    const { value } = context;
+  execute: async (inputData, context) => {
+    const { value } = inputData;
 
-    await writer?.custom({
+    await context?.writer?.custom({
       type: "data-tool-progress",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-    await writer?.custom({
+    await context?.writer?.custom({
       type: "data-tool-progress",
       status: "success"
     });
@@ -32409,11 +32586,11 @@ Tool execution signatures have been updated to use separate input and context pa
 
 ### `createTool` execute signature to `(inputData, context)` format
 
-All **`createTool`** execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
+All `createTool` execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
 
 **Note:** This change only applies to `createTool`. If you're using `createStep` for workflows, the signature remains `async (inputData, context)` and does not need to be changed.
 
-To migrate, update **`createTool`** signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
+To migrate, update `createTool` signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
 
 ```diff
   createTool({
@@ -32433,7 +32610,7 @@ To migrate, update **`createTool`** signatures to use `inputData` as the first p
 
 ### `createTool` context properties organization
 
-Context properties in **`createTool`** are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
+Context properties in `createTool` are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
 
 For tools that are executed inside an agent, access agent-specific properties through `context.agent`.
 
@@ -33133,13 +33310,54 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
-### `setState` is now async and the data passed is validated
+### `writableStream` to `outputWriter` in `Run.start()` & `Run.timeTravel()`
 
-The `setState` function is now async. The data passed is now validated against the `stateSchema` defined in the step.
-The state data validation also uses the `validateInputs` flag to determine whether to validate the state data or not.
-Also, when calling `setState`, you can now pass only the state data being updated, instead of adding the previous state spread (`...state`).
+The `writableStream` parameter in `Run.start()` and `Run.timeTravel()` has been replaced with `outputWriter`. Instead of passing a `WritableStream`, you now pass an async callback function that receives each workflow event chunk directly.
 
-To migrate, update the `setState` function to be async.
+This change simplifies the API - rather than creating a `WritableStream` wrapper, you handle chunks directly in the callback.
+
+**Example:** Streaming workflow events to an HTTP response (SSE):
+
+```diff
+  const run = await workflow.createRun();
+
+- const stream = new WritableStream({
+-   write(chunk) {
+-     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+-   }
+- });
+- await run.start({ inputData, writableStream: stream });
+
++ await run.start({
++   inputData,
++   outputWriter: async (chunk) => {
++     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
++   },
++ });
+```
+
+:::note
+
+The `writer` parameter passed to step `execute` functions is not affected by this change. It remains a `ToolStream` that extends `WritableStream<unknown>` and provides `.write()` and `.custom()` methods:
+
+```ts
+createStep({
+  id: 'my-step',
+  execute: async ({ writer }) => {
+    // This API is unchanged
+    await writer.write({ data: 'some output' });
+    await writer.custom({ type: 'custom-event', payload: {} });
+  },
+});
+```
+
+:::
+
+### `setState()` is now async and the data passed is validated
+
+The `setState()` function is now async. The data passed is now validated against the `stateSchema` defined in the step. The state data validation also uses the `validateInputs` flag to determine whether to validate the state data or not. Also, when calling `setState()`, you can now pass only the state data being updated, instead of adding the previous state spread `(...state)`.
+
+To migrate, update the `setState()` function to be async.
 
 ```diff
 - setState({ ...state, sharedCounter: state.sharedCounter + 1 });
@@ -34960,7 +35178,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 59+ AI providers and 1231+ models through Mastra's model router."
+description: "Access 60+ AI providers and 1324+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34973,7 +35191,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1231 models from 59 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1324 models from 60 providers through a single API.
 
 ## Features
 
@@ -35101,7 +35319,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 52 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 53 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -42233,6 +42451,1188 @@ For detailed provider-specific documentation, see the [AI SDK Groq provider docs
 
 
 ---
+title: "Helicone | Models | Mastra"
+description: "Use Helicone models with Mastra. 91 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/helicone.svg" alt="Helicone logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Helicone
+[EN] Source: https://mastra.ai/en/models/providers/helicone
+
+Access 91 Helicone models through Mastra's model router. Authentication is handled automatically using the `HELICONE_API_KEY` environment variable.
+
+Learn more in the [Helicone documentation](https://helicone.ai/models).
+
+```bash
+HELICONE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "helicone/chatgpt-4o-latest"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Helicone documentation](https://helicone.ai/models) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "helicone/chatgpt-4o-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 5,
+    "outputCost": 20
+  },
+  {
+    "model": "helicone/claude-3-haiku-20240307",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 0.25,
+    "outputCost": 1.25
+  },
+  {
+    "model": "helicone/claude-3.5-haiku",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 0.7999999999999999,
+    "outputCost": 4
+  },
+  {
+    "model": "helicone/claude-3.5-sonnet-v2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "helicone/claude-3.7-sonnet",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "helicone/claude-4.5-haiku",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "helicone/claude-4.5-opus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
+    "model": "helicone/claude-4.5-sonnet",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "helicone/claude-haiku-4-5-20251001",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "helicone/claude-opus-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "helicone/claude-opus-4-1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "helicone/claude-opus-4-1-20250805",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "helicone/claude-sonnet-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "helicone/claude-sonnet-4-5-20250929",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "helicone/codex-mini-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 1.5,
+    "outputCost": 6
+  },
+  {
+    "model": "helicone/deepseek-r1-distill-llama-70b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.03,
+    "outputCost": 0.13
+  },
+  {
+    "model": "helicone/deepseek-reasoner",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": 0.56,
+    "outputCost": 1.68
+  },
+  {
+    "model": "helicone/deepseek-tng-r1t2-chimera",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 130000,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "helicone/deepseek-v3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.56,
+    "outputCost": 1.68
+  },
+  {
+    "model": "helicone/deepseek-v3.1-terminus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.27,
+    "outputCost": 1
+  },
+  {
+    "model": "helicone/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.27,
+    "outputCost": 0.41
+  },
+  {
+    "model": "helicone/ernie-4.5-21b-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8000,
+    "inputCost": 0.07,
+    "outputCost": 0.28
+  },
+  {
+    "model": "helicone/gemini-2.5-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65535,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "model": "helicone/gemini-2.5-flash-lite",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65535,
+    "inputCost": 0.09999999999999999,
+    "outputCost": 0.39999999999999997
+  },
+  {
+    "model": "helicone/gemini-2.5-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "helicone/gemini-3-pro-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 2,
+    "outputCost": 12
+  },
+  {
+    "model": "helicone/gemma-3-12b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.049999999999999996,
+    "outputCost": 0.09999999999999999
+  },
+  {
+    "model": "helicone/gemma2-9b-it",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.01,
+    "outputCost": 0.03
+  },
+  {
+    "model": "helicone/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.44999999999999996,
+    "outputCost": 1.5
+  },
+  {
+    "model": "helicone/gpt-4.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "helicone/gpt-4.1-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.39999999999999997,
+    "outputCost": 1.5999999999999999
+  },
+  {
+    "model": "helicone/gpt-4.1-mini-2025-04-14",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.39999999999999997,
+    "outputCost": 1.5999999999999999
+  },
+  {
+    "model": "helicone/gpt-4.1-nano",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.09999999999999999,
+    "outputCost": 0.39999999999999997
+  },
+  {
+    "model": "helicone/gpt-4o",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 2.5,
+    "outputCost": 10
+  },
+  {
+    "model": "helicone/gpt-4o-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "helicone/gpt-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "helicone/gpt-5-chat-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "helicone/gpt-5-codex",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "helicone/gpt-5-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "model": "helicone/gpt-5-nano",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.049999999999999996,
+    "outputCost": 0.39999999999999997
+  },
+  {
+    "model": "helicone/gpt-5-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 15,
+    "outputCost": 120
+  },
+  {
+    "model": "helicone/gpt-5.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "helicone/gpt-5.1-chat-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "helicone/gpt-5.1-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "helicone/gpt-5.1-codex-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "model": "helicone/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.04,
+    "outputCost": 0.16
+  },
+  {
+    "model": "helicone/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.049999999999999996,
+    "outputCost": 0.19999999999999998
+  },
+  {
+    "model": "helicone/grok-3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "helicone/grok-3-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 0.5
+  },
+  {
+    "model": "helicone/grok-4",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "helicone/grok-4-1-fast-non-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": 0.19999999999999998,
+    "outputCost": 0.5
+  },
+  {
+    "model": "helicone/grok-4-1-fast-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 2000000,
+    "maxOutput": 2000000,
+    "inputCost": 0.19999999999999998,
+    "outputCost": 0.5
+  },
+  {
+    "model": "helicone/grok-4-fast-non-reasoning",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 2000000,
+    "maxOutput": 2000000,
+    "inputCost": 0.19999999999999998,
+    "outputCost": 0.5
+  },
+  {
+    "model": "helicone/grok-4-fast-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 2000000,
+    "maxOutput": 2000000,
+    "inputCost": 0.19999999999999998,
+    "outputCost": 0.5
+  },
+  {
+    "model": "helicone/grok-code-fast-1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 10000,
+    "inputCost": 0.19999999999999998,
+    "outputCost": 1.5
+  },
+  {
+    "model": "helicone/hermes-2-pro-llama-3-8b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.14,
+    "outputCost": 0.14
+  },
+  {
+    "model": "helicone/kimi-k2-0711",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.5700000000000001,
+    "outputCost": 2.3
+  },
+  {
+    "model": "helicone/kimi-k2-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.5,
+    "outputCost": 2
+  },
+  {
+    "model": "helicone/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 262144,
+    "inputCost": 0.48,
+    "outputCost": 2
+  },
+  {
+    "model": "helicone/llama-3.1-8b-instant",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32678,
+    "inputCost": 0.049999999999999996,
+    "outputCost": 0.08
+  },
+  {
+    "model": "helicone/llama-3.1-8b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 16384,
+    "inputCost": 0.02,
+    "outputCost": 0.049999999999999996
+  },
+  {
+    "model": "helicone/llama-3.1-8b-instruct-turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.02,
+    "outputCost": 0.03
+  },
+  {
+    "model": "helicone/llama-3.3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16400,
+    "inputCost": 0.13,
+    "outputCost": 0.39
+  },
+  {
+    "model": "helicone/llama-3.3-70b-versatile",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32678,
+    "inputCost": 0.59,
+    "outputCost": 0.7899999999999999
+  },
+  {
+    "model": "helicone/llama-4-maverick",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "helicone/llama-4-scout",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.08,
+    "outputCost": 0.3
+  },
+  {
+    "model": "helicone/llama-guard-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 1024,
+    "inputCost": 0.21,
+    "outputCost": 0.21
+  },
+  {
+    "model": "helicone/llama-prompt-guard-2-22m",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 512,
+    "maxOutput": 2,
+    "inputCost": 0.01,
+    "outputCost": 0.01
+  },
+  {
+    "model": "helicone/llama-prompt-guard-2-86m",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 512,
+    "maxOutput": 2,
+    "inputCost": 0.01,
+    "outputCost": 0.01
+  },
+  {
+    "model": "helicone/mistral-large-2411",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "helicone/mistral-nemo",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16400,
+    "inputCost": 20,
+    "outputCost": 40
+  },
+  {
+    "model": "helicone/mistral-small",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 75,
+    "outputCost": 200
+  },
+  {
+    "model": "helicone/o1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 15,
+    "outputCost": 60
+  },
+  {
+    "model": "helicone/o1-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 65536,
+    "inputCost": 1.1,
+    "outputCost": 4.4
+  },
+  {
+    "model": "helicone/o3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "helicone/o3-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 1.1,
+    "outputCost": 4.4
+  },
+  {
+    "model": "helicone/o3-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 20,
+    "outputCost": 80
+  },
+  {
+    "model": "helicone/o4-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 1.1,
+    "outputCost": 4.4
+  },
+  {
+    "model": "helicone/qwen2.5-coder-7b-fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 8192,
+    "inputCost": 0.03,
+    "outputCost": 0.09
+  },
+  {
+    "model": "helicone/qwen3-235b-a22b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 81920,
+    "inputCost": 0.3,
+    "outputCost": 2.9000000000000004
+  },
+  {
+    "model": "helicone/qwen3-30b-a3b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 41000,
+    "maxOutput": 41000,
+    "inputCost": 0.08,
+    "outputCost": 0.29
+  },
+  {
+    "model": "helicone/qwen3-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 40960,
+    "inputCost": 0.29,
+    "outputCost": 0.59
+  },
+  {
+    "model": "helicone/qwen3-coder",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.22,
+    "outputCost": 0.95
+  },
+  {
+    "model": "helicone/qwen3-coder-30b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.09999999999999999,
+    "outputCost": 0.3
+  },
+  {
+    "model": "helicone/qwen3-next-80b-a3b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 16384,
+    "inputCost": 0.14,
+    "outputCost": 1.4
+  },
+  {
+    "model": "helicone/qwen3-vl-235b-a22b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 16384,
+    "inputCost": 0.3,
+    "outputCost": 1.5
+  },
+  {
+    "model": "helicone/sonar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 127000,
+    "maxOutput": 4096,
+    "inputCost": 1,
+    "outputCost": 1
+  },
+  {
+    "model": "helicone/sonar-deep-research",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 127000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "helicone/sonar-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "helicone/sonar-reasoning",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 127000,
+    "maxOutput": 4096,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "helicone/sonar-reasoning-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 127000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 8
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://ai-gateway.helicone.ai/v1",
+    id: "helicone/chatgpt-4o-latest",
+    apiKey: process.env.HELICONE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "helicone/sonar-reasoning-pro"
+      : "helicone/chatgpt-4o-latest";
+  }
+});
+```
+
+
+
+
+---
 title: "Hugging Face | Models | Mastra"
 description: "Use Hugging Face models with Mastra. 14 models available."
 ---
@@ -42976,7 +44376,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/groq.svg"
     />    <CardGridItem
       title="Mistral"
-      description="19 models"
+      description="21 models"
       href="/models/v1/providers/mistral"
       logo="https://models.dev/logos/mistral.svg"
     />    <CardGridItem
@@ -43044,6 +44444,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="55 models"
       href="/models/v1/providers/github-models"
       logo="https://models.dev/logos/github-models.svg"
+    />    <CardGridItem
+      title="Helicone"
+      description="91 models"
+      href="/models/v1/providers/helicone"
+      logo="https://models.dev/logos/helicone.svg"
     />    <CardGridItem
       title="Hugging Face"
       description="14 models"
@@ -44765,7 +46170,7 @@ npm install @ai-sdk/anthropic
 
 ---
 title: "Mistral | Models | Mastra"
-description: "Use Mistral models with Mastra. 19 models available."
+description: "Use Mistral models with Mastra. 21 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -44776,7 +46181,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
 [EN] Source: https://mastra.ai/en/models/providers/mistral
 
-Access 19 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
+Access 21 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
 
 Learn more in the [Mistral documentation](https://docs.mistral.ai/getting-started/models/).
 
@@ -44905,7 +46310,7 @@ for await (const chunk of stream) {
     "outputCost": 0.1
   },
   {
-    "model": "mistral/mistral-large-latest",
+    "model": "mistral/mistral-large-2411",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -44915,6 +46320,30 @@ for await (const chunk of stream) {
     "maxOutput": 16384,
     "inputCost": 2,
     "outputCost": 6
+  },
+  {
+    "model": "mistral/mistral-large-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "mistral/mistral-large-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.5,
+    "outputCost": 1.5
   },
   {
     "model": "mistral/mistral-medium-2505",
@@ -57070,6 +58499,127 @@ for await (const part of uiMessageStream) {
 
 
 ---
+title: "Reference: withMastra() | AI SDK"
+description: API reference for withMastra(), a function to use Mastra functionality in AI SDK.
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# withMastra()
+[EN] Source: https://mastra.ai/en/reference/ai-sdk/with-mastra
+
+Wraps an AI SDK model with Mastra processors and/or memory.
+
+## Usage example
+
+```typescript title="src/example.ts" copy
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import type { Processor } from '@mastra/core/processors';
+
+const loggingProcessor: Processor<'logger'> = {
+  id: 'logger',
+  async processInput({ messages }) {
+    console.log('Input:', messages.length, 'messages');
+    return messages;
+  },
+};
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [loggingProcessor],
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What is 2 + 2?',
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModelV2",
+      description: "Any AI SDK language model (e.g., `openai('gpt-4o')`, `anthropic('claude-3-opus')`).",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "WithMastraOptions",
+      description: "Configuration object for processors and memory.",
+      isOptional: true,
+    },
+    {
+      name: "options.inputProcessors",
+      type: "InputProcessor[]",
+      description: "Input processors to run before the LLM call.",
+      isOptional: true,
+    },
+    {
+      name: "options.outputProcessors",
+      type: "OutputProcessor[]",
+      description: "Output processors to run on the LLM response.",
+      isOptional: true,
+    },
+    {
+      name: "options.memory",
+      type: "WithMastraMemoryOptions",
+      description: "Memory configuration - enables automatic message history persistence.",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.storage",
+      type: "MemoryStorage",
+      description: "Storage adapter for message persistence (e.g., LibSQLStore, PostgresStore).",
+      isOptional: false,
+    },
+    {
+      name: "options.memory.threadId",
+      type: "string",
+      description: "Thread ID for conversation persistence.",
+      isOptional: false,
+    },
+    {
+      name: "options.memory.resourceId",
+      type: "string",
+      description: "Resource ID (user/session identifier).",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.lastMessages",
+      type: "number | false",
+      description: "Number of recent messages to retrieve, or false to disable.",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.semanticRecall",
+      type: "WithMastraSemanticRecallOptions",
+      description: "Semantic recall configuration (RAG-based memory retrieval).",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.workingMemory",
+      type: "MemoryConfig['workingMemory']",
+      description: "Working memory configuration (persistent user data).",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.readOnly",
+      type: "boolean",
+      description: "Read-only mode - prevents saving new messages.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+A wrapped model compatible with `generateText`, `streamText`, `generateObject`, and `streamObject`.
+
+---
 title: "Reference: workflowRoute() | AI SDK"
 description: API reference for workflowRoute(), a function to create workflow route handlers for streaming workflow execution in AI SDK-compatible format.
 ---
@@ -58092,6 +59642,18 @@ The path to your built Mastra output directory. Defaults to `.mastra/output`.
 
 Disable the [OTEL Tracing](/docs/v1/observability/tracing/overview).
 
+## `mastra studio`
+
+Starts [Mastra Studio](/docs/v1/getting-started/studio) as a static server. After starting, you can enter your Mastra instance URL (e.g. `http://localhost:4111`) to connect Studio to your Mastra backend.
+
+### Flags
+
+The command accepts [common flags][common-flags] and the following additional flags:
+
+#### `--port`
+
+The port to run Studio on. Defaults to `3000`.
+
 ## `mastra lint`
 
 The `mastra lint` command validates the structure and code of your Mastra project to ensure it follows best practices and is error-free.
@@ -58180,7 +59742,7 @@ Enable verbose logging for Mastra's internals. Defaults to `false`.
 
 ### `--env`
 
-**Available in:** `dev`, `start`
+**Available in:** `dev`, `start`, `studio`
 
 Custom environment variables file to include. By default, includes `.env.development`, `.env.local`, and `.env`.
 
@@ -58797,8 +60359,8 @@ export const mastraClient = new MastraClient({
     },
     {
       name: "saveMessageToMemory(params)",
-      type: "Promise<void>",
-      description: "Saves one or more messages to the memory system.",
+      type: "Promise<{ messages: (MastraMessageV1 | MastraDBMessage)[] }>",
+      description: "Saves one or more messages to the memory system. Returns the saved messages.",
     },
     {
       name: "getMemoryStatus()",
@@ -58940,7 +60502,7 @@ await thread.delete();
 Save messages to memory:
 
 ```typescript
-const savedMessages = await mastraClient.saveMessageToMemory({
+const result = await mastraClient.saveMessageToMemory({
   messages: [
     {
       role: "user",
@@ -58954,6 +60516,9 @@ const savedMessages = await mastraClient.saveMessageToMemory({
   ],
   agentId: "agent-1",
 });
+
+// result.messages contains the saved messages
+console.log(result.messages);
 ```
 
 ### Retrieve Thread Messages
@@ -77738,7 +79303,7 @@ The `createRoute()` function creates type-safe routes with Zod validation. When 
 ## Import
 
 ```typescript copy
-import { createRoute } from '@mastra/server';
+import { createRoute } from '@mastra/server/server-adapter';
 ```
 
 ## Signature
@@ -77869,7 +79434,7 @@ Returns a `ServerRoute` object that can be registered with an adapter.
 ### GET route with path params
 
 ```typescript copy showLineNumbers
-import { createRoute } from '@mastra/server';
+import { createRoute } from '@mastra/server/server-adapter';
 import { z } from 'zod';
 
 const getAgent = createRoute({
@@ -78003,10 +79568,11 @@ const bodySchema = z.object({
 
 ## Error handling
 
-Throw `HTTPException` to return specific HTTP status codes from handlers:
+Throw an error with a `status` property to return specific HTTP status codes from handlers. If using Hono, you can use `HTTPException` from `hono/http-exception`:
 
 ```typescript copy showLineNumbers
-import { createRoute, HTTPException } from '@mastra/server';
+import { createRoute } from '@mastra/server/server-adapter';
+import { HTTPException } from 'hono/http-exception';
 
 const getAgent = createRoute({
   method: 'GET',
@@ -78021,6 +79587,19 @@ const getAgent = createRoute({
     return agent;
   },
 });
+```
+
+For Express or framework-agnostic code, throw an error with a `status` property:
+
+```typescript copy showLineNumbers
+class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+// In handler:
+throw new HttpError(404, `Agent '${agentId}' not found`);
 ```
 
 Common status codes:
@@ -78078,7 +79657,7 @@ npm install @mastra/express express
 
 Create your server file:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import express from 'express';
 import { MastraServer } from '@mastra/express';
 import { mastra } from './mastra';
@@ -78106,7 +79685,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 
 ## Full example
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import express from 'express';
 import { MastraServer } from '@mastra/express';
 import { mastra } from './mastra';
@@ -78159,6 +79738,7 @@ app.listen(4111);
       type: "string",
       description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
       isOptional: true,
+      defaultValue: "''",
     },
     {
       name: "bodyLimitOptions",
@@ -78179,6 +79759,32 @@ app.listen(4111);
       description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
       isOptional: true,
     },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
+    },
   ]}
 />
 
@@ -78196,7 +79802,7 @@ app.listen(4111);
 
 Add routes directly to the Express app:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 const app = express();
 app.use(express.json());
 
@@ -78226,7 +79832,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Express middleware and routes, access Mastra context via `res.locals`:
 
-```typescript copy showLineNumbers
+```typescript copy
 app.get('/custom', (req, res) => {
   const mastra = res.locals.mastra;
   const requestContext = res.locals.requestContext;
@@ -78245,13 +79851,17 @@ Available properties on `res.locals`:
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
 | `tools` | Available tools |
+| `taskStore` | Task store for A2A operations |
+| `playground` | Whether playground is enabled |
+| `isDev` | Whether running in development mode |
+| `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |
 
 ## Adding middleware
 
 Add Express middleware before or after `init()`:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 const app = express();
 app.use(express.json());
 
@@ -78326,7 +79936,7 @@ npm install @mastra/hono hono
 
 Create your server file:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
@@ -78345,7 +79955,7 @@ export default app;
 
 ## Full example
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
@@ -78368,7 +79978,6 @@ await server.init();
 
 export default app;
 ```
-
 
 ## Constructor parameters
 
@@ -78398,6 +80007,7 @@ export default app;
       type: "string",
       description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
       isOptional: true,
+      defaultValue: "''",
     },
     {
       name: "bodyLimitOptions",
@@ -78418,6 +80028,32 @@ export default app;
       description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
       isOptional: true,
     },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
+    },
   ]}
 />
 
@@ -78426,7 +80062,7 @@ export default app;
 
 Add routes directly to the Hono app:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
@@ -78455,7 +80091,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Hono middleware and route handlers, access Mastra context via `c.get()`:
 
-```typescript copy showLineNumbers
+```typescript copy
 app.get('/custom', async (c) => {
   const mastra = c.get('mastra');
   const requestContext = c.get('requestContext');
@@ -78474,13 +80110,17 @@ Available context keys:
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
 | `tools` | Available tools |
+| `taskStore` | Task store for A2A operations |
+| `playground` | Whether playground is enabled |
+| `isDev` | Whether running in development mode |
+| `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |
 
 ## Adding middleware
 
 Add Hono middleware before or after `init()`:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
@@ -78534,7 +80174,7 @@ The `MastraServer` abstract class is the base for all server adapters. Extend th
 ## Import
 
 ```typescript copy
-import { MastraServer } from '@mastra/server';
+import { MastraServer } from '@mastra/server/server-adapter';
 ```
 
 ## Type parameters
@@ -78583,6 +80223,7 @@ constructor(options: MastraServerOptions<TApp>)
       type: "string",
       description: "Path to serve OpenAPI spec",
       isOptional: true,
+      defaultValue: "''",
     },
     {
       name: "bodyLimitOptions",
@@ -78602,6 +80243,32 @@ constructor(options: MastraServerOptions<TApp>)
       type: "Map<string, boolean>",
       description: "Per-route auth overrides",
       isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values in adapters implementing the MastraServer",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
     },
   ]}
 />
@@ -78747,17 +80414,6 @@ async parseBody(
 ): Promise<unknown>
 ```
 
-### mergeRequestContext()
-
-Merge request context from multiple sources (query params and body).
-
-```typescript copy
-mergeRequestContext(options: {
-  paramsRequestContext?: Record<string, any>;
-  bodyRequestContext?: Record<string, any>;
-}): RequestContext
-```
-
 ### registerOpenAPIRoute()
 
 Register an endpoint that serves the OpenAPI specification.
@@ -78768,6 +80424,19 @@ async registerOpenAPIRoute(
   config: OpenAPIConfig,
   options: { prefix?: string }
 ): Promise<void>
+```
+
+## Protected methods
+
+### mergeRequestContext()
+
+Merge request context from multiple sources (query params and body).
+
+```typescript copy
+protected mergeRequestContext(options: {
+  paramsRequestContext?: Record<string, any>;
+  bodyRequestContext?: Record<string, any>;
+}): RequestContext
 ```
 
 ## Types
@@ -78791,8 +80460,8 @@ interface StreamOptions {
 
 ## Example
 
-```typescript copy showLineNumbers
-import { MastraServer, ServerRoute } from '@mastra/server';
+```typescript copy
+import { MastraServer, ServerRoute } from '@mastra/server/server-adapter';
 import type { Mastra } from '@mastra/core';
 
 export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
@@ -100866,9 +102535,9 @@ const result = await run.start({
       isOptional: true,
     },
     {
-      name: "writableStream",
-      type: "WritableStream<ChunkType>",
-      description: "Optional writable stream for streaming workflow output",
+      name: "outputWriter",
+      type: "(chunk: TOutput) => Promise<void>",
+      description: "Optional asynchronous function to handle output chunks as they are produced",
       isOptional: true,
     },
     {
@@ -101091,9 +102760,9 @@ const result = await run.timeTravel({
       isOptional: true,
     },
     {
-      name: "writableStream",
-      type: "WritableStream<ChunkType>",
-      description: "Optional writable stream for streaming workflow output during time travel",
+      name: "outputWriter",
+      type: "(chunk: TOutput) => Promise<void>",
+      description: "Optional asynchronous function to handle output chunks as they are produced",
       isOptional: true,
     },
     {

@@ -95,6 +95,17 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Deletes a specific workflow run by its ID
+   * @param runId - The ID of the workflow run to delete
+   * @returns Promise containing a success message
+   */
+  deleteRunById(runId: string): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Retrieves the execution result for a specific workflow run by its ID
    * @param runId - The ID of the workflow run to retrieve the execution result for
    * @param requestContext - Optional request context to pass as query parameter

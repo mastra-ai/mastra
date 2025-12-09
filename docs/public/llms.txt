@@ -135,6 +135,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Example: Inngest Workflow | Workflows](https://mastra.ai/en/examples/workflows/inngest-workflow): Example of building an inngest workflow with Mastra
 
 ## EN - guides
+- [AI SDK | Agent Frameworks](https://mastra.ai/en/guides/agent-frameworks/ai-sdk): Use Mastra processors and memory with the Vercel AI SDK
 - [Using AI SDK UI | Frameworks](https://mastra.ai/en/guides/build-your-ui/ai-sdk-ui): Learn how Mastra leverages the AI SDK UI library and how you can leverage it further with Mastra
 - [Using Assistant UI | Frameworks](https://mastra.ai/en/guides/build-your-ui/assistant-ui): Learn how to integrate Assistant UI with Mastra
 - [Using CopilotKit | Frameworks](https://mastra.ai/en/guides/build-your-ui/copilotkit): Learn how to integrate CopilotKit with Mastra
@@ -180,7 +181,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 59+ AI providers and 1231+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 60+ AI providers and 1324+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -204,6 +205,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Vertex](https://mastra.ai/en/models/providers/google-vertex): Use Vertex models via the AI SDK.
 - [Google | Models | Mastra](https://mastra.ai/en/models/providers/google): Use Google models with Mastra. 25 models available.
 - [Groq | Models | Mastra](https://mastra.ai/en/models/providers/groq): Use Groq models with Mastra. 17 models available.
+- [Helicone | Models | Mastra](https://mastra.ai/en/models/providers/helicone): Use Helicone models with Mastra. 91 models available.
 - [Hugging Face | Models | Mastra](https://mastra.ai/en/models/providers/huggingface): Use Hugging Face models with Mastra. 14 models available.
 - [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 20 models available.
 - [Inception | Models | Mastra](https://mastra.ai/en/models/providers/inception): Use Inception models with Mastra. 2 models available.
@@ -217,7 +219,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [LucidQuery AI | Models | Mastra](https://mastra.ai/en/models/providers/lucidquery): Use LucidQuery AI models with Mastra. 2 models available.
 - [MiniMax (China) | Models | Mastra](https://mastra.ai/en/models/providers/minimax-cn): Use MiniMax (China) models with Mastra. 1 model available.
 - [MiniMax | Models | Mastra](https://mastra.ai/en/models/providers/minimax): Use MiniMax models with Mastra. 1 model available.
-- [Mistral | Models | Mastra](https://mastra.ai/en/models/providers/mistral): Use Mistral models with Mastra. 19 models available.
+- [Mistral | Models | Mastra](https://mastra.ai/en/models/providers/mistral): Use Mistral models with Mastra. 21 models available.
 - [ModelScope | Models | Mastra](https://mastra.ai/en/models/providers/modelscope): Use ModelScope models with Mastra. 7 models available.
 - [Moonshot AI (China) | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai-cn): Use Moonshot AI (China) models with Mastra. 5 models available.
 - [Moonshot AI | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai): Use Moonshot AI models with Mastra. 5 models available.
@@ -272,6 +274,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: handleWorkflowStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/handle-workflow-stream): API reference for handleWorkflowStream(), a framework-agnostic handler for streaming workflow execution in AI SDK-compatible format.
 - [Reference: networkRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/network-route): API reference for networkRoute(), a function to create network route handlers for streaming network execution in AI SDK-compatible format.
 - [Reference: toAISdkStream() | AI SDK](https://mastra.ai/en/reference/ai-sdk/to-ai-sdk-stream): API reference for toAISdkStream(), a function to convert Mastra streams to AI SDK-compatible streams.
+- [Reference: withMastra() | AI SDK](https://mastra.ai/en/reference/ai-sdk/with-mastra): API reference for withMastra(), a function to use Mastra functionality in AI SDK.
 - [Reference: workflowRoute() | AI SDK](https://mastra.ai/en/reference/ai-sdk/workflow-route): API reference for workflowRoute(), a function to create workflow route handlers for streaming workflow execution in AI SDK-compatible format.
 - [Reference: MastraAuthAuth0 Class | Auth](https://mastra.ai/en/reference/auth/auth0): API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.
 - [Reference: MastraAuthClerk Class | Auth](https://mastra.ai/en/reference/auth/clerk): API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.
