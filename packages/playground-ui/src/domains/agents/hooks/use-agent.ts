@@ -7,7 +7,7 @@ export const useAgent = (agentId?: string) => {
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['agent', agentId, JSON.stringify(requestContext)],
+    queryKey: ['agent', agentId, requestContext],
     queryFn: () => (agentId ? client.getAgent(agentId).details(requestContext) : null),
     retry: false,
     enabled: Boolean(agentId),

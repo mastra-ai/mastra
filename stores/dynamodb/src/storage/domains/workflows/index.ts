@@ -341,4 +341,28 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
       );
     }
   }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    this.logger.debug('Deleting workflow run by ID', { runId, workflowName });
+
+    try {
+      await this.service.entities.workflow_snapshot
+        .delete({
+          entity: 'workflow_snapshot',
+          workflow_name: workflowName,
+          run_id: runId,
+        })
+        .go();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
+        },
+        error,
+      );
+    }
+  }
 }

@@ -14293,7 +14293,7 @@ describe('Workflow', () => {
       expect((afterResumeRuns[0]?.snapshot as any).status).toBe('suspended');
     });
 
-    it('should get workflow run by id from storage', async () => {
+    it('should get and delete workflow run by id from storage', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
 
@@ -14336,6 +14336,14 @@ describe('Workflow', () => {
       expect(run3?.runId).toBe(run1.runId);
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
+
+      await workflow.deleteWorkflowRunById(run1.runId);
+      const deleted = await workflow.getWorkflowRunById(run1.runId);
+      expect(deleted).toBeNull();
+
+      const { runs: afterDeleteRuns, total: afterDeleteTotal } = await workflow.listWorkflowRuns();
+      expect(afterDeleteTotal).toBe(0);
+      expect(afterDeleteRuns).toHaveLength(0);
     });
 
     it('should persist resourceId when creating workflow runs', async () => {
