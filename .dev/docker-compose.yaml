@@ -1,6 +1,7 @@
 services:
   db:
-    image: pgvector/pgvector:pg16
+    # pgvector 0.8.0+ required for halfvec support (Issue #10999)
+    image: pgvector/pgvector:0.8.0-pg16
     container_name: 'pg-vector-db'
     ports:
       - '5432:5432'
