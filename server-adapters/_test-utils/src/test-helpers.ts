@@ -41,8 +41,6 @@ export interface AdapterTestContext {
   tools?: Record<string, Tool>;
   taskStore?: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
-  playground?: boolean;
-  isDev?: boolean;
 }
 
 /**
