@@ -12,6 +12,7 @@ import { InngestWorkflow } from './workflow';
 
 export * from './workflow';
 export * from './execution-engine';
+export * from './pubsub';
 export * from './run';
 export * from './serve';
 export * from './types';
