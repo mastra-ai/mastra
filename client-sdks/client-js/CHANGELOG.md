@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 1.0.0-beta.9
+
+### Patch Changes
+
+- Fix `saveMessageToMemory` return type to match API response. The method now correctly returns `{ messages: (MastraMessageV1 | MastraDBMessage)[] }` instead of `(MastraMessageV1 | MastraDBMessage)[]` to align with the server endpoint response schema. ([#10996](https://github.com/mastra-ai/mastra/pull/10996))
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+
 ## 1.0.0-beta.8
 
 ### Patch Changes
