@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import EventEmitter from 'node:events';
-import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web';
+import { ReadableStream, TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
@@ -15,7 +15,6 @@ import type { TracingContext, TracingOptions, TracingPolicy } from '../observabi
 import { SpanType, getOrCreateSpan } from '../observability';
 import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
-import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
@@ -49,6 +48,7 @@ import type {
   WorkflowStreamEvent,
   ToolStep,
   StepParams,
+  OutputWriter,
 } from './types';
 import { createTimeTravelExecutionParams, getZodErrors } from './utils';
 
@@ -1130,7 +1130,7 @@ export class Workflow<
     abortSignal,
     retryCount,
     tracingContext,
-    writer,
+    outputWriter,
     validateInputs,
   }: {
     runId?: string;
@@ -1165,7 +1165,7 @@ export class Workflow<
     abort: () => any;
     retryCount?: number;
     tracingContext?: TracingContext;
-    writer?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     validateInputs?: boolean;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
@@ -1225,18 +1225,18 @@ export class Workflow<
         nestedStepsContext: timeTravel?.nestedStepResults as any,
         requestContext,
         tracingContext,
-        writableStream: writer,
+        outputWriter,
         outputOptions: { includeState: true, includeResumeLabels: true },
       });
     } else if (restart) {
-      res = await run.restart({ requestContext, tracingContext, writableStream: writer });
+      res = await run.restart({ requestContext, tracingContext, outputWriter });
     } else if (isResume) {
       res = await run.resume({
         resumeData,
         step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
         requestContext,
         tracingContext,
-        writableStream: writer,
+        outputWriter,
         outputOptions: { includeState: true, includeResumeLabels: true },
         label: resume.label,
       });
@@ -1245,7 +1245,7 @@ export class Workflow<
         inputData,
         requestContext,
         tracingContext,
-        writableStream: writer,
+        outputWriter,
         initialState: state,
         outputOptions: { includeState: true, includeResumeLabels: true },
       });
@@ -1702,7 +1702,7 @@ export class Run<
     inputData,
     initialState,
     requestContext,
-    writableStream,
+    outputWriter,
     tracingContext,
     tracingOptions,
     format,
@@ -1711,7 +1711,7 @@ export class Run<
     inputData?: z.input<TInput>;
     initialState?: z.input<TState>;
     requestContext?: RequestContext;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     format?: 'legacy' | 'vnext' | undefined;
@@ -1773,7 +1773,7 @@ export class Run<
       retryConfig: this.retryConfig,
       requestContext: requestContext ?? new RequestContext(),
       abortController: this.abortController,
-      writableStream,
+      outputWriter,
       workflowSpan,
       format,
       outputOptions,
@@ -1796,7 +1796,7 @@ export class Run<
     inputData?: z.input<TInput>;
     initialState?: z.input<TState>;
     requestContext?: RequestContext;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -2023,16 +2023,29 @@ export class Run<
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
         // @ts-ignore
-        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
-          controller.enqueue({
-            type,
-            runId: self.runId,
-            from,
-            payload: {
-              stepName: (payload as unknown as { id: string })?.id,
-              ...payload,
-            },
-          } as WorkflowStreamEvent);
+        const unwatch = self.watch(async (event: any) => {
+          const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
+          // Check if this is a custom event (has 'data' property instead of 'payload')
+          // Custom events should be passed through as-is with their original structure
+          if (data !== undefined && payload === undefined) {
+            controller.enqueue({
+              type,
+              runId: self.runId,
+              from,
+              data,
+              ...rest,
+            } as WorkflowStreamEvent);
+          } else {
+            controller.enqueue({
+              type,
+              runId: self.runId,
+              from,
+              payload: {
+                stepName: (payload as unknown as { id: string })?.id,
+                ...payload,
+              },
+            } as WorkflowStreamEvent);
+          }
         });
 
         self.closeStreamAction = async () => {
@@ -2052,11 +2065,9 @@ export class Run<
           tracingOptions,
           initialState,
           outputOptions,
-          writableStream: new WritableStream<WorkflowStreamEvent>({
-            write(chunk) {
-              controller.enqueue(chunk);
-            },
-          }),
+          outputWriter: async chunk => {
+            void self.emitter.emit('watch', chunk);
+          },
         });
         let executionResults;
         try {
@@ -2169,16 +2180,29 @@ export class Run<
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
         // @ts-ignore
-        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
-          controller.enqueue({
-            type,
-            runId: self.runId,
-            from,
-            payload: {
-              stepName: (payload as unknown as { id: string }).id,
-              ...payload,
-            },
-          } as WorkflowStreamEvent);
+        const unwatch = self.watch(async (event: any) => {
+          const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
+          // Check if this is a custom event (has 'data' property instead of 'payload')
+          // Custom events should be passed through as-is with their original structure
+          if (data !== undefined && payload === undefined) {
+            controller.enqueue({
+              type,
+              runId: self.runId,
+              from,
+              data,
+              ...rest,
+            } as WorkflowStreamEvent);
+          } else {
+            controller.enqueue({
+              type,
+              runId: self.runId,
+              from,
+              payload: {
+                stepName: (payload as unknown as { id: string })?.id,
+                ...payload,
+              },
+            } as WorkflowStreamEvent);
+          }
         });
 
         self.closeStreamAction = async () => {
@@ -2196,11 +2220,9 @@ export class Run<
           requestContext,
           tracingContext,
           tracingOptions,
-          writableStream: new WritableStream<WorkflowStreamEvent>({
-            write(chunk) {
-              controller.enqueue(chunk);
-            },
-          }),
+          outputWriter: async chunk => {
+            void controller.enqueue(chunk);
+          },
           isVNext: true,
           forEachIndex,
           outputOptions,
@@ -2280,7 +2302,7 @@ export class Run<
     retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
@@ -2297,7 +2319,7 @@ export class Run<
   async restart(
     args: {
       requestContext?: RequestContext;
-      writableStream?: WritableStream<ChunkType>;
+      outputWriter?: OutputWriter;
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
     } = {},
@@ -2320,7 +2342,7 @@ export class Run<
     retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     format?: 'legacy' | 'vnext' | undefined;
     isVNext?: boolean;
     outputOptions?: {
@@ -2484,7 +2506,7 @@ export class Run<
         abortController: this.abortController,
         workflowSpan,
         outputOptions: params.outputOptions,
-        writableStream: params.writableStream,
+        outputWriter: params.outputWriter,
       })
       .then(result => {
         if (!params.isVNext && result.status !== 'suspended') {
@@ -2505,12 +2527,12 @@ export class Run<
 
   protected async _restart({
     requestContext,
-    writableStream,
+    outputWriter,
     tracingContext,
     tracingOptions,
   }: {
     requestContext?: RequestContext;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -2620,7 +2642,7 @@ export class Run<
       retryConfig: this.retryConfig,
       requestContext: requestContextToUse,
       abortController: this.abortController,
-      writableStream,
+      outputWriter,
       workflowSpan,
     });
 
@@ -2640,7 +2662,7 @@ export class Run<
     context,
     nestedStepsContext,
     requestContext,
-    writableStream,
+    outputWriter,
     tracingContext,
     tracingOptions,
     outputOptions,
@@ -2659,7 +2681,7 @@ export class Run<
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
     requestContext?: RequestContext;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -2766,7 +2788,7 @@ export class Run<
       retryConfig: this.retryConfig,
       requestContext: requestContextToUse,
       abortController: this.abortController,
-      writableStream,
+      outputWriter,
       workflowSpan,
       outputOptions,
     });
@@ -2794,7 +2816,7 @@ export class Run<
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
     requestContext?: RequestContext;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -2876,11 +2898,9 @@ export class Run<
           requestContext,
           tracingContext,
           tracingOptions,
-          writableStream: new WritableStream<WorkflowStreamEvent>({
-            write(chunk) {
-              controller.enqueue(chunk);
-            },
-          }),
+          outputWriter: async chunk => {
+            void controller.enqueue(chunk);
+          },
           outputOptions,
         });
 
