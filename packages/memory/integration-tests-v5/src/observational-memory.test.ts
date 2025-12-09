@@ -559,6 +559,208 @@ describe('ObservationalMemory with Agent Integration', () => {
       expect(latestObs.previousGenerationId).toBe('large-obs');
       expect(latestObs.observation).toContain('Condensed');
     });
+
+    it('should reset observedMessageIds after reflection and create a new DB record', async () => {
+      const threadId = 'reflection-reset-ids-thread';
+
+      // Pre-populate with an observation that has many observed message IDs
+      // This simulates a long conversation that's about to trigger reflection
+      const initialObsId = 'initial-obs-with-many-ids';
+
+      // Create a large observation that will exceed the reflection threshold when combined with new obs
+      const largeObservation = Array.from(
+        { length: 20 },
+        (_, i) =>
+          `- User preference ${i + 1}: This is a detailed observation about the user's preference number ${i + 1}`,
+      ).join('\n');
+
+      await storage.stores!.memory.saveObservations({
+        observations: [
+          {
+            id: initialObsId,
+            threadId,
+            resourceId,
+            observation: largeObservation, // ~200+ tokens
+            observedMessageIds: ['old-msg-1', 'old-msg-2', 'old-msg-3', 'old-msg-4', 'old-msg-5'],
+            bufferedMessageIds: [],
+            bufferingMessageIds: [],
+            originType: 'initial',
+            totalTokensObserved: 500,
+            observationTokenCount: 200,
+            isReflecting: false,
+            metadata: { reflectionCount: 0 },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      });
+
+      const observationalMemory = new ObservationalMemory({
+        storage,
+        observer: {
+          historyThreshold: 20, // Low threshold to trigger observation
+        },
+        reflector: {
+          observationThreshold: 100, // Threshold that will be exceeded by existing + new obs
+        },
+        debug: true,
+      });
+
+      // Mock both agents - observer returns enough to push over threshold
+      (observationalMemory as any).observerAgent = {
+        generate: vi.fn().mockResolvedValue({
+          text: '- New observation from the latest message with additional context and details',
+        }),
+      };
+      (observationalMemory as any).reflectorAgent = {
+        generate: vi.fn().mockResolvedValue({
+          text: '- Condensed: All user preferences and context combined',
+        }),
+      };
+
+      const memory = new Memory({
+        storage,
+        options: {
+          lastMessages: 10,
+        },
+      });
+
+      const agent = new Agent({
+        id: 'reflection-reset-agent',
+        name: 'Reflection Reset Agent',
+        instructions: 'You are a helpful assistant.',
+        model: openai('gpt-4o-mini'),
+        memory,
+        inputProcessors: [observationalMemory],
+        outputProcessors: [observationalMemory],
+      });
+
+      // Generate to trigger observation + reflection
+      await agent.generate('This is a brand new message that should trigger reflection.', {
+        threadId,
+        resourceId,
+        maxSteps: 1,
+      });
+
+      // Verify reflector was called
+      expect((observationalMemory as any).reflectorAgent.generate).toHaveBeenCalled();
+
+      // Get all observations for this thread
+      const observations = await storage.stores!.memory.listObservations({ threadId });
+
+      // Find the reflection record (should be the latest)
+      const reflectionObs = observations.find(o => o.originType === 'reflection');
+
+      expect(reflectionObs).toBeDefined();
+      expect(reflectionObs!.id).not.toBe(initialObsId); // New ID
+      expect(reflectionObs!.previousGenerationId).toBe(initialObsId); // Links to old
+
+      // CRITICAL: After reflection, observedMessageIds should be RESET
+      // The old message IDs should NOT be in the new reflection record
+      // because they are now "baked into" the reflection
+      expect(reflectionObs!.observedMessageIds).not.toContain('old-msg-1');
+      expect(reflectionObs!.observedMessageIds).not.toContain('old-msg-2');
+      expect(reflectionObs!.observedMessageIds).not.toContain('old-msg-3');
+      expect(reflectionObs!.observedMessageIds).not.toContain('old-msg-4');
+      expect(reflectionObs!.observedMessageIds).not.toContain('old-msg-5');
+
+      // The new record should only contain IDs of messages observed in this generation
+      // (the messages from the agent.generate call)
+      expect(reflectionObs!.observedMessageIds.length).toBeGreaterThan(0);
+      expect(reflectionObs!.observedMessageIds.length).toBeLessThan(5); // Less than the old count
+
+      // IMPORTANT: The previous DB record should RETAIN all its observed IDs
+      // This preserves the historical record of what was observed in that generation
+      const previousObs = observations.find(o => o.id === initialObsId);
+      expect(previousObs).toBeDefined();
+      expect(previousObs!.observedMessageIds).toContain('old-msg-1');
+      expect(previousObs!.observedMessageIds).toContain('old-msg-2');
+      expect(previousObs!.observedMessageIds).toContain('old-msg-3');
+      expect(previousObs!.observedMessageIds).toContain('old-msg-4');
+      expect(previousObs!.observedMessageIds).toContain('old-msg-5');
+    });
+
+    it('should only pass post-reflection messages to observer after reflection occurs', async () => {
+      const threadId = 'post-reflection-messages-thread';
+
+      // Pre-populate with a reflection record that has observed some messages
+      const reflectionObsId = 'existing-reflection-obs';
+      await storage.stores!.memory.saveObservations({
+        observations: [
+          {
+            id: reflectionObsId,
+            threadId,
+            resourceId,
+            observation: '- Condensed memory from previous reflection',
+            observedMessageIds: ['pre-reflection-msg-1', 'pre-reflection-msg-2'],
+            bufferedMessageIds: [],
+            bufferingMessageIds: [],
+            originType: 'reflection',
+            previousGenerationId: 'even-older-obs',
+            totalTokensObserved: 1000,
+            observationTokenCount: 30,
+            isReflecting: false,
+            metadata: { reflectionCount: 1 },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      });
+
+      const observationalMemory = new ObservationalMemory({
+        storage,
+        observer: {
+          historyThreshold: 20,
+        },
+        debug: true,
+      });
+
+      // Track what gets passed to the observer
+      const observerGenerateMock = vi.fn().mockResolvedValue({
+        text: '- New observation from post-reflection conversation',
+      });
+      (observationalMemory as any).observerAgent = {
+        generate: observerGenerateMock,
+      };
+
+      const memory = new Memory({
+        storage,
+        options: {
+          lastMessages: 10,
+        },
+      });
+
+      const agent = new Agent({
+        id: 'post-reflection-agent',
+        name: 'Post Reflection Agent',
+        instructions: 'You are a helpful assistant.',
+        model: openai('gpt-4o-mini'),
+        memory,
+        inputProcessors: [observationalMemory],
+        outputProcessors: [observationalMemory],
+      });
+
+      // Generate a new message (this should only pass NEW messages to observer)
+      await agent.generate('This is a new message after the reflection occurred.', {
+        threadId,
+        resourceId,
+        maxSteps: 1,
+      });
+
+      // Verify observer was called
+      expect(observerGenerateMock).toHaveBeenCalled();
+
+      // Check what was passed to the observer
+      const observerPrompt = observerGenerateMock.mock.calls[0][0];
+
+      // The prompt should NOT contain the pre-reflection message IDs
+      // because those messages were already observed before reflection
+      expect(observerPrompt).not.toContain('pre-reflection-msg-1');
+      expect(observerPrompt).not.toContain('pre-reflection-msg-2');
+
+      // The prompt SHOULD contain the new message content
+      expect(observerPrompt).toContain('new message after the reflection');
+    });
   });
 
   describe('Storage Operations with Agent Flow', () => {

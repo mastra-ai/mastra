@@ -977,6 +977,228 @@ describe('Message State Tracking', () => {
     // and it's below the threshold
     expect((processor as any).observerAgent.generate).not.toHaveBeenCalled();
   });
+
+  it('should only pass unobserved messages to observer after reflection', async () => {
+    const storage = createMockStorage();
+
+    // Simulate a reflection scenario:
+    // - Old observation record exists with some observed message IDs
+    // - A reflection has occurred, creating a new record with previousGenerationId
+    // - The new record should have inherited the observedMessageIds
+    // - When new messages come in, only truly new messages should go to observer
+
+    // Pre-reflection messages (already observed)
+    const preReflectionMsgIds = ['pre-msg-1', 'pre-msg-2', 'pre-msg-3'];
+
+    // Create the reflection record (what exists after reflection)
+    storage._observations.set('reflection-obs', {
+      id: 'reflection-obs',
+      threadId: 'test-thread',
+      observation: '- Reflected summary of conversation',
+      observedMessageIds: preReflectionMsgIds, // These were observed before reflection
+      bufferedMessageIds: [],
+      bufferingMessageIds: [],
+      originType: 'reflection',
+      previousGenerationId: 'old-obs-id',
+      totalTokensObserved: 500,
+      observationTokenCount: 20,
+      isReflecting: false,
+      metadata: { createdAt: new Date(), updatedAt: new Date(), reflectionCount: 1 },
+    });
+
+    const processor = new ObservationalMemory({
+      storage,
+      observer: { historyThreshold: 10 }, // Low threshold to trigger observation
+    });
+
+    const mockObserverGenerate = vi.fn().mockResolvedValue({
+      text: '- New observation from post-reflection messages',
+    });
+    (processor as any).observerAgent = {
+      generate: mockObserverGenerate,
+    };
+
+    // Simulate a conversation that includes:
+    // 1. Old messages from before reflection (should be excluded)
+    // 2. New messages after reflection (should be included)
+    const messages = [
+      // Pre-reflection messages (already in observedMessageIds)
+      createMessage('user', 'Old message 1', 'pre-msg-1'),
+      createMessage('assistant', 'Old response 1', 'pre-msg-2'),
+      createMessage('user', 'Old message 2', 'pre-msg-3'),
+      // Post-reflection messages (new, should be observed)
+      createMessage('user', generateTokenText(50), 'post-msg-1'),
+      createMessage('assistant', generateTokenText(50), 'post-msg-2'),
+    ];
+    const messageList = createMessageList(messages);
+    const requestContext = createRequestContext('test-thread', 'test-resource');
+
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
+
+    // Observer should have been called
+    expect(mockObserverGenerate).toHaveBeenCalled();
+
+    // Check what was passed to the observer - first arg is the prompt string
+    const promptContent = mockObserverGenerate.mock.calls[0][0] as string;
+
+    // The prompt should contain the new messages (their IDs appear in the encoded MESSAGE_HISTORY)
+    expect(promptContent).toContain('post-msg-1');
+    expect(promptContent).toContain('post-msg-2');
+
+    // The prompt should NOT contain the old pre-reflection messages
+    // (they were already observed and are in observedMessageIds)
+    expect(promptContent).not.toContain('pre-msg-1');
+    expect(promptContent).not.toContain('pre-msg-2');
+    expect(promptContent).not.toContain('pre-msg-3');
+  });
+
+  it('should continue excluding already-observed messages within the same generation', async () => {
+    const storage = createMockStorage();
+
+    // This test verifies that within a single generation (before reflection):
+    // 1. Messages that have been observed are tracked in observedMessageIds
+    // 2. Those messages are excluded from subsequent observer calls
+    // 3. Only new unobserved messages are passed to the observer
+
+    // Start with an initial observation that has already observed some messages
+    storage._observations.set('initial-obs', {
+      id: 'initial-obs',
+      threadId: 'test-thread',
+      observation: '- User prefers dark mode',
+      observedMessageIds: ['msg-1', 'msg-2'], // Already observed
+      bufferedMessageIds: [],
+      bufferingMessageIds: [],
+      originType: 'initial',
+      totalTokensObserved: 100,
+      observationTokenCount: 10,
+      isReflecting: false,
+      metadata: { createdAt: new Date(), updatedAt: new Date(), reflectionCount: 0 },
+    });
+
+    const processor = new ObservationalMemory({
+      storage,
+      observer: { historyThreshold: 10 },
+      // No reflector - we want to test within a single generation
+    });
+
+    const mockObserverGenerate = vi.fn().mockResolvedValue({
+      text: '- User asked about weather',
+    });
+
+    (processor as any).observerAgent = { generate: mockObserverGenerate };
+
+    // Messages include both old (already observed) and new
+    // The new message needs enough tokens to trigger observation
+    const messages = [
+      createMessage('user', 'Old message', 'msg-1'),
+      createMessage('assistant', 'Old response', 'msg-2'),
+      createMessage('user', generateTokenText(50), 'msg-3'), // New message with enough tokens
+    ];
+    const messageList = createMessageList(messages);
+    const requestContext = createRequestContext('test-thread', 'test-resource');
+
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
+
+    // Observer should have been called
+    expect(mockObserverGenerate).toHaveBeenCalled();
+
+    // Check that only the new message was passed to the observer
+    const promptContent = mockObserverGenerate.mock.calls[0][0];
+    expect(promptContent).toContain('msg-3');
+    expect(promptContent).not.toContain('msg-1');
+    expect(promptContent).not.toContain('msg-2');
+
+    // The saved observation should now include all message IDs
+    const savedObs = Array.from(storage._observations.values()).find((o: any) =>
+      o.observedMessageIds.includes('msg-3'),
+    );
+    expect(savedObs).toBeDefined();
+    expect(savedObs.observedMessageIds).toContain('msg-1');
+    expect(savedObs.observedMessageIds).toContain('msg-2');
+    expect(savedObs.observedMessageIds).toContain('msg-3');
+  });
+
+  it('should reset observedMessageIds after reflection and create a new DB record', async () => {
+    const storage = createMockStorage();
+
+    // This test verifies that after reflection:
+    // 1. A completely new DB record is created (new ID)
+    // 2. observedMessageIds should be RESET (not accumulated)
+    // 3. The old record should remain for history/audit purposes
+    //
+    // Rationale: After reflection, the observations represent a compressed
+    // summary of everything. The old messages are now "baked into" the
+    // reflection, so we don't need to track them individually anymore.
+    // Continuing to accumulate observedMessageIds would cause unbounded growth.
+
+    // Start with an initial observation that has some observed messages
+    const initialObsId = 'initial-obs-id';
+    storage._observations.set(initialObsId, {
+      id: initialObsId,
+      threadId: 'test-thread',
+      observation: generateTokenText(200), // Large enough to trigger reflection
+      observedMessageIds: ['old-msg-1', 'old-msg-2', 'old-msg-3'],
+      bufferedMessageIds: [],
+      bufferingMessageIds: [],
+      originType: 'initial',
+      totalTokensObserved: 800,
+      observationTokenCount: 200,
+      isReflecting: false,
+      metadata: { createdAt: new Date(), updatedAt: new Date(), reflectionCount: 0 },
+    });
+
+    const processor = new ObservationalMemory({
+      storage,
+      observer: { historyThreshold: 10 },
+      reflector: { observationThreshold: 100 }, // Will trigger reflection
+    });
+
+    const mockObserverGenerate = vi.fn().mockResolvedValue({
+      text: generateTokenText(150), // Large observation to trigger reflection
+    });
+    const mockReflectorGenerate = vi.fn().mockResolvedValue({
+      text: '- Condensed reflection of all previous observations',
+    });
+
+    (processor as any).observerAgent = { generate: mockObserverGenerate };
+    (processor as any).reflectorAgent = { generate: mockReflectorGenerate };
+
+    // New messages come in (these are the only ones that should be in observedMessageIds after reflection)
+    const newMessages = [
+      createMessage('user', 'Old message 1', 'old-msg-1'),
+      createMessage('assistant', 'Old response 1', 'old-msg-2'),
+      createMessage('user', 'Old message 2', 'old-msg-3'),
+      createMessage('user', generateTokenText(50), 'new-msg-after-reflection'),
+    ];
+    const messageList = createMessageList(newMessages);
+    const requestContext = createRequestContext('test-thread', 'test-resource');
+
+    await processor.processOutputResult(createProcessOutputResultArgs(newMessages, messageList, requestContext));
+
+    // Reflection should have been triggered
+    expect(mockReflectorGenerate).toHaveBeenCalled();
+
+    // Get all observations
+    const allObs = Array.from(storage._observations.values());
+    const reflectionObs = allObs.find((o: any) => o.originType === 'reflection');
+
+    // Verify a new record was created
+    expect(reflectionObs).toBeDefined();
+    expect(reflectionObs.id).not.toBe(initialObsId); // New ID
+    expect(reflectionObs.previousGenerationId).toBe(initialObsId); // Links to old record
+
+    // CRITICAL: After reflection, observedMessageIds should be RESET
+    // Only the messages observed in THIS generation should be tracked
+    // The old message IDs (old-msg-1, old-msg-2, old-msg-3) should NOT be in the new record
+    // because they are now "baked into" the reflection
+    expect(reflectionObs.observedMessageIds).not.toContain('old-msg-1');
+    expect(reflectionObs.observedMessageIds).not.toContain('old-msg-2');
+    expect(reflectionObs.observedMessageIds).not.toContain('old-msg-3');
+
+    // Only the new message should be tracked (it was the only unobserved one)
+    expect(reflectionObs.observedMessageIds).toContain('new-msg-after-reflection');
+    expect(reflectionObs.observedMessageIds.length).toBe(1);
+  });
 });
 
 // ============================================================================
@@ -997,9 +1219,7 @@ describe('Error Handling', () => {
     const requestContext = createRequestContext('test-thread', 'test-resource');
 
     // Should not throw
-    const result = await processor.processInput(
-      createProcessInputArgs(messageList, requestContext)
-    );
+    const result = await processor.processInput(createProcessInputArgs(messageList, requestContext));
     expect(result).toBe(messageList);
   });
 
@@ -1018,7 +1238,7 @@ describe('Error Handling', () => {
 
     // Should not throw
     const result = await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
+      createProcessOutputResultArgs(messages, messageList, requestContext),
     );
     expect(result).toBe(messageList);
   });
@@ -1041,7 +1261,7 @@ describe('Error Handling', () => {
 
     // Should not throw
     const result = await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
+      createProcessOutputResultArgs(messages, messageList, requestContext),
     );
     expect(result).toBe(messageList);
   });
@@ -1067,9 +1287,7 @@ describe('Scope Behavior', () => {
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('thread-1', 'resource-1');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     const savedObs = Array.from(storage._observations.values())[0];
     expect(savedObs.threadId).toBe('thread-1');
@@ -1091,9 +1309,7 @@ describe('Scope Behavior', () => {
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('thread-1', 'resource-1');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     const savedObs = Array.from(storage._observations.values())[0];
     // For resource scope, threadId in storage should be the resourceId
@@ -1121,9 +1337,7 @@ describe('ObservationalMemoryRecord Structure', () => {
     const messageList = createMessageList(messages);
     const requestContext = createRequestContext('test-thread', 'test-resource');
 
-    await processor.processOutputResult(
-      createProcessOutputResultArgs(messages, messageList, requestContext)
-    );
+    await processor.processOutputResult(createProcessOutputResultArgs(messages, messageList, requestContext));
 
     const savedObs = Array.from(storage._observations.values())[0];
 
