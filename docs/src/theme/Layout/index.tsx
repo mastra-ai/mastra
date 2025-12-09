@@ -48,7 +48,6 @@ export default function Layout(props: Props): ReactNode {
           hrefLang="ja"
           href={`${siteConfig.url}/ja${cleanPath}`}
         />
-        <link rel="alternate" hrefLang="x-default" href={canonicalUrl} />
       </Head>
 
       <SkipToContent />
