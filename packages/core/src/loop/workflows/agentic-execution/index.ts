@@ -34,7 +34,9 @@ export function createAgenticExecutionWorkflow<
     llmExecutionStep,
   );
 
-  // Determine if sequential execution is required for tool calls to avoid race conditions
+  // Sequential execution may be required for tool calls to avoid race conditions, otherwise concurrency is configurable
+  const toolCallConcurrency = rest?.toolCallConcurrency && rest.toolCallConcurrency > 0 ? rest.toolCallConcurrency : 10;
+
   const sequentialExecutionRequired =
     rest.requireToolApproval ||
     (rest.tools &&
@@ -75,7 +77,7 @@ export function createAgenticExecutionWorkflow<
       },
       { id: 'map-tool-calls' },
     )
-    .foreach(toolCallStep, { concurrency: sequentialExecutionRequired ? 1 : 10 })
+    .foreach(toolCallStep, { concurrency: sequentialExecutionRequired ? 1 : toolCallConcurrency })
     .then(llmMappingStep)
     .commit();
 }

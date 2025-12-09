@@ -162,6 +162,7 @@ export function createMapResultsStep<
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
       includeRawChunks: options.includeRawChunks,
+      toolCallConcurrency: options.toolCallConcurrency,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
