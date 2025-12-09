@@ -441,7 +441,7 @@ export class LangfuseExporter extends BaseExporter {
 
       if (modelAttr.usage !== undefined) {
         payload.usageDetails = formatUsageMetrics(modelAttr.usage);
-        attributesToOmit.push('usageDetails');
+        attributesToOmit.push('usage');
       }
 
       if (modelAttr.parameters !== undefined) {
