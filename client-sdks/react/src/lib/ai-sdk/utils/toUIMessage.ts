@@ -111,6 +111,39 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
   // Always return a new array reference for React
   const result = [...conversation];
 
+  // Handle data-* chunks (custom data chunks from writer.custom())
+  if (chunk.type.startsWith('data-')) {
+    const lastMessage = result[result.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') {
+      // Create a new assistant message with the data part
+      const newMessage: MastraUIMessage = {
+        id: `data-${chunk.runId}-${Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: chunk.type as `data-${string}`,
+            data: 'data' in chunk ? chunk.data : undefined,
+          },
+        ],
+        metadata,
+      };
+      return [...result, newMessage];
+    }
+
+    // Add data part to existing assistant message
+    const updatedMessage: MastraUIMessage = {
+      ...lastMessage,
+      parts: [
+        ...lastMessage.parts,
+        {
+          type: chunk.type as `data-${string}`,
+          data: 'data' in chunk ? chunk.data : undefined,
+        },
+      ],
+    };
+    return [...result.slice(0, -1), updatedMessage];
+  }
+
   switch (chunk.type) {
     case 'tripwire': {
       // Create a new assistant message
@@ -294,21 +327,35 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       // Find and update the corresponding tool call
       const parts = [...lastMessage.parts];
       const toolPartIndex = parts.findIndex(
-        part => part.type === 'dynamic-tool' && 'toolCallId' in part && part.toolCallId === chunk.payload.toolCallId,
+        part =>
+          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+          'toolCallId' in part &&
+          part.toolCallId === chunk.payload.toolCallId,
       );
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
+        if (
+          toolPart.type === 'dynamic-tool' ||
+          (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
+        ) {
+          const toolName =
+            'toolName' in toolPart && typeof toolPart.toolName === 'string'
+              ? toolPart.toolName
+              : toolPart.type.startsWith('tool-')
+                ? toolPart.type.substring(5)
+                : '';
 
-        if (toolPart.type === 'dynamic-tool') {
+          const toolCallId = (toolPart as any).toolCallId;
+
           if ((chunk.type === 'tool-result' && chunk.payload.isError) || chunk.type === 'tool-error') {
             const error = chunk.type === 'tool-error' ? chunk.payload.error : chunk.payload.result;
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
-              toolName: toolPart.toolName,
-              toolCallId: toolPart.toolCallId,
+              toolName,
+              toolCallId,
               state: 'output-error',
-              input: toolPart.input,
+              input: (toolPart as any).input,
               errorText: String(error),
               callProviderMetadata: chunk.payload.providerMetadata,
             };
@@ -325,10 +372,10 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             }
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
-              toolName: toolPart.toolName,
-              toolCallId: toolPart.toolCallId,
+              toolName,
+              toolCallId,
               state: 'output-available',
-              input: toolPart.input,
+              input: (toolPart as any).input,
               output,
               callProviderMetadata: chunk.payload.providerMetadata,
             };
@@ -352,17 +399,34 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       // Find and update the corresponding tool call
       const parts = [...lastMessage.parts];
       const toolPartIndex = parts.findIndex(
-        part => part.type === 'dynamic-tool' && 'toolCallId' in part && part.toolCallId === chunk.payload.toolCallId,
+        part =>
+          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+          'toolCallId' in part &&
+          part.toolCallId === chunk.payload.toolCallId,
       );
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
-        if (toolPart.type === 'dynamic-tool') {
+        // Handle dynamic-tool and tool-* part types
+        if (
+          toolPart.type === 'dynamic-tool' ||
+          (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
+        ) {
+          // Extract toolName, toolCallId, input from different part structures
+          const toolName =
+            'toolName' in toolPart && typeof toolPart.toolName === 'string'
+              ? toolPart.toolName
+              : typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-')
+                ? toolPart.type.substring(5)
+                : '';
+          const toolCallId = (toolPart as any).toolCallId;
+          const input = (toolPart as any).input;
+
           // Handle workflow-related output chunks
           if (chunk.payload.output?.type?.startsWith('workflow-')) {
             // Get existing workflow state from the output field
             const existingWorkflowState =
-              (toolPart.output as WorkflowStreamResult<any, any, any, any>) ||
+              ((toolPart as any).output as WorkflowStreamResult<any, any, any, any>) ||
               ({} as WorkflowStreamResult<any, any, any, any>);
 
             // Use the mapWorkflowStreamChunkToWatchResult pattern for accumulation
@@ -372,7 +436,11 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             );
 
             parts[toolPartIndex] = {
-              ...toolPart,
+              type: 'dynamic-tool',
+              toolName,
+              toolCallId,
+              state: 'input-streaming',
+              input,
               output: updatedWorkflowState as any,
             };
           } else if (
@@ -383,11 +451,15 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             return toUIMessageFromAgent(chunk.payload.output, conversation, metadata);
           } else {
             // Handle regular tool output
-            const currentOutput = (toolPart.output as any) || [];
+            const currentOutput = ((toolPart as any).output as any) || [];
             const existingOutput = Array.isArray(currentOutput) ? currentOutput : [];
 
             parts[toolPartIndex] = {
-              ...toolPart,
+              type: 'dynamic-tool',
+              toolName,
+              toolCallId,
+              state: 'input-streaming',
+              input,
               output: [...existingOutput, chunk.payload.output] as any,
             };
           }

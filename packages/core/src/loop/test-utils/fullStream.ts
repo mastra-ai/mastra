@@ -1,7 +1,7 @@
 import { delay } from '@ai-sdk/provider-utils-v5';
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { tool } from 'ai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2, mockValues, mockId } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockValues, mockId } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
@@ -17,6 +17,7 @@ import {
   testUsage,
   testUsage2,
 } from './utils';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.fullStream', () => {
@@ -77,11 +78,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
                       modelId: 'response-model-id',
                       timestamp: new Date(5000),
                     },
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello' },
-                    { type: 'text-delta', id: '1', delta: ', ' },
-                    { type: 'text-delta', id: '1', delta: `world!` },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                    { type: 'text-delta', id: 'text-1', delta: ', ' },
+                    { type: 'text-delta', id: 'text-1', delta: `world!` },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
@@ -111,30 +112,30 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "warnings": [],
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-start",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "Hello",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": ", ",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "world!",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-end",
           },
@@ -200,11 +201,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
                       modelId: 'response-model-id',
                       timestamp: new Date(5000),
                     },
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello' },
-                    { type: 'text-delta', id: '1', delta: ', ' },
-                    { type: 'text-delta', id: '1', delta: `world!` },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                    { type: 'text-delta', id: 'text-1', delta: ', ' },
+                    { type: 'text-delta', id: 'text-1', delta: `world!` },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
@@ -234,30 +235,30 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "warnings": [],
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-start",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "Hello",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": ", ",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "world!",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-end",
           },
@@ -454,24 +455,24 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "reasoning-end",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-start",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "Hi",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": " there!",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-end",
           },
@@ -509,6 +510,56 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       `);
     });
 
+    // https://github.com/mastra-ai/mastra/issues/9005
+    it('should store empty reasoning with providerMetadata for OpenAI item_reference', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const modelWithEmptyReasoning = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'reasoning-start',
+              id: 'rs_test123',
+              providerMetadata: { openai: { itemId: 'rs_test123' } },
+            },
+            // No reasoning-delta - empty reasoning
+            {
+              type: 'reasoning-end',
+              id: 'rs_test123',
+              providerMetadata: { openai: { itemId: 'rs_test123' } },
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage },
+          ]),
+        }),
+      });
+
+      const result = await loopFn({
+        methodType: 'stream',
+        runId,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithEmptyReasoning }],
+        messageList,
+        ...defaultSettings(),
+      });
+
+      await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+
+      // Check that reasoning was stored in messageList even though deltas were empty
+      const responseMessages = messageList.get.response.db();
+      const reasoningMessage = responseMessages.find(msg => msg.content.parts?.some(p => p.type === 'reasoning'));
+
+      expect(reasoningMessage).toBeDefined();
+      const reasoningPart = reasoningMessage?.content.parts?.find(p => p.type === 'reasoning');
+      expect(reasoningPart?.providerMetadata).toEqual({ openai: { itemId: 'rs_test123' } });
+    });
+
     it('should send sources', async () => {
       const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
@@ -542,18 +593,18 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "url": "https://example.com",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-start",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "Hello!",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-end",
           },
@@ -637,18 +688,18 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "file",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-start",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "Hello!",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-end",
           },
@@ -721,11 +772,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
                 return {
                   stream: convertArrayToReadableStream([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello' },
-                    { type: 'text-delta', id: '1', delta: ', ' },
-                    { type: 'text-delta', id: '1', delta: `world!` },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                    { type: 'text-delta', id: 'text-1', delta: ', ' },
+                    { type: 'text-delta', id: 'text-1', delta: `world!` },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
@@ -754,30 +805,30 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "warnings": [],
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-start",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "Hello",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": ", ",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "world!",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-end",
           },
@@ -1134,7 +1185,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           tool1: tool({
             inputSchema: z.object({ value: z.string() }),
             execute: async (inputData, options) => {
-              console.info('TOOL 1', inputData, options);
+              // console.info('TOOL 1', inputData, options);
 
               expect(inputData).toStrictEqual({ value: 'value' });
               expect(options.messages).toStrictEqual([
@@ -1223,15 +1274,15 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               modelId: 'mock-model-id',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-delta', id: '1', delta: '' },
-            { type: 'text-delta', id: '1', delta: ', ' },
-            { type: 'text-delta', id: '1', delta: '' },
-            { type: 'text-delta', id: '1', delta: 'world!' },
-            { type: 'text-delta', id: '1', delta: '' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-delta', id: 'text-1', delta: '' },
+            { type: 'text-delta', id: 'text-1', delta: ', ' },
+            { type: 'text-delta', id: 'text-1', delta: '' },
+            { type: 'text-delta', id: 'text-1', delta: 'world!' },
+            { type: 'text-delta', id: 'text-1', delta: '' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -1258,30 +1309,30 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "warnings": [],
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-start",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "Hello",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": ", ",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "text": "world!",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "providerMetadata": undefined,
             "type": "text-end",
           },

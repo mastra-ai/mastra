@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
 import { RequestContext } from '../request-context';
-import { createTool } from './tool';
+import { createTool, Tool } from './tool';
 
 const mockFindUser = vi.fn().mockImplementation(async nameS => {
   const list = [
@@ -73,5 +73,96 @@ describe('createTool', () => {
       },
     );
     expect(user).toStrictEqual({ message: 'User not found' });
+  });
+});
+
+describe('createTool with providerOptions', () => {
+  it('should preserve providerOptions when creating a tool', () => {
+    const toolWithProviderOptions = createTool({
+      id: 'cache-control-tool',
+      description: 'A tool with cache control settings',
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      providerOptions: {
+        anthropic: {
+          cacheControl: { type: 'ephemeral' },
+        },
+      },
+      execute: async ({ city }) => {
+        return { attractions: `Attractions in ${city}` };
+      },
+    });
+
+    expect(toolWithProviderOptions.providerOptions).toEqual({
+      anthropic: {
+        cacheControl: { type: 'ephemeral' },
+      },
+    });
+  });
+
+  it('should support multiple provider options', () => {
+    const toolWithMultipleProviders = createTool({
+      id: 'multi-provider-tool',
+      description: 'A tool with multiple provider options',
+      inputSchema: z.object({
+        query: z.string(),
+      }),
+      providerOptions: {
+        anthropic: {
+          cacheControl: { type: 'ephemeral' },
+        },
+        openai: {
+          someOption: 'value',
+        },
+      },
+      execute: async ({ query }) => {
+        return { result: query };
+      },
+    });
+
+    expect(toolWithMultipleProviders.providerOptions).toEqual({
+      anthropic: {
+        cacheControl: { type: 'ephemeral' },
+      },
+      openai: {
+        someOption: 'value',
+      },
+    });
+  });
+
+  it('should work without providerOptions', () => {
+    const toolWithoutProviderOptions = createTool({
+      id: 'no-provider-options-tool',
+      description: 'A tool without provider options',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async ({ input }) => {
+        return { output: input };
+      },
+    });
+
+    expect(toolWithoutProviderOptions.providerOptions).toBeUndefined();
+  });
+
+  it('should preserve providerOptions through Tool class constructor', () => {
+    const tool = new Tool({
+      id: 'direct-tool',
+      description: 'Tool created directly with constructor',
+      inputSchema: z.object({ value: z.string() }),
+      providerOptions: {
+        anthropic: {
+          cacheControl: { type: 'ephemeral' },
+        },
+      },
+      execute: async ({ value }) => ({ result: value }),
+    });
+
+    expect(tool.providerOptions).toEqual({
+      anthropic: {
+        cacheControl: { type: 'ephemeral' },
+      },
+    });
   });
 });

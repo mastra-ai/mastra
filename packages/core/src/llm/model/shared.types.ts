@@ -1,4 +1,4 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -37,16 +37,25 @@ export type OpenAICompatibleConfig =
       headers?: Record<string, string>; // Additional headers
     };
 
-export type MastraLanguageModel = LanguageModelV1 | LanguageModelV2;
+type DoStreamResultPromise = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;
+export type MastraLanguageModelV2 = Omit<LanguageModelV2, 'doGenerate' | 'doStream'> & {
+  doGenerate: (options: LanguageModelV2CallOptions) => DoStreamResultPromise;
+  doStream: (options: LanguageModelV2CallOptions) => DoStreamResultPromise;
+};
+export type MastraLanguageModelV1 = LanguageModelV1;
+export type MastraLanguageModel = MastraLanguageModelV1 | MastraLanguageModelV2;
 
 // Support for:
 // - "openai/gpt-4o" (magic string with autocomplete)
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
 // - LanguageModelV1/V2 (existing AI SDK models)
-export type MastraModelConfig = MastraLanguageModel | ModelRouterModelId | OpenAICompatibleConfig;
-
-export type MastraLanguageModelV2 = LanguageModelV2;
+export type MastraModelConfig =
+  | LanguageModelV1
+  | LanguageModelV2
+  | ModelRouterModelId
+  | OpenAICompatibleConfig
+  | MastraLanguageModel;
 
 export type MastraModelOptions = {
   tracingPolicy?: TracingPolicy;

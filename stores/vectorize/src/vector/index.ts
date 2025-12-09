@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -10,6 +11,7 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
   IndexStats,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import Cloudflare from 'cloudflare';
 
@@ -66,7 +68,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, vectorCount: vectors?.length },
@@ -106,7 +108,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
       // For any other errors, propagate
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, dimension, metric },
@@ -147,7 +149,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, topK },
@@ -167,7 +169,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -202,7 +204,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -220,7 +222,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -240,7 +242,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_CREATE_METADATA_INDEX_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'CREATE_METADATA_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, propertyName, indexType },
@@ -259,7 +261,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_DELETE_METADATA_INDEX_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'DELETE_METADATA_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, propertyName },
@@ -279,7 +281,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_LIST_METADATA_INDEXES_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'LIST_METADATA_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -300,9 +302,19 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    if (!id) {
+      throw new MastraError({
+        id: createVectorErrorId('VECTORIZE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id is required for Vectorize updateVector',
+        details: { indexName },
+      });
+    }
+
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'STORAGE_VECTORIZE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: createVectorErrorId('VECTORIZE', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No update data provided',
@@ -327,10 +339,13 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
@@ -353,13 +368,30 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_VECTORIZE_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('VECTORIZE', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
         },
         error,
       );
     }
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
+    throw new MastraError({
+      id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
+      text: 'deleteVectors is not yet implemented for Vectorize vector store',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
+    });
   }
 }

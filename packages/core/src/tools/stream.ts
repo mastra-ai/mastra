@@ -1,8 +1,13 @@
-import { WritableStream } from 'stream/web';
+import { WritableStream } from 'node:stream/web';
 import type { DataChunkType } from '../stream/types';
+import type { OutputWriter } from '../workflows';
 
-export class ToolStream<T> extends WritableStream<T> {
-  originalStream?: WritableStream;
+export class ToolStream extends WritableStream<unknown> {
+  private prefix: string;
+  private callId: string;
+  private name: string;
+  private runId: string;
+  private writeFn?: OutputWriter;
 
   constructor(
     {
@@ -16,54 +21,55 @@ export class ToolStream<T> extends WritableStream<T> {
       name: string;
       runId: string;
     },
-    originalStream?: WritableStream,
+    writeFn?: OutputWriter,
   ) {
     super({
       async write(chunk: any) {
-        const writer = originalStream?.getWriter();
-
-        try {
-          await writer?.write({
-            type: `${prefix}-output`,
-            runId,
-            from: 'USER',
-            payload: {
-              output: chunk,
-              ...(prefix === 'workflow-step'
-                ? {
-                    runId,
-                    stepName: name,
-                  }
-                : {
-                    [`${prefix}CallId`]: callId,
-                    [`${prefix}Name`]: name,
-                  }),
-            },
-          });
-        } finally {
-          writer?.releaseLock();
-        }
+        await getInstance()._write(chunk);
       },
     });
-    this.originalStream = originalStream;
+
+    const self = this;
+    function getInstance() {
+      return self;
+    }
+
+    this.prefix = prefix;
+    this.callId = callId;
+    this.name = name;
+    this.runId = runId;
+    this.writeFn = writeFn;
   }
 
-  async write(data: any) {
-    const writer = this.getWriter();
-
-    try {
-      await writer.write(data);
-    } finally {
-      writer.releaseLock();
+  private async _write(data: any) {
+    if (this.writeFn) {
+      await this.writeFn({
+        type: `${this.prefix}-output`,
+        runId: this.runId,
+        from: 'USER',
+        payload: {
+          output: data,
+          ...(this.prefix === 'workflow-step'
+            ? {
+                runId: this.runId,
+                stepName: this.name,
+              }
+            : {
+                [`${this.prefix}CallId`]: this.callId,
+                [`${this.prefix}Name`]: this.name,
+              }),
+        },
+      });
     }
   }
 
+  async write(data: any) {
+    await this._write(data);
+  }
+
   async custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T) {
-    const writer = this.originalStream?.getWriter();
-    try {
-      await writer?.write(data);
-    } finally {
-      writer?.releaseLock();
+    if (this.writeFn) {
+      await this.writeFn(data);
     }
   }
 }

@@ -21,9 +21,9 @@ describe('NetlifyGateway', () => {
     process.env.NETLIFY_TOKEN = 'ok';
     const mockNetlifyResponse = {
       providers: {
-        netlify: {
+        openai: {
           token_env_var: 'NETLIFY_TOKEN',
-          models: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-3.5-turbo', 'openai/o1', 'openai/o1-mini'],
+          models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo', 'o1', 'o1-mini'],
         },
       },
     };
@@ -52,7 +52,7 @@ describe('NetlifyGateway', () => {
 
       // Should have a single 'netlify' provider
       expect(providers['netlify']).toBeDefined();
-      expect(providers['netlify'].models).toContain('netlify/openai/gpt-4o');
+      expect(providers['netlify'].models).toContain('openai/gpt-4o');
     });
 
     it('should convert Netlify format to standard ProviderConfig format', async () => {
@@ -209,9 +209,9 @@ describe('NetlifyGateway', () => {
         ok: true,
         json: async () => ({
           providers: {
-            netlify: {
+            openai: {
               token_env_var: 'NETLIFY_TOKEN',
-              models: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-3.5-turbo', 'openai/o1', 'openai/o1-mini'],
+              models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo', 'o1', 'o1-mini'],
             },
           },
         }),
@@ -219,7 +219,7 @@ describe('NetlifyGateway', () => {
 
       const providers = await gateway.fetchProviders();
       expect(providers['netlify']).toBeDefined();
-      expect(providers['netlify'].models).toContain('netlify/openai/gpt-4o');
+      expect(providers['netlify'].models).toContain('openai/gpt-4o');
 
       // Mock token exchange for buildUrl
       const mockTokenResponse = {

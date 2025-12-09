@@ -5,6 +5,7 @@ import type { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
+import type { LanguageModelUsage, ProviderMetadata } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 
 // ============================================================================
@@ -64,6 +65,10 @@ export interface AIBaseAttributes {}
 export interface AgentRunAttributes extends AIBaseAttributes {
   /** Agent identifier */
   agentId: string;
+  /** Human-readable agent name */
+  agentName?: string;
+  /** Conversation/thread/session identifier for multi-turn interactions */
+  conversationId?: string;
   /** Agent Instructions **/
   instructions?: string;
   /** Agent Prompt **/
@@ -74,33 +79,65 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
 }
 
-/** Token usage statistics - supports both v5 and legacy formats */
+/**
+ * Detailed breakdown of input token usage by type.
+ * Based on OpenInference semantic conventions.
+ */
+export interface InputTokenDetails {
+  /** Regular text tokens (non-cached, non-audio, non-image) */
+  text?: number;
+  /** Tokens served from cache (cache hit/read) */
+  cacheRead?: number;
+  /** Tokens written to cache (cache creation - Anthropic only) */
+  cacheWrite?: number;
+  /** Audio input tokens */
+  audio?: number;
+  /** Image input tokens (includes PDF pages) */
+  image?: number;
+}
+
+/**
+ * Detailed breakdown of output token usage by type.
+ * Based on OpenInference semantic conventions.
+ */
+export interface OutputTokenDetails {
+  /** Regular text output tokens */
+  text?: number;
+  /** Reasoning/thinking tokens (o1, Claude thinking, Gemini thoughts) */
+  reasoning?: number;
+  /** Audio output tokens */
+  audio?: number;
+  /** Image output tokens (DALL-E, etc.) */
+  image?: number;
+}
+
+/** Token usage statistics */
 export interface UsageStats {
-  // VNext paths
+  /** Total input tokens (sum of all input details) */
   inputTokens?: number;
+  /** Total output tokens (sum of all output details) */
   outputTokens?: number;
-  // Legacy format (for backward compatibility)
-  promptTokens?: number;
-  completionTokens?: number;
-  // Common fields
-  totalTokens?: number;
-  reasoningTokens?: number;
-  cachedInputTokens?: number;
-  promptCacheHitTokens?: number;
-  promptCacheMissTokens?: number;
+  /** Detailed breakdown of input token usage */
+  inputDetails?: InputTokenDetails;
+  /** Detailed breakdown of output token usage */
+  outputDetails?: OutputTokenDetails;
 }
 
 /**
  * Model Generation attributes
  */
 export interface ModelGenerationAttributes extends AIBaseAttributes {
+  /** Agent identifier (when generation is part of an agent run) */
+  agentId?: string;
+  /** Human-readable agent name (when generation is part of an agent run) */
+  agentName?: string;
   /** Model name (e.g., 'gpt-4', 'claude-3') */
   model?: string;
   /** Model provider (e.g., 'openai', 'anthropic') */
   provider?: string;
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
-  /** Token usage statistics - supports both v5 and legacy formats */
+  /** Token usage statistics */
   usage?: UsageStats;
   /** Model parameters */
   parameters?: {
@@ -120,6 +157,20 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   streaming?: boolean;
   /** Reason the generation finished */
   finishReason?: string;
+  /**
+   * When the first token/chunk of the completion was received.
+   * Used to calculate time-to-first-token (TTFT) metrics.
+   * Only applicable for streaming responses.
+   */
+  completionStartTime?: Date;
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string;
+  /** Unique identifier for the response */
+  responseId?: string;
+  /** Server address for the model endpoint */
+  serverAddress?: string;
+  /** Server port for the model endpoint */
+  serverPort?: number;
 }
 
 /**
@@ -182,6 +233,16 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
   processorType: 'input' | 'output';
   /** Processor index in the agent */
   processorIndex?: number;
+  /** MessageList mutations performed by this processor */
+  messageListMutations?: Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    source?: string;
+    count?: number;
+    ids?: string[];
+    text?: string;
+    tag?: string;
+    message?: any;
+  }>;
 }
 
 /**
@@ -323,10 +384,12 @@ interface BaseSpan<TType extends SpanType> {
   startTime: Date;
   /** When span ended */
   endTime?: Date;
-  /** Is an internal span? (spans internal to the operation of mastra) */
+  /** Span-type specific attributes */
   attributes?: SpanTypeMap[TType];
   /** User-defined metadata */
   metadata?: Record<string, any>;
+  /** Labels used to categorize and filter traces. Only valid on root spans. */
+  tags?: string[];
   /** Input passed at the start of the span */
   input?: any;
   /** Output generated at the end of the span */
@@ -390,6 +453,84 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Returns the traceId on span, unless NoOpSpan, then undefined */
   get externalTraceId(): string | undefined;
+
+  /**
+   * Execute an async function within this span's tracing context.
+   *
+   * When a bridge is configured, this enables auto-instrumented operations
+   * (HTTP requests, database queries, etc.) to be properly nested under this
+   * span in the external tracing system.
+   *
+   * @param fn - The async function to execute within the span context
+   * @returns The result of the function execution
+   *
+   * @example
+   * ```typescript
+   * const result = await modelSpan.executeInContext(async () => {
+   *   return model.generateText(...);
+   * });
+   * ```
+   */
+  executeInContext<T>(fn: () => Promise<T>): Promise<T>;
+
+  /**
+   * Execute a synchronous function within this span's tracing context.
+   *
+   * When a bridge is configured, this enables auto-instrumented operations
+   * (HTTP requests, database queries, etc.) to be properly nested under this
+   * span in the external tracing system.
+   *
+   * @param fn - The synchronous function to execute within the span context
+   * @returns The result of the function execution
+   *
+   * @example
+   * ```typescript
+   * const result = modelSpan.executeInContextSync(() => {
+   *   return model.streamText(...);
+   * });
+   * ```
+   */
+  executeInContextSync<T>(fn: () => T): T;
+}
+
+export interface BridgeSpanContext {
+  /**
+   * Execute an async function within this span's tracing context.
+   *
+   * When a bridge is configured, this enables auto-instrumented operations
+   * (HTTP requests, database queries, etc.) to be properly nested under this
+   * span in the external tracing system.
+   *
+   * @param fn - The async function to execute within the span context
+   * @returns The result of the function execution
+   *
+   * @example
+   * ```typescript
+   * const result = await modelSpan.executeInContext(async () => {
+   *   return model.generateText(...);
+   * });
+   * ```
+   */
+  executeInContext<T>(fn: () => Promise<T>): Promise<T>;
+
+  /**
+   * Execute a synchronous function within this span's tracing context.
+   *
+   * When a bridge is configured, this enables auto-instrumented operations
+   * (HTTP requests, database queries, etc.) to be properly nested under this
+   * span in the external tracing system.
+   *
+   * @param fn - The synchronous function to execute within the span context
+   * @returns The result of the function execution
+   *
+   * @example
+   * ```typescript
+   * const result = modelSpan.executeInContextSync(() => {
+   *   return model.streamText(...);
+   * });
+   * ```
+   */
+  executeInContextSync<T>(fn: () => T): T;
 }
 
 /**
@@ -409,12 +550,27 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   parentSpanId?: string;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
+  /**
+   * Tags for this trace (only present on root spans).
+   * Tags are string labels used to categorize and filter traces.
+   */
+  tags?: string[];
+}
+
+/**
+ * Options for ending a model generation span
+ */
+export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENERATION> {
+  /** Raw usage data from AI SDK - will be converted to UsageStats with cache token details */
+  usage?: LanguageModelUsage;
+  /** Provider-specific metadata for extracting cache tokens */
+  providerMetadata?: ProviderMetadata;
 }
 
 export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
-  endGeneration(options?: EndSpanOptions<SpanType.MODEL_GENERATION>): void;
+  endGeneration(options?: EndGenerationOptions): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
 }
 
@@ -439,7 +595,7 @@ export interface ObservabilityInstance {
   /**
    * Get current configuration
    */
-  getConfig(): Readonly<Required<ObservabilityInstanceConfig>>;
+  getConfig(): Readonly<ObservabilityInstanceConfig>;
 
   /**
    * Get all exporters
@@ -455,6 +611,11 @@ export interface ObservabilityInstance {
    * Get the logger instance (for exporters and other components)
    */
   getLogger(): IMastraLogger;
+
+  /**
+   * Get the bridge instance if configured
+   */
+  getBridge(): ObservabilityBridge | undefined;
 
   /**
    * Start a new span of a specific SpanType
@@ -499,6 +660,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   input?: any;
   /** Output data (for event spans) */
   output?: any;
+  /** Labels used to categorize and filter traces. Only valid on root spans. */
+  tags?: string[];
   /** Parent span */
   parent?: AnySpan;
   /** Is an event span? */
@@ -680,6 +843,18 @@ export interface TracingOptions {
    * If provided, the root span will be created as a child of this span.
    */
   parentSpanId?: string;
+  /**
+   * Tags to apply to this trace.
+   * Tags are string labels that can be used to categorize and filter traces
+   * Note: Tags are only applied to the root span of a trace.
+   */
+  tags?: string[];
+}
+
+export interface SpanIds {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
 }
 
 /**
@@ -716,6 +891,8 @@ export interface ObservabilityInstanceConfig {
   exporters?: ObservabilityExporter[];
   /** Custom processors */
   spanOutputProcessors?: SpanOutputProcessor[];
+  /** OpenTelemetry bridge for integration with existing OTEL infrastructure */
+  bridge?: ObservabilityBridge;
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
   /**
@@ -797,6 +974,11 @@ export interface InitExporterOptions {
   config?: ObservabilityInstanceConfig;
 }
 
+export interface InitBridgeOptions {
+  mastra?: Mastra;
+  config?: ObservabilityInstanceConfig;
+}
+
 /**
  * Interface for tracing exporters
  */
@@ -807,7 +989,7 @@ export interface ObservabilityExporter {
   /** Initialize exporter with tracing configuration and/or access to Mastra */
   init?(options: InitExporterOptions): void;
 
-  /** Sets logger instance throughout Observability, including all configured exporters, processors, etc..  */
+  /** Sets logger instance on the exporter.  */
   __setLogger?(logger: IMastraLogger): void;
 
   /** Export tracing events */
@@ -830,6 +1012,62 @@ export interface ObservabilityExporter {
   }): Promise<void>;
 
   /** Shutdown exporter */
+  shutdown(): Promise<void>;
+}
+
+/**
+ * Interface for observability bridges
+ */
+export interface ObservabilityBridge {
+  /** Bridge name */
+  name: string;
+
+  /** Initialize bridge with observability configuration and/or access to Mastra */
+  init?(options: InitBridgeOptions): void;
+
+  /** Sets logger instance on the bridge  */
+  __setLogger?(logger: IMastraLogger): void;
+
+  /**
+   * Export Mastra tracing events to OTEL infrastructure
+   * Called for SPAN_STARTED, SPAN_UPDATED, SPAN_ENDED events
+   *
+   * @param event - Tracing event with exported span
+   */
+  exportTracingEvent(event: TracingEvent): Promise<void>;
+
+  /**
+   * Execute an async function within the tracing context of a Mastra span.
+   * This enables auto-instrumented operations (HTTP, DB) to have correct parent spans
+   * in the external tracing system (e.g., OpenTelemetry, DataDog, etc.).
+   *
+   * @param spanId - The ID of the Mastra span to use as context
+   * @param fn - The async function to execute within the span context
+   * @returns The result of the function execution
+   */
+  executeInContext?<T>(spanId: string, fn: () => Promise<T>): Promise<T>;
+
+  /**
+   * Execute a synchronous function within the tracing context of a Mastra span.
+   * This enables auto-instrumented operations (HTTP, DB) to have correct parent spans
+   * in the external tracing system (e.g., OpenTelemetry, DataDog, etc.).
+   *
+   * @param spanId - The ID of the Mastra span to use as context
+   * @param fn - The synchronous function to execute within the span context
+   * @returns The result of the function execution
+   */
+  executeInContextSync?<T>(spanId: string, fn: () => T): T;
+
+  /**
+   * Create a span in the bridge's tracing system.
+   * Called during Mastra span construction to get bridge-generated identifiers.
+   *
+   * @param options - Span creation options from Mastra
+   * @returns Span identifiers (spanId, traceId, parentSpanId) from bridge, or undefined if creation fails
+   */
+  createSpan(options: CreateSpanOptions<SpanType>): SpanIds | undefined;
+
+  /** Shutdown bridge and cleanup resources */
   shutdown(): Promise<void>;
 }
 

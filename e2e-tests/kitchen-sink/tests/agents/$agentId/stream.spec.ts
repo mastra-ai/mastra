@@ -1,12 +1,17 @@
 import { test, expect, Page } from '@playwright/test';
 import { selectFixture } from '../../__utils__/select-fixture';
 import { nanoid } from 'nanoid';
+import { resetStorage } from '../../__utils__/reset-storage';
 
 let page: Page;
 
 test.beforeEach(async ({ browser }) => {
   const context = await browser.newContext();
   page = await context.newPage();
+});
+
+test.afterEach(async () => {
+  await resetStorage();
 });
 
 test('text stream', async () => {
@@ -18,7 +23,7 @@ test('text stream', async () => {
   await page.click('text=Stream');
 
   await page.locator('textarea').fill('Give me the Lorem Ipsum thing');
-  await page.click('button:has-text("Send")');
+  await page.click('button[aria-label="Send"]');
 
   // Assert partial streaming chunks
   await expect(page.getByTestId('thread-wrapper').getByText(`I can help you get accurate`)).toBeVisible({
@@ -50,7 +55,7 @@ test('tool stream', async () => {
   await page.click('text=Stream');
 
   await page.locator('textarea').fill('Give me the weather in Paris');
-  await page.click('button:has-text("Send")');
+  await page.click('button[aria-label="Send"]');
 
   await assertToolStream(page);
   await page.reload();
@@ -87,7 +92,7 @@ test('workflow stream', async () => {
   await page.click('text=Stream');
 
   await page.locator('textarea').fill('Give me the weather in Paris');
-  await page.click('button:has-text("Send")');
+  await page.click('button[aria-label="Send"]');
 
   // Assert partial streaming chunks
   await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `lessComplexWorkflow` })).toBeVisible({
@@ -118,6 +123,7 @@ test('workflow stream', async () => {
   });
 
   // Memory
+  await expect(page.getByTestId('thread-list').locator('li')).toHaveCount(2); // One is the new button, second is the new thread
   await page.reload();
   await expect(page.locator('[data-workflow-node]').nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(1)).toHaveAttribute('data-workflow-step-status', 'success');

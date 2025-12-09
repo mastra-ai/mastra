@@ -1,19 +1,20 @@
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
-  SharedV2ProviderMetadata,
   LanguageModelV2CallWarning,
   LanguageModelV2ResponseMetadata,
-  LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
+
 import type { FinishReason, LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { OutputProcessor } from '../processors';
+import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 
@@ -24,6 +25,23 @@ export enum ChunkFrom {
   WORKFLOW = 'WORKFLOW',
   NETWORK = 'NETWORK',
 }
+
+/**
+A JSON value can be a string, number, boolean, object, array, or null.
+JSON values can be serialized and deserialized by the JSON.stringify and JSON.parse methods.
+ */
+export type JSONValue = null | string | number | boolean | JSONObject | JSONArray;
+export type JSONObject = {
+  [key: string]: JSONValue;
+};
+export type JSONArray = JSONValue[];
+
+/**
+ * Additional provider-specific metadata.
+ * The outer record is keyed by the provider name, and the inner
+ * record is keyed by the provider-specific metadata key.
+ */
+export type ProviderMetadata = Record<string, Record<string, JSONValue>>;
 
 interface BaseChunkType {
   runId: string;
@@ -38,36 +56,36 @@ interface ResponseMetadataPayload {
 
 export interface TextStartPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
 export interface TextDeltaPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   text: string;
 }
 
 interface TextEndPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   [key: string]: unknown;
 }
 
 export interface ReasoningStartPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   signature?: string;
 }
 
 export interface ReasoningDeltaPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   text: string;
 }
 
 interface ReasoningEndPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   signature?: string;
 }
 
@@ -78,19 +96,15 @@ export interface SourcePayload {
   mimeType?: string;
   filename?: string;
   url?: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
 export interface FilePayload {
   data: string | Uint8Array;
   base64?: string;
   mimeType: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
-
-type JSONValue = string | number | boolean | null | JSONObject | JSONArray;
-type JSONObject = { [key: string]: JSONValue | undefined };
-type JSONArray = JSONValue[];
 
 export type ReadonlyJSONValue = null | string | number | boolean | ReadonlyJSONObject | ReadonlyJSONArray;
 
@@ -128,7 +142,7 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
     __mastraMetadata?: MastraMetadata;
   };
   providerExecuted?: boolean;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   output?: TOutput;
   dynamic?: boolean;
 }
@@ -139,7 +153,7 @@ export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   result: TResult;
   isError?: boolean;
   providerExecuted?: boolean;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   args?: TArgs;
   dynamic?: boolean;
 }
@@ -151,20 +165,20 @@ interface ToolCallInputStreamingStartPayload {
   toolCallId: string;
   toolName: string;
   providerExecuted?: boolean;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
 }
 
 interface ToolCallDeltaPayload {
   argsTextDelta: string;
   toolCallId: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   toolName?: string;
 }
 
 interface ToolCallInputStreamingEndPayload {
   toolCallId: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
 interface FinishPayload {
@@ -178,7 +192,7 @@ interface FinishPayload {
     usage: LanguageModelV2Usage;
   };
   metadata: {
-    providerMetadata?: SharedV2ProviderMetadata;
+    providerMetadata?: ProviderMetadata;
     request?: LanguageModelRequestMetadata;
     [key: string]: unknown;
   };
@@ -215,7 +229,7 @@ export interface StepStartPayload {
 
 export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   id?: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   totalUsage?: LanguageModelV2Usage;
   response?: LanguageModelV2ResponseMetadata;
   messageId?: string;
@@ -234,7 +248,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
   };
   metadata: {
     request?: LanguageModelRequestMetadata;
-    providerMetadata?: SharedV2ProviderMetadata;
+    providerMetadata?: ProviderMetadata;
     [key: string]: unknown;
   };
   messages?: {
@@ -247,7 +261,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
 
 interface ToolErrorPayload {
   id?: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   toolCallId: string;
   toolName: string;
   args?: Record<string, unknown>;
@@ -262,13 +276,13 @@ interface AbortPayload {
 interface ReasoningSignaturePayload {
   id: string;
   signature: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
 interface RedactedReasoningPayload {
   id: string;
   data: unknown;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
 interface ToolOutputPayload<TOutput = unknown> {
@@ -308,6 +322,7 @@ interface TripwirePayload {
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
+  networkId: string;
   runId: string;
   inputData: {
     task: string;
@@ -324,8 +339,8 @@ interface RoutingAgentStartPayload {
 
 interface RoutingAgentEndPayload {
   task: string;
-  resourceId: string;
-  resourceType: string;
+  primitiveId: string;
+  primitiveType: string;
   prompt: string;
   result: string;
   isComplete?: boolean;
@@ -365,10 +380,12 @@ interface AgentExecutionEndPayload {
   isComplete: boolean;
   iteration: number;
   usage: LanguageModelV2Usage;
+  runId: string;
 }
 
 interface WorkflowExecutionStartPayload {
   name: string;
+  workflowId: string;
   args: {
     task: string;
     primitiveId: string;
@@ -384,6 +401,7 @@ interface WorkflowExecutionStartPayload {
 
 interface WorkflowExecutionEndPayload {
   name: string;
+  workflowId: string;
   task: string;
   primitiveId: string;
   primitiveType: string;
@@ -391,6 +409,7 @@ interface WorkflowExecutionEndPayload {
   isComplete: boolean;
   iteration: number;
   usage: LanguageModelV2Usage;
+  runId: string;
 }
 
 interface ToolExecutionStartPayload {
@@ -625,11 +644,11 @@ export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: To
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type ExecuteStreamModelManager<T> = (
-  callback: (model: LanguageModelV2, isLastModel: boolean) => Promise<T>,
+  callback: (model: MastraLanguageModelV2, isLastModel: boolean) => Promise<T>,
 ) => Promise<T>;
 
 export type ModelManagerModelConfig = {
-  model: LanguageModelV2;
+  model: MastraLanguageModelV2;
   maxRetries: number;
   id: string;
 };
@@ -675,6 +694,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
+  requestContext?: RequestContext;
 };
 
 export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
@@ -710,5 +730,5 @@ export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
     [key: string]: unknown;
   };
   reasoningText: string | undefined;
-  providerMetadata: SharedV2ProviderMetadata | undefined;
+  providerMetadata: ProviderMetadata | undefined;
 };

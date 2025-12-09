@@ -32,14 +32,15 @@ interface CreatePrepareStreamWorkflowOptions<
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
-  saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
+  saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
 }
 
@@ -58,11 +59,12 @@ export function createPrepareStreamWorkflow<
   instructions,
   memoryConfig,
   memory,
-  saveQueueManager,
   returnScorerData,
+  saveQueueManager,
   requireToolApproval,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
@@ -98,8 +100,13 @@ export function createPrepareStreamWorkflow<
     requireToolApproval,
     resumeContext,
     agentId,
+    agentName,
     toolCallId,
     methodType,
+    saveQueueManager,
+    memoryConfig,
+    memory,
+    resourceId,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -110,7 +117,6 @@ export function createPrepareStreamWorkflow<
     requestContext,
     memory,
     memoryConfig,
-    saveQueueManager,
     agentSpan,
     agentId,
     methodType,

@@ -2,7 +2,7 @@ import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
-import esmShim from '@rollup/plugin-esm-shim';
+import { esmShim } from './plugins/esm-shim';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'rollup';
 import { esbuild } from './plugins/esbuild';
@@ -12,6 +12,7 @@ import { removeDeployer } from './plugins/remove-deployer';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { join } from 'node:path';
 import { slash } from './utils';
+import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 
 export async function getInputOptions(
   entryFile: string,
@@ -43,18 +44,7 @@ export async function getInputOptions(
           browser: true,
         });
 
-  const externalsCopy = new Set<string>();
-  // make all nested imports external from the same package
-  for (const external of analyzedBundleInfo.externalDependencies) {
-    if (external.startsWith('@')) {
-      const [scope, name] = external.split('/', 3);
-      externalsCopy.add(`${scope}/${name}`);
-      externalsCopy.add(`${scope}/${name}/*`);
-    } else {
-      externalsCopy.add(external);
-      externalsCopy.add(`${external}/*`);
-    }
-  }
+  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
 
   const externals = Array.from(externalsCopy);
 
@@ -65,6 +55,7 @@ export async function getInputOptions(
     preserveSymlinks: true,
     external: externals,
     plugins: [
+      subpathExternalsResolver(externals),
       {
         name: 'alias-optimized-deps',
         resolveId(id: string) {

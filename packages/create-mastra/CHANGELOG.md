@@ -1,5 +1,57 @@
 # create-mastra
 
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Fix default value showing on workflow form after user submits ([#10983](https://github.com/mastra-ai/mastra/pull/10983))
+
+- Move useScorers down to trace page to trigger it once for all trace spans ([#10985](https://github.com/mastra-ai/mastra/pull/10985))
+
+- Update Observability Trace Spans list UI, so a user can expand/collapse span children/descendants and can filter the list by span type or name ([#10378](https://github.com/mastra-ai/mastra/pull/10378))
+
+- Fix workflow trigger form overflow ([#10986](https://github.com/mastra-ai/mastra/pull/10986))
+
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Fix select options overflow when list is long by adding maximum height ([#10813](https://github.com/mastra-ai/mastra/pull/10813))
+
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10500](https://github.com/mastra-ai/mastra/pull/10500))
+
+- Hide time travel on map steps in Studio ([#10631](https://github.com/mastra-ai/mastra/pull/10631))
+
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Add timeTravel APIs and add timeTravel feature to studio ([#10361](https://github.com/mastra-ai/mastra/pull/10361))
+
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- fix: detect bun runtime and cleanup on failure ([#10242](https://github.com/mastra-ai/mastra/pull/10242))
+
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- dependencies updates: ([#10111](https://github.com/mastra-ai/mastra/pull/10111))
+  - Updated dependency [`pino@^10.1.0` ↗︎](https://www.npmjs.com/package/pino/v/10.1.0) (from `^9.7.0`, in `dependencies`)
+
+- dependencies updates: ([#9781](https://github.com/mastra-ai/mastra/pull/9781))
+  - Updated dependency [`posthog-node@^5.11.2` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.11.2) (from `^4.18.0`, in `dependencies`)
+
+- Fix scorer filtering for SpanScoring, add error and info message for user ([#10160](https://github.com/mastra-ai/mastra/pull/10160))
+
+- Fix double scroll on agent chat container ([#10253](https://github.com/mastra-ai/mastra/pull/10253))
+
 ## 1.0.0-beta.1
 
 ### Patch Changes

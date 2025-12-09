@@ -1,17 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useWorkflow } from '@/hooks/use-workflows';
-import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../hooks/use-workflows-actions';
 import { EntityHeader } from '@/components/ui/entity-header';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { Badge } from '@/ds/components/Badge';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { toast } from '@/lib/toast';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import { PlaygroundTabs, TabList, Tab, TabContent } from '@/components/ui/playground-tabs';
+import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -21,17 +23,19 @@ export interface WorkflowInformationProps {
 export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInformationProps) {
   const { data: workflow, isLoading, error } = useWorkflow(workflowId);
 
-  const { createWorkflowRun } = useExecuteWorkflow();
   const {
+    createWorkflowRun,
     streamWorkflow,
     streamResult,
-    isStreaming,
+    isStreamingWorkflow,
     observeWorkflowStream,
     closeStreamsAndReset,
-    resumeWorkflowStream,
-  } = useStreamWorkflow();
-  const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
+    resumeWorkflow,
+    cancelWorkflowRun,
+    isCancellingWorkflowRun,
+  } = useContext(WorkflowRunContext);
 
+  const [tab, setTab] = useState<string>('current-run');
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
@@ -75,40 +79,52 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         </div>
       </EntityHeader>
 
-      <div className="overflow-y-auto border-t-sm border-border1">
-        {workflowId ? (
-          initialRunId ? (
-            <WorkflowRunDetail
-              workflowId={workflowId}
-              runId={initialRunId}
-              setRunId={setRunId}
-              workflow={workflow ?? undefined}
-              isLoading={isLoading}
-              createWorkflowRun={createWorkflowRun.mutateAsync}
-              streamWorkflow={streamWorkflow.mutateAsync}
-              resumeWorkflow={resumeWorkflowStream.mutateAsync}
-              streamResult={streamResult}
-              isStreamingWorkflow={isStreaming}
-              isCancellingWorkflowRun={isCancellingWorkflowRun}
-              cancelWorkflowRun={cancelWorkflowRun}
-              observeWorkflowStream={observeWorkflowStream.mutate}
-            />
-          ) : (
-            <WorkflowTrigger
-              workflowId={workflowId}
-              setRunId={setRunId}
-              workflow={workflow ?? undefined}
-              isLoading={isLoading}
-              createWorkflowRun={createWorkflowRun.mutateAsync}
-              streamWorkflow={streamWorkflow.mutateAsync}
-              resumeWorkflow={resumeWorkflowStream.mutateAsync}
-              streamResult={streamResult}
-              isStreamingWorkflow={isStreaming}
-              isCancellingWorkflowRun={isCancellingWorkflowRun}
-              cancelWorkflowRun={cancelWorkflowRun}
-            />
-          )
-        ) : null}
+      <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
+        <PlaygroundTabs defaultTab="current-run" value={tab} onValueChange={setTab}>
+          <TabList>
+            <Tab value="current-run">Current Run</Tab>
+            <Tab value="run-options">Run options</Tab>
+          </TabList>
+
+          <TabContent value="current-run">
+            {workflowId ? (
+              initialRunId ? (
+                <WorkflowRunDetail
+                  workflowId={workflowId}
+                  runId={initialRunId}
+                  setRunId={setRunId}
+                  workflow={workflow ?? undefined}
+                  isLoading={isLoading}
+                  createWorkflowRun={createWorkflowRun}
+                  streamWorkflow={streamWorkflow}
+                  resumeWorkflow={resumeWorkflow}
+                  streamResult={streamResult}
+                  isStreamingWorkflow={isStreamingWorkflow}
+                  isCancellingWorkflowRun={isCancellingWorkflowRun}
+                  cancelWorkflowRun={cancelWorkflowRun}
+                  observeWorkflowStream={observeWorkflowStream}
+                />
+              ) : (
+                <WorkflowTrigger
+                  workflowId={workflowId}
+                  setRunId={setRunId}
+                  workflow={workflow ?? undefined}
+                  isLoading={isLoading}
+                  createWorkflowRun={createWorkflowRun}
+                  streamWorkflow={streamWorkflow}
+                  resumeWorkflow={resumeWorkflow}
+                  streamResult={streamResult}
+                  isStreamingWorkflow={isStreamingWorkflow}
+                  isCancellingWorkflowRun={isCancellingWorkflowRun}
+                  cancelWorkflowRun={cancelWorkflowRun}
+                />
+              )
+            ) : null}
+          </TabContent>
+          <TabContent value="run-options">
+            <TracingRunOptions />
+          </TabContent>
+        </PlaygroundTabs>
       </div>
     </div>
   );

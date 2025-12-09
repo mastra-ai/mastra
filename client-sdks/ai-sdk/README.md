@@ -93,6 +93,64 @@ export const mastra = new Mastra({
 });
 ```
 
+## Framework-agnostic handlers
+
+For use outside of the Mastra server (e.g., Next.js App Router, Express), you can use the standalone handler functions directly. These handlers return a `ReadableStream` that you can wrap with `createUIMessageStreamResponse`:
+
+### handleChatStream
+
+```typescript
+import { handleChatStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+### handleWorkflowStream
+
+```typescript
+import { handleWorkflowStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleWorkflowStream({
+    mastra,
+    workflowId: 'myWorkflow',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+### handleNetworkStream
+
+```typescript
+import { handleNetworkStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleNetworkStream({
+    mastra,
+    agentId: 'routingAgent',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
 ## Manual transformation
 
 If you have a raw Mastra `stream`, you can manually transform it to AI SDK UI message parts:
@@ -106,7 +164,9 @@ export async function POST(req: Request) {
   const agent = mastra.getAgent('weatherAgent');
   const stream = await agent.stream(messages);
 
+  // deduplicate messages https://ai-sdk.dev/docs/troubleshooting/repeated-assistant-messages
   const uiMessageStream = createUIMessageStream({
+    originalMessages: messages,
     execute: async ({ writer }) => {
       for await (const part of toAISdkFormat(stream, { from: 'agent' })!) {
         writer.write(part);

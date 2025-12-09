@@ -60,6 +60,47 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
   }
 }
 
+/**
+ * Get the external parent span ID from CreateSpanOptions.
+ *
+ * If the parent is internal, walks up the parent chain to find
+ * the closest external ancestor. If the parent is already external,
+ * returns its ID directly.
+ *
+ * This is useful when exporting spans to external observability systems
+ * that shouldn't include internal framework spans.
+ *
+ * @param options - Span creation options
+ * @returns The external parent span ID, or undefined if no external parent exists
+ *
+ * @example
+ * ```typescript
+ * // Parent is external - returns parent.id
+ * const externalParent = { id: 'span-123', isInternal: false };
+ * const options = { parent: externalParent, ... };
+ * getExternalParentId(options); // 'span-123'
+ *
+ * // Parent is internal - walks up to find external ancestor
+ * const externalGrandparent = { id: 'span-456', isInternal: false };
+ * const internalParent = { id: 'span-123', isInternal: true, parent: externalGrandparent };
+ * const options = { parent: internalParent, ... };
+ * getExternalParentId(options); // 'span-456'
+ * ```
+ */
+export function getExternalParentId(options: CreateSpanOptions<any>): string | undefined {
+  if (!options.parent) {
+    return undefined;
+  }
+
+  if (options.parent.isInternal) {
+    // Parent is internal, find its external ancestor
+    return options.parent.getParentSpanId(false);
+  } else {
+    // Parent is already external, use it directly
+    return options.parent.id;
+  }
+}
+
 export abstract class BaseSpan<TType extends SpanType = any> implements Span<TType> {
   public abstract id: string;
   public abstract traceId: string;
@@ -83,6 +124,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
+  public tags?: string[];
   public traceState?: TraceState;
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
@@ -98,6 +140,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.isEvent = options.isEvent ?? false;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
     this.traceState = options.traceState;
+    // Tags are only set for root spans (spans without a parent)
+    this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
@@ -191,11 +235,41 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
+      // Tags are only included for root spans
+      ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
     };
   }
 
   get externalTraceId(): string | undefined {
     return this.isValid ? this.traceId : undefined;
+  }
+
+  /**
+   * Execute an async function within this span's tracing context.
+   * Delegates to the bridge if available.
+   */
+  async executeInContext<T>(fn: () => Promise<T>): Promise<T> {
+    const bridge = this.observabilityInstance.getBridge();
+
+    if (bridge?.executeInContext) {
+      return bridge.executeInContext(this.id, fn);
+    }
+
+    return fn();
+  }
+
+  /**
+   * Execute a synchronous function within this span's tracing context.
+   * Delegates to the bridge if available.
+   */
+  executeInContextSync<T>(fn: () => T): T {
+    const bridge = this.observabilityInstance.getBridge();
+
+    if (bridge?.executeInContextSync) {
+      return bridge.executeInContextSync(this.id, fn);
+    }
+
+    return fn();
   }
 }
 
@@ -249,6 +323,11 @@ export function deepClean(
   }
 
   _seen.add(value);
+
+  // Handle Date objects - return as-is (they are JSON-serializable)
+  if (value instanceof Date) {
+    return value;
+  }
 
   if (Array.isArray(value)) {
     return value.map(item => deepClean(item, options, _seen, _depth + 1));

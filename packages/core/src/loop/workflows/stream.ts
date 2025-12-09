@@ -1,5 +1,7 @@
-import { ReadableStream, WritableStream } from 'stream/web';
+import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from 'ai-v5';
+import type { MastraDBMessage } from '../../agent/message-list';
+import { getErrorFromUnknown } from '../../error';
 import { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
@@ -44,11 +46,27 @@ export function workflowLoopStream<
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
-      const writer = new WritableStream<ChunkType<OUTPUT>>({
-        write: chunk => {
-          controller.enqueue(chunk);
-        },
-      });
+      const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
+        // Handle data-* chunks (custom data chunks from writer.custom())
+        // These need to be persisted to storage, not just streamed
+        if (chunk.type.startsWith('data-') && messageId) {
+          const dataPart = {
+            type: chunk.type as `data-${string}`,
+            data: 'data' in chunk ? chunk.data : undefined,
+          };
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [dataPart],
+            },
+            createdAt: new Date(),
+          };
+          messageList.add(message, 'response');
+        }
+        void controller.enqueue(chunk);
+      };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
@@ -58,7 +76,7 @@ export function workflowLoopStream<
         modelSettings,
         toolChoice,
         controller,
-        writer,
+        outputWriter,
         runId,
         messageList,
         startTimestamp,
@@ -125,6 +143,38 @@ export function workflowLoopStream<
           });
 
       if (executionResult.status !== 'success') {
+        if (executionResult.status === 'failed') {
+          // Temporary fix for cleaning of workflow result error message.
+          // executionResult.error is typed as Error but is actually a string and has "Error: Error: " prepended to the message.
+          // TODO: This string handling can be removed when the workflow execution result error type is fixed (issue #9348) -- https://github.com/mastra-ai/mastra/issues/9348
+          let executionResultError: string | Error = executionResult.error;
+          if (typeof executionResult.error === 'string') {
+            const prependedErrorString = 'Error: ';
+            if ((executionResult.error as string).startsWith(`${prependedErrorString}${prependedErrorString}`)) {
+              executionResultError = (executionResult.error as string).substring(
+                `${prependedErrorString}${prependedErrorString}`.length,
+              );
+            } else if ((executionResult.error as string).startsWith(prependedErrorString)) {
+              executionResultError = (executionResult.error as string).substring(prependedErrorString.length);
+            }
+          }
+
+          const error = getErrorFromUnknown(executionResultError, {
+            fallbackMessage: 'Unknown error in agent workflow stream',
+          });
+
+          controller.enqueue({
+            type: 'error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { error },
+          });
+
+          if (rest.options?.onError) {
+            await rest.options?.onError?.({ error });
+          }
+        }
+
         controller.close();
         return;
       }

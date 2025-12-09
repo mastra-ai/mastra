@@ -23,6 +23,7 @@ npm install @mastra/langsmith@beta
 
 ```bash title=".env"
 LANGSMITH_API_KEY=ls-xxxxxxxxxxxx
+LANGCHAIN_PROJECT=my-project  # Optional: default project for traces
 LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
 ```
 
@@ -60,6 +61,7 @@ new LangSmithExporter({
 
   // Optional settings
   apiUrl: process.env.LANGSMITH_BASE_URL, // Default: https://api.smith.langchain.com
+  projectName: "my-project", // Project to send traces to (overrides LANGCHAIN_PROJECT env var)
   callerOptions: {
     // HTTP client options
     timeout: 30000, // Request timeout in ms
@@ -72,6 +74,16 @@ new LangSmithExporter({
   hideOutputs: false, // Hide output data in UI
 });
 ```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `LANGSMITH_API_KEY` | Your LangSmith API key (required) |
+| `LANGCHAIN_PROJECT` | Default project name for traces (optional, defaults to "default") |
+| `LANGSMITH_BASE_URL` | API URL for self-hosted instances (optional) |
+
+The `projectName` config option takes precedence over the `LANGCHAIN_PROJECT` environment variable, allowing you to programmatically route traces to different projects.
 
 ## Related
 

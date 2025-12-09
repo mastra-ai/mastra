@@ -1,33 +1,30 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import {
   calculatePagination,
+  createStorageErrorId,
   normalizePerPage,
-  safelyParseJSON,
   ScoresStorage,
   TABLE_SCORERS,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
+/**
+ * PostgreSQL-specific score row transformation.
+ * Uses Z-suffix timestamps (createdAtZ, updatedAtZ) when available.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  return {
-    ...row,
-    input: safelyParseJSON(row.input),
-    scorer: safelyParseJSON(row.scorer),
-    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
-    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
-    metadata: safelyParseJSON(row.metadata),
-    output: safelyParseJSON(row.output),
-    additionalContext: safelyParseJSON(row.additionalContext),
-    requestContext: safelyParseJSON(row.requestContext),
-    entity: safelyParseJSON(row.entity),
-    createdAt: row.createdAtZ || row.createdAt,
-    updatedAt: row.updatedAtZ || row.updatedAt,
-  } as ScoreRowData;
+  return coreTransformScoreRow(row, {
+    preferredTimestampFields: {
+      createdAt: 'createdAtZ',
+      updatedAt: 'updatedAtZ',
+    },
+  });
 }
 
 export class ScoresPG extends ScoresStorage {
@@ -61,7 +58,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -143,7 +140,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -152,22 +149,22 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let parsedScore: ValidatedSaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('PG', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.id,
-            entityId: score.entityId,
-            entityType: score.entityType,
-            traceId: score.traceId || '',
-            spanId: score.spanId || '',
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
           },
         },
         error,
@@ -177,6 +174,7 @@ export class ScoresPG extends ScoresStorage {
     try {
       // Generate ID like other storage implementations
       const id = crypto.randomUUID();
+      const now = new Date();
 
       const {
         scorer,
@@ -205,17 +203,16 @@ export class ScoresPG extends ScoresStorage {
           additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
           requestContext: requestContext ? JSON.stringify(requestContext) : null,
           entity: entity ? JSON.stringify(entity) : null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('PG', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -271,7 +268,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -329,7 +326,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -380,7 +377,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

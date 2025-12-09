@@ -1,5 +1,10 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, normalizePerPage } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  WorkflowsStorage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  normalizePerPage,
+} from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
@@ -127,7 +132,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       }
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_WORKFLOW_RESULTS_FAILED',
+          id: createStorageErrorId('MSSQL', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -184,7 +189,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         await transaction.rollback();
         throw new MastraError(
           {
-            id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_WORKFLOW_STATE_SNAPSHOT_NOT_FOUND',
+            id: createStorageErrorId('MSSQL', 'UPDATE_WORKFLOW_STATE', 'SNAPSHOT_NOT_FOUND'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.SYSTEM,
             details: {
@@ -218,9 +223,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       } catch {
         // Ignore rollback errors
       }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_WORKFLOW_STATE_FAILED',
+          id: createStorageErrorId('MSSQL', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -267,7 +273,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('MSSQL', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -302,7 +308,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('MSSQL', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -351,12 +357,43 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
             runId,
             workflowName: workflowName || '',
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+    const transaction = this.pool.transaction();
+    try {
+      await transaction.begin();
+      const deleteRequest = new sql.Request(transaction);
+      deleteRequest.input('workflow_name', workflowName);
+      deleteRequest.input('run_id', runId);
+      await deleteRequest.query(`DELETE FROM ${table} WHERE workflow_name = @workflow_name AND run_id = @run_id`);
+      await transaction.commit();
+    } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Ignore rollback errors
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId,
+            workflowName,
           },
         },
         error,
@@ -440,7 +477,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('MSSQL', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { ZodLikeSchema } from '../types/zod-compat';
 
 export interface ValidationError<T = any> {
@@ -26,6 +26,73 @@ function truncateForLogging(data: unknown, maxLength: number = 200): string {
 }
 
 /**
+ * Validates raw suspend data against a Zod schema.
+ *
+ * @param schema The Zod schema to validate against
+ * @param suspendData The raw suspend data to validate
+ * @param toolId Optional tool ID for better error messages
+ * @returns The validated data or a validation error
+ */
+export function validateToolSuspendData<T = any>(
+  schema: ZodLikeSchema | undefined,
+  suspendData: unknown,
+  toolId?: string,
+): { data: T | unknown; error?: ValidationError<T> } {
+  // If no schema, return suspend data as-is
+  if (!schema || !('safeParse' in schema)) {
+    return { data: suspendData };
+  }
+
+  // Validate the input directly - no unwrapping needed in v1.0
+  const validation = schema.safeParse(suspendData);
+
+  if (validation.success) {
+    return { data: validation.data };
+  }
+
+  // Validation failed, return error
+  const errorMessages = validation.error.issues
+    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+    .join('\n');
+
+  const error: ValidationError<T> = {
+    error: true,
+    message: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(suspendData)}`,
+    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+  };
+
+  return { data: suspendData, error };
+}
+
+/**
+ * Normalizes undefined/null input to an appropriate default value based on schema type.
+ * This handles LLMs (Claude Sonnet 4.5, Gemini 2.4, etc.) that send undefined/null
+ * instead of {} or [] when all parameters are optional.
+ *
+ * @param schema The Zod schema to check
+ * @param input The input to normalize
+ * @returns The normalized input (original value, {}, or [])
+ */
+function normalizeNullishInput(schema: ZodLikeSchema, input: unknown): unknown {
+  if (input !== undefined && input !== null) {
+    return input;
+  }
+
+  // Check if schema is an array type
+  if (schema instanceof z.ZodArray) {
+    return [];
+  }
+
+  // Check if schema is an object type
+  if (schema instanceof z.ZodObject) {
+    return {};
+  }
+
+  // For other schema types, return the original input and let Zod validate
+  return input;
+}
+
+/**
  * Validates raw input data against a Zod schema.
  *
  * @param schema The Zod schema to validate against
@@ -43,8 +110,12 @@ export function validateToolInput<T = any>(
     return { data: input };
   }
 
-  // Validate the input directly - no unwrapping needed in v1.0
-  const validation = schema.safeParse(input);
+  // Normalize undefined/null input to appropriate default for the schema type
+  // This handles LLMs that send undefined instead of {} or [] for optional parameters
+  const normalizedInput = normalizeNullishInput(schema, input);
+
+  // Validate the normalized input
+  const validation = schema.safeParse(normalizedInput);
 
   if (validation.success) {
     return { data: validation.data };
@@ -57,7 +128,7 @@ export function validateToolInput<T = any>(
 
   const error: ValidationError<T> = {
     error: true,
-    message: `Tool validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
+    message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
     validationErrors: validation.error.format() as z.ZodFormattedError<T>,
   };
 
@@ -76,9 +147,10 @@ export function validateToolOutput<T = any>(
   schema: ZodLikeSchema | undefined,
   output: unknown,
   toolId?: string,
+  suspendCalled?: boolean,
 ): { data: T | unknown; error?: ValidationError<T> } {
   // If no schema, return output as-is
-  if (!schema || !('safeParse' in schema)) {
+  if (!schema || !('safeParse' in schema) || suspendCalled) {
     return { data: output };
   }
 

@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { resetStorage } from '../../__utils__/reset-storage';
+
+test.afterEach(async () => {
+  await resetStorage();
+});
 
 test('verifies a tool s behaviour', async ({ page }) => {
   await page.goto('http://localhost:4111/tools/simpleMcpTool');

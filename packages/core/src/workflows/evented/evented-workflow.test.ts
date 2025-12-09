@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -74,7 +74,7 @@ describe('Workflow', () => {
 
       const executionResult = await getWorkflowState();
 
-      console.log('executionResult===', JSON.stringify(executionResult, null, 2));
+      // console.log('executionResult===', JSON.stringify(executionResult, null, 2));
 
       expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
@@ -853,7 +853,7 @@ describe('Workflow', () => {
 
       const executionResult = await output.result;
 
-      console.log('executionResult===', JSON.stringify(executionResult, null, 2));
+      // console.log('executionResult===', JSON.stringify(executionResult, null, 2));
 
       expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
@@ -1026,7 +1026,7 @@ describe('Workflow', () => {
 
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
 
-      output = await run.resumeStream({ resumeData: resumeData as any, step: promptAgent });
+      output = await run.resumeStream({ resumeData, step: promptAgent });
       for await (const _data of output.fullStream) {
       }
 

@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "7.0.0-beta.2",
+  "version": "7.0.0-beta.9",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -47,10 +47,10 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
-    "@assistant-ui/react": "^0.10.45",
-    "@assistant-ui/react-markdown": "^0.10.9",
-    "@assistant-ui/react-syntax-highlighter": "^0.10.10",
-    "@assistant-ui/react-ui": "^0.1.8",
+    "@assistant-ui/react": "^0.11.47",
+    "@assistant-ui/react-markdown": "^0.11.6",
+    "@assistant-ui/react-syntax-highlighter": "^0.11.6",
+    "@assistant-ui/react-ui": "^0.2.1",
     "@autoform/core": "^3.0.0",
     "@autoform/react": "^4.0.0",
     "@autoform/zod": "^4.0.0",
@@ -64,7 +64,6 @@
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.3",
     "@lukeed/uuid": "^2.0.1",
-    "@mastra/ai-sdk": "workspace:^",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "^1.3.2",
@@ -92,7 +91,6 @@
     "@xyflow/react": "^12.9.3",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
-    "json-schema-to-zod": "^2.6.1",
     "motion": "^12.23.22",
     "prettier": "^3.6.2",
     "prism-react-renderer": "^2.4.1",
@@ -116,9 +114,11 @@
     "zustand": "^5.0.8"
   },
   "peerDependencies": {
+    "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
     "@tanstack/react-query": "^5.81.5",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
@@ -126,9 +126,11 @@
     "tailwindcss": "^3.0.0"
   },
   "devDependencies": {
+    "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
     "@mastra/core": "workspace:*",
     "@mastra/react": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
     "@storybook/addon-docs": "^9.1.16",
     "@storybook/react-vite": "^9.1.16",
     "@tanstack/react-query": "^5.90.9",

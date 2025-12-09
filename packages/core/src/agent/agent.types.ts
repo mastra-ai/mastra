@@ -1,4 +1,3 @@
-import type { WritableStream } from 'stream/web';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
@@ -10,7 +9,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType } from '../stream/types';
+import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, AgentMethodType } from './types';
 
@@ -122,13 +121,16 @@ export type AgentExecutionOptions<
 
   /** Structured output generation with enhanced developer experience  */
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+
+  /** Whether to include raw chunks in the stream output (not available on all model providers) */
+  includeRawChunks?: boolean;
 };
 
 export type InnerAgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
 > = AgentExecutionOptions<OUTPUT, FORMAT> & {
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */

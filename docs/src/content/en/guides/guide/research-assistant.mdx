@@ -16,7 +16,7 @@ You'll use the foundational Transformer paper ["Attention Is All You Need"](http
 
 - Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
+- An existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
 
 ## How RAG works
 
@@ -57,7 +57,7 @@ Let's define the agent's behavior, connect it to your Mastra project, and create
 
 Install additional dependencies
 
-After running the [installation guide](/docs/v1/getting-started/installation) you'll need to install additional dependencies:
+After running the [installation guide](/guides/v1/getting-started/quickstart) you'll need to install additional dependencies:
 
 ```bash copy
 npm install @mastra/rag@beta ai@^4.0.0
@@ -76,14 +76,14 @@ Create a new file `src/mastra/agents/researchAgent.ts` and define your agent:
 
 ```ts copy title="src/mastra/agents/researchAgent.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { createVectorQueryTool } from "@mastra/rag";
 
 // Create a tool for semantic search over the paper embeddings
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "libSqlVector",
   indexName: "papers",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 
 export const researchAgent = new Agent({
@@ -94,7 +94,7 @@ export const researchAgent = new Agent({
     and provide accurate, well-supported answers based on the retrieved content.
     Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
     Base your responses only on the content provided, not on general knowledge.`,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   tools: {
     vectorQueryTool,
   },
@@ -229,9 +229,8 @@ This allows the agent to efficiently search and retrieve relevant information.
 
 Open the `src/store.ts` file and add the following:
 
-```ts copy title="src/store.ts" {2-4, 20-99}
+```ts copy title="src/store.ts"
 import { MDocument } from "@mastra/rag";
-import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
 import { mastra } from "./mastra";
 
@@ -251,7 +250,7 @@ const chunks = await doc.chunk({
 
 // Generate embeddings
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 

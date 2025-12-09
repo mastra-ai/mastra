@@ -82,8 +82,10 @@ async function captureDependenciesToOptimize(
   initialDepsToOptimize: Map<string, DependencyMetadata>,
   {
     logger,
+    shouldCheckTransitiveDependencies,
   }: {
     logger: IMastraLogger;
+    shouldCheckTransitiveDependencies: boolean;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -100,7 +102,7 @@ async function captureDependenciesToOptimize(
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
-    if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency)) {
+    if (isNodeBuiltin(dependency) || dependency.startsWith('#')) {
       continue;
     }
 
@@ -116,7 +118,11 @@ async function captureDependenciesToOptimize(
 
     const normalizedRootPath = rootPath ? slash(rootPath) : null;
 
-    depsToOptimize.set(dependency, { exports: bindings, rootPath: normalizedRootPath, isWorkspace });
+    depsToOptimize.set(dependency, {
+      exports: bindings,
+      rootPath: normalizedRootPath,
+      isWorkspace,
+    });
   }
 
   /**
@@ -187,14 +193,20 @@ async function captureDependenciesToOptimize(
     }
   }
 
-  await checkTransitiveDependencies(initialDepsToOptimize);
+  if (shouldCheckTransitiveDependencies) {
+    await checkTransitiveDependencies(initialDepsToOptimize);
+  }
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
   if (dynamicImports.length) {
     for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
-        depsToOptimize.set(dynamicImport, { exports: ['*'], rootPath: null, isWorkspace: false });
+        depsToOptimize.set(dynamicImport, {
+          exports: ['*'],
+          rootPath: null,
+          isWorkspace: false,
+        });
       }
     }
   }
@@ -213,6 +225,7 @@ async function captureDependenciesToOptimize(
  * @param options.logger - Logger instance for debugging
  * @param options.sourcemapEnabled - Whether sourcemaps are enabled
  * @param options.workspaceMap - Map of workspace packages
+ * @param options.shouldCheckTransitiveDependencies - Whether to recursively analyze transitive workspace dependencies (default: false)
  * @returns A promise that resolves to an object containing the analyzed dependencies and generated output
  */
 export async function analyzeEntry(
@@ -230,12 +243,14 @@ export async function analyzeEntry(
     workspaceMap,
     projectRoot,
     initialDepsToOptimize = new Map(), // used to avoid infinite recursion
+    shouldCheckTransitiveDependencies = false,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
     initialDepsToOptimize?: Map<string, DependencyMetadata>;
+    shouldCheckTransitiveDependencies?: boolean;
   },
 ): Promise<{
   dependencies: Map<string, DependencyMetadata>;
@@ -247,7 +262,7 @@ export async function analyzeEntry(
   const optimizerBundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: isVirtualFile ? '#entry' : entry,
-    treeshake: 'smallest',
+    treeshake: false,
     preserveSymlinks: true,
     plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
     external: DEPS_TO_IGNORE,
@@ -267,6 +282,7 @@ export async function analyzeEntry(
     initialDepsToOptimize,
     {
       logger,
+      shouldCheckTransitiveDependencies,
     },
   );
 

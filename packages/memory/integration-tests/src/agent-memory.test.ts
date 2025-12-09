@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
-import type { MastraDBMessage, UIMessageWithMetadata } from '@mastra/core/agent';
+import type { UIMessageWithMetadata } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -204,19 +204,6 @@ describe('Agent Memory Tests', () => {
     // due to resource scope, even on the first message
     const thread2Id = randomUUID();
 
-    // Mock the getMemoryMessages method to track if it's called
-    let getMemoryMessagesCalled = false;
-    let retrievedMemoryMessages: { messages: MastraDBMessage[] } = { messages: [] };
-
-    const originalGetMemoryMessages = (agent as any).getMemoryMessages;
-
-    (agent as any).getMemoryMessages = async (...args: any[]) => {
-      getMemoryMessagesCalled = true;
-      const result = await originalGetMemoryMessages.call(agent, ...args);
-      retrievedMemoryMessages = result?.messages ? result : { messages: [] };
-      return result;
-    };
-
     const secondResponse = await agent.generateLegacy('What did we discuss about cats?', {
       memory: {
         thread: thread2Id,
@@ -224,22 +211,13 @@ describe('Agent Memory Tests', () => {
       },
     });
 
-    // Restore original method
-    (agent as any).getMemoryMessages = originalGetMemoryMessages;
-
-    expect(getMemoryMessagesCalled).toBe(true);
-
-    // Verify that getMemoryMessages actually returned messages from the first thread
-    expect(retrievedMemoryMessages.messages.length).toBeGreaterThan(0);
-
-    // Verify that the retrieved messages contain content from the first thread
-    const hasMessagesFromFirstThread = retrievedMemoryMessages.messages.some(msg => {
-      const text = (msg.content.parts?.[0]?.type === 'text' && msg.content.parts[0]?.text?.toLowerCase()) || '';
-      return msg.threadId === thread1Id || text?.includes('cat');
-    });
-
-    expect(hasMessagesFromFirstThread).toBe(true);
+    // Verify that the agent was able to access cross-thread memory
+    // by checking that the response references the previous conversation
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
+
+    // Verify that the second thread now has messages
+    const thread2Messages = await memory.recall({ threadId: thread2Id, resourceId });
+    expect(thread2Messages.messages.length).toBeGreaterThan(0);
   });
 
   describe('Agent memory message persistence', () => {
@@ -614,12 +592,97 @@ describe('Agent with message processors', () => {
 
     const secondResponseRequestMessages: CoreMessage[] = JSON.parse(secondResponse.request.body as string).messages;
 
-    expect(secondResponseRequestMessages.length).toBe(4);
-    // Filter out tool messages and tool results, should be the same as above.
-    expect(
-      secondResponseRequestMessages.filter(m => m.role !== 'tool' || (m as any)?.tool_calls?.[0]?.type !== 'function')
-        .length,
-    ).toBe(4);
+    // Verify no tool messages or tool results are in the request
+    const toolOrToolResultMessages = secondResponseRequestMessages.filter(
+      m => m.role === 'tool' || (m.role === 'assistant' && (m as any)?.tool_calls?.length > 0),
+    );
+    expect(toolOrToolResultMessages.length).toBe(0);
+
+    // Should have at minimum: system (instructions) + user + assistant + user
+    // Optionally: system (semantic recall) if embeddings completed in time
+    expect(secondResponseRequestMessages.length).toBeGreaterThanOrEqual(4);
+
+    // Verify message structure
+    const systemMessages = secondResponseRequestMessages.filter(m => m.role === 'system');
+    const userMessages = secondResponseRequestMessages.filter(m => m.role === 'user');
+    const assistantMessages = secondResponseRequestMessages.filter(m => m.role === 'assistant');
+
+    // Should have 1-2 system messages (instructions + optional semantic recall)
+    expect(systemMessages.length).toBeGreaterThanOrEqual(1);
+    expect(systemMessages.length).toBeLessThanOrEqual(2);
+
+    // Should have 2 user messages (first question + second question)
+    expect(userMessages.length).toBe(2);
+
+    // Should have 1 assistant message (response to first question, with tool calls filtered out)
+    expect(assistantMessages.length).toBe(1);
+  }, 30_000);
+
+  it('should include working memory in LLM request when input processors run', async () => {
+    const dbFile = 'file:mastra-agent.db';
+    const storage = new LibSQLStore({
+      id: 'test-storage',
+      url: dbFile,
+    });
+    const vector = new LibSQLVector({
+      connectionUrl: dbFile,
+      id: 'test-vector',
+    });
+
+    const memory = new Memory({
+      storage,
+      vector,
+      embedder: fastembed,
+      options: {
+        workingMemory: {
+          enabled: true,
+        },
+        lastMessages: 5,
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'You are a helpful assistant',
+      model: openai('gpt-4o-mini'),
+      memory,
+    });
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    // First, set working memory
+    await memory.updateWorkingMemory({
+      threadId,
+      resourceId,
+      workingMemory: '# User Information\nName: John Doe\nFavorite color: Blue',
+    });
+
+    // Now generate a response - this should include working memory in the LLM request
+    const response = await agent.generateLegacy('What is my favorite color?', {
+      threadId,
+      resourceId,
+    });
+
+    // Check the actual request body sent to the LLM
+    const requestMessages = JSON.parse(response.request.body as string).messages;
+
+    // Should have more than just the user message
+    // Should include working memory system message + user message
+    expect(requestMessages.length).toBeGreaterThan(1);
+
+    // Should include a system message with working memory
+    const workingMemoryMessage = requestMessages.find(
+      (msg: any) => msg.role === 'system' && msg.content.includes('John Doe') && msg.content.includes('Blue'),
+    );
+
+    expect(workingMemoryMessage).toBeDefined();
+    expect(workingMemoryMessage.content).toContain('John Doe');
+    expect(workingMemoryMessage.content).toContain('Blue');
+
+    // Response should reference the working memory
+    expect(response.text.toLowerCase()).toContain('blue');
   }, 30_000);
 });
 
@@ -637,7 +700,7 @@ describe('Agent memory test gemini', () => {
     name: 'gemini-agent',
     instructions:
       'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name.',
-    model: google.chat('gemini-2.5-flash-preview-05-20'),
+    model: google.chat('gemini-2.5-flash-lite'),
     memory,
     tools: { get_weather: weatherToolCity },
   });

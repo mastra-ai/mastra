@@ -1,6 +1,6 @@
 {
   "name": "@mastra/arize",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.4",
   "description": "Arize observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -37,7 +37,8 @@
     "@opentelemetry/core": "^2.1.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
     "@opentelemetry/resources": "^2.1.0",
-    "@opentelemetry/sdk-trace-base": "^2.1.0"
+    "@opentelemetry/sdk-trace-base": "^2.1.0",
+    "@opentelemetry/semantic-conventions": "1.38.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
