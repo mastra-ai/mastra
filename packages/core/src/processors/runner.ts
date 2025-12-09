@@ -175,7 +175,7 @@ export class ProcessorRunner {
         });
 
         try {
-          const workflowResult = await this.executeWorkflowAsProcessor(
+          await this.executeWorkflowAsProcessor(
             processorOrWorkflow,
             {
               phase: 'outputResult',
@@ -186,22 +186,6 @@ export class ProcessorRunner {
             tracingContext,
             requestContext,
           );
-
-          // Apply workflow result to messageList
-          // Note: TripWire errors are now thrown directly from executeWorkflowAsProcessor
-          if (workflowResult.messages) {
-            const resultMessages = workflowResult.messages as MastraDBMessage[];
-            const deletedIds = idsBeforeProcessing.filter(
-              (i: string) => !resultMessages.some((m: MastraDBMessage) => m.id === i),
-            );
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
-            for (const message of resultMessages) {
-              messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'response');
-            }
-          }
 
           processorSpan?.end({ output: processableMessages });
         } catch (error) {
@@ -548,7 +532,7 @@ export class ProcessorRunner {
 
         try {
           const currentSystemMessages = messageList.getAllSystemMessages();
-          const workflowResult = await this.executeWorkflowAsProcessor(
+          await this.executeWorkflowAsProcessor(
             processorOrWorkflow,
             {
               phase: 'input',
@@ -560,28 +544,6 @@ export class ProcessorRunner {
             tracingContext,
             requestContext,
           );
-
-          // Apply workflow result to messageList
-          // Note: TripWire errors are now thrown directly from executeWorkflowAsProcessor
-          if (workflowResult.messages) {
-            const resultMessages = workflowResult.messages as MastraDBMessage[];
-            const deletedIds = inputIds.filter((i: string) => !resultMessages.some((m: MastraDBMessage) => m.id === i));
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
-            for (const message of resultMessages) {
-              messageList.removeByIds([message.id]);
-              if (message.role === 'system') {
-                const systemText =
-                  (message.content.content as string | undefined) ??
-                  message.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                  '';
-                messageList.addSystem(systemText);
-              } else {
-                messageList.add(message, check.getSource(message) || 'input');
-              }
-            }
-          }
 
           processorSpan?.end({ output: messageList.get.input.db() });
         } catch (error) {
@@ -799,7 +761,7 @@ export class ProcessorRunner {
 
         try {
           const currentSystemMessages = messageList.getAllSystemMessages();
-          const workflowResult = await this.executeWorkflowAsProcessor(
+          await this.executeWorkflowAsProcessor(
             processorOrWorkflow,
             {
               phase: 'inputStep',
@@ -812,30 +774,6 @@ export class ProcessorRunner {
             tracingContext,
             requestContext,
           );
-
-          // Apply workflow result to messageList
-          // Note: TripWire errors are now thrown directly from executeWorkflowAsProcessor
-          if (workflowResult.messages) {
-            const resultMessages = workflowResult.messages as MastraDBMessage[];
-            const deletedIds = idsBeforeProcessing.filter(
-              (i: string) => !resultMessages.some((m: MastraDBMessage) => m.id === i),
-            );
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
-            for (const message of resultMessages) {
-              messageList.removeByIds([message.id]);
-              if (message.role === 'system') {
-                const systemText =
-                  (message.content.content as string | undefined) ??
-                  message.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                  '';
-                messageList.addSystem(systemText);
-              } else {
-                messageList.add(message, check.getSource(message) || 'input');
-              }
-            }
-          }
 
           processorSpan?.end({ output: messageList.get.all.db() });
         } catch (error) {
@@ -1031,7 +969,7 @@ export class ProcessorRunner {
 
         try {
           const currentSystemMessages = messageList.getAllSystemMessages();
-          const workflowResult = await this.executeWorkflowAsProcessor(
+          await this.executeWorkflowAsProcessor(
             processorOrWorkflow,
             {
               phase: 'outputStep',
@@ -1047,30 +985,6 @@ export class ProcessorRunner {
             tracingContext,
             requestContext,
           );
-
-          // Apply workflow result to messageList
-          // Note: TripWire errors are now thrown directly from executeWorkflowAsProcessor
-          if (workflowResult.messages) {
-            const resultMessages = workflowResult.messages as MastraDBMessage[];
-            const deletedIds = idsBeforeProcessing.filter(
-              (i: string) => !resultMessages.some((m: MastraDBMessage) => m.id === i),
-            );
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
-            for (const message of resultMessages) {
-              messageList.removeByIds([message.id]);
-              if (message.role === 'system') {
-                const systemText =
-                  (message.content.content as string | undefined) ??
-                  message.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                  '';
-                messageList.addSystem(systemText);
-              } else {
-                messageList.add(message, check.getSource(message) || 'response');
-              }
-            }
-          }
 
           processorSpan?.end({ output: messageList.get.all.db() });
         } catch (error) {
