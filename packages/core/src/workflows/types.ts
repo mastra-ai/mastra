@@ -248,7 +248,7 @@ export interface WorkflowState {
       output?: Record<string, any>;
       payload?: Record<string, any>;
       resumePayload?: Record<string, any>;
-      error?: SerializedError;
+      error?: string | Error;
       startedAt: number;
       endedAt: number;
       suspendedAt?: number;
@@ -257,7 +257,7 @@ export interface WorkflowState {
   >;
   result?: Record<string, any>;
   payload?: Record<string, any>;
-  error?: SerializedError;
+  error?: string | Error;
 }
 
 export interface WorkflowRunState {
@@ -265,7 +265,7 @@ export interface WorkflowRunState {
   runId: string;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
-  error?: SerializedError;
+  error?: string | Error;
   requestContext?: Record<string, any>;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, SerializedStepResult<any, any, any, any>>;
