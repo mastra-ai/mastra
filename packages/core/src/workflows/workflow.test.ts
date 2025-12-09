@@ -17736,4 +17736,115 @@ describe('Workflow', () => {
       expect(result.result.result).toBe('test: No suspend data');
     });
   });
+
+  describe('Agent step with structured output schema', () => {
+    it('should pass structured output from agent step to next step with correct types', async () => {
+      // Define the structured output schema for the agent
+      const articleSchema = z.object({
+        title: z.string(),
+        summary: z.string(),
+        tags: z.array(z.string()),
+      });
+
+      const articleJson = JSON.stringify({
+        title: 'Test Article',
+        summary: 'This is a test summary',
+        tags: ['test', 'article'],
+      });
+
+      // Mock agent using V2 model that properly supports structured output
+      const agent = new Agent({
+        id: 'article-generator',
+        name: 'Article Generator',
+        instructions: 'Generate an article with title, summary, and tags',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: articleJson }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: 'text-1' });
+                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: articleJson });
+                controller.enqueue({ type: 'text-end', id: 'text-1' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                });
+                controller.close();
+              },
+            }),
+          }),
+        }),
+      });
+
+      // Create agent step WITH structuredOutput schema
+      const agentStep = createStep(agent, {
+        structuredOutput: {
+          schema: articleSchema,
+        },
+      });
+
+      // This step receives the structured output from the agent directly
+      const processArticleStep = createStep({
+        id: 'process-article',
+        description: 'Process the generated article',
+        inputSchema: articleSchema,
+        outputSchema: z.object({
+          processed: z.boolean(),
+          tagCount: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          // inputData should have title, summary, tags - not just text
+          return {
+            processed: true,
+            tagCount: inputData.tags.length,
+          };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'article-workflow',
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.object({ processed: z.boolean(), tagCount: z.number() }),
+        steps: [agentStep, processArticleStep],
+      });
+
+      new Mastra({
+        workflows: { 'article-workflow': workflow },
+        agents: { 'article-generator': agent },
+        idGenerator: randomUUID,
+      });
+
+      // Chain directly - no map needed if outputSchema matches inputSchema
+      workflow.then(agentStep).then(processArticleStep).commit();
+
+      const run = await workflow.createRun({ runId: 'structured-output-test' });
+      const result = await run.start({
+        inputData: { prompt: 'Generate an article about testing' },
+      });
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({
+          processed: true,
+          tagCount: 2,
+        });
+      }
+    });
+  });
 });

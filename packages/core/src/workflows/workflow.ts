@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
+import type { OutputSchema } from '../stream/base/schema';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -54,8 +55,8 @@ import { createTimeTravelExecutionParams, getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
-export type AgentStepOptions = Omit<
-  AgentExecutionOptions & AgentStreamOptions,
+export type AgentStepOptions<TOutput extends OutputSchema = undefined> = Omit<
+  AgentExecutionOptions<TOutput> & AgentStreamOptions,
   | 'format'
   | 'tracingContext'
   | 'requestContext'
@@ -113,6 +114,21 @@ export function createStep<
   params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
+// Overload for agent WITH structured output schema
+export function createStep<TStepId extends string, TStepOutput extends z.ZodType<any>>(
+  agent: Agent<TStepId, any>,
+  agentOptions: AgentStepOptions<TStepOutput> & { structuredOutput: { schema: TStepOutput } },
+): Step<
+  TStepId,
+  any,
+  z.ZodObject<{ prompt: z.ZodString }>,
+  TStepOutput,
+  z.ZodType<any>,
+  z.ZodType<any>,
+  DefaultEngineType
+>;
+
+// Overload for agent WITHOUT structured output (default { text: string })
 export function createStep<
   TStepId extends string,
   TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
@@ -149,6 +165,9 @@ export function createStep<
   agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
   if (params instanceof Agent) {
+    // Determine output schema based on structuredOutput option
+    const outputSchema = agentOptions?.structuredOutput?.schema ?? z.object({ text: z.string() });
+
     return {
       id: params.id,
       description: params.getDescription(),
@@ -159,9 +178,7 @@ export function createStep<
         // threadId: z.string().optional(),
       }),
       // @ts-ignore
-      outputSchema: z.object({
-        text: z.string(),
-      }),
+      outputSchema,
       execute: async ({
         inputData,
         [EMITTER_SYMBOL]: emitter,
@@ -182,6 +199,10 @@ export function createStep<
           streamPromise.resolve = resolve;
           streamPromise.reject = reject;
         });
+
+        // Track structured output result
+        let structuredResult: any = null;
+
         const toolData = {
           name: params.name,
           args: inputData,
@@ -197,6 +218,11 @@ export function createStep<
             requestContext,
             tracingContext,
             onFinish: result => {
+              // Capture structured output if available
+              const resultWithObject = result as typeof result & { object?: unknown };
+              if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+                structuredResult = resultWithObject.object;
+              }
               streamPromise.resolve(result.text);
               void agentOptions?.onFinish?.(result);
             },
@@ -209,6 +235,11 @@ export function createStep<
             requestContext,
             tracingContext,
             onFinish: result => {
+              // Capture structured output if available
+              const resultWithObject = result as typeof result & { object?: unknown };
+              if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+                structuredResult = resultWithObject.object;
+              }
               streamPromise.resolve(result.text);
               void agentOptions?.onFinish?.(result);
             },
@@ -246,6 +277,10 @@ export function createStep<
           return abort();
         }
 
+        // Return structured output if available, otherwise default text
+        if (structuredResult !== null) {
+          return structuredResult;
+        }
         return {
           text: await streamPromise.promise,
         };
