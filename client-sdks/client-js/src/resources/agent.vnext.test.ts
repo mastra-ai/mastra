@@ -68,12 +68,6 @@ describe('Agent vNext', () => {
   });
 
   it('stream: executes client tool and triggers recursive call on finish reason tool-calls', async () => {
-    // This test also verifies issue #8302 is fixed (WritableStream locked error)
-    // The error could occur at two locations during recursive stream calls:
-    // 1. writable.getWriter() during recursive pipe operation
-    // 2. writable.close() in setTimeout after stream finishes
-    // Both errors stem from the same race condition where the writable stream
-    // is locked by pipeTo() when code tries to access it.
     const toolCallId = 'call_1';
 
     // First cycle: emit tool-call and finish with tool-calls
@@ -326,6 +320,118 @@ describe('Agent vNext', () => {
     expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/stream')).length).toBe(
       1,
     );
+  });
+
+  it('stream: completes without WritableStream locked error (issue #8302)', async () => {
+    // Issue #8302: WritableStream is locked error when stream finishes
+    // This occurred because pipeTo() locks the stream and close() was called
+    // before pipeTo() completed. The fix ensures we await pipeTo before closing.
+
+    const sseChunks = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      { type: 'text-delta', payload: { text: 'Hello' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 1 } } },
+    ];
+
+    (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
+
+    // Capture any errors logged to console.error
+    const errors: any[] = [];
+    const originalConsoleError = console.error;
+    console.error = (...args: any[]) => {
+      errors.push(args);
+    };
+
+    try {
+      const resp = await agent.stream({ messages: 'hi' });
+
+      await resp.processDataStream({
+        onChunk: async () => {},
+      });
+
+      // Wait for any async cleanup (like the setTimeout that was in the buggy code)
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Verify no WritableStream locked errors occurred
+      const writableStreamError = errors.find(args =>
+        args.some(
+          (arg: any) =>
+            (typeof arg === 'string' && arg.includes('WritableStream is locked')) ||
+            (arg?.message && arg.message.includes('WritableStream is locked')) ||
+            arg?.code === 'ERR_INVALID_STATE',
+        ),
+      );
+
+      expect(writableStreamError).toBeUndefined();
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
+  it('stream: completes without errors when client tool triggers recursive stream (issue #8302)', async () => {
+    // Issue #8302: The error also occurred during recursive stream calls with client tools
+    // when writable.getWriter() was called while pipeTo() still held the lock.
+
+    const toolCallId = 'call_1';
+
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      { type: 'tool-call', payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Weather is sunny' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    // Capture any errors
+    const errors: any[] = [];
+    const originalConsoleError = console.error;
+    console.error = (...args: any[]) => {
+      errors.push(args);
+    };
+
+    try {
+      const weatherTool = createTool({
+        id: 'weatherTool',
+        description: 'Weather',
+        inputSchema: z.object({ location: z.string() }),
+        outputSchema: z.object({ temp: z.number() }),
+        execute: async () => ({ temp: 72 }),
+      });
+
+      const resp = await agent.stream({ messages: 'weather?', clientTools: { weatherTool } });
+
+      await resp.processDataStream({
+        onChunk: async () => {},
+      });
+
+      // Wait for any async cleanup
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Verify no WritableStream locked errors occurred
+      const writableStreamError = errors.find(args =>
+        args.some(
+          (arg: any) =>
+            (typeof arg === 'string' && arg.includes('WritableStream is locked')) ||
+            (arg?.message && arg.message.includes('WritableStream is locked')) ||
+            arg?.code === 'ERR_INVALID_STATE',
+        ),
+      );
+
+      expect(writableStreamError).toBeUndefined();
+    } finally {
+      console.error = originalConsoleError;
+    }
   });
 
   it('generate: returns JSON using mocked fetch', async () => {
