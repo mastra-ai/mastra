@@ -83,15 +83,15 @@ const config = {
     // PostHog analytics (only enabled if POSTHOG_API_KEY is set)
     ...(process.env.POSTHOG_API_KEY
       ? [
-          [
-            "posthog-docusaurus",
-            {
-              apiKey: process.env.POSTHOG_API_KEY,
-              appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-              enableInDevelopment: false,
-            },
-          ],
-        ]
+        [
+          "posthog-docusaurus",
+          {
+            apiKey: process.env.POSTHOG_API_KEY,
+            appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
+            enableInDevelopment: false,
+          },
+        ],
+      ]
       : []),
     // Vercel Analytics (automatically enabled in production on Vercel)
     [
@@ -208,77 +208,6 @@ const config = {
           alt: "Mastra Logo",
           src: "logo.svg",
         },
-      },
-      footer: {
-        links: [
-          {
-            title: "Developer",
-            items: [
-              {
-                label: "Docs",
-                to: "/docs/v1",
-              },
-
-              {
-                label: "Templates",
-                href: `https://mastra.ai/templates`,
-              },
-              {
-                label: "Principles of Building AI Agents",
-                href: `https://mastra.ai/book`,
-              },
-
-              {
-                label: "llms.txt",
-                href: `https://mastra.ai/llms.txt`,
-              },
-
-              {
-                label: "llms-full.txt",
-                href: `https://mastra.ai/llms-full.txt`,
-              },
-              {
-                label: "MCP Registry Registry",
-                href: `https://mastra.ai/mcp-registry-registry`,
-              },
-              {
-                label: "Mastra Cloud Status",
-                href: "https://statuspage.incident.io/mastra-cloud",
-              },
-            ],
-          },
-          {
-            title: "Company",
-            items: [
-              {
-                label: "GitHub",
-                href: "https://github.com/mastra-ai/mastra",
-              },
-              {
-                label: "Discord",
-                href: "https://discord.gg/BTYqqHKUrf",
-              },
-              {
-                label: "X",
-                href: "https://x.com/mastra_ai",
-              },
-              {
-                label: "YouTube",
-                href: "https://www.youtube.com/@mastra-ai",
-              },
-            ],
-          },
-          {
-            title: "Legal",
-            items: [
-              {
-                label: "Privacy Policy",
-                href: `https://mastra.ai/privacy-policy`,
-              },
-            ],
-          },
-        ],
-        copyright: `© ${new Date().getFullYear()} Mastra.`,
       },
       prism: {
         theme: prismMastraLight,
