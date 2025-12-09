@@ -121,7 +121,7 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
   return error as SERIALIZABLE extends true ? SerializableError : Error;
 }
 
-const DEFAULT_MAX_DEPTH = 10;
+const DEFAULT_MAX_DEPTH = 5;
 
 /**
  * Adds a toJSON method to an Error instance for proper serialization.
@@ -137,6 +137,8 @@ function addErrorToJSON(
   const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH;
   const currentDepth = options?.currentDepth ?? 0;
 
+  // Skip if error already has toJSON - preserves custom implementations
+  // and avoids re-processing (first call's options win)
   if ((error as SerializableError).toJSON) {
     return;
   }

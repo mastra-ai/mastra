@@ -340,7 +340,7 @@ export async function executeConditional(
             errorInstance,
           );
           engine.getLogger()?.trackException(mastraError);
-          engine.getLogger()?.error('Error evaluating condition: ' + errorInstance?.stack);
+          engine.getLogger()?.error('Error evaluating condition: ' + errorInstance.stack);
 
           evalSpan?.error({
             error: mastraError,

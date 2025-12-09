@@ -10392,7 +10392,11 @@ describe('MastraInngestWorkflow', () => {
         {
           payload: {
             id: 'step2',
-            error: expect.any(Error),
+            // After JSON.parse(JSON.stringify(...)), Error becomes a plain object
+            error: expect.objectContaining({
+              message: expect.stringMatching(/Step input validation failed/),
+              name: expect.any(String),
+            }),
             endedAt: expect.any(Number),
             startedAt: expect.any(Number),
             payload: {

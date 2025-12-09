@@ -129,7 +129,7 @@ export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
       category: this.category,
       code: this.id,
       details: this.details,
-      cause: this.cause?.toJSON?.() ?? this.cause,
+      cause: this.cause?.toJSON?.(),
     };
   }
 

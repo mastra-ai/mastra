@@ -128,9 +128,10 @@ describe('getErrorFromUnknown', () => {
         current = current.cause as Error | undefined;
       }
 
-      // Should have toJSON on top 3 errors (depth 0, 1, 2) but not deeper
-      // Note: maxDepth limits the recursive processing
-      expect(toJSONCount).toBeLessThanOrEqual(4); // maxDepth + 1 for the initial call
+      // With maxDepth=3, toJSON is added at depths 0, 1, 2, and 3 (4 errors total)
+      // The recursion condition `currentDepth < maxDepth` stops at depth 3,
+      // but toJSON is still added to the error at depth 3 before returning
+      expect(toJSONCount).toBe(4);
     });
 
     it('should handle deeply nested causes without stack overflow', () => {

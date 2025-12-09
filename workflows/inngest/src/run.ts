@@ -211,14 +211,7 @@ export class InngestRun<
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
 
-    if (result.status === 'failed') {
-      // Ensure error is a proper Error instance with all properties preserved
-      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
-      // Re-hydrate serialized errors in step results
-      if (result.steps) {
-        hydrateSerializedStepErrors(result.steps);
-      }
-    }
+    this.hydrateFailedResult(result);
 
     if (result.status !== 'suspended') {
       this.cleanup?.();
@@ -304,14 +297,7 @@ export class InngestRun<
     }
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
-    if (result.status === 'failed') {
-      // Ensure error is a proper Error instance with all properties preserved
-      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
-      // Re-hydrate serialized errors in step results
-      if (result.steps) {
-        hydrateSerializedStepErrors(result.steps);
-      }
-    }
+    this.hydrateFailedResult(result);
     return result;
   }
 
@@ -449,14 +435,7 @@ export class InngestRun<
     }
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
-    if (result.status === 'failed') {
-      // Ensure error is a proper Error instance with all properties preserved
-      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
-      // Re-hydrate serialized errors in step results
-      if (result.steps) {
-        hydrateSerializedStepErrors(result.steps);
-      }
-    }
+    this.hydrateFailedResult(result);
     return result;
   }
 
@@ -753,5 +732,20 @@ export class InngestRun<
     });
 
     return this.streamOutput;
+  }
+
+  /**
+   * Hydrates errors in a failed workflow result back to proper Error instances.
+   * This ensures error.cause chains and custom properties are preserved.
+   */
+  private hydrateFailedResult(result: WorkflowResult<TState, TInput, TOutput, TSteps>): void {
+    if (result.status === 'failed') {
+      // Ensure error is a proper Error instance with all properties preserved
+      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
+      // Re-hydrate serialized errors in step results
+      if (result.steps) {
+        hydrateSerializedStepErrors(result.steps);
+      }
+    }
   }
 }
