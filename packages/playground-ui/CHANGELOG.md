@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 7.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/core@0.24.7-alpha.3
+  - @mastra/client-js@0.17.0-alpha.3
+  - @mastra/react@0.0.22-alpha.3
+
 ## 7.0.0-alpha.2
 
 ### Patch Changes

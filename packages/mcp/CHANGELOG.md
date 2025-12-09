@@ -1,5 +1,18 @@
 # @mastra/mcp
 
+## 0.14.5-alpha.1
+
+### Patch Changes
+
+- Fix MCPClient automatic reconnection when session becomes invalid ([#10993](https://github.com/mastra-ai/mastra/pull/10993))
+
+  When an MCP server restarts, the session ID becomes invalid causing "Bad Request: No valid session ID provided" errors. The MCPClient now automatically detects session-related errors, reconnects to the server, and retries the tool call.
+
+  This fix addresses issue #7675 where MCPClient would fail to reconnect after an MCP server went offline and came back online.
+
+- Updated dependencies []:
+  - @mastra/core@0.24.7-alpha.3
+
 ## 0.14.5-alpha.0
 
 ### Patch Changes

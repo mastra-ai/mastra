@@ -1,5 +1,24 @@
 # @mastra/deployer
 
+## 0.24.7-alpha.3
+
+### Patch Changes
+
+- Fixed bundling to correctly exclude subpath imports of external packages. Previously, when a package like `lodash` was marked as external, subpath imports such as `lodash/merge` were still being bundled incorrectly. Now all subpaths are properly excluded. ([#10596](https://github.com/mastra-ai/mastra/pull/10596))
+
+  Fixes #10055
+
+- Improved error messages when bundling fails during deployment. ([#10997](https://github.com/mastra-ai/mastra/pull/10997))
+
+  **What changed:**
+  - Build errors now show clearer messages that identify the problematic package
+  - Added detection for common issues like missing native builds and unresolved modules
+  - Errors in workspace packages are now properly identified with actionable guidance
+
+- Updated dependencies []:
+  - @mastra/server@0.24.7-alpha.3
+  - @mastra/core@0.24.7-alpha.3
+
 ## 0.24.7-alpha.2
 
 ### Patch Changes
