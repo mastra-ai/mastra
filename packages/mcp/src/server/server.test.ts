@@ -1226,7 +1226,11 @@ describe('MCPServer', () => {
   describe('MCPServer Session Management', () => {
     let sessionServer: MCPServer;
     let sessionHttpServer: http.Server;
-    const SESSION_TEST_PORT = 9600 + Math.floor(Math.random() * 1000);
+    let currentTestPort: number;
+
+    beforeEach(() => {
+      currentTestPort = 9600 + Math.floor(Math.random() * 1000);
+    });
 
     afterEach(async () => {
       if (sessionHttpServer) {
@@ -1251,7 +1255,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1261,21 +1265,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'default-session-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Verify that a session was created by checking if we can list tools
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
     });
@@ -1288,7 +1292,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1300,21 +1304,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'no-session-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Should work in stateless mode
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
     });
@@ -1327,7 +1331,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1339,21 +1343,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'serverless-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Should work in stateless serverless mode
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
     });
@@ -1375,7 +1379,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
         await sessionServer.startHTTP({
           url,
           httpPath: '/http',
@@ -1387,12 +1391,12 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'custom-session-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
@@ -1414,7 +1418,7 @@ describe('MCPServer', () => {
       });
 
       sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-        const url = new URL(req.url || '', `http://localhost:${SESSION_TEST_PORT}`);
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
 
         await sessionServer.startHTTP({
           url,
@@ -1429,21 +1433,21 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => sessionHttpServer.listen(SESSION_TEST_PORT, () => resolve()));
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
 
       const client = new InternalMastraMCPClient({
         name: 'override-test-client',
         server: {
-          url: new URL(`http://localhost:${SESSION_TEST_PORT}/http`),
+          url: new URL(`http://localhost:${currentTestPort}/http`),
         },
       });
 
       await client.connect();
 
       // Should work with sessions disabled
-      const tools = await client.listTools();
+      const tools = await client.tools();
       expect(tools).toBeDefined();
-      expect(tools.tools).toBeInstanceOf(Array);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
 

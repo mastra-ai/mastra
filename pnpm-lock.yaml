@@ -267,15 +267,15 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../../packages/schema-compat
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
       rxjs:
         specifier: 7.8.1
         version: 7.8.1
-      zod-to-json-schema:
-        specifier: ^3.24.6
-        version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@babel/preset-env':
         specifier: ^7.28.3

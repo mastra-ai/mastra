@@ -6,7 +6,8 @@ import {
   DropdownMenuTrigger,
 } from "@site/src/components/ui/dropdown";
 import { Check } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useLocation } from "@docusaurus/router";
+import { useState } from "react";
 import { cn } from "../lib/utils";
 import {
   BetaIcon,
@@ -20,6 +21,34 @@ const versions = [
   { value: "beta", label: "Beta" },
 ];
 
+type Version = "beta" | "stable";
+
+const getVersionFromPath = (pathname: string): Version =>
+  pathname.includes("/docs/v1") ? "beta" : "stable";
+
+const getPathForVersion = (pathname: string, nextVersion: Version): string => {
+  const pathChunks = pathname.split("/");
+  let newPath: string | undefined;
+
+  if (nextVersion === "beta") {
+    if (pathChunks?.[1] === "ja") {
+      pathChunks.splice(1, 1);
+      newPath = pathChunks.join("/");
+    }
+    if (pathChunks?.[2] !== "v1") {
+      pathChunks.splice(2, 0, "v1");
+      newPath = pathChunks.join("/");
+    }
+  } else {
+    if (pathChunks?.[2] === "v1") {
+      pathChunks.splice(2, 1);
+      newPath = pathChunks.join("/");
+    }
+  }
+
+  return newPath ?? pathname;
+};
+
 export default function VersionControl({
   className,
   size = "default",
@@ -27,49 +56,11 @@ export default function VersionControl({
   className?: string;
   size?: "sm" | "default";
 }) {
-  // Initialize to stable to match SSR output and prevent hydration mismatch
-  // Stable = 0.x (default /docs), Beta = v1 (/docs/v1)
-  const [currentVersion, setCurrentVersion] = useState<"beta" | "stable">(
-    "beta",
-  );
+  const location = useLocation();
+  const pathname = location.pathname;
+  const currentVersion = getVersionFromPath(pathname);
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    const path = window.location.pathname;
-    if (path.includes("/docs/v1")) {
-      setCurrentVersion("beta");
-    } else {
-      setCurrentVersion("stable");
-    }
-  }, []);
-
-  const onChange = (nextVersion: string) => {
-    if (typeof window === "undefined") return;
-
-    const currentPath = window.location.pathname;
-    let pathChunks = currentPath.split("/");
-    let newPath: string;
-
-    if (nextVersion === "beta") {
-      if (pathChunks?.[1] === "ja") {
-        pathChunks.splice(1, 1);
-        newPath = pathChunks.join("/");
-      }
-      if (pathChunks?.[2] !== "v1") {
-        pathChunks.splice(2, 0, "v1");
-        newPath = pathChunks.join("/");
-      }
-    } else {
-      if (pathChunks?.[2] === "v1") {
-        pathChunks.splice(2, 1);
-        newPath = pathChunks.join("/");
-      }
-    }
-
-    if (newPath) {
-      window.location.href = newPath;
-    }
-  };
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -102,19 +93,24 @@ export default function VersionControl({
           return (
             <DropdownMenuItem
               key={version.value}
-              onClick={() => onChange(version.value)}
+              asChild
               className={cn(
                 "flex items-center text-(--mastra-text-secondary) justify-between w-full",
                 isActive && " font-medium",
               )}
             >
-              <span className="inline-flex dark:text-white text-black items-center gap-2">
-                {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
-                <span>{version.label}</span>
-              </span>
-              {isActive && (
-                <Check className="size-4 text-(--mastra-green-accent-2)" />
-              )}
+              <a
+                href={getPathForVersion(pathname, version.value as Version)}
+                className="flex w-full items-center justify-between no-underline"
+              >
+                <span className="inline-flex dark:text-white text-black items-center gap-2">
+                  {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
+                  <span>{version.label}</span>
+                </span>
+                {isActive && (
+                  <Check className="size-4 text-(--mastra-green-accent-2)" />
+                )}
+              </a>
             </DropdownMenuItem>
           );
         })}

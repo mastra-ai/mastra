@@ -307,6 +307,7 @@ export type WorkflowInfo = {
   inputSchema: string | undefined;
   outputSchema: string | undefined;
   options?: WorkflowOptions;
+  stepCount?: number;
 };
 
 export type DefaultEngineType = {};
