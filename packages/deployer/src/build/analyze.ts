@@ -318,11 +318,11 @@ If you think your configuration is valid, please open an issue.`);
   const userBundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
+  const customExternals = Array.isArray(externals) ? externals : [];
+  const allExternals = [...GLOBAL_EXTERNALS, ...customExternals];
+
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
-
-  const { externals: customExternals = [] } = bundlerOptions || {};
-  const allExternals = [...GLOBAL_EXTERNALS, ...customExternals];
 
   logger.info('Analyzing dependencies...');
 
