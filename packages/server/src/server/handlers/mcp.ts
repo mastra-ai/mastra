@@ -13,7 +13,7 @@ import {
   mcpToolInfoSchema,
   executeToolResponseSchema,
 } from '../schemas/mcp';
-import type { RuntimeContext } from '../server-adapter';
+import type { ServerContext } from '../server-adapter';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 // ============================================================================
@@ -35,7 +35,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     perPage,
     limit,
     offset,
-  }: RuntimeContext & { page?: number; perPage?: number; limit?: number; offset?: number }) => {
+  }: ServerContext & { page?: number; perPage?: number; limit?: number; offset?: number }) => {
     if (!mastra || typeof mastra.listMCPServers !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or listMCPServers method not available' });
     }
@@ -106,7 +106,7 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   summary: 'Get MCP server details',
   description: 'Returns detailed information about a specific MCP server',
   tags: ['MCP'],
-  handler: async ({ mastra, id, version }: RuntimeContext & { id: string; version?: string }) => {
+  handler: async ({ mastra, id, version }: ServerContext & { id: string; version?: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -139,7 +139,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   summary: 'List MCP server tools',
   description: 'Returns a list of tools available on the specified MCP server',
   tags: ['MCP'],
-  handler: async ({ mastra, serverId }: RuntimeContext & { serverId: string }) => {
+  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -167,7 +167,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   summary: 'Get MCP server tool details',
   description: 'Returns detailed information about a specific tool on the MCP server',
   tags: ['MCP'],
-  handler: async ({ mastra, serverId, toolId }: RuntimeContext & { serverId: string; toolId: string }) => {
+  handler: async ({ mastra, serverId, toolId }: ServerContext & { serverId: string; toolId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -206,7 +206,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
     serverId,
     toolId,
     data,
-  }: RuntimeContext & { serverId: string; toolId: string; data?: unknown }) => {
+  }: ServerContext & { serverId: string; toolId: string; data?: unknown }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -257,7 +257,7 @@ export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
   summary: 'MCP HTTP Transport',
   description: 'Streamable HTTP transport endpoint for MCP protocol communication',
   tags: ['MCP'],
-  handler: async ({ mastra, serverId }: RuntimeContext & { serverId: string }): Promise<MCPHttpTransportResult> => {
+  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPHttpTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -283,7 +283,7 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
   summary: 'MCP SSE Transport',
   description: 'SSE transport endpoint for MCP protocol communication',
   tags: ['MCP'],
-  handler: async ({ mastra, serverId }: RuntimeContext & { serverId: string }): Promise<MCPSseTransportResult> => {
+  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPSseTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }

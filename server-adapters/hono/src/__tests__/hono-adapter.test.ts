@@ -25,8 +25,6 @@ describe('Hono Server Adapter', () => {
         tools: context.tools,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        playground: context.playground,
-        isDev: context.isDev,
       });
 
       await adapter.init();
