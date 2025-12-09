@@ -349,6 +349,7 @@ export async function executeStep(
           },
           outputWriter,
         ),
+        outputWriter,
         // Disable scorers must be explicitly set to false they are on by default
         scorers: disableScorers === false ? undefined : step.scorers,
         validateInputs: engine.options?.validateInputs,
