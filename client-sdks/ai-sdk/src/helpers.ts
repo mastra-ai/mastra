@@ -15,7 +15,7 @@ import { isDataChunkType } from './utils';
  * 'tripwire' and 'retry' are Mastra-specific reasons for processor scenarios,
  * which are mapped to 'other' for AI SDK compatibility.
  */
-function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
+export function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
   if (reason === 'tripwire' || reason === 'retry') {
     return 'other';
   }
