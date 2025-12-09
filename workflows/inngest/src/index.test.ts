@@ -11786,7 +11786,7 @@ describe('MastraInngestWorkflow', () => {
   });
 
   describe('Agent step with structured output schema', () => {
-    it.only('should pass structured output from agent step to next step with correct types', async ctx => {
+    it('should pass structured output from agent step to next step with correct types', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
