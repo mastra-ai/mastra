@@ -341,4 +341,28 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       );
     }
   }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      const values: Record<string, any> = {
+        var_runId: runId,
+        var_workflow_name: workflowName,
+      };
+
+      await this.client.command({
+        query: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE run_id = {var_runId:String} AND workflow_name = {var_workflow_name:String}`,
+        query_params: values,
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
+        },
+        error,
+      );
+    }
+  }
 }

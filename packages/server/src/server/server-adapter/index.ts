@@ -58,8 +58,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected prefix?: string;
   protected openapiPath?: string;
   protected taskStore?: InMemoryTaskStore;
-  protected playground?: boolean;
-  protected isDev?: boolean;
   protected customRouteAuthConfig?: Map<string, boolean>;
   protected streamOptions: StreamOptions;
 
@@ -71,8 +69,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     prefix = '',
     openapiPath = '',
     taskStore,
-    playground = false,
-    isDev = false,
     customRouteAuthConfig,
     streamOptions,
   }: {
@@ -83,8 +79,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     prefix?: string;
     openapiPath?: string;
     taskStore?: InMemoryTaskStore;
-    playground?: boolean;
-    isDev?: boolean;
     customRouteAuthConfig?: Map<string, boolean>;
     streamOptions?: StreamOptions;
   }) {
@@ -95,8 +89,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.prefix = prefix;
     this.openapiPath = openapiPath;
     this.taskStore = taskStore;
-    this.playground = playground;
-    this.isDev = isDev;
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
 

@@ -209,6 +209,10 @@ export class UpstashStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot(params);
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns(args);
   }

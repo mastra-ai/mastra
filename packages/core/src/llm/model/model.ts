@@ -26,6 +26,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import { SpanType } from '../../observability';
 import { executeWithContext, executeWithContextSync } from '../../observability/utils';
+import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 import { delay, isZodType } from '../../utils';
 
 import type {
@@ -270,7 +271,7 @@ export class MastraLLMV1 extends MastraBase {
         },
         attributes: {
           finishReason: result.finishReason,
-          usage: result.usage,
+          usage: convertV4Usage(result.usage),
         },
       });
 
@@ -371,7 +372,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           attributes: {
             finishReason: result.finishReason,
-            usage: result.usage,
+            usage: convertV4Usage(result.usage),
           },
         });
 
@@ -553,7 +554,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           attributes: {
             finishReason: props?.finishReason,
-            usage: props?.usage,
+            usage: convertV4Usage(props?.usage),
           },
         });
 

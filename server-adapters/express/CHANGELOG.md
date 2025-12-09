@@ -1,5 +1,17 @@
 # @mastra/express
 
+## 0.0.2-beta.4
+
+### Patch Changes
+
+- Add HonoApp interface to eliminate `as any` cast when passing Hono app to MastraServer. Users can now pass typed Hono apps directly without casting. ([#10846](https://github.com/mastra-ai/mastra/pull/10846))
+
+  Fix example type issues in server-adapters
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+  - @mastra/server@1.0.0-beta.9
+
 ## 0.0.2-beta.3
 
 ### Patch Changes

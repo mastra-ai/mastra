@@ -16,6 +16,7 @@ import type {
   MCPToolCallAttributes,
   ModelGenerationAttributes,
   ToolCallAttributes,
+  UsageStats,
   WorkflowRunAttributes,
 } from '@mastra/core/observability';
 import type { Attributes } from '@opentelemetry/api';
@@ -50,6 +51,62 @@ import {
   ATTR_GEN_AI_TOOL_NAME,
 } from '@opentelemetry/semantic-conventions/incubating';
 import { convertMastraMessagesToGenAIMessages } from './gen-ai-messages';
+
+/**
+ * Token usage attributes following OTel GenAI semantic conventions.
+ * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+ */
+export interface OtelUsageMetrics {
+  [ATTR_GEN_AI_USAGE_INPUT_TOKENS]?: number;
+  [ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]?: number;
+  'gen_ai.usage.reasoning_tokens'?: number;
+  'gen_ai.usage.cached_input_tokens'?: number;
+  'gen_ai.usage.cache_write_tokens'?: number;
+  'gen_ai.usage.audio_input_tokens'?: number;
+  'gen_ai.usage.audio_output_tokens'?: number;
+}
+
+/**
+ * Formats UsageStats to OTel GenAI semantic convention attributes.
+ */
+export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
+  if (!usage) return {};
+
+  const metrics: OtelUsageMetrics = {};
+
+  if (usage.inputTokens !== undefined) {
+    metrics[ATTR_GEN_AI_USAGE_INPUT_TOKENS] = usage.inputTokens;
+  }
+
+  if (usage.outputTokens !== undefined) {
+    metrics[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS] = usage.outputTokens;
+  }
+
+  // Reasoning tokens from outputDetails
+  if (usage.outputDetails?.reasoning !== undefined) {
+    metrics['gen_ai.usage.reasoning_tokens'] = usage.outputDetails.reasoning;
+  }
+
+  // Cache read tokens from inputDetails
+  if (usage.inputDetails?.cacheRead !== undefined) {
+    metrics['gen_ai.usage.cached_input_tokens'] = usage.inputDetails.cacheRead;
+  }
+
+  // Cache write tokens from inputDetails
+  if (usage.inputDetails?.cacheWrite !== undefined) {
+    metrics['gen_ai.usage.cache_write_tokens'] = usage.inputDetails.cacheWrite;
+  }
+
+  // Audio tokens from inputDetails/outputDetails
+  if (usage.inputDetails?.audio !== undefined) {
+    metrics['gen_ai.usage.audio_input_tokens'] = usage.inputDetails.audio;
+  }
+  if (usage.outputDetails?.audio !== undefined) {
+    metrics['gen_ai.usage.audio_output_tokens'] = usage.outputDetails.audio;
+  }
+
+  return metrics;
+}
 
 /**
  * Get the operation name based on span type for gen_ai.operation.name
@@ -174,25 +231,15 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
       attributes[ATTR_GEN_AI_PROVIDER_NAME] = normalizeProvider(modelAttrs.provider);
     }
 
-    // Token usage - use OTEL standard naming
-    if (modelAttrs.usage) {
-      const inputTokens = modelAttrs.usage.inputTokens ?? modelAttrs.usage.promptTokens;
-      const outputTokens = modelAttrs.usage.outputTokens ?? modelAttrs.usage.completionTokens;
-
-      if (inputTokens !== undefined) {
-        attributes[ATTR_GEN_AI_USAGE_INPUT_TOKENS] = inputTokens;
-      }
-      if (outputTokens !== undefined) {
-        attributes[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS] = outputTokens;
-      }
-      // Add other token metrics if present
-      if (modelAttrs.usage.reasoningTokens !== undefined) {
-        attributes['gen_ai.usage.reasoning_tokens'] = modelAttrs.usage.reasoningTokens;
-      }
-      if (modelAttrs.usage.cachedInputTokens !== undefined) {
-        attributes['gen_ai.usage.cached_input_tokens'] = modelAttrs.usage.cachedInputTokens;
-      }
+    // Agent context - allows correlating model generation with the agent that invoked it
+    if (modelAttrs.agentId) {
+      attributes[ATTR_GEN_AI_AGENT_ID] = modelAttrs.agentId;
     }
+    if (modelAttrs.agentName) {
+      attributes[ATTR_GEN_AI_AGENT_NAME] = modelAttrs.agentName;
+    }
+    // Token usage - use OTEL standard naming + OpenInference conventions
+    Object.assign(attributes, formatUsageMetrics(modelAttrs.usage));
 
     // Parameters using OTEL conventions
     if (modelAttrs.parameters) {
