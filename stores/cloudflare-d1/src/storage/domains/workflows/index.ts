@@ -287,4 +287,24 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       );
     }
   }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    try {
+      const sql = `DELETE FROM ${fullTableName} WHERE workflow_name = ? AND run_id = ?`;
+      const params: SqlParam[] = [workflowName, runId];
+      await this.operations.executeQuery({ sql, params });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to delete workflow run by ID: ${error instanceof Error ? error.message : String(error)}`,
+          details: { runId, workflowName },
+        },
+        error,
+      );
+    }
+  }
 }

@@ -257,7 +257,9 @@ export interface SaveNetworkMessageToMemoryParams {
   networkId: string;
 }
 
-export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraDBMessage)[];
+export type SaveMessageToMemoryResponse = {
+  messages: (MastraMessageV1 | MastraDBMessage)[];
+};
 
 export interface CreateMemoryThreadParams {
   title?: string;

@@ -98,6 +98,10 @@ export interface UsageStats {
  * Model Generation attributes
  */
 export interface ModelGenerationAttributes extends AIBaseAttributes {
+  /** Agent identifier (when generation is part of an agent run) */
+  agentId?: string;
+  /** Human-readable agent name (when generation is part of an agent run) */
+  agentName?: string;
   /** Model name (e.g., 'gpt-4', 'claude-3') */
   model?: string;
   /** Model provider (e.g., 'openai', 'anthropic') */

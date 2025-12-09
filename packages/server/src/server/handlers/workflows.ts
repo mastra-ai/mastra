@@ -228,6 +228,40 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   },
 });
 
+export const DELETE_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/api/workflows/:workflowId/runs/:runId',
+  responseType: 'json',
+  pathParamSchema: workflowRunPathParams,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Delete workflow run by ID',
+  description: 'Deletes a specific workflow run by ID',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId, runId }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      if (!runId) {
+        throw new HTTPException(400, { message: 'Run ID is required' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      await workflow.deleteWorkflowRunById(runId);
+
+      return { message: 'Workflow run deleted' };
+    } catch (error) {
+      return handleError(error, 'Error deleting workflow run');
+    }
+  },
+});
+
 export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/create-run',

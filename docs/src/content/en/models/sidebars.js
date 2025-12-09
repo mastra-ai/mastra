@@ -183,6 +183,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/helicone",
+          label: "Helicone",
+        },
+        {
+          type: "doc",
           id: "providers/huggingface",
           label: "Hugging Face",
         },

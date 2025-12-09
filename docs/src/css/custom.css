@@ -351,7 +351,36 @@ h3 code,
 h4 code,
 h5 code,
 h6 code {
+  letter-spacing: normal;
+}
+
+h1 code {
+  font-size: calc(var(--ifm-h1-font-size) - 0.25rem);
+  border-radius: 10px;
+}
+
+h2 code {
   font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
+  border-radius: 10px;
+}
+
+h3 code {
+  font-size: calc(var(--ifm-h3-font-size) - 0.25rem);
+  border-radius: 10px;
+}
+
+h4 code {
+  font-size: calc(var(--ifm-h4-font-size) - 0.25rem);
+  border-radius: 10px;
+}
+
+h5 code {
+  font-size: calc(var(--ifm-h5-font-size) - 0.25rem);
+  border-radius: 10px;
+}
+
+h6 code {
+  font-size: calc(var(--ifm-h6-font-size) - 0.25rem);
   border-radius: 10px;
 }
 

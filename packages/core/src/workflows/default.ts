@@ -1,11 +1,9 @@
-import type { WritableStream } from 'node:stream/web';
 import { TripWire } from '../agent/trip-wire';
 import type { RequestContext } from '../di';
 import type { IErrorDefinition } from '../error';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { Span, SpanType, TracingContext } from '../observability';
-import type { ChunkType } from '../stream/types';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type {
@@ -33,6 +31,7 @@ import type {
   EntryExecutionResult,
   ExecutionContext,
   MutableContext,
+  OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
   StepExecutionResult,
@@ -247,7 +246,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     requestContext: RequestContext;
     tracingContext: TracingContext;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     stepSpan?: Span<SpanType.WORKFLOW_STEP>;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Default: return null to use standard execution
@@ -497,7 +496,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     requestContext: RequestContext;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     abortController: AbortController;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
@@ -589,7 +588,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController: params.abortController,
         emitter: params.emitter,
         requestContext: currentRequestContext,
-        writableStream: params.writableStream,
+        outputWriter: params.outputWriter,
         disableScorers,
       });
 
