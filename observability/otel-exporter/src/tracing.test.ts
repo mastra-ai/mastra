@@ -281,9 +281,8 @@ describe('OtelExporter', () => {
         model: 'gpt-4',
         provider: 'openai',
         usage: {
-          promptTokens: 10,
-          completionTokens: 5,
-          totalTokens: 15,
+          inputTokens: 10,
+          outputTokens: 5,
         },
       } as unknown as AnyExportedSpan;
 
