@@ -191,9 +191,7 @@ export async function executeParallel(
   }
 
   if (execResults.status === 'failed') {
-    parallelSpan?.error({
-      error: new Error(execResults.error),
-    });
+    parallelSpan?.error({ error: execResults.error });
   } else {
     parallelSpan?.end({
       output: execResults.output || execResults,
@@ -450,9 +448,7 @@ export async function executeConditional(
   }
 
   if (execResults.status === 'failed') {
-    conditionalSpan?.error({
-      error: new Error(execResults.error),
-    });
+    conditionalSpan?.error({ error: execResults.error });
   } else {
     conditionalSpan?.end({
       output: execResults.output || execResults,
