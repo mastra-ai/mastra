@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { Mastra } from '@mastra/core/mastra';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
+import type { PubSub } from '@mastra/core/events';
 import type {
   ExecutionContext,
   Step,
   StepResult,
   StepFailure,
-  Emitter,
   ExecutionEngineOptions,
   TimeTravelExecutionParams,
   WorkflowResult,
@@ -179,7 +179,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     timeTravel?: TimeTravelExecutionParams;
     prevOutput: any;
     inputData: any;
-    emitter: Emitter;
+    pubsub: PubSub;
     startedAt: number;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Only handle InngestWorkflow instances
@@ -187,7 +187,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       return null;
     }
 
-    const { step, stepResults, executionContext, resume, timeTravel, prevOutput, inputData, emitter, startedAt } =
+    const { step, stepResults, executionContext, resume, timeTravel, prevOutput, inputData, pubsub, startedAt } =
       params;
 
     const isResume = !!resume?.steps?.length;
@@ -288,13 +288,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       `workflow.${executionContext.workflowId}.step.${step.id}.nestedwf-results`,
       async () => {
         if (result.status === 'failed') {
-          await emitter.emit('watch', {
-            type: 'workflow-step-result',
-            payload: {
-              id: step.id,
-              status: 'failed',
-              error: result?.error,
-              payload: prevOutput,
+          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+            type: 'watch',
+            runId: executionContext.runId,
+            data: {
+              type: 'workflow-step-result',
+              payload: {
+                id: step.id,
+                status: 'failed',
+                error: result?.error,
+                payload: prevOutput,
+              },
             },
           });
 
@@ -309,11 +313,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
 
-            await emitter.emit('watch', {
-              type: 'workflow-step-suspended',
-              payload: {
-                id: step.id,
-                status: 'suspended',
+            await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+              type: 'watch',
+              runId: executionContext.runId,
+              data: {
+                type: 'workflow-step-suspended',
+                payload: {
+                  id: step.id,
+                  status: 'suspended',
+                },
               },
             });
 
@@ -339,20 +347,28 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           };
         }
 
-        await emitter.emit('watch', {
-          type: 'workflow-step-result',
-          payload: {
-            id: step.id,
-            status: 'success',
-            output: result?.result,
+        await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+          type: 'watch',
+          runId: executionContext.runId,
+          data: {
+            type: 'workflow-step-result',
+            payload: {
+              id: step.id,
+              status: 'success',
+              output: result?.result,
+            },
           },
         });
 
-        await emitter.emit('watch', {
-          type: 'workflow-step-finish',
-          payload: {
-            id: step.id,
-            metadata: {},
+        await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+          type: 'watch',
+          runId: executionContext.runId,
+          data: {
+            type: 'workflow-step-finish',
+            payload: {
+              id: step.id,
+              metadata: {},
+            },
           },
         });
 

@@ -3,13 +3,8 @@ import type { Event } from '../../events/types';
 import type { Mastra } from '../../mastra';
 import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
-import type {
-  Emitter,
-  SerializedStepFlowEntry,
-  StepResult,
-  RestartExecutionParams,
-  TimeTravelExecutionParams,
-} from '../types';
+import type { PubSub } from '../../events/pubsub';
+import type { SerializedStepFlowEntry, StepResult, RestartExecutionParams, TimeTravelExecutionParams } from '../types';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
@@ -54,7 +49,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       resumePayload: any;
       resumePath: number[];
     };
-    emitter: Emitter;
+    pubsub?: PubSub; // Not used - evented engine uses this.mastra.pubsub directly
     requestContext: RequestContext;
     retryConfig?: {
       attempts?: number;

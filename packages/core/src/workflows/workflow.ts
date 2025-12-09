@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import EventEmitter from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
@@ -9,6 +8,9 @@ import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraScorers } from '../evals';
+import { EventEmitterPubSub } from '../events/event-emitter';
+import type { PubSub } from '../events/pubsub';
+import type { Event } from '../events/types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
@@ -18,7 +20,7 @@ import { WorkflowRunOutput } from '../stream/RunOutput';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
@@ -164,7 +166,8 @@ export function createStep<
       }),
       execute: async ({
         inputData,
-        [EMITTER_SYMBOL]: emitter,
+        runId,
+        [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: streamFormat,
         requestContext,
         tracingContext,
@@ -219,22 +222,24 @@ export function createStep<
         }
 
         if (streamFormat === 'legacy') {
-          await emitter.emit('watch', {
-            type: 'tool-call-streaming-start',
-            ...(toolData ?? {}),
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
           });
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') {
-              await emitter.emit('watch', {
-                type: 'tool-call-delta',
-                ...(toolData ?? {}),
-                argsTextDelta: chunk.textDelta,
+              await pubsub.publish(`workflow.events.v2.${runId}`, {
+                type: 'watch',
+                runId,
+                data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
               });
             }
           }
-          await emitter.emit('watch', {
-            type: 'tool-call-streaming-finish',
-            ...(toolData ?? {}),
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
           });
         } else {
           for await (const chunk of stream) {
@@ -1123,7 +1128,7 @@ export class Workflow<
     restart,
     resume,
     timeTravel,
-    [EMITTER_SYMBOL]: emitter,
+    [PUBSUB_SYMBOL]: pubsub,
     mastra,
     requestContext,
     abort,
@@ -1156,7 +1161,7 @@ export class Workflow<
       label?: string;
       forEachIndex?: number;
     };
-    [EMITTER_SYMBOL]: { emit: (event: string, data: any) => void };
+    [PUBSUB_SYMBOL]: PubSub;
     mastra: Mastra;
     requestContext?: RequestContext;
     engine: DefaultEngineType;
@@ -1206,7 +1211,7 @@ export class Workflow<
     });
 
     const unwatch = run.watch(event => {
-      emitter.emit('nested-watch', { event, workflowId: this.id });
+      pubsub.publish('nested-watch', { type: 'nested-watch', runId: run.runId, data: { event, workflowId: this.id } });
     });
 
     if (retryCount && retryCount > 0 && isResume && requestContext) {
@@ -1469,7 +1474,7 @@ export class Run<
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > {
   #abortController?: AbortController;
-  protected emitter: EventEmitter;
+  protected pubsub: PubSub;
   /**
    * Unique identifier for this workflow
    */
@@ -1582,7 +1587,7 @@ export class Run<
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
     this.#mastra = params.mastra;
-    this.emitter = new EventEmitter();
+    this.pubsub = new EventEmitterPubSub();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
     this.disableScorers = params.disableScorers;
@@ -1756,20 +1761,7 @@ export class Run<
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
       initialState: initialStateToUse,
-      emitter: {
-        emit: async (event: string, data: any) => {
-          this.emitter.emit(event, data);
-        },
-        on: (event: string, callback: (data: any) => void) => {
-          this.emitter.on(event, callback);
-        },
-        off: (event: string, callback: (data: any) => void) => {
-          this.emitter.off(event, callback);
-        },
-        once: (event: string, callback: (data: any) => void) => {
-          this.emitter.once(event, callback);
-        },
-      },
+      pubsub: this.pubsub,
       retryConfig: this.retryConfig,
       requestContext: requestContext ?? new RequestContext(),
       abortController: this.abortController,
@@ -1853,9 +1845,10 @@ export class Run<
     });
 
     this.closeStreamAction = async () => {
-      this.emitter.emit('watch', {
-        type: 'workflow-finish',
-        payload: { runId: this.runId },
+      await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+        type: 'watch',
+        runId: this.runId,
+        data: { type: 'workflow-finish', payload: { runId: this.runId } },
       });
       unwatch();
       await Promise.all(this.#observerHandlers.map(handler => handler()));
@@ -1870,9 +1863,10 @@ export class Run<
       }
     };
 
-    this.emitter.emit('watch', {
-      type: 'workflow-start',
-      payload: { runId: this.runId },
+    void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+      type: 'watch',
+      runId: this.runId,
+      data: { type: 'workflow-start', payload: { runId: this.runId } },
     });
     this.executionResults = this._start({
       inputData,
@@ -2066,7 +2060,11 @@ export class Run<
           initialState,
           outputOptions,
           outputWriter: async chunk => {
-            void self.emitter.emit('watch', chunk);
+            void self.pubsub.publish(`workflow.events.v2.${self.runId}`, {
+              type: 'watch',
+              runId: self.runId,
+              data: chunk,
+            });
           },
         });
         let executionResults;
@@ -2258,25 +2256,37 @@ export class Run<
    * @internal
    */
   watch(cb: (event: WorkflowStreamEvent) => void): () => void {
-    const nestedWatchCb = ({
-      event,
-      workflowId,
-    }: {
-      event: { type: string; payload: { id: string } & Record<string, unknown> };
-      workflowId: string;
-    }) => {
-      this.emitter.emit('watch', {
-        ...event,
-        ...(event.payload?.id ? { payload: { ...event.payload, id: `${workflowId}.${event.payload.id}` } } : {}),
-      });
+    const wrappedCb = (event: Event) => {
+      if (event.runId === this.runId) {
+        cb(event.data as WorkflowStreamEvent);
+      }
     };
 
-    this.emitter.on('watch', cb);
-    this.emitter.on('nested-watch', nestedWatchCb);
+    const nestedWatchCb = (event: Event) => {
+      if (event.runId === this.runId) {
+        const { event: nestedEvent, workflowId } = event.data as {
+          event: { type: string; payload: { id: string } & Record<string, unknown> };
+          workflowId: string;
+        };
+        this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          type: 'watch',
+          runId: this.runId,
+          data: {
+            ...nestedEvent,
+            ...(nestedEvent.payload?.id
+              ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
+              : {}),
+          },
+        });
+      }
+    };
+
+    this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
+    this.pubsub.subscribe('nested-watch', nestedWatchCb);
 
     return () => {
-      this.emitter.off('watch', cb);
-      this.emitter.off('nested-watch', nestedWatchCb);
+      this.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
+      this.pubsub.unsubscribe('nested-watch', nestedWatchCb);
     };
   }
 
@@ -2487,21 +2497,7 @@ export class Run<
           label: params.label,
         },
         format: params.format,
-        emitter: {
-          emit: (event: string, data: any) => {
-            this.emitter.emit(event, data);
-            return Promise.resolve();
-          },
-          on: (event: string, callback: (data: any) => void) => {
-            this.emitter.on(event, callback);
-          },
-          off: (event: string, callback: (data: any) => void) => {
-            this.emitter.off(event, callback);
-          },
-          once: (event: string, callback: (data: any) => void) => {
-            this.emitter.once(event, callback);
-          },
-        },
+        pubsub: this.pubsub,
         requestContext: requestContextToUse,
         abortController: this.abortController,
         workflowSpan,
@@ -2625,20 +2621,7 @@ export class Run<
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
       restart: restartData,
-      emitter: {
-        emit: async (event: string, data: any) => {
-          this.emitter.emit(event, data);
-        },
-        on: (event: string, callback: (data: any) => void) => {
-          this.emitter.on(event, callback);
-        },
-        off: (event: string, callback: (data: any) => void) => {
-          this.emitter.off(event, callback);
-        },
-        once: (event: string, callback: (data: any) => void) => {
-          this.emitter.once(event, callback);
-        },
-      },
+      pubsub: this.pubsub,
       retryConfig: this.retryConfig,
       requestContext: requestContextToUse,
       abortController: this.abortController,
@@ -2771,20 +2754,7 @@ export class Run<
       graph: this.executionGraph,
       timeTravel: timeTravelData,
       serializedStepGraph: this.serializedStepGraph,
-      emitter: {
-        emit: async (event: string, data: any) => {
-          this.emitter.emit(event, data);
-        },
-        on: (event: string, callback: (data: any) => void) => {
-          this.emitter.on(event, callback);
-        },
-        off: (event: string, callback: (data: any) => void) => {
-          this.emitter.off(event, callback);
-        },
-        once: (event: string, callback: (data: any) => void) => {
-          this.emitter.once(event, callback);
-        },
-      },
+      pubsub: this.pubsub,
       retryConfig: this.retryConfig,
       requestContext: requestContextToUse,
       abortController: this.abortController,
