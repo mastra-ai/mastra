@@ -201,4 +201,63 @@ describe('getErrorFromUnknown', () => {
       expect(json.custom).toBe(true);
     });
   });
+
+  describe('edge cases', () => {
+    it('should handle mixed cause types (string cause)', () => {
+      const error = new Error('top error', { cause: 'string cause' });
+      const result = getErrorFromUnknown(error);
+
+      const json = JSON.parse(JSON.stringify(result));
+      expect(json.message).toBe('top error');
+      expect(json.cause).toBe('string cause');
+    });
+
+    it('should handle mixed cause types (plain object cause)', () => {
+      const error = new Error('top error', { cause: { code: 'ERR_PLAIN', details: 'some details' } });
+      const result = getErrorFromUnknown(error);
+
+      const json = JSON.parse(JSON.stringify(result));
+      expect(json.message).toBe('top error');
+      expect(json.cause).toEqual({ code: 'ERR_PLAIN', details: 'some details' });
+    });
+
+    it('should handle number as unknown input', () => {
+      const result = getErrorFromUnknown(42, { fallbackMessage: 'Unexpected error' });
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe('Unexpected error');
+    });
+
+    it('should handle array as unknown input', () => {
+      const result = getErrorFromUnknown(['error1', 'error2'], { fallbackMessage: 'Unexpected error' });
+      expect(result).toBeInstanceOf(Error);
+      // Arrays get JSON stringified as the message
+      expect(result.message).toBe('["error1","error2"]');
+    });
+
+    it('should handle symbol as unknown input', () => {
+      const result = getErrorFromUnknown(Symbol('error'), { fallbackMessage: 'Unexpected error' });
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe('Unexpected error');
+    });
+
+    it('should handle undefined as unknown input', () => {
+      const result = getErrorFromUnknown(undefined, { fallbackMessage: 'Unexpected error' });
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe('Unexpected error');
+    });
+
+    it('should handle circular references in cause chains gracefully via maxDepth', () => {
+      const error1 = new Error('error 1');
+      const error2 = new Error('error 2', { cause: error1 });
+      // Create a circular reference
+      (error1 as any).cause = error2;
+
+      // Should not throw due to maxDepth protection
+      expect(() => getErrorFromUnknown(error2, { maxDepth: 3 })).not.toThrow();
+
+      const result = getErrorFromUnknown(error2, { maxDepth: 3 });
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe('error 2');
+    });
+  });
 });

@@ -2928,7 +2928,6 @@ describe('Workflow', () => {
 
         const run = await workflow.createRun();
         const result = await run.start({ inputData: { status: 'success' } });
-        console.dir({ result }, { depth: null });
 
         expect(step1Action).toHaveBeenCalled();
         expect(step2Action).toHaveBeenCalled();
@@ -3006,6 +3005,82 @@ describe('Workflow', () => {
           name: 'Error',
           message: 'Failed',
         });
+
+        await mastra.stopEventEngine();
+      });
+
+      it('should preserve custom error properties and cause chains in evented workflows', async () => {
+        // Create a nested error with cause chain and custom properties
+        const rootCause = new Error('Database connection failed');
+        (rootCause as any).code = 'ECONNREFUSED';
+        (rootCause as any).host = 'localhost';
+
+        const middleCause = new Error('Query execution failed', { cause: rootCause });
+        (middleCause as any).query = 'SELECT * FROM users';
+
+        const topError = new Error('Failed to fetch user data', { cause: middleCause });
+        (topError as any).statusCode = 500;
+        (topError as any).requestId = 'req-12345';
+
+        const step1Action = vi.fn().mockImplementation(() => {
+          throw topError;
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute: step1Action,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-error-props-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          steps: [step1],
+        });
+
+        workflow.then(step1).commit();
+
+        const mastra = new Mastra({
+          workflows: { 'test-error-props-workflow': workflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
+        await mastra.startEventEngine();
+
+        const run = await workflow.createRun();
+        let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
+        try {
+          result = await run.start({ inputData: {} });
+        } catch {
+          // do nothing
+        }
+
+        expect(step1Action).toHaveBeenCalled();
+
+        const step1Result = result?.steps?.step1;
+        expect(step1Result).toBeDefined();
+        expect(step1Result?.status).toBe('failed');
+
+        // Check that the error preserves custom properties
+        const error = (step1Result as any)?.error;
+        expect(error).toBeDefined();
+        expect(error.name).toBe('Error');
+        expect(error.message).toBe('Failed to fetch user data');
+        expect(error.statusCode).toBe(500);
+        expect(error.requestId).toBe('req-12345');
+
+        // Check that cause chain is preserved
+        expect(error.cause).toBeDefined();
+        expect(error.cause.message).toBe('Query execution failed');
+        expect(error.cause.query).toBe('SELECT * FROM users');
+
+        // Check root cause
+        expect(error.cause.cause).toBeDefined();
+        expect(error.cause.cause.message).toBe('Database connection failed');
+        expect(error.cause.cause.code).toBe('ECONNREFUSED');
+        expect(error.cause.cause.host).toBe('localhost');
 
         await mastra.stopEventEngine();
       });
@@ -5081,8 +5156,6 @@ describe('Workflow', () => {
         throw new Error('Resume failed to return a result');
       }
 
-      console.dir({ firstResumeResult }, { depth: null });
-
       // expect(firstResumeResult.activePaths.size).toBe(1);
       // expect(firstResumeResult.activePaths.get('improveResponse')?.status).toBe('suspended');
       expect(firstResumeResult.steps).toEqual({
@@ -5897,12 +5970,10 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // In evented workflows, errors become serialized objects
-      expect((failedRun.steps.step2 as any).error).toBeDefined();
-      expect((failedRun.steps.step2 as any).error).toMatchObject({
-        name: 'Error',
-        message: 'Simulated error',
-      });
+      // Errors are hydrated back to Error instances with preserved properties
+      expect((failedRun.steps.step2 as any).error).toBeInstanceOf(Error);
+      expect((failedRun.steps.step2 as any).error.name).toBe('Error');
+      expect((failedRun.steps.step2 as any).error.message).toBe('Simulated error');
 
       const result = await run.timeTravel({
         step: step2,
@@ -7238,7 +7309,6 @@ describe('Workflow', () => {
       await run1.start({ inputData: {} });
 
       const { runs, total } = await workflow.listWorkflowRuns();
-      console.dir({ runs }, { depth: null });
       expect(total).toBe(1);
       expect(runs).toHaveLength(1);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
@@ -7246,7 +7316,6 @@ describe('Workflow', () => {
       expect(runs[0]?.snapshot).toBeDefined();
 
       const run3 = await workflow.getWorkflowRunById(run1.runId);
-      console.dir({ run3 }, { depth: null });
       expect(run3?.runId).toBe(run1.runId);
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
@@ -9183,7 +9252,6 @@ describe('Workflow', () => {
 
       const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
-      console.dir({ result }, { depth: null });
 
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
@@ -9203,7 +9271,6 @@ describe('Workflow', () => {
       }
       expect(result.suspended[0]).toEqual(['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other']);
       const resumedResults = await run.resume({ step: result.suspended[0], resumeData: { newValue: 0 } });
-      console.dir({ resumedResults }, { depth: null });
 
       // @ts-ignore
       expect(resumedResults.steps['nested-workflow-c'].output).toEqual({

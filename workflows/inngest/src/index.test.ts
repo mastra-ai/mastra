@@ -2564,6 +2564,113 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
+    it('should preserve error cause chains through Inngest serialization', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      // Create a nested error with cause chain
+      const rootCause = new Error('Database connection failed');
+      (rootCause as any).code = 'ECONNREFUSED';
+      (rootCause as any).host = 'localhost';
+      (rootCause as any).port = 5432;
+
+      const middleCause = new Error('Query execution failed', { cause: rootCause });
+      (middleCause as any).query = 'SELECT * FROM users';
+
+      const topError = new Error('Failed to fetch user data', { cause: middleCause });
+      (topError as any).userId = '12345';
+
+      const failingAction = vi.fn().mockRejectedValue(topError);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-error-cause-chain-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-error-cause-chain-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Step-level error should preserve the cause chain
+      const stepError = result.steps.step1;
+      expect(stepError.status).toBe('failed');
+      expect(stepError.error).toBeInstanceOf(Error);
+      expect((stepError.error as Error).message).toBe('Failed to fetch user data');
+      expect((stepError.error as any).userId).toBe('12345');
+
+      // Check middle cause
+      const stepMiddleCause = (stepError.error as Error).cause;
+      expect(stepMiddleCause).toBeDefined();
+      expect((stepMiddleCause as Error).message).toBe('Query execution failed');
+      expect((stepMiddleCause as any).query).toBe('SELECT * FROM users');
+
+      // Check root cause
+      const stepRootCause = (stepMiddleCause as Error).cause;
+      expect(stepRootCause).toBeDefined();
+      expect((stepRootCause as Error).message).toBe('Database connection failed');
+      expect((stepRootCause as any).code).toBe('ECONNREFUSED');
+      expect((stepRootCause as any).host).toBe('localhost');
+      expect((stepRootCause as any).port).toBe(5432);
+
+      // Workflow-level error should also preserve the cause chain
+      if (result.status === 'failed') {
+        expect(result.error).toBeInstanceOf(Error);
+        expect((result.error as Error).message).toBe('Failed to fetch user data');
+
+        const workflowMiddleCause = (result.error as Error).cause;
+        expect(workflowMiddleCause).toBeDefined();
+        expect((workflowMiddleCause as Error).message).toBe('Query execution failed');
+
+        const workflowRootCause = (workflowMiddleCause as Error).cause;
+        expect(workflowRootCause).toBeDefined();
+        expect((workflowRootCause as Error).message).toBe('Database connection failed');
+      }
+
+      srv.close();
+    });
+
     it('should handle step execution errors within branches', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
