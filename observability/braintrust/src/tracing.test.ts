@@ -316,7 +316,7 @@ describe('BraintrustExporter', () => {
       );
     });
 
-    it('should map MODEL_CHUNK to "llm" type', async () => {
+    it('should map MODEL_CHUNK to "task" type', async () => {
       const chunkSpan = createMockSpan({
         id: 'chunk-span',
         name: 'llm-chunk',
@@ -332,7 +332,7 @@ describe('BraintrustExporter', () => {
 
       expect(mockLogger.startSpan).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'llm',
+          type: 'task',
         }),
       );
     });
@@ -478,9 +478,8 @@ describe('BraintrustExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            promptTokens: 10,
-            completionTokens: 5,
-            totalTokens: 15,
+            inputTokens: 10,
+            outputTokens: 5,
           },
           parameters: {
             temperature: 0.7,
@@ -665,7 +664,7 @@ describe('BraintrustExporter', () => {
       // Update with usage info
       llmSpan.attributes = {
         ...llmSpan.attributes,
-        usage: { totalTokens: 150 },
+        usage: { inputTokens: 100, outputTokens: 50 },
       } as ModelGenerationAttributes;
       // Note: LLM output uses 'text' field, not 'content'
       llmSpan.output = { text: 'Updated response' };
@@ -678,7 +677,7 @@ describe('BraintrustExporter', () => {
       expect(mockSpan.log).toHaveBeenCalledWith({
         // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
         output: { role: 'assistant', content: 'Updated response' },
-        metrics: { tokens: 150 },
+        metrics: { prompt_tokens: 100, completion_tokens: 50, tokens: 150 },
         metadata: {
           spanType: 'model_generation',
           model: 'gpt-4',

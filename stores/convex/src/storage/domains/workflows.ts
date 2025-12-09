@@ -182,6 +182,10 @@ export class WorkflowsConvex extends WorkflowsStorage {
     };
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    await this.operations.deleteMany(TABLE_WORKFLOW_SNAPSHOT, [`${workflowName}-${runId}`]);
+  }
+
   private async getRun(workflowName: string, runId: string): Promise<RawWorkflowRun | null> {
     const runs = await this.operations.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, [
       { field: 'workflow_name', value: workflowName },

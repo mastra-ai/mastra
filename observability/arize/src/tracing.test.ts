@@ -145,9 +145,8 @@ describe('ArizeExporter', () => {
         model: 'gpt-4',
         provider: 'openai',
         usage: {
-          promptTokens: 10,
-          completionTokens: 5,
-          totalTokens: 15,
+          inputTokens: 10,
+          outputTokens: 5,
         },
       },
     } as unknown as AnyExportedSpan;
@@ -275,6 +274,110 @@ describe('ArizeExporter', () => {
       correlation_id: 'corr-123',
     });
     expect(parsed.threadId).toBeUndefined();
+  });
+
+  describe('Usage Metrics Conversion', () => {
+    it('handles partial usage metrics gracefully', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const testSpan: Mutable<AnyExportedSpan> = {
+        id: 'span-partial-usage',
+        traceId: 'trace-partial-usage',
+        type: SpanType.MODEL_GENERATION,
+        name: 'Partial Usage Test',
+        startTime: new Date(),
+        endTime: new Date(),
+        input: { text: 'test' },
+        output: { text: 'response' },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+          usage: {
+            // Only input tokens, no output tokens
+            inputTokens: 100,
+          },
+        },
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: testSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Input tokens should be present
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_PROMPT]).toBe(100);
+
+      // Output and total should NOT be present (undefined, not 0)
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_COMPLETION]).toBeUndefined();
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_TOTAL]).toBeUndefined();
+
+      // Cache/reasoning/audio should not be present
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ]).toBeUndefined();
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_COMPLETION_DETAILS_REASONING]).toBeUndefined();
+    });
+
+    it('converts detailed usage metrics to OpenInference token count attributes', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const testSpan: Mutable<AnyExportedSpan> = {
+        id: 'span-usage',
+        traceId: 'trace-usage',
+        type: SpanType.MODEL_GENERATION,
+        name: 'Detailed Usage Test',
+        startTime: new Date(),
+        endTime: new Date(),
+        input: { text: 'test' },
+        output: { text: 'response' },
+        attributes: {
+          model: 'claude-3-opus',
+          provider: 'anthropic',
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+            inputDetails: {
+              cacheRead: 80,
+              cacheWrite: 20,
+              audio: 10,
+            },
+            outputDetails: {
+              reasoning: 30,
+              audio: 5,
+            },
+          },
+        },
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: testSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Core token counts
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_PROMPT]).toBe(100);
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_COMPLETION]).toBe(50);
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_TOTAL]).toBe(150);
+
+      // Cache details
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ]).toBe(80);
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_WRITE]).toBe(20);
+
+      // Reasoning tokens
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_COMPLETION_DETAILS_REASONING]).toBe(30);
+
+      // Audio tokens
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_PROMPT_DETAILS_AUDIO]).toBe(10);
+      expect(attrs[SemanticConventions.LLM_TOKEN_COUNT_COMPLETION_DETAILS_AUDIO]).toBe(5);
+    });
   });
 
   describe('Tags Support', () => {

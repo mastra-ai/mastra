@@ -185,6 +185,24 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     }
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const whereClause = `run_id = '${runId.replace(/'/g, "''")}' AND workflow_name = '${workflowName.replace(/'/g, "''")}'`;
+      await table.delete(whereClause);
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
+        },
+        error,
+      );
+    }
+  }
+
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);

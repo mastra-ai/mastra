@@ -58,4 +58,6 @@ export abstract class WorkflowsStorage extends MastraBase {
   abstract listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns>;
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+
+  abstract deleteWorkflowRunById(args: { runId: string; workflowName: string }): Promise<void>;
 }
