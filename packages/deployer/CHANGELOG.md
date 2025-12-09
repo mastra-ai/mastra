@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 0.24.7-alpha.4
+
+### Patch Changes
+
+- Fix tsconfig.json parsing when file contains JSONC comments ([#11040](https://github.com/mastra-ai/mastra/pull/11040))
+
+  The `hasPaths()` function now uses `strip-json-comments` to properly parse tsconfig.json files that contain comments. Previously, `JSON.parse()` would fail silently on JSONC comments, causing path aliases like `@src/*` to be incorrectly treated as npm scoped packages.
+
+- Updated dependencies []:
+  - @mastra/core@0.24.7-alpha.4
+  - @mastra/server@0.24.7-alpha.4
+
 ## 0.24.7-alpha.3
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @mastra/server
 
+## 0.24.7-alpha.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/core@0.24.7-alpha.4
+
 ## 0.24.7-alpha.3
 
 ### Patch Changes
