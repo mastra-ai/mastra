@@ -10,5 +10,9 @@ export type { AgentDataPart } from './transformers';
 
 export { toAISdkV5Stream as toAISdkStream } from './convert-streams';
 
+// Middleware for wrapping models with Mastra processors
+export { withMastra } from './middleware';
+export type { WithMastraOptions, WithMastraMemoryOptions, WithMastraSemanticRecallOptions } from './middleware';
+
 // Deprecated exports
 export { toAISdkFormat } from './to-ai-sdk-format';

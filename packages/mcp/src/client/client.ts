@@ -485,6 +485,7 @@ export class InternalMastraMCPClient extends MastraBase {
    * Common session-related errors include:
    * - "No valid session ID provided" (HTTP 400)
    * - "Server not initialized" (HTTP 400)
+   * - "Not connected" (protocol state error)
    * - Connection refused errors
    * 
    * @param error - The error to check
@@ -504,6 +505,7 @@ export class InternalMastraMCPClient extends MastraBase {
       errorMessage.includes('no valid session') ||
       errorMessage.includes('session') ||
       errorMessage.includes('server not initialized') ||
+      errorMessage.includes('not connected') ||
       errorMessage.includes('http 400') ||
       errorMessage.includes('http 401') ||
       errorMessage.includes('http 403') ||
