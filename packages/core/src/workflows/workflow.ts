@@ -473,19 +473,52 @@ export function createStep<
               });
 
               if (result instanceof MessageList) {
+                // Processor returned a MessageList - extract messages from it
+                // If it's the same messageList that was passed in, it's already been mutated
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
+                // Processor returned an array of messages - apply them to the messageList
+                // This ensures the messageList reflects the processor's modifications
+                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
+                passThrough.messageList.removeByIds(existingIds);
+                for (const msg of result as MastraDBMessage[]) {
+                  if (msg.role === 'system') {
+                    const systemText =
+                      (msg.content?.content as string | undefined) ??
+                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList.addSystem(systemText);
+                  } else {
+                    passThrough.messageList.add(msg, 'input');
+                  }
+                }
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
+                // Processor returned { messages, systemMessages } - apply both to the messageList
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
+                passThrough.messageList.removeByIds(existingIds);
+                for (const msg of typedResult.messages) {
+                  if (msg.role === 'system') {
+                    const systemText =
+                      (msg.content?.content as string | undefined) ??
+                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList.addSystem(systemText);
+                  } else {
+                    passThrough.messageList.add(msg, 'input');
+                  }
+                }
+                // Also update system messages
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
-                  messages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] }).messages,
-                  systemMessages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] })
-                    .systemMessages,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
                 };
               }
               return { ...passThrough, messages };
@@ -517,13 +550,43 @@ export function createStep<
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
+                // Processor returned an array of messages - apply them to the messageList
+                // For input step phase, messages should be added with 'input' source
+                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
+                passThrough.messageList.removeByIds(existingIds);
+                for (const msg of result as MastraDBMessage[]) {
+                  if (msg.role === 'system') {
+                    const systemText =
+                      (msg.content?.content as string | undefined) ??
+                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList.addSystem(systemText);
+                  } else {
+                    passThrough.messageList.add(msg, 'input');
+                  }
+                }
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
+                // Processor returned { messages, systemMessages } - apply both to the messageList
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
+                passThrough.messageList.removeByIds(existingIds);
+                for (const msg of typedResult.messages) {
+                  if (msg.role === 'system') {
+                    const systemText =
+                      (msg.content?.content as string | undefined) ??
+                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList.addSystem(systemText);
+                  } else {
+                    passThrough.messageList.add(msg, 'input');
+                  }
+                }
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
-                  messages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] }).messages,
-                  systemMessages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] })
-                    .systemMessages,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
                 };
               }
               return { ...passThrough, messages };
@@ -567,13 +630,43 @@ export function createStep<
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
+                // Processor returned an array of messages - apply them to the messageList
+                // For output phase, messages should be added with 'response' source
+                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
+                passThrough.messageList.removeByIds(existingIds);
+                for (const msg of result as MastraDBMessage[]) {
+                  if (msg.role === 'system') {
+                    const systemText =
+                      (msg.content?.content as string | undefined) ??
+                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList.addSystem(systemText);
+                  } else {
+                    passThrough.messageList.add(msg, 'response');
+                  }
+                }
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
+                // Processor returned { messages, systemMessages } - apply both to the messageList
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
+                passThrough.messageList.removeByIds(existingIds);
+                for (const msg of typedResult.messages) {
+                  if (msg.role === 'system') {
+                    const systemText =
+                      (msg.content?.content as string | undefined) ??
+                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList.addSystem(systemText);
+                  } else {
+                    passThrough.messageList.add(msg, 'response');
+                  }
+                }
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
-                  messages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] }).messages,
-                  systemMessages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] })
-                    .systemMessages,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
                 };
               }
               return { ...passThrough, messages };
@@ -608,13 +701,43 @@ export function createStep<
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
+                // Processor returned an array of messages - apply them to the messageList
+                // For output step phase, messages should be added with 'response' source
+                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
+                passThrough.messageList.removeByIds(existingIds);
+                for (const msg of result as MastraDBMessage[]) {
+                  if (msg.role === 'system') {
+                    const systemText =
+                      (msg.content?.content as string | undefined) ??
+                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList.addSystem(systemText);
+                  } else {
+                    passThrough.messageList.add(msg, 'response');
+                  }
+                }
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
+                // Processor returned { messages, systemMessages } - apply both to the messageList
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
+                passThrough.messageList.removeByIds(existingIds);
+                for (const msg of typedResult.messages) {
+                  if (msg.role === 'system') {
+                    const systemText =
+                      (msg.content?.content as string | undefined) ??
+                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList.addSystem(systemText);
+                  } else {
+                    passThrough.messageList.add(msg, 'response');
+                  }
+                }
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
-                  messages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] }).messages,
-                  systemMessages: (result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] })
-                    .systemMessages,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
                 };
               }
               return { ...passThrough, messages };
