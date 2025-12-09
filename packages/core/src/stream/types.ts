@@ -450,12 +450,14 @@ interface ToolCallApprovalPayload {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
+  willAutoResume?: boolean;
 }
 
 interface ToolCallSuspendedPayload {
   toolCallId: string;
   toolName: string;
   suspendPayload: any;
+  willAutoResume?: boolean;
 }
 
 export type DataChunkType = {

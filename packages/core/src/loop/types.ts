@@ -98,6 +98,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   agentName?: string;
   requestContext?: RequestContext;
   methodType: ModelMethodType;
+  autoResumeSuspendedTools?: boolean;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
