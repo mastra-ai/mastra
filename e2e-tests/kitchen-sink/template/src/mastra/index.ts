@@ -8,7 +8,6 @@ import {
   TABLE_SCORERS,
   TABLE_TRACES,
   TABLE_SPANS,
-  TABLE_AGENTS,
 } from '@mastra/core/storage';
 import { storage } from './storage';
 
@@ -41,7 +40,6 @@ export const mastra = new Mastra({
             storage.clearTable({ tableName: TABLE_SCORERS }),
             storage.clearTable({ tableName: TABLE_TRACES }),
             storage.supports.observabilityInstance && storage.clearTable({ tableName: TABLE_SPANS }),
-            storage.supports.agents && storage.clearTable({ tableName: TABLE_AGENTS }),
           ]);
 
           return c.json({ message: 'Custom route' }, 201);
