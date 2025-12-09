@@ -5,14 +5,14 @@ A Netlify deployer for Mastra applications.
 ## Features
 
 - Deploy Mastra applications to Netlify Functions
-- Automatic site creation and configuration
-- Serverless function support with Edge Functions
-- Zero-configuration deployments
+- Generates Netlify Frameworks API configuration during build
+- Bundles functions with optimized settings for serverless environments
+- Routes all requests through a single API endpoint
 
 ## Installation
 
 ```bash
-pnpm add @mastra/deployer-netlify
+npm install @mastra/deployer-netlify
 ```
 
 ## Usage
@@ -23,66 +23,80 @@ The Netlify deployer is used as part of the Mastra framework:
 import { Mastra } from '@mastra/core/mastra';
 import { NetlifyDeployer } from '@mastra/deployer-netlify';
 
-const deployer = new NetlifyDeployer({
-  scope: 'your-team-id',
-  projectName: 'your-project-name',
-  token: 'your-netlify-token',
-});
-
 const mastra = new Mastra({
-  deployer,
-  // ... other Mastra configuration options
+  deployer: new NetlifyDeployer(),
 });
 ```
-
-## Configuration
-
-### Constructor Options
-
-- `scope` (required): Your Netlify team slug or ID
-- `projectName`: Name of your Netlify site (will be created if it doesn't exist)
-- `token`: Your Netlify authentication token
 
 ## Project Structure
 
 The deployer automatically creates the following structure:
 
-```
+```bash
 your-project/
-├── netlify/
-│   └── functions/
-│       └── api/
-└── netlify.toml
+└── .netlify/
+    └── v1/
+        ├── config.json
+        └── functions/
+            └── api/
+                ├── index.js
+                ├── package.json
+                └── node_modules/
 ```
 
-### netlify.toml Configuration
+### Netlify Frameworks API Configuration
 
-The deployer creates a `netlify.toml` with the following defaults:
+The deployer uses Netlify's [Frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/) and generates a `.netlify/v1/config.json` file to configure functions and routing for Netlify.
 
-```toml
-[functions]
-node_bundler = "esbuild"
-directory = "/netlify/functions"
+Generated configuration:
 
-[[redirects]]
-force = true
-from = "/*"
-status = 200
-to = "/.netlify/functions/api/:splat"
+```json
+{
+  "functions": {
+    "directory": ".netlify/v1/functions",
+    "node_bundler": "none",
+    "included_files": [".netlify/v1/functions/**"]
+  },
+  "redirects": [
+    {
+      "force": true,
+      "from": "/*",
+      "to": "/.netlify/functions/api/:splat",
+      "status": 200
+    }
+  ]
+}
 ```
+
+This configuration:
+
+- Tells Netlify where to find your functions
+- Disables Netlify's bundling (Mastra pre-bundles for optimization)
+- Routes all requests to your Mastra API function
+
+## How It Works
+
+The Netlify deployer:
+
+1. **Bundles your Mastra application** into optimized serverless functions
+2. **Creates the Frameworks API configuration** automatically
+3. **Handles all routing** through a single API endpoint
+4. **Pre-optimizes dependencies** for serverless environments
 
 ## Environment Variables
 
-Environment variables are handled automatically through:
+Environment variables are handled through:
 
 - `.env` files in your project
-- Environment variables passed through the Mastra configuration
-- Netlify's environment variable UI
+- Netlify's environment variable dashboard
+- Runtime environment variable access in your Mastra app
 
-## Deployment Process
+## Deployment
 
-The deployer will:
+Deploy your Mastra application to Netlify by:
 
-1. Create a new site if it doesn't exist
-2. Configure the site with your environment variables
-3. Deploy your application to Netlify Functions
+1. **Building locally**: Run your build command (the deployer handles bundling)
+2. **Using Netlify CLI**: `netlify deploy --prod`
+3. **Via Git integration**: Connect your repository to Netlify for automatic deployments
+
+The deployer automatically configures everything needed for Netlify Functions.

@@ -245,6 +245,17 @@ const aiSdkStream = await agent.stream("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description:
+                "Provider-specific options passed to the internal structuring agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`).",
+            },
+          ],
+        },
       ],
     },
     {
@@ -253,6 +264,13 @@ const aiSdkStream = await agent.stream("message for agent", {
       isOptional: true,
       description:
         "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+    },
+    {
+      name: "includeRawChunks",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "Whether to include raw chunks in the stream output (not available on all model providers).",
     },
     {
       name: "inputProcessors",
@@ -577,6 +595,50 @@ const aiSdkStream = await agent.stream("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
   ]}
@@ -706,7 +768,7 @@ await agent.stream("message for agent", {
   },
   // Output processors for streaming response validation
   outputProcessors: [
-    new ModerationProcessor({ model: "openai/gpt-4.1-nano" }),
+    new ModerationProcessor({ model: "openrouter/openai/gpt-oss-safeguard-20b" }),
     new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
   ],
 });

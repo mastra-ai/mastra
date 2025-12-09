@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.0.0-beta.4",
+  "version": "1.0.0-beta.9",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -190,6 +190,7 @@
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
+    "@ai-sdk/azure": "^2.0.0",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.12",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "@ai-sdk/ui-utils-v5": "npm:@ai-sdk/ui-utils@1.2.11",
@@ -202,13 +203,14 @@
     "ai-v5": "npm:ai@5.0.97",
     "dotenv": "^16.6.1",
     "hono": "^4.10.5",
-    "hono-openapi": "^0.4.8",
+    "hono-openapi": "^1.1.1",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
-    "json-schema-to-zod": "^2.6.1",
+    "lru-cache": "^11.2.2",
     "p-map": "^7.0.3",
     "p-retry": "^7.1.0",
-    "radash": "^12.1.1"
+    "radash": "^12.1.1",
+    "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
     "@mastra/observability": ">=1.0.0-0 <2.0.0-0",
@@ -221,12 +223,14 @@
   },
   "devDependencies": {
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.45",
+    "@ai-sdk/deepseek-v5": "npm:@ai-sdk/deepseek@1.0.31",
     "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.40",
     "@ai-sdk/mistral-v5": "npm:@ai-sdk/mistral@2.0.24",
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.27",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.69",
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.33",
+    "@ai-sdk/perplexity-v5": "npm:@ai-sdk/perplexity@2.0.5",
     "@babel/core": "^7.28.5",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/external-types": "workspace:*",

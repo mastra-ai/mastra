@@ -9,9 +9,8 @@ import { RequestContext } from '../request-context';
 import { Mastra } from './index';
 
 class Gateway1 extends MastraModelGateway {
-  readonly id = 'gateway-1';
+  readonly id = 'g1';
   readonly name = 'gateway-1';
-  readonly prefix = 'g1';
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
@@ -19,7 +18,7 @@ class Gateway1 extends MastraModelGateway {
         name: 'Provider 1',
         models: ['model-1'],
         apiKeyEnvVar: 'G1_API_KEY',
-        gateway: 'gateway-1',
+        gateway: 'g1',
       },
     };
   }
@@ -33,23 +32,25 @@ class Gateway1 extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL: this.buildUrl(`${providerId}/${modelId}`),
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
 }
 class Gateway2 extends MastraModelGateway {
-  readonly id = 'gateway-2';
+  readonly id = 'g2';
   readonly name = 'gateway-2';
-  readonly prefix = 'g2';
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
@@ -57,7 +58,7 @@ class Gateway2 extends MastraModelGateway {
         name: 'Provider 2',
         models: ['model-2'],
         apiKeyEnvVar: 'G2_API_KEY',
-        gateway: 'gateway-2',
+        gateway: 'g2',
       },
     };
   }
@@ -71,15 +72,18 @@ class Gateway2 extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL: this.buildUrl(`${providerId}/${modelId}`),
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
@@ -115,16 +119,19 @@ class TestGateway extends MastraModelGateway {
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
       name: providerId,
       apiKey,
       baseURL,
+      headers,
       supportsStructuredOutputs: true,
     }).chatModel(modelId);
   }
@@ -231,15 +238,18 @@ describe('Mastra Custom Gateway Integration', () => {
           modelId,
           providerId,
           apiKey,
+          headers,
         }: {
           modelId: string;
           providerId: string;
           apiKey: string;
+          headers?: Record<string, string>;
         }) {
           return createOpenAICompatible({
             name: providerId,
             apiKey,
             baseURL: this.buildUrl(`${providerId}/${modelId}`),
+            headers,
             supportsStructuredOutputs: true,
           }).chatModel(modelId);
         }
@@ -462,15 +472,15 @@ describe('Mastra Custom Gateway Integration', () => {
       expect(gateways?.test.name).toBe('test-gateway');
     });
 
-    it('should use gateway name as key if no key provided', () => {
+    it('should use gateway ID as key if no key provided', () => {
       const mastra = new Mastra();
 
       const gateway = new Gateway2();
 
-      mastra.addGateway(gateway); // No key provided, should use gateway.name = 'gateway-2'
+      mastra.addGateway(gateway); // No key provided, should use gateway.id = 'g2'
 
       const gateways = mastra.listGateways();
-      expect(gateways?.['gateway-2']).toBe(gateway);
+      expect(gateways?.['g2']).toBe(gateway);
     });
   });
 

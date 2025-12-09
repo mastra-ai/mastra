@@ -40,9 +40,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -75,9 +75,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -104,9 +104,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -222,9 +222,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               modelId: 'mock-model-id',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -260,9 +260,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               modelId: 'mock-model-id',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -305,7 +305,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             {
               "id": "msg-0",
               "metadata": {
-                "createdAt": 2024-01-01T00:00:00.000Z,
+                "createdAt": 2024-01-01T00:00:00.001Z,
               },
               "parts": [
                 {
@@ -673,6 +673,24 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
                 "type": "file",
               },
+              {
+                "file": DefaultGeneratedFileWithType {
+                  "base64Data": "Hello World",
+                  "mediaType": "text/plain",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+              {
+                "file": DefaultGeneratedFileWithType {
+                  "base64Data": "QkFVRw==",
+                  "mediaType": "image/jpeg",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
             ],
             "dynamicToolCalls": [],
             "dynamicToolResults": [],
@@ -742,7 +760,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 {
                   "id": "msg-0",
                   "metadata": {
-                    "createdAt": 2024-01-01T00:00:00.000Z,
+                    "createdAt": 2024-01-01T00:00:00.001Z,
                   },
                   "parts": [
                     {
@@ -753,6 +771,16 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     {
                       "text": "Hello!",
                       "type": "text",
+                    },
+                    {
+                      "mediaType": "image/jpeg",
+                      "type": "file",
+                      "url": "data:image/jpeg;base64,QkFVRw==",
+                    },
+                    {
+                      "mediaType": "text/plain",
+                      "type": "file",
+                      "url": "data:text/plain;base64,Hello World",
                     },
                     {
                       "mediaType": "image/jpeg",

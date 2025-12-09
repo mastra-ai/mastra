@@ -150,6 +150,7 @@ export class MastraLLMVNext extends MastraBase {
     resourceId,
     structuredOutput,
     options,
+    inputProcessors,
     outputProcessors,
     returnScorerData,
     providerOptions,
@@ -158,8 +159,11 @@ export class MastraLLMVNext extends MastraBase {
     requireToolApproval,
     _internal,
     agentId,
+    agentName,
     toolCallId,
+    requestContext,
     methodType,
+    includeRawChunks,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -187,6 +191,8 @@ export class MastraLLMVNext extends MastraBase {
         messages: [...messageList.getSystemMessages(), ...messages],
       },
       attributes: {
+        agentId,
+        agentName,
         model: firstModel.modelId,
         provider: firstModel.provider,
         streaming: true,
@@ -218,12 +224,16 @@ export class MastraLLMVNext extends MastraBase {
         providerOptions,
         _internal,
         structuredOutput,
+        inputProcessors,
         outputProcessors,
         returnScorerData,
         modelSpanTracker,
         requireToolApproval,
         agentId,
+        agentName,
+        requestContext,
         methodType,
+        includeRawChunks,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -292,6 +302,8 @@ export class MastraLLMVNext extends MastraBase {
                   reasoningTokens: props?.totalUsage?.reasoningTokens,
                   cachedInputTokens: props?.totalUsage?.cachedInputTokens,
                 },
+                responseId: props?.response.id,
+                responseModel: props?.response.modelId,
               },
             });
 

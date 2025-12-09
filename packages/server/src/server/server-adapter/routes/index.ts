@@ -9,9 +9,11 @@ import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
+import { MCP_ROUTES } from './mcp';
 import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
+import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { MastraStreamReturn } from './stream-types';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
@@ -42,10 +44,20 @@ export type InferParams<
   (TQuerySchema extends z.ZodTypeAny ? z.infer<TQuerySchema> : {}) &
   (TBodySchema extends z.ZodTypeAny ? z.infer<TBodySchema> : {});
 
+/**
+ * All supported response types for server routes.
+ * - 'json': Standard JSON response
+ * - 'stream': Streaming response (SSE or raw stream)
+ * - 'datastream-response': Pre-built Response object for data streams
+ * - 'mcp-http': MCP Streamable HTTP transport (handled by adapter)
+ * - 'mcp-sse': MCP SSE transport (handled by adapter)
+ */
+export type ResponseType = 'stream' | 'json' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
+
 export type ServerRouteHandler<
   TParams = Record<string, unknown>,
   TResponse = unknown,
-  TResponseType extends 'stream' | 'json' | 'datastream-response' = 'json',
+  TResponseType extends ResponseType = 'json',
 > = (
   params: TParams & RuntimeContext,
 ) => Promise<
@@ -59,7 +71,7 @@ export type ServerRouteHandler<
 export type ServerRoute<
   TParams = Record<string, unknown>,
   TResponse = unknown,
-  TResponseType extends 'stream' | 'json' | 'datastream-response' = 'json',
+  TResponseType extends ResponseType = 'json',
 > = Omit<ApiRoute, 'handler' | 'createHandler'> & {
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream', defaults to 'stream'
@@ -85,6 +97,8 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...A2A_ROUTES,
   ...AGENT_BUILDER_ROUTES,
   ...LEGACY_ROUTES,
+  ...MCP_ROUTES,
+  ...STORED_AGENTS_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

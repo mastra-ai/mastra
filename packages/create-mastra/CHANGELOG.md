@@ -1,5 +1,37 @@
 # create-mastra
 
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Fix default value showing on workflow form after user submits ([#10983](https://github.com/mastra-ai/mastra/pull/10983))
+
+- Move useScorers down to trace page to trigger it once for all trace spans ([#10985](https://github.com/mastra-ai/mastra/pull/10985))
+
+- Update Observability Trace Spans list UI, so a user can expand/collapse span children/descendants and can filter the list by span type or name ([#10378](https://github.com/mastra-ai/mastra/pull/10378))
+
+- Fix workflow trigger form overflow ([#10986](https://github.com/mastra-ai/mastra/pull/10986))
+
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Fix select options overflow when list is long by adding maximum height ([#10813](https://github.com/mastra-ai/mastra/pull/10813))
+
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10500](https://github.com/mastra-ai/mastra/pull/10500))
+
+- Hide time travel on map steps in Studio ([#10631](https://github.com/mastra-ai/mastra/pull/10631))
+
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Add timeTravel APIs and add timeTravel feature to studio ([#10361](https://github.com/mastra-ai/mastra/pull/10361))
+
 ## 1.0.0-beta.3
 
 ### Patch Changes

@@ -37,3 +37,4 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_TEAM_ID: ${{ secrets.SLACK_TEAM_ID }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}

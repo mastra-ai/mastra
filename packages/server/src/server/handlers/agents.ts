@@ -91,6 +91,7 @@ export interface SerializedAgentWithId extends SerializedAgent {
 
 export async function getSerializedAgentTools(
   tools: Record<string, SerializedToolInput>,
+  partial: boolean = false,
 ): Promise<Record<string, SerializedTool>> {
   return Object.entries(tools || {}).reduce<Record<string, SerializedTool>>((acc, [key, tool]) => {
     const toolId = tool.id ?? `tool-${key}`;
@@ -98,39 +99,44 @@ export async function getSerializedAgentTools(
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
 
-    try {
-      if (tool.inputSchema) {
-        if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
-          inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
-        } else if (typeof tool.inputSchema === 'function') {
-          const inputSchema = tool.inputSchema();
-          if (inputSchema && inputSchema.jsonSchema) {
-            inputSchemaForReturn = stringify(inputSchema.jsonSchema);
+    // Only process schemas if not in partial mode
+    if (!partial) {
+      try {
+        if (tool.inputSchema) {
+          if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
+            inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
+          } else if (typeof tool.inputSchema === 'function') {
+            const inputSchema = tool.inputSchema();
+            if (inputSchema && inputSchema.jsonSchema) {
+              inputSchemaForReturn = stringify(inputSchema.jsonSchema);
+            }
+          } else if (tool.inputSchema) {
+            inputSchemaForReturn = stringify(
+              zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
           }
-        } else if (tool.inputSchema) {
-          inputSchemaForReturn = stringify(zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
         }
-      }
 
-      if (tool.outputSchema) {
-        if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
-          outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
-        } else if (typeof tool.outputSchema === 'function') {
-          const outputSchema = tool.outputSchema();
-          if (outputSchema && outputSchema.jsonSchema) {
-            outputSchemaForReturn = stringify(outputSchema.jsonSchema);
+        if (tool.outputSchema) {
+          if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
+            outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
+          } else if (typeof tool.outputSchema === 'function') {
+            const outputSchema = tool.outputSchema();
+            if (outputSchema && outputSchema.jsonSchema) {
+              outputSchemaForReturn = stringify(outputSchema.jsonSchema);
+            }
+          } else if (tool.outputSchema) {
+            outputSchemaForReturn = stringify(
+              zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
           }
-        } else if (tool.outputSchema) {
-          outputSchemaForReturn = stringify(
-            zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
-          );
         }
+      } catch (error) {
+        console.error(`Error getting serialized tool`, {
+          toolId: tool.id,
+          error,
+        });
       }
-    } catch (error) {
-      console.error(`Error getting serialized tool`, {
-        toolId: tool.id,
-        error,
-      });
     }
 
     acc[key] = {
@@ -188,11 +194,13 @@ async function formatAgentList({
   mastra,
   agent,
   requestContext,
+  partial = false,
 }: {
   id: string;
   mastra: Context['mastra'];
   agent: Agent;
   requestContext: RequestContext;
+  partial?: boolean;
 }): Promise<SerializedAgentWithId> {
   const description = agent.getDescription();
   const instructions = await agent.getInstructions({ requestContext });
@@ -201,7 +209,7 @@ async function formatAgentList({
   const defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
   const defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
   const defaultOptions = await agent.getDefaultOptions({ requestContext });
-  const serializedAgentTools = await getSerializedAgentTools(tools);
+  const serializedAgentTools = await getSerializedAgentTools(tools, partial);
 
   let serializedAgentWorkflows: Record<
     string,
@@ -429,17 +437,21 @@ export const LIST_AGENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agents',
   responseType: 'json',
+  queryParamSchema: z.object({
+    partial: z.string().optional(),
+  }),
   responseSchema: listAgentsResponseSchema,
   summary: 'List all agents',
   description: 'Returns a list of all available agents in the system',
   tags: ['Agents'],
-  handler: async ({ mastra, requestContext }) => {
+  handler: async ({ mastra, requestContext, partial }) => {
     try {
       const agents = mastra.listAgents();
 
+      const isPartial = partial === 'true';
       const serializedAgentsMap = await Promise.all(
         Object.entries(agents).map(async ([id, agent]) => {
-          return formatAgentList({ id, mastra, agent, requestContext });
+          return formatAgentList({ id, mastra, agent, requestContext, partial: isPartial });
         }),
       );
 
@@ -716,6 +728,7 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   summary: 'Stream a response from an agent',
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
+  deprecated: true,
   handler: STREAM_GENERATE_ROUTE.handler,
 });
 
@@ -963,6 +976,7 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   summary: 'Stream a response from an agent',
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
+  deprecated: true,
   handler: async () => {
     throw new HTTPException(410, { message: 'This endpoint is deprecated. Please use /stream instead.' });
   },
@@ -979,6 +993,7 @@ export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
+  deprecated: true,
   handler: async () => {
     try {
       throw new MastraError({
@@ -1004,5 +1019,6 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
+  deprecated: true,
   handler: STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE.handler,
 });

@@ -2,6 +2,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { Processor } from '../index';
@@ -73,6 +74,19 @@ export interface PromptInjectionOptions {
      */
     jsonPromptInjection?: boolean;
   };
+
+  /**
+   * Provider-specific options passed to the internal detection agent.
+   * Use this to control model behavior like reasoning effort for thinking models.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   openai: { reasoningEffort: 'low' }
+   * }
+   * ```
+   */
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -82,7 +96,7 @@ export interface PromptInjectionOptions {
  * Provides multiple response strategies including content rewriting to neutralize
  * attacks while preserving legitimate user intent.
  */
-export class PromptInjectionDetector implements Processor {
+export class PromptInjectionDetector implements Processor<'prompt-injection-detector'> {
   readonly id = 'prompt-injection-detector';
   readonly name = 'Prompt Injection Detector';
 
@@ -92,6 +106,7 @@ export class PromptInjectionDetector implements Processor {
   private strategy: 'block' | 'warn' | 'filter' | 'rewrite';
   private includeScores: boolean;
   private structuredOutputOptions?: PromptInjectionOptions['structuredOutputOptions'];
+  private providerOptions?: ProviderOptions;
 
   // Default detection categories based on OWASP LLM01 and common attack patterns
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -109,6 +124,7 @@ export class PromptInjectionDetector implements Processor {
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
+    this.providerOptions = options.providerOptions;
 
     this.detectionAgent = new Agent({
       id: 'prompt-injection-detector',
@@ -221,12 +237,14 @@ export class PromptInjectionDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {
         response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       }

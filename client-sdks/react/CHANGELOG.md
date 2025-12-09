@@ -1,5 +1,67 @@
 # @mastra/react-hooks
 
+## 0.1.0-beta.9
+
+### Patch Changes
+
+- Updated dependencies [[`5a1ede1`](https://github.com/mastra-ai/mastra/commit/5a1ede1f7ab527b9ead11f7eee2f73e67aeca9e4)]:
+  - @mastra/client-js@1.0.0-beta.9
+
+## 0.1.0-beta.8
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.8
+
+## 0.1.0-beta.7
+
+### Patch Changes
+
+- Updated dependencies [[`5fe71bc`](https://github.com/mastra-ai/mastra/commit/5fe71bc925dfce597df69c89241f33b378028c63), [`21735a7`](https://github.com/mastra-ai/mastra/commit/21735a7ef306963554a69a89b44f06c3bcd85141)]:
+  - @mastra/client-js@1.0.0-beta.7
+
+## 0.1.0-beta.6
+
+### Patch Changes
+
+- Adjust the types to accept tracingOptions ([#10742](https://github.com/mastra-ai/mastra/pull/10742))
+
+- Updated dependencies [[`6edf340`](https://github.com/mastra-ai/mastra/commit/6edf3402f6a46ee8def2f42a2287785251fbffd6), [`ad7e8f1`](https://github.com/mastra-ai/mastra/commit/ad7e8f16ac843cbd16687ad47b66ba96bcffe111), [`e1b7118`](https://github.com/mastra-ai/mastra/commit/e1b7118f42ca0a97247afc75e57dcd5fdf987752), [`441c7b6`](https://github.com/mastra-ai/mastra/commit/441c7b6665915cfa7fd625fded8c0f518530bf10), [`e849603`](https://github.com/mastra-ai/mastra/commit/e849603a596269069f58a438b98449ea2770493d)]:
+  - @mastra/client-js@1.0.0-beta.6
+
+## 0.1.0-beta.5
+
+### Patch Changes
+
+- Configurable resourceId in react useChat ([#10461](https://github.com/mastra-ai/mastra/pull/10461))
+
+- fix(agent): persist messages before tool suspension ([#10369](https://github.com/mastra-ai/mastra/pull/10369))
+
+  Fixes issues where thread and messages were not saved before suspension when tools require approval or call suspend() during execution. This caused conversation history to be lost if users refreshed during tool approval or suspension.
+
+  **Backend changes (@mastra/core):**
+  - Add assistant messages to messageList immediately after LLM execution
+  - Flush messages synchronously before suspension to persist state
+  - Create thread if it doesn't exist before flushing
+  - Add metadata helpers to persist and remove tool approval state
+  - Pass saveQueueManager and memory context through workflow for immediate persistence
+
+  **Frontend changes (@mastra/react):**
+  - Extract runId from pending approvals to enable resumption after refresh
+  - Convert `pendingToolApprovals` (DB format) to `requireApprovalMetadata` (runtime format)
+  - Handle both `dynamic-tool` and `tool-{NAME}` part types for approval state
+  - Change runId from hardcoded `agentId` to unique `uuid()`
+
+  **UI changes (@mastra/playground-ui):**
+  - Handle tool calls awaiting approval in message initialization
+  - Convert approval metadata format when loading initial messages
+
+  Fixes #9745, #9906
+
+- Updated dependencies [[`898a972`](https://github.com/mastra-ai/mastra/commit/898a9727d286c2510d6b702dfd367e6aaf5c6b0f)]:
+  - @mastra/client-js@1.0.0-beta.5
+
 ## 0.1.0-beta.4
 
 ### Patch Changes

@@ -13,9 +13,9 @@ import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
 import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useAgentPromptExperiment } from '@/domains/agents/context';
@@ -75,10 +75,10 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
   return Promise.all(promises);
 };
 
-const initializeMessageState = (initialMessages: Message[]) => {
+const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
   // @ts-expect-error - TODO: fix the ThreadMessageLike type, it's missing some properties like "data" from the role.
   const convertedMessages: ThreadMessageLike[] = initialMessages
-    ?.map((message: Message) => {
+    ?.map((message: UIMessageWithMetadata) => {
       const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
         type: image.contentType.startsWith(`image/`)
           ? 'image'
@@ -111,6 +111,25 @@ const initializeMessageState = (initialMessages: Message[]) => {
                 args: part.toolInvocation.args,
                 result: part.toolInvocation.result,
               };
+            } else if (part.toolInvocation.state === 'call') {
+              // Only return pending tool calls that are legitimately awaiting approval
+              const toolCallId = part.toolInvocation.toolCallId;
+              const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
+              const suspensionData = pendingToolApprovals?.[toolCallId];
+              if (suspensionData) {
+                return {
+                  type: 'tool-call',
+                  toolCallId,
+                  toolName: part.toolInvocation.toolName,
+                  args: part.toolInvocation.args,
+                  metadata: {
+                    mode: 'stream',
+                    requireApprovalMetadata: {
+                      [toolCallId]: suspensionData,
+                    },
+                  },
+                };
+              }
             }
           }
 
@@ -157,6 +176,7 @@ export function MastraRuntimeProvider({
 }> &
   ChatProps) {
   const { prompt: instructions } = useAgentPromptExperiment();
+  const { settings: tracingSettings } = useTracingSettings();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
   const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
     memory ? initializeMessageState(initialLegacyMessages || []) : [],
@@ -252,6 +272,7 @@ export function MastraRuntimeProvider({
             threadId,
             modelSettings: modelSettingsArgs,
             signal: controller.signal,
+            tracingOptions: tracingSettings?.tracingOptions,
             onNetworkChunk: async chunk => {
               if (
                 chunk.type === 'tool-execution-end' &&
@@ -278,6 +299,7 @@ export function MastraRuntimeProvider({
               threadId,
               modelSettings: modelSettingsArgs,
               signal: controller.signal,
+              tracingOptions: tracingSettings?.tracingOptions,
             });
 
             await refreshThreadList?.();
@@ -291,6 +313,7 @@ export function MastraRuntimeProvider({
               requestContext: requestContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
+              tracingOptions: tracingSettings?.tracingOptions,
               onChunk: async chunk => {
                 if (chunk.type === 'finish') {
                   await refreshThreadList?.();

@@ -10,6 +10,7 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import {
+  createStorageErrorId,
   ensureDate,
   MemoryStorage,
   normalizePerPage,
@@ -59,7 +60,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -84,7 +85,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_CLOUDFLARE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -134,7 +135,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to get threads by resource ID with pagination',
@@ -151,7 +152,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -193,7 +194,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -250,7 +251,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -262,6 +263,17 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
+  /**
+   * Searches all threads in the KV store to find a message by its ID.
+   *
+   * **Performance Warning**: This method sequentially scans all threads to locate
+   * the message. For stores with many threads, this can result in significant
+   * latency and API calls. When possible, callers should provide the `threadId`
+   * directly to avoid this full scan.
+   *
+   * @param messageId - The globally unique message ID to search for
+   * @returns The message with its threadId if found, null otherwise
+   */
   private async findMessageInAnyThread(messageId: string): Promise<MastraMessageV1 | null> {
     try {
       // List all threads to search for the message
@@ -514,7 +526,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           } catch (error) {
             throw new MastraError(
               {
-                id: 'CLOUDFLARE_STORAGE_SAVE_MESSAGES_FAILED',
+                id: createStorageErrorId('CLOUDFLARE', 'SAVE_MESSAGES', 'FAILED'),
                 domain: ErrorDomain.STORAGE,
                 category: ErrorCategory.THIRD_PARTY,
                 details: {
@@ -537,7 +549,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -570,16 +582,32 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return this.getRange(orderKey, 0, -1);
   }
 
+  /**
+   * Retrieves messages specified in the include array along with their surrounding context.
+   *
+   * **Performance Note**: When `threadId` is not provided in an include entry, this method
+   * must call `findMessageInAnyThread` which sequentially scans all threads in the KV store.
+   * For optimal performance, callers should provide `threadId` in include entries when known.
+   *
+   * @param include - Array of message IDs to include, optionally with context windows
+   * @param messageIds - Set to accumulate the message IDs that should be fetched
+   */
   private async getIncludedMessagesWithContext(
-    threadId: string,
     include: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
     messageIds: Set<string>,
   ): Promise<void> {
     await Promise.all(
       include.map(async item => {
-        // Use the item's threadId if provided, otherwise use the main threadId
-        const targetThreadId = item.threadId || threadId;
+        // Look up the message to get its threadId (message IDs are globally unique)
+        // Note: When threadId is not provided, this triggers a full scan of all threads
+        let targetThreadId = item.threadId;
+        if (!targetThreadId) {
+          const foundMessage = await this.findMessageInAnyThread(item.id);
+          if (!foundMessage) return;
+          targetThreadId = foundMessage.threadId;
+        }
         if (!targetThreadId) return;
+
         const threadMessagesKey = this.getThreadMessagesKey(targetThreadId);
 
         messageIds.add(item.id);
@@ -619,6 +647,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
+  /**
+   * Fetches and parses messages from one or more threads.
+   *
+   * **Performance Note**: When neither `include` entries with `threadId` nor `targetThreadId`
+   * are provided, this method falls back to `findMessageInAnyThread` which scans all threads.
+   * For optimal performance, provide `threadId` in include entries or specify `targetThreadId`.
+   */
   private async fetchAndParseMessagesFromMultipleThreads(
     messageIds: string[],
     include?: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
@@ -647,7 +682,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
               // If we have a target thread, only look in that thread
               threadId = targetThreadId;
             } else {
-              // Search for the message in any thread
+              // Search for the message in any thread (expensive: scans all threads)
               const foundMessage = await this.findMessageInAnyThread(id);
               if (foundMessage) {
                 threadId = foundMessage.threadId;
@@ -675,11 +710,19 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return messages.filter((msg): msg is MastraMessageV1 & { _index?: number } => msg !== null);
   }
 
+  /**
+   * Retrieves messages by their IDs.
+   *
+   * **Performance Warning**: This method calls `findMessageInAnyThread` for each message ID,
+   * which scans all threads in the KV store. For large numbers of messages or threads,
+   * this can result in significant latency. Consider using `listMessages` with specific
+   * thread IDs when the thread context is known.
+   */
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
-      // Fetch and parse all messages from their respective threads
+      // Fetch and parse all messages from their respective threads (expensive: scans all threads per message)
       const messages = (await Promise.all(messageIds.map(id => this.findMessageInAnyThread(id)))).filter(
         result => !!result,
       ) as (MastraMessageV1 & { _index: string })[];
@@ -695,7 +738,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error retrieving messages by ID`,
@@ -714,15 +757,21 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    // Validate each threadId is a non-empty string (avoid TypeError on non-string inputs)
+    const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
+
+    if (threadIds.length === 0 || threadIds.some(id => !isValidThreadId(id))) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId) },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -734,7 +783,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_PAGE',
+            id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -746,73 +795,35 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
-      const messageIds = new Set<string>();
-
-      // Step 1: Get messages from the thread
-      // If filters are applied, we need to fetch all messages first, then filter and paginate
-      // Otherwise, we can paginate first by index
-      const hasFilters = !!resourceId || !!filter?.dateRange;
-
-      if (hasFilters || perPage === Number.MAX_SAFE_INTEGER) {
-        // Get all messages when filters are applied or when limit is false
+      // Step 1: Get thread messages from all specified threads (for pagination)
+      const threadMessageIds = new Set<string>();
+      for (const tid of threadIds) {
         try {
-          const threadMessagesKey = this.getThreadMessagesKey(threadId);
+          const threadMessagesKey = this.getThreadMessagesKey(tid);
           const allIds = await this.getFullOrder(threadMessagesKey);
-          allIds.forEach(id => messageIds.add(id));
+          allIds.forEach(id => threadMessageIds.add(id));
         } catch {
-          // If no message order found, continue with empty set
-        }
-      } else {
-        // No filters - paginate by index first (more efficient)
-        if (perPage > 0) {
-          try {
-            const threadMessagesKey = this.getThreadMessagesKey(threadId);
-            const fullOrder = await this.getFullOrder(threadMessagesKey);
-            const totalMessages = fullOrder.length;
-
-            // Apply offset and limit - direction-aware pagination
-            // For ASC: select from start (oldest first)
-            // For DESC: select from end (newest first)
-            let start: number;
-            let end: number;
-            if (direction === 'ASC') {
-              start = offset;
-              end = Math.min(offset + perPage - 1, totalMessages - 1);
-            } else {
-              // DESC: calculate window from the end (newest messages)
-              start = Math.max(totalMessages - offset - perPage, 0);
-              end = totalMessages - offset - 1;
-            }
-            const paginatedIds = await this.getRange(threadMessagesKey, start, end);
-            paginatedIds.forEach(id => messageIds.add(id));
-          } catch {
-            // If no message order found, continue with empty set
-          }
+          // If no message order found for this thread, continue
         }
       }
 
-      // Step 2: Add included messages with context (if any)
-      if (include && include.length > 0) {
-        await this.getIncludedMessagesWithContext(threadId, include, messageIds);
-      }
-
-      // Fetch and parse all messages
-      const messages = await this.fetchAndParseMessagesFromMultipleThreads(
-        Array.from(messageIds),
-        include,
-        include && include.length > 0 ? undefined : threadId,
+      // Fetch thread messages from all threads
+      const threadMessages = await this.fetchAndParseMessagesFromMultipleThreads(
+        Array.from(threadMessageIds),
+        undefined,
+        threadIds.length === 1 ? threadIds[0] : undefined,
       );
 
-      // Filter by resourceId if specified
-      let filteredMessages = messages;
+      // Filter thread messages by resourceId if specified
+      let filteredThreadMessages = threadMessages;
       if (resourceId) {
-        filteredMessages = filteredMessages.filter(msg => msg.resourceId === resourceId);
+        filteredThreadMessages = filteredThreadMessages.filter(msg => msg.resourceId === resourceId);
       }
 
-      // Filter by dateRange if specified
+      // Filter thread messages by dateRange if specified
       const dateRange = filter?.dateRange;
       if (dateRange) {
-        filteredMessages = filteredMessages.filter(msg => {
+        filteredThreadMessages = filteredThreadMessages.filter(msg => {
           const messageDate = new Date(msg.createdAt);
           if (dateRange.start && messageDate < new Date(dateRange.start)) return false;
           if (dateRange.end && messageDate > new Date(dateRange.end)) return false;
@@ -820,25 +831,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         });
       }
 
-      // Get total count BEFORE pagination (for hasMore calculation)
-      let total: number;
-      if (hasFilters) {
-        // With filters, total is the count of filtered messages
-        total = filteredMessages.length;
-      } else {
-        // No filters - get total from order
-        try {
-          const threadMessagesKey = this.getThreadMessagesKey(threadId);
-          const fullOrder = await this.getFullOrder(threadMessagesKey);
-          total = fullOrder.length;
-        } catch {
-          // Fallback to filtered messages length
-          total = filteredMessages.length;
-        }
-      }
+      // Get total count for pagination
+      const total = filteredThreadMessages.length;
 
       // If perPage is 0 AND there are no include messages, return empty array immediately
-      // When include is provided, we still need to return those messages even with perPage: 0
       if (perPage === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
@@ -849,64 +845,78 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         };
       }
 
-      // Apply pagination if filters were applied (we fetched all messages above)
-      // Direction-aware slicing: for DESC, slice from the end (newest messages)
-      if (hasFilters && perPage !== Number.MAX_SAFE_INTEGER && perPage > 0) {
-        if (direction === 'ASC') {
-          filteredMessages = filteredMessages.slice(offset, offset + perPage);
-        } else {
-          // DESC: slice from the end (newest messages first)
-          const start = Math.max(filteredMessages.length - offset - perPage, 0);
-          const end = filteredMessages.length - offset;
-          filteredMessages = filteredMessages.slice(start, end);
+      // Sort thread messages by createdAt BEFORE pagination
+      filteredThreadMessages.sort((a, b) => {
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
+        if (timeDiff === 0) {
+          return a.id.localeCompare(b.id);
+        }
+        return timeDiff;
+      });
+
+      // Apply pagination to thread messages
+      // After sorting, pagination is simply offset + limit from the sorted array
+      // (same as SQL: ORDER BY ... LIMIT ... OFFSET ...)
+      let paginatedMessages: (MastraMessageV1 & { _index?: number })[];
+      if (perPage === 0) {
+        // perPage: 0 means return no paginated messages (only include messages)
+        paginatedMessages = [];
+      } else if (perPage === Number.MAX_SAFE_INTEGER) {
+        // perPage: false (MAX_SAFE_INTEGER) means return all messages
+        paginatedMessages = filteredThreadMessages;
+      } else {
+        // Normal pagination - just slice from the sorted array
+        paginatedMessages = filteredThreadMessages.slice(offset, offset + perPage);
+      }
+
+      // Step 2: Get included messages separately (not subject to pagination)
+      let includedMessages: (MastraMessageV1 & { _index?: number })[] = [];
+      if (include && include.length > 0) {
+        const includedMessageIds = new Set<string>();
+        await this.getIncludedMessagesWithContext(include, includedMessageIds);
+
+        // Remove IDs that are already in paginated messages to avoid duplicate fetches
+        const paginatedIds = new Set(paginatedMessages.map(m => m.id));
+        const idsToFetch = Array.from(includedMessageIds).filter(id => !paginatedIds.has(id));
+
+        if (idsToFetch.length > 0) {
+          includedMessages = await this.fetchAndParseMessagesFromMultipleThreads(idsToFetch, include, undefined);
         }
       }
 
-      // Calculate paginated count (before adding included messages)
-      const paginatedCount =
-        hasFilters && perPage !== Number.MAX_SAFE_INTEGER && perPage > 0
-          ? filteredMessages.length // Already sliced
-          : filteredMessages.length;
+      // Step 3: Combine paginated + included messages, deduplicate
+      const seenIds = new Set<string>();
+      const allMessages: (MastraMessageV1 & { _index?: number })[] = [];
 
-      // Sort messages
-      try {
-        const threadMessagesKey = this.getThreadMessagesKey(threadId);
-        const messageOrder = await this.getFullOrder(threadMessagesKey);
-        const orderMap = new Map(messageOrder.map((id, index) => [id, index]));
-
-        filteredMessages.sort((a, b) => {
-          const indexA = orderMap.get(a.id);
-          const indexB = orderMap.get(b.id);
-
-          if (indexA !== undefined && indexB !== undefined) {
-            return direction === 'ASC' ? indexA - indexB : indexB - indexA;
-          }
-
-          // Fallback to createdAt sorting
-          const timeA = new Date(a.createdAt).getTime();
-          const timeB = new Date(b.createdAt).getTime();
-          const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
-
-          // Handle tiebreaker for stable sorting
-          if (timeDiff === 0) {
-            return a.id.localeCompare(b.id);
-          }
-          return timeDiff;
-        });
-      } catch {
-        // Fallback to createdAt sorting
-        filteredMessages.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime();
-          const timeB = new Date(b.createdAt).getTime();
-          const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
-
-          // Handle tiebreaker for stable sorting
-          if (timeDiff === 0) {
-            return a.id.localeCompare(b.id);
-          }
-          return timeDiff;
-        });
+      for (const msg of paginatedMessages) {
+        if (!seenIds.has(msg.id)) {
+          allMessages.push(msg);
+          seenIds.add(msg.id);
+        }
       }
+
+      for (const msg of includedMessages) {
+        if (!seenIds.has(msg.id)) {
+          allMessages.push(msg);
+          seenIds.add(msg.id);
+        }
+      }
+
+      // Sort combined messages by createdAt
+      allMessages.sort((a, b) => {
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
+        if (timeDiff === 0) {
+          return a.id.localeCompare(b.id);
+        }
+        return timeDiff;
+      });
+
+      let filteredMessages = allMessages;
+      const paginatedCount = paginatedMessages.length;
 
       // Only return early if there are no messages AND no includes to process
       if (total === 0 && filteredMessages.length === 0 && (!include || include.length === 0)) {
@@ -927,7 +937,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }));
 
       // Use MessageList for proper deduplication and format conversion to V2
-      const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
+      // Use first threadId for context when multiple threads are provided
+      const primaryThreadId = Array.isArray(threadId) ? threadId[0] : threadId;
+      const list = new MessageList({ threadId: primaryThreadId, resourceId }).add(
+        prepared as MastraMessageV1[],
+        'memory',
+      );
       let finalMessages = list.get.all.db();
 
       // Sort final messages with type-aware comparator and stable tiebreaker
@@ -952,21 +967,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window (direction-aware)
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      // Otherwise, check if there are more pages in the pagination window
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-
-      let hasMore: boolean;
-      if (perPageInput === false || allThreadMessagesReturned) {
-        hasMore = false;
-      } else if (direction === 'ASC') {
-        // ASC: check if there are more messages after the current window
-        hasMore = offset + paginatedCount < total;
-      } else {
-        // DESC: check if there are more (older) messages before the current window
-        // Window starts at: total - offset - perPage, so there are more if start > 0
-        hasMore = total - offset - perPage > 0;
-      }
+      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + paginatedCount < total;
 
       return {
         messages: finalMessages,
@@ -978,14 +985,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to list messages for thread ${threadId}: ${
+          text: `Failed to list messages for thread ${Array.isArray(threadId) ? threadId.join(',') : threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
@@ -1157,7 +1164,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to update messages',
@@ -1182,7 +1189,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1214,7 +1221,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

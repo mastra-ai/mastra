@@ -1,7 +1,7 @@
-import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import util from 'node:util';
-import path from 'path';
 import * as p from '@clack/prompts';
 import type { ModelRouterModelId } from '@mastra/core/llm/model';
 import fsExtra from 'fs-extra/esm';
@@ -534,9 +534,10 @@ export const checkInitialization = async (dirPath: string) => {
   }
 };
 
-export const checkAndInstallCoreDeps = async (addExample: boolean) => {
+export const checkAndInstallCoreDeps = async (addExample: boolean, versionTag?: string) => {
   const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies' });
   let packages: Array<{ name: string; version: string }> = [];
+  const mastraVersionTag = versionTag || 'latest';
 
   try {
     const depService = new DepsService();
@@ -548,11 +549,11 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
     const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
     if (needsCore) {
-      packages.push({ name: '@mastra/core', version: 'latest' });
+      packages.push({ name: '@mastra/core', version: mastraVersionTag });
     }
 
     if (needsCli) {
-      packages.push({ name: 'mastra', version: 'latest' });
+      packages.push({ name: 'mastra', version: mastraVersionTag });
     }
 
     if (needsZod) {
@@ -563,7 +564,7 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
 
       if (needsLibsql) {
-        packages.push({ name: '@mastra/libsql', version: 'latest' });
+        packages.push({ name: '@mastra/libsql', version: mastraVersionTag });
       }
     }
 
@@ -766,6 +767,12 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         }
 
         return editor;
+      },
+      initGit: async () => {
+        return p.confirm({
+          message: 'Initialize a new git repository?',
+          initialValue: true,
+        });
       },
     },
     {

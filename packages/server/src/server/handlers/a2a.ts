@@ -63,7 +63,7 @@ export async function getAgentCardByIdHandler({
     url: string;
   };
 }): Promise<AgentCard> {
-  const agent = mastra.getAgent(agentId);
+  const agent = mastra.getAgentById(agentId);
 
   if (!agent) {
     throw new Error(`Agent with ID ${agentId} not found`);
@@ -155,9 +155,13 @@ export async function handleMessageSend({
   });
 
   try {
+    // Pass contextId as threadId for memory persistence across A2A conversations
+    // Allow user to pass resourceId via metadata, fall back to agentId
+    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
     const { text } = await agent.generate([convertToCoreMessage(message)], {
       runId: taskId,
       requestContext,
+      ...(contextId ? { threadId: contextId, resourceId } : {}),
     });
 
     currentData = applyUpdateToTask(currentData, {
@@ -353,7 +357,7 @@ export async function getAgentExecutionHandler({
   taskStore: InMemoryTaskStore;
   logger?: IMastraLogger;
 }): Promise<any> {
-  const agent = mastra.getAgent(agentId);
+  const agent = mastra.getAgentById(agentId);
 
   let taskId: string | undefined; // For error context
 
@@ -439,7 +443,7 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
     };
     const version = '1.0';
 
-    const agent = mastra.getAgent(agentId as string);
+    const agent = mastra.getAgentById(agentId as string);
 
     if (!agent) {
       throw new Error(`Agent with ID ${agentId} not found`);

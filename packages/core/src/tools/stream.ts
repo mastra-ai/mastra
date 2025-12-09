@@ -1,8 +1,25 @@
-import { WritableStream } from 'stream/web';
+import { WritableStream } from 'node:stream/web';
 import type { DataChunkType } from '../stream/types';
 
-export class ToolStream<T> extends WritableStream<T> {
+/**
+ * ToolStream is a WritableStream that wraps chunks with metadata before writing to an underlying stream.
+ *
+ * It extends `WritableStream<unknown>` to allow piping from any ReadableStream type.
+ * This is necessary because WritableStream is contravariant in its type parameter -
+ * a WritableStream<unknown> can accept writes of any type, making it compatible
+ * with ReadableStream<T> for any T.
+ *
+ * @example
+ * ```typescript
+ * // In a tool's execute function:
+ * const stream = await agent.stream(prompt);
+ * await stream.fullStream.pipeTo(context.writer);
+ * ```
+ *
+ */
+export class ToolStream extends WritableStream<unknown> {
   originalStream?: WritableStream;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(
     {
@@ -59,11 +76,20 @@ export class ToolStream<T> extends WritableStream<T> {
   }
 
   async custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T) {
-    const writer = this.originalStream?.getWriter();
-    try {
-      await writer?.write(data);
-    } finally {
-      writer?.releaseLock();
-    }
+    // Queue the write operation to prevent concurrent access to the writer
+    this.writeQueue = this.writeQueue.then(async () => {
+      if (!this.originalStream) {
+        return;
+      }
+
+      const writer = this.originalStream.getWriter();
+      try {
+        await writer.write(data);
+      } finally {
+        writer.releaseLock();
+      }
+    });
+
+    return this.writeQueue;
   }
 }

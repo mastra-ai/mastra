@@ -5,8 +5,8 @@
  * and generates markdown documentation for each provider's options.
  */
 
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Node, Project, TypeFormatFlags } from 'ts-morph';
 import type { Type } from 'ts-morph';
 
@@ -137,12 +137,23 @@ function generateProviderDocs(providerName: string, typeName: string, project: P
 }
 
 /**
+ * Custom descriptions for provider options that need additional context
+ */
+const CUSTOM_OPTION_DESCRIPTIONS: Record<string, Record<string, string>> = {
+  openai: {
+    store:
+      'Controls whether OpenAI stores your API requests for model training. Required to be "false" if your organization has zero data retention enabled. See: https://platform.openai.com/docs/guides/your-data#zero-data-retention',
+  },
+};
+
+/**
  * Generate provider options section for a specific provider (for use in provider docs)
  */
 export function generateProviderOptionsSection(providerId: string): string {
   // Map provider IDs to their type names
   const providerTypeMap: Record<string, { typeName: string; displayName: string }> = {
     anthropic: { typeName: 'AnthropicProviderOptions', displayName: 'Anthropic' },
+    deepseek: { typeName: 'DeepSeekChatOptions', displayName: 'DeepSeek' },
     google: { typeName: 'GoogleGenerativeAIProviderOptions', displayName: 'Google' },
     openai: { typeName: 'OpenAIResponsesProviderOptions', displayName: 'OpenAI' },
     xai: { typeName: 'XaiProviderOptions', displayName: 'xAI' },
@@ -163,6 +174,7 @@ export function generateProviderOptionsSection(providerId: string): string {
 
   project.addSourceFilesAtPaths([
     path.join(nodeModulesPath, '@ai-sdk/anthropic-v5/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/deepseek-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/google-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/openai-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/xai-v5/dist/index.d.ts'),
@@ -189,7 +201,7 @@ export function generateProviderOptionsSection(providerId: string): string {
     const exportedDeclarations = sourceFile.getExportedDeclarations();
     const typeExport = exportedDeclarations.get(providerInfo.typeName);
     if (typeExport && typeExport.length > 0) {
-      targetType = typeExport[0].getType();
+      targetType = typeExport[0]?.getType();
       break;
     }
   }
@@ -219,12 +231,23 @@ export function generateProviderOptionsSection(providerId: string): string {
   markdown += `### Available Options\n\n`;
 
   // Generate PropertiesTable component with JSON data
-  const tableData = properties.map(prop => ({
-    name: prop.name,
-    type: prop.type,
-    description: prop.description || '',
-    isOptional: prop.optional,
-  }));
+  const customDescriptions = CUSTOM_OPTION_DESCRIPTIONS[providerId] || {};
+  const tableData = properties.map(prop => {
+    let description = prop.description || '';
+    const customDesc = customDescriptions[prop.name];
+
+    // Combine existing description with custom description
+    if (customDesc) {
+      description = description ? `${description}\n\n${customDesc}` : customDesc;
+    }
+
+    return {
+      name: prop.name,
+      type: prop.type,
+      description,
+      isOptional: prop.optional,
+    };
+  });
 
   markdown += `<PropertiesTable\n`;
   markdown += `  content={${JSON.stringify(tableData, null, 4)}}\n`;
@@ -249,6 +272,7 @@ function main() {
 
   project.addSourceFilesAtPaths([
     path.join(nodeModulesPath, '@ai-sdk/anthropic-v5/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/deepseek-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/google-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/openai-v5/dist/index.d.ts'),
     path.join(nodeModulesPath, '@ai-sdk/xai-v5/dist/index.d.ts'),
@@ -257,6 +281,7 @@ function main() {
   // Generate docs for each provider
   const providers = [
     { name: 'anthropic', typeName: 'AnthropicProviderOptions' },
+    { name: 'deepseek', typeName: 'DeepSeekChatOptions' },
     { name: 'google', typeName: 'GoogleGenerativeAIProviderOptions' },
     { name: 'openai', typeName: 'OpenAIResponsesProviderOptions' },
     { name: 'xai', typeName: 'XaiProviderOptions' },

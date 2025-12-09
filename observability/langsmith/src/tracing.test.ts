@@ -54,7 +54,9 @@ describe('LangSmithExporter', () => {
 
     // Mock RunTree constructor
     MockRunTreeClass = vi.mocked(RunTree);
-    MockRunTreeClass.mockImplementation(() => mockRunTree);
+    MockRunTreeClass.mockImplementation(function () {
+      return mockRunTree;
+    });
 
     // Set up mock for Client
     mockClient = {
@@ -63,7 +65,9 @@ describe('LangSmithExporter', () => {
     };
 
     MockClientClass = vi.mocked(Client);
-    MockClientClass.mockImplementation(() => mockClient);
+    MockClientClass.mockImplementation(function () {
+      return mockClient;
+    });
 
     config = {
       apiKey: 'test-api-key',
@@ -79,13 +83,48 @@ describe('LangSmithExporter', () => {
       expect(exporter.name).toBe('langsmith');
     });
 
+    it('should pass projectName to RunTree when configured', async () => {
+      // Create exporter with custom projectName
+      const exporterWithProject = new LangSmithExporter({
+        apiKey: 'test-api-key',
+        projectName: 'my-custom-project',
+      });
+
+      const rootSpan = createMockSpan({
+        id: 'test-span',
+        name: 'test',
+        type: SpanType.GENERIC,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporterWithProject.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Should pass project_name to the RunTree constructor
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project_name: 'my-custom-project',
+        }),
+      );
+    });
+
     it('should disable exporter when apiKey is missing', async () => {
+      // Temporarily clear env var to test missing apiKey behavior
+      const originalEnvKey = process.env.LANGSMITH_API_KEY;
+      delete process.env.LANGSMITH_API_KEY;
+
       const invalidConfig = {
         // Missing apiKey
         apiUrl: 'https://test.com',
       };
 
       const disabledExporter = new LangSmithExporter(invalidConfig);
+
+      // Restore env var
+      process.env.LANGSMITH_API_KEY = originalEnvKey;
 
       // Should be disabled when apiKey is missing
       expect(disabledExporter['isDisabled']).toBe(true);
@@ -197,6 +236,64 @@ describe('LangSmithExporter', () => {
 
       // Should post the child run
       expect(mockRunTree.postRun).toHaveBeenCalledTimes(2);
+    });
+
+    it('should reuse existing trace when multiple root spans share the same traceId', async () => {
+      const sharedTraceId = 'shared-trace-123';
+
+      // First root span (e.g., first agent.stream call)
+      const firstRootSpan = createMockSpan({
+        id: 'root-span-1',
+        name: 'agent-call-1',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      firstRootSpan.traceId = sharedTraceId;
+
+      // Second root span with same traceId (e.g., second agent.stream call after client-side tool)
+      const secondRootSpan = createMockSpan({
+        id: 'root-span-2',
+        name: 'agent-call-2',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      secondRootSpan.traceId = sharedTraceId;
+
+      // Process both root spans
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondRootSpan,
+      });
+
+      // Access internal traceMap to verify trace data is shared (not overwritten)
+      const traceData = (exporter as any).traceMap.get(sharedTraceId);
+      expect(traceData).toBeDefined();
+
+      // Both root spans should be tracked in the same trace
+      expect(traceData.spans.has('root-span-1')).toBe(true);
+      expect(traceData.spans.has('root-span-2')).toBe(true);
+
+      // Both root spans should be active
+      expect(traceData.activeIds.has('root-span-1')).toBe(true);
+      expect(traceData.activeIds.has('root-span-2')).toBe(true);
+
+      // Only one trace entry should exist (not two separate ones)
+      expect((exporter as any).traceMap.size).toBe(1);
     });
   });
 

@@ -3,6 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   ensureDate,
   MemoryStorage,
   serializeDate,
@@ -51,7 +52,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_RESOURCE_BY_ID_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error processing resource ${resourceId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -102,7 +103,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_SAVE_RESOURCE_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to save resource to ${fullTableName}: ${error instanceof Error ? error.message : String(error)}`,
@@ -162,7 +163,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_UPDATE_RESOURCE_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to update resource ${resourceId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -194,7 +195,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_THREAD_BY_ID_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error processing thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -217,7 +218,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLOUDFLARE_D1_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -269,7 +270,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_LIST_THREADS_BY_RESOURCE_ID_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error getting threads by resourceId ${resourceId}: ${
@@ -330,7 +331,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_SAVE_THREAD_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to save thread to ${fullTableName}: ${error instanceof Error ? error.message : String(error)}`,
@@ -384,7 +385,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_UPDATE_THREAD_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to update thread ${id}: ${error instanceof Error ? error.message : String(error)}`,
@@ -414,7 +415,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_DELETE_THREAD_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to delete thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -487,7 +488,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_SAVE_MESSAGES_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to save messages: ${error instanceof Error ? error.message : String(error)}`,
@@ -497,28 +498,29 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  private async _getIncludedMessages(threadId: string, include: StorageListMessagesInput['include']) {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    if (!include) return null;
+  private async _getIncludedMessages(include: StorageListMessagesInput['include']) {
+    if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
+    const tableName = this.operations.getTableName(TABLE_MESSAGES);
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      // if threadId is provided, use it, otherwise use threadId from args
-      const searchId = inc.threadId || threadId;
+      // Query by message ID directly - get the threadId from the message itself via subquery
 
       unionQueries.push(`
                 SELECT * FROM (
-                  WITH ordered_messages AS (
+                  WITH target_thread AS (
+                    SELECT thread_id FROM ${tableName} WHERE id = ?
+                  ),
+                  ordered_messages AS (
                     SELECT
                       *,
                       ROW_NUMBER() OVER (ORDER BY createdAt ASC) AS row_num
-                    FROM ${this.operations.getTableName(TABLE_MESSAGES)}
-                    WHERE thread_id = ?
+                    FROM ${tableName}
+                    WHERE thread_id = (SELECT thread_id FROM target_thread)
                   )
                   SELECT
                     m.id,
@@ -542,7 +544,7 @@ export class MemoryStorageD1 extends MemoryStorage {
                 ) AS query_${paramIdx}
             `);
 
-      params.push(searchId, id, id, withNextMessages, withPreviousMessages);
+      params.push(id, id, id, withNextMessages, withPreviousMessages);
       paramIdx++;
     }
 
@@ -604,7 +606,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_LIST_MESSAGES_BY_ID_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve messages by ID: ${error instanceof Error ? error.message : String(error)}`,
@@ -621,22 +623,25 @@ export class MemoryStorageD1 extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLOUDFLARE_D1_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLOUDFLARE_D1_LIST_MESSAGES_INVALID_PAGE',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -748,7 +753,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        const includeResult = (await this._getIncludedMessages(threadId, include)) as MastraDBMessage[];
+        const includeResult = (await this._getIncludedMessages(include)) as MastraDBMessage[];
         if (Array.isArray(includeResult)) {
           includeMessages = includeResult;
 
@@ -804,14 +809,14 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_LIST_MESSAGES_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to list messages for thread ${threadId}: ${
+          text: `Failed to list messages for thread ${Array.isArray(threadId) ? threadId.join(',') : threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
@@ -965,7 +970,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },

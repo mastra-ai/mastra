@@ -78,10 +78,10 @@ describe('Input and Output Processors', () => {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'processed: ' },
-            { type: 'text-delta', id: '1', delta: textContent },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'processed: ' },
+            { type: 'text-delta', id: 'text-1', delta: textContent },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -595,9 +595,9 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'This is a test response with test words' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'This is a test response with test words' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 8, outputTokens: 10, totalTokens: 18 } },
             ]),
           }),
@@ -619,6 +619,65 @@ describe('Input and Output Processors', () => {
 
       // await testWithFormat('aisdk');
       await testWithFormat('mastra');
+    });
+
+    it('should return processed text in result.text property', async () => {
+      class TextTransformProcessor implements Processor {
+        readonly id = 'text-transform-processor';
+        readonly name = 'Text Transform Processor';
+
+        async processOutputResult({ messages }) {
+          return messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part =>
+                part.type === 'text' ? { ...part, text: part.text.toUpperCase() } : part,
+              ),
+            },
+          }));
+        }
+      }
+
+      const agent = new Agent({
+        id: 'result-text-processor-test-agent',
+        name: 'Result Text Processor Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            content: [
+              {
+                type: 'text',
+                text: 'hello world',
+              },
+            ],
+            finishReason: 'stop',
+            usage: { inputTokens: 2, outputTokens: 5, totalTokens: 7 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'hello world' },
+              { type: 'text-end', id: '1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 2, outputTokens: 5, totalTokens: 7 } },
+            ]),
+          }),
+        }),
+        outputProcessors: [new TextTransformProcessor()],
+      });
+
+      const result = await agent.generate('Test');
+
+      // The result.text property should contain the processed text (uppercase)
+      // not the original unprocessed text
+      expect(result.text).toBe('HELLO WORLD');
+
+      // Also verify the response messages are processed correctly
+      expect((result.response.messages[0].content[0] as any).text).toBe('HELLO WORLD');
     });
 
     it('should process messages through multiple output processors in sequence', async () => {
@@ -684,9 +743,9 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'hello world' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'hello world' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 2, outputTokens: 5, totalTokens: 7 } },
             ]),
           }),
@@ -750,9 +809,9 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'This content is inappropriate and should be blocked' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'This content is inappropriate and should be blocked' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
             ]),
           }),
@@ -820,9 +879,9 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'This is a test response' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'This is a test response' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
             ]),
           }),
@@ -1156,12 +1215,12 @@ describe('Input and Output Processors', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: '{"winner":' },
-              { type: 'text-delta', id: '1', delta: '"Barack' },
-              { type: 'text-delta', id: '1', delta: ' Obama",' },
-              { type: 'text-delta', id: '1', delta: '"year":"2012"}' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: '{"winner":' },
+              { type: 'text-delta', id: 'text-1', delta: '"Barack' },
+              { type: 'text-delta', id: 'text-1', delta: ' Obama",' },
+              { type: 'text-delta', id: 'text-1', delta: '"year":"2012"}' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -1254,9 +1313,9 @@ describe('Input and Output Processors', () => {
               stream: convertArrayToReadableStream([
                 { type: 'stream-start', warnings: [] },
                 { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'This should be aborted' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'This should be aborted' },
+                { type: 'text-end', id: 'text-1' },
                 { type: 'finish', finishReason: 'stop', usage: { inputTokens: 4, outputTokens: 10, totalTokens: 14 } },
               ]),
             }),

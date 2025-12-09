@@ -1,9 +1,10 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   MastraStorage,
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -76,7 +77,7 @@ export class CloudflareStore extends MastraStorage {
   }
 
   constructor(config: CloudflareStoreConfig) {
-    super({ id: config.id, name: 'Cloudflare' });
+    super({ id: config.id, name: 'Cloudflare', disableInit: config.disableInit });
 
     try {
       if (isWorkersConfig(config)) {
@@ -122,7 +123,7 @@ export class CloudflareStore extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_INIT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -284,6 +285,10 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async updateMessages(args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
@@ -297,7 +302,7 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 

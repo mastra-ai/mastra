@@ -42,7 +42,8 @@ export async function validateStepInput({
 
       validationError = new Error('Step input validation failed: \n' + errorMessages);
     } else {
-      inputData = isEmpty(validatedInput.data) ? prevOutput : validatedInput.data;
+      const isEmptyData = isEmpty(validatedInput.data);
+      inputData = isEmptyData ? prevOutput : validatedInput.data;
     }
   }
 
@@ -69,6 +70,66 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
     }
   }
   return { resumeData, validationError };
+}
+
+export async function validateStepSuspendData({
+  suspendData,
+  step,
+  validateInputs,
+}: {
+  suspendData?: any;
+  step: Step<string, any, any>;
+  validateInputs: boolean;
+}) {
+  if (!suspendData) {
+    return { suspendData: undefined, validationError: undefined };
+  }
+
+  let validationError: Error | undefined;
+
+  const suspendSchema = step.suspendSchema;
+
+  if (suspendSchema && validateInputs) {
+    const validatedSuspendData = await suspendSchema.safeParseAsync(suspendData);
+    if (!validatedSuspendData.success) {
+      const errors = getZodErrors(validatedSuspendData.error!);
+      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      validationError = new Error('Step suspend data validation failed: \n' + errorMessages);
+    } else {
+      suspendData = validatedSuspendData.data;
+    }
+  }
+  return { suspendData, validationError };
+}
+
+export async function validateStepStateData({
+  stateData,
+  step,
+  validateInputs,
+}: {
+  stateData?: any;
+  step: Step<string, any, any>;
+  validateInputs: boolean;
+}) {
+  if (!stateData) {
+    return { stateData: undefined, validationError: undefined };
+  }
+
+  let validationError: Error | undefined;
+
+  const stateSchema = step.stateSchema;
+
+  if (stateSchema && validateInputs) {
+    const validatedStateData = await stateSchema.safeParseAsync(stateData);
+    if (!validatedStateData.success) {
+      const errors = getZodErrors(validatedStateData.error!);
+      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      validationError = new Error('Step state data validation failed: \n' + errorMessages);
+    } else {
+      stateData = validatedStateData.data;
+    }
+  }
+  return { stateData, validationError };
 }
 
 export function getResumeLabelsByStepId(

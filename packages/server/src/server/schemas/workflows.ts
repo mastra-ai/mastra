@@ -1,5 +1,5 @@
 import z from 'zod';
-import { createOffsetPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
+import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
 
 export const workflowRunStatusSchema = z.enum([
   'running',
@@ -87,9 +87,10 @@ export const workflowRunResponseSchema = workflowRunSchema;
 
 /**
  * Schema for query parameters when listing workflow runs
- * All query params come as strings from URL
+ * Supports both page/perPage and limit/offset for backwards compatibility
+ * If page/perPage provided, use directly; otherwise convert from limit/offset
  */
-export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend({
+export const listWorkflowRunsQuerySchema = createCombinedPaginationSchema().extend({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
   resourceId: z.string().optional(),
@@ -101,6 +102,7 @@ export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend
  */
 const workflowExecutionBodySchema = z.object({
   inputData: z.unknown().optional(),
+  initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
 });

@@ -26,6 +26,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "gateways/azure-openai",
+          label: "Azure-openai",
+        },
+        {
+          type: "doc",
           id: "gateways/netlify",
           label: "Netlify",
         },
@@ -113,6 +118,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/bailing",
+          label: "Bailing",
+        },
+        {
+          type: "doc",
           id: "providers/baseten",
           label: "Baseten",
         },
@@ -128,8 +138,18 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/cloudflare-ai-gateway",
+          label: "Cloudflare AI Gateway",
+        },
+        {
+          type: "doc",
           id: "providers/cloudflare-workers-ai",
           label: "Cloudflare Workers AI",
+        },
+        {
+          type: "doc",
+          id: "providers/cohere",
+          label: "Cohere",
         },
         {
           type: "doc",
@@ -163,6 +183,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/helicone",
+          label: "Helicone",
+        },
+        {
+          type: "doc",
           id: "providers/huggingface",
           label: "Hugging Face",
         },
@@ -183,6 +208,16 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/io-net",
+          label: "IO.NET",
+        },
+        {
+          type: "doc",
+          id: "providers/kimi-for-coding",
+          label: "Kimi For Coding",
+        },
+        {
+          type: "doc",
           id: "providers/llama",
           label: "Llama",
         },
@@ -199,7 +234,12 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/minimax",
-          label: "Minimax",
+          label: "MiniMax",
+        },
+        {
+          type: "doc",
+          id: "providers/minimax-cn",
+          label: "MiniMax (China)",
         },
         {
           type: "doc",
@@ -253,6 +293,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/poe",
+          label: "Poe",
+        },
+        {
+          type: "doc",
           id: "providers/requesty",
           label: "Requesty",
         },
@@ -260,6 +305,11 @@ const sidebars = {
           type: "doc",
           id: "providers/scaleway",
           label: "Scaleway",
+        },
+        {
+          type: "doc",
+          id: "providers/siliconflow",
+          label: "SiliconFlow",
         },
         {
           type: "doc",

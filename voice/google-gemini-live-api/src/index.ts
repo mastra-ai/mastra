@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type { ToolsInput } from '@mastra/core/agent';
 import { MastraVoice } from '@mastra/core/voice';
 import type { VoiceEventType, VoiceConfig } from '@mastra/core/voice';

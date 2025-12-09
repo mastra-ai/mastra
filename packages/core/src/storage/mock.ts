@@ -1,10 +1,12 @@
 import type { MastraDBMessage } from '../agent';
-import type { ScoreRowData, ScoringSource } from '../evals/types';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../evals/types';
 import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';
+import { InMemoryAgentsStorage } from './domains/agents/inmemory';
+import type { InMemoryAgents } from './domains/agents/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
@@ -60,12 +62,18 @@ export class InMemoryStore extends MastraStorage {
       operations: operationsStorage,
     });
 
+    const agentsCollection: InMemoryAgents = new Map();
+    const agentsStorage = new InMemoryAgentsStorage({
+      collection: agentsCollection,
+    });
+
     this.stores = {
       operations: operationsStorage,
       workflows: workflowsStorage,
       scores: scoresStorage,
       memory: memoryStorage,
       observability: observabilityStorage,
+      agents: agentsStorage,
     };
   }
 
@@ -79,6 +87,7 @@ export class InMemoryStore extends MastraStorage {
       observabilityInstance: true,
       indexManagement: false,
       listScoresBySpan: true,
+      agents: true,
     };
   }
 
@@ -246,7 +255,7 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 
@@ -308,6 +317,10 @@ export class InMemoryStore extends MastraStorage {
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
   async createSpan(span: SpanRecord): Promise<void> {

@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { getErrorFromUnknown } from '../../error/utils.js';
@@ -9,7 +9,12 @@ import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
 import type { LoopConditionFunction, Step } from '../step';
 import type { Emitter, StepFlowEntry, StepResult } from '../types';
-import { validateStepInput, createDeprecationProxy, runCountDeprecationMessage } from '../utils';
+import {
+  validateStepInput,
+  createDeprecationProxy,
+  runCountDeprecationMessage,
+  validateStepSuspendData,
+} from '../utils';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -67,6 +72,16 @@ export class StepExecutor extends MastraBase {
       stepInfo.resumedAt = Date.now();
     }
 
+    // Extract suspend data if this step was previously suspended
+    let suspendDataToUse =
+      params.stepResults[step.id]?.status === 'suspended' ? params.stepResults[step.id]?.suspendPayload : undefined;
+
+    // Filter out internal workflow metadata before exposing to step code
+    if (suspendDataToUse && '__workflow_meta' in suspendDataToUse) {
+      const { __workflow_meta, ...userSuspendData } = suspendDataToUse;
+      suspendDataToUse = userSuspendData;
+    }
+
     try {
       if (validationError) {
         throw validationError;
@@ -81,16 +96,25 @@ export class StepExecutor extends MastraBase {
             requestContext,
             inputData,
             state: params.state,
-            setState: (state: any) => {
+            setState: async (state: any) => {
               // TODO
               params.state = state;
             },
             retryCount,
             resumeData: params.resumeData,
+            suspendData: suspendDataToUse,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
             suspend: async (suspendPayload: any): Promise<any> => {
-              suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
+              const { suspendData, validationError } = await validateStepSuspendData({
+                suspendData: suspendPayload,
+                step,
+                validateInputs: params.validateInputs ?? true,
+              });
+              if (validationError) {
+                throw validationError;
+              }
+              suspended = { payload: { ...suspendData, __workflow_meta: { runId, path: [step.id] } } };
             },
             bail: (result: any) => {
               bailed = { payload: result };
@@ -252,16 +276,10 @@ export class StepExecutor extends MastraBase {
           requestContext,
           inputData,
           state,
-          setState: (_state: any) => {
-            // TODO
-          },
           retryCount,
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
-          suspend: async (_suspendPayload: any): Promise<any> => {
-            throw new Error('Not implemented');
-          },
           bail: (_result: any) => {
             throw new Error('Not implemented');
           },
@@ -322,7 +340,7 @@ export class StepExecutor extends MastraBase {
             inputData: params.input,
             // TODO: implement state
             state: {},
-            setState: (_state: any) => {
+            setState: async (_state: any) => {
               // TODO
             },
             retryCount,
@@ -395,7 +413,7 @@ export class StepExecutor extends MastraBase {
             inputData: params.input,
             // TODO: implement state
             state: {},
-            setState: (_state: any) => {
+            setState: async (_state: any) => {
               // TODO
             },
             retryCount,

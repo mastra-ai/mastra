@@ -1,12 +1,13 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
+  createStorageErrorId,
   ScoresStorage,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
-  safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
@@ -19,24 +20,17 @@ export interface D1Client {
   query(args: { sql: string; params: string[] }): Promise<{ result: D1QueryResult }>;
 }
 
+/**
+ * Cloudflare D1-specific score row transformation.
+ * Uses Z-suffix timestamps (createdAtZ, updatedAtZ) when available.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  const deserialized: Record<string, any> = { ...row };
-
-  // Reverse serialized JSON fields (stored as strings in D1)
-  deserialized.input = safelyParseJSON(row.input);
-  deserialized.output = safelyParseJSON(row.output);
-  deserialized.scorer = safelyParseJSON(row.scorer);
-  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-  deserialized.metadata = safelyParseJSON(row.metadata);
-  deserialized.additionalContext = safelyParseJSON(row.additionalContext);
-  deserialized.requestContext = safelyParseJSON(row.requestContext);
-  deserialized.entity = safelyParseJSON(row.entity);
-
-  deserialized.createdAt = row.createdAtZ || row.createdAt;
-  deserialized.updatedAt = row.updatedAtZ || row.updatedAt;
-
-  return deserialized as ScoreRowData;
+  return coreTransformScoreRow(row, {
+    preferredTimestampFields: {
+      createdAt: 'createdAtZ',
+      updatedAt: 'updatedAtZ',
+    },
+  });
 }
 
 export class ScoresStorageD1 extends ScoresStorage {
@@ -63,7 +57,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_SCORES_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -72,24 +66,31 @@ export class ScoresStorageD1 extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let parsedScore: ValidatedSaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_SCORES_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { scoreId: score.id },
+          details: {
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
     }
 
+    const id = crypto.randomUUID();
+
     try {
-      const id = crypto.randomUUID();
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
 
       // Serialize all object values to JSON strings
@@ -106,9 +107,10 @@ export class ScoresStorageD1 extends ScoresStorage {
         }
       }
 
+      const now = new Date();
       serializedRecord.id = id;
-      serializedRecord.createdAt = new Date().toISOString();
-      serializedRecord.updatedAt = new Date().toISOString();
+      serializedRecord.createdAt = now.toISOString();
+      serializedRecord.updatedAt = now.toISOString();
 
       const columns = Object.keys(serializedRecord);
       const values = Object.values(serializedRecord);
@@ -118,14 +120,14 @@ export class ScoresStorageD1 extends ScoresStorage {
 
       await this.operations.executeQuery({ sql, params });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_SCORES_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: { id },
         },
         error,
       );
@@ -212,7 +214,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_SCORES_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -280,7 +282,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_SCORES_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -355,7 +357,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_SCORES_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -430,7 +432,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORE_SCORES_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

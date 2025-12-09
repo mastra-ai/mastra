@@ -1,6 +1,8 @@
 import { openai } from '@ai-sdk/openai-v5';
-import { describe, expect, it } from 'vitest';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { MastraError } from '../error';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools';
@@ -601,3 +603,181 @@ describe.skip('Agent - network', () => {
     expect(titleGenerationAttempted).toBe(false);
   });
 }, 120e3);
+
+describe('Agent - network - updateWorkingMemory', () => {
+  it('Should forward memory context (threadId, resourceId) to sub-agents when using same memory template', async () => {
+    // Create a shared memory instance with working memory enabled
+    // This is the scenario from issue #9873 where sub-agents share the same memory template
+    const sharedMemory = new MockMemory({
+      enableWorkingMemory: true,
+      workingMemoryTemplate: `
+      # Information Profile
+      - Title:
+      - Some facts:
+        - Fact 1:
+        - Fact 2:
+        - Fact 3:
+      - Summary:
+      `,
+    });
+
+    // Create sub-agents with the shared memory and working memory enabled
+    // These agents will need threadId/resourceId to use updateWorkingMemory tool
+    const subAgent1 = new Agent({
+      id: 'sub-agent-1',
+      name: 'Sub Agent 1',
+      instructions:
+        'You are a helpful assistant. When the user provides information, remember it using your memory tools.',
+      model: openai('gpt-4o-mini'),
+      memory: sharedMemory,
+      defaultOptions: {
+        toolChoice: 'required',
+      },
+    });
+
+    const subAgent2 = new Agent({
+      id: 'sub-agent-2',
+      name: 'Sub Agent 2',
+      instructions:
+        'You are a helpful assistant. When the user provides information, remember it using your memory tools.',
+      model: openai('gpt-4o-mini'),
+      memory: sharedMemory,
+      defaultOptions: {
+        toolChoice: 'required',
+      },
+    });
+
+    // Create network agent with the same shared memory
+    const networkWithSharedMemory = new Agent({
+      id: 'network-with-shared-memory',
+      name: 'Network With Shared Memory',
+      instructions:
+        'You can delegate tasks to sub-agents. Sub Agent 1 handles research tasks. Sub Agent 2 handles writing tasks.',
+      model: openai('gpt-4o-mini'),
+      agents: {
+        subAgent1,
+        subAgent2,
+      },
+      memory: sharedMemory,
+    });
+
+    const threadId = 'test-thread-shared-memory';
+    const resourceId = 'test-resource-shared-memory';
+
+    const anStream = await networkWithSharedMemory.network('Research dolphins and write a summary', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Consume the stream and track sub-agent executions
+    for await (const chunk of anStream) {
+      if (chunk.type === 'agent-execution-event-tool-result') {
+        const payload = chunk.payload as any;
+        const toolName = payload.payload?.toolName;
+        const result = payload.payload?.result;
+        if (toolName === 'updateWorkingMemory' && result instanceof MastraError) {
+          const toolResultMessage = result?.message;
+          if (toolResultMessage.includes('Thread ID') || toolResultMessage.includes('resourceId')) {
+            expect.fail(toolResultMessage + ' should not be thrown');
+          }
+        }
+      }
+    }
+
+    // Verify the stream completed (usage should be available)
+    const usage = await anStream.usage;
+    expect(usage).toBeDefined();
+
+    // Verify that the thread was created/accessed in memory
+    // This confirms that memory operations worked correctly
+    const thread = await sharedMemory.getThreadById({ threadId });
+    expect(thread).toBeDefined();
+    expect(thread?.id).toBe(threadId);
+    expect(thread?.resourceId).toBe(resourceId);
+  });
+}, 120e3);
+
+describe('Agent - network - tool context validation', () => {
+  it('should pass toolCallId, threadId, and resourceId in context.agent when network executes a tool', async () => {
+    const mockExecute = vi.fn(async (_inputData, _context) => {
+      return { result: 'context captured' };
+    });
+
+    const tool = createTool({
+      id: 'context-check-tool',
+      description: 'Tool to validate context.agent properties from network',
+      inputSchema: z.object({
+        message: z.string(),
+      }),
+      execute: mockExecute,
+    });
+
+    // Mock model returns routing agent selection schema
+    // The network's routing agent uses structuredOutput expecting: { primitiveId, primitiveType, prompt, selectionReason }
+    const routingResponse = JSON.stringify({
+      primitiveId: 'tool',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ message: 'validate context' }),
+      selectionReason: 'Test context propagation through network',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const memory = new MockMemory();
+
+    const agent = new Agent({
+      id: 'context-network-agent',
+      name: 'Context Test Network',
+      instructions: 'Use the context-check-tool to validate context properties.',
+      model: mockModel,
+      tools: { tool },
+      memory,
+    });
+
+    const threadId = 'context-test-thread';
+    const resourceId = 'context-test-resource';
+
+    const anStream = await agent.network('Validate context by using the context-check-tool', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Consume the stream to trigger tool execution through network
+    for await (const _chunk of anStream) {
+      // Stream events are processed
+    }
+
+    // Verify the tool was called with context containing toolCallId, threadId, and resourceId
+    expect(mockExecute).toHaveBeenCalled();
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'validate context' }),
+      expect.objectContaining({
+        agent: expect.objectContaining({
+          toolCallId: expect.any(String),
+          threadId,
+          resourceId,
+        }),
+      }),
+    );
+  });
+});

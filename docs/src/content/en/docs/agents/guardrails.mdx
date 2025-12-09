@@ -33,7 +33,7 @@ export const moderatedAgent = new Agent({
   model: "openai/gpt-5.1",
   inputProcessors: [
     new ModerationProcessor({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
@@ -82,7 +82,7 @@ export const secureAgent = new Agent({
   // ...
   inputProcessors: [
     new PromptInjectionDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       threshold: 0.8,
       strategy: "rewrite",
       detectionTypes: ["injection", "jailbreak", "system-override"],
@@ -106,7 +106,7 @@ export const multilingualAgent = new Agent({
   // ...
   inputProcessors: [
     new LanguageDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       targetLanguages: ["English", "en"],
       strategy: "translate",
       threshold: 0.8,
@@ -179,7 +179,7 @@ const scrubbedAgent = new Agent({
   name: "Scrubbed Agent",
   outputProcessors: [
     new SystemPromptScrubber({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       strategy: "redact",
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
@@ -193,6 +193,10 @@ const scrubbedAgent = new Agent({
 ```
 
 > See [SystemPromptScrubber](/reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
+
+:::note
+When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/v1/server-db/mastra-server#stream-data-redaction) for details.
+:::
 
 ## Hybrid processors
 
@@ -211,7 +215,7 @@ export const moderatedAgent = new Agent({
   // ...
   inputProcessors: [
     new ModerationProcessor({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       threshold: 0.7,
       strategy: "block",
       categories: ["hate", "harassment", "violence"],
@@ -240,7 +244,7 @@ export const privateAgent = new Agent({
   // ...
   inputProcessors: [
     new PIIDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       threshold: 0.6,
       strategy: "redact",
       redactionMethod: "mask",
@@ -364,6 +368,6 @@ If the built-in processors don’t cover your needs, you can create your own by 
 
 Available examples:
 
-- [Message Length Limiter](/examples/v1/processors/message-length-limiter)
-- [Response Length Limiter](/examples/v1/processors/response-length-limiter)
-- [Response Validator](/examples/v1/processors/response-validator)
+- [Message Length Limiter](https://github.com/mastra-ai/mastra/tree/main/examples/processors-message-length-limiter)
+- [Response Length Limiter](https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-length-limiter)
+- [Response Validator](https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator)

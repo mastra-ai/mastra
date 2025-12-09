@@ -11,6 +11,7 @@ import {
   GET_WORKFLOW_BY_ID_ROUTE,
   START_ASYNC_WORKFLOW_ROUTE,
   GET_WORKFLOW_RUN_BY_ID_ROUTE,
+  DELETE_WORKFLOW_RUN_BY_ID_ROUTE,
   CREATE_WORKFLOW_RUN_ROUTE,
   START_WORKFLOW_RUN_ROUTE,
   RESUME_ASYNC_WORKFLOW_ROUTE,
@@ -116,6 +117,128 @@ describe('vNext Workflow Handlers', () => {
         'test-workflow': serializeWorkflow(mockWorkflow),
         'reusable-workflow': serializeWorkflow(reusableWorkflow),
       });
+    });
+
+    it('should return workflows with partial data when partial=true query param is provided', async () => {
+      const stepWithSchemas = createStep({
+        id: 'step-with-schemas',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          output: z.string(),
+        }),
+        resumeSchema: z.object({
+          resumeData: z.string(),
+        }),
+        suspendSchema: z.object({
+          suspendData: z.string(),
+        }),
+        execute: vi.fn<any>().mockResolvedValue({ output: 'test' }),
+      });
+
+      const workflowWithSchemas = createWorkflow({
+        id: 'workflow-with-schemas',
+        description: 'A workflow with schemas',
+        inputSchema: z.object({
+          workflowInput: z.string(),
+        }),
+        outputSchema: z.object({
+          workflowOutput: z.string(),
+        }),
+        steps: [stepWithSchemas],
+      })
+        .then(stepWithSchemas)
+        .commit();
+
+      const mastraWithSchemas = new Mastra({
+        logger: false,
+        workflows: { 'workflow-with-schemas': workflowWithSchemas },
+        storage: new MockStore(),
+      });
+
+      const result = await LIST_WORKFLOWS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mastraWithSchemas }),
+        partial: 'true',
+      });
+
+      const workflow = result['workflow-with-schemas'];
+      expect(workflow).toBeDefined();
+      expect(workflow.name).toBe('workflow-with-schemas');
+      expect(workflow.description).toBe('A workflow with schemas');
+
+      // When partial=true, root-level schemas should be pruned
+      expect(workflow.inputSchema).toBeUndefined();
+      expect(workflow.outputSchema).toBeUndefined();
+
+      // Steps should not be returned, only stepCount
+      expect(workflow.steps).toEqual({});
+      expect(workflow.allSteps).toEqual({});
+      expect(workflow.stepCount).toBe(1);
+      expect(typeof workflow.stepCount).toBe('number');
+    });
+
+    it('should return workflows with full schemas when partial param is not provided', async () => {
+      const stepWithSchemas = createStep({
+        id: 'step-with-schemas',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          output: z.string(),
+        }),
+        execute: vi.fn<any>().mockResolvedValue({ output: 'test' }) as any,
+      });
+
+      const workflowWithSchemas = createWorkflow({
+        id: 'workflow-with-schemas',
+        description: 'A workflow with schemas',
+        inputSchema: z.object({
+          workflowInput: z.string(),
+        }),
+        outputSchema: z.object({
+          workflowOutput: z.string(),
+        }),
+        steps: [stepWithSchemas],
+      })
+        .then(stepWithSchemas)
+        .commit();
+
+      const mastraWithSchemas = new Mastra({
+        logger: false,
+        workflows: { 'workflow-with-schemas': workflowWithSchemas },
+        storage: new MockStore(),
+      });
+
+      const result = await LIST_WORKFLOWS_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mastraWithSchemas }),
+        // No partial parameter provided
+      });
+
+      const workflow = result['workflow-with-schemas'];
+      expect(workflow).toBeDefined();
+
+      // When partial is not provided, schemas should be included
+      expect(workflow.inputSchema).toBeDefined();
+      expect(workflow.outputSchema).toBeDefined();
+      expect(typeof workflow.inputSchema).toBe('string');
+      expect(typeof workflow.outputSchema).toBe('string');
+
+      // Step-level schemas should also be included
+      const step = workflow.steps['step-with-schemas'];
+      // @ts-expect-error - step is only defined when partial=true
+      expect(step.inputSchema).toBeDefined();
+      // @ts-expect-error - step is only defined when partial=true
+      expect(step.outputSchema).toBeDefined();
+      // @ts-expect-error - step is only defined when partial=true
+      expect(typeof step.inputSchema).toBe('string');
+      // @ts-expect-error - step is only defined when partial=true
+      expect(typeof step.outputSchema).toBe('string');
+
+      // Steps object should be present, not stepCount
+      expect(workflow.steps).toBeDefined();
+      expect(workflow.allSteps).toBeDefined();
+      expect(workflow.stepCount).toBeUndefined();
     });
   });
 
@@ -245,6 +368,68 @@ describe('vNext Workflow Handlers', () => {
       });
 
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('DELETE_WORKFLOW_RUN_BY_ID_ROUTE', () => {
+    it('should throw error when workflowId is not provided', async () => {
+      await expect(
+        DELETE_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          runId: 'test-run',
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+    });
+
+    it('should throw error when runId is not provided', async () => {
+      await expect(
+        DELETE_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: 'test-workflow',
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
+    });
+
+    it('should throw error when workflow is not found', async () => {
+      await expect(
+        DELETE_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: 'non-existent',
+          runId: 'test-run',
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+    });
+
+    it('should delete workflow run successfully', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run',
+      });
+
+      await run.start({ inputData: {} });
+
+      const result = await GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+        runId: 'test-run',
+      });
+
+      expect(result).toBeDefined();
+
+      const deleteResponse = await DELETE_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+        ...createTestRuntimeContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+        runId: 'test-run',
+      });
+
+      expect(deleteResponse).toEqual({ message: 'Workflow run deleted' });
+
+      await expect(
+        GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+          ...createTestRuntimeContext({ mastra: mockMastra }),
+          workflowId: 'test-workflow',
+          runId: 'test-run',
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
   });
 

@@ -1,6 +1,6 @@
-import type { ChildProcess } from 'child_process';
+import type { ChildProcess } from 'node:child_process';
+import { join } from 'node:path';
 import process from 'node:process';
-import { join } from 'path';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
@@ -121,7 +121,7 @@ const startServer = async (
       currentServerProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
         if (
-          !output.includes('Playground available') &&
+          !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
           !output.includes('Mastra API running on port')
         ) {
@@ -134,7 +134,7 @@ const startServer = async (
       currentServerProcess.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
         if (
-          !output.includes('Playground available') &&
+          !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
           !output.includes('Mastra API running on port')
         ) {

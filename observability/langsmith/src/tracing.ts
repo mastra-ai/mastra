@@ -19,6 +19,12 @@ import { normalizeUsageMetrics } from './metrics';
 export interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   /** LangSmith client instance */
   client?: Client;
+  /**
+   * The name of the LangSmith project to send traces to.
+   * Overrides the LANGCHAIN_PROJECT environment variable.
+   * If neither is set, traces are sent to the "default" project.
+   */
+  projectName?: string;
 }
 
 type SpanData = {
@@ -90,6 +96,16 @@ export class LangSmithExporter extends BaseExporter {
   }
 
   private initializeRootSpan(span: AnyExportedSpan) {
+    // Check if trace already exists - reuse existing trace data
+    if (this.traceMap.has(span.traceId)) {
+      this.logger.debug('LangSmith exporter: Reusing existing trace from local map', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+      });
+      return;
+    }
+
     this.traceMap.set(span.traceId, { spans: new Map(), activeIds: new Set() });
   }
 
@@ -284,6 +300,11 @@ export class LangSmithExporter extends BaseExporter {
         ...span.metadata,
       },
     };
+
+    // Add project name if configured
+    if (this.config.projectName) {
+      payload.project_name = this.config.projectName;
+    }
 
     // Core span data
     if (span.input !== undefined) {

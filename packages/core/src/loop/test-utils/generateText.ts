@@ -48,9 +48,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+              { type: 'text-end', id: 'text-1' },
               {
                 id: '123',
                 providerMetadata: {
@@ -68,9 +68,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               { type: 'reasoning-delta', id: '1', delta: 'I will open the conversation with witty banter.' },
               { type: 'reasoning-end', id: '1' },
               { type: 'tool-call', toolCallId: 'call-1', toolName: 'tool1', input: `{ "value": "value" }` },
-              { type: 'text-start', id: '2' },
-              { type: 'text-delta', id: '2', delta: 'More text' },
-              { type: 'text-end', id: '2' },
+              { type: 'text-start', id: 'text-2' },
+              { type: 'text-delta', id: 'text-2', delta: 'More text' },
+              { type: 'text-end', id: 'text-2' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -249,10 +249,10 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               },
             },
             { type: 'reasoning-end', id: '2' },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello,' },
-            { type: 'text-delta', id: '1', delta: ' world!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello,' },
+            { type: 'text-delta', id: 'text-1', delta: ' world!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -265,9 +265,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       const modelWithSources = new MockLanguageModelV2({
         doStream: async () => ({
           stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'source',
               sourceType: 'url',
@@ -575,9 +575,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: 'text-1' },
                     { type: 'finish', finishReason: 'stop', usage: testUsage },
                   ]),
                 }),
@@ -662,9 +662,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: 'text-1' },
                     { type: 'finish', finishReason: 'stop', usage: testUsage },
                   ]),
                   request: {
@@ -710,9 +710,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: 'text-1' },
                     { type: 'finish', finishReason: 'stop', usage: testUsage },
                   ]),
                   response: {
@@ -743,12 +743,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             "id": "test-id-from-model",
             "messages": [
               {
-                "content": [
-                  {
-                    "text": "Hello, world!",
-                    "type": "text",
-                  },
-                ],
+                "content": "Hello, world!",
                 "role": "assistant",
               },
             ],
@@ -765,7 +760,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
                   {
@@ -809,7 +804,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
                   {

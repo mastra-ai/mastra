@@ -559,34 +559,35 @@ describe('resolveInitialMessages', () => {
       ]);
     });
 
-    it('should log the parsed JSON', () => {
-      const networkData = {
-        isNetwork: true,
-        primitiveType: 'agent',
-        primitiveId: 'agent-8',
-        input: 'test',
-        finalResult: {
-          text: 'Result',
-        },
-      };
+    // Note: Do we still need this test? Leaving it here for now in case we need to log the parsed JSON again.
+    // it('should log the parsed JSON', () => {
+    //   const networkData = {
+    //     isNetwork: true,
+    //     primitiveType: 'agent',
+    //     primitiveId: 'agent-8',
+    //     input: 'test',
+    //     finalResult: {
+    //       text: 'Result',
+    //     },
+    //   };
 
-      const messages: MastraUIMessage[] = [
-        {
-          id: 'msg-13',
-          role: 'assistant',
-          parts: [
-            {
-              type: 'text',
-              text: JSON.stringify(networkData),
-            },
-          ],
-        },
-      ];
+    //   const messages: MastraUIMessage[] = [
+    //     {
+    //       id: 'msg-13',
+    //       role: 'assistant',
+    //       parts: [
+    //         {
+    //           type: 'text',
+    //           text: JSON.stringify(networkData),
+    //         },
+    //       ],
+    //     },
+    //   ];
 
-      resolveInitialMessages(messages);
+    //   resolveInitialMessages(messages);
 
-      expect(consoleLogSpy).toHaveBeenCalledWith('json', networkData);
-    });
+    //   expect(consoleLogSpy).toHaveBeenCalledWith('json', networkData);
+    // });
   });
 
   describe('Non-network messages', () => {

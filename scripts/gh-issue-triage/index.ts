@@ -10,6 +10,7 @@ const MASTRA_BASE_URL = process.env.MASTRA_BASE_URL;
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const SLACK_TEAM_ID = process.env.SLACK_TEAM_ID;
 const CHANNEL_ID = process.env.CHANNEL_ID;
+const MASTRA_TRIAGE_JWT_KEY = process.env.MASTRA_TRIAGE_JWT_KEY;
 
 const mappings = {
   abhiaiyer91: 'U06CK1L4Y94',
@@ -62,6 +63,9 @@ async function main() {
 
   const mastraClient = new MastraClient({
     baseUrl: MASTRA_BASE_URL || 'http://localhost:4111',
+    headers: {
+      Authorization: `Bearer ${MASTRA_TRIAGE_JWT_KEY}`,
+    },
   });
 
   const issue = await octokit.rest.issues.get({

@@ -12,51 +12,27 @@ import { useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useChatbotSidebar } from "@site/src/theme/DocRoot/Layout/ChatbotSidebar/context";
 
-const SHORTCUT_OS_KEY = "shortcut-os-preference";
-
-function getInitialIsMac(): boolean {
-  if (typeof window === "undefined") return false;
-
-  try {
-    const cached = localStorage.getItem(SHORTCUT_OS_KEY);
-    if (cached !== null) {
-      return cached === "mac";
-    }
-  } catch (error) {
-    console.error(
-      "Error reading shortcut preference from localStorage:",
-      error,
-    );
-  }
-
-  return false;
-}
-
 export function Shortcut({ shortcut }: { shortcut: string }) {
-  const [isMac, setIsMac] = useState(getInitialIsMac);
+  const [os, setOS] = useState<"mac" | "other" | null>(null);
 
   useEffect(() => {
-    const isMacOS = navigator.userAgent.includes("Mac");
-    setIsMac(isMacOS);
+    const userAgent = navigator.userAgent;
 
-    try {
-      localStorage.setItem(SHORTCUT_OS_KEY, isMacOS ? "mac" : "other");
-    } catch (error) {
-      console.error("Error saving shortcut preference to localStorage:", error);
+    if (userAgent.includes("Mac")) {
+      setOS("mac");
+    } else {
+      setOS("other");
     }
   }, []);
 
   return (
-    <kbd className="flex items-center py-2 gap-1 text-xs font-medium text-(--mastra-icons-3)">
-      {!isMac ? (
-        `CTRL ${shortcut}`
-      ) : (
-        <span className="inline-flex gap-1 items-center text-sm">
-          <span className="text-xs">⌘</span>
-          <span className="text-xs">{shortcut}</span>
-        </span>
-      )}
-    </kbd>
+    <>
+      {os ? (
+        <kbd className="flex items-center py-2 gap-1 text-xs font-medium text-(--mastra-icons-3)">
+          {os === "mac" ? `⌘ ${shortcut}` : `CTRL + ${shortcut}`}
+        </kbd>
+      ) : null}
+    </>
   );
 }
 
@@ -74,7 +50,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
   }
   // Configure Algolia search options
   const searchOptions = {
-    indexName: "docs_crawler",
+    indexName: "docs_v1_crawler",
     hitsPerPage: 20,
     attributesToRetrieve: [
       "hierarchy",
@@ -114,9 +90,9 @@ export default function SearchContainer({ locale }: { locale: string }) {
       </DialogTrigger>
       <DialogPortal>
         <DialogOverlay className="fixed inset-0 transition-opacity z-250 bg-black/40" />
-        <DialogContent className="dialog-panel z-260 fixed left-1/2 top-[100px] -translate-x-1/2  w-full">
+        <DialogContent className="dialog-panel z-260 fixed left-1/2 top-[100px] -translate-x-1/2">
           <div className="flex relative top-1/2 justify-center items-start p-4 min-h-full">
-            <div className="w-full ring ring-neutral-200 dark:ring-(--border) shadow-2xl duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-(--border) h-fit max-w-[660px] mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-2) transition-all">
+            <div className="ring ring-neutral-200 dark:ring-(--border) shadow-2xl duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-(--border) h-fit w-[660px] mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-2) transition-all">
               <DialogTitle className="sr-only">Search docs...</DialogTitle>
               <div className="w-full">
                 <CustomSearch
