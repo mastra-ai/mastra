@@ -161,30 +161,21 @@ export function createStep<
           await pubsub.publish(`workflow.events.v2.${runId}`, {
             type: 'watch',
             runId,
-            data: {
-              type: 'tool-call-streaming-start',
-              payload: toolData ?? {},
-            },
+            data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
           });
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') {
               await pubsub.publish(`workflow.events.v2.${runId}`, {
                 type: 'watch',
                 runId,
-                data: {
-                  type: 'tool-call-delta',
-                  payload: { ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-                },
+                data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
               });
             }
           }
           await pubsub.publish(`workflow.events.v2.${runId}`, {
             type: 'watch',
             runId,
-            data: {
-              type: 'tool-call-streaming-finish',
-              payload: toolData ?? {},
-            },
+            data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
           });
         } else {
           for await (const chunk of stream) {
