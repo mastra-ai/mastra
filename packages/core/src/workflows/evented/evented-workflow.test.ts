@@ -3002,7 +3002,10 @@ describe('Workflow', () => {
         });
         // In evented workflows, errors are serialized through events and become objects
         expect((step1Result as any)?.error).toBeDefined();
-        expect((step1Result as any)?.error?.message).toMatch(/Failed/);
+        expect((step1Result as any)?.error).toMatchObject({
+          name: 'Error',
+          message: 'Failed',
+        });
 
         await mastra.stopEventEngine();
       });
@@ -3574,7 +3577,10 @@ describe('Workflow', () => {
         // In evented workflows, errors are serialized through the event system
         // so they become plain objects with name/message, not Error instances
         expect(result.error).toBeDefined();
-        expect((result.error as any).message).toMatch(/Step execution failed/);
+        expect(result.error).toMatchObject({
+          name: 'Error',
+          message: 'Step execution failed',
+        });
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -3592,7 +3598,10 @@ describe('Workflow', () => {
       });
       // In evented workflows, errors are serialized objects with name/message
       expect((step1Result as any)?.error).toBeDefined();
-      expect((step1Result as any)?.error.message).toMatch(/Step execution failed/);
+      expect((step1Result as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step execution failed',
+      });
 
       await mastra.stopEventEngine();
     });
@@ -3723,7 +3732,10 @@ describe('Workflow', () => {
       });
       // In evented workflows, errors are serialized objects
       expect((result.steps?.step2 as any)?.error).toBeDefined();
-      expect((result.steps?.step2 as any)?.error.message).toMatch(/Step execution failed/);
+      expect((result.steps?.step2 as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step execution failed',
+      });
 
       await mastra.stopEventEngine();
     });
@@ -3798,7 +3810,10 @@ describe('Workflow', () => {
 
       // In evented workflows, errors are serialized objects
       expect((result.steps?.['test-workflow'] as any)?.error).toBeDefined();
-      expect((result.steps?.['test-workflow'] as any)?.error.message).toMatch(/Step execution failed/);
+      expect((result.steps?.['test-workflow'] as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step execution failed',
+      });
 
       await mastra.stopEventEngine();
     });
@@ -4756,7 +4771,10 @@ describe('Workflow', () => {
       });
       // ADD THIS SEPARATE ASSERTION - in evented workflows, errors become serialized objects
       expect((result.steps.step2 as any)?.error).toBeDefined();
-      expect((result.steps.step2 as any)?.error?.message).toMatch(/Step failed/);
+      expect((result.steps.step2 as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step failed',
+      });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
 
@@ -4820,7 +4838,10 @@ describe('Workflow', () => {
       });
       // ADD THIS SEPARATE ASSERTION - in evented workflows, errors become serialized objects
       expect((result.steps.step2 as any)?.error).toBeDefined();
-      expect((result.steps.step2 as any)?.error?.message).toMatch(/Step failed/);
+      expect((result.steps.step2 as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step failed',
+      });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
 
@@ -5872,12 +5893,16 @@ describe('Workflow', () => {
       expect(failedRun.steps.step2).toMatchObject({
         status: 'failed',
         payload: { step1Result: 2 },
+        error: expect.any(Error),
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       // In evented workflows, errors become serialized objects
       expect((failedRun.steps.step2 as any).error).toBeDefined();
-      expect((failedRun.steps.step2 as any).error.message).toBe('Simulated error');
+      expect((failedRun.steps.step2 as any).error).toMatchObject({
+        name: 'Error',
+        message: 'Simulated error',
+      });
 
       const result = await run.timeTravel({
         step: step2,
