@@ -135,16 +135,25 @@ export class ProcessorRunner {
       });
     }
 
-    // Extract the output from the workflow result
-    // The workflow should return ProcessorStepOutput format
-    const output = result.result as ProcessorStepOutput | undefined;
+    // Extract and validate the output from the workflow result
+    const output = result.result;
 
-    if (!output) {
+    if (!output || typeof output !== 'object') {
       // No output means no changes - return input unchanged
       return input;
     }
 
-    return output;
+    // Validate it has the expected ProcessorStepOutput shape
+    if (!('phase' in output) || !('messages' in output || 'part' in output || 'messageList' in output)) {
+      throw new MastraError({
+        category: 'USER',
+        domain: 'AGENT',
+        id: 'PROCESSOR_WORKFLOW_INVALID_OUTPUT',
+        text: `Processor workflow ${workflow.id} returned invalid output format. Expected ProcessorStepOutput.`,
+      });
+    }
+
+    return output as ProcessorStepOutput;
   }
 
   async runOutputProcessors(
@@ -338,8 +347,10 @@ export class ProcessorRunner {
               requestContext,
             );
 
-            // Extract the processed part from the result
-            processedPart = result.part as ChunkType<OUTPUT> | null | undefined;
+            // Extract the processed part from the result if it exists
+            if ('part' in result) {
+              processedPart = result.part as ChunkType<OUTPUT> | null | undefined;
+            }
           } catch (error) {
             if (error instanceof TripWire) {
               state?.span?.end({
