@@ -1,6 +1,6 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 
@@ -389,6 +389,10 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async close(): Promise<void> {
     await this.pool.close();
   }
@@ -498,8 +502,8 @@ export class MSSQLStore extends MastraStorage {
     });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async listScoresByRunId({

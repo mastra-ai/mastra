@@ -2,7 +2,7 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
@@ -279,6 +279,10 @@ export class ClickhouseStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     return this.stores.memory.getThreadById({ threadId });
   }
@@ -341,8 +345,8 @@ export class ClickhouseStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async listScoresByRunId({

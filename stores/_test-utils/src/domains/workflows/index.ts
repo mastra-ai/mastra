@@ -167,7 +167,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
   });
 
-  describe('getWorkflowRunById', () => {
+  describe('getWorkflowRunById and deleteWorkflowRunById', () => {
     const workflowName = 'workflow-id-test';
     let runId: string;
     let stepId: string;
@@ -192,6 +192,26 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       expect(found).not.toBeNull();
       expect(found?.runId).toBe(runId);
       checkWorkflowSnapshot(found?.snapshot!, stepId, 'success');
+    });
+
+    it('should delete a workflow run by ID', async () => {
+      const found = await storage.getWorkflowRunById({
+        runId,
+        workflowName,
+      });
+      expect(found).not.toBeNull();
+      expect(found?.runId).toBe(runId);
+      checkWorkflowSnapshot(found?.snapshot!, stepId, 'success');
+
+      await storage.deleteWorkflowRunById({
+        runId,
+        workflowName,
+      });
+      const deleted = await storage.getWorkflowRunById({
+        runId,
+        workflowName,
+      });
+      expect(deleted).toBeNull();
     });
 
     it('should return null for non-existent workflow run ID', async () => {

@@ -1,4 +1,4 @@
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   StorageColumn,
@@ -254,11 +254,15 @@ export class ConvexStore extends MastraStorage {
     return this.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.scores.saveScore(score);
   }
 

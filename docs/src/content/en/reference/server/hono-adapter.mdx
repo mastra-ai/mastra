@@ -5,6 +5,7 @@ description: "API reference for the @mastra/hono server adapter."
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Hono Adapter
 
@@ -34,7 +35,7 @@ npm install @mastra/hono hono
 
 Create your server file:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
@@ -53,7 +54,7 @@ export default app;
 
 ## Full example
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
@@ -77,11 +78,90 @@ await server.init();
 export default app;
 ```
 
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "Hono",
+      description: "Hono app instance",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "{ maxSize: number, onError: (err) => unknown }",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "{ redact?: boolean }",
+      description: "Stream redaction config. When true, redacts sensitive data from streams.",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+
 ## Adding custom routes
 
 Add routes directly to the Hono app:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
@@ -110,7 +190,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Hono middleware and route handlers, access Mastra context via `c.get()`:
 
-```typescript copy showLineNumbers
+```typescript copy
 app.get('/custom', async (c) => {
   const mastra = c.get('mastra');
   const requestContext = c.get('requestContext');
@@ -129,13 +209,17 @@ Available context keys:
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
 | `tools` | Available tools |
+| `taskStore` | Task store for A2A operations |
+| `playground` | Whether playground is enabled |
+| `isDev` | Whether running in development mode |
+| `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |
 
 ## Adding middleware
 
 Add Hono middleware before or after `init()`:
 
-```typescript title="server.ts" copy showLineNumbers
+```typescript title="server.ts" copy
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 

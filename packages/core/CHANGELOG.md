@@ -1,5 +1,82 @@
 # @mastra/core
 
+## 1.0.0-beta.9
+
+### Minor Changes
+
+- Add stored agents support ([#10953](https://github.com/mastra-ai/mastra/pull/10953))
+
+  Agents can now be stored in the database and loaded at runtime. This lets you persist agent configurations and dynamically create executable Agent instances from storage.
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+  import { LibSQLStore } from '@mastra/libsql';
+
+  const mastra = new Mastra({
+    storage: new LibSQLStore({ url: ':memory:' }),
+    tools: { myTool },
+    scorers: { myScorer },
+  });
+
+  // Create agent in storage via API or directly
+  await mastra.getStorage().createAgent({
+    agent: {
+      id: 'my-agent',
+      name: 'My Agent',
+      instructions: 'You are helpful',
+      model: { provider: 'openai', name: 'gpt-4' },
+      tools: { myTool: {} },
+      scorers: { myScorer: { sampling: { type: 'ratio', rate: 0.5 } } },
+    },
+  });
+
+  // Load and use the agent
+  const agent = await mastra.getStoredAgentById('my-agent');
+  const response = await agent.generate({ messages: 'Hello!' });
+
+  // List all stored agents with pagination
+  const { agents, total, hasMore } = await mastra.listStoredAgents({
+    page: 0,
+    perPage: 10,
+  });
+  ```
+
+  Also adds a memory registry to Mastra so stored agents can reference memory instances by key.
+
+### Patch Changes
+
+- Add agentId and agentName attributes to MODEL_GENERATION spans. This allows users to correlate gen_ai.usage metrics with specific agents when analyzing LLM operation spans. The attributes are exported as gen_ai.agent.id and gen_ai.agent.name in the OtelExporter. ([#10984](https://github.com/mastra-ai/mastra/pull/10984))
+
+- Fix JSON parsing errors when LLMs output unescaped newlines in structured output strings ([#10965](https://github.com/mastra-ai/mastra/pull/10965))
+
+  Some LLMs (particularly when not using native JSON mode) output actual newline characters inside JSON string values instead of properly escaped `\n` sequences. This breaks JSON parsing and causes structured output to fail.
+
+  This change adds preprocessing to escape unescaped control characters (`\n`, `\r`, `\t`) within JSON string values before parsing, making structured output more robust across different LLM providers.
+
+- Fix toolCallId propagation in agent network tool execution. The toolCallId property was undefined at runtime despite being required by TypeScript type definitions in AgentToolExecutionContext. Now properly passes the toolCallId through to the tool's context during network tool execution. ([#10951](https://github.com/mastra-ai/mastra/pull/10951))
+
+- Exports `convertFullStreamChunkToMastra` from the stream module for AI SDK stream chunk transformations. ([#10911](https://github.com/mastra-ai/mastra/pull/10911))
+
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- Fix saveScore not persisting ID correctly, breaking getScoreById retrieval ([#10915](https://github.com/mastra-ai/mastra/pull/10915))
+
+  **What Changed**
+  - saveScore now correctly returns scores that can be retrieved with getScoreById
+  - Validation errors now include contextual information (scorer, entity, trace details) for easier debugging
+
+  **Impact**
+  Previously, calling getScoreById after saveScore would return null because the generated ID wasn't persisted to the database. This is now fixed across all store implementations, ensuring consistent behavior and data integrity.
+
+- `setState` is now async ([#10944](https://github.com/mastra-ai/mastra/pull/10944))
+  - `setState` must now be awaited: `await setState({ key: value })`
+  - State updates are merged automatically—no need to spread the previous state
+  - State data is validated against the step's `stateSchema` when `validateInputs` is enabled (default: `true`)
+
+- Add human-in-the-loop support for workflows used in agent ([#10871](https://github.com/mastra-ai/mastra/pull/10871))
+
 ## 1.0.0-beta.7
 
 ### Minor Changes

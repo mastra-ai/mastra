@@ -1,12 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../../di';
 import { ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import { SpanType, wrapMastra } from '../../observability';
 import type { TracingContext } from '../../observability';
-import type { ChunkType } from '../../stream/types';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -16,6 +14,7 @@ import { getStepResult } from '../step';
 import type {
   Emitter,
   ExecutionContext,
+  OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
   StepExecutionResult,
@@ -28,6 +27,7 @@ import {
   runCountDeprecationMessage,
   validateStepResumeData,
   validateStepSuspendData,
+  validateStepStateData,
 } from '../utils';
 
 export interface ExecuteStepParams {
@@ -50,7 +50,7 @@ export interface ExecuteStepParams {
   abortController: AbortController;
   requestContext: RequestContext;
   skipEmits?: boolean;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
   tracingContext: TracingContext;
@@ -76,7 +76,7 @@ export async function executeStep(
     abortController,
     requestContext,
     skipEmits = false,
-    writableStream,
+    outputWriter,
     disableScorers,
     serializedStepGraph,
     tracingContext,
@@ -184,7 +184,7 @@ export async function executeStep(
       abortController,
       requestContext,
       tracingContext,
-      writableStream,
+      outputWriter,
       stepSpan,
     });
 
@@ -255,9 +255,17 @@ export async function executeStep(
         requestContext,
         inputData,
         state: executionContext.state,
-        setState: (state: any) => {
-          executionContext.state = state;
-          contextMutations.stateUpdate = state;
+        setState: async (state: any) => {
+          const { stateData, validationError: stateValidationError } = await validateStepStateData({
+            stateData: state,
+            step,
+            validateInputs: engine.options?.validateInputs ?? true,
+          });
+          if (stateValidationError) {
+            throw stateValidationError;
+          }
+          // executionContext.state = stateData;
+          contextMutations.stateUpdate = stateData;
         },
         retryCount,
         resumeData: resumeDataToUse,
@@ -269,6 +277,7 @@ export async function executeStep(
           const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
             suspendData: suspendPayload,
             step,
+            validateInputs: engine.options?.validateInputs ?? true,
           });
           if (suspendValidationError) {
             throw suspendValidationError;
@@ -338,8 +347,9 @@ export async function executeStep(
             name: step.id,
             runId,
           },
-          writableStream,
+          outputWriter,
         ),
+        outputWriter,
         // Disable scorers must be explicitly set to false they are on by default
         scorers: disableScorers === false ? undefined : step.scorers,
         validateInputs: engine.options?.validateInputs,
@@ -366,9 +376,7 @@ export async function executeStep(
     // For Inngest: on replay, the wrapped function didn't re-execute, so we restore from the memoized result
     Object.assign(executionContext.suspendedPaths, durableResult.contextMutations.suspendedPaths);
     Object.assign(executionContext.resumeLabels, durableResult.contextMutations.resumeLabels);
-    if (durableResult.contextMutations.stateUpdate !== null) {
-      executionContext.state = durableResult.contextMutations.stateUpdate;
-    }
+
     // Restore requestContext from memoized result (only for engines that need it)
     if (engine.requiresDurableContextSerialization() && durableResult.contextMutations.requestContextUpdate) {
       requestContext.clear();
@@ -434,7 +442,12 @@ export async function executeStep(
   return {
     result: stepResult,
     stepResults: { [step.id]: stepResult },
-    mutableContext: engine.buildMutableContext(executionContext),
+    mutableContext: engine.buildMutableContext({
+      ...executionContext,
+      state: stepRetryResult.ok
+        ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
+        : executionContext.state,
+    }),
     requestContext: engine.serializeRequestContext(requestContext),
   };
 }

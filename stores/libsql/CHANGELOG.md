@@ -1,5 +1,69 @@
 # @mastra/libsql
 
+## 1.0.0-beta.6
+
+### Minor Changes
+
+- Add stored agents support ([#10953](https://github.com/mastra-ai/mastra/pull/10953))
+
+  Agents can now be stored in the database and loaded at runtime. This lets you persist agent configurations and dynamically create executable Agent instances from storage.
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+  import { LibSQLStore } from '@mastra/libsql';
+
+  const mastra = new Mastra({
+    storage: new LibSQLStore({ url: ':memory:' }),
+    tools: { myTool },
+    scorers: { myScorer },
+  });
+
+  // Create agent in storage via API or directly
+  await mastra.getStorage().createAgent({
+    agent: {
+      id: 'my-agent',
+      name: 'My Agent',
+      instructions: 'You are helpful',
+      model: { provider: 'openai', name: 'gpt-4' },
+      tools: { myTool: {} },
+      scorers: { myScorer: { sampling: { type: 'ratio', rate: 0.5 } } },
+    },
+  });
+
+  // Load and use the agent
+  const agent = await mastra.getStoredAgentById('my-agent');
+  const response = await agent.generate({ messages: 'Hello!' });
+
+  // List all stored agents with pagination
+  const { agents, total, hasMore } = await mastra.listStoredAgents({
+    page: 0,
+    perPage: 10,
+  });
+  ```
+
+  Also adds a memory registry to Mastra so stored agents can reference memory instances by key.
+
+### Patch Changes
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fix saveScore not persisting ID correctly, breaking getScoreById retrieval ([#10915](https://github.com/mastra-ai/mastra/pull/10915))
+
+  **What Changed**
+  - saveScore now correctly returns scores that can be retrieved with getScoreById
+  - Validation errors now include contextual information (scorer, entity, trace details) for easier debugging
+
+  **Impact**
+  Previously, calling getScoreById after saveScore would return null because the generated ID wasn't persisted to the database. This is now fixed across all store implementations, ensuring consistent behavior and data integrity.
+
+- Updated dependencies [[`0d41fe2`](https://github.com/mastra-ai/mastra/commit/0d41fe245355dfc66d61a0d9c85d9400aac351ff), [`6b3ba91`](https://github.com/mastra-ai/mastra/commit/6b3ba91494cc10394df96782f349a4f7b1e152cc), [`7907fd1`](https://github.com/mastra-ai/mastra/commit/7907fd1c5059813b7b870b81ca71041dc807331b)]:
+  - @mastra/core@1.0.0-beta.8
+
 ## 1.0.0-beta.4
 
 ### Minor Changes

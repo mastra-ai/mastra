@@ -1,7 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
@@ -331,6 +331,10 @@ export class D1Store extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   /**
    * Insert multiple records in a batch operation
    * @param tableName The table to insert into
@@ -376,8 +380,8 @@ export class D1Store extends MastraStorage {
     return this.stores.scores.getScoreById({ id: _id });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async listScoresByRunId({

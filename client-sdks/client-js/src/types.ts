@@ -255,7 +255,9 @@ export interface SaveNetworkMessageToMemoryParams {
   networkId: string;
 }
 
-export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraDBMessage)[];
+export type SaveMessageToMemoryResponse = {
+  messages: (MastraMessageV1 | MastraDBMessage)[];
+};
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -548,6 +550,113 @@ export interface TimeTravelParams {
   nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
   requestContext?: RequestContext | Record<string, any>;
   tracingOptions?: TracingOptions;
+}
+
+// ============================================================================
+// Stored Agents Types
+// ============================================================================
+
+/**
+ * Scorer config for stored agents
+ */
+export interface StoredAgentScorerConfig {
+  sampling?: {
+    type: 'ratio' | 'count';
+    rate?: number;
+    count?: number;
+  };
+}
+
+/**
+ * Stored agent data returned from API
+ */
+export interface StoredAgentResponse {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: string;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Parameters for listing stored agents
+ */
+export interface ListStoredAgentsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+}
+
+/**
+ * Response for listing stored agents
+ */
+export interface ListStoredAgentsResponse {
+  agents: StoredAgentResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored agent
+ */
+export interface CreateStoredAgentParams {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: string;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for updating a stored agent
+ */
+export interface UpdateStoredAgentParams {
+  name?: string;
+  description?: string;
+  instructions?: string;
+  model?: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: string;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for deleting a stored agent
+ */
+export interface DeleteStoredAgentResponse {
+  success: boolean;
+  message: string;
 }
 
 export interface ListAgentsModelProvidersResponse {

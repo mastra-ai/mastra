@@ -401,6 +401,71 @@ describe('SpanConverter', () => {
       expect(result.attributes['gen_ai.request.max_tokens']).toBe(1000);
     });
 
+    it('should include agent context attributes on MODEL_GENERATION spans when provided', async () => {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'llm-gen',
+        type: SpanType.MODEL_GENERATION,
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: false,
+        parentSpanId: 'agent-span',
+        attributes: {
+          agentId: 'my-support-agent',
+          agentName: 'Customer Support Agent',
+          model: 'gpt-4',
+          provider: 'openai',
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+          },
+        } as ModelGenerationAttributes,
+      };
+
+      const result = await converter.convertSpan(span);
+      const attrs = result.attributes;
+
+      // Verify agent context is present
+      expect(attrs['gen_ai.agent.id']).toBe('my-support-agent');
+      expect(attrs['gen_ai.agent.name']).toBe('Customer Support Agent');
+
+      // Verify other attributes are still present
+      expect(attrs['gen_ai.request.model']).toBe('gpt-4');
+      expect(attrs['gen_ai.provider.name']).toBe('openai');
+      expect(attrs['gen_ai.usage.input_tokens']).toBe(100);
+      expect(attrs['gen_ai.usage.output_tokens']).toBe(50);
+    });
+
+    it('should not include agent context attributes on MODEL_GENERATION spans when not provided', async () => {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'llm-gen',
+        type: SpanType.MODEL_GENERATION,
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: false,
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        } as ModelGenerationAttributes,
+      };
+
+      const result = await converter.convertSpan(span);
+      const attrs = result.attributes;
+
+      // Agent context should not be present
+      expect(attrs['gen_ai.agent.id']).toBeUndefined();
+      expect(attrs['gen_ai.agent.name']).toBeUndefined();
+
+      // Other attributes should still be present
+      expect(attrs['gen_ai.request.model']).toBe('gpt-4');
+      expect(attrs['gen_ai.provider.name']).toBe('openai');
+    });
+
     it('should handle tool attributes correctly', async () => {
       const span: ExportedSpan<SpanType.TOOL_CALL> = {
         id: 'span-1',

@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
 import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
@@ -35,7 +34,6 @@ import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
@@ -43,7 +41,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import type { Workflow, WorkflowResult } from '../workflows';
+import type { OutputWriter, Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -1197,6 +1195,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         tracingContext,
         messageList,
         agentId: this.id,
+        agentName: this.name,
       });
 
       text = await result.text;
@@ -1475,7 +1474,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     mastraProxy,
-    writableStream,
+    outputWriter,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1483,7 +1482,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1515,7 +1514,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           requestContext,
           tracingContext,
           model: await this.getModel({ requestContext }),
-          writableStream,
+          outputWriter,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
@@ -1905,19 +1904,28 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 resourceId,
               });
 
-              const run = await workflow.createRun();
+              const run = await workflow.createRun({ runId });
 
               const { initialState, inputData: workflowInputData } = inputData;
+              const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
               if (methodType === 'generate' || methodType === 'generateLegacy') {
-                result = await run.start({
-                  inputData: workflowInputData,
-                  requestContext,
-                  tracingContext: context?.tracingContext,
-                  ...(initialState && { initialState }),
-                });
+                if (resumeData) {
+                  result = await run.resume({
+                    resumeData,
+                    requestContext,
+                    tracingContext: context?.tracingContext,
+                  });
+                } else {
+                  result = await run.start({
+                    inputData: workflowInputData,
+                    requestContext,
+                    tracingContext: context?.tracingContext,
+                    ...(initialState && { initialState }),
+                  });
+                }
               } else if (methodType === 'streamLegacy') {
                 const streamResult = run.streamLegacy({
                   inputData: workflowInputData,
@@ -1935,12 +1943,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
-                const streamResult = run.stream({
-                  inputData: workflowInputData,
-                  requestContext,
-                  tracingContext: context?.tracingContext,
-                  ...(initialState && { initialState }),
-                });
+                const streamResult = resumeData
+                  ? run.resumeStream({
+                      resumeData,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                    })
+                  : run.stream({
+                      inputData: workflowInputData,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(initialState && { initialState }),
+                    });
 
                 if (context?.writer) {
                   await streamResult.fullStream.pipeTo(context.writer);
@@ -1959,10 +1973,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   runId: run.runId,
                 };
               } else if (result?.status === 'suspended') {
-                return {
-                  error: `Workflow ended with status: "suspended". This is not currently handled in the basic agent workflow tool transformation. To achieve this you'll need to write your own tool that uses a workflow internally.`,
-                  runId: run.runId,
-                };
+                const suspendedStep = result?.suspended?.[0]?.[0]!;
+                const suspendPayload = result?.steps?.[suspendedStep]?.suspendPayload;
+
+                if (suspendPayload?.__workflow_meta) {
+                  delete suspendPayload.__workflow_meta;
+                }
+                return suspend?.(suspendPayload);
               } else {
                 // This is to satisfy the execute fn's return value for typescript
                 return {
@@ -2027,7 +2044,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     runId,
     requestContext,
     tracingContext,
-    writableStream,
+    outputWriter,
     methodType,
     memoryConfig,
   }: {
@@ -2038,7 +2055,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     runId?: string;
     requestContext: RequestContext;
     tracingContext?: TracingContext;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
   }): Promise<Record<string, CoreTool>> {
@@ -2056,7 +2073,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       tracingContext,
       mastraProxy,
-      writableStream,
+      outputWriter,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -2546,6 +2563,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requireToolApproval: options.requireToolApproval,
       resumeContext,
       agentId: this.id,
+      agentName: this.name,
       toolCallId: options.toolCallId,
     });
 

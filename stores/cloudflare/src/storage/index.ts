@@ -1,7 +1,7 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import {
   createStorageErrorId,
@@ -285,6 +285,10 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async updateMessages(args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
@@ -298,7 +302,7 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 

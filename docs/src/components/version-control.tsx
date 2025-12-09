@@ -80,6 +80,7 @@ export default function VersionControl({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         side="bottom"
+        className="z-300"
         style={{ width: "var(--radix-dropdown-menu-trigger-width)" }}
       >
         {versions.map((version) => {

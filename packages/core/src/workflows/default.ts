@@ -1,10 +1,8 @@
-import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../di';
 import type { IErrorDefinition } from '../error';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { Span, SpanType, TracingContext } from '../observability';
-import type { ChunkType } from '../stream/types';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type {
@@ -25,13 +23,14 @@ import type { ExecuteSleepParams, ExecuteSleepUntilParams } from './handlers/sle
 import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepUntilHandler } from './handlers/sleep';
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
-import type { ConditionFunction, ExecuteFunctionParams, Step } from './step';
+import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import type {
   DefaultEngineType,
   Emitter,
   EntryExecutionResult,
   ExecutionContext,
   MutableContext,
+  OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
   StepExecutionResult,
@@ -176,7 +175,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async evaluateCondition(
     conditionFn: ConditionFunction<any, any, any, any, DefaultEngineType>,
     index: number,
-    context: ExecuteFunctionParams<any, any, any, any, DefaultEngineType>,
+    context: ConditionFunctionParams<any, any, any, any, DefaultEngineType>,
     operationId: string,
   ): Promise<number | null> {
     return this.wrapDurableOperation(operationId, async () => {
@@ -245,7 +244,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     requestContext: RequestContext;
     tracingContext: TracingContext;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     stepSpan?: Span<SpanType.WORKFLOW_STEP>;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Default: return null to use standard execution
@@ -415,7 +414,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Apply mutable context changes back to the execution context.
    */
   applyMutableContext(executionContext: ExecutionContext, mutableContext: MutableContext): void {
-    executionContext.state = mutableContext.state;
+    Object.assign(executionContext.state, mutableContext.state);
     Object.assign(executionContext.suspendedPaths, mutableContext.suspendedPaths);
     Object.assign(executionContext.resumeLabels, mutableContext.resumeLabels);
   }
@@ -454,7 +453,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     requestContext: RequestContext;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     abortController: AbortController;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
@@ -546,7 +545,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController: params.abortController,
         emitter: params.emitter,
         requestContext: currentRequestContext,
-        writableStream: params.writableStream,
+        outputWriter: params.outputWriter,
         disableScorers,
       });
 

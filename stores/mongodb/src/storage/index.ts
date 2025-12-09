@@ -1,6 +1,6 @@
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   PaginationInfo,
@@ -275,6 +275,10 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async close(): Promise<void> {
     try {
       await this.#connector.close();
@@ -297,7 +301,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 
