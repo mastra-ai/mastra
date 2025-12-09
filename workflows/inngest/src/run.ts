@@ -83,16 +83,16 @@ export class InngestRun<
           runId: this.runId,
         });
         // Hydrate serialized errors back to Error instances
-        const context = snapshot?.context ? hydrateSerializedStepErrors(snapshot.context) : undefined;
-        // Use the error from snapshot if available (preserves original error with custom properties)
-        // Fall back to the Inngest run output message if no snapshot error
-        const errorSource = snapshot?.error ?? runs?.[0]?.output?.message;
+        if (snapshot?.context) {
+          snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+        }
         return {
           output: {
             result: {
-              steps: context,
+              steps: snapshot?.context,
               status: 'failed',
-              error: getErrorFromUnknown(errorSource, { serializeStack: false }),
+              // Get the original error from NonRetriableError's cause (which contains the workflow result)
+              error: getErrorFromUnknown(runs?.[0]?.output?.cause?.error, { serializeStack: false }),
             },
           },
         };
