@@ -17994,8 +17994,8 @@ describe('Workflow', () => {
         expect(result.tripwire.processorId).toBe('output-stream-tripwire-processor');
       }
     }, 30000);
-  })
-  
+  });
+
   describe('Agent step with structured output schema', () => {
     it('should pass structured output from agent step to next step with correct types', async () => {
       // Define the structured output schema for the agent
