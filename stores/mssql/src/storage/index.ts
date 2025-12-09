@@ -389,6 +389,10 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async close(): Promise<void> {
     await this.pool.close();
   }

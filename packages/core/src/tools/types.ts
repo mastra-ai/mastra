@@ -15,7 +15,7 @@ import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
-import type { SuspendOptions } from '../workflows';
+import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 
@@ -89,7 +89,7 @@ export interface MCPToolExecutionContext {
 export type MastraToolInvocationOptions = ToolInvocationOptions & {
   suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
   resumeData?: any;
-  writableStream?: WritableStream<any> | ToolStream;
+  outputWriter?: OutputWriter;
   tracingContext?: TracingContext;
   /**
    * Optional MCP-specific context passed when tool is executed in MCP server.

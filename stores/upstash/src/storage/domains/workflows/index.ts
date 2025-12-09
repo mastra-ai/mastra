@@ -197,6 +197,27 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     }
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId });
+    try {
+      await this.client.del(key);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            namespace: 'workflows',
+            runId,
+            workflowName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
   async listWorkflowRuns({
     workflowName,
     fromDate,

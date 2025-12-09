@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
 import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
@@ -35,7 +34,6 @@ import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
@@ -43,7 +41,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import type { Workflow, WorkflowResult } from '../workflows';
+import type { OutputWriter, Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -1594,7 +1592,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     mastraProxy,
-    writableStream,
+    outputWriter,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1602,7 +1600,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1634,7 +1632,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           requestContext,
           tracingContext,
           model: await this.getModel({ requestContext }),
-          writableStream,
+          outputWriter,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
@@ -2165,7 +2163,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     runId,
     requestContext,
     tracingContext,
-    writableStream,
+    outputWriter,
     methodType,
     memoryConfig,
   }: {
@@ -2176,7 +2174,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     runId?: string;
     requestContext: RequestContext;
     tracingContext?: TracingContext;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
   }): Promise<Record<string, CoreTool>> {
@@ -2194,7 +2192,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       tracingContext,
       mastraProxy,
-      writableStream,
+      outputWriter,
     });
 
     const memoryTools = await this.listMemoryTools({

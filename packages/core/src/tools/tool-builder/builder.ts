@@ -296,7 +296,7 @@ export class CoreToolBuilder extends MastraBase {
                 name: options.name,
                 runId: options.runId!,
               },
-              options.writableStream || execOptions.writableStream,
+              options.outputWriter || execOptions.outputWriter,
             ),
             tracingContext: { currentSpan: toolSpan },
             abortSignal: execOptions.abortSignal,
@@ -334,7 +334,7 @@ export class CoreToolBuilder extends MastraBase {
                 resumeData,
                 threadId,
                 resourceId,
-                writableStream: execOptions.writableStream,
+                outputWriter: execOptions.outputWriter,
               },
             };
           } else if (isWorkflowExecution) {
