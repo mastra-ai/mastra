@@ -21,6 +21,7 @@ import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
 import { CardGrid, CardGridItem } from "@site/src/components/CardGrid";
 import YouTube from "@site/src/components/YouTube-player";
+import { useDoc } from "@docusaurus/plugin-content-docs/lib/client/doc.js";
 
 const MDXComponents: MDXComponentsObject = {
   Head,
@@ -32,18 +33,24 @@ const MDXComponents: MDXComponentsObject = {
   ul: MDXUl,
   li: MDXLi,
   img: MDXImg,
-  h1: (props: ComponentProps<"h1">) => (
-    <div className="flex justify-between items-start">
-      <MDXHeading as="h1" {...props} />
-      <BrowserOnly fallback={<div />}>
-        {() => (
-          <div className="relative">
-            <CopyPageButton />
-          </div>
-        )}
-      </BrowserOnly>
-    </div>
-  ),
+  h1: (props: ComponentProps<"h1">) => {
+    const { frontMatter } = useDoc();
+    const showCopyButton = (frontMatter as any)?.showCopyButton !== false;
+    return (
+      <div className="flex justify-between items-start">
+        <MDXHeading as="h1" {...props} />
+        {showCopyButton ? (
+          <BrowserOnly fallback={<div />}>
+            {() => (
+              <div className="relative hidden @[600px]:block">
+                <CopyPageButton />
+              </div>
+            )}
+          </BrowserOnly>
+        ) : null}
+      </div>
+    );
+  },
   h2: (props: ComponentProps<"h2">) => <MDXHeading as="h2" {...props} />,
   h3: (props: ComponentProps<"h3">) => <MDXHeading as="h3" {...props} />,
   h4: (props: ComponentProps<"h4">) => <MDXHeading as="h4" {...props} />,
