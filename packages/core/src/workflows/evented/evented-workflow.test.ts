@@ -3649,13 +3649,10 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // In evented workflows, errors are serialized through the event system
-        // so they become plain objects with name/message, not Error instances
-        expect(result.error).toBeDefined();
-        expect(result.error).toMatchObject({
-          name: 'Error',
-          message: 'Step execution failed',
-        });
+        // Errors are hydrated back to Error instances with preserved properties
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error?.name).toBe('Error');
+        expect(result.error?.message).toBe('Step execution failed');
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -4844,12 +4841,10 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // ADD THIS SEPARATE ASSERTION - in evented workflows, errors become serialized objects
-      expect((result.steps.step2 as any)?.error).toBeDefined();
-      expect((result.steps.step2 as any)?.error).toMatchObject({
-        name: 'Error',
-        message: 'Step failed',
-      });
+      // Errors are hydrated back to Error instances with preserved properties
+      expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
+      expect((result.steps.step2 as any)?.error.name).toBe('Error');
+      expect((result.steps.step2 as any)?.error.message).toBe('Step failed');
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
 
@@ -4911,12 +4906,10 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // ADD THIS SEPARATE ASSERTION - in evented workflows, errors become serialized objects
-      expect((result.steps.step2 as any)?.error).toBeDefined();
-      expect((result.steps.step2 as any)?.error).toMatchObject({
-        name: 'Error',
-        message: 'Step failed',
-      });
+      // Errors are hydrated back to Error instances with preserved properties
+      expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
+      expect((result.steps.step2 as any)?.error.name).toBe('Error');
+      expect((result.steps.step2 as any)?.error.message).toBe('Step failed');
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
 
