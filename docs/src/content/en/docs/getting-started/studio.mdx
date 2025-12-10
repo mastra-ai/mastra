@@ -113,7 +113,7 @@ The OpenAPI and Swagger endpoints are disabled in production by default. To enab
 
 ## Configuration
 
-### Port
+### Port and Host
 
 By default, the development server runs at http://localhost:4111. You can change the `host` and `port` in the Mastra server configuration:
 
@@ -127,6 +127,29 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+### Sub-path Hosting
+
+You can host the Mastra Studio on a sub-path of your existing application using the `studioBase` configuration:
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    studioBase: "/my-mastra-studio",
+  },
+});
+```
+
+This is particularly useful when:
+- Integrating with existing applications
+- Using authentication tools like Cloudflare Zero Trust that benefit from shared domains
+- Managing multiple services under a single domain
+
+**Example URLs:**
+- Default: `http://localhost:4111/` (studio at root)
+- With `studioBase`: `http://localhost:4111/my-mastra-studio/` (studio at sub-path)
 
 ### Local HTTPS
 

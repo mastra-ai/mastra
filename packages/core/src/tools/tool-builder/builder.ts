@@ -507,8 +507,9 @@ export class CoreToolBuilder extends MastraBase {
     const schemaCompatLayers = [];
 
     if (model) {
+      // Respect the model's own capability flag; do not disable it based solely on specificationVersion.
       const supportsStructuredOutputs =
-        model.specificationVersion !== 'v2' ? (model.supportsStructuredOutputs ?? false) : false;
+        'supportsStructuredOutputs' in model ? (model.supportsStructuredOutputs ?? false) : false;
 
       const modelInfo = {
         modelId: model.modelId,
