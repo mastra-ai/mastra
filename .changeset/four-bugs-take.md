@@ -38,13 +38,6 @@ if (result.status === 'failed') {
 }
 ```
 
-- Changed `WorkflowState.error` and `WorkflowRunState.error` types from `string | Error` to `SerializedError`
-- Updated `formatResultError` in execution engines to serialize errors immediately via `.toJSON()`
-- Errors are now consistently serialized at workflow level for storage compatibility
-- Step-level errors remain as `Error` instances; only workflow-level `result.error` is serialized
-- Custom error properties (statusCode, responseHeaders, cause chain, etc.) are preserved through serialization
-- Added `UpdateWorkflowStateOptions` type to consolidate workflow state update parameters across all storage implementations
-
 **Type change:** `WorkflowState.error` and `WorkflowRunState.error` types changed from `string | Error` to `SerializedError`.
 
 Other changes:
