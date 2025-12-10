@@ -21,4 +21,4 @@ fix(workflows): preserve error details when thrown from workflow steps
 - Errors are now consistently serialized at workflow level for storage compatibility
 - Step-level errors remain as `Error` instances; only workflow-level `result.error` is serialized
 - Custom error properties (statusCode, responseHeaders, cause chain, etc.) are preserved through serialization
-- Updated all storage implementations to use `SerializedError` type for workflow errors
+- Added `UpdateWorkflowStateOptions` type to consolidate workflow state update parameters across all storage implementations
