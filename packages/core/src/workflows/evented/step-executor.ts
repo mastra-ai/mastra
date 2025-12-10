@@ -2,7 +2,7 @@ import EventEmitter from 'node:events';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { getErrorFromUnknown } from '../../error/utils.js';
-import type { PubSub } from '../../events';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -15,6 +15,7 @@ import {
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
+import type { PubSub } from '../../events/pubsub';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -124,7 +125,7 @@ export class StepExecutor extends MastraBase {
             abort: () => {
               abortController?.abort();
             },
-            [PUBSUB_SYMBOL]: params.emitter as unknown as PubSub, // TODO: refactor this to use our PubSub actually
+            [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(params.emitter),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
@@ -288,7 +289,7 @@ export class StepExecutor extends MastraBase {
           abort: () => {
             abortController?.abort();
           },
-          [PUBSUB_SYMBOL]: emitter as unknown as PubSub, // TODO: refactor this to use our PubSub actually
+          [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(emitter),
           [STREAM_FORMAT_SYMBOL]: undefined, // TODO
           engine: {},
           abortSignal: abortController?.signal,
@@ -358,7 +359,7 @@ export class StepExecutor extends MastraBase {
             },
             // TODO
             writer: undefined as any,
-            [PUBSUB_SYMBOL]: ee as unknown as PubSub, // TODO: refactor this to use our PubSub actually
+            [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(ee),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
@@ -431,7 +432,7 @@ export class StepExecutor extends MastraBase {
             },
             // TODO
             writer: undefined as any,
-            [PUBSUB_SYMBOL]: ee as unknown as PubSub, // TODO: refactor this to use our PubSub actually
+            [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(ee),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
