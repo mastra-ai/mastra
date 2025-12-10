@@ -680,8 +680,7 @@ describe('Mastra ID Generator', () => {
       expect(results).toHaveLength(3);
     });
 
-    // TODO: in memory storage doesn't have any way to call id generator on mastra, so this test makes no sense
-    it.skip('should handle complex workflow with memory operations', async () => {
+    it('should handle complex workflow with memory operations', async () => {
       const memory = new MockMemory();
 
       const agent = new Agent({
@@ -734,7 +733,7 @@ describe('Mastra ID Generator', () => {
               },
               role: 'user',
               createdAt: new Date(),
-            },
+            } as any,
           ],
         });
         savedMessageIds.push(...result.messages.map(m => m.id));
