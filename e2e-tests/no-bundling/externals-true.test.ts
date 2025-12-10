@@ -104,8 +104,11 @@ describe('externals: true', () => {
         const delayMs = 1000;
         let serverStarted = false;
 
+        console.log(`Server URL: http://localhost:${port}`);
+
         for (let i = 0; i < maxAttempts; i++) {
           try {
+            console.log(`Checking if server is ready (attempt ${i + 1}/${maxAttempts})...`);
             const res = await fetch(`http://localhost:${port}/api/tools`);
             if (res.ok) {
               console.log('Server is ready');

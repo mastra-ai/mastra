@@ -26,7 +26,21 @@ export default async function setup(project: TestProject) {
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 
-  await publishPackages(['--filter="mastra^..."', '--filter="mastra"'], tag, rootDir, registry);
+  await publishPackages(
+    [
+      '--filter="mastra^..."',
+      '--filter="mastra"',
+      '--filter="@mastra/libsql"',
+      '--filter="@mastra/memory"',
+      '--filter="@mastra/loggers"',
+      '--filter="@mastra/evals"',
+      '--filter="@mastra/observability"',
+      '--filter="@mastra/deployer"',
+    ],
+    tag,
+    rootDir,
+    registry,
+  );
 
   return () => {
     teardown();
