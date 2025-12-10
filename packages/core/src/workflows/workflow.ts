@@ -598,11 +598,11 @@ export function createStep<
                 );
               }
 
-              if (systemMessages) {
-                passThrough.messageList!.replaceAllSystemMessages(systemMessages as CoreMessage[]);
+              if (validatedResult.systemMessages) {
+                passThrough.messageList!.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
-              return { ...passThrough, messages };
+              return { ...passThrough, ...validatedResult };
             }
             return { ...passThrough, messages };
           }
