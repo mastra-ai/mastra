@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { getPackageName, getCompiledDepCachePath, slash, findNativePackageModule } from './utils';
+import { getPackageName, getCompiledDepCachePath, slash, findNativePackageModule, normalizeStudioBase } from './utils';
 
 describe('getPackageName', () => {
   it('should return the full scoped package name for scoped packages', () => {
@@ -322,6 +322,187 @@ describe('findNativePackageModule', () => {
       expect(findNativePackageModule(moduleIds)).toBe(
         '/Users/user/project/node_modules/bcrypt/bcrypt.js?commonjs-module',
       );
+    });
+  });
+});
+
+describe('normalizeStudioBase', () => {
+  describe('special cases', () => {
+    it('should return empty string for root path', () => {
+      expect(normalizeStudioBase('/')).toBe('');
+    });
+
+    it('should return empty string for empty string', () => {
+      expect(normalizeStudioBase('')).toBe('');
+    });
+  });
+
+  describe('basic normalization', () => {
+    it('should add leading slash when missing', () => {
+      expect(normalizeStudioBase('admin')).toBe('/admin');
+    });
+
+    it('should preserve leading slash', () => {
+      expect(normalizeStudioBase('/admin')).toBe('/admin');
+    });
+
+    it('should remove trailing slash', () => {
+      expect(normalizeStudioBase('/admin/')).toBe('/admin');
+    });
+
+    it('should add leading slash and remove trailing slash', () => {
+      expect(normalizeStudioBase('admin/')).toBe('/admin');
+    });
+
+    it('should handle nested paths', () => {
+      expect(normalizeStudioBase('/admin/panel')).toBe('/admin/panel');
+      expect(normalizeStudioBase('admin/panel')).toBe('/admin/panel');
+      expect(normalizeStudioBase('/admin/panel/')).toBe('/admin/panel');
+    });
+  });
+
+  describe('multiple slashes normalization', () => {
+    it('should normalize double slashes to single slash', () => {
+      expect(normalizeStudioBase('//admin')).toBe('/admin');
+    });
+
+    it('should normalize multiple consecutive slashes', () => {
+      expect(normalizeStudioBase('///admin')).toBe('/admin');
+      expect(normalizeStudioBase('////admin')).toBe('/admin');
+    });
+
+    it('should normalize slashes in the middle of path', () => {
+      expect(normalizeStudioBase('/admin//test')).toBe('/admin/test');
+      expect(normalizeStudioBase('/admin///test')).toBe('/admin/test');
+    });
+
+    it('should normalize multiple slash groups', () => {
+      expect(normalizeStudioBase('//admin//test//panel')).toBe('/admin/test/panel');
+    });
+
+    it('should handle trailing multiple slashes', () => {
+      expect(normalizeStudioBase('/admin//')).toBe('/admin');
+      expect(normalizeStudioBase('/admin///')).toBe('/admin');
+    });
+  });
+
+  describe('validation - path traversal', () => {
+    it('should throw error for path with parent directory traversal', () => {
+      expect(() => normalizeStudioBase('../secret')).toThrow(
+        "Invalid base path: \"../secret\". Base path cannot contain '..', '?', or '#'",
+      );
+    });
+
+    it('should throw error for path with traversal in middle', () => {
+      expect(() => normalizeStudioBase('/admin/../secret')).toThrow(
+        "Invalid base path: \"/admin/../secret\". Base path cannot contain '..', '?', or '#'",
+      );
+    });
+
+    it('should throw error for path with multiple traversals', () => {
+      expect(() => normalizeStudioBase('../../secret')).toThrow(
+        "Invalid base path: \"../../secret\". Base path cannot contain '..', '?', or '#'",
+      );
+    });
+  });
+
+  describe('validation - query parameters', () => {
+    it('should throw error for path with query string', () => {
+      expect(() => normalizeStudioBase('/admin?query=1')).toThrow(
+        "Invalid base path: \"/admin?query=1\". Base path cannot contain '..', '?', or '#'",
+      );
+    });
+
+    it('should throw error for path with multiple query parameters', () => {
+      expect(() => normalizeStudioBase('/admin?a=1&b=2')).toThrow(
+        "Invalid base path: \"/admin?a=1&b=2\". Base path cannot contain '..', '?', or '#'",
+      );
+    });
+  });
+
+  describe('validation - hash fragments', () => {
+    it('should throw error for path with hash', () => {
+      expect(() => normalizeStudioBase('/admin#section')).toThrow(
+        "Invalid base path: \"/admin#section\". Base path cannot contain '..', '?', or '#'",
+      );
+    });
+
+    it('should throw error for path with just hash', () => {
+      expect(() => normalizeStudioBase('#anchor')).toThrow(
+        "Invalid base path: \"#anchor\". Base path cannot contain '..', '?', or '#'",
+      );
+    });
+  });
+
+  describe('validation - combined invalid characters', () => {
+    it('should throw error for path with query and hash', () => {
+      expect(() => normalizeStudioBase('/admin?query=1#section')).toThrow(
+        "Invalid base path: \"/admin?query=1#section\". Base path cannot contain '..', '?', or '#'",
+      );
+    });
+
+    it('should throw error for path with traversal and query', () => {
+      expect(() => normalizeStudioBase('../admin?query=1')).toThrow(
+        "Invalid base path: \"../admin?query=1\". Base path cannot contain '..', '?', or '#'",
+      );
+    });
+  });
+
+  describe('real-world examples', () => {
+    it('should handle common base path patterns', () => {
+      expect(normalizeStudioBase('api')).toBe('/api');
+      expect(normalizeStudioBase('admin')).toBe('/admin');
+      expect(normalizeStudioBase('studio')).toBe('/studio');
+      expect(normalizeStudioBase('v1')).toBe('/v1');
+    });
+
+    it('should handle versioned API paths', () => {
+      expect(normalizeStudioBase('/api/v1')).toBe('/api/v1');
+      expect(normalizeStudioBase('api/v2/')).toBe('/api/v2');
+    });
+
+    it('should handle dashboard/admin paths', () => {
+      expect(normalizeStudioBase('/admin/dashboard')).toBe('/admin/dashboard');
+      expect(normalizeStudioBase('admin/panel/')).toBe('/admin/panel');
+    });
+
+    it('should handle hyphenated paths', () => {
+      expect(normalizeStudioBase('/my-app')).toBe('/my-app');
+      expect(normalizeStudioBase('my-admin-panel')).toBe('/my-admin-panel');
+    });
+
+    it('should handle underscored paths', () => {
+      expect(normalizeStudioBase('/my_app')).toBe('/my_app');
+      expect(normalizeStudioBase('admin_panel')).toBe('/admin_panel');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle single character paths', () => {
+      expect(normalizeStudioBase('a')).toBe('/a');
+      expect(normalizeStudioBase('/a')).toBe('/a');
+    });
+
+    it('should normalize multiple slashes to empty string', () => {
+      // Multiple slashes normalize to '/' during normalization step
+      // Then caught by the post-normalization check that returns ''
+      expect(normalizeStudioBase('///')).toBe('');
+      expect(normalizeStudioBase('//')).toBe('');
+    });
+
+    it('should handle deep nested paths', () => {
+      expect(normalizeStudioBase('/a/b/c/d/e/f')).toBe('/a/b/c/d/e/f');
+      expect(normalizeStudioBase('a/b/c/d/e/f/')).toBe('/a/b/c/d/e/f');
+    });
+
+    it('should handle paths with numbers', () => {
+      expect(normalizeStudioBase('/app123')).toBe('/app123');
+      expect(normalizeStudioBase('v2024')).toBe('/v2024');
+    });
+
+    it('should handle mixed case paths', () => {
+      expect(normalizeStudioBase('/Admin')).toBe('/Admin');
+      expect(normalizeStudioBase('MyApp')).toBe('/MyApp');
     });
   });
 });
