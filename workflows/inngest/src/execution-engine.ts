@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
-import type { PubSub } from '@mastra/core/events';
 import type {
   ExecutionContext,
   Step,

@@ -1246,7 +1246,11 @@ export class Workflow<
     });
 
     const unwatch = run.watch(event => {
-      pubsub.publish('nested-watch', { type: 'nested-watch', runId: run.runId, data: { event, workflowId: this.id } });
+      void pubsub.publish('nested-watch', {
+        type: 'nested-watch',
+        runId: run.runId,
+        data: { event, workflowId: this.id },
+      });
     });
 
     if (retryCount && retryCount > 0 && isResume && requestContext) {
@@ -2303,7 +2307,7 @@ export class Run<
           event: { type: string; payload: { id: string } & Record<string, unknown> };
           workflowId: string;
         };
-        this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+        void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
           type: 'watch',
           runId: this.runId,
           data: {
@@ -2316,12 +2320,12 @@ export class Run<
       }
     };
 
-    this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
-    this.pubsub.subscribe('nested-watch', nestedWatchCb);
+    void this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
+    void this.pubsub.subscribe('nested-watch', nestedWatchCb);
 
     return () => {
-      this.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
-      this.pubsub.unsubscribe('nested-watch', nestedWatchCb);
+      void this.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
+      void this.pubsub.unsubscribe('nested-watch', nestedWatchCb);
     };
   }
 

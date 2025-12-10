@@ -1,6 +1,7 @@
 import { subscribe } from '@inngest/realtime';
+import { PubSub } from '@mastra/core/events';
+import type { Event } from '@mastra/core/events';
 import type { Inngest } from 'inngest';
-import { PubSub, type Event } from '@mastra/core/events';
 
 /**
  * Type for Inngest's publish function, available inside Inngest function context.
