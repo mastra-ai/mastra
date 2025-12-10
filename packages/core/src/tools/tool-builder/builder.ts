@@ -295,7 +295,7 @@ export class CoreToolBuilder extends MastraBase {
                 name: options.name,
                 runId: options.runId!,
               },
-              options.writableStream || execOptions.writableStream,
+              options.outputWriter || execOptions.outputWriter,
             ),
             tracingContext: { currentSpan: toolSpan },
             abortSignal: execOptions.abortSignal,
@@ -333,7 +333,7 @@ export class CoreToolBuilder extends MastraBase {
                 resumeData,
                 threadId,
                 resourceId,
-                writableStream: execOptions.writableStream,
+                outputWriter: execOptions.outputWriter,
               },
             };
           } else if (isWorkflowExecution) {
@@ -386,19 +386,30 @@ export class CoreToolBuilder extends MastraBase {
           }
         }
 
-        const skiptOutputValidation = !!(typeof result === 'undefined' && suspendData);
-
-        // Validate output if outputSchema exists
-        const outputSchema = this.getOutputSchema();
-        const outputValidation = validateToolOutput(outputSchema, result, options.name, skiptOutputValidation);
-        if (outputValidation.error) {
-          logger?.warn(outputValidation.error.message);
-          toolSpan?.end({ output: outputValidation.error });
-          return outputValidation.error;
+        // Skip validation if suspend was called without a result
+        const shouldSkipValidation = typeof result === 'undefined' && !!suspendData;
+        if (shouldSkipValidation) {
+          toolSpan?.end({ output: result });
+          return result;
         }
 
-        toolSpan?.end({ output: outputValidation.data });
-        return outputValidation.data;
+        // Validate output for Vercel/AI SDK tools which don't have built-in validation
+        // Mastra tools handle their own validation in Tool.execute() which properly
+        // applies Zod transforms (e.g., .transform(), .pipe()) to the output
+        if (isVercelTool(tool)) {
+          const outputSchema = this.getOutputSchema();
+          const outputValidation = validateToolOutput(outputSchema, result, options.name, false);
+          if (outputValidation.error) {
+            logger?.warn(outputValidation.error.message);
+            toolSpan?.end({ output: outputValidation.error });
+            return outputValidation.error;
+          }
+          result = outputValidation.data;
+        }
+
+        // Return result (validated for Vercel tools, already validated for Mastra tools)
+        toolSpan?.end({ output: result });
+        return result;
       } catch (error) {
         toolSpan?.error({ error: error as Error });
         throw error;
@@ -496,8 +507,9 @@ export class CoreToolBuilder extends MastraBase {
     const schemaCompatLayers = [];
 
     if (model) {
+      // Respect the model's own capability flag; do not disable it based solely on specificationVersion.
       const supportsStructuredOutputs =
-        model.specificationVersion !== 'v2' ? (model.supportsStructuredOutputs ?? false) : false;
+        'supportsStructuredOutputs' in model ? (model.supportsStructuredOutputs ?? false) : false;
 
       const modelInfo = {
         modelId: model.modelId,

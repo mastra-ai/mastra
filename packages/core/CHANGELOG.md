@@ -1,5 +1,68 @@
 # @mastra/core
 
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Add support for typed structured output in agent workflow steps ([#11014](https://github.com/mastra-ai/mastra/pull/11014))
+
+  When wrapping an agent with `createStep()` and providing a `structuredOutput.schema`, the step's `outputSchema` is now correctly inferred from the provided schema instead of defaulting to `{ text: string }`.
+
+  This enables type-safe chaining of agent steps with structured output to subsequent steps:
+
+  ```typescript
+  const articleSchema = z.object({
+    title: z.string(),
+    summary: z.string(),
+    tags: z.array(z.string()),
+  });
+
+  // Agent step with structured output - outputSchema is now articleSchema
+  const agentStep = createStep(agent, {
+    structuredOutput: { schema: articleSchema },
+  });
+
+  // Next step can receive the structured output directly
+  const processStep = createStep({
+    id: 'process',
+    inputSchema: articleSchema, // Matches agent's outputSchema
+    outputSchema: z.object({ tagCount: z.number() }),
+    execute: async ({ inputData }) => ({
+      tagCount: inputData.tags.length, // Fully typed!
+    }),
+  });
+
+  workflow.then(agentStep).then(processStep).commit();
+  ```
+
+  When `structuredOutput` is not provided, the agent step continues to use the default `{ text: string }` output schema.
+
+- Fixed a bug where multiple tools streaming output simultaneously could fail with "WritableStreamDefaultWriter is locked" errors. Tool streaming now works reliably during concurrent tool executions. ([#10830](https://github.com/mastra-ai/mastra/pull/10830))
+
+- Add delete workflow run API ([#10991](https://github.com/mastra-ai/mastra/pull/10991))
+
+  ```typescript
+  await workflow.deleteWorkflowRunById(runId);
+  ```
+
+- Fixed CachedToken tracking in all Observability Exporters. Also fixed TimeToFirstToken in Langfuse, Braintrust, PostHog exporters. Fixed trace formatting in Posthog Exporter. ([#11029](https://github.com/mastra-ai/mastra/pull/11029))
+
+- fix: persist data-\* chunks from writer.custom() to memory storage ([#10884](https://github.com/mastra-ai/mastra/pull/10884))
+  - Add persistence for custom data chunks (`data-*` parts) emitted via `writer.custom()` in tools
+  - Data chunks are now saved to message storage so they survive page refreshes
+  - Update `@assistant-ui/react` to v0.11.47 with native `DataMessagePart` support
+  - Convert `data-*` parts to `DataMessagePart` format (`{ type: 'data', name: string, data: T }`)
+  - Update related `@assistant-ui/*` packages for compatibility
+
+- Fixed double validation bug that prevented Zod transforms from working correctly in tool schemas. ([#11025](https://github.com/mastra-ai/mastra/pull/11025))
+
+  When tools with Zod `.transform()` or `.pipe()` in their `outputSchema` were executed through the Agent pipeline, validation was happening twice - once in Tool.execute() (correct) and again in CoreToolBuilder (incorrect). The second validation received already-transformed data but expected pre-transform data, causing validation errors.
+
+  This fix enables proper use of Zod transforms in both `inputSchema` (for normalizing/cleaning input data) and `outputSchema` (for transforming output data to be LLM-friendly).
+
+- Updated dependencies [[`5d7000f`](https://github.com/mastra-ai/mastra/commit/5d7000f757cd65ea9dc5b05e662fd83dfd44e932)]:
+  - @mastra/observability@1.0.0-beta.4
+
 ## 1.0.0-beta.9
 
 ### Minor Changes

@@ -14,7 +14,7 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { ChromaClient, CloudClient } from 'chromadb';
-import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection, Metadata } from 'chromadb';
+import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection, Metadata, Search } from 'chromadb';
 import type { ChromaVectorFilter } from './filter';
 import { ChromaFilterTranslator } from './filter';
 
@@ -218,6 +218,31 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
       throw new MastraError(
         {
           id: createVectorErrorId('CHROMA', 'QUERY', 'FAILED'),
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
+  }
+
+  async hybridSearch({ indexName, search }: { indexName: string; search: Search }): Promise<QueryResult[]> {
+    try {
+      const collection = await this.getCollection({ indexName });
+      const results = await collection.search(search);
+      return (results.rows()[0] ?? []).map(record => ({
+        id: record.id,
+        score: record.score ?? 0,
+        metadata: record.metadata ?? undefined,
+        vector: record.embedding ?? undefined,
+        document: record.document ?? undefined,
+      }));
+    } catch (error: any) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createVectorErrorId('CHROMA', 'SEARCH_API', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },

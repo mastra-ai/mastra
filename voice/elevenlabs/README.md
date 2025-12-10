@@ -37,11 +37,18 @@ const speakers = await voice.getSpeakers();
 const stream = await voice.speak('Hello from Mastra!', {
   speaker: 'Adam', // Optional, defaults to constructor speaker
 });
+
+// Generate speech with custom output format (e.g., for telephony/VoIP)
+const telephonyStream = await voice.speak('Hello from Mastra!', {
+  speaker: 'Adam',
+  outputFormat: 'ulaw_8000', // μ-law 8kHz format for telephony systems
+});
 ```
 
 ## Features
 
 - High-fidelity Text-to-Speech synthesis
+- Configurable audio output formats (MP3, PCM, μ-law, A-law, WAV) for telephony and VoIP use cases
 
 ## Voice Options
 
@@ -79,9 +86,20 @@ new ElevenLabsVoice({
 
 Returns a list of available speakers with their details.
 
-#### `speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string })`
+#### `speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string; outputFormat?: ElevenLabsOutputFormat })`
 
 Converts text to speech. Returns a readable stream of audio data.
+
+**Options:**
+
+- `speaker?: string` - The ID of the speaker to use for the speech. If not provided, the default speaker will be used.
+- `outputFormat?: ElevenLabsOutputFormat` - The audio output format. Supported formats include:
+  - **MP3 formats**: `mp3_22050_32`, `mp3_44100_32`, `mp3_44100_64`, `mp3_44100_96`, `mp3_44100_128`, `mp3_44100_192`
+  - **PCM formats**: `pcm_8000`, `pcm_16000`, `pcm_22050`, `pcm_24000`, `pcm_44100`
+  - **Telephony formats**: `ulaw_8000`, `alaw_8000` (μ-law and A-law 8kHz for VoIP/telephony)
+  - **WAV formats**: `wav`, `wav_8000`, `wav_16000`
+
+If not provided, defaults to ElevenLabs' default format (typically `mp3_44100_128`).
 
 #### `listen()`
 
