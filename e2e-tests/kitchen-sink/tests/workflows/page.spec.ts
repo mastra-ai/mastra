@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { resetStorage } from '../__utils__/reset-storage';
+
+test.afterEach(async () => {
+  await resetStorage();
+});
 
 test('has valid links', async ({ page }) => {
   await page.goto('http://localhost:4111/workflows');

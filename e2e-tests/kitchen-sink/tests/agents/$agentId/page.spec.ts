@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { resetStorage } from '../../__utils__/reset-storage';
+
+test.afterEach(async () => {
+  await resetStorage();
+});
 
 test('overall layout information', async ({ page }) => {
   await page.goto('http://localhost:4111/agents/weatherAgent/chat/1234');
