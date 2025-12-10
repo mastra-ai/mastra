@@ -68,7 +68,7 @@ export function nodeModulesExtensionResolver(): Plugin {
   return {
     name: 'node-modules-extension-resolver',
     async resolveId(id, importer, options) {
-      // Skip: relative imports, absolute paths, no importer, or builtin modules
+      // Skip relative imports, absolute paths, no importer, or builtin modules
       if (!importer || id.startsWith('.') || id.startsWith('/') || isBuiltinModule(id)) {
         return null;
       }
@@ -97,7 +97,18 @@ export function nodeModulesExtensionResolver(): Plugin {
         return { id, external: true };
       }
 
-      // For imports without extension, check if we need to add one
+      // Try import.meta.resolve first - if it works, the import is valid as-is
+      // This respects ESM exports maps correctly
+      try {
+        const resolved = import.meta.resolve(id);
+        if (resolved && extname(resolved)) {
+          return { id, external: true };
+        }
+      } catch {
+        // import.meta.resolve failed, continue with fallback logic
+      }
+
+      // Fallback: For imports without extension, check if we need to add one
       // @ts-expect-error - resolveId.handler exists but isn't typed
       const nodeResolved = await nodeResolvePlugin.resolveId?.handler?.call(this, id, importer, options);
 
