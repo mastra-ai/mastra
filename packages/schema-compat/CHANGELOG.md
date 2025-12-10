@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.11.9
+
+### Patch Changes
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10764](https://github.com/mastra-ai/mastra/pull/10764))
+
 ## 0.11.9-alpha.0
 
 ### Patch Changes
