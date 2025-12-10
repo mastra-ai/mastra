@@ -176,6 +176,8 @@ export const testWorkflow = createWorkflow({
 - The next step receives an object containing all parallel step outputs
 - You must define the `inputSchema` of the following step to match this structure
 
+> See [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
+
 ## Conditional logic with `.branch()`
 
 Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
@@ -428,7 +430,7 @@ export const testWorkflow = createWorkflow({
 
 ### Looping with `.foreach()`
 
-Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step's logic to each one.
+Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step's logic to each one. See [Choosing the right pattern](#choosing-the-right-pattern) for guidance on when to use `.foreach()` vs other methods.
 
 ![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
@@ -653,6 +655,139 @@ export const multiDocWorkflow = createWorkflow({
 - If a step inside `.foreach()` returns an array, the output becomes an array of arrays
 - Use `.map()` with `.flat()` to flatten nested arrays when needed
 - For complex RAG pipelines, Option 1 (handling batching in a single step) often provides better control
+
+#### Nested workflows inside foreach
+
+The step after `.foreach()` only executes after all iterations complete. If you need to run multiple sequential operations per item, use a nested workflow instead of chaining multiple `.foreach()` calls. This keeps all operations for each item together and makes the data flow clearer.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+// Define a workflow that processes a single document
+const processDocumentWorkflow = createWorkflow({
+  id: "process-document",
+  inputSchema: z.object({ url: z.string() }),
+  outputSchema: z.object({
+    embeddings: z.array(z.array(z.number())),
+    metadata: z.object({ url: z.string(), chunkCount: z.number() })
+  })
+})
+  .then(downloadStep)      // Download the document
+  .then(chunkStep)         // Split into chunks
+  .then(embedChunksStep)   // Embed all chunks for this document
+  .then(formatResultStep)  // Format the final output
+  .commit();
+
+// Use the nested workflow inside foreach
+export const batchProcessWorkflow = createWorkflow({
+  id: "batch-process-documents",
+  inputSchema: z.array(z.object({ url: z.string() })),
+  outputSchema: z.array(z.object({
+    embeddings: z.array(z.array(z.number())),
+    metadata: z.object({ url: z.string(), chunkCount: z.number() })
+  }))
+})
+  .foreach(processDocumentWorkflow, { concurrency: 3 })
+  .commit();
+
+// Each document goes through all 4 steps before the next document starts (with concurrency: 1)
+// With concurrency: 3, up to 3 documents process their full pipelines in parallel
+```
+
+**Why use nested workflows:**
+- All steps for one item complete together before results are collected
+- Cleaner than multiple `.foreach()` calls which create nested arrays
+- Each nested workflow execution is independent with its own data flow
+- Easier to test and reuse the per-item logic separately
+
+**How it works:**
+1. The parent workflow passes each array item to an instance of the nested workflow
+2. Each nested workflow runs its full step sequence for that item
+3. The nested workflow's final output becomes one element in the result array
+4. After all nested workflows complete, the next step in the parent receives the full array
+
+## Choosing the right pattern
+
+Use this section as a reference for selecting the appropriate control flow method.
+
+### Quick reference
+
+| Method | Purpose | Input | Output | Concurrency |
+|--------|---------|-------|--------|-------------|
+| `.then(step)` | Sequential processing | `T` | `U` | N/A (one at a time) |
+| `.parallel([a, b])` | Different operations on same input | `T` | `{ a: U, b: V }` | All run simultaneously |
+| `.foreach(step)` | Same operation on each array item | `T[]` | `U[]` | Configurable (default: 1) |
+| `.branch([...])` | Conditional path selection | `T` | `{ selectedStep: U }` | Only one branch runs |
+
+### `.parallel()` vs `.foreach()`
+
+**Use `.parallel()` when you have one input that needs different processing:**
+
+```typescript
+// Same user data processed differently in parallel
+workflow
+  .parallel([validateStep, enrichStep, scoreStep])
+  .then(combineResultsStep)
+```
+
+**Use `.foreach()` when you have many inputs that need the same processing:**
+
+```typescript
+// Multiple URLs each processed the same way
+workflow
+  .foreach(downloadStep, { concurrency: 5 })
+  .then(aggregateStep)
+```
+
+### When to use nested workflows
+
+**Inside `.foreach()`** - when each array item needs multiple sequential steps:
+
+```typescript
+// Each document goes through a full pipeline
+const processDocWorkflow = createWorkflow({...})
+  .then(downloadStep)
+  .then(parseStep)
+  .then(embedStep)
+  .commit();
+
+workflow.foreach(processDocWorkflow, { concurrency: 3 })
+```
+
+This is cleaner than chaining `.foreach().foreach()`, which creates nested arrays.
+
+**Inside `.parallel()`** - when a parallel branch needs its own multi-step pipeline:
+
+```typescript
+const pipelineA = createWorkflow({...}).then(step1).then(step2).commit();
+const pipelineB = createWorkflow({...}).then(step3).then(step4).commit();
+
+workflow.parallel([pipelineA, pipelineB])
+```
+
+### Chaining patterns
+
+| Pattern | What happens | Common use case |
+|---------|--------------|-----------------|
+| `.then().then()` | Sequential steps | Simple pipelines |
+| `.parallel().then()` | Run in parallel, then combine | Fan-out/fan-in |
+| `.foreach().then()` | Process all items, then aggregate | Map-reduce |
+| `.foreach().foreach()` | Creates array of arrays | Avoid - use nested workflow or `.map()` with `.flat()` |
+| `.foreach(workflow)` | Full pipeline per item | Multi-step processing per array item |
+
+### Concurrency behavior
+
+| Method | Behavior |
+|--------|----------|
+| `.then()` | Sequential - one step at a time |
+| `.parallel()` | All branches run simultaneously (no limit option) |
+| `.foreach()` | Controlled via `{ concurrency: N }` - default is 1 (sequential) |
+| Nested workflow in `.foreach()` | Respects parent's concurrency setting |
+
+**Performance tip:** For I/O-bound operations in `.foreach()`, increase concurrency to process items in parallel:
+
+```typescript
+// Process up to 10 items simultaneously
+workflow.foreach(fetchDataStep, { concurrency: 10 })
+```
 
 ## Loop management
 
