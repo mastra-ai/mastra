@@ -3,6 +3,17 @@ import { Routes, Route, BrowserRouter, Outlet, useNavigate } from 'react-router'
 
 import { Layout } from '@/components/layout';
 
+// Extend window type for Mastra config
+declare global {
+  interface Window {
+    MASTRA_STUDIO_BASE_PATH?: string;
+    MASTRA_SERVER_HOST: string;
+    MASTRA_SERVER_PORT: string;
+    MASTRA_TELEMETRY_DISABLED?: string;
+    MASTRA_HIDE_CLOUD_CTA: string;
+  }
+}
+
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import Tools from '@/pages/tools';
 
@@ -71,6 +82,7 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, isLoading } = useStudioConfig();
 
   if (isLoading) {
@@ -86,7 +98,7 @@ function App() {
   return (
     <MastraReactProvider baseUrl={baseUrl} headers={headers}>
       <PostHogProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={studioBasePath}>
           <LinkComponentWrapper>
             <Routes>
               <Route

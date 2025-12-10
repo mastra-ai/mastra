@@ -19,8 +19,6 @@ declare global {
       tools: Record<string, Tool>;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
-      playground?: boolean;
-      isDev?: boolean;
     }
   }
 }
@@ -74,8 +72,6 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       if (this.taskStore) {
         res.locals.taskStore = this.taskStore;
       }
-      res.locals.playground = this.playground === true;
-      res.locals.isDev = this.isDev === true;
       res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
       const controller = new AbortController();
       // Use res.on('close') instead of req.on('close') because the request's 'close' event

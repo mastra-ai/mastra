@@ -1,5 +1,15 @@
 # @mastra/langsmith
 
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fixed CachedToken tracking in all Observability Exporters. Also fixed TimeToFirstToken in Langfuse, Braintrust, PostHog exporters. Fixed trace formatting in Posthog Exporter. ([#11029](https://github.com/mastra-ai/mastra/pull/11029))
+
+- Updated dependencies [[`edb07e4`](https://github.com/mastra-ai/mastra/commit/edb07e49283e0c28bd094a60e03439bf6ecf0221), [`b7e17d3`](https://github.com/mastra-ai/mastra/commit/b7e17d3f5390bb5a71efc112204413656fcdc18d), [`261473a`](https://github.com/mastra-ai/mastra/commit/261473ac637e633064a22076671e2e02b002214d), [`5d7000f`](https://github.com/mastra-ai/mastra/commit/5d7000f757cd65ea9dc5b05e662fd83dfd44e932), [`4f0331a`](https://github.com/mastra-ai/mastra/commit/4f0331a79bf6eb5ee598a5086e55de4b5a0ada03), [`8a000da`](https://github.com/mastra-ai/mastra/commit/8a000da0c09c679a2312f6b3aa05b2ca78ca7393)]:
+  - @mastra/core@1.0.0-beta.10
+  - @mastra/observability@1.0.0-beta.4
+
 ## 1.0.0-beta.4
 
 ### Patch Changes
