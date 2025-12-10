@@ -11,6 +11,7 @@ declare global {
     MASTRA_SERVER_PORT: string;
     MASTRA_TELEMETRY_DISABLED?: string;
     MASTRA_HIDE_CLOUD_CTA: string;
+    MASTRA_SERVER_PROTOCOL: string;
   }
 }
 
@@ -195,9 +196,14 @@ function App() {
 }
 
 export default function AppWrapper() {
+  const protocol = window.MASTRA_SERVER_PROTOCOL || 'http';
+  const host = window.MASTRA_SERVER_HOST || 'localhost';
+  const port = window.MASTRA_SERVER_PORT || 4111;
+  const endpoint = `${protocol}://${host}:${port}`;
+
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={`http://localhost:${window.MASTRA_SERVER_PORT || 4111}`}>
+      <StudioConfigProvider endpoint={endpoint}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>

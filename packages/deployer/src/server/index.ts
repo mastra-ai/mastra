@@ -306,10 +306,12 @@ export async function createHonoServer(
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
       const host = serverOptions?.host ?? 'localhost';
+      const protocol = serverOptions?.https ? 'https' : 'http';
 
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, `'${protocol}'`);
       // Inject the base path for frontend routing
       // The <base href> tag uses this to resolve all relative URLs correctly
       indexHtml = indexHtml.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', studioBasePath);
