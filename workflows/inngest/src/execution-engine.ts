@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { getErrorFromUnknown, type SerializedError } from '@mastra/core/error';
+import { getErrorFromUnknown } from '@mastra/core/error';
+import type { SerializedError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
