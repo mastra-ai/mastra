@@ -3,8 +3,8 @@ import * as babel from '@babel/core';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import type { OutputAsset, OutputChunk } from 'rollup';
-import { join } from 'node:path';
-import { validate } from '../validator/validate';
+import { basename, join, parse } from 'node:path';
+import { validate, ValidationError } from '../validator/validate';
 import { getBundlerOptions } from './bundlerOptions';
 import { checkConfigExport } from './babel/check-config-export';
 import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/workspaceDependencies';
@@ -12,11 +12,14 @@ import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { findNativePackageModule, isDependencyPartOfPackage } from './utils';
+import { isDependencyPartOfPackage } from './utils';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
-import { getPackageInfo } from 'local-pkg';
+import * as stackTraceParser from 'stacktrace-parser';
 
-type ErrorId = 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD';
+type ErrorId =
+  | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
+  | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD'
+  | 'DEPLOYER_ANALYZE_TYPE_ERROR';
 
 function throwExternalDependencyError({
   errorId,
@@ -45,6 +48,151 @@ export const mastra = new Mastra({
   }
 })`,
   });
+}
+
+function getPackageNameFromBundledModuleName(moduleName: string) {
+  const chunks = moduleName.split('-');
+
+  if (!chunks.length) {
+    return moduleName;
+  }
+
+  if (chunks[0]?.startsWith('@')) {
+    return chunks.slice(0, 2).join('/');
+  }
+
+  return chunks[0];
+}
+
+function validateError(
+  err: ValidationError | Error,
+  file: OutputChunk,
+  {
+    binaryMapData,
+    workspaceMap,
+  }: {
+    binaryMapData: Record<string, string[]>;
+    logger: IMastraLogger;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+  },
+) {
+  let moduleName: string | undefined | null = null;
+  let errorConfig: {
+    id: ErrorId;
+    messagePrefix: string;
+  } | null = null;
+
+  if (err instanceof ValidationError) {
+    const parsedStack = stackTraceParser.parse(err.stack);
+    if (err.type === 'TypeError') {
+      const pkgNameRegex = /.*node_modules\/([^\/]+)\//;
+      const stacktraceFrame = parsedStack.find(frame => frame.file && pkgNameRegex.test(frame.file));
+      if (stacktraceFrame) {
+        const match = stacktraceFrame.file!.match(pkgNameRegex);
+        moduleName = match?.[1] ?? getPackageNameFromBundledModuleName(basename(file.name));
+      } else {
+        moduleName = getPackageNameFromBundledModuleName(basename(file.name));
+      }
+
+      errorConfig = {
+        id: 'DEPLOYER_ANALYZE_TYPE_ERROR',
+        messagePrefix: `Mastra wasn't able to bundle "${moduleName}", might be an older commonJS module. Please add`,
+      };
+    } else if (err.stack?.includes?.('[ERR_MODULE_NOT_FOUND]')) {
+      moduleName = err.message.match(/Cannot find package '([^']+)'/)?.[1];
+
+      const parentModuleName = getPackageNameFromBundledModuleName(basename(file.name));
+
+      errorConfig = {
+        id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
+        messagePrefix: `Mastra wasn't able to build your project, We couldn't load "${moduleName}" from "${parentModuleName}". Make sure "${moduleName}" is installed or add`,
+      };
+
+      // if they are the same, the feedback we give to our user is not really useful and probably something else went wrong
+      if (moduleName === parentModuleName) {
+        return;
+      }
+    }
+  }
+
+  if (err.message.includes('No native build was found')) {
+    const pkgName = getPackageNameFromBundledModuleName(basename(file.name));
+    moduleName = binaryMapData[file.fileName]?.[0] ?? pkgName;
+    errorConfig = {
+      id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
+      messagePrefix: 'We found a binary dependency in your bundle but we cannot bundle it yet. Please add',
+    };
+  }
+
+  if (moduleName && workspaceMap.has(moduleName)) {
+    throw new MastraError({
+      id: 'DEPLOYER_ANALYZE_ERROR_IN_WORKSPACE',
+      domain: ErrorDomain.DEPLOYER,
+      category: ErrorCategory.USER,
+      details: {
+        // importFile: moduleName,
+        packageName: moduleName,
+      },
+      text: `We found an error in the ${moduleName} workspace package. Please find the offending package and fix the error.
+  Error: ${err.stack}`,
+    });
+  }
+
+  if (errorConfig && moduleName) {
+    throwExternalDependencyError({
+      errorId: errorConfig.id,
+      moduleName: moduleName!,
+      packageName: moduleName!,
+      messagePrefix: errorConfig.messagePrefix,
+    });
+  }
+}
+
+async function validateFile(
+  root: string,
+  file: OutputChunk,
+  {
+    binaryMapData,
+    moduleResolveMapLocation,
+    logger,
+    workspaceMap,
+  }: {
+    binaryMapData: Record<string, string[]>;
+    moduleResolveMapLocation: string;
+    logger: IMastraLogger;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+  },
+) {
+  try {
+    if (!file.isDynamicEntry && file.isEntry) {
+      // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
+      await validate(join(root, file.fileName), {
+        moduleResolveMapLocation,
+        injectESMShim: false,
+      });
+    }
+  } catch (err) {
+    let errorToHandle = err;
+    if (
+      err instanceof ValidationError &&
+      err.type === 'ReferenceError' &&
+      (err.message.startsWith('__dirname') || err.message.startsWith('__filename'))
+    ) {
+      try {
+        await validate(join(root, file.fileName), {
+          moduleResolveMapLocation,
+          injectESMShim: true,
+        });
+        errorToHandle = null;
+      } catch (err) {
+        errorToHandle = err;
+      }
+    }
+
+    if (errorToHandle instanceof Error) {
+      validateError(errorToHandle, file, { binaryMapData, logger, workspaceMap });
+    }
+  }
 }
 
 /**
@@ -83,13 +231,17 @@ async function validateOutput(
   };
 
   // store resolve map for validation
-  await writeFile(join(outputDir, 'module-resolve-map.json'), JSON.stringify(usedExternals, null, 2));
-
   // we should resolve the version of the deps
   for (const deps of Object.values(usedExternals)) {
     for (const dep of Object.keys(deps)) {
       result.externalDependencies.add(dep);
     }
+  }
+  let binaryMapData: Record<string, string[]> = {};
+
+  if (existsSync(join(outputDir, 'binary-map.json'))) {
+    const binaryMap = await readFile(join(outputDir, 'binary-map.json'), 'utf-8');
+    binaryMapData = JSON.parse(binaryMap);
   }
 
   for (const file of output) {
@@ -97,62 +249,18 @@ async function validateOutput(
       continue;
     }
 
-    try {
-      logger.debug(`Validating if ${file.fileName} is a valid module.`);
-      if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-        result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
-      }
-
-      if (!file.isDynamicEntry && file.isEntry) {
-        // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
-        await validate(join(projectRoot, file.fileName));
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        let moduleName: string | undefined | null = null;
-        let errorConfig: {
-          id: ErrorId;
-          messagePrefix: string;
-        } | null = null;
-
-        if (err.message.includes('[ERR_MODULE_NOT_FOUND]')) {
-          // This is the preferred way to get the module name that caused the issue
-          const moduleIdName = file.moduleIds.length >= 2 ? file.moduleIds[file.moduleIds.length - 2] : undefined;
-          // For some reason some virtual modules are quite sparse on their details, so name (e.g. '.mastra/.build/puppeteer') is a good enough fallback
-          const fallbackName = file.name.split('/').pop();
-
-          moduleName = moduleIdName ?? fallbackName;
-          errorConfig = {
-            id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
-            messagePrefix: "Mastra wasn't able to build your project. Please add",
-          };
-        } else if (err.message.includes('Error: No native build was found for ')) {
-          moduleName = findNativePackageModule(file.moduleIds);
-          errorConfig = {
-            id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
-            messagePrefix: 'We found a binary dependency in your bundle. Please add',
-          };
-        }
-
-        if (moduleName && errorConfig) {
-          const pkgInfo = await getPackageInfo(moduleName);
-          const packageName = pkgInfo?.packageJson?.name;
-
-          if (packageName) {
-            throwExternalDependencyError({
-              errorId: errorConfig.id,
-              moduleName,
-              packageName,
-              messagePrefix: errorConfig.messagePrefix,
-            });
-          } else {
-            logger.debug(`Could not determine the module name for file ${file.fileName}`);
-          }
-        }
-
-        logger.debug(`Error while validating module ${file.fileName}: ${err.message}`);
-      }
+    logger.debug(`Validating if ${file.fileName} is a valid module.`);
+    if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
+      result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
     }
+
+    // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
+    await validateFile(projectRoot, file, {
+      binaryMapData,
+      moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
+      logger,
+      workspaceMap,
+    });
   }
 
   return result;
