@@ -137,6 +137,7 @@ export function createPrepareMemoryStep<
       const existingThread = await memory.getThreadById({ threadId: thread?.id });
 
       if (existingThread) {
+        console.dir({ existingThread }, { depth: null });
         if (
           (!existingThread.metadata && thread.metadata) ||
           (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
@@ -161,6 +162,7 @@ export function createPrepareMemoryStep<
           resourceId,
           saveThread: true,
         });
+        console.dir({ newThread: threadObject }, { depth: null });
       }
 
       // Set memory context in RequestContext for processors to access
@@ -179,6 +181,9 @@ export function createPrepareMemoryStep<
         messageList,
         inputProcessorOverrides: options.inputProcessors,
       });
+
+      const currentMessages = messageList.get.all.db();
+      console.dir({ currentMessages, threadFromArgs, resourceId }, { depth: null });
 
       return {
         thread: threadObject,

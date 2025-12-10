@@ -156,6 +156,10 @@ export function workflowLoopStream<
           }
         }
 
+        if (executionResult.status !== 'suspended') {
+          await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+        }
+
         controller.close();
         return;
       }
@@ -165,9 +169,7 @@ export function workflowLoopStream<
         return;
       }
 
-      // if (executionResult.status !== 'suspended') {
-      //   // agenticLoopWorkflow.
-      // }
+      await agenticLoopWorkflow.deleteWorkflowRunById(runId);
 
       controller.enqueue({
         type: 'finish',

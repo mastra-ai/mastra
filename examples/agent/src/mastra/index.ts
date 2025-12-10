@@ -37,7 +37,7 @@ export const mastra = new Mastra({
   processors: {
     moderationProcessor,
   },
-  logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
+  // logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
   mcpServers: {
     myMcpServer,

@@ -87,6 +87,16 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
 
       if (inputData?.every(toolCall => toolCall?.result === undefined)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error);
+        const resumeToolErrorResults = errorResults.filter(toolCall => toolCall?.toolName === 'resume-tool');
+        const toolsCalledByResumeToolErrResults = resumeToolErrorResults.map(toolCall => ({
+          toolCallId: toolCall.args.toolCallId,
+          toolName: toolCall.args.toolName,
+          args: toolCall.args.args,
+          providerMetadata: toolCall.providerMetadata,
+          error: toolCall.error,
+        }));
+
+        errorResults.push(...toolsCalledByResumeToolErrResults);
 
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
@@ -138,7 +148,18 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
       }
 
       if (inputData?.length) {
-        for (const toolCall of inputData) {
+        const allInputData = inputData;
+        const resumeToolResults = allInputData.filter(toolCall => toolCall?.toolName === 'resume-tool');
+        const toolsCalledByResumeToolResults = resumeToolResults.map(toolCall => ({
+          toolCallId: toolCall.args.toolCallId,
+          toolName: toolCall.args.toolName,
+          args: toolCall.args.args,
+          result: toolCall.result,
+          providerMetadata: toolCall.providerMetadata,
+          providerExecuted: toolCall.providerExecuted,
+        }));
+        allInputData.push(...toolsCalledByResumeToolResults);
+        for (const toolCall of allInputData) {
           const chunk: ChunkType<OUTPUT> = {
             type: 'tool-result',
             runId: rest.runId,
@@ -171,7 +192,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           role: 'assistant' as const,
           content: {
             format: 2,
-            parts: inputData.map(toolCall => {
+            parts: allInputData.map(toolCall => {
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {

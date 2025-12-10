@@ -34,42 +34,55 @@ export function createAgenticExecutionWorkflow<
     llmExecutionStep,
   );
 
-  return createWorkflow({
-    id: 'executionWorkflow',
-    inputSchema: llmIterationOutputSchema,
-    outputSchema: llmIterationOutputSchema,
-    options: {
-      tracingPolicy: {
-        // mark all workflow spans related to the
-        // VNext execution as internal
-        internal: InternalSpans.WORKFLOW,
+  return (
+    createWorkflow({
+      id: 'executionWorkflow',
+      inputSchema: llmIterationOutputSchema,
+      outputSchema: llmIterationOutputSchema,
+      options: {
+        tracingPolicy: {
+          // mark all workflow spans related to the
+          // VNext execution as internal
+          internal: InternalSpans.WORKFLOW,
+        },
+        shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+        validateInputs: false,
       },
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
-      validateInputs: false,
-    },
-  })
-    .then(llmExecutionStep)
-    .map(
-      async ({ inputData }) => {
-        const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-        // Add assistant response messages to messageList BEFORE processing tool calls
-        // This ensures messages are available for persistence before suspension
-        const responseMessages = typedInputData.messages.nonUser;
-        if (responseMessages && responseMessages.length > 0) {
-          rest.messageList.add(responseMessages, 'response');
-        }
-        return typedInputData;
-      },
-      { id: 'add-response-to-messagelist' },
-    )
-    .map(
-      async ({ inputData }) => {
-        const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-        return typedInputData.output.toolCalls || [];
-      },
-      { id: 'map-tool-calls' },
-    )
-    .foreach(toolCallStep, { concurrency: 10 })
-    .then(llmMappingStep)
-    .commit();
+    })
+      // .map(
+      //   async ({ inputData }) => {
+      //     const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+      //     console.dir({ [`toolCalls-pre-execution`]: typedInputData.output.toolCalls }, { depth: null });
+      //     return typedInputData.output.toolCalls || [];
+      //   },
+      //   { id: 'map-tool-calls' },
+      // )
+      // .foreach(cloneStep(toolCallStep, { id: 'findSuspendedToolsStep' }), { concurrency: 10 })
+      // .then(cloneStep(llmMappingStep, { id: 'suspendedToolsMappingStep' }))
+      .then(llmExecutionStep)
+      .map(
+        async ({ inputData }) => {
+          const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+          // Add assistant response messages to messageList BEFORE processing tool calls
+          // This ensures messages are available for persistence before suspension
+          const responseMessages = typedInputData.messages.nonUser;
+          if (responseMessages && responseMessages.length > 0) {
+            rest.messageList.add(responseMessages, 'response');
+          }
+          return typedInputData;
+        },
+        { id: 'add-response-to-messagelist' },
+      )
+      .map(
+        async ({ inputData }) => {
+          const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+          console.dir({ toolCalls: typedInputData.output.toolCalls }, { depth: null });
+          return typedInputData.output.toolCalls || [];
+        },
+        { id: 'map-tool-calls' },
+      )
+      .foreach(toolCallStep, { concurrency: 10 })
+      .then(llmMappingStep)
+      .commit()
+  );
 }

@@ -6,6 +6,7 @@ import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import { getOpenAIModel } from './mock-model';
+import { MockMemory } from '../../memory';
 
 const mockStorage = new InMemoryStore();
 
@@ -316,6 +317,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           instructions: 'You are an agent that can get list of users using findUserWorkflow.',
           model: openaiModel,
           workflows: { findUserWorkflow },
+          memory: new MockMemory(),
         });
 
         const mastra = new Mastra({
@@ -327,7 +329,12 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('userAgent');
 
         let toolCall;
-        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        const stream = await agentOne.stream('Find the user with name - Dero Israel', {
+          memory: {
+            thread: 'test-thread-1',
+            resource: 'test-resource-1',
+          },
+        });
         const suspendData = {
           suspendPayload: null,
           suspendedToolName: '',
@@ -338,10 +345,28 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             suspendData.suspendedToolName = _chunk.payload.toolName;
           }
         }
+        const db = stream.messageList.get.response.db();
+        const aiv5Ui = stream.messageList.get.response.aiV5.ui();
+        console.dir({ db }, { depth: null });
+        console.dir({ aiv5Ui }, { depth: null });
         if (suspendData.suspendPayload) {
-          const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
+          const resumeStream = await agentOne.resumeStream(
+            { name: 'Dero Israel' },
+            {
+              runId: stream.runId,
+              memory: {
+                thread: 'test-thread-1',
+                resource: 'test-resource-1',
+              },
+            },
+          );
           for await (const _chunk of resumeStream.fullStream) {
           }
+
+          const resumeDb = resumeStream.messageList.get.response.db();
+          const resumeAiv5Ui = resumeStream.messageList.get.response.aiV5.ui();
+          console.dir({ resumeDb }, { depth: null });
+          console.dir({ resumeAiv5Ui }, { depth: null });
 
           const toolResults = await resumeStream.toolResults;
 
@@ -359,6 +384,133 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(suspendData.suspendPayload).toBeDefined();
         expect(suspendData.suspendedToolName).toBe('workflow-findUserWorkflow');
         expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the name of the user');
+      }, 15000);
+
+      it.only('should call findUserWorkflow with suspend and resume via stream', async () => {
+        const findUserStep = createStep({
+          id: 'find-user-step',
+          description: 'This is a test step that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          suspendSchema: z.object({
+            message: z.string(),
+          }),
+          resumeSchema: z.object({
+            name: z.string(),
+          }),
+          outputSchema: z.object({
+            name: z.string(),
+            email: z.string(),
+          }),
+          execute: async ({ suspend, resumeData }) => {
+            if (!resumeData) {
+              return await suspend({ message: 'Please provide the name of the user' });
+            }
+
+            return {
+              name: resumeData?.name,
+              email: 'test@test.com',
+            };
+          },
+        });
+
+        const findUserWorkflow = createWorkflow({
+          id: 'find-user-workflow',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          outputSchema: z.object({
+            name: z.string(),
+            email: z.string(),
+          }),
+        })
+          .then(findUserStep)
+          .commit();
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserWorkflow.',
+          model: openaiModel,
+          workflows: { findUserWorkflow },
+          memory: new MockMemory(),
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        let toolCall;
+        const stream = await agentOne.stream('Find the user with name - Dero Israel', {
+          memory: {
+            thread: 'test-thread',
+            resource: 'test-resource',
+          },
+        });
+        const suspendData = {
+          suspendPayload: null,
+          suspendedToolName: '',
+        };
+        let text = '';
+        for await (const _chunk of stream.fullStream) {
+          if (_chunk.type === 'tool-call-suspended') {
+            console.dir({ 'tool-call-suspended': _chunk }, { depth: null });
+            suspendData.suspendPayload = _chunk.payload.suspendPayload;
+            suspendData.suspendedToolName = _chunk.payload.toolName;
+          }
+          if (_chunk.type === 'text-delta') {
+            text += _chunk.payload.text;
+          }
+        }
+
+        const systemMessages = stream.messageList.getSystemMessages();
+        console.dir({ systemMessages }, { depth: null });
+
+        const db = stream.messageList.get.response.db();
+        const aiv5Ui = stream.messageList.get.response.aiV5.ui();
+        console.dir({ db }, { depth: null });
+        console.dir({ aiv5Ui }, { depth: null });
+        console.log('text', text);
+        if (suspendData.suspendPayload) {
+          const resumeStream = await agentOne.stream("The user's name is Dero Israel", {
+            memory: {
+              thread: 'test-thread',
+              resource: 'test-resource',
+            },
+          });
+          let resumeText = '';
+          for await (const _chunk of resumeStream.fullStream) {
+            // console.dir({ _chunk }, { depth: null });
+            if (_chunk.type === 'text-delta') {
+              resumeText += _chunk.payload.text;
+            }
+          }
+          console.log('resumeText', resumeText);
+
+          const toolResults = await resumeStream.toolResults;
+
+          toolCall = toolResults?.find(
+            (result: any) => result.payload.toolName === 'workflow-findUserWorkflow',
+          )?.payload;
+
+          const name = toolCall?.result?.result?.name;
+          const email = toolCall?.result?.result?.email;
+
+          expect(name).toBe('Dero Israel');
+          expect(email).toBe('test@test.com');
+        }
+
+        console.dir(suspendData, { depth: null });
+
+        // expect(suspendData.suspendPayload).toBeDefined();
+        // expect(suspendData.suspendedToolName).toBe('workflow-findUserWorkflow');
+        // expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the name of the user');
       }, 15000);
     });
 

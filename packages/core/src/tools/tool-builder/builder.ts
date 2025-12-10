@@ -280,6 +280,7 @@ export class CoreToolBuilder extends MastraBase {
           // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
           const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
 
+          const resumeSchema = this.getResumeSchema();
           // Pass raw args as first parameter, context as second
           // Properly structure context based on execution source
           const baseContext = {
@@ -302,7 +303,11 @@ export class CoreToolBuilder extends MastraBase {
             abortSignal: execOptions.abortSignal,
             suspend: (args: any, suspendOptions?: SuspendOptions) => {
               suspendData = args;
-              return execOptions.suspend?.(args, suspendOptions);
+              const newSuspendOptions = {
+                ...(suspendOptions ?? {}),
+                resumeSchema: suspendOptions?.resumeSchema ?? resumeSchema,
+              };
+              return execOptions.suspend?.(args, newSuspendOptions);
             },
             resumeData: execOptions.resumeData,
           };
@@ -365,7 +370,6 @@ export class CoreToolBuilder extends MastraBase {
           const resumeData = execOptions.resumeData;
 
           if (resumeData) {
-            const resumeSchema = this.getResumeSchema();
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);

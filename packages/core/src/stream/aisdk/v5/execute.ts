@@ -103,6 +103,24 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     });
   }
 
+  const toolsChoiceTools = toolsAndToolChoice.tools?.map(tool => tool.name);
+  if (toolsChoiceTools?.includes('resume-tool')) {
+    const resumeTool = tools?.['resume-tool'];
+    if (resumeTool) {
+      prompt = prompt.map(message => {
+        if (message.role === 'system') {
+          return {
+            ...message,
+            content:
+              message.content +
+              `\n\nAlways check the last assistant message in memory, if it has 'suspendedTools' or 'pendingToolApprovals' in its metadata, call the "resume-tool" whose instruction is "${resumeTool.description}"; and ignore all other tools.`,
+          };
+        }
+        return message;
+      });
+    }
+  }
+
   /**
    * Enable OpenAI's strict JSON schema mode to ensure schema compliance.
    * Without this, OpenAI may omit required fields or violate type constraints.

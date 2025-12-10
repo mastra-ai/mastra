@@ -41,7 +41,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import type { OutputWriter, Workflow, WorkflowResult } from '../workflows';
+import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -1322,123 +1322,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    //tool to determine resumption
-    const toolObj = createTool({
-      id: 'find-suspended-tools-tool',
-      description: 'Tool to use determine if there are any suspended tools to resume',
-      outputSchema: z.array(
-        z.object({
-          toolName: z.string().describe('The name of the suspended tool to resume'),
-          resumeSchema: z
-            .any()
-            .describe(
-              'The resume schema of the suspended tool to resume, this is used as guide to create resumeData passed to the tool during tool call',
-            ),
-        }),
-      ),
-      mastra: this.#mastra,
-      execute: async () => {
-        try {
-          const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
-            workflowName: 'agentic-loop',
-            runId: runId || '',
-          });
-          if (!existingSnapshot) {
-            return [];
-          }
-          const suspendedSteps = existingSnapshot.suspendedPaths;
-          if (!suspendedSteps || Object.keys(suspendedSteps).length === 0) {
-            return [];
-          }
-          const suspendedStepIds = Object.keys(suspendedSteps);
-          if (!suspendedStepIds?.includes('executionWorkflow')) {
-            return [];
-          }
-          const executionWorkflow = existingSnapshot.context?.executionWorkflow;
-          if (!executionWorkflow || !executionWorkflow?.suspendPayload) {
-            return [];
-          }
-          const executionWorkflowSuspendPayload = executionWorkflow.suspendPayload;
-          let resumeSchema: z.ZodType<any> | undefined = undefined;
-          const requireToolApproval: Record<string, any> | undefined =
-            executionWorkflowSuspendPayload.requireToolApproval;
-          const toolName: string = executionWorkflowSuspendPayload.toolName || '';
-          const resumeLabel: string[] = executionWorkflowSuspendPayload.resumeLabel ?? [];
-          if (requireToolApproval) {
-            resumeSchema = z.object({
-              approve: z.boolean().describe('Whether to approve the tool call'),
-            });
-          } else if (toolName.startsWith('workflow-')) {
-            const stepPath = resumeLabel?.[0] ?? '';
-            const stepId = stepPath?.split('.')?.[0];
-            const workflowId = toolName.substring('workflow-'.length);
-            const agentWorkflows = await this.listWorkflows();
-            const workflow = agentWorkflows[workflowId];
-            if (workflow && stepId) {
-              const step = workflow.steps?.[stepId];
-              if (step) {
-                resumeSchema = step.resumeSchema;
-              }
-            }
-          } else if (toolName) {
-            const agentTools = await this.listTools();
-            const tool = agentTools[toolName];
-            if (tool && 'resumeSchema' in tool) {
-              resumeSchema = tool.resumeSchema;
-            }
-          }
-
-          if (toolName && resumeSchema) {
-            return [
-              {
-                toolName,
-                resumeSchema,
-              },
-            ];
-          }
-
-          return [];
-        } catch (error) {
-          const mastraError = new MastraError(
-            {
-              id: 'AGENT_RESUME_TOOL_ERROR',
-              domain: ErrorDomain.AGENT,
-              category: ErrorCategory.USER,
-              details: {
-                agentName: this.name,
-                runId: runId || '',
-                threadId: threadId || '',
-                resourceId: resourceId || '',
-              },
-              text: `[Agent:${this.name}] - Failed resume tool execution`,
-            },
-            error,
-          );
-          this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
-          throw mastraError;
-        }
-      },
-    });
-
-    const options: ToolOptions = {
-      name: 'find-suspended-tools-tool',
-      runId,
-      threadId,
-      resourceId,
-      logger: this.logger,
-      mastra: mastraProxy as MastraUnion | undefined,
-      memory,
-      agentName: this.name,
-      requestContext,
-      tracingContext,
-      model: await this.getModel({ requestContext }),
-      tracingPolicy: this.#options?.tracingPolicy,
-      requireApproval: (toolObj as any).requireApproval,
-    };
-    const convertedToCoreTool = makeCoreTool(toolObj, options);
-    convertedMemoryTools['find-suspended-tools-tool'] = convertedToCoreTool;
-
     return convertedMemoryTools;
   }
 
@@ -1579,6 +1462,144 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
       vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
     });
+  }
+
+  /**
+   * Retrieves and converts memory tools to CoreTool format.
+   * @internal
+   */
+  private async listCustomTools({
+    toolsets,
+    clientTools,
+    threadId,
+    resourceId,
+    runId,
+    requestContext,
+    tracingContext,
+    outputWriter,
+    methodType,
+    memoryConfig,
+    mastraProxy,
+  }: {
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+    threadId?: string;
+    resourceId?: string;
+    runId?: string;
+    requestContext: RequestContext;
+    tracingContext?: TracingContext;
+    outputWriter?: OutputWriter;
+    methodType: AgentMethodType;
+    memoryConfig?: MemoryConfig;
+    mastraProxy?: MastraUnion;
+  }) {
+    let convertedCustomTools: Record<string, CoreTool> = {};
+
+    this.logger.debug(`[Agent:${this.name}] - Adding custom tools`, {
+      runId,
+    });
+
+    const memory = await this.getMemory({ requestContext });
+
+    //tool to determine resumption
+    const toolObj = createTool({
+      id: 'resume-tool',
+      description: `This tool is used to find and resume suspended tools. 
+         Suspended tool information can be found in the metadata of the last assistant message.
+         The metadata in the message will either contain 'suspendedTools' or 'pendingToolApprovals'.
+         You should always check the last assistant message in memory for these 'suspendedTools' or 'pendingToolApprovals' metadata.
+         Both will contain the toolName, toolCallId, runId, args and resumeSchema of the suspended tool to resume.
+         Using the available messages in memory, create the resumeData object that matches the resumeSchema and use it to call this tool.
+         If you're unable to construct the resumeData object, do not call this tool.`,
+      inputSchema: z.object({
+        runId: z.string().describe('The runId of the suspended tool'),
+        toolCallId: z.string().describe('The toolCallId of the suspended tool'),
+        toolName: z.string().describe('The name of the suspended tool'),
+        args: z.any().describe('The args of the suspended tool'),
+        resumeData: z
+          .any()
+          .describe(
+            'The resumeData object created from the messages in the memory, using resumeSchema as guide, to pass to the suspended tool',
+          ),
+      }),
+      mastra: this.#mastra,
+      execute: async inputData => {
+        try {
+          const { runId, toolCallId, toolName, args, resumeData } = inputData;
+
+          const convertedTools = await this.convertTools({
+            toolsets,
+            clientTools,
+            threadId,
+            resourceId,
+            runId,
+            requestContext,
+            tracingContext,
+            outputWriter,
+            methodType,
+            memoryConfig,
+          });
+
+          const tool = convertedTools[toolName];
+          if (!tool) {
+            throw new MastraError({
+              id: 'AGENT_RESUME_TOOL_ERROR',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              text: `[Agent:${this.name}] - Tool not found`,
+            });
+          }
+          if (!tool.execute) {
+            throw new MastraError({
+              id: 'AGENT_RESUME_TOOL_ERROR',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              text: `[Agent:${this.name}] - Tool does not have an execute function`,
+            });
+          }
+
+          return tool.execute(args, { resumeData, toolCallId, messages: [] });
+        } catch (error) {
+          const mastraError = new MastraError(
+            {
+              id: 'AGENT_RESUME_TOOL_ERROR',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              details: {
+                agentName: this.name,
+                runId: runId || '',
+                threadId: threadId || '',
+                resourceId: resourceId || '',
+              },
+              text: `[Agent:${this.name}] - Failed resume tool execution`,
+            },
+            error,
+          );
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+      },
+    });
+
+    const options: ToolOptions = {
+      name: 'resume-tool',
+      runId,
+      threadId,
+      resourceId,
+      logger: this.logger,
+      mastra: mastraProxy as MastraUnion | undefined,
+      memory,
+      agentName: this.name,
+      requestContext,
+      tracingContext,
+      model: await this.getModel({ requestContext }),
+      tracingPolicy: this.#options?.tracingPolicy,
+    };
+    const convertedToCoreTool = makeCoreTool(toolObj, options);
+    convertedCustomTools['resume-tool'] = convertedToCoreTool;
+
+    return convertedCustomTools;
   }
 
   /**
@@ -2094,11 +2115,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 const suspendedStep = result?.suspended?.[0]?.[0]!;
                 const suspendPayload = result?.steps?.[suspendedStep]?.suspendPayload;
                 const suspendedStepIds = result?.suspended?.map(stepPath => stepPath.join('.'));
-
+                const firstSuspendedStepPath = result?.suspended?.[0];
+                let wflowStep = workflow;
+                while (firstSuspendedStepPath.length > 0) {
+                  const key = firstSuspendedStepPath.shift();
+                  if (key) {
+                    wflowStep = workflow.steps[key] as any;
+                  }
+                }
+                const resumeSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
                 if (suspendPayload?.__workflow_meta) {
                   delete suspendPayload.__workflow_meta;
                 }
-                return suspend?.(suspendPayload, { resumeLabel: suspendedStepIds });
+                return suspend?.(suspendPayload, { resumeLabel: suspendedStepIds, resumeSchema });
               } else {
                 // This is to satisfy the execute fn's return value for typescript
                 return {
@@ -2243,6 +2272,20 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
     });
 
+    const customTools = await this.listCustomTools({
+      toolsets,
+      clientTools,
+      threadId,
+      resourceId,
+      runId,
+      requestContext,
+      tracingContext,
+      outputWriter,
+      methodType,
+      memoryConfig,
+      mastraProxy,
+    });
+
     return this.formatTools({
       ...assignedTools,
       ...memoryTools,
@@ -2250,6 +2293,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       ...clientSideTools,
       ...agentTools,
       ...workflowTools,
+      ...customTools,
     });
   }
 

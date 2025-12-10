@@ -11,7 +11,7 @@ import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];
-};
+} & Record<string, any>;
 
 export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
   runId: string;
