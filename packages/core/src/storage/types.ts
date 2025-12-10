@@ -85,7 +85,7 @@ export type StorageListMessagesInput = {
       end?: Date;
     };
   };
-  orderBy?: StorageOrderBy;
+  orderBy?: StorageOrderBy<'createdAt'>;
 };
 
 export type StorageListMessagesOutput = PaginationInfo & {
@@ -149,8 +149,8 @@ export type StorageMessageType = {
   resourceId: string | null;
 };
 
-export interface StorageOrderBy {
-  field?: ThreadOrderBy;
+export interface StorageOrderBy<TField extends ThreadOrderBy = ThreadOrderBy> {
+  field?: TField;
   direction?: ThreadSortDirection;
 }
 
