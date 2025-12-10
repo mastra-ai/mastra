@@ -1,4 +1,4 @@
-import { ErrorDomain, ErrorCategory, MastraError, type SerializedError } from '@mastra/core/error';
+import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
   WorkflowsStorage,
@@ -6,7 +6,12 @@ import {
   safelyParseJSON,
   normalizePerPage,
 } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsMongoDB } from '../operations';
 
@@ -43,13 +48,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: SerializedError;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');

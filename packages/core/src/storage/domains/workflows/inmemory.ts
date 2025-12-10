@@ -1,8 +1,13 @@
-import type { SerializedError } from '../../../error';
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import { normalizePerPage } from '../../base';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
-import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
+import type {
+  StorageWorkflowRun,
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '../../types';
 import type { StoreOperations } from '../operations';
 import { WorkflowsStorage } from './base';
 
@@ -84,13 +89,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: SerializedError;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     const run = this.collection.get(`${workflowName}-${runId}`);
 
