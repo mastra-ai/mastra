@@ -312,7 +312,7 @@ async function buildExternalDependencies(
       {} as Record<string, string>,
     ),
     external: externals,
-    treeshake: bundlerOptions.isDev || bundlerOptions.externalsPreset ? false : 'safest',
+    treeshake: noBundling ? false : 'safest',
     plugins: getInputPlugins(virtualDependencies, {
       transpilePackages: packagesToTranspile,
       workspaceMap,
