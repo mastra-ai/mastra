@@ -41,7 +41,6 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/ui-utils": "^1.2.11",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
@@ -51,14 +50,15 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
+    "@internal/ai-sdk-v4": "workspace:*",
+    "@internal/ai-sdk-v5": "workspace:*",
+    "@ai-sdk/ui-utils": "^1.2.11",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^4.3.19",
-    "ai-v5": "npm:ai@^5.0.93",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
