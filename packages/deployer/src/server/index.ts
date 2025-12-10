@@ -306,7 +306,13 @@ export async function createHonoServer(
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
       const host = serverOptions?.host ?? 'localhost';
-      const protocol = serverOptions?.https ? 'https' : 'http';
+      const key =
+        serverOptions?.https?.key ??
+        (process.env.MASTRA_HTTPS_KEY ? Buffer.from(process.env.MASTRA_HTTPS_KEY, 'base64') : undefined);
+      const cert =
+        serverOptions?.https?.cert ??
+        (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
+      const protocol = key && cert ? 'https' : 'http';
 
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
