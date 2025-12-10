@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 export default defineConfig(({ mode }) => {
   const commonConfig = {
     plugins: [react()],
+    base: './',
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
