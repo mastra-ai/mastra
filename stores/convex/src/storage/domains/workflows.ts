@@ -6,7 +6,7 @@ import type {
   WorkflowRuns,
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import type { StoreOperationsConvex } from '../operations';
 

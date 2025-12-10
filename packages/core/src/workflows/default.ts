@@ -1,5 +1,6 @@
 import type { RequestContext } from '../di';
-import { MastraError, ErrorDomain, ErrorCategory, type SerializedError } from '../error';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { Span, SpanType, TracingContext } from '../observability';
 import type { ExecutionGraph } from './execution-engine';
