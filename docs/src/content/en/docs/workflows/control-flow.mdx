@@ -428,7 +428,7 @@ export const testWorkflow = createWorkflow({
 
 ### Looping with `.foreach()`
 
-Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step’s logic to each one.
+Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step's logic to each one.
 
 ![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
@@ -454,6 +454,32 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
+#### Output structure
+
+The `.foreach()` method always returns an array containing the output of each iteration. The order of outputs matches the order of inputs.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const addTenStep = createStep({
+  id: "add-ten",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ value: z.number() }),
+  execute: async ({ inputData }) => ({
+    value: inputData.value + 10
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  id: "foreach-output-example",
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.array(z.object({ value: z.number() }))
+})
+  .foreach(addTenStep)
+  .commit();
+
+// When executed with [{ value: 1 }, { value: 22 }, { value: 333 }]
+// Output: [{ value: 11 }, { value: 32 }, { value: 343 }]
+```
+
 #### Concurrency limits
 
 Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
@@ -465,6 +491,168 @@ export const testWorkflow = createWorkflow({...})
   .foreach(step1, { concurrency: 4 })
   .commit();
 ```
+
+#### Aggregating results after `.foreach()`
+
+Since `.foreach()` outputs an array, you can use `.then()` or `.map()` to aggregate or transform the results. The step following `.foreach()` receives the entire array as its input.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const processItemStep = createStep({
+  id: "process-item",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ processed: z.number() }),
+  execute: async ({ inputData }) => ({
+    processed: inputData.value * 2
+  })
+});
+
+const aggregateStep = createStep({
+  id: "aggregate",
+  // Input is an array of outputs from foreach
+  inputSchema: z.array(z.object({ processed: z.number() })),
+  outputSchema: z.object({ total: z.number() }),
+  execute: async ({ inputData }) => ({
+    // Sum all processed values
+    total: inputData.reduce((sum, item) => sum + item.processed, 0)
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  id: "foreach-aggregate-example",
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.object({ total: z.number() })
+})
+  .foreach(processItemStep)
+  .then(aggregateStep)  // Receives the full array from foreach
+  .commit();
+
+// When executed with [{ value: 1 }, { value: 2 }, { value: 3 }]
+// After foreach: [{ processed: 2 }, { processed: 4 }, { processed: 6 }]
+// After aggregate: { total: 12 }
+```
+
+You can also use `.map()` to transform the array output:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...})
+  .foreach(processItemStep)
+  .map(async ({ inputData }) => ({
+    // Transform the array into a different structure
+    values: inputData.map(item => item.processed),
+    count: inputData.length
+  }))
+  .then(nextStep)
+  .commit();
+```
+
+#### Chaining multiple `.foreach()` calls
+
+When you chain `.foreach()` calls, each operates on the array output of the previous step. This is useful when each item in your array needs to be transformed by multiple steps in sequence.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const chunkStep = createStep({
+  id: "chunk",
+  // Takes a document, returns an array of chunks
+  inputSchema: z.object({ content: z.string() }),
+  outputSchema: z.array(z.object({ chunk: z.string() })),
+  execute: async ({ inputData }) => {
+    // Split document into chunks
+    const chunks = inputData.content.match(/.{1,100}/g) || [];
+    return chunks.map(chunk => ({ chunk }));
+  }
+});
+
+const embedStep = createStep({
+  id: "embed",
+  // Takes a single chunk, returns embedding
+  inputSchema: z.object({ chunk: z.string() }),
+  outputSchema: z.object({ embedding: z.array(z.number()) }),
+  execute: async ({ inputData }) => ({
+    embedding: [/* vector embedding */]
+  })
+});
+
+// For a single document that produces multiple chunks:
+export const singleDocWorkflow = createWorkflow({
+  id: "single-doc-rag",
+  inputSchema: z.object({ content: z.string() }),
+  outputSchema: z.array(z.object({ embedding: z.array(z.number()) }))
+})
+  .then(chunkStep)      // Returns array of chunks
+  .foreach(embedStep)   // Process each chunk -> array of embeddings
+  .commit();
+```
+
+For processing multiple documents where each produces multiple chunks, you have options:
+
+**Option 1: Process all documents in a single step with batching control**
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const downloadAndChunkStep = createStep({
+  id: "download-and-chunk",
+  inputSchema: z.array(z.string()),  // Array of URLs
+  outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
+  execute: async ({ inputData: urls }) => {
+    // Control batching/parallelization within the step
+    const allChunks = [];
+    for (const url of urls) {
+      const content = await fetch(url).then(r => r.text());
+      const chunks = content.match(/.{1,100}/g) || [];
+      allChunks.push(...chunks.map(chunk => ({ chunk, source: url })));
+    }
+    return allChunks;
+  }
+});
+
+export const multiDocWorkflow = createWorkflow({...})
+  .then(downloadAndChunkStep)  // Returns flat array of all chunks
+  .foreach(embedStep, { concurrency: 10 })  // Embed each chunk in parallel
+  .commit();
+```
+
+**Option 2: Use foreach for documents, aggregate chunks, then foreach for embeddings**
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const downloadStep = createStep({
+  id: "download",
+  inputSchema: z.string(),  // Single URL
+  outputSchema: z.object({ content: z.string(), source: z.string() }),
+  execute: async ({ inputData: url }) => ({
+    content: await fetch(url).then(r => r.text()),
+    source: url
+  })
+});
+
+const chunkDocStep = createStep({
+  id: "chunk-doc",
+  inputSchema: z.object({ content: z.string(), source: z.string() }),
+  outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
+  execute: async ({ inputData }) => {
+    const chunks = inputData.content.match(/.{1,100}/g) || [];
+    return chunks.map(chunk => ({ chunk, source: inputData.source }));
+  }
+});
+
+export const multiDocWorkflow = createWorkflow({
+  id: "multi-doc-rag",
+  inputSchema: z.array(z.string()),  // Array of URLs
+  outputSchema: z.array(z.object({ embedding: z.array(z.number()) }))
+})
+  .foreach(downloadStep, { concurrency: 5 })  // Download docs in parallel
+  .foreach(chunkDocStep)  // Chunk each doc -> array of chunk arrays
+  .map(async ({ inputData }) => {
+    // Flatten nested arrays: [[chunks], [chunks]] -> [chunks]
+    return inputData.flat();
+  })
+  .foreach(embedStep, { concurrency: 10 })  // Embed all chunks
+  .commit();
+```
+
+**Key points about chaining `.foreach()`:**
+- Each `.foreach()` operates on the array from the previous step
+- If a step inside `.foreach()` returns an array, the output becomes an array of arrays
+- Use `.map()` with `.flat()` to flatten nested arrays when needed
+- For complex RAG pipelines, Option 1 (handling batching in a single step) often provides better control
 
 ## Loop management
 
