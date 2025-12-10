@@ -3176,9 +3176,6 @@ importers:
 
   packages/schema-compat:
     dependencies:
-      json-schema:
-        specifier: ^0.4.0
-        version: 0.4.0
       json-schema-to-zod:
         specifier: ^2.7.0
         version: 2.7.0
