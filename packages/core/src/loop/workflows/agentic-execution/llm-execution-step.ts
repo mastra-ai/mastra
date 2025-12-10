@@ -499,6 +499,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           messageList.replaceAllSystemMessages(initialSystemMessages);
         }
 
+        // Add processor retry feedback from previous iteration AFTER the reset
+        // This feedback was passed through workflow state to survive the system message reset
+        if (inputData.processorRetryFeedback) {
+          messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
+        }
+
         const currentStep: {
           model: MastraLanguageModelV2;
           tools?: TOOLS | undefined;
@@ -893,12 +899,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         }),
       );
 
-      // Handle retry: add feedback message as a system message and continue the loop
-      // The feedback is prepended to the next LLM call so it can improve its response
-      if (shouldRetry && processOutputStepTripwire) {
-        const feedbackText = `[Processor Feedback] Your previous response was not accepted: ${processOutputStepTripwire.message}. Please try again with the feedback in mind.`;
-        messageList.addSystem(feedbackText, 'processor-retry-feedback');
-      }
+      // Build retry feedback text if retrying
+      // This will be passed through workflow state to survive the system message reset
+      const retryFeedbackText =
+        shouldRetry && processOutputStepTripwire
+          ? `[Processor Feedback] Your previous response was not accepted: ${processOutputStepTripwire.message}. Please try again with the feedback in mind.`
+          : undefined;
 
       const messages = {
         all: messageList.get.all.aiV5.model(),
@@ -952,6 +958,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         messages,
         // Track processor retry count for next iteration
         processorRetryCount: nextProcessorRetryCount,
+        // Pass retry feedback through workflow state to survive system message reset
+        processorRetryFeedback: retryFeedbackText,
       };
     },
   });
