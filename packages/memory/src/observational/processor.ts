@@ -368,7 +368,6 @@ ${compressedObservations}
 
         // Get message IDs that were just observed
         const newObservedIds = unobservedMessages.map(m => m.id).filter((id): id is string => Boolean(id));
-        const allObservedIds = [...(record?.observedMessageIds || []), ...newObservedIds];
 
         // Check if we need to reflect
         const observationThreshold = this.getObservationThreshold();
@@ -377,6 +376,7 @@ ${compressedObservations}
         let reflectionCount = record?.metadata?.reflectionCount || 0;
         let lastReflectionAt = record?.metadata?.lastReflectionAt;
         let previousGenerationId: string | undefined;
+        let didReflect = false;
 
         if (this.reflectorAgent && newObservationTokens >= observationThreshold) {
           this.log('Observation threshold exceeded, running reflector...');
@@ -396,8 +396,14 @@ ${compressedObservations}
           reflectionCount += 1;
           lastReflectionAt = new Date();
           previousGenerationId = record?.id;
+          didReflect = true;
           this.log('Reflector condensed observations to:', estimateTokenCount(finalObservations), 'tokens');
         }
+
+        // After reflection, reset observedMessageIds since old messages are now "baked into" the reflection.
+        // The previous DB record retains its observedMessageIds as historical record.
+        // Within the same generation (no reflection), accumulate IDs to avoid re-observing messages.
+        const allObservedIds = didReflect ? newObservedIds : [...(record?.observedMessageIds || []), ...newObservedIds];
 
         // Save the updated observations
         const scopeId = this.scope === 'resource' ? resourceId : threadId;
