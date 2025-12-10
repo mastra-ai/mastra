@@ -23,7 +23,7 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking-turbo',
     'kimi-k2-turbo-preview',
   ];
-  readonly 'zai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
+  readonly 'zai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
   readonly alibaba: readonly [
     'qvq-max',
     'qwen-flash',
@@ -103,6 +103,8 @@ export type ProviderModelsMap = {
     'google/gemma-3-27b-it',
     'microsoft/phi-4-mini-instruct',
     'minimaxai/minimax-m2',
+    'mistralai/devstral-2-123b-instruct-2512',
+    'mistralai/ministral-14b-instruct-2512',
     'mistralai/mistral-large-3-675b-instruct-2512',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
@@ -146,6 +148,7 @@ export type ProviderModelsMap = {
     'devstral-medium-latest',
     'devstral-small-2505',
     'devstral-small-2507',
+    'labs-devstral-small-2512',
     'magistral-medium-latest',
     'magistral-small',
     'ministral-3b-latest',
@@ -269,7 +272,7 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.5',
     'zai-org/glm-4.5-air',
   ];
-  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v3.2'];
+  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner'];
   readonly 'alibaba-cn': readonly [
     'deepseek-r1',
     'deepseek-r1-0528',
@@ -877,7 +880,14 @@ export type ProviderModelsMap = {
     'text-embedding-3-small',
     'text-embedding-ada-002',
   ];
-  readonly 'zhipuai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
+  readonly 'zhipuai-coding-plan': readonly [
+    'glm-4.5',
+    'glm-4.5-air',
+    'glm-4.5-flash',
+    'glm-4.5v',
+    'glm-4.6',
+    'glm-4.6v',
+  ];
   readonly 'minimax-cn': readonly ['MiniMax-M2'];
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
   readonly openrouter: readonly [
@@ -1105,7 +1115,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.5',
   ];
-  readonly zhipuai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
+  readonly zhipuai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
   readonly submodel: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
@@ -1117,7 +1127,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly zai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
+  readonly zai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
   readonly inference: readonly [
     'google/gemma-3',
     'meta/llama-3.1-8b-instruct',
