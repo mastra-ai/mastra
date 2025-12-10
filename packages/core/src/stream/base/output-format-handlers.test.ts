@@ -1,6 +1,6 @@
 import { convertArrayToReadableStream, convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
-import { asSchema } from 'ai-v5';
-import type { JSONSchema7 } from 'ai-v5';
+import { asSchema } from '@internal/ai-sdk-v5';
+import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import z3 from 'zod/v3';

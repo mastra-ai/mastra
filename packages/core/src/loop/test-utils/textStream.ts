@@ -1,5 +1,5 @@
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
-import { convertArrayToReadableStream } from 'ai-v5/test';
+import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { createMessageListWithUserMessage } from './utils';
 import { testUsage } from '../../stream/aisdk/v5/test-utils';

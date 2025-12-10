@@ -1,6 +1,6 @@
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import type { IdGenerator } from 'ai-v5';
-import { generateId as defaultGenerateId } from 'ai-v5';
+import type { IdGenerator } from '@internal/ai-sdk-v5';
+import { generateId as defaultGenerateId } from '@internal/ai-sdk-v5';
 import type { RegisteredLogger } from '../../../logger';
 import { MastraModelInput } from '../../base';
 import type { ChunkType } from '../../types';

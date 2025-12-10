@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { MastraError } from '../error';
