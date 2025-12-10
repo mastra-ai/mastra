@@ -86,7 +86,6 @@ describe('externals: true', () => {
       async () => {
         port = await getPort();
 
-        console.log('started proc', port);
         proc = execa('npm', ['run', 'start'], {
           cwd: fixturePath,
           cancelSignal,
@@ -97,10 +96,19 @@ describe('externals: true', () => {
           },
         });
 
+        let stdout = '';
+        let stderr = '';
+        proc.stdout?.on('data', data => {
+          stdout += data.toString();
+        });
+        proc.stderr?.on('data', data => {
+          stderr += data.toString();
+        });
+
         activeProcesses.push({ controller, proc });
 
         // Poll the server until it's ready
-        const maxAttempts = 60;
+        const maxAttempts = 30;
         const delayMs = 1000;
         let serverStarted = false;
 
@@ -120,6 +128,8 @@ describe('externals: true', () => {
           }
 
           if (i === maxAttempts - 1) {
+            console.error('Server stdout:', stdout);
+            console.error('Server stderr:', stderr);
             throw new Error('Server failed to start within timeout');
           }
 
