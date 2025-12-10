@@ -587,8 +587,6 @@ export function createStep<
                 steps: steps ?? [],
               });
 
-
-              
               // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
               const applyMessages = (msgs: MastraDBMessage[]) => {
                 const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));

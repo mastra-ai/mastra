@@ -570,7 +570,14 @@ describe('createStep with Processor', () => {
       const messageList = createMockMessageList();
       const inputData = {
         phase: 'input' as const,
-        messages: [{ id: '1', role: 'user' as const, createdAt: new Date(), content: { format: 2 as const, parts: [{ type: 'text', text: 'my email is test@test.com' }] } }],
+        messages: [
+          {
+            id: '1',
+            role: 'user' as const,
+            createdAt: new Date(),
+            content: { format: 2 as const, parts: [{ type: 'text', text: 'my email is test@test.com' }] },
+          },
+        ],
         messageList,
       };
 
@@ -645,7 +652,6 @@ describe('createStep with Processor', () => {
 
 describe('Processor Step in Workflow - TripWire handling', () => {
   it('should return tripwire status when processor in workflow calls abort', async () => {
-
     const tripwireProcessor: Processor = {
       id: 'blocking-processor',
       processInput: async ({ messages, abort }) => {

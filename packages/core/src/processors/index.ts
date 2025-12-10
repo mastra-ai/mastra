@@ -99,7 +99,8 @@ export type ProcessInputStepToolsConfig = ToolSet | Record<string, unknown>;
  * processors run in a chain and any previous processor may have modified structuredOutput.
  * The actual schema type is only known at the generate()/stream() call site.
  */
-export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, TTripwireMetadata = unknown>
+  extends ProcessorMessageContext<TTripwireMetadata> {
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<TOOLS>>;
@@ -170,7 +171,7 @@ export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
-   */ 
+   */
   retryCount?: number;
 };
 
@@ -274,7 +275,7 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
     | MastraDBMessage[]
     | void
     | undefined;
-  
+
   /**
    * Process output after each LLM response in the agentic loop, before tool execution.
    * Unlike processOutputResult which runs once at the end, this runs at every step.

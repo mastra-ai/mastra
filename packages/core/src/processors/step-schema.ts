@@ -354,8 +354,14 @@ export const ProcessorInputStepPhaseSchema = z.object({
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Current tool choice setting'),
   activeTools: z.array(z.string()).optional().describe('Currently active tools'),
   providerOptions: z.custom<SharedV2ProviderOptions>().optional().describe('Provider-specific options'),
-  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional().describe('Model settings (temperature, etc.)'),
-  structuredOutput: z.custom<StructuredOutputOptions<OutputSchema>>().optional().describe('Structured output configuration'),
+  modelSettings: z
+    .custom<Omit<CallSettings, 'abortSignal'>>()
+    .optional()
+    .describe('Model settings (temperature, etc.)'),
+  structuredOutput: z
+    .custom<StructuredOutputOptions<OutputSchema>>()
+    .optional()
+    .describe('Structured output configuration'),
   steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
 });
 
