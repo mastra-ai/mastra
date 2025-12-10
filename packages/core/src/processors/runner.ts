@@ -786,7 +786,7 @@ export class ProcessorRunner {
 
         try {
           const currentSystemMessages = messageList.getAllSystemMessages();
-          await this.executeWorkflowAsProcessor(
+          const result = await this.executeWorkflowAsProcessor(
             processorOrWorkflow,
             {
               phase: 'inputStep',
@@ -799,6 +799,8 @@ export class ProcessorRunner {
             tracingContext,
             requestContext,
           );
+
+          Object.assign(stepInput, result);
 
           processorSpan?.end({ output: messageList.get.all.db() });
         } catch (error) {
