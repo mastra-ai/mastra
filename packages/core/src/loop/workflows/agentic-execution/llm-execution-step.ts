@@ -528,7 +528,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           });
 
           try {
-            const processInputStepResult = await processorRunner.runProcessInputStep<TOOLS>({
+            const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
               tracingContext,
@@ -537,7 +537,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               steps: inputData.output?.steps || [],
               tools,
               toolChoice,
-              activeTools,
+              activeTools: activeTools as string[] | undefined,
               providerOptions,
               modelSettings,
               structuredOutput,
