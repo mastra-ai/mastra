@@ -31,4 +31,11 @@ export class EventEmitterPubSub extends PubSub {
   async flush(): Promise<void> {
     // no-op
   }
+
+  /**
+   * Clean up all listeners during graceful shutdown.
+   */
+  async close(): Promise<void> {
+    this.emitter.removeAllListeners();
+  }
 }

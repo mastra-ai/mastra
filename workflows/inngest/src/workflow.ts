@@ -244,7 +244,9 @@ export class InngestWorkflow<
                 runId,
                 data: chunk,
               })
-              .catch(() => {});
+              .catch(err => {
+                console.debug?.('Failed to publish watch event:', err);
+              });
           },
         });
 

@@ -490,6 +490,10 @@ export class EventedRun<
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
     const result = await this.executionEngine.execute<
       z.infer<TState>,
       z.infer<TInput>,
@@ -501,7 +505,7 @@ export class EventedRun<
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
       initialState: initialStateToUse,
-      pubsub: this.mastra?.pubsub!,
+      pubsub: this.mastra.pubsub,
       retryConfig: this.retryConfig,
       requestContext,
       abortController: this.abortController,
@@ -579,6 +583,10 @@ export class EventedRun<
 
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -592,7 +600,7 @@ export class EventedRun<
           resumePayload: resumeDataToUse,
           resumePath,
         },
-        pubsub: this.mastra?.pubsub!,
+        pubsub: this.mastra.pubsub,
         requestContext,
         abortController: this.abortController,
       })

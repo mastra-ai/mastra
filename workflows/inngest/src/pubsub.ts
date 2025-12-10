@@ -154,4 +154,14 @@ export class InngestPubSub extends PubSub {
   async flush(): Promise<void> {
     // No-op for Inngest
   }
+
+  /**
+   * Clean up all subscriptions during graceful shutdown.
+   */
+  async close(): Promise<void> {
+    for (const [, sub] of this.subscriptions) {
+      sub.unsubscribe();
+    }
+    this.subscriptions.clear();
+  }
 }

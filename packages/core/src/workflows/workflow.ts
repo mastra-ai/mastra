@@ -2085,7 +2085,7 @@ export class Run<
           unwatch();
 
           try {
-            await controller.close();
+            controller.close();
           } catch (err) {
             console.error('Error closing stream:', err);
           }
@@ -2246,7 +2246,7 @@ export class Run<
           unwatch();
 
           try {
-            await controller.close();
+            controller.close();
           } catch (err) {
             console.error('Error closing stream:', err);
           }
@@ -2892,7 +2892,7 @@ export class Run<
           unwatch();
 
           try {
-            await controller.close();
+            controller.close();
           } catch (err) {
             console.error('Error closing stream:', err);
           }
