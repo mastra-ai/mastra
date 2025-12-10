@@ -89,7 +89,7 @@ export function zodToJsonSchema(
   zodSchema: ZodSchemaV3 | ZodSchemaV4,
   target: Targets = 'jsonSchema7',
   strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative',
-) {
+): JSONSchema7 {
   const fn = 'toJSONSchema';
 
   if (fn in z) {
@@ -107,7 +107,7 @@ export function zodToJsonSchema(
           ctx.jsonSchema.format = 'date-time';
         }
       },
-    }) as JSONSchema7;
+    }) satisfies JSONSchema7;
   } else {
     // Zod v3 path - use the original converter
     return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {

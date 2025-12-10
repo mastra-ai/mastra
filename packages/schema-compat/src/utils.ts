@@ -3,12 +3,10 @@ import type { ZodSchema as ZodSchemaV3, ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodSchemaV4, ZodType as ZodTypeV4 } from 'zod/v4';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
-import type { JSONSchema } from 'zod-from-json-schema-v3';
 import type { Targets } from 'zod-to-json-schema';
-import type { JSONSchema7 } from './json-schema';
+import type { JSONSchema7, Schema } from './json-schema';
 import { jsonSchema } from './json-schema';
 import type { SchemaCompatLayer } from './schema-compatibility';
-import type { Schema } from './types';
 import { zodToJsonSchema } from './zod-to-json';
 
 type ZodSchema = ZodSchemaV3 | ZodSchemaV4;
@@ -94,16 +92,17 @@ export function isZodType(value: unknown): value is ZodType {
  * const zodSchema = convertSchemaToZod(aiSchema);
  * ```
  */
-export function convertSchemaToZod(schema: Schema | ZodSchema): ZodType {
+export function convertSchemaToZod(schema: Schema | ZodSchema | JSONSchema7): ZodType {
   if (isZodType(schema)) {
     return schema;
   } else {
-    const jsonSchemaToConvert = ('jsonSchema' in schema ? schema.jsonSchema : schema) as JSONSchema;
+    const jsonSchemaToConvert = 'jsonSchema' in schema ? schema.jsonSchema : schema;
     try {
       if ('toJSONSchema' in z) {
-        // @ts-expect-error - zod type issue
+        // @ts-expect-error - type issue in convertJsonSchemaToZod
         return convertJsonSchemaToZod(jsonSchemaToConvert);
       } else {
+        // @ts-expect-error - type issue in convertJsonSchemaToZodV3
         return convertJsonSchemaToZodV3(jsonSchemaToConvert);
       }
     } catch (e: unknown) {
@@ -124,7 +123,7 @@ export function convertSchemaToZod(schema: Schema | ZodSchema): ZodType {
  * @returns Processed schema as an AI SDK Schema
  */
 export function applyCompatLayer(options: {
-  schema: Schema | ZodSchema;
+  schema: Schema | ZodSchema | JSONSchema7;
   compatLayers: SchemaCompatLayer[];
   mode: 'aiSdkSchema';
 }): Schema;
@@ -139,7 +138,7 @@ export function applyCompatLayer(options: {
  * @returns Processed schema as a JSONSchema7
  */
 export function applyCompatLayer(options: {
-  schema: Schema | ZodSchema;
+  schema: Schema | ZodSchema | JSONSchema7;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema';
 }): JSONSchema7;
@@ -184,7 +183,7 @@ export function applyCompatLayer({
   compatLayers,
   mode,
 }: {
-  schema: Schema | ZodSchema;
+  schema: Schema | ZodSchema | JSONSchema7;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema' | 'aiSdkSchema';
 }): JSONSchema7 | Schema {
