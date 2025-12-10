@@ -3,7 +3,7 @@ import * as babel from '@babel/core';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import type { OutputAsset, OutputChunk } from 'rollup';
-import { basename, join, parse } from 'node:path';
+import { basename, join, parse, relative } from 'node:path';
 import { validate, ValidationError } from '../validator/validate';
 import { getBundlerOptions } from './bundlerOptions';
 import { checkConfigExport } from './babel/check-config-export';
@@ -12,7 +12,7 @@ import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { getPackageName, isDependencyPartOfPackage } from './utils';
+import { getPackageName, isBuiltinModule, isDependencyPartOfPackage } from './utils';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
 import * as stackTraceParser from 'stacktrace-parser';
 
@@ -394,20 +394,31 @@ If you think your configuration is valid, please open an issue.`);
     workspaceMap,
   });
 
+  const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values()).map(pkgInfo =>
+    relative(workspaceRoot || projectRoot, pkgInfo.location),
+  );
+
   for (const o of output) {
     if (o.type === 'asset') {
       continue;
     }
-    o.imports.forEach(imp => {
-      // TODO: Not hardcode "packages"
-      if (!imp.startsWith('packages') && !imp.startsWith('node:')) {
-        const pkgName = getPackageName(imp);
-        if (pkgName) {
-          // Add packages from workspace dependencies (not workspace packages themselves)
-          allUsedExternals.add(pkgName);
-        }
+
+    for (const i of o.imports) {
+      if (isBuiltinModule(i)) {
+        continue;
       }
-    });
+
+      // Do not include workspace packages
+      if (relativeWorkspaceFolderPaths.some(workspacePath => i.startsWith(workspacePath))) {
+        continue;
+      }
+
+      const pkgName = getPackageName(i);
+
+      if (pkgName) {
+        allUsedExternals.add(pkgName);
+      }
+    }
   }
 
   const result = await validateOutput(

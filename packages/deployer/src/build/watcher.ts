@@ -15,7 +15,7 @@ export async function getInputOptions(
   entryFile: string,
   platform: 'node' | 'browser',
   env?: Record<string, string>,
-  { sourcemap = false }: { sourcemap?: boolean } = {},
+  { sourcemap = false, externalsPreset = false }: { sourcemap?: boolean; externalsPreset?: boolean } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
@@ -50,7 +50,7 @@ export async function getInputOptions(
     },
     platform,
     env,
-    { sourcemap, isDev: true, workspaceRoot, projectRoot },
+    { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset },
   );
 
   if (Array.isArray(inputOptions.plugins)) {
@@ -77,7 +77,7 @@ export async function getInputOptions(
     inputOptions.plugins = plugins;
     inputOptions.plugins.push(aliasHono());
     // fixes imports like lodash/fp/get
-    inputOptions.plugins.push(nodeModulesExtensionResolver()); // TODO: Investigate if we can remove this and line 61. Try with mastra dev
+    inputOptions.plugins.push(nodeModulesExtensionResolver());
   }
 
   return inputOptions;

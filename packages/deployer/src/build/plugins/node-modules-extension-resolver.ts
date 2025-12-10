@@ -1,23 +1,8 @@
 import { dirname, extname } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import resolveFrom from 'resolve-from';
-import type { Plugin } from 'rollup';
-import { builtinModules } from 'node:module';
+import type { PartialResolvedId, Plugin } from 'rollup';
 import nodeResolve from '@rollup/plugin-node-resolve';
-import { getPackageName } from '../utils';
-
-/**
- * Check if a module is a Node.js builtin module
- * @param specifier - Module specifier
- * @returns True if it's a builtin module
- */
-function isBuiltinModule(specifier: string): boolean {
-  return (
-    builtinModules.includes(specifier) ||
-    specifier.startsWith('node:') ||
-    builtinModules.includes(specifier.replace(/^node:/, ''))
-  );
-}
+import { getPackageName, isBuiltinModule } from '../utils';
 
 function safeResolve(id: string, importer: string) {
   try {
@@ -59,17 +44,15 @@ export function nodeModulesExtensionResolver(): Plugin {
       }
 
       // The node-resolve plugin should handle most cases
-      const plugin = nodeResolve();
-      const resolveIdHook = plugin.resolveId;
+      // @ts-expect-error - Needs type casting
+      const nodeResolved: PartialResolvedId | null | undefined = await nodeResolve().resolveId.handler.call(
+        this,
+        id,
+        importer,
+        options,
+      );
 
-      if (!resolveIdHook) {
-        return null;
-      }
-
-      const resolveIdFn = typeof resolveIdHook === 'function' ? resolveIdHook : resolveIdHook.handler;
-      const nodeResolved = await resolveIdFn.call(this, id, importer, options);
-
-      if (!nodeResolved || typeof nodeResolved === 'string' || !nodeResolved?.resolvedBy) {
+      if (!nodeResolved?.resolvedBy) {
         return null;
       } else {
         // try to do a node like resolve first
