@@ -693,6 +693,7 @@ export const batchProcessWorkflow = createWorkflow({
 ```
 
 **Why use nested workflows:**
+- **Better parallelism**: With `concurrency: N`, multiple items run their full pipelines simultaneously. Chained `.foreach().foreach()` processes all items through step 1, waits, then all through step 2 - nested workflows let each item progress independently
 - All steps for one item complete together before results are collected
 - Cleaner than multiple `.foreach()` calls which create nested arrays
 - Each nested workflow execution is independent with its own data flow
@@ -701,8 +702,9 @@ export const batchProcessWorkflow = createWorkflow({
 **How it works:**
 1. The parent workflow passes each array item to an instance of the nested workflow
 2. Each nested workflow runs its full step sequence for that item
-3. The nested workflow's final output becomes one element in the result array
-4. After all nested workflows complete, the next step in the parent receives the full array
+3. With `concurrency > 1`, multiple nested workflows execute in parallel
+4. The nested workflow's final output becomes one element in the result array
+5. After all nested workflows complete, the next step in the parent receives the full array
 
 ## Choosing the right pattern
 
