@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import http from 'node:http';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
 import handler from 'serve-handler';
 import { logger } from '../../utils/logger';
@@ -10,12 +11,15 @@ interface StudioOptions {
   port?: string | number;
 }
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 export async function studio(options: StudioOptions = {}) {
   // Load environment variables from .env files
   config({ path: [options.env || '.env.production', '.env'] });
 
   try {
-    const distPath = join(process.cwd(), '.mastra', 'output', 'playground');
+    const distPath = join(__dirname, 'playground');
 
     if (!existsSync(distPath)) {
       logger.error(`Studio distribution not found at ${distPath}. Please run 'mastra build' first.`);
