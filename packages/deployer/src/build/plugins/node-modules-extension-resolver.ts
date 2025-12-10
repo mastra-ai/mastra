@@ -5,17 +5,25 @@ import type { Plugin } from 'rollup';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import { getPackageName, isBuiltinModule } from '../utils';
 
-const JS_EXTENSIONS = ['.js', '.mjs', '.cjs'] as const;
+const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
-// Cache for package exports lookup to avoid repeated filesystem reads
 const packageExportsCache = new Map<string, boolean>();
+const resolveCache = new Map<string, string | null>();
 
 function safeResolve(id: string, importer: string): string | null {
-  try {
-    return resolveFrom(importer, id);
-  } catch {
-    return null;
+  const cacheKey = `${id}\0${importer}`;
+  const cached = resolveCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
   }
+  let result: string | null;
+  try {
+    result = resolveFrom(importer, id);
+  } catch {
+    result = null;
+  }
+  resolveCache.set(cacheKey, result);
+  return result;
 }
 
 /**
@@ -23,39 +31,27 @@ function safeResolve(id: string, importer: string): string | null {
  * Results are cached to avoid repeated filesystem reads.
  */
 function packageHasExports(pkgName: string, importer: string): boolean {
-  // Check cache first
-  const cacheKey = `${pkgName}:${importer}`;
-  const cached = packageExportsCache.get(cacheKey);
-  if (cached !== undefined) {
-    return cached;
-  }
+  const pkgMainPath = safeResolve(pkgName, importer);
+  if (!pkgMainPath) return false;
+  // Find package.json and cache by its directory
+  let dir = pkgMainPath;
+  for (let i = 0; i < 10; i++) {
+    dir = dirname(dir);
+    const cached = packageExportsCache.get(dir);
+    if (cached !== undefined) return cached;
 
-  let result = false;
-  try {
-    // Resolve the package to find its location
-    const pkgMainPath = safeResolve(pkgName, importer);
-    if (pkgMainPath) {
-      // Walk up from the resolved path to find package.json
-      let dir = pkgMainPath;
-      for (let i = 0; i < 10; i++) {
-        dir = dirname(dir);
-        try {
-          const pkgJson = JSON.parse(readFileSync(`${dir}/package.json`, 'utf-8'));
-          if (pkgJson.name === pkgName) {
-            result = !!pkgJson.exports;
-            break;
-          }
-        } catch {
-          // package.json not found at this level, continue up
-        }
+    try {
+      const pkgJson = JSON.parse(readFileSync(`${dir}/package.json`, 'utf-8'));
+      if (pkgJson.name === pkgName) {
+        const result = !!pkgJson.exports;
+        packageExportsCache.set(dir, result);
+        return result;
       }
+    } catch {
+      // continue up
     }
-  } catch {
-    // Resolution failed
   }
-
-  packageExportsCache.set(cacheKey, result);
-  return result;
+  return false;
 }
 
 /**
@@ -88,7 +84,7 @@ export function nodeModulesExtensionResolver(): Plugin {
       const pkgName = getPackageName(id);
 
       // Handle imports that already have a JS extension
-      if (foundExt && JS_EXTENSIONS.includes(foundExt as (typeof JS_EXTENSIONS)[number])) {
+      if (foundExt && JS_EXTENSIONS.has(foundExt)) {
         // If package has exports, strip the extension to avoid double-extension issues
         // (e.g., hono/utils/mime.js -> hono/dist/utils/mime.js.js)
         if (pkgName && packageHasExports(pkgName, importer)) {
@@ -123,7 +119,7 @@ export function nodeModulesExtensionResolver(): Plugin {
       const resolvedExt = extname(resolved);
 
       // No JS extension in resolved path - keep as-is
-      if (!resolvedExt || !JS_EXTENSIONS.includes(resolvedExt as (typeof JS_EXTENSIONS)[number])) {
+      if (!resolvedExt || !JS_EXTENSIONS.has(resolvedExt)) {
         return { id, external: true };
       }
 
