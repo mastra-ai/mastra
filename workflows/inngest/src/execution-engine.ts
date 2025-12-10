@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { getErrorFromUnknown } from '@mastra/core/error';
+import { getErrorFromUnknown, type SerializedError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
@@ -39,14 +39,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * Format errors while preserving Error instances and their custom properties.
    * Uses getErrorFromUnknown to ensure all error properties are preserved.
    */
-  protected formatResultError(error: Error | string | undefined, lastOutput: StepResult<any, any, any, any>): Error {
+  protected formatResultError(
+    error: Error | string | undefined,
+    lastOutput: StepResult<any, any, any, any>,
+  ): SerializedError {
     const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
     const errorSource = error || outputError;
     const errorInstance = getErrorFromUnknown(errorSource, {
       serializeStack: true, // Include stack in JSON for better debugging in Inngest
       fallbackMessage: 'Unknown workflow error',
     });
-    return errorInstance;
+    return errorInstance.toJSON();
   }
 
   /**

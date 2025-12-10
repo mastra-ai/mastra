@@ -17,6 +17,7 @@ import type {
   CreateSpanRecord,
   UpdateSpanRecord,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -230,13 +231,7 @@ export class MongoDBStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }

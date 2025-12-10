@@ -1,5 +1,6 @@
 import type { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { Span, SpanType, TracingContext } from '../observability';
 import type { ExecutionGraph } from './execution-engine';
@@ -304,14 +305,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Format an error for the workflow result.
    * Override to customize error formatting (e.g., include stack traces).
    */
-  protected formatResultError(error: Error | unknown, lastOutput: StepResult<any, any, any, any>): Error {
+  protected formatResultError(error: Error | unknown, lastOutput: StepResult<any, any, any, any>): SerializedError {
     const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
     const errorSource = error || outputError;
     const errorInstance = getErrorFromUnknown(errorSource, {
       serializeStack: false,
       fallbackMessage: 'Unknown workflow error',
     });
-    return errorInstance;
+    return errorInstance.toJSON();
   }
 
   protected async fmtReturnValue<TOutput>(
@@ -325,7 +326,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       steps: Record<string, StepResult<any, any, any, any>>;
       input: StepResult<any, any, any, any> | undefined;
       result?: any;
-      error?: Error;
+      error?: SerializedError;
       suspended?: string[][];
     } = {
       status: lastOutput.status,

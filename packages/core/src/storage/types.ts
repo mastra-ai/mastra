@@ -1,6 +1,7 @@
+import type { SerializedError } from '../error';
 import type { MastraDBMessage, StorageThreadType } from '../memory/types';
 import type { SpanType } from '../observability';
-import type { WorkflowRunState, WorkflowRunStatus } from '../workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
 export type StoragePagination = {
   page: number;
@@ -320,4 +321,14 @@ export interface StorageIndexStats extends IndexInfo {
   tuples_fetched: number; // Number of tuples fetched
   last_used?: Date; // Last time index was used
   method?: string; // Index method (btree, hash, etc)
+}
+
+// Workflow Storage Types
+
+export interface UpdateWorkflowStateOptions {
+  status: WorkflowRunStatus;
+  result?: StepResult<any, any, any, any>;
+  error?: SerializedError;
+  suspendedPaths?: Record<string, number[]>;
+  waitingPaths?: Record<string, number[]>;
 }
