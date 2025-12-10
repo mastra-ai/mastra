@@ -14,8 +14,13 @@ export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = und
 
 // Tripwire result extensions
 export type TripwireProperties = {
-  tripwire?: boolean;
-  tripwireReason?: string;
+  /** Tripwire data when processing was aborted */
+  tripwire?: {
+    reason: string;
+    retry?: boolean;
+    metadata?: unknown;
+    processorId?: string;
+  };
 };
 
 export type ScoringProperties = {

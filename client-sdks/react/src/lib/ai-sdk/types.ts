@@ -1,8 +1,22 @@
 import { UIMessage } from '@ai-sdk/react';
 import { CompleteAttachment } from '@assistant-ui/react';
 
+/**
+ * Tripwire metadata included when a processor triggers a tripwire
+ */
+export type TripwireMetadata = {
+  /** Whether the agent should retry with feedback */
+  retry?: boolean;
+  /** Custom metadata from the processor */
+  tripwirePayload?: unknown;
+  /** ID of the processor that triggered the tripwire */
+  processorId?: string;
+};
+
 export type MastraUIMessageMetadata = {
-  status?: 'warning' | 'error';
+  status?: 'warning' | 'error' | 'tripwire';
+  /** Tripwire-specific metadata when status is 'tripwire' */
+  tripwire?: TripwireMetadata;
 } & (
   | {
       mode: 'generate';

@@ -12,6 +12,8 @@ Processors are configured as:
 - **`inputProcessors`**: Run before messages reach the language model.
 - **`outputProcessors`**: Run after the language model generates a response, but before it's returned to users.
 
+You can use individual `Processor` objects or compose them into workflows using Mastra's workflow primitives. Workflows give you advanced control over processor execution order, parallel processing, and conditional logic.
+
 Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
 
 ## When to use processors
@@ -348,7 +350,81 @@ const agent = new Agent({
 
 > **Note:** The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
 
+## Using workflows as processors
+
+You can use Mastra workflows as processors to create complex processing pipelines with parallel execution, conditional branching, and error handling:
+
+```typescript title="src/mastra/processors/moderation-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { ProcessorStepSchema } from "@mastra/core/processors";
+import { Agent } from "@mastra/core/agent";
+
+// Create a workflow that runs multiple checks in parallel
+const moderationWorkflow = createWorkflow({
+  id: "moderation-pipeline",
+  inputSchema: ProcessorStepSchema,
+  outputSchema: ProcessorStepSchema,
+})
+  .then(createStep(new LengthValidator({ maxLength: 10000 })))
+  .parallel([
+    createStep(new PIIDetector({ strategy: "redact" })),
+    createStep(new ToxicityChecker({ threshold: 0.8 })),
+  ])
+  .commit();
+
+// Use the workflow as an input processor
+const agent = new Agent({
+  id: "moderated-agent",
+  name: "Moderated Agent",
+  model: "openai/gpt-4o",
+  inputProcessors: [moderationWorkflow],
+});
+```
+
+When an agent is registered with Mastra, processor workflows are automatically registered as workflows, allowing you to view and debug them in the playground.
+
+## Retry mechanism
+
+Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks, output validation, or iterative refinement:
+
+```typescript title="src/mastra/processors/quality-checker.ts" showLineNumbers copy
+import type { Processor } from "@mastra/core";
+
+export class QualityChecker implements Processor {
+  id = "quality-checker";
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const qualityScore = await evaluateQuality(text);
+
+    if (qualityScore < 0.7 && retryCount < 3) {
+      // Request a retry with feedback for the LLM
+      abort("Response quality score too low. Please provide a more detailed answer.", {
+        retry: true,
+        metadata: { score: qualityScore },
+      });
+    }
+
+    return [];
+  }
+}
+
+const agent = new Agent({
+  id: "quality-agent",
+  name: "Quality Agent",
+  model: "openai/gpt-4o",
+  outputProcessors: [new QualityChecker()],
+  maxProcessorRetries: 3, // Maximum retry attempts (default: 3)
+});
+```
+
+The retry mechanism:
+- Only works in `processOutputStep` and `processInputStep` methods
+- Replays the step with the abort reason added as context for the LLM
+- Tracks retry count via the `retryCount` parameter
+- Respects `maxProcessorRetries` limit on the agent
+
 ## Related documentation
 
 - [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
 - [Memory Processors](/docs/v1/memory/memory-processors) - Memory-specific processors and automatic integration
+- [Processor Interface](/reference/v1/processors/processor-interface) - Full API reference for processors

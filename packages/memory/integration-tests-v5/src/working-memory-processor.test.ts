@@ -1,3 +1,4 @@
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -66,19 +67,23 @@ describe('Working Memory Processor Unit Tests', () => {
       },
     ];
 
-    const result = await workingMemoryProcessor.processInput({
+    const resultMessageList = await workingMemoryProcessor.processInput({
       messages,
-      runtimeContext: mockContext,
+      messageList: new MessageList().add(messages, 'input'),
+      requestContext: mockContext,
       abort: (() => {
         throw new Error('Aborted');
       }) as any,
     });
 
+    // Result is a MessageList - get the prompt format which includes system messages
+    const result = (resultMessageList as MessageList).get.all.aiV4.prompt();
+
     // Should have added a system message with working memory
     expect(result).toHaveLength(2);
     expect(result[0].role).toBe('system');
-    expect(result[0].content.content).toContain('submarine under the sea');
-    expect(result[1]).toEqual(messages[0]);
+    expect(typeof result[0].content === 'string' ? result[0].content : '').toContain('submarine under the sea');
+    expect(result[1].role).toBe('user');
   });
 
   it('should preserve working memory across multiple processor runs', async () => {
@@ -110,18 +115,21 @@ describe('Working Memory Processor Unit Tests', () => {
     ];
 
     // First run - should inject initial working memory
-    const firstResult = await workingMemoryProcessor.processInput({
+    const firstResultMessageList = await workingMemoryProcessor.processInput({
       messages,
-      runtimeContext: mockContext,
+      messageList: new MessageList().add(messages, 'input'),
+      requestContext: mockContext,
       abort: (() => {}) as any,
     });
 
-    expect(firstResult[0].content.content).toContain('submarine under the sea');
+    const firstResult = (firstResultMessageList as MessageList).get.all.aiV4.prompt();
+    const firstSystemContent = typeof firstResult[0].content === 'string' ? firstResult[0].content : '';
+    expect(firstSystemContent).toContain('submarine under the sea');
 
     // Simulate working memory update (this would happen via the tool)
     const updatedWorkingMemory = `# user information
 - **first name**: John
-- **last name**: 
+- **last name**:
 - **location**: submarine under the sea
 - **interests**:`;
 
@@ -131,14 +139,17 @@ describe('Working Memory Processor Unit Tests', () => {
     });
 
     // Second run - should inject updated working memory
-    const secondResult = await workingMemoryProcessor.processInput({
+    const secondResultMessageList = await workingMemoryProcessor.processInput({
       messages,
-      runtimeContext: mockContext,
+      messageList: new MessageList().add(messages, 'input'),
+      requestContext: mockContext,
       abort: (() => {}) as any,
     });
 
-    expect(secondResult[0].content.content).toContain('John');
-    expect(secondResult[0].content.content).toContain('submarine under the sea');
+    const secondResult = (secondResultMessageList as MessageList).get.all.aiV4.prompt();
+    const secondSystemContent = typeof secondResult[0].content === 'string' ? secondResult[0].content : '';
+    expect(secondSystemContent).toContain('John');
+    expect(secondSystemContent).toContain('submarine under the sea');
   });
 
   it('should show working memory is lost when not properly injected', async () => {
@@ -163,17 +174,20 @@ describe('Working Memory Processor Unit Tests', () => {
       },
     ];
 
-    const result = await workingMemoryProcessor.processInput({
+    const resultMessageList = await workingMemoryProcessor.processInput({
       messages,
-      runtimeContext: mockContext,
+      messageList: new MessageList().add(messages, 'input'),
+      requestContext: mockContext,
       abort: (() => {
         throw new Error('Aborted');
       }) as any,
     });
 
+    const result = (resultMessageList as MessageList).get.all.aiV4.prompt();
+
     // Should still have added a system message (with template but no data)
     expect(result).toHaveLength(2);
     expect(result[0].role).toBe('system');
-    expect(result[1]).toEqual(messages[0]);
+    expect(result[1].role).toBe('user');
   });
 });

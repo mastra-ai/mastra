@@ -3,7 +3,8 @@ import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CallSettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { StructuredOutputOptions } from '../../../agent';
-import type { MessageList, MastraDBMessage } from '../../../agent/message-list';
+import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
+import { TripWire } from '../../../agent/trip-wire';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../logger';
@@ -471,6 +472,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   requestContext,
   methodType,
   modelSpanTracker,
+  maxProcessorRetries,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
 
@@ -495,6 +497,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         // don't persist across steps - each step starts fresh with original system messages
         if (initialSystemMessages) {
           messageList.replaceAllSystemMessages(initialSystemMessages);
+        }
+
+        // Add processor retry feedback from previous iteration AFTER the reset
+        // This feedback was passed through workflow state to survive the system message reset
+        if (inputData.processorRetryFeedback) {
+          messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
         }
 
         const currentStep: {
@@ -541,6 +549,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               providerOptions,
               modelSettings,
               structuredOutput,
+              retryCount: inputData.processorRetryCount || 0,
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {
@@ -707,7 +716,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         return bail({
           messageId,
           stepResult: {
-            reason: 'abort',
+            reason: 'tripwire',
             warnings,
             isContinued: false,
           },
@@ -737,7 +746,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         runState.setState({
           stepResult: {
             isContinued: false,
-            reason: 'abort',
+            reason: 'tripwire',
           },
         });
       }
@@ -774,14 +783,84 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         messageList.add(message, 'response');
       }
 
+      // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
+      // This allows processors to validate/modify the response and trigger retries if needed
+      let processOutputStepTripwire: TripWire | null = null;
+      if (outputProcessors && outputProcessors.length > 0) {
+        const processorRunner = new ProcessorRunner({
+          inputProcessors: [],
+          outputProcessors,
+          logger: logger || new ConsoleLogger({ level: 'error' }),
+          agentName: agentId || 'unknown',
+        });
+
+        try {
+          const stepNumber = inputData.output?.steps?.length || 0;
+          const immediateText = outputStream._getImmediateText();
+          const immediateFinishReason = outputStream._getImmediateFinishReason();
+
+          // Convert toolCalls to ToolCallInfo format
+          const toolCallInfos = toolCalls.map(tc => ({
+            toolName: tc.toolName,
+            toolCallId: tc.toolCallId,
+            args: tc.args,
+          }));
+
+          // Get current processor retry count from iteration data
+          const currentRetryCount = inputData.processorRetryCount || 0;
+
+          await processorRunner.runProcessOutputStep({
+            messages: messageList.get.all.db(),
+            messageList,
+            stepNumber,
+            finishReason: immediateFinishReason,
+            toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
+            text: immediateText,
+            tracingContext,
+            requestContext,
+            retryCount: currentRetryCount,
+          });
+        } catch (error) {
+          if (error instanceof TripWire) {
+            processOutputStepTripwire = error;
+            // If retry is requested, we'll handle it below
+            // For now, we just capture the tripwire
+          } else {
+            console.error('Error in processOutputStep processors:', error);
+            throw error;
+          }
+        }
+      }
+
       const finishReason = runState?.state?.stepResult?.reason ?? outputStream._getImmediateFinishReason();
       const hasErrored = runState.state.hasErrored;
       const usage = outputStream._getImmediateUsage();
       const responseMetadata = runState.state.responseMetadata;
       const text = outputStream._getImmediateText();
       const object = outputStream._getImmediateObject();
-      // Check if tripwire was triggered
-      const tripwireTriggered = outputStream.tripwire;
+      // Check if tripwire was triggered (from stream processors or output step processors)
+      const tripwireTriggered = outputStream.tripwire || processOutputStepTripwire !== null;
+
+      // Get current processor retry count
+      const currentProcessorRetryCount = inputData.processorRetryCount || 0;
+
+      // Check if this is a retry request from processOutputStep
+      // Only allow retry if maxProcessorRetries is set and we haven't exceeded it
+      const retryRequested = processOutputStepTripwire?.options?.retry === true;
+      const canRetry = maxProcessorRetries !== undefined && currentProcessorRetryCount < maxProcessorRetries;
+      const shouldRetry = retryRequested && canRetry;
+
+      // Log if retry was requested but not allowed
+      if (retryRequested && !canRetry) {
+        if (maxProcessorRetries === undefined) {
+          logger?.warn?.(`Processor requested retry but maxProcessorRetries is not set. Treating as abort.`);
+        } else {
+          logger?.warn?.(
+            `Processor requested retry but maxProcessorRetries (${maxProcessorRetries}) exceeded. ` +
+              `Current count: ${currentProcessorRetryCount}. Treating as abort.`,
+          );
+        }
+      }
 
       const steps = inputData.output?.steps || [];
 
@@ -793,6 +872,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
       // Extract only the content added in this iteration
       const currentIterationContent = allResponseContent.slice(existingResponseCount);
 
+      // Build tripwire data if this step is being rejected
+      // This includes both retry scenarios and max retries exceeded
+      const stepTripwireData = processOutputStepTripwire
+        ? {
+            reason: processOutputStepTripwire.message,
+            retry: processOutputStepTripwire.options?.retry,
+            metadata: processOutputStepTripwire.options?.metadata,
+            processorId: processOutputStepTripwire.processorId,
+          }
+        : undefined;
+
+      // Always add the current step to the steps array
+      // If tripwire data is set, the step's text will return empty string
+      // This keeps the step in history but excludes its text from final output
       steps.push(
         new DefaultStepResult({
           warnings: outputStream._getImmediateWarnings(),
@@ -802,8 +895,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
           request: request,
           usage: outputStream._getImmediateUsage() as LanguageModelV2Usage,
+          tripwire: stepTripwireData,
         }),
       );
+
+      // Build retry feedback text if retrying
+      // This will be passed through workflow state to survive the system message reset
+      const retryFeedbackText =
+        shouldRetry && processOutputStepTripwire
+          ? `[Processor Feedback] Your previous response was not accepted: ${processOutputStepTripwire.message}. Please try again with the feedback in mind.`
+          : undefined;
 
       const messages = {
         all: messageList.get.all.aiV5.model(),
@@ -811,12 +912,32 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         nonUser: messageList.get.response.aiV5.model(),
       };
 
+      // Determine step result
+      // If shouldRetry is true, we continue the loop instead of triggering tripwire
+      const stepReason = shouldRetry ? 'retry' : tripwireTriggered ? 'tripwire' : hasErrored ? 'error' : finishReason;
+
+      // isContinued should be true if:
+      // - shouldRetry is true (processor requested retry)
+      // - OR finishReason indicates more work (e.g., tool-use)
+      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error'].includes(finishReason));
+
+      // Increment processor retry count if we're retrying
+      const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : currentProcessorRetryCount;
+
       return {
         messageId,
         stepResult: {
-          reason: tripwireTriggered ? 'abort' : hasErrored ? 'error' : finishReason,
+          reason: stepReason,
           warnings,
-          isContinued: tripwireTriggered ? false : !['stop', 'error'].includes(finishReason),
+          isContinued: shouldContinue,
+          // Pass retry metadata for tracking
+          ...(shouldRetry && processOutputStepTripwire
+            ? {
+                retryReason: processOutputStepTripwire.message,
+                retryMetadata: processOutputStepTripwire.options?.metadata,
+                retryProcessorId: processOutputStepTripwire.processorId,
+              }
+            : {}),
         },
         metadata: {
           providerMetadata: runState.state.providerOptions,
@@ -828,13 +949,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         },
         output: {
           text,
-          toolCalls,
+          toolCalls: shouldRetry ? [] : toolCalls, // Clear tool calls on retry
           tools: stepTools,
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),
         },
         messages,
+        // Track processor retry count for next iteration
+        processorRetryCount: nextProcessorRetryCount,
+        // Pass retry feedback through workflow state to survive system message reset
+        processorRetryFeedback: retryFeedbackText,
       };
     },
   });

@@ -18,6 +18,13 @@ export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
 export type WorkflowEngineType = string;
 
+/**
+ * Type of workflow - determines how the workflow is categorized in the UI.
+ * - 'default': Standard workflow
+ * - 'processor': Workflow used as a processor for agent input/output processing
+ */
+export type WorkflowType = 'default' | 'processor';
+
 export type RestartExecutionParams = {
   activePaths: number[];
   activeStepsPath: Record<string, number[]>;
@@ -58,6 +65,14 @@ export type StepSuccess<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+/** Tripwire data attached to a failed step when triggered by a processor */
+export interface StepTripwireInfo {
+  reason: string;
+  retry?: boolean;
+  metadata?: Record<string, unknown>;
+  processorId?: string;
+}
+
 export type StepFailure<P, R, S, T> = {
   status: 'failed';
   error: string | Error;
@@ -70,6 +85,8 @@ export type StepFailure<P, R, S, T> = {
   suspendedAt?: number;
   resumedAt?: number;
   metadata?: StepMetadata;
+  /** Tripwire data when step failed due to processor rejection */
+  tripwire?: StepTripwireInfo;
 };
 
 export type StepSuspended<P, S, T> = {
@@ -199,6 +216,7 @@ export type WorkflowRunStatus =
   | 'running'
   | 'success'
   | 'failed'
+  | 'tripwire'
   | 'suspended'
   | 'waiting'
   | 'pending'
@@ -264,6 +282,8 @@ export interface WorkflowRunState {
   >;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
+  /** Tripwire data when status is 'tripwire' */
+  tripwire?: StepTripwireInfo;
 }
 
 export interface WorkflowOptions {
@@ -285,6 +305,8 @@ export type WorkflowInfo = {
   outputSchema: string | undefined;
   options?: WorkflowOptions;
   stepCount?: number;
+  /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
+  isProcessorWorkflow?: boolean;
 };
 
 export type DefaultEngineType = {};
@@ -459,6 +481,24 @@ export type WorkflowResult<
       error: Error;
     } & TracingProperties)
   | ({
+      status: 'tripwire';
+      input: z.infer<TInput>;
+      state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
+      /** Tripwire data including reason, retry flag, metadata, and processor ID */
+      tripwire: StepTripwireInfo;
+    } & TracingProperties)
+  | ({
       status: 'suspended';
       input: z.infer<TInput>;
       state?: z.infer<TState>;
@@ -519,6 +559,8 @@ export type WorkflowConfig<
     delay?: number;
   };
   options?: WorkflowOptions;
+  /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
+  type?: WorkflowType;
 };
 
 /**

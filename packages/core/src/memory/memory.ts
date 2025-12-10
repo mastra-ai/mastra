@@ -5,7 +5,13 @@ import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
-import type { InputProcessor, OutputProcessor } from '../processors';
+import type {
+  InputProcessor,
+  OutputProcessor,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../processors';
+import { isProcessorWorkflow } from '../processors';
 import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type {
@@ -26,7 +32,7 @@ import type {
   MastraMessageV1,
   WorkingMemoryTemplate,
   MessageDeleteInput,
-  MemoryRuntimeContext,
+  MemoryRequestContext,
 } from './types';
 
 export type MemoryProcessorOpts = {
@@ -490,11 +496,14 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of input processors configured for this memory instance
    */
-  getInputProcessors(configuredProcessors: InputProcessor[] = [], context?: RequestContext): InputProcessor[] {
+  getInputProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): InputProcessor[] {
     const processors: InputProcessor[] = [];
 
     // Extract runtime memoryConfig from context if available
-    const memoryContext = context?.get('MastraMemory') as MemoryRuntimeContext | undefined;
+    const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 
@@ -512,7 +521,7 @@ https://mastra.ai/en/docs/memory/overview`,
         });
 
       // Check if user already manually added WorkingMemory
-      const hasWorkingMemory = configuredProcessors.some(p => p.constructor.name === 'WorkingMemory');
+      const hasWorkingMemory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'working-memory');
 
       if (!hasWorkingMemory) {
         // Convert string template to WorkingMemoryTemplate format
@@ -550,7 +559,7 @@ https://mastra.ai/en/docs/memory/overview`,
         });
 
       // Check if user already manually added MessageHistory
-      const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
+      const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
       if (!hasMessageHistory) {
         processors.push(
@@ -589,7 +598,7 @@ https://mastra.ai/en/docs/memory/overview`,
         });
 
       // Check if user already manually added SemanticRecall
-      const hasSemanticRecall = configuredProcessors.some(p => p.constructor.name === 'SemanticRecall');
+      const hasSemanticRecall = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'semantic-recall');
 
       if (!hasSemanticRecall) {
         const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
@@ -620,11 +629,14 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of output processors configured for this memory instance
    */
-  getOutputProcessors(configuredProcessors: OutputProcessor[] = [], context?: RequestContext): OutputProcessor[] {
+  getOutputProcessors(
+    configuredProcessors: OutputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): OutputProcessor[] {
     const processors: OutputProcessor[] = [];
 
     // Extract runtime memoryConfig from context if available
-    const memoryContext = context?.get('MastraMemory') as MemoryRuntimeContext | undefined;
+    const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 
@@ -659,7 +671,7 @@ https://mastra.ai/en/docs/memory/overview`,
         });
 
       // Check if user already manually added SemanticRecall
-      const hasSemanticRecall = configuredProcessors.some(p => p.constructor.name === 'SemanticRecall');
+      const hasSemanticRecall = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'semantic-recall');
 
       if (!hasSemanticRecall) {
         const semanticRecallConfig =
@@ -691,7 +703,7 @@ https://mastra.ai/en/docs/memory/overview`,
         });
 
       // Check if user already manually added MessageHistory
-      const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
+      const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
       if (!hasMessageHistory) {
         processors.push(
