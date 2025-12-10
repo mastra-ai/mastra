@@ -83,7 +83,7 @@ export type AgentExecutionOptions<
   /** Callback fired when streaming is aborted */
   onAbort?: LoopConfig['onAbort'];
   /** Tools that are active for this execution */
-  activeTools?: LoopConfig['activeTools'];
+  activeTools?: LoopOptions['activeTools'];
   /**
    * Signal to abort the streaming operation
    */
@@ -114,7 +114,7 @@ export type AgentExecutionOptions<
   tracingOptions?: TracingOptions;
 
   /** Callback function called before each step of multi-step execution */
-  prepareStep?: PrepareStepFunction<any>;
+  prepareStep?: PrepareStepFunction;
 
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;

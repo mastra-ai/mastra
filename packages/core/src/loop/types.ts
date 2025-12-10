@@ -1,16 +1,23 @@
-import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
+import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet } from 'ai-v5';
 import z from 'zod';
-import type { MessageList } from '../agent/message-list';
+import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { ModelRouterModelId } from '../llm/model';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
-import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
+import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfig } from '../memory';
 import type { IModelSpanTracker } from '../observability';
-import type { InputProcessor, OutputProcessor, ProcessorState } from '../processors';
+import type {
+  InputProcessor,
+  OutputProcessor,
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
+  ProcessorState,
+} from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
@@ -32,22 +39,23 @@ export type StreamInternal = {
   resourceId?: string;
   memory?: MastraMemory; // MastraMemory from memory/memory
   threadExists?: boolean;
+  // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization
+  stepTools?: ToolSet;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
-  model?: MastraLanguageModelV2;
+  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
-  system?: string;
-  messages?: Array<ModelMessage>;
+  messages?: Array<MessageInput>;
 };
 
-export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
-  steps: Array<StepResult<TOOLS>>;
-  stepNumber: number;
-  model: MastraLanguageModelV2;
-  messages: Array<ModelMessage>;
-}) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
+/**
+ * Function called before each step of multi-step execution.
+ */
+export type PrepareStepFunction = <TOOLS extends ToolSet>(
+  args: ProcessInputStepArgs<TOOLS>,
+) => Promise<ProcessInputStepResult<TOOLS> | undefined | void> | ProcessInputStepResult<TOOLS> | undefined | void;
 
 export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
@@ -55,13 +63,12 @@ export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;
   onAbort?: (event: any) => Promise<void> | void;
-  activeTools?: Array<keyof ToolSet> | undefined;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
-  prepareStep?: PrepareStepFunction<any>;
+  prepareStep?: PrepareStepFunction;
 };
 
-export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
   mastra?: Mastra;
   resumeContext?: {
     resumeData: any;
@@ -78,14 +85,15 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   includeRawChunks?: boolean;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   headers?: Record<string, string>;
-  toolChoice?: ToolChoice<any>;
+  toolChoice?: ToolChoice<TOOLS>;
+  activeTools?: Array<keyof TOOLS>;
   options?: LoopConfig<OUTPUT>;
   providerOptions?: SharedV2ProviderOptions;
-  tools?: Tools;
+  tools?: TOOLS;
   outputProcessors?: OutputProcessor[];
   inputProcessors?: InputProcessor[];
   experimental_generateMessageId?: () => string;
-  stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
+  stopWhen?: StopCondition<NoInfer<TOOLS>> | Array<StopCondition<NoInfer<TOOLS>>>;
   maxSteps?: number;
   _internal?: StreamInternal;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;

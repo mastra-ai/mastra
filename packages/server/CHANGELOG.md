@@ -1,5 +1,37 @@
 # @mastra/server
 
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- ### Breaking Changes ([#11028](https://github.com/mastra-ai/mastra/pull/11028))
+  - Renamed `RuntimeContext` type to `ServerContext` to avoid confusion with the user-facing `RequestContext` (previously called `RuntimeContext`)
+  - Removed `playground` and `isDev` options from server adapter constructors - these only set context variables without any actual functionality
+
+  ### Changes
+
+  **@mastra/server**
+  - Renamed `RuntimeContext` type to `ServerContext` in route handler types
+  - Renamed `createTestRuntimeContext` to `createTestServerContext` in test utilities
+  - Renamed `isPlayground` parameter to `isStudio` in `formatAgent` function
+
+  **@mastra/hono**
+  - Removed `playground` and `isDev` from `HonoVariables` type
+  - Removed setting of `playground` and `isDev` context variables in middleware
+
+  **@mastra/express**
+  - Removed `playground` and `isDev` from `Express.Locals` interface
+  - Removed setting of `playground` and `isDev` in response locals
+
+- Add delete workflow run API ([#10991](https://github.com/mastra-ai/mastra/pull/10991))
+
+  ```typescript
+  await workflow.deleteWorkflowRunById(runId);
+  ```
+
+- Updated dependencies [[`edb07e4`](https://github.com/mastra-ai/mastra/commit/edb07e49283e0c28bd094a60e03439bf6ecf0221), [`b7e17d3`](https://github.com/mastra-ai/mastra/commit/b7e17d3f5390bb5a71efc112204413656fcdc18d), [`261473a`](https://github.com/mastra-ai/mastra/commit/261473ac637e633064a22076671e2e02b002214d), [`5d7000f`](https://github.com/mastra-ai/mastra/commit/5d7000f757cd65ea9dc5b05e662fd83dfd44e932), [`4f0331a`](https://github.com/mastra-ai/mastra/commit/4f0331a79bf6eb5ee598a5086e55de4b5a0ada03), [`8a000da`](https://github.com/mastra-ai/mastra/commit/8a000da0c09c679a2312f6b3aa05b2ca78ca7393)]:
+  - @mastra/core@1.0.0-beta.10
+
 ## 1.0.0-beta.9
 
 ### Minor Changes
