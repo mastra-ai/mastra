@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { MastraError, ErrorDomain, ErrorCategory, type SerializedError } from '@mastra/core/error';
 import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
@@ -291,7 +291,7 @@ export class D1Store extends MastraStorage {
     opts: {
       status: string;
       result?: StepResult<any, any, any, any>;
-      error?: string;
+      error?: SerializedError;
       suspendedPaths?: Record<string, number[]>;
       waitingPaths?: Record<string, number[]>;
     };

@@ -1,4 +1,5 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
+import type { SerializedError } from '@mastra/core/error';
 import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
@@ -183,7 +184,7 @@ export class UpstashStore extends MastraStorage {
     opts: {
       status: string;
       result?: StepResult<any, any, any, any>;
-      error?: string;
+      error?: SerializedError;
       suspendedPaths?: Record<string, number[]>;
       waitingPaths?: Record<string, number[]>;
     };

@@ -1,6 +1,6 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '../agent';
 import { MastraBase } from '../base';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { ErrorCategory, ErrorDomain, MastraError, type SerializedError } from '../error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingStorageStrategy } from '../observability';
@@ -490,7 +490,7 @@ export abstract class MastraStorage extends MastraBase {
     opts: {
       status: string;
       result?: StepResult<any, any, any, any>;
-      error?: string;
+      error?: SerializedError;
       suspendedPaths?: Record<string, number[]>;
       waitingPaths?: Record<string, number[]>;
     };

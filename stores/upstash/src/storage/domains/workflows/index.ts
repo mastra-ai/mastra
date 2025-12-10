@@ -1,4 +1,4 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError, type SerializedError } from '@mastra/core/error';
 import {
   createStorageErrorId,
   normalizePerPage,
@@ -69,7 +69,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       opts: {
         status: string;
         result?: StepResult<any, any, any, any>;
-        error?: string;
+        error?: SerializedError;
         suspendedPaths?: Record<string, number[]>;
         waitingPaths?: Record<string, number[]>;
       };

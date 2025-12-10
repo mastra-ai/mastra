@@ -1,3 +1,4 @@
+import type { SerializedError } from '@mastra/core/error';
 import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
@@ -208,7 +209,7 @@ export class ConvexStore extends MastraStorage {
     opts: {
       status: WorkflowRunStatus;
       result?: StepResult<any, any, any, any>;
-      error?: string;
+      error?: SerializedError;
       suspendedPaths?: Record<string, number[]>;
       waitingPaths?: Record<string, number[]>;
     };

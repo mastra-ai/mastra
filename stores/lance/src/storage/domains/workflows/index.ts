@@ -1,5 +1,5 @@
 import type { Connection } from '@lancedb/lancedb';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError, type SerializedError } from '@mastra/core/error';
 import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -66,7 +66,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       opts: {
         status: string;
         result?: StepResult<any, any, any, any>;
-        error?: string;
+        error?: SerializedError;
         suspendedPaths?: Record<string, number[]>;
         waitingPaths?: Record<string, number[]>;
       };

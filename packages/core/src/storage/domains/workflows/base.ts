@@ -1,4 +1,5 @@
 import { MastraBase } from '../../../base';
+import type { SerializedError } from '../../../error';
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 
@@ -34,7 +35,7 @@ export abstract class WorkflowsStorage extends MastraBase {
     opts: {
       status: string;
       result?: StepResult<any, any, any, any>;
-      error?: string;
+      error?: SerializedError;
       suspendedPaths?: Record<string, number[]>;
       waitingPaths?: Record<string, number[]>;
     };

@@ -1,3 +1,4 @@
+import type { SerializedError } from '../../../error';
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import { normalizePerPage } from '../../base';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
@@ -86,7 +87,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     opts: {
       status: string;
       result?: StepResult<any, any, any, any>;
-      error?: string;
+      error?: SerializedError;
       suspendedPaths?: Record<string, number[]>;
       waitingPaths?: Record<string, number[]>;
     };

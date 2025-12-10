@@ -1,4 +1,4 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError, type SerializedError } from '@mastra/core/error';
 import { createStorageErrorId, normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -62,7 +62,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
       opts: {
         status: string;
         result?: StepResult<any, any, any, any>;
-        error?: string;
+        error?: SerializedError;
         suspendedPaths?: Record<string, number[]>;
         waitingPaths?: Record<string, number[]>;
       };

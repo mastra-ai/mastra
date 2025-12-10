@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import EventEmitter from 'node:events';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
@@ -79,7 +79,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         executionPath: [],
         resumeSteps,
         stepResults,
-        prevResult: { status: 'failed', error: e.stack ?? e.message },
+        prevResult: { status: 'failed', error: getErrorFromUnknown(e).toJSON() },
         requestContext,
         resumeData,
         activeSteps: {},

@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '../agent';
+import type { SerializedError } from '../error';
 import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../evals/types';
 import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
@@ -175,7 +176,7 @@ export class InMemoryStore extends MastraStorage {
     opts: {
       status: string;
       result?: StepResult<any, any, any, any>;
-      error?: string;
+      error?: SerializedError;
       suspendedPaths?: Record<string, number[]>;
       waitingPaths?: Record<string, number[]>;
     };

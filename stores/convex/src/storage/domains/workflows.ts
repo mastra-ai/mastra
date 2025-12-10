@@ -1,3 +1,4 @@
+import type { SerializedError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, StorageWorkflowRun, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
@@ -56,7 +57,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     opts: {
       status: WorkflowRunStatus;
       result?: StepResult<any, any, any, any>;
-      error?: string;
+      error?: SerializedError;
       suspendedPaths?: Record<string, number[]>;
       waitingPaths?: Record<string, number[]>;
     };

@@ -6384,25 +6384,26 @@ describe('Workflow', () => {
       expect(result.status).toBe('failed');
 
       if (result.status === 'failed') {
-        // result.error should be an Error instance (not a string)
-        expect(result.error).toBeInstanceOf(Error);
+        // result.error should be a SerializedError (plain object, not Error instance)
+        // This is intentional - errors are serialized for storage compatibility
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
 
-        // The exact same error instance should be preserved
-        expect(result.error).toBe(customError);
-
-        // Custom properties should be preserved on the error
+        // Custom properties should be preserved on the serialized error
+        expect((result.error as any).message).toBe('API rate limit exceeded');
+        expect((result.error as any).name).toBe('Error');
         expect((result.error as any).statusCode).toBe(429);
         expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
         expect((result.error as any).isRetryable).toBe(true);
       }
 
-      // Also check step-level error
+      // Also check step-level error (step errors remain as Error instances)
       const step1Result = result.steps?.step1;
       expect(step1Result).toBeDefined();
       expect(step1Result?.status).toBe('failed');
 
       if (step1Result?.status === 'failed') {
-        // Step error should also be the exact same error instance
+        // Step error is still the original Error instance
         expect(step1Result.error).toBeInstanceOf(Error);
         expect(step1Result.error).toBe(customError);
         expect((step1Result.error as any).statusCode).toBe(429);
