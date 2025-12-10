@@ -1,6 +1,6 @@
 import { createTestSuite } from '@internal/storage-test-utils';
 import type { TestSuiteOptions } from '@internal/storage-test-utils';
-import { vi } from 'vitest';
+import { describe, it, vi } from 'vitest';
 import { dsqlTests, TEST_CONFIG, canRunDSQLTests } from './test-utils';
 import { DSQLStore } from '.';
 
@@ -26,4 +26,8 @@ const DSQL_TEST_OPTIONS: TestSuiteOptions = {
 if (canRunDSQLTests()) {
   createTestSuite(new DSQLStore(TEST_CONFIG), DSQL_TEST_OPTIONS);
   dsqlTests();
+} else {
+  describe.skip('DSQLStore Integration Tests (skipped: DSQL_HOST not set or DSQL_INTEGRATION !== true)', () => {
+    it('placeholder', () => {});
+  });
 }
