@@ -1,7 +1,7 @@
 import EventEmitter from 'node:events';
 import { ReadableStream, WritableStream } from 'node:stream/web';
 import type { ReadableStreamGetReaderOptions, ReadableWritablePair, StreamPipeOptions } from 'node:stream/web';
-import type { LanguageModelUsage } from 'ai-v5';
+import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
 import type { WorkflowResult, WorkflowRunStatus } from '../workflows';
 import { DelayedPromise } from './aisdk/v5/compat';
 import type { MastraBaseStream } from './base/base';

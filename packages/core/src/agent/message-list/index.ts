@@ -2,7 +2,6 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4';
 import type {
-  LanguageModelV1Message,
   IdGenerator,
   LanguageModelV1Prompt,
   CoreMessage as CoreMessageV4,
@@ -10,8 +9,8 @@ import type {
   ToolInvocation as ToolInvocationV4,
 } from '@internal/ai-sdk-v4';
 import type * as AIV4Type from '@internal/ai-sdk-v4';
+import * as AIV5 from '@internal/ai-sdk-v5';
 import { v4 as randomUUID } from '@lukeed/uuid';
-import * as AIV5 from 'ai-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
@@ -32,6 +31,8 @@ import { getToolName } from './utils/ai-v5/tool';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
 export type AIV5ResponseMessage = AIV5Type.AssistantModelMessage | AIV5Type.ToolModelMessage;
+
+type LanguageModelV1Message = LanguageModelV1Prompt[0];
 
 type MastraMessageShared = {
   id: string;

@@ -1,6 +1,6 @@
 import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
-import type { generateText as generateText5 } from 'ai-v5';
-import { convertArrayToReadableStream, mockId } from 'ai-v5/test';
+import type { generateText as generateText5 } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
 import type { loop } from '../loop';

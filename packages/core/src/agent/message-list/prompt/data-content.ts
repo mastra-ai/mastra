@@ -1,4 +1,4 @@
-import { convertUint8ArrayToBase64 } from '@internal/ai-sdk-v4';
+import { convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils-v5';
 import { z } from 'zod';
 
 /**

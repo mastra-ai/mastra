@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';

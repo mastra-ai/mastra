@@ -6,8 +6,12 @@ import type {
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
 
-import type { FinishReason, LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
-import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
+import type {
+  FinishReason,
+  LanguageModelRequestMetadata,
+  LogProbs as LanguageModelV1LogProbs,
+} from '@internal/ai-sdk-v4';
+import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';

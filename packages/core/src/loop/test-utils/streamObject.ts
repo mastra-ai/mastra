@@ -5,8 +5,8 @@ import {
   convertReadableStreamToArray,
 } from '@ai-sdk/provider-utils-v5/test';
 import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from 'ai-v5';
-import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from 'ai-v5';
+import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@internal/ai-sdk-v5';
+import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';

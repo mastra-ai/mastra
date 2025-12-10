@@ -1,5 +1,5 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';

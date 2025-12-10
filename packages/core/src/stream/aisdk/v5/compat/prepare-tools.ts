@@ -3,8 +3,8 @@ import type {
   LanguageModelV2ProviderDefinedTool,
   LanguageModelV2ToolChoice,
 } from '@ai-sdk/provider-v5';
-import { asSchema, tool as toolFn } from 'ai-v5';
-import type { Tool, ToolChoice } from 'ai-v5';
+import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
+import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
 
 export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   tools,
