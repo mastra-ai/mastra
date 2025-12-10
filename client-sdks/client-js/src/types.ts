@@ -211,6 +211,8 @@ export interface GetWorkflowResponse {
   stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
+  /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
+  isProcessorWorkflow?: boolean;
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;

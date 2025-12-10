@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
+import type { TripWireOptions } from '../agent/trip-wire';
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
@@ -9,12 +10,16 @@ import type { Span, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
+import type { ProcessorStepOutput } from './step-schema';
+import { isProcessorWorkflow } from './index';
 import type {
   ProcessInputStepResult,
   Processor,
   ProcessorMessageResult,
+  ProcessorWorkflow,
   RunProcessInputStepArgs,
   RunProcessInputStepResult,
+  ToolCallInfo,
 } from './index';
 
 /**
@@ -67,9 +72,14 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   }
 }
 
+/**
+ * Union type for processor or workflow that can be used as a processor
+ */
+type ProcessorOrWorkflow = Processor | ProcessorWorkflow;
+
 export class ProcessorRunner {
-  public readonly inputProcessors: Processor[];
-  public readonly outputProcessors: Processor[];
+  public readonly inputProcessors: ProcessorOrWorkflow[];
+  public readonly outputProcessors: ProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
 
@@ -79,8 +89,8 @@ export class ProcessorRunner {
     logger,
     agentName,
   }: {
-    inputProcessors?: Processor[];
-    outputProcessors?: Processor[];
+    inputProcessors?: ProcessorOrWorkflow[];
+    outputProcessors?: ProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
   }) {
@@ -90,29 +100,127 @@ export class ProcessorRunner {
     this.agentName = agentName;
   }
 
+  /**
+   * Execute a workflow as a processor and handle the result.
+   * Returns the processed messages and any tripwire information.
+   */
+  private async executeWorkflowAsProcessor(
+    workflow: ProcessorWorkflow,
+    input: ProcessorStepOutput,
+    tracingContext?: TracingContext,
+    requestContext?: RequestContext,
+  ): Promise<ProcessorStepOutput> {
+    // Create a run and start the workflow
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: input,
+      tracingContext,
+      requestContext,
+    });
+
+    // Check for tripwire status - this means a processor in the workflow called abort()
+    if (result.status === 'tripwire') {
+      const tripwireData = (
+        result as { tripwire?: { reason?: string; retry?: boolean; metadata?: unknown; processorId?: string } }
+      ).tripwire;
+      // Re-throw as TripWire so the agent handles it properly
+      throw new TripWire(
+        tripwireData?.reason || `Tripwire triggered in workflow ${workflow.id}`,
+        {
+          retry: tripwireData?.retry,
+          metadata: tripwireData?.metadata,
+        },
+        tripwireData?.processorId || workflow.id,
+      );
+    }
+
+    // Check for execution failure
+    if (result.status !== 'success') {
+      throw new MastraError({
+        category: 'USER',
+        domain: 'AGENT',
+        id: 'PROCESSOR_WORKFLOW_FAILED',
+        text: `Processor workflow ${workflow.id} failed with status: ${result.status}`,
+      });
+    }
+
+    // Extract and validate the output from the workflow result
+    const output = result.result;
+
+    if (!output || typeof output !== 'object') {
+      // No output means no changes - return input unchanged
+      return input;
+    }
+
+    // Validate it has the expected ProcessorStepOutput shape
+    if (!('phase' in output) || !('messages' in output || 'part' in output || 'messageList' in output)) {
+      throw new MastraError({
+        category: 'USER',
+        domain: 'AGENT',
+        id: 'PROCESSOR_WORKFLOW_INVALID_OUTPUT',
+        text: `Processor workflow ${workflow.id} returned invalid output format. Expected ProcessorStepOutput.`,
+      });
+    }
+
+    return output as ProcessorStepOutput;
+  }
+
   async runOutputProcessors(
     messageList: MessageList,
     tracingContext?: TracingContext,
     requestContext?: RequestContext,
+    retryCount: number = 0,
   ): Promise<MessageList> {
-    for (const [index, processor] of this.outputProcessors.entries()) {
+    for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
       const allNewMessages = messageList.get.response.db();
       let processableMessages: MastraDBMessage[] = [...allNewMessages];
-      const idsBeforeProcessing = processableMessages.map(m => m.id);
+      const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
 
-      const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
-        messages: processableMessages,
-        abort: () => {
-          throw new TripWire('Tripwire triggered');
-        },
-      };
+      // Handle workflow as processor
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        const currentSpan = tracingContext?.currentSpan;
+        const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+        const processorSpan = parentSpan?.createChildSpan({
+          type: SpanType.PROCESSOR_RUN,
+          name: `output processor workflow: ${processorOrWorkflow.id}`,
+          attributes: {
+            processorName: processorOrWorkflow.id,
+            processorType: 'output',
+            processorIndex: index,
+          },
+          input: processableMessages,
+        });
 
-      const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
-      };
+        try {
+          await this.executeWorkflowAsProcessor(
+            processorOrWorkflow,
+            {
+              phase: 'outputResult',
+              messages: processableMessages,
+              messageList,
+              retryCount,
+            },
+            tracingContext,
+            requestContext,
+          );
 
-      ctx.abort = abort;
+          processorSpan?.end({ output: processableMessages });
+        } catch (error) {
+          if (error instanceof TripWire) {
+            throw error;
+          }
+          processorSpan?.error({ error: error as Error, endSpan: true });
+          throw error;
+        }
+        continue;
+      }
+
+      // Handle regular processor
+      const processor = processorOrWorkflow;
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
 
       // Use the processOutputResult method if available
       const processMethod = processor.processOutputResult?.bind(processor);
@@ -141,9 +249,10 @@ export class ProcessorRunner {
       const result = await processMethod({
         messages: processableMessages,
         messageList,
-        abort: ctx.abort,
+        abort,
         tracingContext: { currentSpan: processorSpan },
         requestContext,
+        retryCount,
       });
 
       // Stop recording and get mutations for this processor
@@ -164,7 +273,9 @@ export class ProcessorRunner {
         }
       } else {
         if (result) {
-          const deletedIds = idsBeforeProcessing.filter(i => !result.some(m => m.id === i));
+          const deletedIds = idsBeforeProcessing.filter(
+            (i: string) => !result.some((m: MastraDBMessage) => m.id === i),
+          );
           if (deletedIds.length) {
             messageList.removeByIds(deletedIds);
           }
@@ -194,10 +305,13 @@ export class ProcessorRunner {
     tracingContext?: TracingContext,
     requestContext?: RequestContext,
     messageList?: MessageList,
+    retryCount: number = 0,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
     reason?: string;
+    tripwireOptions?: TripWireOptions<unknown>;
+    processorId?: string;
   }> {
     if (!this.outputProcessors.length) {
       return { part, blocked: false };
@@ -207,7 +321,65 @@ export class ProcessorRunner {
       let processedPart: ChunkType<OUTPUT> | null | undefined = part;
       const isFinishChunk = part.type === 'finish';
 
-      for (const [index, processor] of this.outputProcessors.entries()) {
+      for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+        // Handle workflows for stream processing
+        if (isProcessorWorkflow(processorOrWorkflow)) {
+          if (!processedPart) continue;
+
+          // Get or create state for this workflow
+          const workflowId = processorOrWorkflow.id;
+          let state = processorStates.get(workflowId);
+          if (!state) {
+            state = new ProcessorState<OUTPUT>({
+              processorName: workflowId,
+              tracingContext,
+              processorIndex: index,
+            });
+            processorStates.set(workflowId, state);
+          }
+
+          // Add the current part to accumulated state
+          state.addPart(processedPart);
+
+          try {
+            const result = await this.executeWorkflowAsProcessor(
+              processorOrWorkflow,
+              {
+                phase: 'outputStream',
+                part: processedPart,
+                streamParts: state.streamParts as ChunkType[],
+                state: state.customState,
+                messageList,
+                retryCount,
+              },
+              tracingContext,
+              requestContext,
+            );
+
+            // Extract the processed part from the result if it exists
+            if ('part' in result) {
+              processedPart = result.part as ChunkType<OUTPUT> | null | undefined;
+            }
+          } catch (error) {
+            if (error instanceof TripWire) {
+              state?.span?.end({
+                metadata: { blocked: true, reason: error.message, retry: error.options?.retry },
+              });
+              return {
+                part: null,
+                blocked: true,
+                reason: error.message,
+                tripwireOptions: error.options,
+                processorId: error.processorId || workflowId,
+              };
+            }
+            state?.span?.error({ error: error as Error, endSpan: true });
+            this.logger.error(`[Agent:${this.agentName}] - Output processor workflow ${workflowId} failed:`, error);
+          }
+          continue;
+        }
+
+        const processor = processorOrWorkflow;
         try {
           if (processor.processOutputStream && processedPart) {
             // Get or create state for this processor
@@ -228,12 +400,13 @@ export class ProcessorRunner {
               part: processedPart as ChunkType,
               streamParts: state.streamParts as ChunkType[],
               state: state.customState,
-              abort: (reason?: string) => {
-                throw new TripWire(reason || `Stream part blocked by ${processor.id}`);
+              abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+                throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
               },
               tracingContext: { currentSpan: state.span },
               requestContext,
               messageList,
+              retryCount,
             });
 
             if (state.span && !state.span.isEvent) {
@@ -248,9 +421,15 @@ export class ProcessorRunner {
             // End span with blocked metadata
             const state = processorStates.get(processor.id);
             state?.span?.end({
-              metadata: { blocked: true, reason: error.message },
+              metadata: { blocked: true, reason: error.message, retry: error.options?.retry },
             });
-            return { part: null, blocked: true, reason: error.message };
+            return {
+              part: null,
+              blocked: true,
+              reason: error.message,
+              tripwireOptions: error.options,
+              processorId: processor.id,
+            };
           }
           // End span with error
           const state = processorStates.get(processor.id);
@@ -309,6 +488,8 @@ export class ProcessorRunner {
               part: processedPart,
               blocked,
               reason,
+              tripwireOptions,
+              processorId,
             } = await this.processPart(value, processorStates, tracingContext);
 
             if (blocked) {
@@ -321,7 +502,12 @@ export class ProcessorRunner {
               // Send tripwire part and close stream for abort
               controller.enqueue({
                 type: 'tripwire',
-                tripwireReason: reason || 'Output processor blocked content',
+                payload: {
+                  reason: reason || 'Output processor blocked content',
+                  retry: tripwireOptions?.retry,
+                  metadata: tripwireOptions?.metadata,
+                  processorId,
+                },
               });
               controller.close();
               break;
@@ -342,17 +528,58 @@ export class ProcessorRunner {
     messageList: MessageList,
     tracingContext?: TracingContext,
     requestContext?: RequestContext,
+    retryCount: number = 0,
   ): Promise<MessageList> {
-    for (const [index, processor] of this.inputProcessors.entries()) {
+    for (const [index, processorOrWorkflow] of this.inputProcessors.entries()) {
       let processableMessages: MastraDBMessage[] = messageList.get.input.db();
-      const inputIds = processableMessages.map(m => m.id);
+      const inputIds = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
 
-      const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
-        messages: processableMessages,
-        abort: (reason?: string): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
-        },
+      // Handle workflow as processor
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        const currentSpan = tracingContext?.currentSpan;
+        const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+        const processorSpan = parentSpan?.createChildSpan({
+          type: SpanType.PROCESSOR_RUN,
+          name: `input processor workflow: ${processorOrWorkflow.id}`,
+          attributes: {
+            processorName: processorOrWorkflow.id,
+            processorType: 'input',
+            processorIndex: index,
+          },
+          input: processableMessages,
+        });
+
+        try {
+          const currentSystemMessages = messageList.getAllSystemMessages();
+          await this.executeWorkflowAsProcessor(
+            processorOrWorkflow,
+            {
+              phase: 'input',
+              messages: processableMessages,
+              messageList,
+              systemMessages: currentSystemMessages,
+              retryCount,
+            },
+            tracingContext,
+            requestContext,
+          );
+
+          processorSpan?.end({ output: messageList.get.input.db() });
+        } catch (error) {
+          if (error instanceof TripWire) {
+            throw error;
+          }
+          processorSpan?.error({ error: error as Error, endSpan: true });
+          throw error;
+        }
+        continue;
+      }
+
+      // Handle regular processor
+      const processor = processorOrWorkflow;
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
       // Use the processInput method if available
@@ -385,10 +612,11 @@ export class ProcessorRunner {
       const result = await processMethod({
         messages: processableMessages,
         systemMessages: currentSystemMessages,
-        abort: ctx.abort,
+        abort,
         tracingContext: { currentSpan: processorSpan },
         messageList,
         requestContext,
+        retryCount,
       });
 
       // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
@@ -532,22 +760,69 @@ export class ProcessorRunner {
       providerOptions: args.providerOptions,
       modelSettings: args.modelSettings,
       structuredOutput: args.structuredOutput,
+      retryCount: args.retryCount ?? 0,
     };
 
     // Run through all input processors that have processInputStep
-    for (const [index, processor] of this.inputProcessors.entries()) {
+    for (const [index, processorOrWorkflow] of this.inputProcessors.entries()) {
+      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
+      const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
+      const check = messageList.makeMessageSourceChecker();
+
+      // Handle workflow as processor with inputStep phase
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        const currentSpan = tracingContext?.currentSpan;
+        const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+        const processorSpan = parentSpan?.createChildSpan({
+          type: SpanType.PROCESSOR_RUN,
+          name: `input step processor workflow: ${processorOrWorkflow.id}`,
+          attributes: {
+            processorName: processorOrWorkflow.id,
+            processorType: 'input',
+            processorIndex: index,
+          },
+          input: { messages: processableMessages, stepNumber },
+        });
+
+        try {
+          const currentSystemMessages = messageList.getAllSystemMessages();
+          const result = await this.executeWorkflowAsProcessor(
+            processorOrWorkflow,
+            {
+              phase: 'inputStep',
+              messages: processableMessages,
+              messageList,
+              stepNumber,
+              systemMessages: currentSystemMessages,
+              ...stepInput,
+            },
+            tracingContext,
+            requestContext,
+          );
+
+          Object.assign(stepInput, result);
+
+          processorSpan?.end({ output: messageList.get.all.db() });
+        } catch (error) {
+          if (error instanceof TripWire) {
+            throw error;
+          }
+          processorSpan?.error({ error: error as Error, endSpan: true });
+          throw error;
+        }
+        continue;
+      }
+
+      // Handle regular processor
+      const processor = processorOrWorkflow;
       const processMethod = processor.processInputStep?.bind(processor);
       if (!processMethod) {
         // Skip processors that don't implement processInputStep
         continue;
       }
 
-      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
-      const idsBeforeProcessing = processableMessages.map(m => m.id);
-      const check = messageList.makeMessageSourceChecker();
-
-      const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
       // Get all system messages to pass to the processor
@@ -592,12 +867,13 @@ export class ProcessorRunner {
       messageList.startRecording();
 
       try {
-        const result = await this.validateAndFormatProcessInputStepResult(
+        const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(
           await processMethod({
             messageList,
             ...inputData,
             abort,
             tracingContext: { currentSpan: processorSpan },
+            retryCount: args.retryCount ?? 0,
           }),
           {
             messageList,
@@ -607,7 +883,7 @@ export class ProcessorRunner {
         );
         const { messages, systemMessages, ...rest } = result;
         if (messages) {
-          this.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
+          ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
         }
         if (systemMessages) {
           messageList.replaceAllSystemMessages(systemMessages);
@@ -667,7 +943,212 @@ export class ProcessorRunner {
     );
   }
 
-  private applyMessagesToMessageList(
+  /**
+   * Run processOutputStep for all processors that implement it.
+   * Called after each LLM response in the agentic loop, before tool execution.
+   *
+   * Unlike processOutputResult which runs once at the end, this runs at every step.
+   * This is the ideal place to implement guardrails that can trigger retries.
+   *
+   * @param args.messages - The current messages including the LLM response
+   * @param args.messageList - MessageList instance for managing message sources
+   * @param args.stepNumber - The current step number (0-indexed)
+   * @param args.finishReason - The finish reason from the LLM
+   * @param args.toolCalls - Tool calls made in this step (if any)
+   * @param args.text - Generated text from this step
+   * @param args.tracingContext - Optional tracing context for observability
+   * @param args.requestContext - Optional runtime context with execution metadata
+   * @param args.retryCount - Number of times processors have triggered retry
+   *
+   * @returns The processed MessageList
+   */
+  async runProcessOutputStep(args: {
+    messages: MastraDBMessage[];
+    messageList: MessageList;
+    stepNumber: number;
+    finishReason?: string;
+    toolCalls?: ToolCallInfo[];
+    text?: string;
+    tracingContext?: TracingContext;
+    requestContext?: RequestContext;
+    retryCount?: number;
+  }): Promise<MessageList> {
+    const {
+      messageList,
+      stepNumber,
+      finishReason,
+      toolCalls,
+      text,
+      tracingContext,
+      requestContext,
+      retryCount = 0,
+    } = args;
+
+    // Run through all output processors that have processOutputStep
+    for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
+      const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
+      const check = messageList.makeMessageSourceChecker();
+
+      // Handle workflow as processor with outputStep phase
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        const currentSpan = tracingContext?.currentSpan;
+        const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+        const processorSpan = parentSpan?.createChildSpan({
+          type: SpanType.PROCESSOR_RUN,
+          name: `output step processor workflow: ${processorOrWorkflow.id}`,
+          attributes: {
+            processorName: processorOrWorkflow.id,
+            processorType: 'output',
+            processorIndex: index,
+          },
+          input: { messages: processableMessages, stepNumber, finishReason, toolCalls, text },
+        });
+
+        try {
+          const currentSystemMessages = messageList.getAllSystemMessages();
+          await this.executeWorkflowAsProcessor(
+            processorOrWorkflow,
+            {
+              phase: 'outputStep',
+              messages: processableMessages,
+              messageList,
+              stepNumber,
+              finishReason,
+              toolCalls,
+              text,
+              systemMessages: currentSystemMessages,
+              retryCount,
+            },
+            tracingContext,
+            requestContext,
+          );
+
+          processorSpan?.end({ output: messageList.get.all.db() });
+        } catch (error) {
+          if (error instanceof TripWire) {
+            throw error;
+          }
+          processorSpan?.error({ error: error as Error, endSpan: true });
+          throw error;
+        }
+        continue;
+      }
+
+      // Handle regular processor
+      const processor = processorOrWorkflow;
+      const processMethod = processor.processOutputStep?.bind(processor);
+
+      if (!processMethod) {
+        // Skip processors that don't implement processOutputStep
+        continue;
+      }
+
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      const currentSpan = tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const processorSpan = parentSpan?.createChildSpan({
+        type: SpanType.PROCESSOR_RUN,
+        name: `output step processor: ${processor.id}`,
+        attributes: {
+          processorName: processor.name ?? processor.id,
+          processorType: 'output',
+          processorIndex: index,
+        },
+        input: { messages: processableMessages, stepNumber, finishReason, toolCalls, text },
+      });
+
+      // Start recording MessageList mutations for this processor
+      messageList.startRecording();
+
+      // Get all system messages to pass to the processor
+      const currentSystemMessages = messageList.getAllSystemMessages();
+
+      try {
+        const result = await processMethod({
+          messages: processableMessages,
+          messageList,
+          stepNumber,
+          finishReason,
+          toolCalls,
+          text,
+          systemMessages: currentSystemMessages,
+          abort,
+          tracingContext: { currentSpan: processorSpan },
+          requestContext,
+          retryCount,
+        });
+
+        // Stop recording and get mutations for this processor
+        const mutations = messageList.stopRecording();
+
+        // Handle the return type - MessageList or MastraDBMessage[]
+        if (result instanceof MessageList) {
+          if (result !== messageList) {
+            throw new MastraError({
+              category: 'USER',
+              domain: 'AGENT',
+              id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+              text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+            });
+          }
+          // Processor returned the same messageList - mutations have been applied
+        } else if (result) {
+          // Processor returned an array - apply changes to messageList
+          const deletedIds = idsBeforeProcessing.filter(
+            (i: string) => !result.some((m: MastraDBMessage) => m.id === i),
+          );
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
+
+          // Re-add messages with correct sources
+          for (const message of result) {
+            messageList.removeByIds([message.id]);
+            if (message.role === 'system') {
+              const systemText =
+                (message.content.content as string | undefined) ??
+                message.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                '';
+              messageList.addSystem(systemText);
+            } else {
+              messageList.add(message, check.getSource(message) || 'response');
+            }
+          }
+        }
+
+        processorSpan?.end({
+          output: messageList.get.all.db(),
+          attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+        });
+      } catch (error) {
+        // Stop recording on error
+        messageList.stopRecording();
+
+        if (error instanceof TripWire) {
+          processorSpan?.end({
+            metadata: {
+              blocked: true,
+              reason: error.message,
+              retry: error.options?.retry,
+              metadata: error.options?.metadata,
+            },
+          });
+          throw error;
+        }
+        processorSpan?.error({ error: error as Error, endSpan: true });
+        this.logger.error(`[Agent:${this.agentName}] - Output step processor ${processor.id} failed:`, error);
+        throw error;
+      }
+    }
+
+    return messageList;
+  }
+
+  static applyMessagesToMessageList(
     messages: MastraDBMessage[],
     messageList: MessageList,
     idsBeforeProcessing: string[],
@@ -693,7 +1174,7 @@ export class ProcessorRunner {
     }
   }
 
-  private async validateAndFormatProcessInputStepResult(
+  static async validateAndFormatProcessInputStepResult(
     result: ProcessInputStepResult | Awaited<ProcessorMessageResult> | undefined | void,
     {
       messageList,

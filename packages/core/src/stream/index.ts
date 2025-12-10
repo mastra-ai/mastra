@@ -7,6 +7,7 @@ export type {
   AgentChunkType,
   StepFinishPayload,
   StepStartPayload,
+  MastraFinishReason,
   ProviderMetadata,
 } from './types';
 export { ChunkFrom } from './types';

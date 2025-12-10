@@ -50,6 +50,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         part: processed,
         blocked,
         reason,
+        tripwireOptions,
+        processorId,
       } = await processorRunner.processPart(
         chunk,
         rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
@@ -63,7 +65,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         rest.controller.enqueue({
           type: 'tripwire',
           payload: {
-            tripwireReason: reason || 'Output processor blocked content',
+            reason: reason || 'Output processor blocked content',
+            retry: tripwireOptions?.retry,
+            metadata: tripwireOptions?.metadata,
+            processorId,
           },
         } as ChunkType<OUTPUT>);
         return;
@@ -133,7 +138,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           rest.messageList.add(msg, 'response');
         }
 
-        initialResult.stepResult.isContinued = false;
+        // Only set isContinued = false if this is NOT a retry scenario
+        // When stepResult.reason is 'retry', the llm-execution-step has already set
+        // isContinued = true and we should preserve that to allow the agentic loop to continue
+        if (initialResult.stepResult.reason !== 'retry') {
+          initialResult.stepResult.isContinued = false;
+        }
         return bail(initialResult);
       }
 

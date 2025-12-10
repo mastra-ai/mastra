@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import EventEmitter from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
-import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
+import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage } from '../agent';
+import { MessageList } from '../agent/message-list';
+import { TripWire } from '../agent/trip-wire';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -13,9 +16,14 @@ import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import { SpanType, getOrCreateSpan } from '../observability';
+import { ProcessorRunner } from '../processors';
+import type { Processor } from '../processors';
+import { ProcessorStepSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
+import type { ProcessorStepOutput } from '../processors/step-schema';
 import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
 import type { OutputSchema } from '../stream/base/schema';
 import { WorkflowRunOutput } from '../stream/RunOutput';
+import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
@@ -43,6 +51,7 @@ import type {
   WorkflowEngineType,
   WorkflowOptions,
   WorkflowResult,
+  WorkflowType,
   WorkflowRunState,
   WorkflowRunStatus,
   WorkflowState,
@@ -150,6 +159,19 @@ export function createStep<
   tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
 
+// Processor overload - wraps a Processor as a workflow step
+export function createStep<TProcessorId extends string>(
+  processor: Processor<TProcessorId>,
+): Step<
+  `processor:${TProcessorId}`,
+  any,
+  typeof ProcessorStepSchema,
+  typeof ProcessorStepOutputSchema,
+  any,
+  any,
+  DefaultEngineType
+>;
+
 export function createStep<
   TStepId extends string,
   TState extends z.ZodObject<any>,
@@ -161,7 +183,8 @@ export function createStep<
   params:
     | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any>
-    | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
+    | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>
+    | Processor,
   agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
   if (params instanceof Agent) {
@@ -249,12 +272,18 @@ export function createStep<
           stream = modelOutput.fullStream;
         }
 
+        let tripwireChunk: any = null;
+
         if (streamFormat === 'legacy') {
           await emitter.emit('watch', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
           });
           for await (const chunk of stream) {
+            if (chunk.type === 'tripwire') {
+              tripwireChunk = chunk;
+              break;
+            }
             if (chunk.type === 'text-delta') {
               await emitter.emit('watch', {
                 type: 'tool-call-delta',
@@ -270,7 +299,23 @@ export function createStep<
         } else {
           for await (const chunk of stream) {
             await writer.write(chunk as any);
+            if (chunk.type === 'tripwire') {
+              tripwireChunk = chunk;
+              break;
+            }
           }
+        }
+
+        // If a tripwire was detected, throw TripWire to abort the workflow step
+        if (tripwireChunk) {
+          throw new TripWire(
+            tripwireChunk.payload?.reason || 'Agent tripwire triggered',
+            {
+              retry: tripwireChunk.payload?.retry,
+              metadata: tripwireChunk.payload?.metadata,
+            },
+            tripwireChunk.payload?.processorId,
+          );
         }
 
         if (abortSignal.aborted) {
@@ -336,6 +381,411 @@ export function createStep<
     };
   }
 
+  // Handle Processor - wrap it as a workflow step
+  if (isProcessor(params)) {
+    const processor = params;
+    return {
+      // @ts-ignore - processor overload has specific id type
+      id: `processor:${processor.id}`,
+      description: processor.name ?? `Processor ${processor.id}`,
+      // @ts-ignore - Use discriminated union for input (better UI experience)
+      inputSchema: ProcessorStepSchema,
+      // @ts-ignore - Use flexible schema for output (allows any phase combination)
+      outputSchema: ProcessorStepOutputSchema,
+      execute: async ({
+        inputData,
+        requestContext,
+      }: {
+        inputData: z.infer<typeof ProcessorStepSchema>;
+        requestContext: RequestContext;
+      }): Promise<ProcessorStepOutput> => {
+        // Cast to output type for easier property access - the discriminated union
+        // ensures type safety at the schema level, but inside the execute function
+        // we need access to all possible properties
+        const input = inputData as ProcessorStepOutput;
+        const {
+          phase,
+          messages,
+          messageList,
+          stepNumber,
+          systemMessages,
+          part,
+          streamParts,
+          state,
+          finishReason,
+          toolCalls,
+          text,
+          retryCount,
+          // inputStep phase fields for model/tools configuration
+          model,
+          tools,
+          toolChoice,
+          activeTools,
+          providerOptions,
+          modelSettings,
+          structuredOutput,
+          steps,
+        } = input;
+
+        // Create a minimal abort function that throws TripWire
+        const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
+          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        };
+
+        // Base context for all processor methods - includes requestContext for memory processors
+        const baseContext = {
+          abort,
+          retryCount: retryCount ?? 0,
+          requestContext,
+        };
+
+        // Pass-through data that should flow to the next processor in a chain
+        // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
+        const passThrough = {
+          phase,
+          // Auto-create MessageList from messages if not provided
+          // This enables running processor workflows from the UI where messageList can't be serialized
+          messageList:
+            messageList ??
+            (Array.isArray(messages)
+              ? new MessageList()
+                  .add(messages as MastraDBMessage[], 'input')
+                  .addSystem((systemMessages ?? []) as CoreMessage[])
+              : undefined),
+          stepNumber,
+          systemMessages,
+          streamParts,
+          state,
+          finishReason,
+          toolCalls,
+          text,
+          retryCount,
+          // inputStep phase fields for model/tools configuration
+          model,
+          tools,
+          toolChoice,
+          activeTools,
+          providerOptions,
+          modelSettings,
+          structuredOutput,
+          steps,
+        };
+
+        // TripWire errors are NOT caught here - they bubble up to halt the workflow
+        // The workflow engine handles TripWire errors and returns a 'tripwire' status
+        switch (phase) {
+          case 'input': {
+            if (processor.processInput) {
+              if (!passThrough.messageList) {
+                throw new MastraError({
+                  category: ErrorCategory.USER,
+                  domain: ErrorDomain.MASTRA_WORKFLOW,
+                  id: 'PROCESSOR_MISSING_MESSAGE_LIST',
+                  text: `Processor ${processor.id} requires messageList or messages for processInput phase`,
+                });
+              }
+
+              // Create source checker before processing to preserve message sources
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = passThrough.messageList.makeMessageSourceChecker();
+
+              const result = await processor.processInput({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+              });
+
+              // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
+              const applyMessages = (msgs: MastraDBMessage[]) => {
+                const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
+                if (deletedIds.length) {
+                  passThrough.messageList!.removeByIds(deletedIds);
+                }
+                for (const message of msgs) {
+                  passThrough.messageList!.removeByIds([message.id]);
+                  if (message.role === 'system') {
+                    const systemText =
+                      (message.content?.content as string | undefined) ??
+                      message.content?.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList!.addSystem(systemText);
+                  } else {
+                    passThrough.messageList!.add(message, check.getSource(message) || 'input');
+                  }
+                }
+              };
+
+              if (result instanceof MessageList) {
+                // Validate same instance
+                if (result !== passThrough.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
+              } else if (Array.isArray(result)) {
+                // Processor returned an array of messages
+                applyMessages(result as MastraDBMessage[]);
+                return { ...passThrough, messages: result };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                // Processor returned { messages, systemMessages }
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                applyMessages(typedResult.messages);
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                return {
+                  ...passThrough,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
+                };
+              }
+              return { ...passThrough, messages };
+            }
+            return { ...passThrough, messages };
+          }
+
+          case 'inputStep': {
+            if (processor.processInputStep) {
+              if (!passThrough.messageList) {
+                throw new MastraError({
+                  category: ErrorCategory.USER,
+                  domain: ErrorDomain.MASTRA_WORKFLOW,
+                  id: 'PROCESSOR_MISSING_MESSAGE_LIST',
+                  text: `Processor ${processor.id} requires messageList or messages for processInputStep phase`,
+                });
+              }
+
+              // Create source checker before processing to preserve message sources
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = passThrough.messageList.makeMessageSourceChecker();
+
+              const result = await processor.processInputStep({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList,
+                stepNumber: stepNumber ?? 0,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+                // Pass model/tools configuration fields - types match ProcessInputStepArgs
+                model: model!,
+                tools,
+                toolChoice,
+                activeTools,
+                providerOptions,
+                modelSettings,
+                structuredOutput,
+                steps: steps ?? [],
+              });
+
+              const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
+                messageList: passThrough.messageList,
+                processor,
+                stepNumber: stepNumber ?? 0,
+              });
+
+              if (validatedResult.messages) {
+                ProcessorRunner.applyMessagesToMessageList(
+                  validatedResult.messages,
+                  passThrough.messageList,
+                  idsBeforeProcessing,
+                  check,
+                );
+              }
+
+              if (validatedResult.systemMessages) {
+                passThrough.messageList!.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
+              }
+
+              return { ...passThrough, ...validatedResult };
+            }
+            return { ...passThrough, messages };
+          }
+
+          case 'outputStream': {
+            if (processor.processOutputStream) {
+              const result = await processor.processOutputStream({
+                ...baseContext,
+                part: part as ChunkType,
+                streamParts: (streamParts ?? []) as ChunkType[],
+                state: state ?? {},
+                messageList: passThrough.messageList, // Optional for stream processing
+              });
+              return { ...passThrough, part: result };
+            }
+            return { ...passThrough, part };
+          }
+
+          case 'outputResult': {
+            if (processor.processOutputResult) {
+              if (!passThrough.messageList) {
+                throw new MastraError({
+                  category: ErrorCategory.USER,
+                  domain: ErrorDomain.MASTRA_WORKFLOW,
+                  id: 'PROCESSOR_MISSING_MESSAGE_LIST',
+                  text: `Processor ${processor.id} requires messageList or messages for processOutputResult phase`,
+                });
+              }
+
+              // Create source checker before processing to preserve message sources
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = passThrough.messageList.makeMessageSourceChecker();
+
+              const result = await processor.processOutputResult({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList,
+              });
+
+              // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
+              const applyMessages = (msgs: MastraDBMessage[]) => {
+                const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
+                if (deletedIds.length) {
+                  passThrough.messageList!.removeByIds(deletedIds);
+                }
+                for (const message of msgs) {
+                  passThrough.messageList!.removeByIds([message.id]);
+                  if (message.role === 'system') {
+                    const systemText =
+                      (message.content?.content as string | undefined) ??
+                      message.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList!.addSystem(systemText);
+                  } else {
+                    passThrough.messageList!.add(message, check.getSource(message) || 'response');
+                  }
+                }
+              };
+
+              if (result instanceof MessageList) {
+                // Validate same instance
+                if (result !== passThrough.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
+              } else if (Array.isArray(result)) {
+                // Processor returned an array of messages
+                applyMessages(result as MastraDBMessage[]);
+                return { ...passThrough, messages: result };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                // Processor returned { messages, systemMessages }
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                applyMessages(typedResult.messages);
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                return {
+                  ...passThrough,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
+                };
+              }
+              return { ...passThrough, messages };
+            }
+            return { ...passThrough, messages };
+          }
+
+          case 'outputStep': {
+            if (processor.processOutputStep) {
+              if (!passThrough.messageList) {
+                throw new MastraError({
+                  category: ErrorCategory.USER,
+                  domain: ErrorDomain.MASTRA_WORKFLOW,
+                  id: 'PROCESSOR_MISSING_MESSAGE_LIST',
+                  text: `Processor ${processor.id} requires messageList or messages for processOutputStep phase`,
+                });
+              }
+
+              // Create source checker before processing to preserve message sources
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = passThrough.messageList.makeMessageSourceChecker();
+
+              const result = await processor.processOutputStep({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList,
+                stepNumber: stepNumber ?? 0,
+                finishReason,
+                toolCalls: toolCalls as any,
+                text,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+              });
+
+              // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
+              const applyMessages = (msgs: MastraDBMessage[]) => {
+                const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
+                if (deletedIds.length) {
+                  passThrough.messageList!.removeByIds(deletedIds);
+                }
+                for (const message of msgs) {
+                  passThrough.messageList!.removeByIds([message.id]);
+                  if (message.role === 'system') {
+                    const systemText =
+                      (message.content?.content as string | undefined) ??
+                      message.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList!.addSystem(systemText);
+                  } else {
+                    passThrough.messageList!.add(message, check.getSource(message) || 'response');
+                  }
+                }
+              };
+
+              if (result instanceof MessageList) {
+                // Validate same instance
+                if (result !== passThrough.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
+              } else if (Array.isArray(result)) {
+                // Processor returned an array of messages
+                applyMessages(result as MastraDBMessage[]);
+                return { ...passThrough, messages: result };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                // Processor returned { messages, systemMessages }
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                applyMessages(typedResult.messages);
+                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                return {
+                  ...passThrough,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
+                };
+              }
+              return { ...passThrough, messages };
+            }
+            return { ...passThrough, messages };
+          }
+
+          default:
+            return { ...passThrough, messages };
+        }
+      },
+      component: 'PROCESSOR',
+    };
+  }
+
   return {
     id: params.id,
     description: params.description,
@@ -367,6 +817,26 @@ export function cloneStep<TStepId extends string>(
     scorers: step.scorers,
     component: step.component,
   };
+}
+
+/**
+ * Type guard to check if an object is a Processor.
+ * A Processor must have an 'id' property and at least one processor method.
+ */
+export function isProcessor(obj: unknown): obj is Processor {
+  return (
+    obj !== null &&
+    typeof obj === 'object' &&
+    'id' in obj &&
+    typeof (obj as any).id === 'string' &&
+    !(obj instanceof Agent) &&
+    !(obj instanceof Tool) &&
+    (typeof (obj as any).processInput === 'function' ||
+      typeof (obj as any).processInputStep === 'function' ||
+      typeof (obj as any).processOutputStream === 'function' ||
+      typeof (obj as any).processOutputResult === 'function' ||
+      typeof (obj as any).processOutputStep === 'function')
+  );
 }
 
 export function createWorkflow<
@@ -448,6 +918,8 @@ export class Workflow<
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
+  /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
+  public type: WorkflowType = 'default';
   #nestedWorkflowInput?: z.infer<TInput>;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -476,6 +948,7 @@ export class Workflow<
     retryConfig,
     steps,
     options = {},
+    type,
   }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -490,6 +963,7 @@ export class Workflow<
     this.#mastra = mastra;
     this.steps = {};
     this.stepDefs = steps;
+    this.type = type ?? 'default';
     this.#options = {
       validateInputs: options.validateInputs ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
