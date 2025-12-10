@@ -92,7 +92,7 @@ describe('externals: true', () => {
           gracefulCancel: true,
           env: {
             OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-            MASTRA_PORT: port.toString(),
+            PORT: port.toString(),
           },
         });
 
@@ -108,7 +108,7 @@ describe('externals: true', () => {
         activeProcesses.push({ controller, proc });
 
         // Poll the server until it's ready
-        const maxAttempts = 30;
+        const maxAttempts = 10;
         const delayMs = 1000;
         let serverStarted = false;
 
