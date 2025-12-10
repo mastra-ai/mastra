@@ -197,7 +197,7 @@ function App() {
 export default function AppWrapper() {
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider>
+      <StudioConfigProvider endpoint={`http://localhost:${window.MASTRA_SERVER_PORT || 4111}`}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>
