@@ -9,13 +9,8 @@ import * as path from 'node:path';
 import { rollup, type OutputChunk, type OutputAsset, type Plugin } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
 import { aliasHono } from '../plugins/hono-alias';
-import {
-  getCompiledDepCachePath,
-  getPackageRootPath,
-  isDependencyPartOfPackage,
-  rollupSafeName,
-  slash,
-} from '../utils';
+import { getCompiledDepCachePath, isDependencyPartOfPackage, rollupSafeName, slash } from '../utils';
+import { getPackageRootPath } from '../package-info';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
