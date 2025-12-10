@@ -2692,6 +2692,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       saveQueueManager,
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
+      toolCallConcurrency: options.toolCallConcurrency,
       resumeContext,
       agentId: this.id,
       agentName: this.name,

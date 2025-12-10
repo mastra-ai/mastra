@@ -35,12 +35,35 @@ export function createAgenticExecutionWorkflow<
   );
 
   // Sequential execution may be required for tool calls to avoid race conditions, otherwise concurrency is configurable
-  const toolCallConcurrency = rest?.toolCallConcurrency && rest.toolCallConcurrency > 0 ? rest.toolCallConcurrency : 10;
+  let toolCallConcurrency = 10;
+  if (rest?.toolCallConcurrency) {
+    toolCallConcurrency = rest.toolCallConcurrency > 0 ? rest.toolCallConcurrency : 10;
+  }
 
-  const sequentialExecutionRequired =
-    rest.requireToolApproval ||
-    (rest.tools &&
-      Object.values(rest.tools).some((tool: any) => 'suspendSchema' in tool || (tool as any)?.requireApproval));
+  // Check for sequential execution requirements:
+  // 1. Global requireToolApproval flag
+  // 2. Any tool has suspendSchema
+  // 3. Any tool has requireApproval flag
+  const hasRequireToolApproval = !!rest.requireToolApproval;
+
+  let hasSuspendSchema = false;
+  let hasRequireApproval = false;
+
+  if (rest.tools) {
+    for (const tool of Object.values(rest.tools)) {
+      if ((tool as any)?.hasSuspendSchema) {
+        hasSuspendSchema = true;
+      }
+
+      if ((tool as any)?.requireApproval) {
+        hasRequireApproval = true;
+      }
+
+      if (hasSuspendSchema || hasRequireApproval) break;
+    }
+  }
+
+  const sequentialExecutionRequired = hasRequireToolApproval || hasSuspendSchema || hasRequireApproval;
 
   return createWorkflow({
     id: 'executionWorkflow',
