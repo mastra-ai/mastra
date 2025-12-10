@@ -408,6 +408,11 @@ If you think your configuration is valid, please open an issue.`);
         continue;
       }
 
+      // Skip relative imports - they're local chunks, not external packages
+      if (i.startsWith('.') || i.startsWith('/')) {
+        continue;
+      }
+
       // Do not include workspace packages
       if (relativeWorkspaceFolderPaths.some(workspacePath => i.startsWith(workspacePath))) {
         continue;
