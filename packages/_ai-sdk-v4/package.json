@@ -39,7 +39,7 @@
     "@ai-sdk/provider": "^1.1.3",
     "@ai-sdk/provider-utils": "^2.2.8",
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.53.1",
+    "@microsoft/api-extractor": "^7.55.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",

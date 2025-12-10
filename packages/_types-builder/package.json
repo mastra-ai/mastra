@@ -10,6 +10,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@microsoft/api-extractor": "^7.55.2",
     "globby": "^14.1.0",
     "typescript": "^5.8.3"
   },
