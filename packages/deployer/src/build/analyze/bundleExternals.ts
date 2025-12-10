@@ -52,7 +52,6 @@ export function createVirtualDependencies(
   optimizedDependencyEntries: Map<string, VirtualDependency>;
   fileNameToDependencyMap: Map<string, string>;
 } {
-  // TODO: Handle workspace deps for externalsPreset: true
   const { isDev = false, externalsPreset = false } = bundlerOptions || {};
   const fileNameToDependencyMap = new Map<string, string>();
   const optimizedDependencyEntries = new Map<string, VirtualDependency>();
@@ -297,6 +296,16 @@ async function buildExternalDependencies(
 
   const noBundling = bundlerOptions.isDev || bundlerOptions.externalsPreset;
 
+  const plugins = await getInputPlugins(virtualDependencies, {
+    transpilePackages: packagesToTranspile,
+    workspaceMap,
+    bundlerOptions: {
+      noBundling,
+    },
+    rootDir,
+    externals,
+  });
+
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: Array.from(virtualDependencies.entries()).reduce(
@@ -308,15 +317,7 @@ async function buildExternalDependencies(
     ),
     external: externals,
     treeshake: noBundling ? false : 'safest',
-    plugins: getInputPlugins(virtualDependencies, {
-      transpilePackages: packagesToTranspile,
-      workspaceMap,
-      bundlerOptions: {
-        noBundling,
-      },
-      rootDir,
-      externals,
-    }),
+    plugins,
   });
 
   const outputDirRelative = prepareEntryFileName(outputDir, rootDir);
@@ -333,8 +334,8 @@ async function buildExternalDependencies(
      */
     chunkFileNames: chunkInfo => {
       /**
-       * This whole bunch of logic directly below is for the edge case shown in the e2e-tests/monorepo with "tinyrainbow" package. It's used in multiple places in the package and as such Rollup creates a shared chunk for it. During 'mastra dev', we don't want that chunk to show up in the '.mastra/output' folder (outputDirRelative) but inside <pkg>/node_modules/.cache instead.
-       * We only care about this during 'mastra dev'!
+       * This whole bunch of logic directly below is for the edge case shown in the e2e-tests/monorepo with "tinyrainbow" package. It's used in multiple places in the package and as such Rollup creates a shared chunk for it. During 'mastra dev' / with externals: true, we don't want that chunk to show up in the '.mastra/output' folder (outputDirRelative) but inside <pkg>/node_modules/.cache instead.
+       * We only care about this for the "noBundling" case!
        */
       if (noBundling) {
         const importedFromPackages = new Set<string>();
