@@ -110,7 +110,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         fallbackMessage: 'Unknown step execution error',
       });
       params.stepSpan?.error({
-        error: e,
+        error: errorInstance,
         attributes: { status: 'failed' },
       });
       return {

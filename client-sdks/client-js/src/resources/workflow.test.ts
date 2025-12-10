@@ -158,8 +158,6 @@ describe('Workflow error deserialization', () => {
     vi.restoreAllMocks();
   });
 
-  const createJsonResponse = (data: any) => ({ ok: true, json: async () => data });
-
   it('deserializes failed workflow error in startAsync', async () => {
     const serializedError = {
       name: 'StepError',

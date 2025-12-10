@@ -3082,6 +3082,14 @@ describe('Workflow', () => {
         expect(error.cause.cause.code).toBe('ECONNREFUSED');
         expect(error.cause.cause.host).toBe('localhost');
 
+        // Check workflow-level error also preserves cause chain
+        expect(result?.status).toBe('failed');
+        expect(result?.error).toBeDefined();
+        expect(result?.error?.message).toBe('Failed to fetch user data');
+        expect((result?.error as any)?.statusCode).toBe(500);
+        expect((result?.error as any)?.cause?.message).toBe('Query execution failed');
+        expect((result?.error as any)?.cause?.cause?.message).toBe('Database connection failed');
+
         await mastra.stopEventEngine();
       });
 
