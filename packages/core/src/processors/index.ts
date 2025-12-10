@@ -1,6 +1,6 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { CallSettings, StepResult, ToolChoice, ToolSet } from 'ai-v5';
+import type { CallSettings, StepResult, ToolChoice } from 'ai-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
