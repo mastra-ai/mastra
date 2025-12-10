@@ -7178,7 +7178,7 @@ The OpenAPI and Swagger endpoints are disabled in production by default. To enab
 
 ## Configuration
 
-### Port
+### Port and Host
 
 By default, the development server runs at http://localhost:4111. You can change the `host` and `port` in the Mastra server configuration:
 
@@ -7192,6 +7192,29 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+### Sub-path Hosting
+
+You can host the Mastra Studio on a sub-path of your existing application using the `studioBase` configuration:
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    studioBase: "/my-mastra-studio",
+  },
+});
+```
+
+This is particularly useful when:
+- Integrating with existing applications
+- Using authentication tools like Cloudflare Zero Trust that benefit from shared domains
+- Managing multiple services under a single domain
+
+**Example URLs:**
+- Default: `http://localhost:4111/` (studio at root)
+- With `studioBase`: `http://localhost:4111/my-mastra-studio/` (studio at sub-path)
 
 ### Local HTTPS
 
@@ -14762,19 +14785,22 @@ adding additional server behaviour.
 
 ## Server configuration
 
-You can configure server `port` and `timeout` in the Mastra instance.
+You can configure server `port`, `host`, `studioBase`, and `timeout` in the Mastra instance.
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     port: 3000, // Defaults to 4111
+    host: "0.0.0.0", // Defaults to 'localhost'
+    studioBase: "/my-mastra-studio", // Sub-path for the studio (optional)
     timeout: 10000, // Defaults to 3 * 60 * 1000 (3 minutes)
   },
 });
 ```
+
+The `studioBase` option allows you to host Mastra Studio on a sub-path of your existing application. For example, with `studioBase: "/my-mastra-studio"`, the studio will be available at `http://your-host:port/my-mastra-studio` instead of the root.
 
 ## TypeScript configuration
 
@@ -14803,11 +14829,10 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
 
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     cors: {
       origin: ["https://example.com"], // Allow specific origins or '*' for all
@@ -62074,7 +62099,7 @@ This method does not accept any parameters.
       name: "server",
       type: "ServerConfig | undefined",
       description:
-        "The configured server configuration including port, timeout, API routes, middleware, CORS settings, and build options, or undefined if no server has been configured.",
+        "The configured server configuration including port, host, studioBase, timeout, API routes, middleware, CORS settings, and build options, or undefined if no server has been configured.",
     },
   ]}
 />
