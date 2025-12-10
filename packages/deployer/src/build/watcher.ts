@@ -15,7 +15,7 @@ export async function getInputOptions(
   entryFile: string,
   platform: 'node' | 'browser',
   env?: Record<string, string>,
-  { sourcemap = false, externalsPreset = false }: { sourcemap?: boolean; externalsPreset?: boolean } = {},
+  { sourcemap = false }: { sourcemap?: boolean } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
@@ -50,7 +50,7 @@ export async function getInputOptions(
     },
     platform,
     env,
-    { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset },
+    { sourcemap, isDev: true, workspaceRoot, projectRoot },
   );
 
   if (Array.isArray(inputOptions.plugins)) {
