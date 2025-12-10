@@ -1,20 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
-import type { MessageList } from '../agent/message-list';
+import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { Processor } from '../processors';
-import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
+import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
-import { createStep, isProcessor } from './workflow';
+import { createStep, createWorkflow, isProcessor } from './workflow';
 
 // Helper to create a mock MessageList
-function createMockMessageList(messages: any[] = []): MessageList {
+function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
   const mockMessageList = {
     get: {
       all: { db: () => messages },
-      input: { db: () => messages.filter((m: any) => m.role === 'user') },
-      response: { db: () => messages.filter((m: any) => m.role === 'assistant') },
+      input: { db: () => messages.filter(m => m.role === 'user') },
+      response: { db: () => messages.filter(m => m.role === 'assistant') },
     },
     add: vi.fn(),
     addSystem: vi.fn(),
@@ -198,13 +198,13 @@ describe('createStep with Processor', () => {
 
     const step = createStep(processor);
 
-    expect((step as any).component).toBe('PROCESSOR');
+    expect(step.component).toBe('PROCESSOR');
   });
 
   describe('execute function', () => {
     it('should call processInput when phase is input', async () => {
-      const processInputMock = async ({ messages }: any) => {
-        return messages.map((m: any) => ({ ...m, modified: true }));
+      const processInputMock = async ({ messages }) => {
+        return messages.map(m => ({ ...m, modified: true }));
       };
 
       const processor: Processor = {
@@ -231,8 +231,8 @@ describe('createStep with Processor', () => {
     });
 
     it('should call processInputStep when phase is inputStep', async () => {
-      const processInputStepMock = async ({ messages, stepNumber }: any) => {
-        return messages.map((m: any) => ({ ...m, step: stepNumber }));
+      const processInputStepMock = async ({ messages, stepNumber }) => {
+        return messages.map(m => ({ ...m, step: stepNumber }));
       };
 
       const processor: Processor = {
@@ -260,7 +260,7 @@ describe('createStep with Processor', () => {
     });
 
     it('should call processOutputStream when phase is outputStream (messageList optional)', async () => {
-      const processOutputStreamMock = async ({ part }: any) => {
+      const processOutputStreamMock = async ({ part }) => {
         return { ...part, processed: true };
       };
 
@@ -289,8 +289,8 @@ describe('createStep with Processor', () => {
     });
 
     it('should call processOutputResult when phase is outputResult', async () => {
-      const processOutputResultMock = async ({ messages }: any) => {
-        return messages.filter((m: any) => m.role !== 'system');
+      const processOutputResultMock = async ({ messages }) => {
+        return messages.filter(m => m.role !== 'system');
       };
 
       const processor: Processor = {
@@ -323,8 +323,8 @@ describe('createStep with Processor', () => {
     });
 
     it('should call processOutputStep when phase is outputStep', async () => {
-      const processOutputStepMock = async ({ messages, text, finishReason }: any) => {
-        return messages.map((m: any) => ({
+      const processOutputStepMock = async ({ messages, text = '', finishReason = 'stop' }) => {
+        return messages.map(m => ({
           ...m,
           metadata: { text, finishReason },
         }));
@@ -455,7 +455,7 @@ describe('createStep with Processor', () => {
       };
 
       // Should NOT throw - messageList is auto-created from messages
-      const result = (await step.execute({ inputData } as any)) as any;
+      const result = await step.execute({ inputData } as any);
       expect(result.messages).toHaveLength(1);
     });
 
@@ -494,7 +494,7 @@ describe('createStep with Processor', () => {
       };
 
       // Should NOT throw - messageList is auto-created from messages
-      const result = (await step.execute({ inputData } as any)) as any;
+      const result = await step.execute({ inputData } as any);
       expect(result.messages).toHaveLength(1);
     });
   });
@@ -505,6 +505,7 @@ describe('createStep with Processor', () => {
         id: 'blocking-processor',
         processInput: async ({ abort }) => {
           abort('Content violates policy');
+          return [];
         },
       };
 
@@ -526,6 +527,7 @@ describe('createStep with Processor', () => {
         id: 'retry-processor',
         processOutputStep: async ({ abort }) => {
           abort('Response needs improvement', { retry: true });
+          return [];
         },
       };
 
@@ -560,6 +562,7 @@ describe('createStep with Processor', () => {
               severity: 'high',
             },
           });
+          return [];
         },
       };
 
@@ -567,7 +570,7 @@ describe('createStep with Processor', () => {
       const messageList = createMockMessageList();
       const inputData = {
         phase: 'input' as const,
-        messages: [{ id: '1', content: 'my email is test@test.com' }],
+        messages: [{ id: '1', role: 'user' as const, createdAt: new Date(), content: { format: 2 as const, parts: [{ type: 'text', text: 'my email is test@test.com' }] } }],
         messageList,
       };
 
@@ -594,6 +597,7 @@ describe('createStep with Processor', () => {
             retry: true,
             metadata: { tone: 'aggressive', score: 0.9 },
           });
+          return [];
         },
       };
 
@@ -641,14 +645,12 @@ describe('createStep with Processor', () => {
 
 describe('Processor Step in Workflow - TripWire handling', () => {
   it('should return tripwire status when processor in workflow calls abort', async () => {
-    const { createWorkflow } = await import('./workflow');
-    const { ProcessorStepSchema } = await import('../processors/step-schema');
 
     const tripwireProcessor: Processor = {
       id: 'blocking-processor',
       processInput: async ({ messages, abort }) => {
         // Check for blocked content
-        const hasBlockedContent = messages.some((msg: any) => JSON.stringify(msg.content).includes('blocked'));
+        const hasBlockedContent = messages.some(msg => JSON.stringify(msg.content).includes('blocked'));
         if (hasBlockedContent) {
           abort('Content blocked by policy', { retry: true, metadata: { severity: 'high' } });
         }
@@ -694,16 +696,13 @@ describe('Processor Step in Workflow - TripWire handling', () => {
     // Workflow should return tripwire status, not failed
     expect(result.status).toBe('tripwire');
     if (result.status === 'tripwire') {
-      expect((result as any).tripwire?.reason).toBe('Content blocked by policy');
-      expect((result as any).tripwire?.retry).toBe(true);
-      expect((result as any).tripwire?.metadata).toEqual({ severity: 'high' });
+      expect(result.tripwire?.reason).toBe('Content blocked by policy');
+      expect(result.tripwire?.retry).toBe(true);
+      expect(result.tripwire?.metadata).toEqual({ severity: 'high' });
     }
   });
 
   it('should return tripwire status when processor in parallel workflow calls abort', async () => {
-    const { createWorkflow } = await import('./workflow');
-    const { ProcessorStepSchema } = await import('../processors/step-schema');
-
     const passingProcessor: Processor = {
       id: 'passing-processor',
       processInput: async ({ messages }) => messages,
@@ -712,7 +711,7 @@ describe('Processor Step in Workflow - TripWire handling', () => {
     const tripwireProcessor: Processor = {
       id: 'tripwire-processor',
       processInput: async ({ messages, abort }) => {
-        const hasBlockedContent = messages.some((msg: any) => JSON.stringify(msg.content).includes('blocked'));
+        const hasBlockedContent = messages.some(msg => JSON.stringify(msg.content).includes('blocked'));
         if (hasBlockedContent) {
           abort('Parallel processor blocked content', { retry: false, metadata: { source: 'parallel' } });
         }
@@ -759,9 +758,9 @@ describe('Processor Step in Workflow - TripWire handling', () => {
     // Workflow should return tripwire status
     expect(result.status).toBe('tripwire');
     if (result.status === 'tripwire') {
-      expect((result as any).tripwire?.reason).toBe('Parallel processor blocked content');
-      expect((result as any).tripwire?.retry).toBe(false);
-      expect((result as any).tripwire?.metadata).toEqual({ source: 'parallel' });
+      expect(result.tripwire?.reason).toBe('Parallel processor blocked content');
+      expect(result.tripwire?.retry).toBe(false);
+      expect(result.tripwire?.metadata).toEqual({ source: 'parallel' });
     }
   });
 });

@@ -1,6 +1,12 @@
+import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { CallSettings, StepResult, ToolChoice, ToolSet } from 'ai-v5';
 import { z } from 'zod';
 
 import type { MastraMessageContentV2, MessageList } from '../agent/message-list';
+import type { ModelRouterModelId } from '../llm/model';
+import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
+import type { OutputSchema } from '../stream';
+import type { StructuredOutputOptions } from './processors';
 
 // =========================================================================
 // Message Part Schemas (for documentation and UI)
@@ -315,8 +321,25 @@ export const ProcessorInputPhaseSchema = z.object({
 });
 
 /**
+ * Model type for processor step schema.
+ * In workflows, model configs may not yet be resolved, so we accept both resolved and unresolved types.
+ */
+export type ProcessorStepModelConfig =
+  | LanguageModelV2
+  | ModelRouterModelId
+  | OpenAICompatibleConfig
+  | MastraLanguageModelV2;
+
+/**
+ * Tools type for processor step schema.
+ * Accepts both AI SDK ToolSet and generic Record for flexibility.
+ */
+export type ProcessorStepToolsConfig = ToolSet | Record<string, unknown>;
+
+/**
  * Schema for 'inputStep' phase - processInputStep
- * Processes input messages at each step of the agentic loop
+ * Processes input messages at each step of the agentic loop.
+ * Includes model/tools configuration that can be modified per-step.
  */
 export const ProcessorInputStepPhaseSchema = z.object({
   phase: z.literal('inputStep'),
@@ -325,6 +348,15 @@ export const ProcessorInputStepPhaseSchema = z.object({
   stepNumber: z.number().describe('The current step number (0-indexed)'),
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
+  // Model and tools configuration (can be modified by processors)
+  model: z.custom<ProcessorStepModelConfig>().optional().describe('Current model for this step'),
+  tools: z.custom<ProcessorStepToolsConfig>().optional().describe('Current tools available for this step'),
+  toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Current tool choice setting'),
+  activeTools: z.array(z.string()).optional().describe('Currently active tools'),
+  providerOptions: z.custom<SharedV2ProviderOptions>().optional().describe('Provider-specific options'),
+  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional().describe('Model settings (temperature, etc.)'),
+  structuredOutput: z.custom<StructuredOutputOptions<OutputSchema>>().optional().describe('Structured output configuration'),
+  steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
 });
 
 /**
@@ -421,6 +453,16 @@ export const ProcessorStepOutputSchema = z.object({
 
   // Retry count
   retryCount: z.number().optional(),
+
+  // Model and tools configuration (for inputStep phase)
+  model: z.custom<ProcessorStepModelConfig>().optional(),
+  tools: z.custom<ProcessorStepToolsConfig>().optional(),
+  toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
+  activeTools: z.array(z.string()).optional(),
+  providerOptions: z.custom<SharedV2ProviderOptions>().optional(),
+  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional(),
+  structuredOutput: z.custom<StructuredOutputOptions<OutputSchema>>().optional(),
+  steps: z.custom<Array<StepResult<ToolSet>>>().optional(),
 });
 
 /**

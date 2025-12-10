@@ -16,7 +16,12 @@ import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import { SpanType, getOrCreateSpan } from '../observability';
-import type { Processor } from '../processors';
+import type {
+  Processor,
+  ProcessInputStepResult,
+  ProcessInputStepModelConfig,
+  ProcessInputStepToolsConfig,
+} from '../processors';
 import { ProcessorStepSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
 import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
@@ -415,6 +420,15 @@ export function createStep<
           toolCalls,
           text,
           retryCount,
+          // inputStep phase fields for model/tools configuration
+          model,
+          tools,
+          toolChoice,
+          activeTools,
+          providerOptions,
+          modelSettings,
+          structuredOutput,
+          steps,
         } = input;
 
         // Create a minimal abort function that throws TripWire
@@ -450,6 +464,15 @@ export function createStep<
           toolCalls,
           text,
           retryCount,
+          // inputStep phase fields for model/tools configuration
+          model,
+          tools,
+          toolChoice,
+          activeTools,
+          providerOptions,
+          modelSettings,
+          structuredOutput,
+          steps,
         };
 
         // TripWire errors are NOT caught here - they bubble up to halt the workflow
@@ -465,6 +488,11 @@ export function createStep<
                   text: `Processor ${processor.id} requires messageList or messages for processInput phase`,
                 });
               }
+
+              // Create source checker before processing to preserve message sources
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = passThrough.messageList.makeMessageSourceChecker();
+
               const result = await processor.processInput({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
@@ -472,48 +500,49 @@ export function createStep<
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
               });
 
+              // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
+              const applyMessages = (msgs: MastraDBMessage[]) => {
+                const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
+                if (deletedIds.length) {
+                  passThrough.messageList!.removeByIds(deletedIds);
+                }
+                for (const message of msgs) {
+                  passThrough.messageList!.removeByIds([message.id]);
+                  if (message.role === 'system') {
+                    const systemText =
+                      (message.content?.content as string | undefined) ??
+                      message.content?.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList!.addSystem(systemText);
+                  } else {
+                    passThrough.messageList!.add(message, check.getSource(message) || 'input');
+                  }
+                }
+              };
+
               if (result instanceof MessageList) {
-                // Processor returned a MessageList - extract messages from it
-                // If it's the same messageList that was passed in, it's already been mutated
+                // Validate same instance
+                if (result !== passThrough.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
-                // Processor returned an array of messages - apply them to the messageList
-                // This ensures the messageList reflects the processor's modifications
-                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
-                passThrough.messageList.removeByIds(existingIds);
-                for (const msg of result as MastraDBMessage[]) {
-                  if (msg.role === 'system') {
-                    const systemText =
-                      (msg.content?.content as string | undefined) ??
-                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                      '';
-                    passThrough.messageList.addSystem(systemText);
-                  } else {
-                    passThrough.messageList.add(msg, 'input');
-                  }
-                }
+                // Processor returned an array of messages
+                applyMessages(result as MastraDBMessage[]);
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
-                // Processor returned { messages, systemMessages } - apply both to the messageList
+                // Processor returned { messages, systemMessages }
                 const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
-                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
-                passThrough.messageList.removeByIds(existingIds);
-                for (const msg of typedResult.messages) {
-                  if (msg.role === 'system') {
-                    const systemText =
-                      (msg.content?.content as string | undefined) ??
-                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                      '';
-                    passThrough.messageList.addSystem(systemText);
-                  } else {
-                    passThrough.messageList.add(msg, 'input');
-                  }
-                }
-                // Also update system messages
+                applyMessages(typedResult.messages);
                 passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
@@ -536,57 +565,117 @@ export function createStep<
                   text: `Processor ${processor.id} requires messageList or messages for processInputStep phase`,
                 });
               }
+
+              // Create source checker before processing to preserve message sources
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = passThrough.messageList.makeMessageSourceChecker();
+
               const result = await processor.processInputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
                 stepNumber: stepNumber ?? 0,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
+                // Pass model/tools configuration fields - types match ProcessInputStepArgs
+                model: model as ProcessInputStepModelConfig,
+                tools: tools as ProcessInputStepToolsConfig,
+                toolChoice,
+                activeTools,
+                providerOptions,
+                modelSettings,
+                structuredOutput,
+                steps: steps ?? [],
               });
+
+
+              
+              // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
+              const applyMessages = (msgs: MastraDBMessage[]) => {
+                const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
+                if (deletedIds.length) {
+                  passThrough.messageList!.removeByIds(deletedIds);
+                }
+                for (const message of msgs) {
+                  passThrough.messageList!.removeByIds([message.id]);
+                  if (message.role === 'system') {
+                    const systemText =
+                      (message.content?.content as string | undefined) ??
+                      message.content?.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList!.addSystem(systemText);
+                  } else {
+                    passThrough.messageList!.add(message, check.getSource(message) || 'input');
+                  }
+                }
+              };
+
+              // Handle different return types (mirrors runner.validateAndFormatProcessInputStepResult)
               if (result instanceof MessageList) {
+                // Validate same instance
+                if (result !== passThrough.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
-                // Processor returned an array of messages - apply them to the messageList
-                // For input step phase, messages should be added with 'input' source
-                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
-                passThrough.messageList.removeByIds(existingIds);
-                for (const msg of result as MastraDBMessage[]) {
-                  if (msg.role === 'system') {
-                    const systemText =
-                      (msg.content?.content as string | undefined) ??
-                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                      '';
-                    passThrough.messageList.addSystem(systemText);
-                  } else {
-                    passThrough.messageList.add(msg, 'input');
-                  }
-                }
+                // Processor returned an array of messages
+                applyMessages(result as MastraDBMessage[]);
                 return { ...passThrough, messages: result };
-              } else if (result && 'messages' in result && 'systemMessages' in result) {
-                // Processor returned { messages, systemMessages } - apply both to the messageList
-                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
-                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
-                passThrough.messageList.removeByIds(existingIds);
-                for (const msg of typedResult.messages) {
-                  if (msg.role === 'system') {
-                    const systemText =
-                      (msg.content?.content as string | undefined) ??
-                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                      '';
-                    passThrough.messageList.addSystem(systemText);
-                  } else {
-                    passThrough.messageList.add(msg, 'input');
-                  }
+              } else if (result && typeof result === 'object') {
+                // Processor returned ProcessInputStepResult object
+                const typedResult = result as ProcessInputStepResult;
+
+                // Validate messageList if returned
+                if (typedResult.messageList && typedResult.messageList !== passThrough.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
                 }
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+
+                // Validate not returning both messages and messageList
+                if (typedResult.messages && typedResult.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_MESSAGES_AND_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned both messages and messageList. Only one is allowed.`,
+                  });
+                }
+
+                // Apply messages if returned
+                if (typedResult.messages) {
+                  applyMessages(typedResult.messages);
+                }
+
+                // Apply systemMessages if returned
+                if (typedResult.systemMessages) {
+                  passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                }
+
+                // Return all fields, merging processor result with passThrough
+                // Config fields from processor result take precedence (like Object.assign(stepInput, rest))
                 return {
                   ...passThrough,
-                  messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  messages: typedResult.messages ?? messages,
+                  systemMessages: typedResult.systemMessages ?? passThrough.systemMessages,
+                  model: typedResult.model ?? passThrough.model,
+                  tools: typedResult.tools ?? passThrough.tools,
+                  toolChoice: typedResult.toolChoice ?? passThrough.toolChoice,
+                  activeTools: typedResult.activeTools ?? passThrough.activeTools,
+                  providerOptions: typedResult.providerOptions ?? passThrough.providerOptions,
+                  modelSettings: typedResult.modelSettings ?? passThrough.modelSettings,
+                  structuredOutput: typedResult.structuredOutput ?? passThrough.structuredOutput,
                 };
               }
               return { ...passThrough, messages };
@@ -618,50 +707,60 @@ export function createStep<
                   text: `Processor ${processor.id} requires messageList or messages for processOutputResult phase`,
                 });
               }
+
+              // Create source checker before processing to preserve message sources
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = passThrough.messageList.makeMessageSourceChecker();
+
               const result = await processor.processOutputResult({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
               });
+
+              // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
+              const applyMessages = (msgs: MastraDBMessage[]) => {
+                const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
+                if (deletedIds.length) {
+                  passThrough.messageList!.removeByIds(deletedIds);
+                }
+                for (const message of msgs) {
+                  passThrough.messageList!.removeByIds([message.id]);
+                  if (message.role === 'system') {
+                    const systemText =
+                      (message.content?.content as string | undefined) ??
+                      message.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList!.addSystem(systemText);
+                  } else {
+                    passThrough.messageList!.add(message, check.getSource(message) || 'response');
+                  }
+                }
+              };
+
               if (result instanceof MessageList) {
+                // Validate same instance
+                if (result !== passThrough.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
-                // Processor returned an array of messages - apply them to the messageList
-                // For output phase, messages should be added with 'response' source
-                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
-                passThrough.messageList.removeByIds(existingIds);
-                for (const msg of result as MastraDBMessage[]) {
-                  if (msg.role === 'system') {
-                    const systemText =
-                      (msg.content?.content as string | undefined) ??
-                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                      '';
-                    passThrough.messageList.addSystem(systemText);
-                  } else {
-                    passThrough.messageList.add(msg, 'response');
-                  }
-                }
+                // Processor returned an array of messages
+                applyMessages(result as MastraDBMessage[]);
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
-                // Processor returned { messages, systemMessages } - apply both to the messageList
+                // Processor returned { messages, systemMessages }
                 const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
-                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
-                passThrough.messageList.removeByIds(existingIds);
-                for (const msg of typedResult.messages) {
-                  if (msg.role === 'system') {
-                    const systemText =
-                      (msg.content?.content as string | undefined) ??
-                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                      '';
-                    passThrough.messageList.addSystem(systemText);
-                  } else {
-                    passThrough.messageList.add(msg, 'response');
-                  }
-                }
+                applyMessages(typedResult.messages);
                 passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
@@ -684,6 +783,11 @@ export function createStep<
                   text: `Processor ${processor.id} requires messageList or messages for processOutputStep phase`,
                 });
               }
+
+              // Create source checker before processing to preserve message sources
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = passThrough.messageList.makeMessageSourceChecker();
+
               const result = await processor.processOutputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
@@ -694,45 +798,50 @@ export function createStep<
                 text,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
               });
+
+              // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
+              const applyMessages = (msgs: MastraDBMessage[]) => {
+                const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
+                if (deletedIds.length) {
+                  passThrough.messageList!.removeByIds(deletedIds);
+                }
+                for (const message of msgs) {
+                  passThrough.messageList!.removeByIds([message.id]);
+                  if (message.role === 'system') {
+                    const systemText =
+                      (message.content?.content as string | undefined) ??
+                      message.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
+                      '';
+                    passThrough.messageList!.addSystem(systemText);
+                  } else {
+                    passThrough.messageList!.add(message, check.getSource(message) || 'response');
+                  }
+                }
+              };
+
               if (result instanceof MessageList) {
+                // Validate same instance
+                if (result !== passThrough.messageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
                   systemMessages: result.getAllSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
-                // Processor returned an array of messages - apply them to the messageList
-                // For output step phase, messages should be added with 'response' source
-                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
-                passThrough.messageList.removeByIds(existingIds);
-                for (const msg of result as MastraDBMessage[]) {
-                  if (msg.role === 'system') {
-                    const systemText =
-                      (msg.content?.content as string | undefined) ??
-                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                      '';
-                    passThrough.messageList.addSystem(systemText);
-                  } else {
-                    passThrough.messageList.add(msg, 'response');
-                  }
-                }
+                // Processor returned an array of messages
+                applyMessages(result as MastraDBMessage[]);
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
-                // Processor returned { messages, systemMessages } - apply both to the messageList
+                // Processor returned { messages, systemMessages }
                 const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
-                const existingIds = (messages as MastraDBMessage[]).map(m => m.id);
-                passThrough.messageList.removeByIds(existingIds);
-                for (const msg of typedResult.messages) {
-                  if (msg.role === 'system') {
-                    const systemText =
-                      (msg.content?.content as string | undefined) ??
-                      msg.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                      '';
-                    passThrough.messageList.addSystem(systemText);
-                  } else {
-                    passThrough.messageList.add(msg, 'response');
-                  }
-                }
+                applyMessages(typedResult.messages);
                 passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,

@@ -543,6 +543,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               providerOptions,
               modelSettings,
               structuredOutput,
+              retryCount: inputData.processorRetryCount || 0,
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {

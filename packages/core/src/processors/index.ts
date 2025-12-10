@@ -77,6 +77,22 @@ export interface ProcessOutputResultArgs<TTripwireMetadata = unknown>
   extends ProcessorMessageContext<TTripwireMetadata> {}
 
 /**
+ * Model configuration type for processInputStep.
+ * Accepts both resolved models and unresolved configs (for workflow contexts).
+ */
+export type ProcessInputStepModelConfig =
+  | LanguageModelV2
+  | ModelRouterModelId
+  | OpenAICompatibleConfig
+  | MastraLanguageModelV2;
+
+/**
+ * Tools configuration type for processInputStep.
+ * Accepts both AI SDK ToolSet and generic Record for flexibility.
+ */
+export type ProcessInputStepToolsConfig = ToolSet | Record<string, unknown>;
+
+/**
  * Arguments for processInputStep method
  *
  * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
@@ -91,11 +107,15 @@ export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, TTripwire
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
 
-  model: MastraLanguageModelV2;
+  /**
+   * Current model for this step.
+   * Can be a resolved MastraLanguageModelV2 or an unresolved config (string, OpenAI-compatible config).
+   */
+  model: ProcessInputStepModelConfig;
   /** Current tools available for this step */
-  tools?: TOOLS;
+  tools?: TOOLS | ProcessInputStepToolsConfig;
   toolChoice?: ToolChoice<TOOLS> | ToolChoice<any>;
-  activeTools?: Array<keyof TOOLS>;
+  activeTools?: Array<keyof TOOLS> | string[];
 
   providerOptions?: SharedV2ProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
@@ -104,12 +124,24 @@ export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, TTripwire
    * because processors can modify it, and the actual type is only known at runtime.
    */
   structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  /**
+   * Number of times processors have triggered retry for this generation.
+   * Use this to implement retry limits within your processor.
+   */
+  retryCount: number;
 }
 
+/**
+ * Arguments for runProcessInputStep in the runner.
+ * Model is required and must be a resolved MastraLanguageModelV2.
+ */
 export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
   ProcessInputStepArgs<TOOLS>,
-  'messages' | 'systemMessages' | 'abort'
->;
+  'messages' | 'systemMessages' | 'abort' | 'model'
+> & {
+  /** Resolved model - must be MastraLanguageModelV2 when calling the runner */
+  model: MastraLanguageModelV2;
+};
 
 /**
  * Result from processInputStep method
@@ -135,6 +167,11 @@ export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
    * because processors can modify it, and the actual type is only known at runtime.
    */
   structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  /**
+   * Number of times processors have triggered retry for this generation.
+   * Use this to implement retry limits within your processor.
+   */ 
+  retryCount?: number;
 };
 
 export type RunProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = Omit<
