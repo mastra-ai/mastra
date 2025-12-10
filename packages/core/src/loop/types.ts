@@ -53,9 +53,9 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
 /**
  * Function called before each step of multi-step execution.
  */
-export type PrepareStepFunction = <TOOLS extends ToolSet>(
-  args: ProcessInputStepArgs<TOOLS>,
-) => Promise<ProcessInputStepResult<TOOLS> | undefined | void> | ProcessInputStepResult<TOOLS> | undefined | void;
+export type PrepareStepFunction = (
+  args: ProcessInputStepArgs,
+) => Promise<ProcessInputStepResult | undefined | void> | ProcessInputStepResult | undefined | void;
 
 export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;

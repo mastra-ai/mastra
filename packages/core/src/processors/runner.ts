@@ -1,4 +1,3 @@
-import type { ToolSet } from 'ai-v5';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
@@ -749,23 +748,12 @@ export class ProcessorRunner {
    *
    * @returns The processed MessageList
    */
-  // async runProcessInputStep(args: {
-  //   messages: MastraDBMessage[];
-  //   messageList: MessageList;
-  //   stepNumber: number;
-  //   tracingContext?: TracingContext;
-  //   requestContext?: RequestContext;
-  //   retryCount?: number;
-  // }): Promise<MessageList> {
-  //   const { messageList, stepNumber, tracingContext, requestContext, retryCount = 0 } = args;
-  async runProcessInputStep<TOOLS extends ToolSet = ToolSet>(
-    args: RunProcessInputStepArgs<TOOLS>,
-  ): Promise<RunProcessInputStepResult<TOOLS>> {
+  async runProcessInputStep(args: RunProcessInputStepArgs): Promise<RunProcessInputStepResult> {
     const { messageList, stepNumber, steps, tracingContext, requestContext } = args;
 
     // Initialize with all provided values - processors will modify this object in order
-    const stepInput: RunProcessInputStepResult<TOOLS> = {
-      tools: args.tools as TOOLS | undefined,
+    const stepInput: RunProcessInputStepResult = {
+      tools: args.tools,
       toolChoice: args.toolChoice,
       model: args.model,
       activeTools: args.activeTools,
@@ -843,7 +831,7 @@ export class ProcessorRunner {
         stepNumber,
         steps,
         systemMessages: currentSystemMessages,
-        tools: stepInput.tools as TOOLS | undefined,
+        tools: stepInput.tools,
         toolChoice: stepInput.toolChoice,
         model: stepInput.model!,
         activeTools: stepInput.activeTools,
@@ -1184,8 +1172,8 @@ export class ProcessorRunner {
     }
   }
 
-  static async validateAndFormatProcessInputStepResult<TOOLS extends ToolSet = ToolSet>(
-    result: ProcessInputStepResult<TOOLS> | Awaited<ProcessorMessageResult> | undefined | void,
+  static async validateAndFormatProcessInputStepResult(
+    result: ProcessInputStepResult | Awaited<ProcessorMessageResult> | undefined | void,
     {
       messageList,
       processor,
@@ -1195,7 +1183,7 @@ export class ProcessorRunner {
       processor: Processor;
       stepNumber: number;
     },
-  ): Promise<RunProcessInputStepResult<TOOLS>> {
+  ): Promise<RunProcessInputStepResult> {
     if (result instanceof MessageList) {
       if (result !== messageList) {
         throw new MastraError({

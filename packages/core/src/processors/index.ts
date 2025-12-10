@@ -1,6 +1,6 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { CallSettings, StepResult, ToolChoice, ToolSet } from 'ai-v5';
+import type { CallSettings, StepResult, ToolChoice } from 'ai-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
@@ -77,23 +77,16 @@ export interface ProcessOutputResultArgs<TTripwireMetadata = unknown>
   extends ProcessorMessageContext<TTripwireMetadata> {}
 
 /**
- * Tools configuration type for processInputStep.
- * Accepts both AI SDK ToolSet and generic Record for flexibility.
- */
-export type ProcessInputStepToolsConfig = ToolSet | Record<string, unknown>;
-
-/**
  * Arguments for processInputStep method
  *
  * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
  * processors run in a chain and any previous processor may have modified structuredOutput.
  * The actual schema type is only known at the generate()/stream() call site.
  */
-export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, TTripwireMetadata = unknown>
-  extends ProcessorMessageContext<TTripwireMetadata> {
+export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** The current step number (0-indexed) */
   stepNumber: number;
-  steps: Array<StepResult<TOOLS>>;
+  steps: Array<StepResult<any>>;
 
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
@@ -104,9 +97,9 @@ export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, TTripwire
    */
   model: MastraLanguageModelV2;
   /** Current tools available for this step */
-  tools?: TOOLS | ProcessInputStepToolsConfig;
-  toolChoice?: ToolChoice<TOOLS> | ToolChoice<any>;
-  activeTools?: Array<keyof TOOLS> | string[];
+  tools?: Record<string, unknown>;
+  toolChoice?: ToolChoice<any>;
+  activeTools?: string[];
 
   providerOptions?: SharedV2ProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
@@ -122,17 +115,7 @@ export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, TTripwire
   retryCount: number;
 }
 
-/**
- * Arguments for runProcessInputStep in the runner.
- * Model is required and must be a resolved MastraLanguageModelV2.
- */
-export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
-  ProcessInputStepArgs<TOOLS>,
-  'messages' | 'systemMessages' | 'abort' | 'model'
-> & {
-  /** Resolved model - must be MastraLanguageModelV2 when calling the runner */
-  model: MastraLanguageModelV2;
-};
+export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort'>;
 
 /**
  * Result from processInputStep method
@@ -140,12 +123,12 @@ export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
  * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
-export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
+export type ProcessInputStepResult = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
   /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
-  tools?: ToolSet | Record<string, unknown>;
-  toolChoice?: ToolChoice<TOOLS | any>;
-  activeTools?: Array<keyof TOOLS>;
+  tools?: Record<string, unknown>;
+  toolChoice?: ToolChoice<any>;
+  activeTools?: string[];
 
   messages?: MastraDBMessage[];
   messageList?: MessageList;
@@ -165,10 +148,7 @@ export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
   retryCount?: number;
 };
 
-export type RunProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = Omit<
-  ProcessInputStepResult<TOOLS>,
-  'model'
-> & { model?: MastraLanguageModelV2 };
+export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & { model?: MastraLanguageModelV2 };
 
 /**
  * Arguments for processOutputStream method
@@ -256,11 +236,11 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
    *  - undefined/void: No changes
    */
-  processInputStep?<TOOLS extends ToolSet = ToolSet>(
-    args: ProcessInputStepArgs<TOOLS, TTripwireMetadata>,
+  processInputStep?(
+    args: ProcessInputStepArgs<TTripwireMetadata>,
   ):
-    | Promise<ProcessInputStepResult<TOOLS> | MessageList | MastraDBMessage[] | undefined | void>
-    | ProcessInputStepResult<TOOLS>
+    | Promise<ProcessInputStepResult | MessageList | MastraDBMessage[] | undefined | void>
+    | ProcessInputStepResult
     | MessageList
     | MastraDBMessage[]
     | void

@@ -1,4 +1,3 @@
-import type { ToolSet } from 'ai-v5';
 import type { PrepareStepFunction } from '../../loop/types';
 import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../index';
 
@@ -12,9 +11,7 @@ export class PrepareStepProcessor implements Processor<'prepare-step'> {
     this.prepareStep = options.prepareStep;
   }
 
-  async processInputStep<TOOLS extends ToolSet>(
-    args: ProcessInputStepArgs<TOOLS>,
-  ): Promise<ProcessInputStepResult<TOOLS> | undefined | void> {
+  async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined | void> {
     return this.prepareStep(args);
   }
 }

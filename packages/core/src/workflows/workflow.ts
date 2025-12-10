@@ -17,7 +17,7 @@ import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import { SpanType, getOrCreateSpan } from '../observability';
 import { ProcessorRunner } from '../processors';
-import type { Processor, ProcessInputStepToolsConfig } from '../processors';
+import type { Processor } from '../processors';
 import { ProcessorStepSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
 import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
@@ -574,7 +574,7 @@ export function createStep<
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
                 model: model!,
-                tools: tools as ProcessInputStepToolsConfig,
+                tools,
                 toolChoice,
                 activeTools,
                 providerOptions,
