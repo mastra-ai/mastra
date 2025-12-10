@@ -75,6 +75,40 @@ If you followed the automatic installation, you'll see a popup when you open cur
 
 [More info on using MCP servers with Cursor](https://cursor.com/de/docs/context/mcp)
 
+### Antigravity
+
+Google Antigravity is an agent-first development platform that supports MCP servers to enhance AI capabilities with real-time context.
+
+1. Open your Antigravity MCP configuration file:
+   - The configuration is typically located in your Antigravity settings
+   - You can access it through the MCP Store interface in Antigravity
+
+2. Add the Mastra MCP server configuration:
+
+   ```json copy
+   {
+     "mcpServers": {
+       "mastra": {
+         "type": "stdio",
+         "command": "npx",
+         "args": ["-y", "@mastra/mcp-docs-server@beta"]
+       }
+     }
+   }
+   ```
+
+3. Save the configuration and restart Antigravity
+
+Once configured, Antigravity's AI agents can access Mastra's documentation, code examples, and knowledge base to:
+- Provide context-aware suggestions when building Mastra projects
+- Access up-to-date API documentation and best practices
+- Help debug issues by referencing recent changes and bug fixes
+- Suggest correct implementations based on current Mastra patterns
+
+The MCP server will appear in Antigravity's MCP Store, where you can manage its connection status and authentication if needed.
+
+[More info on using MCP servers with Antigravity](https://antigravity.google)
+
 ### Visual Studio Code
 
 1. Create a `.vscode/mcp.json` file in your workspace
