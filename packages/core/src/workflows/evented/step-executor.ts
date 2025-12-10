@@ -3,6 +3,7 @@ import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import type { PubSub } from '../../events/pubsub';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -15,7 +16,6 @@ import {
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
-import type { PubSub } from '../../events/pubsub';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
