@@ -47,7 +47,12 @@ export function createVirtualDependencies(
     workspaceRoot,
     outputDir,
     bundlerOptions,
-  }: { workspaceRoot: string | null; projectRoot: string; outputDir: string; bundlerOptions?: { isDev?: boolean; externalsPreset?: boolean } },
+  }: {
+    workspaceRoot: string | null;
+    projectRoot: string;
+    outputDir: string;
+    bundlerOptions?: { isDev?: boolean; externalsPreset?: boolean };
+  },
 ): {
   optimizedDependencyEntries: Map<string, VirtualDependency>;
   fileNameToDependencyMap: Map<string, string>;
@@ -134,7 +139,7 @@ async function getInputPlugins(
   }: {
     transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
-    bundlerOptions: { enableEsmShim: boolean; isDev: boolean; externalsPreset: boolean };
+    bundlerOptions: { noBundling: boolean };
     rootDir: string;
     externals: string[];
   },
@@ -176,7 +181,7 @@ async function getInputPlugins(
           }),
         })
       : null,
-    bundlerOptions.isDev || bundlerOptions.externalsPreset
+    bundlerOptions.noBundling
       ? ({
           name: 'alias-optimized-deps',
           async resolveId(id, importer, options) {
@@ -212,13 +217,13 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
-    bundlerOptions.isDev || bundlerOptions.externalsPreset
+    bundlerOptions.noBundling
       ? null
       : nodeResolve({
           preferBuiltins: true,
           exportConditions: ['node'],
         }),
-    bundlerOptions.isDev || bundlerOptions.externalsPreset ? esmShim() : null,
+    bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
@@ -283,7 +288,6 @@ async function buildExternalDependencies(
     rootDir: string;
     outputDir: string;
     bundlerOptions: {
-      enableEsmShim: boolean;
       isDev: boolean;
       externalsPreset: boolean;
     };
@@ -295,6 +299,8 @@ async function buildExternalDependencies(
   if (virtualDependencies.size === 0) {
     return [] as unknown as [OutputChunk, ...(OutputAsset | OutputChunk)[]];
   }
+
+  const noBundling = bundlerOptions.isDev || bundlerOptions.externalsPreset;
 
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
@@ -310,7 +316,9 @@ async function buildExternalDependencies(
     plugins: getInputPlugins(virtualDependencies, {
       transpilePackages: packagesToTranspile,
       workspaceMap,
-      bundlerOptions,
+      bundlerOptions: {
+        noBundling,
+      },
       rootDir,
       externals,
     }),
@@ -333,7 +341,7 @@ async function buildExternalDependencies(
        * This whole bunch of logic directly below is for the edge case shown in the e2e-tests/monorepo with "tinyrainbow" package. It's used in multiple places in the package and as such Rollup creates a shared chunk for it. During 'mastra dev', we don't want that chunk to show up in the '.mastra/output' folder (outputDirRelative) but inside <pkg>/node_modules/.cache instead.
        * We only care about this during 'mastra dev'!
        */
-      if (bundlerOptions.isDev || bundlerOptions.externalsPreset) {
+      if (noBundling) {
         const importedFromPackages = new Set<string>();
 
         for (const moduleId of chunkInfo.moduleIds) {
@@ -425,7 +433,6 @@ export async function bundleExternals(
     bundlerOptions?:
       | ({
           isDev?: boolean;
-          enableEsmShim?: boolean;
         } & Config['bundler'])
       | null;
     projectRoot?: string;
@@ -434,16 +441,11 @@ export async function bundleExternals(
   },
 ) {
   const { workspaceRoot = null, workspaceMap = new Map(), projectRoot = outputDir, bundlerOptions = {} } = options;
-  const {
-    externals: customExternals = [],
-    transpilePackages = [],
-    isDev = false,
-    enableEsmShim = true,
-  } = bundlerOptions || {};
+  const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
   /**
    * A user can set `externals: true` to indicate they want to externalize all dependencies. In this case, we set `externalsPreset` to true to skip bundling any externals.
    */
-  let externalsPreset = false
+  let externalsPreset = false;
 
   if (customExternals === true) {
     externalsPreset = true;
@@ -473,7 +475,6 @@ export async function bundleExternals(
     rootDir: workspaceRoot || projectRoot,
     outputDir,
     bundlerOptions: {
-      enableEsmShim,
       isDev,
       externalsPreset,
     },

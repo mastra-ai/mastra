@@ -288,7 +288,6 @@ export async function analyzeBundle(
     platform: 'node' | 'browser';
     isDev?: boolean;
     bundlerOptions?: {
-      enableEsmShim?: boolean;
       externals?: boolean | string[];
     } | null;
   },
@@ -314,15 +313,22 @@ export const mastra = new Mastra({
 If you think your configuration is valid, please open an issue.`);
   }
 
-  const { enableEsmShim = true, externals = [] } = internalBundlerOptions || {};
+  const { externals: _bundlerExternals = [] } = internalBundlerOptions || {};
   const userBundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
-  const customExternals = Array.isArray(externals) ? externals : [];
-  const allExternals = [...GLOBAL_EXTERNALS, ...customExternals];
+  let externalsPreset = false;
+
+  if (userBundlerOptions?.externals === true) {
+    externalsPreset = true;
+  }
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
+
+  const bundlerExternals = Array.isArray(_bundlerExternals) ? _bundlerExternals : [];
+  const userExternals = Array.isArray(userBundlerOptions?.externals) ? userBundlerOptions?.externals : [];
+  const allExternals = [...GLOBAL_EXTERNALS, ...bundlerExternals, ...userExternals];
 
   logger.info('Analyzing dependencies...');
 
@@ -334,7 +340,7 @@ If you think your configuration is valid, please open an issue.`);
       sourcemapEnabled: userBundlerOptions?.sourcemap ?? false,
       workspaceMap,
       projectRoot,
-      shouldCheckTransitiveDependencies: isDev || userBundlerOptions?.externals === true,
+      shouldCheckTransitiveDependencies: isDev || externalsPreset,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
@@ -343,7 +349,7 @@ If you think your configuration is valid, please open an issue.`);
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
       const isPartOfExternals = allExternals.some(external => isDependencyPartOfPackage(dep, external));
-      if (isPartOfExternals || userBundlerOptions?.externals === true && !metadata.isWorkspace) {
+      if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
         // Add all packages coming from src/mastra
         allUsedExternals.add(dep);
         continue;
@@ -364,18 +370,14 @@ If you think your configuration is valid, please open an issue.`);
 
   /**
    * Only during `mastra dev` we want to optimize workspace packages. In previous steps we might have added dependencies that are not workspace packages, so we gotta remove them again.
-   *
-   * Note: When `bundler.externals: true`, the filtering is handled inside bundleExternals.
    */
-  if (isDev || userBundlerOptions?.externals === true) {
+  if (isDev || externalsPreset) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
       if (!metadata.isWorkspace) {
         depsToOptimize.delete(dep);
       }
     }
   }
-
-  console.log({ depsToOptimize })
 
   const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
@@ -385,7 +387,6 @@ If you think your configuration is valid, please open an issue.`);
     bundlerOptions: {
       ...userBundlerOptions,
       externals: userBundlerOptions?.externals ?? allExternals,
-      enableEsmShim,
       isDev,
     },
     projectRoot,
@@ -395,21 +396,19 @@ If you think your configuration is valid, please open an issue.`);
 
   for (const o of output) {
     if (o.type === 'asset') {
-      continue
+      continue;
     }
-    o.imports.forEach((imp) => {
+    o.imports.forEach(imp => {
       // TODO: Not hardcode "packages"
       if (!imp.startsWith('packages') && !imp.startsWith('node:')) {
-        const pkgName = getPackageName(imp)
+        const pkgName = getPackageName(imp);
         if (pkgName) {
           // Add packages from workspace dependencies (not workspace packages themselves)
-          allUsedExternals.add(pkgName)
+          allUsedExternals.add(pkgName);
         }
       }
-    })
+    });
   }
-
-  console.log({ allUsedExternals })
 
   const result = await validateOutput(
     {

@@ -27,7 +27,9 @@ function safeResolve(id: string, importer: string) {
   }
 }
 
-// we only need this for dev, so we can resolve the js extension of the module as we do not use node-resolve
+/**
+ * We need this for dev & externalsPreset, so we can resolve the js extension of the module as we do not use node-resolve
+ */
 export function nodeModulesExtensionResolver(): Plugin {
   return {
     name: 'node-modules-extension-resolver',
@@ -56,12 +58,20 @@ export function nodeModulesExtensionResolver(): Plugin {
         return null;
       }
 
-        // if we cannot resolve it, it means it's a legacy module
-        // @ts-expect-error - todo
-        const nodeResolved = await nodeResolve().resolveId.handler.bind(this)(id, importer, options)
-        if (!nodeResolved?.resolvedBy) {
-          return null
-        } else {
+      // The node-resolve plugin should handle most cases
+      const plugin = nodeResolve();
+      const resolveIdHook = plugin.resolveId;
+
+      if (!resolveIdHook) {
+        return null;
+      }
+
+      const resolveIdFn = typeof resolveIdHook === 'function' ? resolveIdHook : resolveIdHook.handler;
+      const nodeResolved = await resolveIdFn.call(this, id, importer, options);
+
+      if (!nodeResolved || typeof nodeResolved === 'string' || !nodeResolved?.resolvedBy) {
+        return null;
+      } else {
         // try to do a node like resolve first
         const resolved = safeResolve(id, importer);
         if (resolved) {
@@ -77,8 +87,6 @@ export function nodeModulesExtensionResolver(): Plugin {
 
           const newImportWithExtension = resolved.replace(dirname(pkgJsonPath), pkgName);
 
-          const test = pathToFileURL(newImportWithExtension).href
-          // console.log(`${resolved} - ${id} - ${test} - ${importer} - ${newImportWithExtension}`);
           return {
             id: newImportWithExtension,
             external: true,
@@ -106,7 +114,7 @@ export function nodeModulesExtensionResolver(): Plugin {
             };
           }
         }
-        }
+      }
 
       return null;
     },

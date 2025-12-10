@@ -26,12 +26,14 @@ export async function getInputOptions(
     projectRoot,
     workspaceRoot = undefined,
     enableEsmShim = true,
+    externalsPreset = false,
   }: {
     sourcemap?: boolean;
     isDev?: boolean;
     workspaceRoot?: string;
     projectRoot: string;
     enableEsmShim?: boolean;
+    externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
@@ -46,12 +48,9 @@ export async function getInputOptions(
         });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
-
-  // TODO: Only do this for externals: true or always?
-  const externals: string[] = []
+  const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
   const normalizedEntryFile = slash(entryFile);
-  console.log({ normalizedEntryFile, externals, isDev })
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
@@ -131,10 +130,7 @@ export async function getInputOptions(
         },
       }),
       enableEsmShim ? esmShim() : undefined,
-      // TODO: if externalsPreset true, then do nodeModulesExtensionResolver, otherwise nodeResolve
-      nodeModulesExtensionResolver(),
-      // TODO: asdf
-      // nodeResolvePlugin,
+      externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging
       // {
       //   name: 'logger',
