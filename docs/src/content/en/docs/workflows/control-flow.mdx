@@ -59,7 +59,7 @@ export const testWorkflow = createWorkflow({
 
 ## Simultaneous steps with `.parallel()`
 
-Use `.parallel()` to run steps at the same time. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
+Use `.parallel()` to run steps at the same time. All parallel steps must complete before the workflow continues to the next step. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
@@ -774,6 +774,27 @@ workflow.parallel([pipelineA, pipelineB])
 | `.foreach().then()` | Process all items, then aggregate | Map-reduce |
 | `.foreach().foreach()` | Creates array of arrays | Avoid - use nested workflow or `.map()` with `.flat()` |
 | `.foreach(workflow)` | Full pipeline per item | Multi-step processing per array item |
+
+### Synchronization: when does the next step run?
+
+Both `.parallel()` and `.foreach()` are synchronization points. The next step in the workflow only executes after all parallel branches or all array iterations have completed.
+
+```typescript
+workflow
+  .parallel([stepA, stepB, stepC])  // All 3 run simultaneously
+  .then(combineStep)                // Waits for ALL 3 to finish before running
+  .commit();
+
+workflow
+  .foreach(processStep, { concurrency: 5 })  // Up to 5 items process at once
+  .then(aggregateStep)                       // Waits for ALL items to finish before running
+  .commit();
+```
+
+This means:
+- `.parallel()` collects all branch outputs into an object, then passes it to the next step
+- `.foreach()` collects all iteration outputs into an array, then passes it to the next step
+- There is no way to "stream" results to the next step as they complete
 
 ### Concurrency behavior
 
