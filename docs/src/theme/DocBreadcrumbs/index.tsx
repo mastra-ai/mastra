@@ -6,11 +6,12 @@ import { useHomePageRoute } from "@docusaurus/theme-common/internal";
 import { translate } from "@docusaurus/Translate";
 import HomeBreadcrumbItem from "@theme/DocBreadcrumbs/Items/Home";
 import DocBreadcrumbsStructuredData from "@theme/DocBreadcrumbs/StructuredData";
-import { BreadcrumbsItemLink, BreadcrumbsItem } from "@site/src/components/ui/breadcrumbs";
+import {
+  BreadcrumbsItemLink,
+  BreadcrumbsItem,
+} from "@site/src/components/ui/breadcrumbs";
 
 import styles from "./styles.module.css";
-
-
 
 export default function DocBreadcrumbs(): ReactNode {
   const breadcrumbs = useSidebarBreadcrumbs();
