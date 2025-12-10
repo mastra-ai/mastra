@@ -77,16 +77,6 @@ export interface ProcessOutputResultArgs<TTripwireMetadata = unknown>
   extends ProcessorMessageContext<TTripwireMetadata> {}
 
 /**
- * Model configuration type for processInputStep.
- * Accepts both resolved models and unresolved configs (for workflow contexts).
- */
-export type ProcessInputStepModelConfig =
-  | LanguageModelV2
-  | ModelRouterModelId
-  | OpenAICompatibleConfig
-  | MastraLanguageModelV2;
-
-/**
  * Tools configuration type for processInputStep.
  * Accepts both AI SDK ToolSet and generic Record for flexibility.
  */
@@ -112,7 +102,7 @@ export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet, TTripwire
    * Current model for this step.
    * Can be a resolved MastraLanguageModelV2 or an unresolved config (string, OpenAI-compatible config).
    */
-  model: ProcessInputStepModelConfig;
+  model: MastraLanguageModelV2;
   /** Current tools available for this step */
   tools?: TOOLS | ProcessInputStepToolsConfig;
   toolChoice?: ToolChoice<TOOLS> | ToolChoice<any>;

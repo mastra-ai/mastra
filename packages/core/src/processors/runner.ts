@@ -877,7 +877,7 @@ export class ProcessorRunner {
       messageList.startRecording();
 
       try {
-        const result = await this.validateAndFormatProcessInputStepResult(
+        const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(
           await processMethod({
             messageList,
             ...inputData,
@@ -893,7 +893,7 @@ export class ProcessorRunner {
         );
         const { messages, systemMessages, ...rest } = result;
         if (messages) {
-          this.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
+          ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
         }
         if (systemMessages) {
           messageList.replaceAllSystemMessages(systemMessages);
@@ -1158,7 +1158,7 @@ export class ProcessorRunner {
     return messageList;
   }
 
-  private applyMessagesToMessageList(
+  static applyMessagesToMessageList(
     messages: MastraDBMessage[],
     messageList: MessageList,
     idsBeforeProcessing: string[],
@@ -1184,7 +1184,7 @@ export class ProcessorRunner {
     }
   }
 
-  private async validateAndFormatProcessInputStepResult<TOOLS extends ToolSet = ToolSet>(
+  static async validateAndFormatProcessInputStepResult<TOOLS extends ToolSet = ToolSet>(
     result: ProcessInputStepResult<TOOLS> | Awaited<ProcessorMessageResult> | undefined | void,
     {
       messageList,

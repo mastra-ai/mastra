@@ -16,12 +16,8 @@ import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import { SpanType, getOrCreateSpan } from '../observability';
-import type {
-  Processor,
-  ProcessInputStepResult,
-  ProcessInputStepModelConfig,
-  ProcessInputStepToolsConfig,
-} from '../processors';
+import { ProcessorRunner } from '../processors';
+import type { Processor, ProcessInputStepToolsConfig } from '../processors';
 import { ProcessorStepSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
 import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
@@ -577,7 +573,7 @@ export function createStep<
                 stepNumber: stepNumber ?? 0,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
-                model: model as ProcessInputStepModelConfig,
+                model: model!,
                 tools: tools as ProcessInputStepToolsConfig,
                 toolChoice,
                 activeTools,
@@ -587,95 +583,25 @@ export function createStep<
                 steps: steps ?? [],
               });
 
-              // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
-              const applyMessages = (msgs: MastraDBMessage[]) => {
-                const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
-                if (deletedIds.length) {
-                  passThrough.messageList!.removeByIds(deletedIds);
-                }
-                for (const message of msgs) {
-                  passThrough.messageList!.removeByIds([message.id]);
-                  if (message.role === 'system') {
-                    const systemText =
-                      (message.content?.content as string | undefined) ??
-                      message.content?.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-                      '';
-                    passThrough.messageList!.addSystem(systemText);
-                  } else {
-                    passThrough.messageList!.add(message, check.getSource(message) || 'input');
-                  }
-                }
-              };
+              const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
+                messageList: passThrough.messageList,
+                processor,
+                stepNumber: stepNumber ?? 0,
+              });
 
-              // Handle different return types (mirrors runner.validateAndFormatProcessInputStepResult)
-              if (result instanceof MessageList) {
-                // Validate same instance
-                if (result !== passThrough.messageList) {
-                  throw new MastraError({
-                    category: ErrorCategory.USER,
-                    domain: ErrorDomain.MASTRA_WORKFLOW,
-                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
-                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
-                  });
-                }
-                return {
-                  ...passThrough,
-                  messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
-                };
-              } else if (Array.isArray(result)) {
-                // Processor returned an array of messages
-                applyMessages(result as MastraDBMessage[]);
-                return { ...passThrough, messages: result };
-              } else if (result && typeof result === 'object') {
-                // Processor returned ProcessInputStepResult object
-                const typedResult = result as ProcessInputStepResult;
-
-                // Validate messageList if returned
-                if (typedResult.messageList && typedResult.messageList !== passThrough.messageList) {
-                  throw new MastraError({
-                    category: ErrorCategory.USER,
-                    domain: ErrorDomain.MASTRA_WORKFLOW,
-                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
-                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
-                  });
-                }
-
-                // Validate not returning both messages and messageList
-                if (typedResult.messages && typedResult.messageList) {
-                  throw new MastraError({
-                    category: ErrorCategory.USER,
-                    domain: ErrorDomain.MASTRA_WORKFLOW,
-                    id: 'PROCESSOR_RETURNED_MESSAGES_AND_MESSAGE_LIST',
-                    text: `Processor ${processor.id} returned both messages and messageList. Only one is allowed.`,
-                  });
-                }
-
-                // Apply messages if returned
-                if (typedResult.messages) {
-                  applyMessages(typedResult.messages);
-                }
-
-                // Apply systemMessages if returned
-                if (typedResult.systemMessages) {
-                  passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
-                }
-
-                // Return all fields, merging processor result with passThrough
-                // Config fields from processor result take precedence (like Object.assign(stepInput, rest))
-                return {
-                  ...passThrough,
-                  messages: typedResult.messages ?? messages,
-                  systemMessages: typedResult.systemMessages ?? passThrough.systemMessages,
-                  model: typedResult.model ?? passThrough.model,
-                  tools: typedResult.tools ?? passThrough.tools,
-                  toolChoice: typedResult.toolChoice ?? passThrough.toolChoice,
-                  activeTools: typedResult.activeTools ?? passThrough.activeTools,
-                  providerOptions: typedResult.providerOptions ?? passThrough.providerOptions,
-                  modelSettings: typedResult.modelSettings ?? passThrough.modelSettings,
-                  structuredOutput: typedResult.structuredOutput ?? passThrough.structuredOutput,
-                };
+              if (validatedResult.messages) {
+                ProcessorRunner.applyMessagesToMessageList(
+                  validatedResult.messages,
+                  passThrough.messageList,
+                  idsBeforeProcessing,
+                  check,
+                );
               }
+
+              if (systemMessages) {
+                passThrough.messageList!.replaceAllSystemMessages(systemMessages as CoreMessage[]);
+              }
+
               return { ...passThrough, messages };
             }
             return { ...passThrough, messages };

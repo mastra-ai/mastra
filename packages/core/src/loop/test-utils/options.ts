@@ -1456,13 +1456,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           stopWhen: stepCountIs(3),
           options: {
             prepareStep: async ({ model, stepNumber, steps, messages }) => {
-              // Model is a resolved MastraLanguageModelV2 at runtime
-              const resolvedModel = model as { modelId: string; provider: string; specificationVersion: string };
               prepareStepCalls.push({
                 model: {
-                  modelId: resolvedModel.modelId,
-                  provider: resolvedModel.provider,
-                  specificationVersion: resolvedModel.specificationVersion,
+                  modelId: model.modelId,
+                  provider: model.provider,
+                  specificationVersion: model.specificationVersion,
                 },
                 stepNumber,
                 steps,

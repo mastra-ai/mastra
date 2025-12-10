@@ -461,7 +461,7 @@ export const ProcessorStepOutputSchema = z.object({
   retryCount: z.number().optional(),
 
   // Model and tools configuration (for inputStep phase)
-  model: z.custom<ProcessorStepModelConfig>().optional(),
+  model: z.custom<MastraLanguageModelV2>().optional(),
   tools: z.custom<ProcessorStepToolsConfig>().optional(),
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
   activeTools: z.array(z.string()).optional(),
