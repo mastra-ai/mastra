@@ -6026,9 +6026,10 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // result.error should be an Error instance
-        expect(result.error).toBeInstanceOf(Error);
-        expect((result.error as Error).message).toMatch(/Step execution failed/);
+        // result.error should be a SerializedError (plain object, not Error instance)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toMatch(/Step execution failed/);
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -6440,22 +6441,25 @@ describe('Workflow', () => {
 
       expect(result.status).toBe('failed');
 
-      // Workflow-level error
+      // Workflow-level error - should be a SerializedError (plain object)
+      // This is intentional - errors are serialized for storage compatibility
       if (result.status === 'failed') {
-        expect(result.error).toBeInstanceOf(Error);
-        expect(result.error).toBe(testError);
-        expect((result.error as Error).message).toBe('Step failed with details');
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+
+        // Properties should be preserved on the serialized error
+        expect((result.error as any).message).toBe('Step failed with details');
+        expect((result.error as any).name).toBe('Error');
         expect((result.error as any).code).toBe('STEP_FAILURE');
         expect((result.error as any).details).toEqual({ reason: 'test failure' });
       }
 
-      // Step-level error should be the same instance
+      // Step-level error remains as Error instance
       const stepResult = result.steps?.['failing-step'];
       expect(stepResult?.status).toBe('failed');
       if (stepResult?.status === 'failed') {
         expect(stepResult.error).toBe(testError);
-        // Verify workflow error and step error are the same instance
-        expect(result.error).toBe(stepResult.error);
+        expect(stepResult.error).toBeInstanceOf(Error);
       }
     });
 
@@ -6496,20 +6500,23 @@ describe('Workflow', () => {
       expect(result.status).toBe('failed');
 
       if (result.status === 'failed') {
-        // Verify the top-level error is preserved
-        expect(result.error).toBeInstanceOf(Error);
-        expect(result.error).toBe(topLevelError);
-        expect(result.error.message).toBe(topLevelMessage);
+        // Workflow-level error should be SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+
+        // Verify the top-level error properties are preserved
+        expect((result.error as any).message).toBe(topLevelMessage);
+        expect((result.error as any).name).toBe('Error');
         expect((result.error as any).statusCode).toBe(500);
         expect((result.error as any).isRetryable).toBe(true);
 
-        // Verify the full error.cause chain is preserved
-        expect(result.error.cause).toBeInstanceOf(Error);
-        expect((result.error.cause as Error).message).toBe(intermediateMessage);
+        // Verify the full error.cause chain is preserved as serialized objects
+        expect((result.error as any).cause).toBeDefined();
+        expect((result.error as any).cause.message).toBe(intermediateMessage);
 
         // Verify nested cause (intermediate error's cause)
-        expect((result.error.cause as Error).cause).toBeInstanceOf(Error);
-        expect(((result.error.cause as Error).cause as Error).message).toBe(rootCauseMessage);
+        expect((result.error as any).cause.cause).toBeDefined();
+        expect((result.error as any).cause.cause.message).toBe(rootCauseMessage);
       }
     });
 
@@ -6568,9 +6575,12 @@ describe('Workflow', () => {
       expect(result.status).toBe('failed');
 
       if (result.status === 'failed') {
-        expect(result.error).toBeInstanceOf(Error);
-        expect(result.error).toBe(apiError);
-        expect((result.error as Error).message).toBe('Service Unavailable');
+        // Workflow-level error should be SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+
+        expect((result.error as any).message).toBe('Service Unavailable');
+        expect((result.error as any).name).toBe('Error');
         // Verify API error properties are preserved
         expect((result.error as any).statusCode).toBe(503);
         expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
@@ -6615,9 +6625,12 @@ describe('Workflow', () => {
       expect(result.status).toBe('failed');
 
       if (result.status === 'failed') {
-        expect(result.error).toBeInstanceOf(Error);
-        expect(result.error).toBe(testError);
-        expect((result.error as Error).message).toBe('Rate limit exceeded');
+        // Workflow-level error should be SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+
+        expect((result.error as any).message).toBe('Rate limit exceeded');
+        expect((result.error as any).name).toBe('Error');
         expect((result.error as any).statusCode).toBe(429);
         expect((result.error as any).responseHeaders).toEqual(customErrorProps.responseHeaders);
       }
@@ -8192,10 +8205,11 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // result.error is now an Error instance
-        expect(result.error).toBeInstanceOf(Error);
-        expect((result.error as Error).message).toContain('Step input validation failed');
-        expect((result.error as Error).message).toContain('start: Required');
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain('Step input validation failed');
+        expect((result.error as any).message).toContain('start: Required');
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -8261,19 +8275,18 @@ describe('Workflow', () => {
       expect(result.status).toBe('failed');
 
       if (result.status === 'failed') {
-        // Error should be a MastraError
-        expect(result.error).toBeInstanceOf(MastraError);
-        expect((result.error as Error).message).toContain('Step input validation failed');
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain('Step input validation failed');
 
-        // The cause should be the original ZodError
-        const mastraError = result.error as MastraError;
-        expect(mastraError.cause).toBeDefined();
-        expect(mastraError.cause).toBeInstanceOf(Error);
-        // ZodError has an 'issues' array
-        expect((mastraError.cause as any).issues).toBeDefined();
-        expect(Array.isArray((mastraError.cause as any).issues)).toBe(true);
+        // The cause should be the serialized ZodError
+        expect((result.error as any).cause).toBeDefined();
+        // ZodError has an 'issues' array - should be preserved in serialization
+        expect((result.error as any).cause.issues).toBeDefined();
+        expect(Array.isArray((result.error as any).cause.issues)).toBe(true);
         // Should have issues for both missing fields
-        expect((mastraError.cause as any).issues.length).toBeGreaterThanOrEqual(2);
+        expect((result.error as any).cause.issues.length).toBeGreaterThanOrEqual(2);
       }
     });
 
@@ -8421,10 +8434,11 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // result.error is now an Error instance
-        expect(result.error).toBeInstanceOf(Error);
-        expect((result.error as Error).message).toContain('Step input validation failed');
-        expect((result.error as Error).message).toContain('start: Expected string, received number');
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain('Step input validation failed');
+        expect((result.error as any).message).toContain('start: Expected string, received number');
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -9229,12 +9243,12 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        // result.error is now an Error instance
-        expect(result.error).toBeInstanceOf(Error);
-        expect((result.error as Error).message).toContain(
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain(
           'Step input validation failed: \n- start: Invalid input: expected string, received undefined',
-        ); // Now safe to access
+        );
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -9419,12 +9433,12 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        // result.error is now an Error instance
-        expect(result.error).toBeInstanceOf(Error);
-        expect((result.error as Error).message).toContain(
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain(
           'Step input validation failed: \n- start: Invalid input: expected string, received number',
-        ); // Now safe to access
+        );
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
