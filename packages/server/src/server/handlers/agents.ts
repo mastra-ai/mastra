@@ -25,6 +25,8 @@ import {
   updateAgentModelInModelListBodySchema,
   modelManagementResponseSchema,
   modelConfigIdPathParams,
+  enhanceInstructionsBodySchema,
+  enhanceInstructionsResponseSchema,
 } from '../schemas/agents';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -962,6 +964,53 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
       return { message: 'Model updated in model list' };
     } catch (error) {
       return handleError(error, 'error updating model in model list');
+    }
+  },
+});
+
+export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/instructions/enhance',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: enhanceInstructionsBodySchema,
+  responseSchema: enhanceInstructionsResponseSchema,
+  summary: 'Enhance agent instructions',
+  description: 'Uses AI to enhance or modify agent instructions based on user feedback',
+  tags: ['Agents'],
+  handler: async ({ mastra, agentId, instructions, comment }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      const enhancementPrompt = `You are an expert prompt engineer. Your task is to improve the following agent instructions based on the user's feedback.
+
+Current Instructions:
+---
+${instructions}
+---
+
+User's Feedback/Request:
+${comment}
+
+Please provide:
+1. An improved version of the instructions that incorporates the user's feedback
+2. A brief explanation of what changes you made and why
+
+Important:
+- Maintain the overall structure and intent of the original instructions
+- Make targeted improvements based on the user's feedback
+- Keep the instructions clear, concise, and actionable
+- Preserve any specific formatting or sections that are important`;
+
+      const result = await agent.generate(enhancementPrompt, {
+        structuredOutput: {
+          schema: enhanceInstructionsResponseSchema,
+        },
+      });
+
+      return result.object;
+    } catch (error) {
+      return handleError(error, 'Error enhancing instructions');
     }
   },
 });
