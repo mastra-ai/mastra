@@ -790,9 +790,7 @@ export class ProcessorRunner {
             processorOrWorkflow,
             {
               phase: 'inputStep',
-              messages: processableMessages,
-              messageList,
-              stepNumber,
+              ...stepInput,
               systemMessages: currentSystemMessages,
               retryCount: args.retryCount ?? 0,
             },
