@@ -27,8 +27,8 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   inputMessages: LanguageModelV2Prompt;
   tools?: ToolSet;
   toolChoice?: ToolChoice<ToolSet>;
+  activeTools?: string[];
   options?: {
-    activeTools?: string[];
     abortSignal?: AbortSignal;
   };
   includeRawChunks?: boolean;
@@ -52,6 +52,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   inputMessages,
   tools,
   toolChoice,
+  activeTools,
   options,
   onResult,
   includeRawChunks,
@@ -71,7 +72,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   const toolsAndToolChoice = prepareToolsAndToolChoice({
     tools,
     toolChoice,
-    activeTools: options?.activeTools,
+    activeTools,
   });
 
   const structuredOutputMode = structuredOutput?.schema

@@ -1,5 +1,23 @@
 # @mastra/react-hooks
 
+## 0.1.0-beta.10
+
+### Minor Changes
+
+- Fix "MessagePartRuntime is not available" error when chatting with agents in Studio playground by replacing deprecated `useMessagePart` hook with `useAssistantState` ([#11039](https://github.com/mastra-ai/mastra/pull/11039))
+
+### Patch Changes
+
+- fix: persist data-\* chunks from writer.custom() to memory storage ([#10884](https://github.com/mastra-ai/mastra/pull/10884))
+  - Add persistence for custom data chunks (`data-*` parts) emitted via `writer.custom()` in tools
+  - Data chunks are now saved to message storage so they survive page refreshes
+  - Update `@assistant-ui/react` to v0.11.47 with native `DataMessagePart` support
+  - Convert `data-*` parts to `DataMessagePart` format (`{ type: 'data', name: string, data: T }`)
+  - Update related `@assistant-ui/*` packages for compatibility
+
+- Updated dependencies [[`261473a`](https://github.com/mastra-ai/mastra/commit/261473ac637e633064a22076671e2e02b002214d)]:
+  - @mastra/client-js@1.0.0-beta.10
+
 ## 0.1.0-beta.9
 
 ### Patch Changes

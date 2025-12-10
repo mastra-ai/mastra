@@ -1845,6 +1845,81 @@ This is useful for:
 - Filtering or modifying semantic recall content to prevent "prompt too long" errors
 - Dynamically adjusting system instructions based on the conversation
 
+### Per-step processing with processInputStep
+
+While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
+
+```typescript title="src/mastra/processors/step-processor.ts" showLineNumbers copy
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+
+export class DynamicModelProcessor implements Processor {
+  id = "dynamic-model";
+
+  async processInputStep({
+    stepNumber,
+    model,
+    toolChoice,
+    messageList,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // Use a fast model for initial response
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+
+    // Disable tools after 5 steps to force completion
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+
+    // No changes for other steps
+    return {};
+  }
+}
+```
+
+The `processInputStep` method receives:
+- `stepNumber`: Current step in the agentic loop (0-indexed)
+- `steps`: Results from previous steps
+- `messages`: Current messages snapshot (read-only)
+- `systemMessages`: Current system messages (read-only)
+- `messageList`: The full MessageList instance for mutations
+- `model`: Current model being used
+- `tools`: Current tools available for this step
+- `toolChoice`: Current tool choice setting
+- `activeTools`: Currently active tools
+- `providerOptions`: Provider-specific options
+- `modelSettings`: Model settings like temperature
+- `structuredOutput`: Structured output configuration
+
+The method can return any combination of:
+- `model`: Change the model for this step
+- `tools`: Replace or add tools (use spread to merge: `{ tools: { ...tools, newTool } }`)
+- `toolChoice`: Change tool selection behavior
+- `activeTools`: Filter which tools are available
+- `messages`: Replace messages (applied to messageList)
+- `systemMessages`: Replace all system messages
+- `providerOptions`: Modify provider options
+- `modelSettings`: Modify model settings
+- `structuredOutput`: Modify structured output configuration
+
+#### Using prepareStep callback
+
+For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
+
+```typescript
+await agent.generate({
+  prompt: "Complex task",
+  prepareStep: async ({ stepNumber, model }) => {
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+  },
+});
+```
+
 ### Custom output processor
 
 ```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy
@@ -10794,7 +10869,7 @@ Each provider requires specific protocol packages. Install the base exporter plu
 npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-proto
 ```
 
-### For gRPC Providers (Dash0)
+### For gRPC Providers (Dash0, Datadog)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
@@ -10929,6 +11004,72 @@ new OtelExporter({
 });
 ```
 
+### Datadog
+
+[Datadog](https://www.datadoghq.com/) APM provides application performance monitoring with distributed tracing. To send traces to Datadog via OTLP, you need the Datadog Agent running with OTLP ingestion enabled.
+
+Datadog uses gRPC for OTLP ingestion, which requires explicit imports and bundler configuration to work correctly:
+
+```typescript title="src/mastra/index.ts"
+// Explicitly import gRPC dependencies for the bundler
+import "@grpc/grpc-js";
+import "@opentelemetry/exporter-trace-otlp-grpc";
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelExporter, type ExportProtocol } from "@mastra/otel-exporter";
+
+export const mastra = new Mastra({
+  // Add grpc-js to externals so it's handled at runtime
+  bundler: {
+    externals: ["@grpc/grpc-js"],
+  },
+
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        exporters: [
+          new OtelExporter({
+            provider: {
+              custom: {
+                endpoint:
+                  process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+                  "http://localhost:4317",
+                protocol: (process.env.OTEL_EXPORTER_OTLP_PROTOCOL ||
+                  "grpc") as ExportProtocol,
+                headers: {},
+              },
+            },
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+:::info
+
+The Datadog Agent must be configured with OTLP ingestion enabled. Add the following to your `datadog.yaml`:
+
+```yaml
+otlp_config:
+  receiver:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+```
+
+The default OTLP endpoint is `http://localhost:4317` when running the Datadog Agent locally.
+
+:::
+
+:::warning
+
+The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-grpc` at the top of the file, along with the `bundler.externals` configuration, are required for the gRPC transport to work correctly. Without these, you may encounter connection issues.
+
+:::
+
 ### Custom/Generic OTEL Endpoints
 
 For other OTEL-compatible platforms or custom collectors:
@@ -10997,6 +11138,7 @@ Choose the right protocol package based on your provider:
 | Provider  | Protocol      | Required Package                           |
 | --------- | ------------- | ------------------------------------------ |
 | Dash0     | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
+| Datadog   | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
 | SigNoz    | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
 | New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
 | Traceloop | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  |
@@ -11285,7 +11427,7 @@ In addition to the internal exporters, Mastra supports integration with popular 
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
+  - Supports: Dash0, Datadog, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Bridges
 
@@ -18635,7 +18777,7 @@ export const testWorkflow = createWorkflow({
 
 > See [Input Data Mapping](./input-data-mapping) for more information.
 
-Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
+When no `structuredOutput` option is provided, Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
 
 ```json
 {
@@ -18647,6 +18789,46 @@ Mastra agents use a default schema that expects a `prompt` string as input and r
   }
 }
 ```
+
+### Agents with structured output
+
+When you need the agent to return structured data instead of plain text, pass the `structuredOutput` option to `createStep()`. The step's output schema will match your provided schema, enabling type-safe chaining to subsequent steps.
+
+```typescript {1-6,8-10} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const articleSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+});
+
+const agentStep = createStep(testAgent, {
+  structuredOutput: { schema: articleSchema },
+});
+
+// Next step receives typed structured data
+const processStep = createStep({
+  id: "process",
+  inputSchema: articleSchema, // Matches agent's outputSchema
+  outputSchema: z.object({ tagCount: z.number() }),
+  execute: async ({ inputData }) => ({
+    tagCount: inputData.tags.length, // Fully typed
+  }),
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .map(async ({ inputData }) => ({
+    prompt: `Generate an article about: ${inputData.topic}`,
+  }))
+  .then(agentStep)
+  .then(processStep)
+  .commit();
+```
+
+The `structuredOutput.schema` option accepts any Zod schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
+
+> See [Structured Output](/docs/v1/agents/structured-output) for more options like error handling strategies and streaming with structured output.
 
 ## Using tools in workflows
 
@@ -30948,6 +31130,27 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
   });
 ```
 
+### `prepareStep` messages format
+
+The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5 model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
+
+If you need the old AI SDK v5 format, use `messageList.get.all.aiV5.model()`:
+
+```diff
+  agent.generate({
+    prompt: 'Hello',
+    prepareStep: async ({ messages, messageList }) => {
+-     // messages was AI SDK v5 ModelMessage format
+-     console.log(messages[0].content);
++     // messages is now MastraDBMessage format
++     // Use messageList to get AI SDK v5 format if needed:
++     const aiSdkMessages = messageList.get.all.aiV5.model();
+
+      return { toolChoice: 'auto' };
+    },
+  });
+```
+
 
 ---
 title: "CLI | v1 Migration Guide"
@@ -35178,7 +35381,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 60+ AI providers and 1324+ models through Mastra's model router."
+description: "Access 60+ AI providers and 1328+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35191,7 +35394,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1324 models from 60 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1328 models from 60 providers through a single API.
 
 ## Features
 
@@ -44376,7 +44579,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/groq.svg"
     />    <CardGridItem
       title="Mistral"
-      description="21 models"
+      description="22 models"
       href="/models/v1/providers/mistral"
       logo="https://models.dev/logos/mistral.svg"
     />    <CardGridItem
@@ -44551,7 +44754,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/perplexity.svg"
     />    <CardGridItem
       title="Poe"
-      description="100 models"
+      description="102 models"
       href="/models/v1/providers/poe"
       logo="https://models.dev/logos/poe.svg"
     />    <CardGridItem
@@ -44591,7 +44794,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="18 models"
+      description="19 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -46170,7 +46373,7 @@ npm install @ai-sdk/anthropic
 
 ---
 title: "Mistral | Models | Mastra"
-description: "Use Mistral models with Mastra. 21 models available."
+description: "Use Mistral models with Mastra. 22 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -46181,7 +46384,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
 [EN] Source: https://mastra.ai/en/models/providers/mistral
 
-Access 21 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
+Access 22 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
 
 Learn more in the [Mistral documentation](https://docs.mistral.ai/getting-started/models/).
 
@@ -46234,6 +46437,18 @@ for await (const chunk of stream) {
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 128000,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "mistral/devstral-medium-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
     "inputCost": 0.4,
     "outputCost": 2
   },
@@ -49179,7 +49394,7 @@ For detailed provider-specific documentation, see the [AI SDK Perplexity provide
 
 ---
 title: "Poe | Models | Mastra"
-description: "Use Poe models with Mastra. 100 models available."
+description: "Use Poe models with Mastra. 102 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -49189,7 +49404,7 @@ description: "Use Poe models with Mastra. 100 models available."
 # <img src="https://models.dev/logos/poe.svg" alt="Poe logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Poe
 [EN] Source: https://mastra.ai/en/models/providers/poe
 
-Access 100 Poe models through Mastra's model router. Authentication is handled automatically using the `POE_API_KEY` environment variable.
+Access 102 Poe models through Mastra's model router. Authentication is handled automatically using the `POE_API_KEY` environment variable.
 
 Learn more in the [Poe documentation](https://creator.poe.com/docs/external-applications/openai-compatible-api).
 
@@ -49273,7 +49488,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 192000,
     "maxOutput": 64000,
     "inputCost": 0.85,
-    "outputCost": 4.2
+    "outputCost": 4.3
   },
   {
     "model": "poe/anthropic/claude-opus-3",
@@ -49334,6 +49549,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": 13,
     "outputCost": 64
+  },
+  {
+    "model": "poe/anthropic/claude-opus-4.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 196608,
+    "maxOutput": 64000,
+    "inputCost": 4.3,
+    "outputCost": 21
   },
   {
     "model": "poe/anthropic/claude-sonnet-3.5",
@@ -49480,42 +49707,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/facebook/llama-3.1-405b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": null,
-    "inputCost": 3,
-    "outputCost": 3
-  },
-  {
-    "model": "poe/facebook/llama-3.1-70b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": null,
-    "inputCost": 0.9,
-    "outputCost": 0.9
-  },
-  {
-    "model": "poe/facebook/llama-3.1-8b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": null,
-    "inputCost": 0.2,
-    "outputCost": 0.2
-  },
-  {
     "model": "poe/google/gemini-2.0-flash",
     "imageInput": true,
     "audioInput": true,
@@ -49549,7 +49740,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1065535,
     "maxOutput": 65535,
     "inputCost": 0.21,
-    "outputCost": 1.7
+    "outputCost": 1.8
   },
   {
     "model": "poe/google/gemini-2.5-flash-lite",
@@ -49576,7 +49767,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7
   },
   {
-    "model": "poe/google/gemini-3.0-pro",
+    "model": "poe/google/gemini-3-pro",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -49669,7 +49860,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 32768,
     "maxOutput": null,
     "inputCost": 0.21,
-    "outputCost": 1.7
+    "outputCost": 1.8
+  },
+  {
+    "model": "poe/google/nano-banana-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": null,
+    "inputCost": 1.6,
+    "outputCost": 9.6
   },
   {
     "model": "poe/google/veo-2",
@@ -49816,7 +50019,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/chatgpt-4o-latest",
+    "model": "poe/novita/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "poe/openai/chatgpt-4o-latest",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49825,10 +50040,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 128000,
     "maxOutput": 8192,
     "inputCost": 4.5,
-    "outputCost": 13
+    "outputCost": 14
   },
   {
-    "model": "poe/openAi/dall-e-3",
+    "model": "poe/openai/dall-e-3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -49840,7 +50055,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/gpt-3.5-turbo",
+    "model": "poe/openai/gpt-3.5-turbo",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49849,10 +50064,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 16384,
     "maxOutput": 2048,
     "inputCost": 0.45,
-    "outputCost": 1.3
+    "outputCost": 1.4
   },
   {
-    "model": "poe/openAi/gpt-3.5-turbo-instruct",
+    "model": "poe/openai/gpt-3.5-turbo-instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49860,11 +50075,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 3500,
     "maxOutput": 1024,
-    "inputCost": 1.3,
+    "inputCost": 1.4,
     "outputCost": 1.8
   },
   {
-    "model": "poe/openAi/gpt-3.5-turbo-raw",
+    "model": "poe/openai/gpt-3.5-turbo-raw",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49873,10 +50088,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 4524,
     "maxOutput": 2048,
     "inputCost": 0.45,
-    "outputCost": 1.3
+    "outputCost": 1.4
   },
   {
-    "model": "poe/openAi/gpt-4-classic",
+    "model": "poe/openai/gpt-4-classic",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49888,7 +50103,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 54
   },
   {
-    "model": "poe/openAi/gpt-4-classic-0314",
+    "model": "poe/openai/gpt-4-classic-0314",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49900,7 +50115,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 54
   },
   {
-    "model": "poe/openAi/gpt-4-turbo",
+    "model": "poe/openai/gpt-4-turbo",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49912,7 +50127,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 27
   },
   {
-    "model": "poe/openAi/gpt-4.1",
+    "model": "poe/openai/gpt-4.1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49924,7 +50139,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7.2
   },
   {
-    "model": "poe/openAi/gpt-4.1-mini",
+    "model": "poe/openai/gpt-4.1-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49936,7 +50151,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.4
   },
   {
-    "model": "poe/openAi/gpt-4.1-nano",
+    "model": "poe/openai/gpt-4.1-nano",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49948,7 +50163,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.36
   },
   {
-    "model": "poe/openAi/gpt-4o",
+    "model": "poe/openai/gpt-4o",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49960,7 +50175,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/gpt-4o-aug",
+    "model": "poe/openai/gpt-4o-aug",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49968,11 +50183,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 8192,
-    "inputCost": 2.3,
+    "inputCost": 2.2,
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-4o-mini",
+    "model": "poe/openai/gpt-4o-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49984,7 +50199,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.54
   },
   {
-    "model": "poe/openAi/gpt-4o-mini-search",
+    "model": "poe/openai/gpt-4o-mini-search",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -49996,7 +50211,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.54
   },
   {
-    "model": "poe/openAi/gpt-4o-search",
+    "model": "poe/openai/gpt-4o-search",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50004,11 +50219,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 8192,
-    "inputCost": 2.3,
+    "inputCost": 2.2,
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-5",
+    "model": "poe/openai/gpt-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50020,7 +50235,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-5-chat",
+    "model": "poe/openai/gpt-5-chat",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50032,7 +50247,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-5-codex",
+    "model": "poe/openai/gpt-5-codex",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50044,7 +50259,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-5-mini",
+    "model": "poe/openai/gpt-5-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50056,7 +50271,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.8
   },
   {
-    "model": "poe/openAi/gpt-5-nano",
+    "model": "poe/openai/gpt-5-nano",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50068,7 +50283,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.36
   },
   {
-    "model": "poe/openAi/gpt-5-pro",
+    "model": "poe/openai/gpt-5-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50076,7 +50291,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 13,
+    "inputCost": 14,
     "outputCost": 110
   },
   {
@@ -50093,7 +50308,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "poe/openai/gpt-5.1-codex",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -50128,7 +50343,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-image-1",
+    "model": "poe/openai/gpt-image-1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50140,7 +50355,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/gpt-image-1-mini",
+    "model": "poe/openai/gpt-image-1-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50152,7 +50367,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/o1",
+    "model": "poe/openai/o1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50160,11 +50375,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 100000,
-    "inputCost": 13,
+    "inputCost": 14,
     "outputCost": 54
   },
   {
-    "model": "poe/openAi/o1-pro",
+    "model": "poe/openai/o1-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50176,7 +50391,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 540
   },
   {
-    "model": "poe/openAi/o3",
+    "model": "poe/openai/o3",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50188,7 +50403,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7.2
   },
   {
-    "model": "poe/openAi/o3-deep-research",
+    "model": "poe/openai/o3-deep-research",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50200,7 +50415,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 36
   },
   {
-    "model": "poe/openAi/o3-mini",
+    "model": "poe/openai/o3-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50212,7 +50427,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4
   },
   {
-    "model": "poe/openAi/o3-mini-high",
+    "model": "poe/openai/o3-mini-high",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50224,7 +50439,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4
   },
   {
-    "model": "poe/openAi/o3-pro",
+    "model": "poe/openai/o3-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50236,7 +50451,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 72
   },
   {
-    "model": "poe/openAi/o4-mini",
+    "model": "poe/openai/o4-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50248,7 +50463,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4
   },
   {
-    "model": "poe/openAi/o4-mini-deep-research",
+    "model": "poe/openai/o4-mini-deep-research",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50260,7 +50475,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7.2
   },
   {
-    "model": "poe/openAi/sora-2",
+    "model": "poe/openai/sora-2",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50272,7 +50487,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/sora-2-pro",
+    "model": "poe/openai/sora-2-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50398,7 +50613,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 256000,
+    "contextWindow": 2000000,
     "maxOutput": 128000,
     "inputCost": 0.2,
     "outputCost": 0.5
@@ -50410,10 +50625,34 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 2000000,
     "maxOutput": 128000,
     "inputCost": 0.2,
     "outputCost": 0.5
+  },
+  {
+    "model": "poe/xai/grok-4.1-fast-non-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "poe/xai/grok-4.1-fast-reasoning",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "poe/xai/grok-code-fast-1",
@@ -52850,7 +53089,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 18 models available."
+description: "Use Venice AI models with Mastra. 19 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -52860,7 +53099,7 @@ description: "Use Venice AI models with Mastra. 18 models available."
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 18 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 19 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -52911,40 +53150,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 30
   },
   {
-    "model": "venice/deepseek-coder-v2-lite",
+    "model": "venice/deepseek-v3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 131072,
+    "contextWindow": 163840,
     "maxOutput": 8192,
-    "inputCost": 0.5,
-    "outputCost": 2
-  },
-  {
-    "model": "venice/deepseek-r1-671b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 3.5,
-    "outputCost": 14
-  },
-  {
-    "model": "venice/dolphin-2.9.2-qwen2-72b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 8192,
-    "inputCost": 0.7,
-    "outputCost": 2.8
+    "inputCost": 0.4,
+    "outputCost": 1
   },
   {
     "model": "venice/gemini-3-pro-preview",
@@ -52959,6 +53174,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
+    "model": "venice/google-gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 202752,
+    "maxOutput": 8192,
+    "inputCost": 0.12,
+    "outputCost": 0.2
+  },
+  {
     "model": "venice/grok-41-fast",
     "imageInput": true,
     "audioInput": false,
@@ -52971,6 +53198,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.25
   },
   {
+    "model": "venice/hermes-3-llama-3.1-405b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 1.1,
+    "outputCost": 3
+  },
+  {
     "model": "venice/kimi-k2-thinking",
     "imageInput": false,
     "audioInput": false,
@@ -52981,18 +53220,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.75,
     "outputCost": 3.2
-  },
-  {
-    "model": "venice/llama-3.1-405b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 65536,
-    "maxOutput": 8192,
-    "inputCost": 1.5,
-    "outputCost": 6
   },
   {
     "model": "venice/llama-3.2-3b",
@@ -53031,40 +53258,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "venice/qwen-2.5-coder-32b",
+    "model": "venice/openai-gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 32768,
+    "contextWindow": 131072,
     "maxOutput": 8192,
-    "inputCost": 0.5,
-    "outputCost": 2
-  },
-  {
-    "model": "venice/qwen-2.5-qwq-32b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 8192,
-    "inputCost": 0.5,
-    "outputCost": 2
-  },
-  {
-    "model": "venice/qwen-2.5-vl",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 8192,
-    "inputCost": 0.7,
-    "outputCost": 2.8
+    "inputCost": 0.07,
+    "outputCost": 0.3
   },
   {
     "model": "venice/qwen3-235b",
@@ -53075,8 +53278,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 8192,
-    "inputCost": 1.5,
-    "outputCost": 6
+    "inputCost": 0.45,
+    "outputCost": 3.5
+  },
+  {
+    "model": "venice/qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.75
+  },
+  {
+    "model": "venice/qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.45,
+    "outputCost": 3.5
   },
   {
     "model": "venice/qwen3-4b",
@@ -53087,8 +53314,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 32768,
     "maxOutput": 8192,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    "inputCost": 0.05,
+    "outputCost": 0.15
+  },
+  {
+    "model": "venice/qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.75,
+    "outputCost": 3
+  },
+  {
+    "model": "venice/qwen3-next-80b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.35,
+    "outputCost": 1.9
   },
   {
     "model": "venice/venice-uncensored",
@@ -53099,8 +53350,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 8192,
-    "inputCost": 0.5,
-    "outputCost": 2
+    "inputCost": 0.2,
+    "outputCost": 0.9
   },
   {
     "model": "venice/zai-org-glm-4.6",
@@ -75508,8 +75759,8 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
 #### Execution order in the agentic loop
 
 1. `processInput` (once at start)
-2. `processInputStep` (at each step, before LLM call)
-3. `prepareStep` callback (if provided)
+2. `processInputStep` from inputProcessors (at each step, before LLM call)
+3. `prepareStep` callback (runs as part of the processInputStep pipeline, after inputProcessors)
 4. LLM execution
 5. Tool execution (if needed)
 6. Repeat from step 2 if tools were called
@@ -75521,13 +75772,13 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
     {
       name: "messages",
       type: "MastraDBMessage[]",
-      description: "All messages including tool calls and results from previous steps.",
+      description: "All messages including tool calls and results from previous steps (read-only snapshot).",
       isOptional: false,
     },
     {
       name: "messageList",
       type: "MessageList",
-      description: "MessageList instance for managing messages.",
+      description: "MessageList instance for managing messages. Can mutate directly or return in result.",
       isOptional: false,
     },
     {
@@ -75537,10 +75788,58 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
       isOptional: false,
     },
     {
+      name: "steps",
+      type: "StepResult[]",
+      description: "Results from previous steps, including text, toolCalls, and toolResults.",
+      isOptional: false,
+    },
+    {
       name: "systemMessages",
       type: "CoreMessage[]",
-      description: "All system messages for read/modify access.",
+      description: "All system messages (read-only snapshot). Return in result to replace.",
       isOptional: false,
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModelV2",
+      description: "Current model being used. Return a different model in result to switch.",
+      isOptional: false,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "Current tool choice setting ('auto', 'none', 'required', or specific tool).",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "Currently active tool names. Return filtered array to limit tools.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "Current tools available for this step. Return in result to add/replace tools.",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "Provider-specific options (e.g., Anthropic cacheControl, OpenAI reasoningEffort).",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "Model settings like temperature, maxTokens, topP.",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Structured output configuration (schema, output mode). Return in result to modify.",
+      isOptional: true,
     },
     {
       name: "abort",
@@ -75563,12 +75862,99 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
   ]}
 />
 
+#### ProcessInputStepResult
+
+The method can return any combination of these properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModelV2 | string",
+      description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-4o'.",
+      isOptional: true,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "Change tool selection behavior for this step.",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "Filter which tools are available for this step.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "Replace or modify tools for this step. Use spread to merge: { tools: { ...tools, newTool } }.",
+      isOptional: true,
+    },
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "Replace all messages. Cannot be used with messageList.",
+      isOptional: true,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "Return the same messageList instance (indicates you mutated it). Cannot be used with messages.",
+      isOptional: true,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "Replace all system messages for this step only.",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "Change provider-specific options for this step.",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "Change model settings for this step.",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Change structured output configuration for this step.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Processor chaining
+
+When multiple processors implement `processInputStep`, they run in order and changes chain through:
+
+```
+Processor 1: receives { model: 'gpt-4o' } → returns { model: 'gpt-4o-mini' }
+Processor 2: receives { model: 'gpt-4o-mini' } → returns { toolChoice: 'none' }
+Final: model = 'gpt-4o-mini', toolChoice = 'none'
+```
+
+#### System message isolation
+
+System messages are **reset to their original values** at the start of each step. Modifications made in `processInputStep` only affect the current step, not subsequent steps.
+
 #### Use cases
 
+- Dynamic model switching based on step number or context
+- Disabling tools after a certain number of steps
+- Dynamically adding or replacing tools based on conversation context
 - Transforming message part types between providers (e.g., `reasoning` → `thinking` for Anthropic)
 - Modifying messages based on step number or accumulated context
-- Implementing per-step message filtering or enrichment
-- Adding step-specific context or instructions
+- Adding step-specific system instructions
+- Adjusting provider options per step (e.g., cache control)
+- Modifying structured output schema based on step context
 
 ---
 
@@ -75727,13 +76113,46 @@ export class LowercaseProcessor implements Processor {
 
 ### Per-step processor with processInputStep
 
+```typescript title="src/mastra/processors/dynamic-model.ts" showLineNumbers copy
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+
+export class DynamicModelProcessor implements Processor {
+  id = "dynamic-model";
+
+  async processInputStep({
+    stepNumber,
+    steps,
+    toolChoice,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // Use a fast model for initial response
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+
+    // Switch to powerful model after tool calls
+    if (steps.length > 0 && steps[steps.length - 1].toolCalls?.length) {
+      return { model: "openai/gpt-4o" };
+    }
+
+    // Disable tools after 5 steps to force completion
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+
+    return {};
+  }
+}
+```
+
+### Message transformer with processInputStep
+
 ```typescript title="src/mastra/processors/reasoning-transformer.ts" showLineNumbers copy
 import type { Processor, MastraDBMessage } from "@mastra/core";
 
 export class ReasoningTransformer implements Processor {
   id = "reasoning-transformer";
 
-  async processInputStep({ messages, messageList, stepNumber }) {
+  async processInputStep({ messages, messageList }) {
     // Transform reasoning parts to thinking parts at each step
     // This is useful when switching between model providers
     for (const msg of messages) {
@@ -79771,20 +80190,6 @@ app.listen(4111);
       description: "Task store for A2A (Agent-to-Agent) operations",
       isOptional: true,
     },
-    {
-      name: "playground",
-      type: "boolean",
-      description: "Can be read to set context values",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "isDev",
-      type: "boolean",
-      description: "Development mode flag",
-      isOptional: true,
-      defaultValue: "false",
-    },
   ]}
 />
 
@@ -79852,8 +80257,6 @@ Available properties on `res.locals`:
 | `abortSignal` | Request cancellation signal |
 | `tools` | Available tools |
 | `taskStore` | Task store for A2A operations |
-| `playground` | Whether playground is enabled |
-| `isDev` | Whether running in development mode |
 | `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |
 
@@ -80040,20 +80443,6 @@ export default app;
       description: "Task store for A2A (Agent-to-Agent) operations",
       isOptional: true,
     },
-    {
-      name: "playground",
-      type: "boolean",
-      description: "Can be read to set context values",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "isDev",
-      type: "boolean",
-      description: "Development mode flag",
-      isOptional: true,
-      defaultValue: "false",
-    },
   ]}
 />
 
@@ -80111,8 +80500,6 @@ Available context keys:
 | `abortSignal` | Request cancellation signal |
 | `tools` | Available tools |
 | `taskStore` | Task store for A2A operations |
-| `playground` | Whether playground is enabled |
-| `isDev` | Whether running in development mode |
 | `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |
 
@@ -84241,13 +84628,7 @@ The `.stream()` method enables real-time streaming of responses from an agent wi
 ## Usage example
 
 ```ts title="index.ts" copy
-// Default Mastra format
-const mastraStream = await agent.stream("message for agent");
-
-// AI SDK v5 compatible format
-const aiSdkStream = await agent.stream("message for agent", {
-  format: "aisdk",
-});
+const stream = await agent.stream("message for agent");
 ```
 
 :::info
@@ -84279,14 +84660,6 @@ const aiSdkStream = await agent.stream("message for agent", {
 
 <PropertiesTable
   content={[
-    {
-      name: "format",
-      type: "'mastra' | 'aisdk'",
-      isOptional: true,
-      defaultValue: "'mastra'",
-      description:
-        "Determines the output stream format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.",
-    },
     {
       name: "maxSteps",
       type: "number",
@@ -84879,9 +85252,9 @@ const aiSdkStream = await agent.stream("message for agent", {
   content={[
     {
       name: "stream",
-      type: "MastraModelOutput<Output> | AISDKV5OutputStream<Output>",
+      type: "MastraModelOutput<Output>",
       description:
-        "Returns a streaming interface based on the format parameter. When format is 'mastra' (default), returns MastraModelOutput. When format is 'aisdk', returns AISDKV5OutputStream for AI SDK v5 compatibility.",
+        "Returns a MastraModelOutput instance that provides access to the streaming output.",
     },
     {
       name: "traceId",
@@ -84912,32 +85285,34 @@ for await (const chunk of stream.textStream) {
   console.log(chunk);
 }
 
+// or access full stream
+for await (const chunk of stream.fullStream) {
+  console.log(chunk);
+}
+
 // Get full text after streaming
 const fullText = await stream.text;
 ```
 
 ### AI SDK v5 Format
 
+To use the stream with AI SDK v5, you can convert it using our utility function `toAISdkStream`.
+
 ```ts title="index.ts" showLineNumbers copy
-import { stepCountIs } from "ai-v5";
+import { stepCountIs, createUIMessageStreamResponse } from "ai";
+import { toAISdkStream } from "@mastra/ai-sdk";
 
 const stream = await agent.stream("Tell me a story", {
-  format: "aisdk",
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
   },
 });
 
-// Use with AI SDK v5 compatible interfaces
-for await (const part of stream.fullStream) {
-  if (part.type === "text-delta") {
-    console.log(part.text);
-  }
-}
-
 // In an API route for frontend integration
-return stream.toUIMessageStreamResponse();
+return createUIMessageStreamResponse({
+  stream: toAISdkStream(stream, { from: "agent" }),
+})
 ```
 
 ### Using Callbacks
@@ -84973,10 +85348,9 @@ for await (const chunk of stream.textStream) {
 
 ```ts title="index.ts" showLineNumbers copy
 import { z } from "zod";
-import { stepCountIs } from "ai-v5";
+import { stepCountIs } from "ai";
 
 await agent.stream("message for agent", {
-  format: "aisdk", // Enable AI SDK v5 compatibility
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
@@ -103154,6 +103528,57 @@ const step1 = createStep({
   },
 });
 ```
+
+## Creating steps from agents
+
+You can create a step directly from an agent. The step will use the agent's name as its ID.
+
+### Basic agent step
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testAgent } from "../agents/test-agent";
+
+const agentStep = createStep(testAgent);
+// inputSchema: { prompt: string }
+// outputSchema: { text: string }
+```
+
+### Agent step with structured output
+
+Pass `structuredOutput` to have the agent return typed structured data:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const articleSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+});
+
+const agentStep = createStep(testAgent, {
+  structuredOutput: { schema: articleSchema },
+});
+// inputSchema: { prompt: string }
+// outputSchema: { title: string, summary: string, tags: string[] }
+```
+
+### Agent step options
+
+<PropertiesTable
+  content={[
+    {
+      name: "structuredOutput",
+      type: "{ schema: z.ZodType<any> }",
+      description: "When provided, the agent returns structured data matching this schema instead of plain text. The step's outputSchema is set to the provided schema.",
+      required: false,
+    },
+    {
+      name: "onFinish",
+      type: "(result: AgentResult) => void",
+      description: "Callback invoked when the agent completes generation.",
+      required: false,
+    },
+  ]}
+/>
 
 ## Constructor Parameters
 

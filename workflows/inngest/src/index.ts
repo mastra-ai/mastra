@@ -40,6 +40,21 @@ export function createStep<
   params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
+// Overload for agent WITH structured output schema
+export function createStep<TStepId extends string, TStepOutput extends z.ZodType<any>>(
+  agent: Agent<TStepId, any>,
+  agentOptions: AgentStepOptions<TStepOutput> & { structuredOutput: { schema: TStepOutput } },
+): Step<
+  TStepId,
+  any,
+  z.ZodObject<{ prompt: z.ZodString }>,
+  TStepOutput,
+  z.ZodType<any>,
+  z.ZodType<any>,
+  InngestEngineType
+>;
+
+// Overload for agent WITHOUT structured output (default { text: string })
 export function createStep<
   TStepId extends string,
   TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
@@ -89,6 +104,9 @@ export function createStep<
   }
 
   if (isAgent(params)) {
+    // Determine output schema based on structuredOutput option
+    const outputSchema = agentOptions?.structuredOutput?.schema ?? z.object({ text: z.string() });
+
     return {
       id: params.name as TStepId,
       description: params.getDescription(),
@@ -97,9 +115,7 @@ export function createStep<
         // resourceId: z.string().optional(),
         // threadId: z.string().optional(),
       }) as unknown as TStepInput,
-      outputSchema: z.object({
-        text: z.string(),
-      }) as unknown as TStepOutput,
+      outputSchema: outputSchema as unknown as TStepOutput,
       execute: async ({
         inputData,
         runId,
@@ -121,6 +137,10 @@ export function createStep<
           streamPromise.resolve = resolve;
           streamPromise.reject = reject;
         });
+
+        // Track structured output result
+        let structuredResult: any = null;
+
         const toolData = {
           name: params.name,
           args: inputData,
@@ -136,6 +156,11 @@ export function createStep<
             requestContext,
             tracingContext,
             onFinish: result => {
+              // Capture structured output if available
+              const resultWithObject = result as typeof result & { object?: unknown };
+              if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+                structuredResult = resultWithObject.object;
+              }
               streamPromise.resolve(result.text);
               void agentOptions?.onFinish?.(result);
             },
@@ -148,6 +173,11 @@ export function createStep<
             requestContext,
             tracingContext,
             onFinish: result => {
+              // Capture structured output if available
+              const resultWithObject = result as typeof result & { object?: unknown };
+              if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+                structuredResult = resultWithObject.object;
+              }
               streamPromise.resolve(result.text);
               void agentOptions?.onFinish?.(result);
             },
@@ -187,6 +217,10 @@ export function createStep<
           return abort();
         }
 
+        // Return structured output if available, otherwise default text
+        if (structuredResult !== null) {
+          return structuredResult;
+        }
         return {
           text: await streamPromise.promise,
         };
