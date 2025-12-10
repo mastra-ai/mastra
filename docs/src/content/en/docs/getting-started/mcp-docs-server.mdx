@@ -80,24 +80,47 @@ If you followed the automatic installation, you'll see a popup when you open cur
 Google Antigravity is an agent-first development platform that supports MCP servers to enhance AI capabilities with real-time context.
 
 1. Open your Antigravity MCP configuration file:
-   - The configuration is typically located in your Antigravity settings
+   - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
    - You can access it through the MCP Store interface in Antigravity
 
-2. Add the Mastra MCP server configuration:
+   <img
+     src="/img/antigravity_mcp_server.png"
+     alt="Settings page of antigravity to enable MCP"
+     width={800}
+     className="rounded-lg"
+   />
+
+2. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.  
+   <img
+     src="/img/antigravity_managed_mcp.png"
+     alt="managed mcp page of antigravity to enable MCP"
+     width={800}
+     className="rounded-lg"
+   />
+
+3. Add the Mastra MCP server configuration:
 
    ```json copy
    {
-     "mcpServers": {
-       "mastra": {
-         "type": "stdio",
-         "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server@beta"]
-       }
-     }
-   }
+      "mcpServers": {
+          "mastra-docs": {
+              "command": "npx",
+              "args": [
+                  "-y",
+                  "@mastra/mcp-docs-server"
+              ]
+          }
+      }
+  }
    ```
 
-3. Save the configuration and restart Antigravity
+4. Save the configuration and restart Antigravity
+    <img
+      src="/img/antigravity_final_interface_mcp.png"
+      alt="managed mcp page of antigravity to enable MCP"
+      width={800}
+      className="rounded-lg"
+   />
 
 Once configured, Antigravity's AI agents can access Mastra's documentation, code examples, and knowledge base to:
 - Provide context-aware suggestions when building Mastra projects
