@@ -77,7 +77,7 @@ If you followed the automatic installation, you'll see a popup when you open cur
 
 ### Antigravity
 
-Google Antigravity is an agent-first development platform that supports MCP servers to enhance AI capabilities with real-time context.
+Google Antigravity is an agent-first development platform that supports MCP servers for accessing external documentation, APIs, and project context.
 
 1. Open your Antigravity MCP configuration file:
    - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
@@ -122,11 +122,11 @@ Google Antigravity is an agent-first development platform that supports MCP serv
       className="rounded-lg"
    />
 
-Once configured, Antigravity's AI agents can access Mastra's documentation, code examples, and knowledge base to:
-- Provide context-aware suggestions when building Mastra projects
-- Access up-to-date API documentation and best practices
-- Help debug issues by referencing recent changes and bug fixes
-- Suggest correct implementations based on current Mastra patterns
+Once configured, the Mastra MCP server exposes the following to Antigravity agents:
+- Indexed documentation and API schemas for Mastra, enabling programmatic retrieval of relevant context during code generation
+- Access to example code snippets and usage patterns stored in Mastra Docs
+- Structured data for error handling and debugging references in the editor
+- Metadata about current Mastra project patterns for code suggestion and completion
 
 The MCP server will appear in Antigravity's MCP Store, where you can manage its connection status and authentication if needed.
 
