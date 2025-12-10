@@ -337,8 +337,27 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               payload: {},
             },
           };
+        } else if (result.status === 'tripwire') {
+          await emitter.emit('watch', {
+            type: 'workflow-step-result',
+            payload: {
+              id: step.id,
+              status: 'tripwire',
+              error: result?.tripwire?.reason,
+              payload: prevOutput,
+            },
+          });
+
+          return {
+            executionContext,
+            result: {
+              status: 'tripwire',
+              tripwire: result?.tripwire,
+            },
+          };
         }
 
+        // Status is 'success'
         await emitter.emit('watch', {
           type: 'workflow-step-result',
           payload: {

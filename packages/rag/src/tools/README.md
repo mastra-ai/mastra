@@ -73,12 +73,12 @@ const chromaTool = createVectorQueryTool({
 You can also override database configurations at runtime using the runtime context:
 
 ```typescript
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
 // Override Pinecone namespace at runtime
-runtimeContext.set('databaseConfig', {
+requestContext.set('databaseConfig', {
   pinecone: {
     namespace: 'runtime-namespace',
   },
@@ -87,7 +87,7 @@ runtimeContext.set('databaseConfig', {
 await vectorTool.execute({
   context: { queryText: 'search query' },
   mastra,
-  runtimeContext,
+  requestContext,
 });
 ```
 

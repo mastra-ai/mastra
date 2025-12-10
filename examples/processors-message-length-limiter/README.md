@@ -251,7 +251,7 @@ const longMessage =
 const result = await agent.generate(longMessage);
 
 if (result.tripwire) {
-  console.log('Request blocked:', result.tripwireReason);
+  console.log('Request blocked:', result.tripwire.reason);
 } else {
   console.log(result.text);
 }

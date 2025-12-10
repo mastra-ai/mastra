@@ -1,5 +1,42 @@
 # @mastra/voice-elevenlabs
 
+## 0.12.0-beta.1
+
+### Minor Changes
+
+- Add output format support to ElevenLabs voice integration ([#11027](https://github.com/mastra-ai/mastra/pull/11027))
+
+  The `speak()` method now supports specifying audio output formats via the `outputFormat` option. This enables telephony and VoIP use cases that require specific audio formats like μ-law (ulaw_8000) or PCM formats.
+
+  ```typescript
+  import { ElevenLabsVoice } from '@mastra/voice-elevenlabs';
+
+  const voice = new ElevenLabsVoice();
+
+  // Generate speech with telephony format (μ-law 8kHz)
+  const stream = await voice.speak('Hello from Mastra!', {
+    outputFormat: 'ulaw_8000',
+  });
+
+  // Generate speech with PCM format
+  const pcmStream = await voice.speak('Hello from Mastra!', {
+    outputFormat: 'pcm_16000',
+  });
+  ```
+
+  Supported formats include:
+  - MP3 variants: `mp3_22050_32`, `mp3_44100_32`, `mp3_44100_64`, `mp3_44100_96`, `mp3_44100_128`, `mp3_44100_192`
+  - PCM variants: `pcm_8000`, `pcm_16000`, `pcm_22050`, `pcm_24000`, `pcm_44100`
+  - Telephony formats: `ulaw_8000`, `alaw_8000` (μ-law and A-law 8kHz for VoIP/telephony)
+  - WAV formats: `wav`, `wav_8000`, `wav_16000`
+
+  If `outputFormat` is not specified, the method defaults to ElevenLabs' default format (typically `mp3_44100_128`).
+
+### Patch Changes
+
+- Updated dependencies [[`edb07e4`](https://github.com/mastra-ai/mastra/commit/edb07e49283e0c28bd094a60e03439bf6ecf0221), [`b7e17d3`](https://github.com/mastra-ai/mastra/commit/b7e17d3f5390bb5a71efc112204413656fcdc18d), [`261473a`](https://github.com/mastra-ai/mastra/commit/261473ac637e633064a22076671e2e02b002214d), [`5d7000f`](https://github.com/mastra-ai/mastra/commit/5d7000f757cd65ea9dc5b05e662fd83dfd44e932), [`4f0331a`](https://github.com/mastra-ai/mastra/commit/4f0331a79bf6eb5ee598a5086e55de4b5a0ada03), [`8a000da`](https://github.com/mastra-ai/mastra/commit/8a000da0c09c679a2312f6b3aa05b2ca78ca7393)]:
+  - @mastra/core@1.0.0-beta.10
+
 ## 0.12.0-beta.0
 
 ### Minor Changes

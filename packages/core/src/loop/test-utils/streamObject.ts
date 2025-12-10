@@ -1072,6 +1072,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "text": "{ "content": "Hello, world!" }",
                   "toolCalls": [],
                   "toolResults": [],
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1278,6 +1279,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "text": "{ "invalid": "Hello, world!" }",
                   "toolCalls": [],
                   "toolResults": [],
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1484,6 +1486,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "text": "{ "invalid": "Hello, world!" }",
                   "toolCalls": [],
                   "toolResults": [],
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,

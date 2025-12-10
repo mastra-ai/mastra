@@ -10,6 +10,7 @@ export const workflowRunStatusSchema = z.enum([
   'canceled',
   'pending',
   'bailed',
+  'tripwire',
 ]);
 
 // Path parameter schemas
@@ -51,6 +52,7 @@ export const workflowInfoSchema = z.object({
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
   options: z.object({}).optional(),
+  isProcessorWorkflow: z.boolean().optional(),
 });
 
 /**

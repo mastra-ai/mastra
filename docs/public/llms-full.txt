@@ -1845,6 +1845,81 @@ This is useful for:
 - Filtering or modifying semantic recall content to prevent "prompt too long" errors
 - Dynamically adjusting system instructions based on the conversation
 
+### Per-step processing with processInputStep
+
+While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
+
+```typescript title="src/mastra/processors/step-processor.ts" showLineNumbers copy
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+
+export class DynamicModelProcessor implements Processor {
+  id = "dynamic-model";
+
+  async processInputStep({
+    stepNumber,
+    model,
+    toolChoice,
+    messageList,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // Use a fast model for initial response
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+
+    // Disable tools after 5 steps to force completion
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+
+    // No changes for other steps
+    return {};
+  }
+}
+```
+
+The `processInputStep` method receives:
+- `stepNumber`: Current step in the agentic loop (0-indexed)
+- `steps`: Results from previous steps
+- `messages`: Current messages snapshot (read-only)
+- `systemMessages`: Current system messages (read-only)
+- `messageList`: The full MessageList instance for mutations
+- `model`: Current model being used
+- `tools`: Current tools available for this step
+- `toolChoice`: Current tool choice setting
+- `activeTools`: Currently active tools
+- `providerOptions`: Provider-specific options
+- `modelSettings`: Model settings like temperature
+- `structuredOutput`: Structured output configuration
+
+The method can return any combination of:
+- `model`: Change the model for this step
+- `tools`: Replace or add tools (use spread to merge: `{ tools: { ...tools, newTool } }`)
+- `toolChoice`: Change tool selection behavior
+- `activeTools`: Filter which tools are available
+- `messages`: Replace messages (applied to messageList)
+- `systemMessages`: Replace all system messages
+- `providerOptions`: Modify provider options
+- `modelSettings`: Modify model settings
+- `structuredOutput`: Modify structured output configuration
+
+#### Using prepareStep callback
+
+For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
+
+```typescript
+await agent.generate({
+  prompt: "Complex task",
+  prepareStep: async ({ stepNumber, model }) => {
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+  },
+});
+```
+
 ### Custom output processor
 
 ```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy
@@ -6737,6 +6812,63 @@ If you followed the automatic installation, you'll see a popup when you open cur
 
 [More info on using MCP servers with Cursor](https://cursor.com/de/docs/context/mcp)
 
+### Antigravity
+
+Google Antigravity is an agent-first development platform that supports MCP servers for accessing external documentation, APIs, and project context.
+
+1. Open your Antigravity MCP configuration file:
+   - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
+   - You can access it through the MCP Store interface in Antigravity
+
+   <img
+     src="/img/antigravity_mcp_server.png"
+     alt="Antigravity interface showing configured Mastra MCP server"
+     width={800}
+     className="rounded-lg"
+   />
+
+2. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.  
+   <img
+     src="/img/antigravity_managed_mcp.png"
+     alt="Antigravity interface showing configured Mastra MCP server"
+     width={800}
+     className="rounded-lg"
+   />
+
+3. Add the Mastra MCP server configuration:
+
+   ```json copy
+   {
+      "mcpServers": {
+          "mastra-docs": {
+              "command": "npx",
+              "args": [
+                  "-y",
+                  "@mastra/mcp-docs-server"
+              ]
+          }
+      }
+  }
+   ```
+
+4. Save the configuration and restart Antigravity
+    <img
+      src="/img/antigravity_final_interface_mcp.png"
+      alt="Antigravity interface showing configured Mastra MCP server"
+      width={800}
+      className="rounded-lg"
+   />
+
+Once configured, the Mastra MCP server exposes the following to Antigravity agents:
+- Indexed documentation and API schemas for Mastra, enabling programmatic retrieval of relevant context during code generation
+- Access to example code snippets and usage patterns stored in Mastra Docs
+- Structured data for error handling and debugging references in the editor
+- Metadata about current Mastra project patterns for code suggestion and completion
+
+The MCP server will appear in Antigravity's MCP Store, where you can manage its connection status and authentication if needed.
+
+[More info on using MCP servers with Antigravity](https://antigravity.google)
+
 ### Visual Studio Code
 
 1. Create a `.vscode/mcp.json` file in your workspace
@@ -7103,7 +7235,7 @@ The OpenAPI and Swagger endpoints are disabled in production by default. To enab
 
 ## Configuration
 
-### Port
+### Port and Host
 
 By default, the development server runs at http://localhost:4111. You can change the `host` and `port` in the Mastra server configuration:
 
@@ -7117,6 +7249,29 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+### Sub-path Hosting
+
+You can host the Mastra Studio on a sub-path of your existing application using the `studioBase` configuration:
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    studioBase: "/my-mastra-studio",
+  },
+});
+```
+
+This is particularly useful when:
+- Integrating with existing applications
+- Using authentication tools like Cloudflare Zero Trust that benefit from shared domains
+- Managing multiple services under a single domain
+
+**Example URLs:**
+- Default: `http://localhost:4111/` (studio at root)
+- With `studioBase`: `http://localhost:4111/my-mastra-studio/` (studio at sub-path)
 
 ### Local HTTPS
 
@@ -14687,19 +14842,22 @@ adding additional server behaviour.
 
 ## Server configuration
 
-You can configure server `port` and `timeout` in the Mastra instance.
+You can configure server `port`, `host`, `studioBase`, and `timeout` in the Mastra instance.
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     port: 3000, // Defaults to 4111
+    host: "0.0.0.0", // Defaults to 'localhost'
+    studioBase: "/my-mastra-studio", // Sub-path for the studio (optional)
     timeout: 10000, // Defaults to 3 * 60 * 1000 (3 minutes)
   },
 });
 ```
+
+The `studioBase` option allows you to host Mastra Studio on a sub-path of your existing application. For example, with `studioBase: "/my-mastra-studio"`, the studio will be available at `http://your-host:port/my-mastra-studio` instead of the root.
 
 ## TypeScript configuration
 
@@ -14728,11 +14886,10 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
 
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     cors: {
       origin: ["https://example.com"], // Allow specific origins or '*' for all
@@ -18882,7 +19039,7 @@ export const testWorkflow = createWorkflow({
 
 ## Simultaneous steps with `.parallel()`
 
-Use `.parallel()` to run steps at the same time. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
+Use `.parallel()` to run steps at the same time. All parallel steps must complete before the workflow continues to the next step. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
@@ -18998,6 +19155,8 @@ export const testWorkflow = createWorkflow({
 - All parallel steps execute simultaneously
 - The next step receives an object containing all parallel step outputs
 - You must define the `inputSchema` of the following step to match this structure
+
+> See [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
 
 ## Conditional logic with `.branch()`
 
@@ -19251,7 +19410,7 @@ export const testWorkflow = createWorkflow({
 
 ### Looping with `.foreach()`
 
-Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step’s logic to each one.
+Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step's logic to each one. See [Choosing the right pattern](#choosing-the-right-pattern) for guidance on when to use `.foreach()` vs other methods.
 
 ![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
@@ -19277,6 +19436,32 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
+#### Output structure
+
+The `.foreach()` method always returns an array containing the output of each iteration. The order of outputs matches the order of inputs.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const addTenStep = createStep({
+  id: "add-ten",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ value: z.number() }),
+  execute: async ({ inputData }) => ({
+    value: inputData.value + 10
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  id: "foreach-output-example",
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.array(z.object({ value: z.number() }))
+})
+  .foreach(addTenStep)
+  .commit();
+
+// When executed with [{ value: 1 }, { value: 22 }, { value: 333 }]
+// Output: [{ value: 11 }, { value: 32 }, { value: 343 }]
+```
+
 #### Concurrency limits
 
 Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
@@ -19287,6 +19472,324 @@ const step1 = createStep({...})
 export const testWorkflow = createWorkflow({...})
   .foreach(step1, { concurrency: 4 })
   .commit();
+```
+
+#### Aggregating results after `.foreach()`
+
+Since `.foreach()` outputs an array, you can use `.then()` or `.map()` to aggregate or transform the results. The step following `.foreach()` receives the entire array as its input.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const processItemStep = createStep({
+  id: "process-item",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ processed: z.number() }),
+  execute: async ({ inputData }) => ({
+    processed: inputData.value * 2
+  })
+});
+
+const aggregateStep = createStep({
+  id: "aggregate",
+  // Input is an array of outputs from foreach
+  inputSchema: z.array(z.object({ processed: z.number() })),
+  outputSchema: z.object({ total: z.number() }),
+  execute: async ({ inputData }) => ({
+    // Sum all processed values
+    total: inputData.reduce((sum, item) => sum + item.processed, 0)
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  id: "foreach-aggregate-example",
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.object({ total: z.number() })
+})
+  .foreach(processItemStep)
+  .then(aggregateStep)  // Receives the full array from foreach
+  .commit();
+
+// When executed with [{ value: 1 }, { value: 2 }, { value: 3 }]
+// After foreach: [{ processed: 2 }, { processed: 4 }, { processed: 6 }]
+// After aggregate: { total: 12 }
+```
+
+You can also use `.map()` to transform the array output:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...})
+  .foreach(processItemStep)
+  .map(async ({ inputData }) => ({
+    // Transform the array into a different structure
+    values: inputData.map(item => item.processed),
+    count: inputData.length
+  }))
+  .then(nextStep)
+  .commit();
+```
+
+#### Chaining multiple `.foreach()` calls
+
+When you chain `.foreach()` calls, each operates on the array output of the previous step. This is useful when each item in your array needs to be transformed by multiple steps in sequence.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const chunkStep = createStep({
+  id: "chunk",
+  // Takes a document, returns an array of chunks
+  inputSchema: z.object({ content: z.string() }),
+  outputSchema: z.array(z.object({ chunk: z.string() })),
+  execute: async ({ inputData }) => {
+    // Split document into chunks
+    const chunks = inputData.content.match(/.{1,100}/g) || [];
+    return chunks.map(chunk => ({ chunk }));
+  }
+});
+
+const embedStep = createStep({
+  id: "embed",
+  // Takes a single chunk, returns embedding
+  inputSchema: z.object({ chunk: z.string() }),
+  outputSchema: z.object({ embedding: z.array(z.number()) }),
+  execute: async ({ inputData }) => ({
+    embedding: [/* vector embedding */]
+  })
+});
+
+// For a single document that produces multiple chunks:
+export const singleDocWorkflow = createWorkflow({
+  id: "single-doc-rag",
+  inputSchema: z.object({ content: z.string() }),
+  outputSchema: z.array(z.object({ embedding: z.array(z.number()) }))
+})
+  .then(chunkStep)      // Returns array of chunks
+  .foreach(embedStep)   // Process each chunk -> array of embeddings
+  .commit();
+```
+
+For processing multiple documents where each produces multiple chunks, you have options:
+
+**Option 1: Process all documents in a single step with batching control**
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const downloadAndChunkStep = createStep({
+  id: "download-and-chunk",
+  inputSchema: z.array(z.string()),  // Array of URLs
+  outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
+  execute: async ({ inputData: urls }) => {
+    // Control batching/parallelization within the step
+    const allChunks = [];
+    for (const url of urls) {
+      const content = await fetch(url).then(r => r.text());
+      const chunks = content.match(/.{1,100}/g) || [];
+      allChunks.push(...chunks.map(chunk => ({ chunk, source: url })));
+    }
+    return allChunks;
+  }
+});
+
+export const multiDocWorkflow = createWorkflow({...})
+  .then(downloadAndChunkStep)  // Returns flat array of all chunks
+  .foreach(embedStep, { concurrency: 10 })  // Embed each chunk in parallel
+  .commit();
+```
+
+**Option 2: Use foreach for documents, aggregate chunks, then foreach for embeddings**
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const downloadStep = createStep({
+  id: "download",
+  inputSchema: z.string(),  // Single URL
+  outputSchema: z.object({ content: z.string(), source: z.string() }),
+  execute: async ({ inputData: url }) => ({
+    content: await fetch(url).then(r => r.text()),
+    source: url
+  })
+});
+
+const chunkDocStep = createStep({
+  id: "chunk-doc",
+  inputSchema: z.object({ content: z.string(), source: z.string() }),
+  outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
+  execute: async ({ inputData }) => {
+    const chunks = inputData.content.match(/.{1,100}/g) || [];
+    return chunks.map(chunk => ({ chunk, source: inputData.source }));
+  }
+});
+
+export const multiDocWorkflow = createWorkflow({
+  id: "multi-doc-rag",
+  inputSchema: z.array(z.string()),  // Array of URLs
+  outputSchema: z.array(z.object({ embedding: z.array(z.number()) }))
+})
+  .foreach(downloadStep, { concurrency: 5 })  // Download docs in parallel
+  .foreach(chunkDocStep)  // Chunk each doc -> array of chunk arrays
+  .map(async ({ inputData }) => {
+    // Flatten nested arrays: [[chunks], [chunks]] -> [chunks]
+    return inputData.flat();
+  })
+  .foreach(embedStep, { concurrency: 10 })  // Embed all chunks
+  .commit();
+```
+
+**Key points about chaining `.foreach()`:**
+- Each `.foreach()` operates on the array from the previous step
+- If a step inside `.foreach()` returns an array, the output becomes an array of arrays
+- Use `.map()` with `.flat()` to flatten nested arrays when needed
+- For complex RAG pipelines, Option 1 (handling batching in a single step) often provides better control
+
+#### Nested workflows inside foreach
+
+The step after `.foreach()` only executes after all iterations complete. If you need to run multiple sequential operations per item, use a nested workflow instead of chaining multiple `.foreach()` calls. This keeps all operations for each item together and makes the data flow clearer.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+// Define a workflow that processes a single document
+const processDocumentWorkflow = createWorkflow({
+  id: "process-document",
+  inputSchema: z.object({ url: z.string() }),
+  outputSchema: z.object({
+    embeddings: z.array(z.array(z.number())),
+    metadata: z.object({ url: z.string(), chunkCount: z.number() })
+  })
+})
+  .then(downloadStep)      // Download the document
+  .then(chunkStep)         // Split into chunks
+  .then(embedChunksStep)   // Embed all chunks for this document
+  .then(formatResultStep)  // Format the final output
+  .commit();
+
+// Use the nested workflow inside foreach
+export const batchProcessWorkflow = createWorkflow({
+  id: "batch-process-documents",
+  inputSchema: z.array(z.object({ url: z.string() })),
+  outputSchema: z.array(z.object({
+    embeddings: z.array(z.array(z.number())),
+    metadata: z.object({ url: z.string(), chunkCount: z.number() })
+  }))
+})
+  .foreach(processDocumentWorkflow, { concurrency: 3 })
+  .commit();
+
+// Each document goes through all 4 steps before the next document starts (with concurrency: 1)
+// With concurrency: 3, up to 3 documents process their full pipelines in parallel
+```
+
+**Why use nested workflows:**
+- **Better parallelism**: With `concurrency: N`, multiple items run their full pipelines simultaneously. Chained `.foreach().foreach()` processes all items through step 1, waits, then all through step 2 - nested workflows let each item progress independently
+- All steps for one item complete together before results are collected
+- Cleaner than multiple `.foreach()` calls which create nested arrays
+- Each nested workflow execution is independent with its own data flow
+- Easier to test and reuse the per-item logic separately
+
+**How it works:**
+1. The parent workflow passes each array item to an instance of the nested workflow
+2. Each nested workflow runs its full step sequence for that item
+3. With `concurrency > 1`, multiple nested workflows execute in parallel
+4. The nested workflow's final output becomes one element in the result array
+5. After all nested workflows complete, the next step in the parent receives the full array
+
+## Choosing the right pattern
+
+Use this section as a reference for selecting the appropriate control flow method.
+
+### Quick reference
+
+| Method | Purpose | Input | Output | Concurrency |
+|--------|---------|-------|--------|-------------|
+| `.then(step)` | Sequential processing | `T` | `U` | N/A (one at a time) |
+| `.parallel([a, b])` | Different operations on same input | `T` | `{ a: U, b: V }` | All run simultaneously |
+| `.foreach(step)` | Same operation on each array item | `T[]` | `U[]` | Configurable (default: 1) |
+| `.branch([...])` | Conditional path selection | `T` | `{ selectedStep: U }` | Only one branch runs |
+
+### `.parallel()` vs `.foreach()`
+
+**Use `.parallel()` when you have one input that needs different processing:**
+
+```typescript
+// Same user data processed differently in parallel
+workflow
+  .parallel([validateStep, enrichStep, scoreStep])
+  .then(combineResultsStep)
+```
+
+**Use `.foreach()` when you have many inputs that need the same processing:**
+
+```typescript
+// Multiple URLs each processed the same way
+workflow
+  .foreach(downloadStep, { concurrency: 5 })
+  .then(aggregateStep)
+```
+
+### When to use nested workflows
+
+**Inside `.foreach()`** - when each array item needs multiple sequential steps:
+
+```typescript
+// Each document goes through a full pipeline
+const processDocWorkflow = createWorkflow({...})
+  .then(downloadStep)
+  .then(parseStep)
+  .then(embedStep)
+  .commit();
+
+workflow.foreach(processDocWorkflow, { concurrency: 3 })
+```
+
+This is cleaner than chaining `.foreach().foreach()`, which creates nested arrays.
+
+**Inside `.parallel()`** - when a parallel branch needs its own multi-step pipeline:
+
+```typescript
+const pipelineA = createWorkflow({...}).then(step1).then(step2).commit();
+const pipelineB = createWorkflow({...}).then(step3).then(step4).commit();
+
+workflow.parallel([pipelineA, pipelineB])
+```
+
+### Chaining patterns
+
+| Pattern | What happens | Common use case |
+|---------|--------------|-----------------|
+| `.then().then()` | Sequential steps | Simple pipelines |
+| `.parallel().then()` | Run in parallel, then combine | Fan-out/fan-in |
+| `.foreach().then()` | Process all items, then aggregate | Map-reduce |
+| `.foreach().foreach()` | Creates array of arrays | Avoid - use nested workflow or `.map()` with `.flat()` |
+| `.foreach(workflow)` | Full pipeline per item | Multi-step processing per array item |
+
+### Synchronization: when does the next step run?
+
+Both `.parallel()` and `.foreach()` are synchronization points. The next step in the workflow only executes after all parallel branches or all array iterations have completed.
+
+```typescript
+workflow
+  .parallel([stepA, stepB, stepC])  // All 3 run simultaneously
+  .then(combineStep)                // Waits for ALL 3 to finish before running
+  .commit();
+
+workflow
+  .foreach(processStep, { concurrency: 5 })  // Up to 5 items process at once
+  .then(aggregateStep)                       // Waits for ALL items to finish before running
+  .commit();
+```
+
+This means:
+- `.parallel()` collects all branch outputs into an object, then passes it to the next step
+- `.foreach()` collects all iteration outputs into an array, then passes it to the next step
+- There is no way to "stream" results to the next step as they complete
+
+### Concurrency behavior
+
+| Method | Behavior |
+|--------|----------|
+| `.then()` | Sequential - one step at a time |
+| `.parallel()` | All branches run simultaneously (no limit option) |
+| `.foreach()` | Controlled via `{ concurrency: N }` - default is 1 (sequential) |
+| Nested workflow in `.foreach()` | Respects parent's concurrency setting |
+
+**Performance tip:** For I/O-bound operations in `.foreach()`, increase concurrency to process items in parallel:
+
+```typescript
+// Process up to 10 items simultaneously
+workflow.foreach(fetchDataStep, { concurrency: 10 })
 ```
 
 ## Loop management
@@ -31055,6 +31558,27 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
   });
 ```
 
+### `prepareStep` messages format
+
+The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5 model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
+
+If you need the old AI SDK v5 format, use `messageList.get.all.aiV5.model()`:
+
+```diff
+  agent.generate({
+    prompt: 'Hello',
+    prepareStep: async ({ messages, messageList }) => {
+-     // messages was AI SDK v5 ModelMessage format
+-     console.log(messages[0].content);
++     // messages is now MastraDBMessage format
++     // Use messageList to get AI SDK v5 format if needed:
++     const aiSdkMessages = messageList.get.all.aiV5.model();
+
+      return { toolChoice: 'auto' };
+    },
+  });
+```
+
 
 ---
 title: "CLI | v1 Migration Guide"
@@ -35285,7 +35809,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 60+ AI providers and 1326+ models through Mastra's model router."
+description: "Access 60+ AI providers and 1334+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35298,7 +35822,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1326 models from 60 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1334 models from 60 providers through a single API.
 
 ## Features
 
@@ -40367,7 +40891,7 @@ For detailed provider-specific documentation, see the [AI SDK Deep Infra provide
 
 ---
 title: "DeepSeek | Models | Mastra"
-description: "Use DeepSeek models with Mastra. 3 models available."
+description: "Use DeepSeek models with Mastra. 2 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -40377,7 +40901,7 @@ description: "Use DeepSeek models with Mastra. 3 models available."
 # <img src="https://models.dev/logos/deepseek.svg" alt="DeepSeek logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DeepSeek
 [EN] Source: https://mastra.ai/en/models/providers/deepseek
 
-Access 3 DeepSeek models through Mastra's model router. Authentication is handled automatically using the `DEEPSEEK_API_KEY` environment variable.
+Access 2 DeepSeek models through Mastra's model router. Authentication is handled automatically using the `DEEPSEEK_API_KEY` environment variable.
 
 Learn more in the [DeepSeek documentation](https://platform.deepseek.com).
 
@@ -40432,18 +40956,6 @@ for await (const chunk of stream) {
     "maxOutput": 128000,
     "inputCost": 0.28,
     "outputCost": 0.42
-  },
-  {
-    "model": "deepseek/deepseek-v3.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8000,
-    "inputCost": 0.28,
-    "outputCost": 0.42
   }
 ]}
 />
@@ -40476,7 +40988,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "deepseek/deepseek-v3.2"
+      ? "deepseek/deepseek-reasoner"
       : "deepseek/deepseek-chat";
   }
 });
@@ -44473,7 +44985,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/google.svg"
     />    <CardGridItem
       title="DeepSeek"
-      description="3 models"
+      description="2 models"
       href="/models/v1/providers/deepseek"
       logo="https://models.dev/logos/deepseek.svg"
     />    <CardGridItem
@@ -44483,7 +44995,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/groq.svg"
     />    <CardGridItem
       title="Mistral"
-      description="22 models"
+      description="23 models"
       href="/models/v1/providers/mistral"
       logo="https://models.dev/logos/mistral.svg"
     />    <CardGridItem
@@ -44638,7 +45150,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nebius.svg"
     />    <CardGridItem
       title="Nvidia"
-      description="21 models"
+      description="23 models"
       href="/models/v1/providers/nvidia"
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
@@ -44658,7 +45170,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/perplexity.svg"
     />    <CardGridItem
       title="Poe"
-      description="100 models"
+      description="102 models"
       href="/models/v1/providers/poe"
       logo="https://models.dev/logos/poe.svg"
     />    <CardGridItem
@@ -44713,12 +45225,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/wandb.svg"
     />    <CardGridItem
       title="Z.AI"
-      description="5 models"
+      description="6 models"
       href="/models/v1/providers/zai"
       logo="https://models.dev/logos/zai.svg"
     />    <CardGridItem
       title="Z.AI Coding Plan"
-      description="5 models"
+      description="6 models"
       href="/models/v1/providers/zai-coding-plan"
       logo="https://models.dev/logos/zai-coding-plan.svg"
     />    <CardGridItem
@@ -44728,12 +45240,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/zenmux.svg"
     />    <CardGridItem
       title="Zhipu AI"
-      description="5 models"
+      description="6 models"
       href="/models/v1/providers/zhipuai"
       logo="https://models.dev/logos/zhipuai.svg"
     />    <CardGridItem
       title="Zhipu AI Coding Plan"
-      description="5 models"
+      description="6 models"
       href="/models/v1/providers/zhipuai-coding-plan"
       logo="https://models.dev/logos/zhipuai-coding-plan.svg"
     />
@@ -46277,7 +46789,7 @@ npm install @ai-sdk/anthropic
 
 ---
 title: "Mistral | Models | Mastra"
-description: "Use Mistral models with Mastra. 22 models available."
+description: "Use Mistral models with Mastra. 23 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -46288,7 +46800,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
 [EN] Source: https://mastra.ai/en/models/providers/mistral
 
-Access 22 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
+Access 23 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
 
 Learn more in the [Mistral documentation](https://docs.mistral.ai/getting-started/models/).
 
@@ -46377,6 +46889,18 @@ for await (const chunk of stream) {
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "mistral/labs-devstral-small-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
     "inputCost": 0.1,
     "outputCost": 0.3
   },
@@ -47506,7 +48030,7 @@ const agent = new Agent({
 
 ---
 title: "Nvidia | Models | Mastra"
-description: "Use Nvidia models with Mastra. 21 models available."
+description: "Use Nvidia models with Mastra. 23 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -47516,7 +48040,7 @@ description: "Use Nvidia models with Mastra. 21 models available."
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 [EN] Source: https://mastra.ai/en/models/providers/nvidia
 
-Access 21 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
+Access 23 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
 
 Learn more in the [Nvidia documentation](https://docs.api.nvidia.com/nim/).
 
@@ -47623,6 +48147,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/mistralai/devstral-2-123b-instruct-2512",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/mistralai/ministral-14b-instruct-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
     "inputCost": null,
     "outputCost": null
   },
@@ -49298,7 +49846,7 @@ For detailed provider-specific documentation, see the [AI SDK Perplexity provide
 
 ---
 title: "Poe | Models | Mastra"
-description: "Use Poe models with Mastra. 100 models available."
+description: "Use Poe models with Mastra. 102 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -49308,7 +49856,7 @@ description: "Use Poe models with Mastra. 100 models available."
 # <img src="https://models.dev/logos/poe.svg" alt="Poe logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Poe
 [EN] Source: https://mastra.ai/en/models/providers/poe
 
-Access 100 Poe models through Mastra's model router. Authentication is handled automatically using the `POE_API_KEY` environment variable.
+Access 102 Poe models through Mastra's model router. Authentication is handled automatically using the `POE_API_KEY` environment variable.
 
 Learn more in the [Poe documentation](https://creator.poe.com/docs/external-applications/openai-compatible-api).
 
@@ -49392,7 +49940,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 192000,
     "maxOutput": 64000,
     "inputCost": 0.85,
-    "outputCost": 4.2
+    "outputCost": 4.3
   },
   {
     "model": "poe/anthropic/claude-opus-3",
@@ -49453,6 +50001,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": 13,
     "outputCost": 64
+  },
+  {
+    "model": "poe/anthropic/claude-opus-4.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 196608,
+    "maxOutput": 64000,
+    "inputCost": 4.3,
+    "outputCost": 21
   },
   {
     "model": "poe/anthropic/claude-sonnet-3.5",
@@ -49599,42 +50159,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/facebook/llama-3.1-405b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": null,
-    "inputCost": 3,
-    "outputCost": 3
-  },
-  {
-    "model": "poe/facebook/llama-3.1-70b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": null,
-    "inputCost": 0.9,
-    "outputCost": 0.9
-  },
-  {
-    "model": "poe/facebook/llama-3.1-8b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": null,
-    "inputCost": 0.2,
-    "outputCost": 0.2
-  },
-  {
     "model": "poe/google/gemini-2.0-flash",
     "imageInput": true,
     "audioInput": true,
@@ -49668,7 +50192,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1065535,
     "maxOutput": 65535,
     "inputCost": 0.21,
-    "outputCost": 1.7
+    "outputCost": 1.8
   },
   {
     "model": "poe/google/gemini-2.5-flash-lite",
@@ -49695,7 +50219,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7
   },
   {
-    "model": "poe/google/gemini-3.0-pro",
+    "model": "poe/google/gemini-3-pro",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -49788,7 +50312,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 32768,
     "maxOutput": null,
     "inputCost": 0.21,
-    "outputCost": 1.7
+    "outputCost": 1.8
+  },
+  {
+    "model": "poe/google/nano-banana-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": null,
+    "inputCost": 1.6,
+    "outputCost": 9.6
   },
   {
     "model": "poe/google/veo-2",
@@ -49935,7 +50471,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/chatgpt-4o-latest",
+    "model": "poe/novita/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "poe/openai/chatgpt-4o-latest",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49944,10 +50492,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 128000,
     "maxOutput": 8192,
     "inputCost": 4.5,
-    "outputCost": 13
+    "outputCost": 14
   },
   {
-    "model": "poe/openAi/dall-e-3",
+    "model": "poe/openai/dall-e-3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -49959,7 +50507,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/gpt-3.5-turbo",
+    "model": "poe/openai/gpt-3.5-turbo",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49968,10 +50516,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 16384,
     "maxOutput": 2048,
     "inputCost": 0.45,
-    "outputCost": 1.3
+    "outputCost": 1.4
   },
   {
-    "model": "poe/openAi/gpt-3.5-turbo-instruct",
+    "model": "poe/openai/gpt-3.5-turbo-instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49979,11 +50527,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 3500,
     "maxOutput": 1024,
-    "inputCost": 1.3,
+    "inputCost": 1.4,
     "outputCost": 1.8
   },
   {
-    "model": "poe/openAi/gpt-3.5-turbo-raw",
+    "model": "poe/openai/gpt-3.5-turbo-raw",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -49992,10 +50540,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 4524,
     "maxOutput": 2048,
     "inputCost": 0.45,
-    "outputCost": 1.3
+    "outputCost": 1.4
   },
   {
-    "model": "poe/openAi/gpt-4-classic",
+    "model": "poe/openai/gpt-4-classic",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50007,7 +50555,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 54
   },
   {
-    "model": "poe/openAi/gpt-4-classic-0314",
+    "model": "poe/openai/gpt-4-classic-0314",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50019,7 +50567,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 54
   },
   {
-    "model": "poe/openAi/gpt-4-turbo",
+    "model": "poe/openai/gpt-4-turbo",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50031,7 +50579,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 27
   },
   {
-    "model": "poe/openAi/gpt-4.1",
+    "model": "poe/openai/gpt-4.1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50043,7 +50591,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7.2
   },
   {
-    "model": "poe/openAi/gpt-4.1-mini",
+    "model": "poe/openai/gpt-4.1-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50055,7 +50603,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.4
   },
   {
-    "model": "poe/openAi/gpt-4.1-nano",
+    "model": "poe/openai/gpt-4.1-nano",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50067,7 +50615,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.36
   },
   {
-    "model": "poe/openAi/gpt-4o",
+    "model": "poe/openai/gpt-4o",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50079,7 +50627,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/gpt-4o-aug",
+    "model": "poe/openai/gpt-4o-aug",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50087,11 +50635,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 8192,
-    "inputCost": 2.3,
+    "inputCost": 2.2,
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-4o-mini",
+    "model": "poe/openai/gpt-4o-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50103,7 +50651,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.54
   },
   {
-    "model": "poe/openAi/gpt-4o-mini-search",
+    "model": "poe/openai/gpt-4o-mini-search",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50115,7 +50663,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.54
   },
   {
-    "model": "poe/openAi/gpt-4o-search",
+    "model": "poe/openai/gpt-4o-search",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50123,11 +50671,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 8192,
-    "inputCost": 2.3,
+    "inputCost": 2.2,
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-5",
+    "model": "poe/openai/gpt-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50139,7 +50687,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-5-chat",
+    "model": "poe/openai/gpt-5-chat",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50151,7 +50699,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-5-codex",
+    "model": "poe/openai/gpt-5-codex",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50163,7 +50711,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-5-mini",
+    "model": "poe/openai/gpt-5-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50175,7 +50723,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.8
   },
   {
-    "model": "poe/openAi/gpt-5-nano",
+    "model": "poe/openai/gpt-5-nano",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50187,7 +50735,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.36
   },
   {
-    "model": "poe/openAi/gpt-5-pro",
+    "model": "poe/openai/gpt-5-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50195,7 +50743,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 13,
+    "inputCost": 14,
     "outputCost": 110
   },
   {
@@ -50212,7 +50760,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "poe/openai/gpt-5.1-codex",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -50247,7 +50795,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9
   },
   {
-    "model": "poe/openAi/gpt-image-1",
+    "model": "poe/openai/gpt-image-1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50259,7 +50807,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/gpt-image-1-mini",
+    "model": "poe/openai/gpt-image-1-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50271,7 +50819,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/o1",
+    "model": "poe/openai/o1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50279,11 +50827,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 100000,
-    "inputCost": 13,
+    "inputCost": 14,
     "outputCost": 54
   },
   {
-    "model": "poe/openAi/o1-pro",
+    "model": "poe/openai/o1-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50295,7 +50843,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 540
   },
   {
-    "model": "poe/openAi/o3",
+    "model": "poe/openai/o3",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50307,7 +50855,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7.2
   },
   {
-    "model": "poe/openAi/o3-deep-research",
+    "model": "poe/openai/o3-deep-research",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50319,7 +50867,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 36
   },
   {
-    "model": "poe/openAi/o3-mini",
+    "model": "poe/openai/o3-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50331,7 +50879,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4
   },
   {
-    "model": "poe/openAi/o3-mini-high",
+    "model": "poe/openai/o3-mini-high",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50343,7 +50891,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4
   },
   {
-    "model": "poe/openAi/o3-pro",
+    "model": "poe/openai/o3-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50355,7 +50903,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 72
   },
   {
-    "model": "poe/openAi/o4-mini",
+    "model": "poe/openai/o4-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50367,7 +50915,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4
   },
   {
-    "model": "poe/openAi/o4-mini-deep-research",
+    "model": "poe/openai/o4-mini-deep-research",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50379,7 +50927,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7.2
   },
   {
-    "model": "poe/openAi/sora-2",
+    "model": "poe/openai/sora-2",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50391,7 +50939,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "poe/openAi/sora-2-pro",
+    "model": "poe/openai/sora-2-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50517,7 +51065,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 256000,
+    "contextWindow": 2000000,
     "maxOutput": 128000,
     "inputCost": 0.2,
     "outputCost": 0.5
@@ -50529,10 +51077,34 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 2000000,
     "maxOutput": 128000,
     "inputCost": 0.2,
     "outputCost": 0.5
+  },
+  {
+    "model": "poe/xai/grok-4.1-fast-non-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "poe/xai/grok-4.1-fast-reasoning",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "poe/xai/grok-code-fast-1",
@@ -54044,7 +54616,7 @@ For detailed provider-specific documentation, see the [AI SDK xAI provider docs]
 
 ---
 title: "Z.AI Coding Plan | Models | Mastra"
-description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
+description: "Use Z.AI Coding Plan models with Mastra. 6 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54054,7 +54626,7 @@ description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
 # <img src="https://models.dev/logos/zai-coding-plan.svg" alt="Z.AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zai-coding-plan
 
-Access 5 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 6 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Z.AI Coding Plan documentation](https://docs.z.ai/devpack/overview).
 
@@ -54151,6 +54723,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -54183,7 +54767,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zai-coding-plan/glm-4.6"
+      ? "zai-coding-plan/glm-4.6v"
       : "zai-coding-plan/glm-4.5";
   }
 });
@@ -54194,7 +54778,7 @@ const agent = new Agent({
 
 ---
 title: "Z.AI | Models | Mastra"
-description: "Use Z.AI models with Mastra. 5 models available."
+description: "Use Z.AI models with Mastra. 6 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54204,7 +54788,7 @@ description: "Use Z.AI models with Mastra. 5 models available."
 # <img src="https://models.dev/logos/zai.svg" alt="Z.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI
 [EN] Source: https://mastra.ai/en/models/providers/zai
 
-Access 5 Z.AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 6 Z.AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Z.AI documentation](https://docs.z.ai/guides/overview/pricing).
 
@@ -54301,6 +54885,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 2.2
+  },
+  {
+    "model": "zai/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
   }
 ]}
 />
@@ -54333,7 +54929,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zai/glm-4.6"
+      ? "zai/glm-4.6v"
       : "zai/glm-4.5";
   }
 });
@@ -54686,7 +55282,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI Coding Plan | Models | Mastra"
-description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
+description: "Use Zhipu AI Coding Plan models with Mastra. 6 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54696,7 +55292,7 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai-coding-plan
 
-Access 5 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 6 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI Coding Plan documentation](https://docs.bigmodel.cn/cn/coding-plan/overview).
 
@@ -54793,6 +55389,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zhipuai-coding-plan/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -54825,7 +55433,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai-coding-plan/glm-4.6"
+      ? "zhipuai-coding-plan/glm-4.6v"
       : "zhipuai-coding-plan/glm-4.5";
   }
 });
@@ -54836,7 +55444,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI | Models | Mastra"
-description: "Use Zhipu AI models with Mastra. 5 models available."
+description: "Use Zhipu AI models with Mastra. 6 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54846,7 +55454,7 @@ description: "Use Zhipu AI models with Mastra. 5 models available."
 # <img src="https://models.dev/logos/zhipuai.svg" alt="Zhipu AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai
 
-Access 5 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 6 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI documentation](https://docs.z.ai/guides/overview/pricing).
 
@@ -54943,6 +55551,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 2.2
+  },
+  {
+    "model": "zhipuai/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
   }
 ]}
 />
@@ -54975,7 +55595,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai/glm-4.6"
+      ? "zhipuai/glm-4.6v"
       : "zhipuai/glm-4.5";
   }
 });
@@ -61954,7 +62574,7 @@ This method does not accept any parameters.
       name: "server",
       type: "ServerConfig | undefined",
       description:
-        "The configured server configuration including port, timeout, API routes, middleware, CORS settings, and build options, or undefined if no server has been configured.",
+        "The configured server configuration including port, host, studioBase, timeout, API routes, middleware, CORS settings, and build options, or undefined if no server has been configured.",
     },
   ]}
 />
@@ -75639,8 +76259,8 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
 #### Execution order in the agentic loop
 
 1. `processInput` (once at start)
-2. `processInputStep` (at each step, before LLM call)
-3. `prepareStep` callback (if provided)
+2. `processInputStep` from inputProcessors (at each step, before LLM call)
+3. `prepareStep` callback (runs as part of the processInputStep pipeline, after inputProcessors)
 4. LLM execution
 5. Tool execution (if needed)
 6. Repeat from step 2 if tools were called
@@ -75652,13 +76272,13 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
     {
       name: "messages",
       type: "MastraDBMessage[]",
-      description: "All messages including tool calls and results from previous steps.",
+      description: "All messages including tool calls and results from previous steps (read-only snapshot).",
       isOptional: false,
     },
     {
       name: "messageList",
       type: "MessageList",
-      description: "MessageList instance for managing messages.",
+      description: "MessageList instance for managing messages. Can mutate directly or return in result.",
       isOptional: false,
     },
     {
@@ -75668,10 +76288,58 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
       isOptional: false,
     },
     {
+      name: "steps",
+      type: "StepResult[]",
+      description: "Results from previous steps, including text, toolCalls, and toolResults.",
+      isOptional: false,
+    },
+    {
       name: "systemMessages",
       type: "CoreMessage[]",
-      description: "All system messages for read/modify access.",
+      description: "All system messages (read-only snapshot). Return in result to replace.",
       isOptional: false,
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModelV2",
+      description: "Current model being used. Return a different model in result to switch.",
+      isOptional: false,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "Current tool choice setting ('auto', 'none', 'required', or specific tool).",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "Currently active tool names. Return filtered array to limit tools.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "Current tools available for this step. Return in result to add/replace tools.",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "Provider-specific options (e.g., Anthropic cacheControl, OpenAI reasoningEffort).",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "Model settings like temperature, maxTokens, topP.",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Structured output configuration (schema, output mode). Return in result to modify.",
+      isOptional: true,
     },
     {
       name: "abort",
@@ -75694,12 +76362,99 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
   ]}
 />
 
+#### ProcessInputStepResult
+
+The method can return any combination of these properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModelV2 | string",
+      description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-4o'.",
+      isOptional: true,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "Change tool selection behavior for this step.",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "Filter which tools are available for this step.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "Replace or modify tools for this step. Use spread to merge: { tools: { ...tools, newTool } }.",
+      isOptional: true,
+    },
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "Replace all messages. Cannot be used with messageList.",
+      isOptional: true,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "Return the same messageList instance (indicates you mutated it). Cannot be used with messages.",
+      isOptional: true,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "Replace all system messages for this step only.",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "Change provider-specific options for this step.",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "Change model settings for this step.",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Change structured output configuration for this step.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Processor chaining
+
+When multiple processors implement `processInputStep`, they run in order and changes chain through:
+
+```
+Processor 1: receives { model: 'gpt-4o' } → returns { model: 'gpt-4o-mini' }
+Processor 2: receives { model: 'gpt-4o-mini' } → returns { toolChoice: 'none' }
+Final: model = 'gpt-4o-mini', toolChoice = 'none'
+```
+
+#### System message isolation
+
+System messages are **reset to their original values** at the start of each step. Modifications made in `processInputStep` only affect the current step, not subsequent steps.
+
 #### Use cases
 
+- Dynamic model switching based on step number or context
+- Disabling tools after a certain number of steps
+- Dynamically adding or replacing tools based on conversation context
 - Transforming message part types between providers (e.g., `reasoning` → `thinking` for Anthropic)
 - Modifying messages based on step number or accumulated context
-- Implementing per-step message filtering or enrichment
-- Adding step-specific context or instructions
+- Adding step-specific system instructions
+- Adjusting provider options per step (e.g., cache control)
+- Modifying structured output schema based on step context
 
 ---
 
@@ -75858,13 +76613,46 @@ export class LowercaseProcessor implements Processor {
 
 ### Per-step processor with processInputStep
 
+```typescript title="src/mastra/processors/dynamic-model.ts" showLineNumbers copy
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+
+export class DynamicModelProcessor implements Processor {
+  id = "dynamic-model";
+
+  async processInputStep({
+    stepNumber,
+    steps,
+    toolChoice,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // Use a fast model for initial response
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+
+    // Switch to powerful model after tool calls
+    if (steps.length > 0 && steps[steps.length - 1].toolCalls?.length) {
+      return { model: "openai/gpt-4o" };
+    }
+
+    // Disable tools after 5 steps to force completion
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+
+    return {};
+  }
+}
+```
+
+### Message transformer with processInputStep
+
 ```typescript title="src/mastra/processors/reasoning-transformer.ts" showLineNumbers copy
 import type { Processor, MastraDBMessage } from "@mastra/core";
 
 export class ReasoningTransformer implements Processor {
   id = "reasoning-transformer";
 
-  async processInputStep({ messages, messageList, stepNumber }) {
+  async processInputStep({ messages, messageList }) {
     // Transform reasoning parts to thinking parts at each step
     // This is useful when switching between model providers
     for (const msg of messages) {
@@ -84340,13 +85128,7 @@ The `.stream()` method enables real-time streaming of responses from an agent wi
 ## Usage example
 
 ```ts title="index.ts" copy
-// Default Mastra format
-const mastraStream = await agent.stream("message for agent");
-
-// AI SDK v5 compatible format
-const aiSdkStream = await agent.stream("message for agent", {
-  format: "aisdk",
-});
+const stream = await agent.stream("message for agent");
 ```
 
 :::info
@@ -84378,14 +85160,6 @@ const aiSdkStream = await agent.stream("message for agent", {
 
 <PropertiesTable
   content={[
-    {
-      name: "format",
-      type: "'mastra' | 'aisdk'",
-      isOptional: true,
-      defaultValue: "'mastra'",
-      description:
-        "Determines the output stream format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.",
-    },
     {
       name: "maxSteps",
       type: "number",
@@ -84978,9 +85752,9 @@ const aiSdkStream = await agent.stream("message for agent", {
   content={[
     {
       name: "stream",
-      type: "MastraModelOutput<Output> | AISDKV5OutputStream<Output>",
+      type: "MastraModelOutput<Output>",
       description:
-        "Returns a streaming interface based on the format parameter. When format is 'mastra' (default), returns MastraModelOutput. When format is 'aisdk', returns AISDKV5OutputStream for AI SDK v5 compatibility.",
+        "Returns a MastraModelOutput instance that provides access to the streaming output.",
     },
     {
       name: "traceId",
@@ -85011,32 +85785,34 @@ for await (const chunk of stream.textStream) {
   console.log(chunk);
 }
 
+// or access full stream
+for await (const chunk of stream.fullStream) {
+  console.log(chunk);
+}
+
 // Get full text after streaming
 const fullText = await stream.text;
 ```
 
 ### AI SDK v5 Format
 
+To use the stream with AI SDK v5, you can convert it using our utility function `toAISdkStream`.
+
 ```ts title="index.ts" showLineNumbers copy
-import { stepCountIs } from "ai-v5";
+import { stepCountIs, createUIMessageStreamResponse } from "ai";
+import { toAISdkStream } from "@mastra/ai-sdk";
 
 const stream = await agent.stream("Tell me a story", {
-  format: "aisdk",
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
   },
 });
 
-// Use with AI SDK v5 compatible interfaces
-for await (const part of stream.fullStream) {
-  if (part.type === "text-delta") {
-    console.log(part.text);
-  }
-}
-
 // In an API route for frontend integration
-return stream.toUIMessageStreamResponse();
+return createUIMessageStreamResponse({
+  stream: toAISdkStream(stream, { from: "agent" }),
+})
 ```
 
 ### Using Callbacks
@@ -85072,10 +85848,9 @@ for await (const chunk of stream.textStream) {
 
 ```ts title="index.ts" showLineNumbers copy
 import { z } from "zod";
-import { stepCountIs } from "ai-v5";
+import { stepCountIs } from "ai";
 
 await agent.stream("message for agent", {
-  format: "aisdk", // Enable AI SDK v5 compatibility
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
@@ -103708,7 +104483,7 @@ description: Documentation for the `Workflow.foreach()` method in workflows, whi
 # Workflow.foreach()
 [EN] Source: https://mastra.ai/en/reference/workflows/workflow-methods/foreach
 
-The `.foreach()` method creates a loop that executes a step for each item in an array.
+The `.foreach()` method creates a loop that executes a step for each item in an array. It always returns an array containing the output from each iteration, preserving the original order.
 
 ## Usage example
 
@@ -103753,14 +104528,79 @@ workflow.foreach(step1, { concurrency: 2 });
     {
       name: "workflow",
       type: "Workflow",
-      description: "The workflow instance for method chaining",
+      description: "The workflow instance for method chaining. The output type is an array of the step's output type.",
     },
   ]}
 />
 
+## Behavior
+
+### Execution and waiting
+
+The `.foreach()` method processes all items before the next step executes. The step following `.foreach()` only runs after every iteration has completed, regardless of concurrency settings. With `concurrency: 1` (default), items process sequentially. With higher concurrency, items process in parallel batches, but the next step still waits for all batches to finish.
+
+If you need to run multiple operations per item, use a nested workflow as the step. This keeps all operations for each item together and is cleaner than chaining multiple `.foreach()` calls. See [Nested workflows inside foreach](/docs/v1/workflows/control-flow#nested-workflows-inside-foreach) for examples.
+
+### Output structure
+
+`.foreach()` always outputs an array. Each element in the output array corresponds to the result of processing the element at the same index in the input array.
+
+```typescript copy
+// Input: [{ value: 1 }, { value: 2 }, { value: 3 }]
+// Step adds 10 to each value
+// Output: [{ value: 11 }, { value: 12 }, { value: 13 }]
+```
+
+### Using `.then()` after `.foreach()`
+
+When you chain `.then()` after `.foreach()`, the next step receives the entire output array as its input. This allows you to aggregate or process all results together.
+
+```typescript copy
+workflow
+  .foreach(processItemStep)    // Output: array of processed items
+  .then(aggregateStep)         // Input: the entire array
+  .commit();
+```
+
+### Using `.map()` after `.foreach()`
+
+Use `.map()` to transform the array output before passing it to the next step:
+
+```typescript copy
+workflow
+  .foreach(processItemStep)
+  .map(async ({ inputData }) => ({
+    total: inputData.reduce((sum, item) => sum + item.value, 0),
+    count: inputData.length
+  }))
+  .then(nextStep)
+  .commit();
+```
+
+### Chaining multiple `.foreach()` calls
+
+When you chain `.foreach()` calls, each operates on the array from the previous step:
+
+```typescript copy
+workflow
+  .foreach(stepA)    // If input is [a, b, c], output is [A, B, C]
+  .foreach(stepB)    // Operates on [A, B, C], output is [A', B', C']
+  .commit();
+```
+
+If a step inside `.foreach()` returns an array, the output becomes an array of arrays. Use `.map()` with `.flat()` to flatten:
+
+```typescript copy
+workflow
+  .foreach(chunkStep)           // Output: [[chunk1, chunk2], [chunk3, chunk4]]
+  .map(async ({ inputData }) => inputData.flat())  // Output: [chunk1, chunk2, chunk3, chunk4]
+  .foreach(embedStep)
+  .commit();
+```
+
 ## Related
 
-- [Repeating with foreach](/docs/v1/workflows/control-flow#looping-with-foreach)
+- [Looping with foreach](/docs/v1/workflows/control-flow#looping-with-foreach)
 
 
 ---
