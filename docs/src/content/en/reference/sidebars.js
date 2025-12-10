@@ -730,6 +730,11 @@ const sidebars = {
       items: [
         {
           type: "doc",
+          id: "processors/processor-interface",
+          label: "Processor Interface",
+        },
+        {
+          type: "doc",
           id: "processors/language-detector",
           label: "LanguageDetector",
         },

@@ -1,6 +1,6 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
-import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
+import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
 import type { ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
@@ -390,7 +390,7 @@ export function createTool<
       execute: (
         inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
         context?: TContext,
-      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
+      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> : unknown>;
     }
   : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
   return new Tool(opts) as any;

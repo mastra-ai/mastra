@@ -395,6 +395,7 @@ export const createMessageListWithUserMessage = () => {
   const messageList = new MessageList();
   messageList.add(
     {
+      id: 'msg-1',
       role: 'user',
       content: [{ type: 'text', text: 'test-input' }],
     },

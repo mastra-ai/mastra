@@ -1,6 +1,6 @@
 'use client';
 
-import { useMessagePart } from '@assistant-ui/react';
+import { useAssistantState } from '@assistant-ui/react';
 import { AlertCircle } from 'lucide-react';
 import { MarkdownText } from './markdown-text';
 import { TripwireNotice } from './tripwire-notice';
@@ -8,7 +8,7 @@ import { MastraUIMessageMetadata } from '@mastra/react';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 
 export const ErrorAwareText = () => {
-  const part = useMessagePart();
+  const part = useAssistantState(({ part }) => part);
 
   // Get text from the part - it's a TextPart so it has a text property
   const text = (part as any).text || '';

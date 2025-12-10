@@ -82,7 +82,8 @@
     "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint -- --fix",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
-    "setup": "pnpm install && pnpm run build"
+    "setup": "pnpm install && pnpm run build",
+    "cleanup": "find . -type d \\( -name 'node_modules' -o -name 'dist' -o -name '.turbo' -o -name '.mastra' \\) -prune -exec rm -rf {} +"
   },
   "lint-staged": {
     "*.{js,mjs,ts,tsx,md,mdx,json,graphql,gql}": [

@@ -1,14 +1,15 @@
 import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import type { ToolSet } from 'ai-v5';
-import { MessageList } from '../../../agent/message-list';
-import type { MastraDBMessage } from '../../../agent/message-list';
+import type { LanguageModelV2Usage, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { CallSettings, ToolChoice, ToolSet } from 'ai-v5';
+import type { StructuredOutputOptions } from '../../../agent';
+import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
+import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -28,7 +29,6 @@ import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
 
 type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
-  model: MastraLanguageModelV2;
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
@@ -445,13 +445,14 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
   };
 }
 
-export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
   models,
   _internal,
   messageId,
   runId,
   tools,
   toolChoice,
+  activeTools,
   messageList,
   includeRawChunks,
   modelSettings,
@@ -472,7 +473,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   methodType,
   modelSpanTracker,
   maxProcessorRetries,
-}: OuterLLMRun<Tools, OUTPUT>) {
+}: OuterLLMRun<TOOLS, OUTPUT>) {
+  const initialSystemMessages = messageList.getAllSystemMessages();
+
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
@@ -483,117 +486,99 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       let request: any;
       let rawResponse: any;
 
-      const { outputStream, callBail, runState } = await executeStreamWithFallbackModels<{
+      const { outputStream, callBail, runState, stepTools } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT | undefined>;
         runState: AgenticRunState;
         callBail?: boolean;
+        stepTools?: TOOLS;
       }>(models)(async (model, isLastModel) => {
+        // Reset system messages to original before each step execution
+        // This ensures that system message modifications in prepareStep/processInputStep/processors
+        // don't persist across steps - each step starts fresh with original system messages
+        if (initialSystemMessages) {
+          messageList.replaceAllSystemMessages(initialSystemMessages);
+        }
+
+        const currentStep: {
+          model: MastraLanguageModelV2;
+          tools?: TOOLS | undefined;
+          toolChoice?: ToolChoice<TOOLS> | undefined;
+          activeTools?: (keyof TOOLS)[] | undefined;
+          providerOptions?: SharedV2ProviderOptions | undefined;
+          modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
+          structuredOutput?: StructuredOutputOptions<OUTPUT> | undefined;
+        } = {
+          model,
+          tools,
+          toolChoice,
+          activeTools,
+          providerOptions,
+          modelSettings,
+          structuredOutput,
+        };
+
+        const inputStepProcessors = [
+          ...(inputProcessors || []),
+          ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
+        ];
+        if (inputStepProcessors && inputStepProcessors.length > 0) {
+          const processorRunner = new ProcessorRunner({
+            inputProcessors: inputStepProcessors,
+            outputProcessors: [],
+            logger: logger || new ConsoleLogger({ level: 'error' }),
+            agentName: agentId || 'unknown',
+          });
+
+          try {
+            const processInputStepResult = await processorRunner.runProcessInputStep<TOOLS>({
+              messageList,
+              stepNumber: inputData.output?.steps?.length || 0,
+              tracingContext,
+              requestContext,
+              model,
+              steps: inputData.output?.steps || [],
+              tools,
+              toolChoice,
+              activeTools,
+              providerOptions,
+              modelSettings,
+              structuredOutput,
+            });
+            Object.assign(currentStep, processInputStepResult);
+          } catch (error) {
+            console.error('Error in processInputStep processors:', error);
+            throw error;
+          }
+        }
+
         const runState = new AgenticRunState({
           _internal: _internal!,
-          model,
+          model: currentStep.model,
         });
+        const messageListPromptArgs = {
+          downloadRetries,
+          downloadConcurrency,
+          supportedUrls: currentStep.model?.supportedUrls as Record<string, RegExp[]>,
+        };
+        const inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
-        switch (model.specificationVersion) {
+        switch (currentStep.model.specificationVersion) {
           case 'v2': {
-            const messageListPromptArgs = {
-              downloadRetries,
-              downloadConcurrency,
-              supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
-            };
-            let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
-
-            // Call processInputStep for processors (runs BEFORE prepareStep)
-            // This allows processors to modify messages at each step of the agentic loop
-            let stepModel = model;
-            let stepToolChoice = toolChoice;
-            let stepTools = tools;
-
-            // Run processInputStep for all processors that implement it
-            if (inputProcessors && inputProcessors.length > 0) {
-              const processorRunner = new ProcessorRunner({
-                inputProcessors,
-                outputProcessors: [],
-                logger: logger || new ConsoleLogger({ level: 'error' }),
-                agentName: agentId || 'unknown',
-              });
-
-              try {
-                // processInputStep modifies messages in place via messageList (same as processInput)
-                await processorRunner.runProcessInputStep({
-                  messages: messageList.get.all.db(),
-                  messageList,
-                  stepNumber: inputData.output?.steps?.length || 0,
-                  tracingContext,
-                  requestContext,
-                });
-
-                // Re-fetch messages after processors have modified them
-                inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
-              } catch (error) {
-                console.error('Error in processInputStep processors:', error);
-                throw error;
-              }
-            }
-
-            // Call prepareStep callback if provided (runs AFTER processInputStep)
-            if (options?.prepareStep) {
-              try {
-                const prepareStepResult = await options.prepareStep({
-                  stepNumber: inputData.output?.steps?.length || 0,
-                  steps: inputData.output?.steps || [],
-                  model,
-                  messages: messageList.get.all.aiV5.model(),
-                });
-
-                if (prepareStepResult) {
-                  if (prepareStepResult.model) {
-                    stepModel = prepareStepResult.model;
-                  }
-                  if (prepareStepResult.toolChoice) {
-                    stepToolChoice = prepareStepResult.toolChoice;
-                  }
-                  if (prepareStepResult.activeTools && stepTools) {
-                    const activeToolsSet = new Set(prepareStepResult.activeTools);
-                    stepTools = Object.fromEntries(
-                      Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
-                    ) as typeof tools;
-                  }
-                  if (prepareStepResult.messages) {
-                    const newMessages = prepareStepResult.messages;
-                    const newMessageList = new MessageList();
-
-                    for (const message of newMessages) {
-                      if (message.role === 'system') {
-                        newMessageList.addSystem(message);
-                      } else if (message.role === 'user') {
-                        newMessageList.add(message, 'input');
-                      } else if (message.role === 'assistant' || message.role === 'tool') {
-                        newMessageList.add(message, 'response');
-                      }
-                    }
-
-                    inputMessages = await newMessageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
-                  }
-                }
-              } catch (error) {
-                console.error('Error in prepareStep callback:', error);
-              }
-            }
-
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
               fn: () =>
                 execute({
                   runId,
-                  model: stepModel,
-                  providerOptions,
+                  model: currentStep.model,
+                  providerOptions: currentStep.providerOptions,
                   inputMessages,
-                  tools: stepTools,
-                  toolChoice: stepToolChoice,
+                  tools: currentStep.tools,
+                  toolChoice: currentStep.toolChoice,
+                  activeTools: currentStep.activeTools as string[] | undefined,
                   options,
-                  modelSettings,
+                  modelSettings: currentStep.modelSettings,
                   includeRawChunks,
-                  structuredOutput,
+                  structuredOutput: currentStep.structuredOutput,
                   headers,
                   methodType,
                   generateId: _internal?.generateId,
@@ -635,9 +620,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
 
         const outputStream = new MastraModelOutput({
           model: {
-            modelId: model.modelId,
-            provider: model.provider,
-            version: model.specificationVersion,
+            modelId: currentStep.model.modelId,
+            provider: currentStep.model.provider,
+            version: currentStep.model.specificationVersion,
           },
           stream: modelResult as ReadableStream<ChunkType>,
           messageList,
@@ -646,7 +631,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             runId,
             toolCallStreaming,
             includeRawChunks,
-            structuredOutput,
+            structuredOutput: currentStep.structuredOutput,
             outputProcessors,
             isLLMExecutionStep: true,
             tracingContext,
@@ -659,8 +644,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           await processOutputStream({
             outputStream,
             includeRawChunks,
-            model,
-            tools,
+            tools: currentStep.tools,
             messageId,
             messageList,
             runState,
@@ -683,7 +667,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
             }
 
-            return { callBail: true, outputStream, runState };
+            return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
           }
 
           if (isLastModel) {
@@ -708,8 +692,14 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           }
         }
 
-        return { outputStream, callBail: false, runState };
+        return { outputStream, callBail: false, runState, stepTools: currentStep.tools };
       });
+
+      // Store modified tools in _internal so toolCallStep can access them
+      // without going through workflow serialization (which would lose execute functions)
+      if (_internal) {
+        _internal.stepTools = stepTools;
+      }
 
       if (callBail) {
         const usage = outputStream._getImmediateUsage();
@@ -953,6 +943,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         output: {
           text,
           toolCalls: shouldRetry ? [] : toolCalls, // Clear tool calls on retry
+          tools: stepTools,
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),

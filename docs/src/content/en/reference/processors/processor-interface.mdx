@@ -198,8 +198,8 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
 #### Execution order in the agentic loop
 
 1. `processInput` (once at start)
-2. `processInputStep` (at each step, before LLM call)
-3. `prepareStep` callback (if provided)
+2. `processInputStep` from inputProcessors (at each step, before LLM call)
+3. `prepareStep` callback (runs as part of the processInputStep pipeline, after inputProcessors)
 4. LLM execution
 5. Tool execution (if needed)
 6. Repeat from step 2 if tools were called
@@ -211,13 +211,13 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
     {
       name: "messages",
       type: "MastraDBMessage[]",
-      description: "All messages including tool calls and results from previous steps.",
+      description: "All messages including tool calls and results from previous steps (read-only snapshot).",
       isOptional: false,
     },
     {
       name: "messageList",
       type: "MessageList",
-      description: "MessageList instance for managing messages.",
+      description: "MessageList instance for managing messages. Can mutate directly or return in result.",
       isOptional: false,
     },
     {
@@ -227,10 +227,58 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
       isOptional: false,
     },
     {
+      name: "steps",
+      type: "StepResult[]",
+      description: "Results from previous steps, including text, toolCalls, and toolResults.",
+      isOptional: false,
+    },
+    {
       name: "systemMessages",
       type: "CoreMessage[]",
-      description: "All system messages for read/modify access.",
+      description: "All system messages (read-only snapshot). Return in result to replace.",
       isOptional: false,
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModelV2",
+      description: "Current model being used. Return a different model in result to switch.",
+      isOptional: false,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "Current tool choice setting ('auto', 'none', 'required', or specific tool).",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "Currently active tool names. Return filtered array to limit tools.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "Current tools available for this step. Return in result to add/replace tools.",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "Provider-specific options (e.g., Anthropic cacheControl, OpenAI reasoningEffort).",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "Model settings like temperature, maxTokens, topP.",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Structured output configuration (schema, output mode). Return in result to modify.",
+      isOptional: true,
     },
     {
       name: "abort",
@@ -253,12 +301,99 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
   ]}
 />
 
+#### ProcessInputStepResult
+
+The method can return any combination of these properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModelV2 | string",
+      description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-4o'.",
+      isOptional: true,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "Change tool selection behavior for this step.",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "Filter which tools are available for this step.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "Replace or modify tools for this step. Use spread to merge: { tools: { ...tools, newTool } }.",
+      isOptional: true,
+    },
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "Replace all messages. Cannot be used with messageList.",
+      isOptional: true,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "Return the same messageList instance (indicates you mutated it). Cannot be used with messages.",
+      isOptional: true,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "Replace all system messages for this step only.",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "Change provider-specific options for this step.",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "Change model settings for this step.",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Change structured output configuration for this step.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Processor chaining
+
+When multiple processors implement `processInputStep`, they run in order and changes chain through:
+
+```
+Processor 1: receives { model: 'gpt-4o' } → returns { model: 'gpt-4o-mini' }
+Processor 2: receives { model: 'gpt-4o-mini' } → returns { toolChoice: 'none' }
+Final: model = 'gpt-4o-mini', toolChoice = 'none'
+```
+
+#### System message isolation
+
+System messages are **reset to their original values** at the start of each step. Modifications made in `processInputStep` only affect the current step, not subsequent steps.
+
 #### Use cases
 
+- Dynamic model switching based on step number or context
+- Disabling tools after a certain number of steps
+- Dynamically adding or replacing tools based on conversation context
 - Transforming message part types between providers (e.g., `reasoning` → `thinking` for Anthropic)
 - Modifying messages based on step number or accumulated context
-- Implementing per-step message filtering or enrichment
-- Adding step-specific context or instructions
+- Adding step-specific system instructions
+- Adjusting provider options per step (e.g., cache control)
+- Modifying structured output schema based on step context
 
 ---
 
@@ -537,13 +672,46 @@ export class LowercaseProcessor implements Processor {
 
 ### Per-step processor with processInputStep
 
+```typescript title="src/mastra/processors/dynamic-model.ts" showLineNumbers copy
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+
+export class DynamicModelProcessor implements Processor {
+  id = "dynamic-model";
+
+  async processInputStep({
+    stepNumber,
+    steps,
+    toolChoice,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // Use a fast model for initial response
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+
+    // Switch to powerful model after tool calls
+    if (steps.length > 0 && steps[steps.length - 1].toolCalls?.length) {
+      return { model: "openai/gpt-4o" };
+    }
+
+    // Disable tools after 5 steps to force completion
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+
+    return {};
+  }
+}
+```
+
+### Message transformer with processInputStep
+
 ```typescript title="src/mastra/processors/reasoning-transformer.ts" showLineNumbers copy
 import type { Processor, MastraDBMessage } from "@mastra/core";
 
 export class ReasoningTransformer implements Processor {
   id = "reasoning-transformer";
 
-  async processInputStep({ messages, messageList, stepNumber }) {
+  async processInputStep({ messages, messageList }) {
     // Transform reasoning parts to thinking parts at each step
     // This is useful when switching between model providers
     for (const msg of messages) {

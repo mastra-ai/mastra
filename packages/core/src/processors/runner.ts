@@ -1,8 +1,10 @@
+import type { ToolSet } from 'ai-v5';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
 import { MastraError } from '../error';
+import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
 import { SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
@@ -10,8 +12,16 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { ProcessorStepOutput } from './step-schema';
-import type { Processor, ProcessorWorkflow, ToolCallInfo } from './index';
 import { isProcessorWorkflow } from './index';
+import type {
+  ProcessInputStepResult,
+  Processor,
+  ProcessorMessageResult,
+  ProcessorWorkflow,
+  RunProcessInputStepArgs,
+  RunProcessInputStepResult,
+  ToolCallInfo,
+} from './index';
 
 /**
  * Implementation of processor state management
@@ -739,15 +749,31 @@ export class ProcessorRunner {
    *
    * @returns The processed MessageList
    */
-  async runProcessInputStep(args: {
-    messages: MastraDBMessage[];
-    messageList: MessageList;
-    stepNumber: number;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-    retryCount?: number;
-  }): Promise<MessageList> {
-    const { messageList, stepNumber, tracingContext, requestContext, retryCount = 0 } = args;
+  // async runProcessInputStep(args: {
+  //   messages: MastraDBMessage[];
+  //   messageList: MessageList;
+  //   stepNumber: number;
+  //   tracingContext?: TracingContext;
+  //   requestContext?: RequestContext;
+  //   retryCount?: number;
+  // }): Promise<MessageList> {
+  //   const { messageList, stepNumber, tracingContext, requestContext, retryCount = 0 } = args;
+  async runProcessInputStep<TOOLS extends ToolSet = ToolSet>(
+    args: RunProcessInputStepArgs<TOOLS>,
+  ): Promise<RunProcessInputStepResult<TOOLS>> {
+    const { messageList, stepNumber, steps, tracingContext, requestContext } = args;
+
+    // Initialize with all provided values - processors will modify this object in order
+    const stepInput: RunProcessInputStepResult<TOOLS> = {
+      tools: args.tools as TOOLS | undefined,
+      toolChoice: args.toolChoice,
+      model: args.model,
+      activeTools: args.activeTools,
+      providerOptions: args.providerOptions,
+      modelSettings: args.modelSettings,
+      structuredOutput: args.structuredOutput,
+      retryCount: args.retryCount ?? 0,
+    };
 
     // Run through all input processors that have processInputStep
     for (const [index, processorOrWorkflow] of this.inputProcessors.entries()) {
@@ -780,7 +806,7 @@ export class ProcessorRunner {
               messageList,
               stepNumber,
               systemMessages: currentSystemMessages,
-              retryCount,
+              retryCount: args.retryCount ?? 0,
             },
             tracingContext,
             requestContext,
@@ -800,7 +826,6 @@ export class ProcessorRunner {
       // Handle regular processor
       const processor = processorOrWorkflow;
       const processMethod = processor.processInputStep?.bind(processor);
-
       if (!processMethod) {
         // Skip processors that don't implement processInputStep
         continue;
@@ -810,9 +835,27 @@ export class ProcessorRunner {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
+      // Get all system messages to pass to the processor
+      const currentSystemMessages = messageList.getAllSystemMessages();
+
+      const inputData = {
+        messages: processableMessages,
+        stepNumber,
+        steps,
+        systemMessages: currentSystemMessages,
+        tools: stepInput.tools as TOOLS | undefined,
+        toolChoice: stepInput.toolChoice,
+        model: stepInput.model!,
+        activeTools: stepInput.activeTools,
+        providerOptions: stepInput.providerOptions,
+        modelSettings: stepInput.modelSettings,
+        structuredOutput: stepInput.structuredOutput,
+        requestContext,
+      };
+
+      // Use the current span (the step span) as the parent for processor spans
       const currentSpan = tracingContext?.currentSpan;
-      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-      const processorSpan = parentSpan?.createChildSpan({
+      const processorSpan = currentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `input step processor: ${processor.id}`,
         attributes: {
@@ -820,65 +863,59 @@ export class ProcessorRunner {
           processorType: 'input',
           processorIndex: index,
         },
-        input: { messages: processableMessages, stepNumber },
+        input: {
+          ...inputData,
+          model: {
+            id: inputData.model.modelId,
+            provider: inputData.model.provider,
+            specificationVersion: inputData.model.specificationVersion,
+          },
+        },
       });
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
 
-      // Get all system messages to pass to the processor
-      const currentSystemMessages = messageList.getAllSystemMessages();
-
       try {
-        const result = await processMethod({
-          messages: processableMessages,
-          messageList,
-          stepNumber,
-          systemMessages: currentSystemMessages,
-          abort,
-          tracingContext: { currentSpan: processorSpan },
-          requestContext,
-          retryCount,
-        });
+        const result = await this.validateAndFormatProcessInputStepResult(
+          await processMethod({
+            messageList,
+            ...inputData,
+            abort,
+            tracingContext: { currentSpan: processorSpan },
+            retryCount: args.retryCount ?? 0,
+          }),
+          {
+            messageList,
+            processor,
+            stepNumber,
+          },
+        );
+        const { messages, systemMessages, ...rest } = result;
+        if (messages) {
+          this.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
+        }
+        if (systemMessages) {
+          messageList.replaceAllSystemMessages(systemMessages);
+        }
+        Object.assign(stepInput, rest);
 
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
 
-        // Handle the return type - MessageList or MastraDBMessage[]
-        if (result instanceof MessageList) {
-          if (result !== messageList) {
-            throw new MastraError({
-              category: 'USER',
-              domain: 'AGENT',
-              id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
-              text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
-            });
-          }
-          // Processor returned the same messageList - mutations have been applied
-        } else if (result) {
-          // Processor returned an array - apply changes to messageList
-          const deletedIds = idsBeforeProcessing.filter(i => !result.some(m => m.id === i));
-          if (deletedIds.length) {
-            messageList.removeByIds(deletedIds);
-          }
-
-          // Re-add messages with correct sources
-          for (const message of result) {
-            messageList.removeByIds([message.id]);
-            if (message.role === 'system') {
-              const systemText =
-                (message.content.content as string | undefined) ??
-                message.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-                '';
-              messageList.addSystem(systemText);
-            } else {
-              messageList.add(message, check.getSource(message) || 'input');
-            }
-          }
-        }
-
         processorSpan?.end({
-          output: messageList.get.all.db(),
+          output: {
+            ...stepInput,
+            messages: messageList.get.all.db(),
+            systemMessages: messageList.getAllSystemMessages(),
+            model: stepInput.model
+              ? {
+                  modelId: stepInput.model.modelId,
+                  provider: stepInput.model.provider,
+                  specificationVersion: stepInput.model.specificationVersion,
+                }
+              : undefined,
+          },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
@@ -897,7 +934,7 @@ export class ProcessorRunner {
       }
     }
 
-    return messageList;
+    return stepInput;
   }
 
   /**
@@ -1119,5 +1156,100 @@ export class ProcessorRunner {
     }
 
     return messageList;
+  }
+
+  private applyMessagesToMessageList(
+    messages: MastraDBMessage[],
+    messageList: MessageList,
+    idsBeforeProcessing: string[],
+    check: ReturnType<MessageList['makeMessageSourceChecker']>,
+  ) {
+    const deletedIds = idsBeforeProcessing.filter(i => !messages.some(m => m.id === i));
+    if (deletedIds.length) {
+      messageList.removeByIds(deletedIds);
+    }
+
+    // Re-add messages with correct sources
+    for (const message of messages) {
+      messageList.removeByIds([message.id]);
+      if (message.role === 'system') {
+        const systemText =
+          (message.content.content as string | undefined) ??
+          message.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+          '';
+        messageList.addSystem(systemText);
+      } else {
+        messageList.add(message, check.getSource(message) || 'input');
+      }
+    }
+  }
+
+  private async validateAndFormatProcessInputStepResult<TOOLS extends ToolSet = ToolSet>(
+    result: ProcessInputStepResult<TOOLS> | Awaited<ProcessorMessageResult> | undefined | void,
+    {
+      messageList,
+      processor,
+      stepNumber,
+    }: {
+      messageList: MessageList;
+      processor: Processor;
+      stepNumber: number;
+    },
+  ): Promise<RunProcessInputStepResult<TOOLS>> {
+    if (result instanceof MessageList) {
+      if (result !== messageList) {
+        throw new MastraError({
+          category: 'USER',
+          domain: 'AGENT',
+          id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+          text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+        });
+      }
+      return {
+        messageList: result,
+      };
+    } else if (Array.isArray(result)) {
+      return {
+        messages: result,
+      };
+    } else if (result) {
+      if (result.messageList && result.messageList !== messageList) {
+        throw new MastraError({
+          category: 'USER',
+          domain: 'AGENT',
+          id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+          text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+        });
+      }
+      if (result.messages && result.messageList) {
+        throw new MastraError({
+          category: 'USER',
+          domain: 'AGENT',
+          id: 'PROCESSOR_RETURNED_MESSAGES_AND_MESSAGE_LIST',
+          text: `Processor ${processor.id} returned both messages and messageList. Only one of these is allowed.`,
+        });
+      }
+      const { model: _model, ...rest } = result;
+      if (result.model) {
+        const resolvedModel = await resolveModelConfig(result.model);
+        if (resolvedModel.specificationVersion === 'v1') {
+          throw new MastraError({
+            category: 'USER',
+            domain: 'AGENT',
+            id: 'PROCESSOR_RETURNED_V1_MODEL',
+            text: `Processor ${processor.id} returned a v1 model in step ${stepNumber}. v1 models are not supported in processInputStep.`,
+          });
+        }
+
+        return {
+          model: resolvedModel,
+          ...rest,
+        };
+      }
+
+      return rest;
+    }
+
+    return {};
   }
 }
