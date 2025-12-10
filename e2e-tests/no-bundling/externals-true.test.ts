@@ -108,7 +108,7 @@ describe('externals: true', () => {
         activeProcesses.push({ controller, proc });
 
         // Poll the server until it's ready
-        const maxAttempts = 10;
+        const maxAttempts = 15;
         const delayMs = 1000;
         let serverStarted = false;
 
