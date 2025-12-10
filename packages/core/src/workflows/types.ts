@@ -773,3 +773,17 @@ export type DurableOperationWrapParams<T> = {
   operationId: string;
   operationFn: () => Promise<T>;
 };
+
+/**
+ * Base type for formatted workflow results returned by fmtReturnValue.
+ */
+export type FormattedWorkflowResult = {
+  status: WorkflowStepStatus | 'tripwire';
+  steps: Record<string, StepResult<any, any, any, any>>;
+  input: StepResult<any, any, any, any> | undefined;
+  result?: any;
+  error?: SerializedError;
+  suspended?: string[][];
+  /** Tripwire data when status is 'tripwire' */
+  tripwire?: StepTripwireInfo;
+};

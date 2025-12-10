@@ -26,6 +26,7 @@ import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import type {
+  FormattedWorkflowResult,
   DefaultEngineType,
   Emitter,
   EntryExecutionResult,
@@ -40,7 +41,6 @@ import type {
   StepResult,
   StepTripwireInfo,
   TimeTravelExecutionParams,
-  WorkflowStepStatus,
 } from './types';
 
 // Re-export ExecutionContext for backwards compatibility
@@ -347,14 +347,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | unknown,
   ): Promise<TOutput> {
-    const base: {
-      status: WorkflowStepStatus;
-      steps: Record<string, StepResult<any, any, any, any>>;
-      input: StepResult<any, any, any, any> | undefined;
-      result?: any;
-      error?: SerializedError;
-      suspended?: string[][];
-    } = {
+    const base: FormattedWorkflowResult = {
       status: lastOutput.status,
       steps: stepResults,
       input: stepResults.input,
