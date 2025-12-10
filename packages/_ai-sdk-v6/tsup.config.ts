@@ -1,6 +1,6 @@
 import { embedTypes } from '@internal/types-builder/embed-types';
-import { Project, Node, SyntaxKind } from 'ts-morph';
 import type { ExportDeclaration } from 'ts-morph';
+import { Project, Node, SyntaxKind } from 'ts-morph';
 import { defineConfig } from 'tsup';
 
 async function fixExportBugInDtsFile(dtsFile: string) {
@@ -64,7 +64,7 @@ async function fixExportBugInDtsFile(dtsFile: string) {
 
   const uniqueSymbols = sourceFile
     .getVariableDeclarations()
-    .filter(decl => decl.getTypeNode()?.getText() === 'unique symbol' && !decl.isExported)
+    .filter(decl => decl.getTypeNode()?.getText() === 'unique symbol')
     .map(decl => decl.getName());
 
   // Export them all
@@ -98,26 +98,20 @@ export default defineConfig({
     const dtsFiles = await copyAIDtsFiles();
 
     for (const dtsFile of dtsFiles) {
-      const project = new Project();
-      const sourceFile = project.addSourceFileAtPath(dtsFile);
+      await embedTypes(
+        dtsFile,
+        process.cwd(),
+        new Set([
+          'ai',
+          '@ai-sdk/*',
+          '@opentelemetry/api',
+          '@standard-schema/spec',
+          '@types/json-schema',
+          'eventsource-parser',
+        ]),
+      );
 
-      const uniqueSymbols = sourceFile
-        .getVariableDeclarations()
-        .filter(decl => decl.getTypeNode()?.getText() === 'unique symbol')
-        .map(decl => decl.getName());
-
-      // Export them all
-      if (uniqueSymbols.length > 0) {
-        sourceFile.addExportDeclaration({
-          namedExports: uniqueSymbols,
-        });
-
-        await sourceFile.save();
-      }
-
-      await embedTypes(dtsFile, process.cwd(), new Set(['@ai-sdk/*', '@opentelemetry/api', '@types/json-schema']));
-
-      await fixExportBugInDtsFile(dtsFile);
+      //await fixExportBugInDtsFile(dtsFile);
     }
   },
 });
