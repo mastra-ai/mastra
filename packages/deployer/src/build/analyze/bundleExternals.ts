@@ -24,6 +24,8 @@ import { readFile } from 'node:fs/promises';
 import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
 import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
+import { nodeGypDetector } from '../plugins/node-gyp-detector';
+import { moduleResolveMap } from '../plugins/module-resolve-map';
 
 type VirtualDependency = {
   name: string;
@@ -195,7 +197,8 @@ async function getInputPlugins(
               resolvedPath = pkgJson!.main ?? 'index.js';
             }
 
-            return await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
+            const resolved = await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
+            return resolved;
           },
         } satisfies Plugin)
       : null,
@@ -217,6 +220,8 @@ async function getInputPlugins(
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
+    nodeGypDetector(),
+    moduleResolveMap(externals, rootDir),
     {
       name: 'not-found-resolver',
       resolveId: {
@@ -298,7 +303,7 @@ async function buildExternalDependencies(
       {} as Record<string, string>,
     ),
     external: externals,
-    treeshake: 'safest',
+    treeshake: bundlerOptions.isDev ? false : 'safest',
     plugins: getInputPlugins(virtualDependencies, {
       transpilePackages: packagesToTranspile,
       workspaceMap,
@@ -314,6 +319,8 @@ async function buildExternalDependencies(
     format: 'esm',
     dir: rootDir,
     entryFileNames: '[name].mjs',
+    // used to get the filename of the actual error
+    sourcemap: true,
     /**
      * Rollup creates chunks for common dependencies, but these chunks are by default written to the root directory instead of respecting the entryFileNames structure.
      * So we want to write them to the `.mastra/output` folder as well.
