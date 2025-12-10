@@ -21,7 +21,6 @@
   },
   "pnpm": {
     "overrides": {
-      "@mastra/core": "link:../../packages/core",
       "@mastra/client-js": "link:../../client-sdks/client-js"
     }
   },
