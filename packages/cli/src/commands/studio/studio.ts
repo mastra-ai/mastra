@@ -22,7 +22,7 @@ export async function studio(options: StudioOptions = {}) {
     const distPath = join(__dirname, 'playground');
 
     if (!existsSync(distPath)) {
-      logger.error(`Studio distribution not found at ${distPath}. Please run 'mastra build' first.`);
+      logger.error(`Studio distribution not found at ${distPath}.`);
       process.exit(1);
     }
 
