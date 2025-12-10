@@ -3,5 +3,3 @@ export type ModelInformation = {
   provider: string;
   supportsStructuredOutputs: boolean;
 };
-
-export type { Schema } from '@internal/ai-sdk-v4/schema';
