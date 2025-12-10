@@ -453,6 +453,22 @@ export async function bundleExternals(
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
 
+  /**
+   * When externals: true, we need to extract non-workspace deps from depsToOptimize
+   * and add them directly to usedExternals instead of bundling them.
+   */
+  const extractedExternals = new Map<string, string>();
+  if (externalsPreset) {
+    for (const [dep, metadata] of depsToOptimize.entries()) {
+      if (!metadata.isWorkspace) {
+        // Add to extracted externals - use rootPath or fallback to package name
+        extractedExternals.set(dep, metadata.rootPath ?? dep);
+        // Remove from depsToOptimize so it won't be bundled
+        depsToOptimize.delete(dep);
+      }
+    }
+  }
+
   const { optimizedDependencyEntries, fileNameToDependencyMap } = createVirtualDependencies(depsToOptimize, {
     workspaceRoot,
     outputDir,
@@ -517,6 +533,19 @@ export async function bundleExternals(
       innerObj[external] = value;
     }
     usedExternals[fullPath] = innerObj;
+  }
+
+  /**
+   * When externals: true, add the extracted non-workspace deps to usedExternals
+   * using a synthetic entry path to track them.
+   */
+  if (extractedExternals.size > 0) {
+    const syntheticPath = path.join(workspaceRoot || projectRoot, '__externals__');
+    const externalsObj = Object.create(null) as Record<string, string>;
+    for (const [dep, rootPath] of extractedExternals) {
+      externalsObj[dep] = rootPath;
+    }
+    usedExternals[syntheticPath] = externalsObj;
   }
 
   return { output, fileNameToDependencyMap, usedExternals };
