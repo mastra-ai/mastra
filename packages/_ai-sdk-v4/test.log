@@ -1,0 +1,104 @@
+• Packages in scope: @internal/ai-sdk-v5
+• Running build in 1 packages
+• Remote caching disabled
+@internal/ai-sdk-v5:build: cache miss, executing 7def5755e21c4571
+@internal/ai-sdk-v5:build: 
+@internal/ai-sdk-v5:build: > @internal/ai-sdk-v5@0.0.0 build /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/packages/_ai-sdk-v5
+@internal/ai-sdk-v5:build: > tsup --silent --config tsup.config.ts
+@internal/ai-sdk-v5:build: 
+@internal/ai-sdk-v5:build: Analysis will use the bundled TypeScript version 5.9.3
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+gateway@2.0.18_zod@3.25.76/node_modules/@ai-sdk/gateway/dist/index.d.ts:118:1 - (ae-forgotten-export) The symbol "GatewayProviderSettings" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+gateway@2.0.18_zod@3.25.76/node_modules/@ai-sdk/gateway/dist/index.d.ts:118:1 - (ae-forgotten-export) The symbol "GatewayProvider" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+provider-utils@3.0.18_zod@3.25.76/node_modules/@ai-sdk/provider-utils/dist/index.d.ts:310:1 - (ae-forgotten-export) The symbol "ParseResult" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+provider-utils@3.0.18_zod@3.25.76/node_modules/@ai-sdk/provider-utils/dist/index.d.ts:312:5 - (ae-forgotten-export) The symbol "FlexibleValidator" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+provider-utils@3.0.18_zod@3.25.76/node_modules/@ai-sdk/provider-utils/dist/index.d.ts:401:5 - (ae-forgotten-export) The symbol "ValidationResult" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+provider-utils@3.0.18_zod@3.25.76/node_modules/@ai-sdk/provider-utils/dist/index.d.ts:403:1 - (ae-forgotten-export) The symbol "FlexibleSchema" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+provider-utils@3.0.18_zod@3.25.76/node_modules/@ai-sdk/provider-utils/dist/index.d.ts:548:5 - (ae-forgotten-export) The symbol "LanguageModelV2ToolResultOutput" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+provider-utils@3.0.18_zod@3.25.76/node_modules/@ai-sdk/provider-utils/dist/index.d.ts:568:5 - (ae-forgotten-export) The symbol "ProviderOptions" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+provider-utils@3.0.18_zod@3.25.76/node_modules/@ai-sdk/provider-utils/dist/index.d.ts:574:1 - (ae-forgotten-export) The symbol "ReasoningPart" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+provider-utils@3.0.18_zod@3.25.76/node_modules/@ai-sdk/provider-utils/dist/index.d.ts:682:1 - (ae-forgotten-export) The symbol "ToolOutputProperties" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@ai-sdk+provider-utils@3.0.18_zod@3.25.76/node_modules/@ai-sdk/provider-utils/dist/index.d.ts:779:5 - (ae-forgotten-export) The symbol "LanguageModelV2ToolResultPart" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@types+json-schema@7.0.15/node_modules/@types/json-schema/index.d.ts:611:5 - (ae-forgotten-export) The symbol "JSONSchema7Version" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@types+json-schema@7.0.15/node_modules/@types/json-schema/index.d.ts:619:9 - (ae-forgotten-export) The symbol "JSONSchema7Definition" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@types+json-schema@7.0.15/node_modules/@types/json-schema/index.d.ts:625:5 - (ae-forgotten-export) The symbol "JSONSchema7TypeName" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: /Users/ward/projects/mastra/mastra-oss-worktrees/ai-sdk-versions/node_modules/.pnpm/@types+json-schema@7.0.15/node_modules/@types/json-schema/index.d.ts:626:5 - (ae-forgotten-export) The symbol "JSONSchema7Type" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:153:5 - (ae-forgotten-export) The symbol "AttributeValue" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:157:5 - (ae-forgotten-export) The symbol "Tracer" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:167:1 - (ae-forgotten-export) The symbol "EmbeddingModelV2Embedding" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:181:1 - (ae-forgotten-export) The symbol "ImageModelV2ProviderMetadata" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:243:1 - (ae-forgotten-export) The symbol "GlobalProviderModelId" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:255:1 - (ae-forgotten-export) The symbol "LanguageModelV2FinishReason" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:260:1 - (ae-forgotten-export) The symbol "LanguageModelV2CallWarning" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:278:1 - (ae-forgotten-export) The symbol "LanguageModelV2Middleware" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:349:1 - (ae-forgotten-export) The symbol "SharedV2ProviderMetadata" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:408:1 - (ae-forgotten-export) The symbol "LanguageModelV2Usage" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:608:1 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:817:9 - (ae-forgotten-export) The symbol "ResponseMessage" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:848:1 - (ae-forgotten-export) The symbol "DeepPartialInternal" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:1007:1 - (ae-forgotten-export) The symbol "LanguageModelV2ToolCall" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:1405:5 - (ae-forgotten-export) The symbol "StreamTextOnAbortCallback" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:1567:1 - (ae-forgotten-export) The symbol "ValueOf" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:1595:5 - (ae-forgotten-export) The symbol "asUITool" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:1697:15 - (ae-forgotten-export) The symbol "_ai_sdk_provider_utils" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:1700:5 - (ae-forgotten-export) The symbol "_ai_sdk_provider" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:1815:1 - (ae-forgotten-export) The symbol "DataUIMessageChunk" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:2179:5 - (ae-forgotten-export) The symbol "ConsumeStreamOptions" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:2328:5 - (ae-forgotten-export) The symbol "Output_2" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:2404:1 - (ae-forgotten-export) The symbol "InferAgentTools" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:2675:5 - (ae-forgotten-export) The symbol "SingleRequestTextStreamPart" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:2860:5 - (ae-forgotten-export) The symbol "RetryErrorReason" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3103:1 - (ae-forgotten-export) The symbol "InferSchema" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3216:5 - (ae-forgotten-export) The symbol "Job" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3487:5 - (ae-forgotten-export) The symbol "StreamObjectOnErrorCallback" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3532:5 - (ae-forgotten-export) The symbol "JSONValue_2" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3612:1 - (ae-forgotten-export) The symbol "ImageModelV2CallWarning" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3612:1 - (ae-forgotten-export) The symbol "SpeechModelV2CallWarning" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3612:1 - (ae-forgotten-export) The symbol "TranscriptionModelV2CallWarning" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3620:9 - (ae-forgotten-export) The symbol "LanguageModelV2CallOptions" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3704:1 - (ae-forgotten-export) The symbol "LanguageModelV2" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3704:1 - (ae-forgotten-export) The symbol "EmbeddingModelV2" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3704:1 - (ae-forgotten-export) The symbol "ImageModelV2" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3704:1 - (ae-forgotten-export) The symbol "TranscriptionModelV2" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3704:1 - (ae-forgotten-export) The symbol "SpeechModelV2" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3712:5 - (ae-forgotten-export) The symbol "ExtractModelId" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3741:5 - (ae-forgotten-export) The symbol "ExtractLiteralUnion" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3764:1 - (ae-forgotten-export) The symbol "ProviderV2" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3901:5 - (ae-forgotten-export) The symbol "getOriginalFetch" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:3935:1 - (ae-forgotten-export) The symbol "UIMessageStreamResponseInit" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:4083:5 - (ae-forgotten-export) The symbol "InferUIMessageToolCall" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:4111:5 - (ae-forgotten-export) The symbol "Validator" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:4111:5 - (ae-forgotten-export) The symbol "StandardSchemaV1" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:4112:5 - (ae-forgotten-export) The symbol "UIDataTypesToSchemas" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:4112:5 - (ae-forgotten-export) The symbol "InferUIMessageData" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:4197:9 - (ae-forgotten-export) The symbol "InferUIMessageMetadata" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:4221:5 - (ae-forgotten-export) The symbol "InferUIMessageTools" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:4332:5 - (ae-forgotten-export) The symbol "Resolvable" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/index.d.ts:4381:5 - (ae-forgotten-export) The symbol "FetchFunction" needs to be exported by the entry point index.d.ts[39m
+@internal/ai-sdk-v5:build: API Extractor completed successfully
+@internal/ai-sdk-v5:build: Analysis will use the bundled TypeScript version 5.9.3
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:77:1 - (ae-forgotten-export) The symbol "Prompt" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:79:1 - (ae-forgotten-export) The symbol "LanguageModelV2Prompt" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:80:5 - (ae-forgotten-export) The symbol "StandardizedPrompt" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:82:5 - (ae-forgotten-export) The symbol "DownloadFunction" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:204:1 - (ae-forgotten-export) The symbol "ToolSet" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:206:5 - (ae-forgotten-export) The symbol "ToolChoice" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:209:5 - (ae-forgotten-export) The symbol "LanguageModelV2FunctionTool" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:209:5 - (ae-forgotten-export) The symbol "LanguageModelV2ProviderDefinedTool" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:210:5 - (ae-forgotten-export) The symbol "LanguageModelV2ToolChoice" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:216:1 - (ae-forgotten-export) The symbol "CallSettings" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/internal.d.ts:228:5 - (ae-forgotten-export) The symbol "RetryFunction" needs to be exported by the entry point internal.d.ts[39m
+@internal/ai-sdk-v5:build: API Extractor completed successfully
+@internal/ai-sdk-v5:build: Analysis will use the bundled TypeScript version 5.9.3
+@internal/ai-sdk-v5:build: [33mWarning: dist/test.d.ts:4:1 - (ae-forgotten-export) The symbol "EmbeddingModelV2" needs to be exported by the entry point test.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/test.d.ts:20:1 - (ae-forgotten-export) The symbol "ImageModelV2" needs to be exported by the entry point test.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/test.d.ts:34:1 - (ae-forgotten-export) The symbol "LanguageModelV2" needs to be exported by the entry point test.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/test.d.ts:53:1 - (ae-forgotten-export) The symbol "ProviderV2" needs to be exported by the entry point test.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/test.d.ts:63:9 - (ae-forgotten-export) The symbol "TranscriptionModelV2" needs to be exported by the entry point test.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/test.d.ts:64:9 - (ae-forgotten-export) The symbol "SpeechModelV2" needs to be exported by the entry point test.d.ts[39m
+@internal/ai-sdk-v5:build: [33mWarning: dist/test.d.ts:115:15 - (ae-forgotten-export) The symbol "simulateReadableStream$1" needs to be exported by the entry point test.d.ts[39m
+@internal/ai-sdk-v5:build: API Extractor completed successfully
+
+ Tasks:    1 successful, 1 total
+Cached:    0 cached, 1 total
+  Time:    3.35s 
+
