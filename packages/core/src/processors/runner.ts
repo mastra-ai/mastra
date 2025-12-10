@@ -1,4 +1,3 @@
-import type { ToolSet } from 'ai-v5';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
