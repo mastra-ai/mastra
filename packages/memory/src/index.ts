@@ -1,3 +1,6 @@
+import { embedMany } from '@internal/ai-sdk-v4';
+import type { TextPart } from '@internal/ai-sdk-v4';
+import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
@@ -17,9 +20,6 @@ import type {
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import { embedMany } from 'ai';
-import type { TextPart } from 'ai';
-import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
