@@ -85,6 +85,7 @@ export class InngestWorkflow<
   }
 
   __registerMastra(mastra: Mastra) {
+    super.__registerMastra(mastra);
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
     const updateNested = (step: StepFlowEntry) => {

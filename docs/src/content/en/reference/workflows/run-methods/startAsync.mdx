@@ -1,0 +1,143 @@
+---
+title: "Reference: Run.startAsync() | Workflows"
+description: Documentation for the `Run.startAsync()` method in workflows, which starts a workflow run without waiting for completion (fire-and-forget).
+---
+
+# Run.startAsync()
+
+The `.startAsync()` method starts a workflow run without waiting for completion. It returns immediately with the `runId`, allowing the workflow to execute in the background. This is useful for long-running workflows, scheduled tasks, or when you want to avoid blocking on workflow completion.
+
+## Usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+
+// Fire-and-forget - returns immediately
+const { runId } = await run.startAsync({
+  inputData: {
+    value: "initial data",
+  },
+});
+
+// Optionally poll for completion later
+const result = await workflow.getWorkflowRunExecutionResult(runId);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "Input data that matches the workflow's input schema",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during workflow execution",
+      isOptional: true,
+    },
+    {
+      name: "initialState",
+      type: "z.infer<TState>",
+      description: "Initial state to use for the workflow execution",
+      isOptional: true,
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "Options for Tracing configuration.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "Options for output configuration.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "includeState",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Whether to include the workflow run state in the result.",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description:
+        "The unique identifier for this workflow run. Use this to check status or retrieve results later.",
+    },
+  ]}
+/>
+
+## When to use startAsync()
+
+Use `startAsync()` instead of `start()` when:
+
+- **Long-running workflows**: The workflow may take minutes or hours to complete
+- **Scheduled/cron triggers**: You want to trigger a workflow without blocking the scheduler
+- **Avoiding polling failures**: With Inngest workflows, `start()` polls for completion which can fail and cause retries. `startAsync()` avoids this issue
+- **Background processing**: You want to queue work and handle results asynchronously
+
+## Checking workflow status
+
+After calling `startAsync()`, you can check the workflow status using:
+
+```typescript showLineNumbers copy
+// Get the execution result (including step outputs)
+const result = await workflow.getWorkflowRunExecutionResult(runId);
+
+if (result?.status === 'success') {
+  console.log('Workflow completed:', result.steps);
+} else if (result?.status === 'failed') {
+  console.log('Workflow failed:', result.error);
+} else if (result?.status === 'running') {
+  console.log('Workflow still running...');
+}
+```
+
+## Related
+
+- [Run.start()](./start) - Start a workflow and wait for completion
+- [Workflows overview](/docs/v1/workflows/overview)
+- [Workflow.createRun()](../workflow-methods/create-run)
