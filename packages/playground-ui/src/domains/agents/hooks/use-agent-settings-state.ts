@@ -57,15 +57,16 @@ export function useAgentSettingsState({ agentId, defaultSettings: defaultSetting
   };
 
   const resetAll = () => {
-    const settings = {
+    // Reset to agent defaults (if any), with fallback defaults as base
+    const resetSettings = {
       modelSettings: {
-        ...(defaultSettingsProp?.modelSettings ?? {}),
         ...defaultSettings.modelSettings,
+        ...(defaultSettingsProp?.modelSettings ?? {}),
       },
     };
-    setSettingsState(settings);
+    setSettingsState(resetSettings);
 
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(resetSettings));
   };
 
   return {
