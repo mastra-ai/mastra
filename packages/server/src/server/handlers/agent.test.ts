@@ -603,20 +603,28 @@ describe('Agent Handlers', () => {
             'You are a helpful assistant. Always respond in a friendly, professional tone. Keep responses concise.',
         },
       };
-      (mockAgent.generate as any).mockResolvedValue(mockEnhancedResult);
 
-      const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        agentId: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        comment: 'Make it more specific about tone',
-      });
+      // Spy on Agent.prototype.generate since the handler creates a new Agent instance
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue(mockEnhancedResult as any);
 
-      expect(result).toEqual({
-        explanation: 'Added more specific guidelines for tone and response format.',
-        new_prompt:
-          'You are a helpful assistant. Always respond in a friendly, professional tone. Keep responses concise.',
-      });
+      try {
+        const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          agentId: 'test-agent',
+          instructions: 'You are a helpful assistant.',
+          comment: 'Make it more specific about tone',
+        });
+
+        expect(result).toEqual({
+          explanation: 'Added more specific guidelines for tone and response format.',
+          new_prompt:
+            'You are a helpful assistant. Always respond in a friendly, professional tone. Keep responses concise.',
+        });
+
+        expect(generateSpy).toHaveBeenCalledOnce();
+      } finally {
+        generateSpy.mockRestore();
+      }
     });
   });
 });
