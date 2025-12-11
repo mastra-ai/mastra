@@ -1,7 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import { Agent } from '@mastra/core/agent';
 import { z } from 'zod';
-import { generateObject } from 'ai';
 import { RequestContext } from '@mastra/core/request-context';
 
 // Define the schema for SQL generation output
