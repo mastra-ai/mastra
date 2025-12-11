@@ -1027,6 +1027,42 @@ Return a structured response with:
 
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 
+// Helper to check if a provider has its API key configured
+function isProviderConnected(providerId: string): boolean {
+  // Clean provider ID (e.g., "openai.chat" -> "openai")
+  const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
+  const provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+  if (!provider) return false;
+
+  const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+  return envVars.every(envVar => !!process.env[envVar]);
+}
+
+// Helper to find the first model with a connected provider
+async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+  const modelList = await agent.getModelList();
+
+  if (modelList && modelList.length > 0) {
+    // Find the first enabled model with a connected provider
+    for (const modelConfig of modelList) {
+      if (modelConfig.enabled !== false) {
+        const model = modelConfig.model;
+        if (isProviderConnected(model.provider)) {
+          return model;
+        }
+      }
+    }
+    return null;
+  }
+
+  // No model list, check the default model
+  const defaultModel = await agent.getModel();
+  if (isProviderConnected(defaultModel.provider)) {
+    return defaultModel;
+  }
+  return null;
+}
+
 export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/instructions/enhance',
@@ -1041,11 +1077,20 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
+      // Find the first model with a connected provider (similar to how chat works)
+      const model = await findConnectedModel(agent);
+      if (!model) {
+        throw new HTTPException(400, {
+          message:
+            'No model with a configured API key found. Please set the required environment variable for your model provider.',
+        });
+      }
+
       const systemPromptAgent = new Agent({
         id: 'system-prompt-enhancer',
         name: 'system-prompt-enhancer',
         instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
-        model: await agent.getModel(),
+        model,
       });
 
       const result = await systemPromptAgent.generate(
