@@ -1,16 +1,10 @@
-// @ts-check
-// `@type` JSDoc annotations allow editor autocompletion and type checking
-// (when paired with `@ts-check`).
-// There are various equivalent ways to declare your Docusaurus config.
-// See: https://docusaurus.io/docs/api/docusaurus-config
-
 import { join } from "path/posix";
 import prismMastraDark from "./src/theme/prism-mastra-dark.js";
 import prismMastraLight from "./src/theme/prism-mastra-light.js";
 import "dotenv/config";
+import type { Config } from "@docusaurus/types";
 
-/** @type {import('@docusaurus/types').Config} */
-const config = {
+const config: Config = {
   title: "Mastra Docs v1 Beta",
   tagline: "TypeScript agent framework",
   favicon: "/img/favicon.ico",
@@ -146,21 +140,28 @@ const config = {
         name: "asset-plugin",
         configureWebpack(config, isServer, utils, content) {
           if (!isServer) {
-            for (const plugin of config.plugins) {
-              if (plugin.constructor.name === "CssExtractRspackPlugin") {
-                plugin.options.filename = join("v1", plugin.options.filename);
-                plugin.options.chunkFilename = join(
+            for (const plugin of config.plugins || []) {
+              if (
+                plugin &&
+                plugin.constructor.name === "CssExtractRspackPlugin"
+              ) {
+                (plugin as any).options.filename = join(
                   "v1",
-                  plugin.options.chunkFilename,
+                  (plugin as any).options.filename,
+                );
+                (plugin as any).options.chunkFilename = join(
+                  "v1",
+                  (plugin as any).options.chunkFilename,
                 );
               }
             }
-
+            const filename = config.output?.filename as string;
+            const chunkFilename = config.output?.chunkFilename as string;
             return {
               plugins: config.plugins,
               output: {
-                filename: join("v1", config.output?.filename),
-                chunkFilename: join("v1", config.output?.chunkFilename),
+                filename: join("v1", filename),
+                chunkFilename: join("v1", chunkFilename),
               },
             };
           }
@@ -172,8 +173,7 @@ const config = {
   presets: [
     [
       "classic",
-      /** @type {import('@docusaurus/preset-classic').Options} */
-      ({
+      {
         docs: {
           path: "src/content/en/docs",
           routeBasePath: "docs/v1",
@@ -193,13 +193,13 @@ const config = {
           ignorePatterns: ["/tags/**"],
           filename: "sitemap.xml",
         },
-      }),
+      },
     ],
   ],
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
-    ({
+    {
       colorMode: {
         respectPrefersColorScheme: true,
       },
@@ -214,7 +214,7 @@ const config = {
         darkTheme: prismMastraDark,
         additionalLanguages: ["diff"],
       },
-    }),
+    },
 };
 
 export default config;
