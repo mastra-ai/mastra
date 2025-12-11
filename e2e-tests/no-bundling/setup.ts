@@ -12,12 +12,12 @@ import { publishPackages } from '../_local-registry-setup/publish';
 export default async function setup(project: TestProject) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
-  const tag = 'monorepo-test';
+  const tag = 'no-bundling-test';
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
   const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
   const port = await getPort();
-  const registryLocation = await mkdtemp(join(tmpdir(), 'mastra-monorepo-test-registry'));
+  const registryLocation = await mkdtemp(join(tmpdir(), 'mastra-no-bundling-test-registry'));
   console.log('registryLocation', registryLocation);
   console.log('verdaccioPath', verdaccioPath);
   await copyFile(join(__dirname, '../_local-registry-setup/verdaccio.yaml'), join(registryLocation, 'verdaccio.yaml'));
@@ -26,7 +26,21 @@ export default async function setup(project: TestProject) {
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 
-  await publishPackages(['--filter="mastra^..."', '--filter="mastra"'], tag, rootDir, registry);
+  await publishPackages(
+    [
+      '--filter="mastra^..."',
+      '--filter="mastra"',
+      '--filter="@mastra/libsql"',
+      '--filter="@mastra/memory"',
+      '--filter="@mastra/loggers"',
+      '--filter="@mastra/evals"',
+      '--filter="@mastra/observability"',
+      '--filter="@mastra/deployer"',
+    ],
+    tag,
+    rootDir,
+    registry,
+  );
 
   return () => {
     teardown();
