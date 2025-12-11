@@ -1080,3 +1080,193 @@ export async function POST(req: Request) {
 </TabItem>
 
 </Tabs>
+
+### Workflow suspend/resume with user approval
+
+Workflows can suspend execution and wait for user input before continuing. This is useful for approval flows, confirmations, or any human-in-the-loop scenario.
+
+The workflow uses:
+- `suspendSchema` / `resumeSchema` - Define the data structure for suspend payload and resume input
+- `suspend()` - Pauses the workflow and sends the suspend payload to the UI
+- `resumeData` - Contains the user's response when the workflow resumes
+- `bail()` - Exits the workflow early (e.g., when user rejects)
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Create a workflow step that suspends for approval. The step checks `resumeData` to determine if it's resuming, and calls `suspend()` on first execution.
+
+```typescript title="src/mastra/workflows/approval-workflow.ts" copy
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const requestApproval = createStep({
+  id: "request-approval",
+  inputSchema: z.object({ requestId: z.string(), summary: z.string() }),
+  outputSchema: z.object({
+    approved: z.boolean(),
+    requestId: z.string(),
+    approvedBy: z.string().optional(),
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean(),
+    approverName: z.string().optional(),
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+    requestId: z.string(),
+  }),
+  execute: async ({ inputData, resumeData, suspend, bail }) => {
+    // User rejected - bail out
+    if (resumeData?.approved === false) {
+      return bail({ message: "Request rejected" });
+    }
+    // User approved - continue
+    if (resumeData?.approved) {
+      return {
+        approved: true,
+        requestId: inputData.requestId,
+        approvedBy: resumeData.approverName || "User",
+      };
+    }
+    // First execution - suspend and wait
+    return await suspend({
+      message: `Please approve: ${inputData.summary}`,
+      requestId: inputData.requestId,
+    });
+  },
+});
+
+export const approvalWorkflow = createWorkflow({
+  id: "approval-workflow",
+  inputSchema: z.object({ requestType: z.string(), details: z.string() }),
+  outputSchema: z.object({ status: z.string(), message: z.string() }),
+})
+  .then(processRequest)
+  .then(requestApproval)
+  .then(finalizeRequest);
+
+approvalWorkflow.commit();
+```
+
+Register the workflow. Storage is required for suspend/resume to persist state.
+
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  workflows: { approvalWorkflow },
+  storage: new LibSQLStore({
+    url: "file:../mastra.db",
+  }),
+  server: {
+    apiRoutes: [
+      workflowRoute({ path: "/workflow/approvalWorkflow", workflow: "approvalWorkflow" }),
+    ],
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="Frontend">
+
+Detect when the workflow is suspended and send resume data with `runId`, `step`, and `resumeData`.
+
+```typescript title="src/components/approval-workflow.tsx" copy
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useMemo, useState } from "react";
+import type { WorkflowDataPart } from "@mastra/ai-sdk";
+
+type WorkflowData = WorkflowDataPart["data"];
+
+export function ApprovalWorkflow() {
+  const [requestType, setRequestType] = useState("");
+  const [details, setDetails] = useState("");
+
+  const { messages, sendMessage, setMessages, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/workflow/approvalWorkflow",
+      prepareSendMessagesRequest: ({ messages }) => {
+        const lastMessage = messages[messages.length - 1];
+        const text = lastMessage.parts.find((p) => p.type === "text")?.text;
+        const metadata = lastMessage.metadata as Record<string, string>;
+
+        // Resuming: send runId, step, and resumeData
+        if (text === "Approve" || text === "Reject") {
+          return {
+            body: {
+              runId: metadata.runId,
+              step: "request-approval",
+              resumeData: { approved: text === "Approve" },
+            },
+          };
+        }
+        // Starting: send inputData
+        return {
+          body: { inputData: { requestType: metadata.requestType, details: metadata.details } },
+        };
+      },
+    }),
+  });
+
+  // Find suspended workflow
+  const suspended = useMemo(() => {
+    for (const m of messages) {
+      for (const p of m.parts) {
+        if (p.type === "data-workflow" && (p.data as WorkflowData).status === "suspended") {
+          return { data: p.data as WorkflowData, runId: p.id };
+        }
+      }
+    }
+    return null;
+  }, [messages]);
+
+  const handleApprove = () => {
+    setMessages([]);
+    sendMessage({ text: "Approve", metadata: { runId: suspended?.runId } });
+  };
+
+  const handleReject = () => {
+    setMessages([]);
+    sendMessage({ text: "Reject", metadata: { runId: suspended?.runId } });
+  };
+
+  return (
+    <div>
+      {!suspended ? (
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          setMessages([]);
+          sendMessage({ text: "Start", metadata: { requestType, details } });
+        }}>
+          <input value={requestType} onChange={(e) => setRequestType(e.target.value)} placeholder="Request type" />
+          <input value={details} onChange={(e) => setDetails(e.target.value)} placeholder="Details" />
+          <button type="submit" disabled={status !== "ready"}>Submit</button>
+        </form>
+      ) : (
+        <div>
+          <p>{(suspended.data.steps["request-approval"]?.suspendPayload as { message: string })?.message}</p>
+          <button onClick={handleApprove}>Approve</button>
+          <button onClick={handleReject}>Reject</button>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+Key points:
+- The suspend payload is accessible via `step.suspendPayload`
+- To resume, send `runId`, `step` (the step ID), and `resumeData` in the request body
+- Storage must be configured for suspend/resume to persist workflow state
+
+For a complete implementation, see the [workflow-suspend-resume example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-suspend-resume.tsx) in UI Dojo.
