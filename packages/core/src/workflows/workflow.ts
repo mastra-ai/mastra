@@ -2313,6 +2313,30 @@ export class Run<
   }
 
   /**
+   * Starts the workflow execution without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId. The workflow executes in the background.
+   * Use this when you don't need to wait for the result or want to avoid polling failures.
+   * @param args The input data and configuration for the workflow
+   * @returns A promise that resolves immediately with the runId
+   */
+  async startAsync(args: {
+    inputData?: z.input<TInput>;
+    initialState?: z.input<TState>;
+    requestContext?: RequestContext;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  }): Promise<{ runId: string }> {
+    // Fire execution in background, don't await completion
+    this._start(args).catch(err => {
+      console.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
+    });
+    return { runId: this.runId };
+  }
+
+  /**
    * Starts the workflow execution with the provided input as a stream
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output

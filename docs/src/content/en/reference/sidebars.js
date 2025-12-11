@@ -227,6 +227,11 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "workflows/run-methods/startAsync",
+              label: ".startAsync()",
+            },
+            {
+              type: "doc",
               id: "workflows/run-methods/resume",
               label: ".resume()",
             },
