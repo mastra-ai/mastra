@@ -11924,7 +11924,7 @@ describe('MastraInngestWorkflow', () => {
   });
 
   describe.sequential('startAsync', () => {
-    it.only('should start workflow and complete successfully', async ctx => {
+    it('should start workflow and complete successfully', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
