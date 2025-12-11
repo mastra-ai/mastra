@@ -1140,12 +1140,14 @@ const requestApproval = createStep({
 
 export const approvalWorkflow = createWorkflow({
   id: "approval-workflow",
-  inputSchema: z.object({ requestType: z.string(), details: z.string() }),
-  outputSchema: z.object({ status: z.string(), message: z.string() }),
+  inputSchema: z.object({ requestId: z.string(), summary: z.string() }),
+  outputSchema: z.object({
+    approved: z.boolean(),
+    requestId: z.string(),
+    approvedBy: z.string().optional(),
+  }),
 })
-  .then(processRequest)
-  .then(requestApproval)
-  .then(finalizeRequest);
+  .then(requestApproval);
 
 approvalWorkflow.commit();
 ```
@@ -1185,8 +1187,8 @@ import type { WorkflowDataPart } from "@mastra/ai-sdk";
 type WorkflowData = WorkflowDataPart["data"];
 
 export function ApprovalWorkflow() {
-  const [requestType, setRequestType] = useState("");
-  const [details, setDetails] = useState("");
+  const [requestId, setRequestId] = useState("");
+  const [summary, setSummary] = useState("");
 
   const { messages, sendMessage, setMessages, status } = useChat({
     transport: new DefaultChatTransport({
@@ -1208,7 +1210,7 @@ export function ApprovalWorkflow() {
         }
         // Starting: send inputData
         return {
-          body: { inputData: { requestType: metadata.requestType, details: metadata.details } },
+          body: { inputData: { requestId: metadata.requestId, summary: metadata.summary } },
         };
       },
     }),
@@ -1242,10 +1244,10 @@ export function ApprovalWorkflow() {
         <form onSubmit={(e) => {
           e.preventDefault();
           setMessages([]);
-          sendMessage({ text: "Start", metadata: { requestType, details } });
+          sendMessage({ text: "Start", metadata: { requestId, summary } });
         }}>
-          <input value={requestType} onChange={(e) => setRequestType(e.target.value)} placeholder="Request type" />
-          <input value={details} onChange={(e) => setDetails(e.target.value)} placeholder="Details" />
+          <input value={requestId} onChange={(e) => setRequestId(e.target.value)} placeholder="Request ID" />
+          <input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Summary" />
           <button type="submit" disabled={status !== "ready"}>Submit</button>
         </form>
       ) : (
