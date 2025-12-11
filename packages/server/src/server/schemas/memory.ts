@@ -148,6 +148,14 @@ export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
 export const getThreadByIdQuerySchema = agentIdQuerySchema;
 
 /**
+ * GET /api/memory/threads/:threadId/direct
+ * Direct thread lookup by resourceId without requiring agentId
+ */
+export const getThreadByIdDirectQuerySchema = z.object({
+  resourceId: z.string().describe('Resource ID that the thread belongs to'),
+});
+
+/**
  * GET /api/memory/threads/:threadId/messages
  */
 export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
