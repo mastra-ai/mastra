@@ -36,14 +36,13 @@ export const CookieConsent = () => {
   const hasGottenConsentForHubspotTracking =
     cookieConsent && HS_PORTAL_ID ? true : false;
 
-  console.log(
-    "hasGottenConsentForGoogleTracking",
+  console.log({
+    cookieConsent,
+    GA_ID,
+    HS_PORTAL_ID,
     hasGottenConsentForGoogleTracking,
-  );
-  console.log(
-    "hasGottenConsentForHubspotTracking",
     hasGottenConsentForHubspotTracking,
-  );
+  });
   return (
     <>
       <CookieBanner onConsentChange={setCookieConsent} />
