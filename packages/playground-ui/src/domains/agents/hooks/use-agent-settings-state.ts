@@ -27,20 +27,29 @@ export function useAgentSettingsState({ agentId, defaultSettings: defaultSetting
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        const settings = {
+        const mergedSettings = {
           ...parsed,
           modelSettings: {
+            ...defaultSettings.modelSettings,
             ...(defaultSettingsProp?.modelSettings ?? {}),
             ...(parsed?.modelSettings ?? {}),
           },
         };
-        setSettingsState(settings ?? undefined);
+        setSettingsState(mergedSettings);
+      } else {
+        // No localStorage data - use agent defaults merged with fallback defaults
+        const mergedSettings = {
+          modelSettings: {
+            ...defaultSettings.modelSettings,
+            ...(defaultSettingsProp?.modelSettings ?? {}),
+          },
+        };
+        setSettingsState(mergedSettings);
       }
     } catch (e) {
       // ignore
-      console.error(e);
     }
-  }, [LOCAL_STORAGE_KEY]);
+  }, [LOCAL_STORAGE_KEY, defaultSettingsProp]);
 
   const setSettings = (settingsValue: AgentSettings) => {
     setSettingsState(prev => ({ ...prev, ...settingsValue }));

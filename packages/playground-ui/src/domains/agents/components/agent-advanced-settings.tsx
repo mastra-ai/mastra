@@ -3,6 +3,7 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { useAgentSettings } from '@/domains/agents/context/agent-context';
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
+import { Slider } from '@/components/ui/slider';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
 import { formatJSON, isValidJson } from '@/lib/formatting';
@@ -89,6 +90,62 @@ export const AgentAdvancedSettings = () => {
           </Icon>
         </CollapsibleTrigger>
         <CollapsibleContent className={collapsibleContentClassName}>
+          <div className="col-span-2 grid grid-cols-2 gap-8 mb-2">
+            <div className="space-y-1">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="frequency-penalty">
+                Frequency Penalty
+              </Txt>
+              <div className="flex flex-row justify-between items-center gap-2">
+                <Slider
+                  id="frequency-penalty"
+                  value={[settings?.modelSettings?.frequencyPenalty ?? -1.1]}
+                  max={1}
+                  min={-1.1}
+                  step={0.1}
+                  onValueChange={value =>
+                    setSettings({
+                      ...settings,
+                      modelSettings: {
+                        ...settings?.modelSettings,
+                        frequencyPenalty: value[0] < -1 ? undefined : value[0],
+                      },
+                    })
+                  }
+                />
+                <Txt as="p" variant="ui-sm" className="text-icon3 w-8 text-right">
+                  {settings?.modelSettings?.frequencyPenalty ?? 'n/a'}
+                </Txt>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="presence-penalty">
+                Presence Penalty
+              </Txt>
+              <div className="flex flex-row justify-between items-center gap-2">
+                <Slider
+                  id="presence-penalty"
+                  value={[settings?.modelSettings?.presencePenalty ?? -1.1]}
+                  max={1}
+                  min={-1.1}
+                  step={0.1}
+                  onValueChange={value =>
+                    setSettings({
+                      ...settings,
+                      modelSettings: {
+                        ...settings?.modelSettings,
+                        presencePenalty: value[0] < -1 ? undefined : value[0],
+                      },
+                    })
+                  }
+                />
+                <Txt as="p" variant="ui-sm" className="text-icon3 w-8 text-right">
+                  {settings?.modelSettings?.presencePenalty ?? 'n/a'}
+                </Txt>
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-1">
             <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="top-k">
               Top K
@@ -103,46 +160,6 @@ export const AgentAdvancedSettings = () => {
                   modelSettings: {
                     ...settings?.modelSettings,
                     topK: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="frequency-penalty">
-              Frequency Penalty
-            </Txt>
-            <Input
-              id="frequency-penalty"
-              type="number"
-              value={settings?.modelSettings?.frequencyPenalty || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="presence-penalty">
-              Presence Penalty
-            </Txt>
-            <Input
-              id="presence-penalty"
-              type="number"
-              value={settings?.modelSettings?.presencePenalty || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    presencePenalty: e.target.value ? Number(e.target.value) : undefined,
                   },
                 })
               }
@@ -203,6 +220,26 @@ export const AgentAdvancedSettings = () => {
                   modelSettings: {
                     ...settings?.modelSettings,
                     maxRetries: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="seed">
+              Seed
+            </Txt>
+            <Input
+              id="seed"
+              type="number"
+              value={settings?.modelSettings?.seed || ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    seed: e.target.value ? Number(e.target.value) : undefined,
                   },
                 })
               }

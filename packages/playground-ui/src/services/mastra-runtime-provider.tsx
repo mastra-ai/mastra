@@ -208,6 +208,7 @@ export function MastraRuntimeProvider({
     temperature,
     topK,
     topP,
+    seed,
     chatWithGenerateLegacy,
     chatWithGenerate,
     chatWithNetwork,
@@ -221,14 +222,15 @@ export function MastraRuntimeProvider({
     requestContextInstance.set(key, value);
   });
 
-  const modelSettingsArgs: ModelSettings = {
+  const modelSettingsArgs = {
     frequencyPenalty,
     presencePenalty,
     maxRetries,
     temperature,
     topK,
     topP,
-    maxTokens,
+    seed,
+    maxOutputTokens: maxTokens, // AI SDK v5 uses maxOutputTokens
     instructions,
     providerOptions,
     maxSteps,
@@ -355,6 +357,7 @@ export function MastraRuntimeProvider({
             temperature,
             topK,
             topP,
+            seed,
             instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
@@ -472,6 +475,7 @@ export function MastraRuntimeProvider({
             temperature,
             topK,
             topP,
+            seed,
             instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
