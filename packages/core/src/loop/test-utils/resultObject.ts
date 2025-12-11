@@ -799,6 +799,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             "text": "Hello!",
             "toolCalls": [],
             "toolResults": [],
+            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,

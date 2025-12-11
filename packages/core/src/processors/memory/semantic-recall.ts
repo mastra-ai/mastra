@@ -4,7 +4,7 @@ import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
 import { MessageList } from '../../agent';
 import type { IMastraLogger } from '../../logger';
-import { parseMemoryRuntimeContext } from '../../memory';
+import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
@@ -157,7 +157,7 @@ export class SemanticRecall implements Processor {
     const { messages, messageList, requestContext } = args;
 
     // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(requestContext);
+    const memoryContext = parseMemoryRequestContext(requestContext);
     if (!memoryContext) {
       // No memory context available, return messages unchanged
       return messageList;
@@ -474,7 +474,7 @@ export class SemanticRecall implements Processor {
     }
 
     try {
-      const memoryContext = parseMemoryRuntimeContext(requestContext);
+      const memoryContext = parseMemoryRequestContext(requestContext);
 
       if (!memoryContext) {
         return messageList || messages;

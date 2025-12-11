@@ -3,6 +3,11 @@ import z from 'zod/v4';
 export function getDefaultValueInZodStack(schema: z.core.$ZodType): any {
   if (schema instanceof z.core.$ZodDefault) {
     return schema._zod.def.defaultValue;
+  } else if (schema instanceof z.core.$ZodLiteral) {
+    // For literal types, use the literal value as default since it's the only valid option
+    // In zod v4, literals store the value in `values` array
+    const values = schema._zod.def.values;
+    return Array.isArray(values) ? values[0] : values;
   } else if ('innerType' in schema._zod.def) {
     return getDefaultValueInZodStack(schema._zod.def.innerType as z.core.$ZodType);
   } else if ('shape' in schema._zod.def) {

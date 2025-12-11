@@ -1,3 +1,4 @@
+import { TripWire } from '../agent/trip-wire';
 import type { RequestContext } from '../di';
 import type { IErrorDefinition } from '../error';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -37,6 +38,7 @@ import type {
   StepFailure,
   StepFlowEntry,
   StepResult,
+  StepTripwireInfo,
   TimeTravelExecutionParams,
 } from './types';
 
@@ -276,7 +278,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowId: string;
       runId: string;
     },
-  ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: string; endedAt: number } }> {
+  ): Promise<
+    | {
+        ok: true;
+        result: T;
+      }
+    | {
+        ok: false;
+        error: {
+          status: 'failed';
+          error: string;
+          endedAt: number;
+          tripwire?: StepTripwireInfo;
+        };
+      }
+  > {
     for (let i = 0; i < params.retries + 1; i++) {
       if (i > 0 && params.delay) {
         await new Promise(resolve => setTimeout(resolve, params.delay));
@@ -314,6 +330,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               status: 'failed',
               error: `Error: ${errorInstance.message}`,
               endedAt: Date.now(),
+              // Preserve TripWire data as plain object for proper serialization
+              tripwire:
+                e instanceof TripWire
+                  ? {
+                      reason: e.message,
+                      retry: e.options?.retry,
+                      metadata: e.options?.metadata,
+                      processorId: e.processorId,
+                    }
+                  : undefined,
             },
           };
         }
@@ -353,7 +379,24 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (lastOutput.status === 'success') {
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
-      base.error = this.formatResultError(error, lastOutput);
+      // Check if the failure was due to a TripWire
+      const tripwireData = lastOutput?.tripwire;
+      if (tripwireData instanceof TripWire) {
+        // Use 'tripwire' status instead of 'failed' for tripwire errors (TripWire instance)
+        base.status = 'tripwire';
+        base.tripwire = {
+          reason: tripwireData.message,
+          retry: tripwireData.options?.retry,
+          metadata: tripwireData.options?.metadata,
+          processorId: tripwireData.processorId,
+        };
+      } else if (tripwireData && typeof tripwireData === 'object' && 'reason' in tripwireData) {
+        // Use 'tripwire' status for plain tripwire data objects (already serialized)
+        base.status = 'tripwire';
+        base.tripwire = tripwireData;
+      } else {
+        base.error = this.formatResultError(error, lastOutput);
+      }
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {

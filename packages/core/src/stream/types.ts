@@ -13,7 +13,7 @@ import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
-import type { OutputProcessor } from '../processors';
+import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
@@ -25,6 +25,12 @@ export enum ChunkFrom {
   WORKFLOW = 'WORKFLOW',
   NETWORK = 'NETWORK',
 }
+
+/**
+ * Extended finish reason that includes Mastra-specific values.
+ * 'tripwire' and 'retry' are used for processor scenarios.
+ */
+export type MastraFinishReason = LanguageModelV2FinishReason | 'tripwire' | 'retry';
 
 /**
 A JSON value can be a string, number, boolean, object, array, or null.
@@ -181,15 +187,18 @@ interface ToolCallInputStreamingEndPayload {
   providerMetadata?: ProviderMetadata;
 }
 
-interface FinishPayload {
+interface FinishPayload<Tools extends ToolSet = ToolSet> {
   stepResult: {
-    reason: LanguageModelV2FinishReason;
+    /** Includes 'tripwire' and 'retry' for processor scenarios */
+    reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
     warnings?: LanguageModelV2CallWarning[];
     isContinued?: boolean;
     logprobs?: LanguageModelV1LogProbs;
   };
   output: {
     usage: LanguageModelV2Usage;
+    /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
+    steps?: MastraStepResult<Tools>[];
   };
   metadata: {
     providerMetadata?: ProviderMetadata;
@@ -243,7 +252,8 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
     text?: string;
     toolCalls?: TypedToolCall<Tools>[];
     usage: LanguageModelV2Usage;
-    steps?: StepResult<Tools>[];
+    /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
+    steps?: MastraStepResult<Tools>[];
     object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
   };
   metadata: {
@@ -315,8 +325,15 @@ interface WatchPayload {
   [key: string]: unknown;
 }
 
-interface TripwirePayload {
-  tripwireReason: string;
+interface TripwirePayload<TMetadata = unknown> {
+  /** The reason for the tripwire */
+  reason: string;
+  /** If true, the agent should retry with the tripwire reason as feedback */
+  retry?: boolean;
+  /** Strongly typed metadata from the processor */
+  metadata?: TMetadata;
+  /** The ID of the processor that triggered the tripwire */
+  processorId?: string;
 }
 
 // Network-specific payload interfaces
@@ -613,6 +630,8 @@ export type WorkflowStreamEvent =
         payload?: Record<string, any>;
         resumePayload?: Record<string, any>;
         suspendPayload?: Record<string, any>;
+        /** Tripwire data when step failed due to processor rejection */
+        tripwire?: StepTripwireData;
       };
     });
 
@@ -689,12 +708,36 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   onStepFinish?: MastraOnStepFinishCallback;
   includeRawChunks?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
-  outputProcessors?: OutputProcessor[];
+  outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
+};
+
+/**
+ * Tripwire data attached to a step when a processor triggers a tripwire.
+ * When a step has tripwire data, its text is excluded from the final output.
+ */
+export interface StepTripwireData {
+  /** The tripwire reason */
+  reason: string;
+  /** Whether retry was requested */
+  retry?: boolean;
+  /** Additional metadata from the tripwire */
+  metadata?: unknown;
+  /** ID of the processor that triggered the tripwire */
+  processorId?: string;
+}
+
+/**
+ * Extended StepResult that includes tripwire data.
+ * This extends the AI SDK's StepResult with our custom tripwire field.
+ */
+export type MastraStepResult<Tools extends ToolSet = ToolSet> = StepResult<Tools> & {
+  /** Tripwire data if this step was rejected by a processor */
+  tripwire?: StepTripwireData;
 };
 
 export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
@@ -731,4 +774,6 @@ export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
   };
   reasoningText: string | undefined;
   providerMetadata: ProviderMetadata | undefined;
+  /** Tripwire data if this step was rejected by a processor */
+  tripwire?: StepTripwireData;
 };

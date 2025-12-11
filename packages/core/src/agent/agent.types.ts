@@ -6,7 +6,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { TracingContext, TracingOptions } from '../observability';
-import type { InputProcessor, OutputProcessor } from '../processors';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type { OutputWriter } from '../workflows/types';
@@ -90,9 +90,15 @@ export type AgentExecutionOptions<
   abortSignal?: LoopConfig['abortSignal'];
 
   /** Input processors to use for this execution (overrides agent's default) */
-  inputProcessors?: InputProcessor[];
+  inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this execution (overrides agent's default) */
-  outputProcessors?: OutputProcessor[];
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Maximum number of times processors can trigger a retry for this generation.
+   * Overrides agent's default maxProcessorRetries.
+   * If not set, defaults to the agent's maxProcessorRetries (which defaults to no retries if also unset).
+   */
+  maxProcessorRetries?: number;
 
   /** Additional tool sets that can be used for this execution */
   toolsets?: ToolsetsInput;

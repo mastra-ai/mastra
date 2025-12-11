@@ -192,7 +192,7 @@ export function WorkflowTrigger({
   const workflowActivePaths = streamResultToUse?.steps ?? {};
   const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
 
-  const doneStatuses = ['success', 'failed', 'canceled'];
+  const doneStatuses = ['success', 'failed', 'canceled', 'tripwire'];
 
   return (
     <div className="h-full pt-3 pb-12 overflow-y-auto">
@@ -326,12 +326,31 @@ export function WorkflowTrigger({
                     if (step.status === 'success') {
                       output = step.output;
                     }
+
+                    // Build tripwire info from step or workflow-level result
+                    // TripwireData is aligned with core schema: { reason, retry?, metadata?, processorId? }
+                    const tripwireInfo =
+                      step.status === 'failed' && step.tripwire
+                        ? step.tripwire
+                        : streamResultToUse?.status === 'tripwire'
+                          ? {
+                              reason: streamResultToUse?.tripwire?.reason,
+                              retry: streamResultToUse?.tripwire?.retry,
+                              metadata: streamResultToUse?.tripwire?.metadata,
+                              processorId: streamResultToUse?.tripwire?.processorId,
+                            }
+                          : undefined;
+
+                    // Show tripwire status for failed steps with tripwire info
+                    const displayStatus = step.status === 'failed' && step.tripwire ? 'tripwire' : status;
+
                     return (
                       <WorkflowStatus
                         key={stepId}
                         stepId={stepId}
-                        status={status}
+                        status={displayStatus}
                         result={output ?? suspendOutput ?? {}}
+                        tripwire={tripwireInfo}
                       />
                     );
                   })}

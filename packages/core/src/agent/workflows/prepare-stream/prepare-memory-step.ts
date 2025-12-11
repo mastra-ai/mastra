@@ -88,7 +88,7 @@ export function createPrepareMemoryStep<
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
-        const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
+        const { tripwire } = await capabilities.runInputProcessors({
           requestContext,
           tracingContext,
           messageList,
@@ -98,10 +98,7 @@ export function createPrepareMemoryStep<
           threadExists: false,
           thread: undefined,
           messageList,
-          ...(tripwireTriggered && {
-            tripwire: true,
-            tripwireReason,
-          }),
+          tripwire,
         };
       }
 
@@ -173,7 +170,7 @@ export function createPrepareMemoryStep<
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
 
-      const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
+      const { tripwire } = await capabilities.runInputProcessors({
         requestContext,
         tracingContext,
         messageList,
@@ -183,10 +180,7 @@ export function createPrepareMemoryStep<
       return {
         thread: threadObject,
         messageList: messageList,
-        ...(tripwireTriggered && {
-          tripwire: true,
-          tripwireReason,
-        }),
+        tripwire,
         threadExists: !!existingThread,
       };
     },

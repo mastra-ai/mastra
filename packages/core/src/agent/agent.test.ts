@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { CoreMessage, CoreSystemMessage, LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
@@ -562,6 +562,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const testAgent = new Agent({
+        id: 'test-agent',
         name: 'Test agent',
         instructions: 'You are an agent that can use the noSchemaTool to get test data.',
         model: openaiModel,
@@ -5333,8 +5334,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           result = await agentWithAbortProcessor.generate('This should be aborted');
         }
 
-        expect(result.tripwire).toBe(true);
-        expect(result.tripwireReason).toBe('Tripwire triggered by abort-processor');
+        expect(result.tripwire).toBeDefined();
+        expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-processor');
         expect(await result.text).toBe('');
         expect(await result.finishReason).toBe('other');
       });
@@ -5364,8 +5365,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           result = await agentWithCustomAbort.generate('Custom abort test');
         }
 
-        expect(result.tripwire).toBe(true);
-        expect(result.tripwireReason).toBe('Custom abort reason');
+        expect(result.tripwire).toBeDefined();
+        expect(result.tripwire?.reason).toBe('Custom abort reason');
         expect(await result.text).toBe('');
       });
 
@@ -5406,7 +5407,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           result = await agentWithAbortSequence.generate('Abort sequence test');
         }
 
-        expect(result.tripwire).toBe(true);
+        expect(result.tripwire).toBeDefined();
         expect(secondProcessorExecuted).toBe(false);
       });
     });
@@ -5466,18 +5467,18 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let stream;
         if (version === 'v1') {
           stream = await agentWithStreamAbort.streamLegacy('Stream abort test');
-          expect(stream.tripwire).toBe(true);
-          expect(stream.tripwireReason).toBe('Stream aborted');
+          expect(stream.tripwire).toBeDefined();
+          expect(stream.tripwire?.reason).toBe('Stream aborted');
         } else {
           stream = await agentWithStreamAbort.stream('Stream abort test');
 
           for await (const chunk of stream.fullStream) {
             expect(chunk.type).toBe('tripwire');
-            expect(chunk.payload.tripwireReason).toBe('Stream aborted');
+            expect(chunk.payload?.reason).toBe('Stream aborted');
           }
           const fullOutput = await (stream as MastraModelOutput<any>).getFullOutput();
-          expect(fullOutput.tripwire).toBe(true);
-          expect(fullOutput.tripwireReason).toBe('Stream aborted');
+          expect(fullOutput.tripwire).toBeDefined();
+          expect(fullOutput.tripwire?.reason).toBe('Stream aborted');
         }
 
         // Stream should be empty
@@ -5514,8 +5515,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
 
         if (version === 'v1') {
-          expect(stream.tripwire).toBe(true);
-          expect(stream.tripwireReason).toBe('Deployer test abort');
+          expect(stream.tripwire).toBeDefined();
+          expect(stream.tripwire?.reason).toBe('Deployer test abort');
           // Verify deployer methods exist and return Response objects
           expect(typeof stream.toDataStreamResponse).toBe('function');
           expect(typeof stream.toTextStreamResponse).toBe('function');
@@ -5535,8 +5536,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           expect(typeof stream.experimental_partialOutputStream[Symbol.asyncIterator]).toBe('function');
         } else if (version === 'v2') {
           const fullOutput = await (stream as MastraModelOutput<any>).getFullOutput();
-          expect(fullOutput.tripwire).toBe(true);
-          expect(fullOutput.tripwireReason).toBe('Deployer test abort');
+          expect(fullOutput.tripwire).toBeDefined();
+          expect(fullOutput.tripwire?.reason).toBe('Deployer test abort');
         }
       });
     });
@@ -5687,8 +5688,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         } else {
           invalidResult = await agentWithValidator.generate('This contains inappropriate content');
         }
-        expect(invalidResult.tripwire).toBe(true);
-        expect(invalidResult.tripwireReason).toBe('Content validation failed');
+        expect(invalidResult.tripwire).toBeDefined();
+        expect(invalidResult.tripwire?.reason).toBe('Content validation failed');
       });
     });
   });
@@ -5822,6 +5823,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should preserve metadata in stream method', async () => {
       const agent = new Agent({
+        id: 'metadata-stream-agent',
         name: 'metadata-stream-agent',
         instructions: 'You are a helpful assistant',
         model: dummyModel,
