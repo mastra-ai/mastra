@@ -1,10 +1,11 @@
 import { MastraBase } from '../base';
 import type { RequestContext } from '../di';
+import type { PubSub } from '../events/pubsub';
 import { RegisteredLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Span, SpanType, TracingPolicy } from '../observability';
-import type { Emitter, OutputWriter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
+import type { OutputWriter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
 /**
@@ -70,7 +71,7 @@ export abstract class ExecutionEngine extends MastraBase {
       forEachIndex?: number;
       label?: string;
     };
-    emitter: Emitter;
+    pubsub: PubSub;
     requestContext: RequestContext;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     retryConfig?: {

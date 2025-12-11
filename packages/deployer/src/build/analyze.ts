@@ -3,7 +3,7 @@ import * as babel from '@babel/core';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import type { OutputAsset, OutputChunk } from 'rollup';
-import { basename, join, parse } from 'node:path';
+import { basename, join, parse, relative } from 'node:path';
 import { validate, ValidationError } from '../validator/validate';
 import { getBundlerOptions } from './bundlerOptions';
 import { checkConfigExport } from './babel/check-config-export';
@@ -12,7 +12,7 @@ import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { isDependencyPartOfPackage } from './utils';
+import { getPackageName, isBuiltinModule, isDependencyPartOfPackage } from './utils';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
 import * as stackTraceParser from 'stacktrace-parser';
 
@@ -281,14 +281,14 @@ export async function analyzeBundle(
     outputDir,
     projectRoot,
     isDev = false,
-    bundlerOptions: _bundlerOptions,
+    bundlerOptions: internalBundlerOptions,
   }: {
     outputDir: string;
     projectRoot: string;
     platform: 'node' | 'browser';
     isDev?: boolean;
     bundlerOptions?: {
-      enableEsmShim?: boolean;
+      externals?: boolean | string[];
     } | null;
   },
   logger: IMastraLogger,
@@ -313,15 +313,22 @@ export const mastra = new Mastra({
 If you think your configuration is valid, please open an issue.`);
   }
 
-  const { enableEsmShim = true } = _bundlerOptions || {};
-  const bundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
+  const { externals: _bundlerExternals = [] } = internalBundlerOptions || {};
+  const userBundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
+
+  let externalsPreset = false;
+
+  if (userBundlerOptions?.externals === true) {
+    externalsPreset = true;
+  }
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
 
-  const { externals: customExternals = [] } = bundlerOptions || {};
-  const allExternals = [...GLOBAL_EXTERNALS, ...customExternals];
+  const bundlerExternals = Array.isArray(_bundlerExternals) ? _bundlerExternals : [];
+  const userExternals = Array.isArray(userBundlerOptions?.externals) ? userBundlerOptions?.externals : [];
+  const allExternals = [...GLOBAL_EXTERNALS, ...bundlerExternals, ...userExternals];
 
   logger.info('Analyzing dependencies...');
 
@@ -330,10 +337,10 @@ If you think your configuration is valid, please open an issue.`);
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
       logger,
-      sourcemapEnabled: bundlerOptions?.sourcemap ?? false,
+      sourcemapEnabled: userBundlerOptions?.sourcemap ?? false,
       workspaceMap,
       projectRoot,
-      shouldCheckTransitiveDependencies: isDev,
+      shouldCheckTransitiveDependencies: isDev || externalsPreset,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
@@ -342,7 +349,8 @@ If you think your configuration is valid, please open an issue.`);
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
       const isPartOfExternals = allExternals.some(external => isDependencyPartOfPackage(dep, external));
-      if (isPartOfExternals) {
+      if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
+        // Add all packages coming from src/mastra
         allUsedExternals.add(dep);
         continue;
       }
@@ -363,7 +371,7 @@ If you think your configuration is valid, please open an issue.`);
   /**
    * Only during `mastra dev` we want to optimize workspace packages. In previous steps we might have added dependencies that are not workspace packages, so we gotta remove them again.
    */
-  if (isDev) {
+  if (isDev || externalsPreset) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
       if (!metadata.isWorkspace) {
         depsToOptimize.delete(dep);
@@ -377,15 +385,46 @@ If you think your configuration is valid, please open an issue.`);
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
-      ...bundlerOptions,
-      externals: allExternals,
-      enableEsmShim,
+      ...userBundlerOptions,
+      externals: userBundlerOptions?.externals ?? allExternals,
       isDev,
     },
     projectRoot,
     workspaceRoot,
     workspaceMap,
   });
+
+  const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values()).map(pkgInfo =>
+    relative(workspaceRoot || projectRoot, pkgInfo.location),
+  );
+
+  for (const o of output) {
+    if (o.type === 'asset') {
+      continue;
+    }
+
+    for (const i of o.imports) {
+      if (isBuiltinModule(i)) {
+        continue;
+      }
+
+      // Skip relative imports - they're local chunks, not external packages
+      if (i.startsWith('.') || i.startsWith('/')) {
+        continue;
+      }
+
+      // Do not include workspace packages
+      if (relativeWorkspaceFolderPaths.some(workspacePath => i.startsWith(workspacePath))) {
+        continue;
+      }
+
+      const pkgName = getPackageName(i);
+
+      if (pkgName) {
+        allUsedExternals.add(pkgName);
+      }
+    }
+  }
 
   const result = await validateOutput(
     {

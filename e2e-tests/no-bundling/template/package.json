@@ -1,0 +1,35 @@
+{
+  "name": "template",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.2",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "no-bundling-test",
+    "@mastra/evals": "no-bundling-test",
+    "@mastra/libsql": "no-bundling-test",
+    "@mastra/loggers": "no-bundling-test",
+    "@mastra/memory": "no-bundling-test",
+    "@mastra/observability": "no-bundling-test",
+    "ai": "^5.0.101",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.17",
+    "mastra": "no-bundling-test",
+    "typescript": "^5.9.3"
+  }
+}

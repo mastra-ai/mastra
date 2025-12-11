@@ -3,6 +3,7 @@ import type { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
+import type { PubSub } from '../events/pubsub';
 import type { Span, SpanType, TracingContext } from '../observability';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -28,7 +29,6 @@ import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import type {
   FormattedWorkflowResult,
   DefaultEngineType,
-  Emitter,
   EntryExecutionResult,
   ExecutionContext,
   MutableContext,
@@ -174,7 +174,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async onStepExecutionStart(params: {
     step: Step<string, any, any>;
     inputData: any;
-    emitter: Emitter;
+    pubsub: PubSub;
     executionContext: ExecutionContext;
     stepCallId: string;
     stepInfo: Record<string, any>;
@@ -184,12 +184,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return this.wrapDurableOperation(params.operationId, async () => {
       const startedAt = Date.now();
       if (!params.skipEmits) {
-        await params.emitter.emit('watch', {
-          type: 'workflow-step-start',
-          payload: {
-            id: params.step.id,
-            stepCallId: params.stepCallId,
-            ...params.stepInfo,
+        await params.pubsub.publish(`workflow.events.v2.${params.executionContext.runId}`, {
+          type: 'watch',
+          runId: params.executionContext.runId,
+          data: {
+            type: 'workflow-step-start',
+            payload: {
+              id: params.step.id,
+              stepCallId: params.stepCallId,
+              ...params.stepInfo,
+            },
           },
         });
       }
@@ -219,7 +223,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     timeTravel?: TimeTravelExecutionParams;
     prevOutput: any;
     inputData: any;
-    emitter: Emitter;
+    pubsub: PubSub;
     startedAt: number;
     abortController: AbortController;
     requestContext: RequestContext;
@@ -342,7 +346,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   protected async fmtReturnValue<TOutput>(
-    _emitter: Emitter,
+    _pubsub: PubSub,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | unknown,
@@ -469,7 +473,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       label?: string;
       forEachIndex?: number;
     };
-    emitter: Emitter;
+    pubsub: PubSub;
     retryConfig?: {
       attempts?: number;
       delay?: number;
@@ -567,7 +571,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: workflowSpan,
         },
         abortController: params.abortController,
-        emitter: params.emitter,
+        pubsub: params.pubsub,
         requestContext: currentRequestContext,
         outputWriter: params.outputWriter,
         disableScorers,
@@ -588,7 +592,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           lastOutput.result.status = 'success';
         }
 
-        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result)) as any;
+        const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -628,7 +632,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     // after all steps are successful, return result
-    const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result)) as any;
+    const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
     await this.persistStepUpdate({
       workflowId,
       runId,

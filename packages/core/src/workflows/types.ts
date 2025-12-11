@@ -3,6 +3,7 @@ import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod';
 import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
+import type { PubSub } from '../events/pubsub';
 import type { Mastra } from '../mastra';
 import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -41,13 +42,6 @@ export type TimeTravelExecutionParams = {
   steps: string[];
   state?: Record<string, any>;
   resumeData?: any;
-};
-
-export type Emitter = {
-  emit: (event: string, data: any) => Promise<void>;
-  on: (event: string, callback: (data: any) => void) => void;
-  off: (event: string, callback: (data: any) => void) => void;
-  once: (event: string, callback: (data: any) => void) => void;
 };
 
 export type StepMetadata = Record<string, any>;
@@ -677,7 +671,7 @@ export type StepExecutionStartParams = {
   runId: string;
   step: Step<any, any, any>;
   inputData: any;
-  emitter: Emitter;
+  pubsub: PubSub;
   executionContext: ExecutionContext;
   stepCallId: string;
   stepInfo: Record<string, any>;
@@ -700,7 +694,7 @@ export type RegularStepExecutionParams = {
   timeTravel?: TimeTravelExecutionParams;
   prevOutput: any;
   inputData: any;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   tracingContext?: TracingContext;

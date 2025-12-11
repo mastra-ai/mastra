@@ -108,6 +108,7 @@ export type ProviderModelsMap = {
     'mistralai/mistral-large-3-675b-instruct-2512',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
+    'moonshotai/kimi-k2-thinking',
     'nvidia/cosmos-nemotron-34b',
     'nvidia/llama-3.1-nemotron-ultra-253b-v1',
     'nvidia/llama-embed-nemotron-8b',

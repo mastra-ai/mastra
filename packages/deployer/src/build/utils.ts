@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
+import { builtinModules } from 'node:module';
 
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
@@ -158,4 +159,17 @@ export function normalizeStudioBase(studioBase: string): string {
   }
 
   return studioBase;
+}
+
+/**
+ * Check if a module is a Node.js builtin module
+ * @param specifier - Module specifier
+ * @returns True if it's a builtin module
+ */
+export function isBuiltinModule(specifier: string): boolean {
+  return (
+    builtinModules.includes(specifier) ||
+    specifier.startsWith('node:') ||
+    builtinModules.includes(specifier.replace(/^node:/, ''))
+  );
 }

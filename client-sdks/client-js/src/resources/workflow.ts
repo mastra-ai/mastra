@@ -88,6 +88,9 @@ export class Workflow extends BaseResource {
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);
     }
+    if (params?.status) {
+      searchParams.set('status', params.status);
+    }
     if (requestContextParam) {
       searchParams.set('requestContext', requestContextParam);
     }

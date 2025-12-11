@@ -1,17 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
+import type { PubSub } from '../../events/pubsub';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ConditionFunction, LoopConditionFunction, Step } from '../step';
 import { getStepResult } from '../step';
 import type {
   DefaultEngineType,
-  Emitter,
   ExecutionContext,
   OutputWriter,
   RestartExecutionParams,
@@ -49,7 +49,7 @@ export interface ExecuteParallelParams {
   };
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -73,7 +73,7 @@ export async function executeParallel(
     timeTravel,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     outputWriter,
@@ -150,7 +150,7 @@ export async function executeParallel(
         tracingContext: {
           currentSpan: parallelSpan,
         },
-        emitter,
+        pubsub,
         abortController,
         requestContext,
         outputWriter,
@@ -227,7 +227,7 @@ export interface ExecuteConditionalParams {
   timeTravel?: TimeTravelExecutionParams;
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -251,7 +251,7 @@ export async function executeConditional(
     timeTravel,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     outputWriter,
@@ -301,7 +301,7 @@ export async function executeConditional(
             abort: () => {
               abortController?.abort();
             },
-            [EMITTER_SYMBOL]: emitter,
+            [PUBSUB_SYMBOL]: pubsub,
             [STREAM_FORMAT_SYMBOL]: executionContext.format,
             engine: engine.getEngineContext(),
             abortSignal: abortController?.signal,
@@ -409,7 +409,7 @@ export async function executeConditional(
         tracingContext: {
           currentSpan: conditionalSpan,
         },
-        emitter,
+        pubsub,
         abortController,
         requestContext,
         outputWriter,
@@ -490,7 +490,7 @@ export interface ExecuteLoopParams {
   };
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -514,7 +514,7 @@ export async function executeLoop(
     timeTravel,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     outputWriter,
@@ -558,7 +558,7 @@ export async function executeLoop(
       tracingContext: {
         currentSpan: loopSpan,
       },
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       outputWriter,
@@ -620,7 +620,7 @@ export async function executeLoop(
           abort: () => {
             abortController?.abort();
           },
-          [EMITTER_SYMBOL]: emitter,
+          [PUBSUB_SYMBOL]: pubsub,
           [STREAM_FORMAT_SYMBOL]: executionContext.format,
           engine: engine.getEngineContext(),
           abortSignal: abortController?.signal,
@@ -683,7 +683,7 @@ export interface ExecuteForeachParams {
   };
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -707,7 +707,7 @@ export async function executeForeach(
     timeTravel,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     outputWriter,
@@ -739,12 +739,16 @@ export async function executeForeach(
     tracingPolicy: engine.options?.tracingPolicy,
   });
 
-  await emitter.emit('watch', {
-    type: 'workflow-step-start',
-    payload: {
-      id: step.id,
-      ...stepInfo,
-      status: 'running',
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: 'watch',
+    runId,
+    data: {
+      type: 'workflow-step-start',
+      payload: {
+        id: step.id,
+        ...stepInfo,
+        status: 'running',
+      },
     },
   });
 
@@ -796,7 +800,7 @@ export async function executeForeach(
           resume: resumeToUse,
           prevOutput: item,
           tracingContext: { currentSpan: loopSpan },
-          emitter,
+          pubsub,
           abortController,
           requestContext,
           skipEmits: true,
@@ -820,19 +824,27 @@ export async function executeForeach(
         if (execResults.status === 'suspended') {
           foreachIndexObj[i + resultIndex] = execResults;
         } else {
-          await emitter.emit('watch', {
-            type: 'workflow-step-result',
-            payload: {
-              id: step.id,
-              ...execResults,
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-result',
+              payload: {
+                id: step.id,
+                ...execResults,
+              },
             },
           });
 
-          await emitter.emit('watch', {
-            type: 'workflow-step-finish',
-            payload: {
-              id: step.id,
-              metadata: {},
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-finish',
+              payload: {
+                id: step.id,
+                metadata: {},
+              },
             },
           });
 
@@ -855,11 +867,15 @@ export async function executeForeach(
     if (Object.keys(foreachIndexObj).length > 0) {
       const suspendedIndices = Object.keys(foreachIndexObj).map(Number);
       const foreachIndex = suspendedIndices[0]!;
-      await emitter.emit('watch', {
-        type: 'workflow-step-suspended',
-        payload: {
-          id: step.id,
-          ...foreachIndexObj[foreachIndex],
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-suspended',
+          payload: {
+            id: step.id,
+            ...foreachIndexObj[foreachIndex],
+          },
         },
       });
 
@@ -886,21 +902,29 @@ export async function executeForeach(
     }
   }
 
-  await emitter.emit('watch', {
-    type: 'workflow-step-result',
-    payload: {
-      id: step.id,
-      status: 'success',
-      output: results,
-      endedAt: Date.now(),
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: 'watch',
+    runId,
+    data: {
+      type: 'workflow-step-result',
+      payload: {
+        id: step.id,
+        status: 'success',
+        output: results,
+        endedAt: Date.now(),
+      },
     },
   });
 
-  await emitter.emit('watch', {
-    type: 'workflow-step-finish',
-    payload: {
-      id: step.id,
-      metadata: {},
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: 'watch',
+    runId,
+    data: {
+      type: 'workflow-step-finish',
+      payload: {
+        id: step.id,
+        metadata: {},
+      },
     },
   });
 

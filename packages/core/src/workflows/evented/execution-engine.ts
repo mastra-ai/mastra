@@ -1,15 +1,10 @@
 import type { RequestContext } from '../../di';
+import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { Mastra } from '../../mastra';
 import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
-import type {
-  Emitter,
-  SerializedStepFlowEntry,
-  StepResult,
-  RestartExecutionParams,
-  TimeTravelExecutionParams,
-} from '../types';
+import type { SerializedStepFlowEntry, StepResult, RestartExecutionParams, TimeTravelExecutionParams } from '../types';
 import { hydrateSerializedStepErrors } from '../utils';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
@@ -55,7 +50,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       resumePayload: any;
       resumePath: number[];
     };
-    emitter: Emitter;
+    pubsub?: PubSub; // Not used - evented engine uses this.mastra.pubsub directly
     requestContext: RequestContext;
     retryConfig?: {
       attempts?: number;
@@ -119,7 +114,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       });
     }
 
-    const resultData: any = await new Promise(resolve => {
+    const resultData: any = await new Promise((resolve, reject) => {
       const finishCb = async (event: Event, ack?: () => Promise<void>) => {
         if (event.runId !== params.runId) {
           await ack?.();
@@ -140,7 +135,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
         await ack?.();
       };
 
-      pubsub.subscribe('workflows-finish', finishCb).catch(() => {});
+      pubsub.subscribe('workflows-finish', finishCb).catch(err => {
+        console.error('Failed to subscribe to workflows-finish:', err);
+        reject(err);
+      });
     });
 
     if (resultData.prevResult.status === 'failed') {

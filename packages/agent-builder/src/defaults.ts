@@ -1229,7 +1229,7 @@ export const mastra = new Mastra({
           const lines = output.split('\n').filter((line: string) => line.trim());
           stdoutLines.push(...lines);
 
-          if (output.includes('Mastra API running on port')) {
+          if (output.includes('Mastra API running on ')) {
             clearTimeout(timeout);
             resolve({
               success: true,
