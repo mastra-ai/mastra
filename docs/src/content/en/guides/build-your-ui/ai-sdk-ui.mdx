@@ -1396,3 +1396,164 @@ Key points:
 - The tool still returns its own output after the stream completes
 
 For a complete implementation, see the [tool-nested-streams example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/tool-nested-streams.tsx) in UI Dojo.
+
+### Streaming agent text from workflow steps
+
+Workflow steps can stream an agent's text output in real-time by piping the agent's stream to the step's `writer`. This lets users see the agent "thinking" while the workflow executes, rather than waiting for the step to complete.
+
+The pattern uses:
+- `writer` in workflow step - Pipe the agent's `fullStream` to the step's writer
+- `text` and `data-workflow` parts - The frontend receives streaming text alongside step progress
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Create a workflow step that streams an agent's response by piping to the step's `writer`.
+
+```typescript title="src/mastra/workflows/weather-workflow.ts" copy
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+import { weatherAgent } from "../agents/weather-agent";
+
+const analyzeWeather = createStep({
+  id: "analyze-weather",
+  inputSchema: z.object({ location: z.string() }),
+  outputSchema: z.object({ analysis: z.string(), location: z.string() }),
+  execute: async ({ inputData, writer }) => {
+    const response = await weatherAgent.stream(
+      `Analyze the weather in ${inputData.location} and provide insights.`
+    );
+
+    // Pipe agent stream to step writer for real-time text streaming
+    await response.fullStream.pipeTo(writer);
+
+    return {
+      analysis: await response.text,
+      location: inputData.location,
+    };
+  },
+});
+
+const calculateScore = createStep({
+  id: "calculate-score",
+  inputSchema: z.object({ analysis: z.string(), location: z.string() }),
+  outputSchema: z.object({ score: z.number(), summary: z.string() }),
+  execute: async ({ inputData }) => {
+    const score = inputData.analysis.includes("sunny") ? 85 : 50;
+    return { score, summary: `Comfort score for ${inputData.location}: ${score}/100` };
+  },
+});
+
+export const weatherWorkflow = createWorkflow({
+  id: "weather-workflow",
+  inputSchema: z.object({ location: z.string() }),
+  outputSchema: z.object({ score: z.number(), summary: z.string() }),
+})
+  .then(analyzeWeather)
+  .then(calculateScore);
+
+weatherWorkflow.commit();
+```
+
+Register the workflow with a `workflowRoute()`. Text streaming is enabled by default.
+
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  workflows: { weatherWorkflow },
+  server: {
+    apiRoutes: [
+      workflowRoute({ path: "/workflow/weather", workflow: "weatherWorkflow" }),
+    ],
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="Frontend">
+
+Render both `text` parts (streaming agent output) and `data-workflow` parts (step progress).
+
+```typescript title="src/components/weather-workflow.tsx" copy
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useState } from "react";
+import type { WorkflowDataPart } from "@mastra/ai-sdk";
+
+type WorkflowData = WorkflowDataPart["data"];
+
+export function WeatherWorkflow() {
+  const [location, setLocation] = useState("");
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/workflow/weather",
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: {
+          inputData: {
+            location: messages[messages.length - 1].parts.find((p) => p.type === "text")?.text,
+          },
+        },
+      }),
+    }),
+  });
+
+  return (
+    <div>
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        sendMessage({ text: location });
+        setLocation("");
+      }}>
+        <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Enter city" />
+        <button type="submit" disabled={status !== "ready"}>Analyze</button>
+      </form>
+
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            // Streaming agent text
+            if (part.type === "text" && message.role === "assistant") {
+              return (
+                <div key={index}>
+                  {status === "streaming" && <p><em>Agent analyzing...</em></p>}
+                  <p>{part.text}</p>
+                </div>
+              );
+            }
+            // Workflow step progress
+            if (part.type === "data-workflow") {
+              const workflow = part.data as WorkflowData;
+              return (
+                <div key={index}>
+                  {Object.entries(workflow.steps).map(([stepId, step]) => (
+                    <div key={stepId}>
+                      <strong>{stepId}</strong>: {step.status}
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+Key points:
+- The step's `writer` is available in the `execute` function (not via `context`)
+- `includeTextStreamParts` defaults to `true` on `workflowRoute()`, so text streams by default
+- Text parts stream in real-time while `data-workflow` parts update with step status
+
+For a complete implementation, see the [workflow-agent-text-stream example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-agent-text-stream.tsx) in UI Dojo.
