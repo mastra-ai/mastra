@@ -346,13 +346,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           };
         } else if (result.status === 'tripwire') {
-          await emitter.emit('watch', {
-            type: 'workflow-step-result',
-            payload: {
-              id: step.id,
-              status: 'tripwire',
-              error: result?.tripwire?.reason,
-              payload: prevOutput,
+          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+            type: 'watch',
+            runId: executionContext.runId,
+            data: {
+              type: 'workflow-step-result',
+              payload: {
+                id: step.id,
+                status: 'tripwire',
+                error: result?.tripwire?.reason,
+                payload: prevOutput,
+              },
             },
           });
 
