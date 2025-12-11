@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Head from "@docusaurus/Head";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CookieBanner } from "./cookie-banner";
 import HubspotTracker from "./hubspot-tracker";
 
@@ -18,6 +18,14 @@ const REO_CLIENT_ID = "fdd9258c52d6769";
 export const CookieConsent = () => {
   const { siteConfig } = useDocusaurusContext();
   const [cookieConsent, setCookieConsent] = useState<boolean | null>(null);
+  const [
+    hasGottenConsentForGoogleTracking,
+    setHasGottenConsentForGoogleTracking,
+  ] = useState<boolean>(false);
+  const [
+    hasGottenConsentForHubspotTracking,
+    setHasGottenConsentForHubspotTracking,
+  ] = useState<boolean>(false);
 
   const GA_ID = siteConfig.customFields?.gaId as string | undefined;
   const HS_PORTAL_ID = siteConfig.customFields?.hsPortalId as
@@ -31,23 +39,17 @@ export const CookieConsent = () => {
     console.warn("Hubspot Portal ID is not defined");
   }
 
-  const hasGottenConsentForGoogleTracking =
-    cookieConsent && GA_ID ? true : false;
-  const hasGottenConsentForHubspotTracking =
-    cookieConsent && HS_PORTAL_ID ? true : false;
+  useEffect(() => {
+    if (cookieConsent) {
+      setHasGottenConsentForGoogleTracking(true);
+      setHasGottenConsentForHubspotTracking(true);
+    }
+  }, [cookieConsent]);
 
-  console.log({
-    cookieConsent,
-    GA_ID,
-    HS_PORTAL_ID,
-    hasGottenConsentForGoogleTracking,
-    hasGottenConsentForHubspotTracking,
-  });
   return (
     <>
       <CookieBanner onConsentChange={setCookieConsent} />
 
-      {/* Google Analytics - Only load with consent */}
       {hasGottenConsentForGoogleTracking ? (
         <>
           <Head>

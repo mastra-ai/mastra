@@ -74,20 +74,6 @@ const config: Config = {
   ],
 
   plugins: [
-    // PostHog analytics (only enabled if POSTHOG_API_KEY is set)
-    ...(process.env.POSTHOG_API_KEY
-      ? [
-          [
-            "posthog-docusaurus",
-            {
-              apiKey: process.env.POSTHOG_API_KEY,
-              appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-              enableInDevelopment: false,
-            },
-          ],
-        ]
-      : []),
-    // Vercel Analytics (automatically enabled in production on Vercel)
     [
       "@docusaurus/plugin-vercel-analytics",
       {
