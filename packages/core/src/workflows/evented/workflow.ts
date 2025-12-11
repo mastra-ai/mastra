@@ -569,6 +569,7 @@ export class EventedRun<
         runId: this.runId,
         prevResult: { status: 'success', output: inputDataToUse },
         requestContext: Object.fromEntries(requestContext.entries()),
+        initialState: initialStateToUse,
       },
     });
 
