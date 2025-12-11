@@ -11924,23 +11924,26 @@ describe('MastraInngestWorkflow', () => {
   });
 
   describe.sequential('startAsync', () => {
-    it('should start workflow and complete successfully', async ctx => {
+    it.only('should start workflow and complete successfully', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: async () => {
+          return { result: 'success' };
+        },
         inputSchema: z.object({}),
         outputSchema: z.object({ result: z.string() }),
       });
 
       const workflow = createWorkflow({
-        id: 'test-startAsync-workflow',
+        id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({ result: z.string() }),
         steps: [step1],
@@ -11953,7 +11956,7 @@ describe('MastraInngestWorkflow', () => {
           url: ':memory:',
         }),
         workflows: {
-          'test-startAsync-workflow': workflow,
+          'test-workflow': workflow,
         },
         server: {
           apiRoutes: [
@@ -11974,6 +11977,9 @@ describe('MastraInngestWorkflow', () => {
       }));
 
       await resetInngest();
+
+      // Extra delay to ensure Inngest has fully synced functions
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRun();
       const { runId } = await run.startAsync({ inputData: {} });
