@@ -512,12 +512,13 @@ export class PrepareCommand {
     const agent = new Agent({
       id: 'prep-agent',
       name: 'Prep Agent',
-      instructions:
-        "You are a helpful assistant. Process and store conversation history. Only store working memory information if it's in the template. Other information is not relevant",
+      instructions: usesObservationalMemory
+        ? `You are a helpful assistant. Process and store conversation history.`
+        : "You are a helpful assistant. Process and store conversation history. Only store working memory information if it's in the template. Other information is not relevant",
       model: model,
       memory: usesObservationalMemory ? undefined : memory,
       // For OM, use processors instead of memory
-      inputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
+      inputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
       outputProcessors: usesObservationalMemory ? [observationalMemory!, messageHistory!] : undefined,
     });
 
