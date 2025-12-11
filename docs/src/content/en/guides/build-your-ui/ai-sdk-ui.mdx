@@ -1270,3 +1270,129 @@ Key points:
 - Storage must be configured for suspend/resume to persist workflow state
 
 For a complete implementation, see the [workflow-suspend-resume example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-suspend-resume.tsx) in UI Dojo.
+
+### Nested agent streams in tools
+
+Tools can call agents internally and stream the agent's output back to the UI. This creates `data-tool-agent` parts that can be rendered alongside the tool's final output.
+
+The pattern uses:
+- `context.mastra.getAgent()` - Get an agent instance from within a tool
+- `agent.stream()` - Stream the agent's response
+- `stream.fullStream.pipeTo(context.writer)` - Pipe the agent's stream to the tool's writer
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Create a tool that calls an agent and pipes its stream to the tool's writer.
+
+```typescript title="src/mastra/tools/nested-agent-tool.ts" copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const nestedAgentTool = createTool({
+  id: "nested-agent-stream",
+  description: "Analyze weather using a nested agent",
+  inputSchema: z.object({
+    city: z.string().describe("The city to analyze"),
+  }),
+  outputSchema: z.object({
+    summary: z.string(),
+  }),
+  execute: async (inputData, context) => {
+    const agent = context?.mastra?.getAgent("weatherAgent");
+    if (!agent) {
+      return { summary: "Weather agent not available" };
+    }
+
+    const stream = await agent.stream(
+      `Analyze the weather in ${inputData.city} and provide a summary.`
+    );
+
+    // Pipe the agent's stream to emit data-tool-agent parts
+    await stream.fullStream.pipeTo(context!.writer!);
+
+    return { summary: (await stream.text) ?? "No summary available" };
+  },
+});
+```
+
+Create an agent that uses this tool.
+
+```typescript title="src/mastra/agents/forecast-agent.ts" copy
+import { Agent } from "@mastra/core/agent";
+import { nestedAgentTool } from "../tools/nested-agent-tool";
+
+export const forecastAgent = new Agent({
+  id: "forecast-agent",
+  instructions: "Use the nested-agent-stream tool when asked about weather.",
+  model: "openai/gpt-4o-mini",
+  tools: { nestedAgentTool },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="Frontend">
+
+Handle `data-tool-agent` parts to display the nested agent's streamed output.
+
+```typescript title="src/components/nested-agent-chat.tsx" copy
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useState } from "react";
+import type { AgentDataPart } from "@mastra/ai-sdk";
+
+export function NestedAgentChat() {
+  const [input, setInput] = useState("");
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/chat/forecastAgent",
+    }),
+  });
+
+  return (
+    <div>
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        sendMessage({ text: input });
+        setInput("");
+      }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Enter a city" />
+        <button type="submit" disabled={status !== "ready"}>Get Forecast</button>
+      </form>
+
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            if (part.type === "text") {
+              return <p key={index}>{part.text}</p>;
+            }
+            if (part.type === "data-tool-agent") {
+              const { id, data } = part as AgentDataPart;
+              return (
+                <div key={index} className="nested-agent">
+                  <strong>Nested Agent: {id}</strong>
+                  {data.text && <p>{data.text}</p>}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+Key points:
+- Piping `fullStream` to `context.writer` creates `data-tool-agent` parts
+- The `AgentDataPart` has `id` (on the part) and `data.text` (the agent's streamed text)
+- The tool still returns its own output after the stream completes
+
+For a complete implementation, see the [tool-nested-streams example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/tool-nested-streams.tsx) in UI Dojo.
