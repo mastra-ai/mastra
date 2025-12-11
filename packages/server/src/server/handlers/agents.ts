@@ -1059,7 +1059,7 @@ ${comment ? `User feedback: ${comment}` : ''}`,
         },
       );
 
-      return result.object;
+      return await result.object;
     } catch (error) {
       return handleError(error, 'Error enhancing instructions');
     }
