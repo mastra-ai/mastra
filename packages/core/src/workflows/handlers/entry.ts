@@ -1,8 +1,8 @@
 import type { RequestContext } from '../../di';
+import type { PubSub } from '../../events/pubsub';
 import type { TracingContext } from '../../observability';
 import type { DefaultExecutionEngine } from '../default';
 import type {
-  Emitter,
   EntryExecutionResult,
   ExecutionContext,
   OutputWriter,
@@ -100,7 +100,7 @@ export interface ExecuteEntryParams {
   };
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -124,7 +124,7 @@ export async function executeEntry(
     resume,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     outputWriter,
@@ -149,7 +149,7 @@ export async function executeEntry(
       resume,
       prevOutput,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       outputWriter,
@@ -184,7 +184,7 @@ export async function executeEntry(
         state: executionContext.state,
       },
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       outputWriter,
@@ -267,7 +267,7 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       outputWriter,
@@ -286,7 +286,7 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       outputWriter,
@@ -305,7 +305,7 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       outputWriter,
@@ -325,7 +325,7 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       outputWriter,
@@ -336,13 +336,17 @@ export async function executeEntry(
     const startedAt = Date.now();
     const sleepWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.waiting_ev`;
     await engine.wrapDurableOperation(sleepWaitingOperationId, async () => {
-      await emitter.emit('watch', {
-        type: 'workflow-step-waiting',
-        payload: {
-          id: entry.id,
-          payload: prevOutput,
-          startedAt,
-          status: 'waiting',
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-waiting',
+          payload: {
+            id: entry.id,
+            payload: prevOutput,
+            startedAt,
+            status: 'waiting',
+          },
         },
       });
     });
@@ -374,7 +378,7 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       outputWriter,
@@ -404,21 +408,29 @@ export async function executeEntry(
     stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
     const sleepResultOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.result_ev`;
     await engine.wrapDurableOperation(sleepResultOperationId, async () => {
-      await emitter.emit('watch', {
-        type: 'workflow-step-result',
-        payload: {
-          id: entry.id,
-          endedAt,
-          status: 'success',
-          output: prevOutput,
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-result',
+          payload: {
+            id: entry.id,
+            endedAt,
+            status: 'success',
+            output: prevOutput,
+          },
         },
       });
 
-      await emitter.emit('watch', {
-        type: 'workflow-step-finish',
-        payload: {
-          id: entry.id,
-          metadata: {},
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-finish',
+          payload: {
+            id: entry.id,
+            metadata: {},
+          },
         },
       });
     });
@@ -426,13 +438,17 @@ export async function executeEntry(
     const startedAt = Date.now();
     const sleepUntilWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.waiting_ev`;
     await engine.wrapDurableOperation(sleepUntilWaitingOperationId, async () => {
-      await emitter.emit('watch', {
-        type: 'workflow-step-waiting',
-        payload: {
-          id: entry.id,
-          payload: prevOutput,
-          startedAt,
-          status: 'waiting',
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-waiting',
+          payload: {
+            id: entry.id,
+            payload: prevOutput,
+            startedAt,
+            status: 'waiting',
+          },
         },
       });
     });
@@ -466,7 +482,7 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       outputWriter,
@@ -497,21 +513,29 @@ export async function executeEntry(
 
     const sleepUntilResultOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.result_ev`;
     await engine.wrapDurableOperation(sleepUntilResultOperationId, async () => {
-      await emitter.emit('watch', {
-        type: 'workflow-step-result',
-        payload: {
-          id: entry.id,
-          endedAt,
-          status: 'success',
-          output: prevOutput,
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-result',
+          payload: {
+            id: entry.id,
+            endedAt,
+            status: 'success',
+            output: prevOutput,
+          },
         },
       });
 
-      await emitter.emit('watch', {
-        type: 'workflow-step-finish',
-        payload: {
-          id: entry.id,
-          metadata: {},
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-finish',
+          payload: {
+            id: entry.id,
+            metadata: {},
+          },
         },
       });
     });
@@ -537,9 +561,10 @@ export async function executeEntry(
   });
 
   if (execResults.status === 'canceled') {
-    await emitter.emit('watch', {
-      type: 'workflow-canceled',
-      payload: {},
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'workflow-canceled', payload: {} },
     });
   }
 
