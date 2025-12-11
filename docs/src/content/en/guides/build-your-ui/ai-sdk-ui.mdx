@@ -433,7 +433,7 @@ Here's an example of rendering a weather tool's output as a custom `WeatherCard`
 
 Define a tool with an `outputSchema` so the frontend knows the shape of the data to render.
 
-```typescript title="src/mastra/tools/weather-tool.ts" copy
+```typescript title="src/mastra/tools/weather-tool.ts" {10-17} copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -474,7 +474,7 @@ export const weatherTool = createTool({
 
 Check for `tool-{toolKey}` parts in the message and render a custom component based on the tool's state and output.
 
-```typescript title="src/components/chat.tsx" copy
+```typescript title="src/components/chat.tsx" {24-35} copy
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { WeatherCard } from "./weather-card";
@@ -617,7 +617,7 @@ export const mastra = new Mastra({
 
 Check for `data-workflow` parts and render each step's status and output using the `WorkflowDataPart` type for type safety.
 
-```typescript title="src/components/workflow-chat.tsx" copy
+```typescript title="src/components/workflow-chat.tsx" {3,5,45-47} copy
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { WorkflowDataPart } from "@mastra/ai-sdk";
@@ -729,7 +729,7 @@ export const mastra = new Mastra({
 
 Check for `data-network` parts and render each agent's execution step using the `NetworkDataPart` type for type safety.
 
-```typescript title="src/components/network-chat.tsx" copy
+```typescript title="src/components/network-chat.tsx" {3,5,42-44} copy
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { NetworkDataPart } from "@mastra/ai-sdk";
@@ -823,7 +823,7 @@ You must `await` the `writer.custom()` call, otherwise you may encounter a `Writ
 
 Use `writer.custom()` inside the tool's `execute()` function to emit custom `data-` prefixed events at different stages of execution.
 
-```typescript title="src/mastra/tools/task-tool.ts" copy
+```typescript title="src/mastra/tools/task-tool.ts" {18-24,30-36} copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -875,7 +875,7 @@ export const taskTool = createTool({
 
 Filter message parts for your custom event type and render a progress indicator that updates as new events arrive.
 
-```typescript title="src/components/task-chat.tsx" copy
+```typescript title="src/components/task-chat.tsx" {31-41,45} copy
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useMemo } from "react";
