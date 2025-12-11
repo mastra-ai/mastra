@@ -1,5 +1,25 @@
 # @mastra/deployer
 
+## 0.24.8
+
+### Patch Changes
+
+- Add simple virtual check for tsconfigpaths plugin, misbehaves on CI ([#11072](https://github.com/mastra-ai/mastra/pull/11072))
+
+- Updated dependencies []:
+  - @mastra/core@0.24.8
+  - @mastra/server@0.24.8
+
+## 0.24.8-alpha.0
+
+### Patch Changes
+
+- Add simple virtual check for tsconfigpaths plugin, misbehaves on CI ([#11072](https://github.com/mastra-ai/mastra/pull/11072))
+
+- Updated dependencies []:
+  - @mastra/core@0.24.8-alpha.0
+  - @mastra/server@0.24.8-alpha.0
+
 ## 0.24.7
 
 ### Patch Changes
