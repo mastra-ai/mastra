@@ -121,7 +121,6 @@ export function createToolCallStep<
       }) => {
         // Find the last assistant message in the response (which should contain this tool call)
         const responseMessages = messageList.get.response.db();
-        console.dir({ responseMessages }, { depth: null });
         const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
 
         if (lastAssistantMessage) {
@@ -133,7 +132,7 @@ export function createToolCallStep<
               ? (lastAssistantMessage.content.metadata as Record<string, any>)
               : {};
           metadata.suspendedTools = metadata.suspendedTools || {};
-          metadata.suspendedTools[toolCallId] = {
+          metadata.suspendedTools[toolName] = {
             toolCallId,
             toolName,
             args,
@@ -144,13 +143,10 @@ export function createToolCallStep<
           };
           lastAssistantMessage.content.metadata = metadata;
         }
-
-        console.dir({ lastAssistantMessage }, { depth: null });
-        console.dir({ messageList: messageList.get.response.db() }, { depth: null });
       };
 
       // Helper function to remove tool approval metadata after approval/decline
-      const removeToolSuspensionMetadata = async (toolCallId: string) => {
+      const removeToolSuspensionMetadata = async (toolName: string) => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
@@ -173,7 +169,7 @@ export function createToolCallStep<
         const lastAssistantMessage = [...allMessages].reverse().find(msg => {
           const metadata = getMetadata(msg);
           const suspendedTools = metadata?.suspendedTools as Record<string, any> | undefined;
-          return !!suspendedTools?.[toolCallId];
+          return !!suspendedTools?.[toolName];
         });
 
         if (lastAssistantMessage) {
@@ -181,7 +177,7 @@ export function createToolCallStep<
           const suspendedTools = metadata?.suspendedTools as Record<string, any> | undefined;
 
           if (suspendedTools && typeof suspendedTools === 'object') {
-            delete suspendedTools[toolCallId];
+            delete suspendedTools[toolName];
 
             // If no more pending suspensions, remove the whole object
             if (metadata && Object.keys(suspendedTools).length === 0) {
@@ -263,8 +259,14 @@ export function createToolCallStep<
 
       try {
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
-        const isResumeSuspendedTool = inputData.toolName === 'resume-suspended-tool';
-        if (!isResumeSuspendedTool && (requireToolApproval || (tool as any).requireApproval)) {
+
+        const { resumeData: resumeDataFromArgs, ...args } = inputData.args;
+
+        console.dir({ resumeDataFromArgs, args }, { depth: null });
+
+        const isResumeToolCall = !!resumeDataFromArgs;
+        console.dir({ isResumeToolCall }, { depth: null });
+        if (!isResumeToolCall && (requireToolApproval || (tool as any).requireApproval)) {
           if (!resumeData) {
             controller.enqueue({
               type: 'tool-call-approval',
@@ -310,8 +312,8 @@ export function createToolCallStep<
         }
 
         // If we are resuming and the tool did not require approval, remove the suspension metadata
-        if (resumeData && !requireToolApproval && !(tool as any).requireApproval) {
-          await removeToolSuspensionMetadata(inputData.toolCallId);
+        if (isResumeToolCall) {
+          await removeToolSuspensionMetadata(inputData.toolName);
         }
 
         const toolOptions: MastraToolInvocationOptions = {
@@ -333,7 +335,7 @@ export function createToolCallStep<
             addToolSuspensionMetadata({
               toolCallId: inputData.toolCallId,
               toolName: inputData.toolName,
-              args: inputData.args,
+              args,
               suspendPayload,
               resumeSchema: options?.resumeSchema,
             });
@@ -353,12 +355,10 @@ export function createToolCallStep<
               },
             );
           },
-          resumeData,
+          resumeData: resumeDataFromArgs ?? resumeData,
         };
 
-        const result = await tool.execute(inputData.args, toolOptions);
-
-        console.dir({ [inputData.toolName]: result }, { depth: null });
+        const result = await tool.execute(args, toolOptions);
 
         // Call onOutput hook after successful execution
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {

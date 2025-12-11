@@ -1504,13 +1504,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     //tool to determine resumption
     const toolObj = createTool({
       id: 'resume-tool',
-      description: `This tool is used to find and resume suspended tools. 
-         Suspended tool information can be found in the metadata of the last assistant message.
-         The metadata in the message will either contain 'suspendedTools' or 'pendingToolApprovals'.
-         You should always check the last assistant message in memory for these 'suspendedTools' or 'pendingToolApprovals' metadata.
-         Both will contain the toolName, toolCallId, runId, args and resumeSchema of the suspended tool to resume.
-         Using the available messages in memory, create the resumeData object that matches the resumeSchema and use it to call this tool.
-         If you're unable to construct the resumeData object, do not call this tool.`,
+      description: `This tool is used to resume suspended tools. It is called when you are able to construct the resumeData for a suspended tool.`,
       inputSchema: z.object({
         runId: z.string().describe('The runId of the suspended tool'),
         toolCallId: z.string().describe('The toolCallId of the suspended tool'),
@@ -1639,6 +1633,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       assignedToolEntries.map(async ([k, tool]) => {
         if (!tool) {
           return;
+        }
+
+        if ((tool as any).inputSchema) {
+          // @ts-ignore
+          tool.inputSchema = tool.inputSchema.extend({
+            resumeData: z
+              .any()
+              .optional()
+              .describe('The resumeData object created from the resumeSchema of suspended tool'),
+          });
         }
 
         const options: ToolOptions = {
@@ -2013,6 +2017,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         const extendedInputSchema = z.object({
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
+          suspendedToolRunId: z.string().optional().describe('The runId of the suspended tool'),
+          resumeData: z
+            .any()
+            .optional()
+            .describe('The resumeData object created from the resumeSchema of suspended tool'),
         });
 
         const toolObj = createTool({
@@ -2034,19 +2043,21 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
             try {
+              const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData;
+              const runIdToUse = suspendedToolRunId ?? runId;
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
                 description: workflow.description,
                 args: inputData,
-                runId,
+                runId: runIdToUse,
                 threadId,
                 resourceId,
               });
 
-              const run = await workflow.createRun({ runId });
-
-              const { initialState, inputData: workflowInputData } = inputData;
+              const run = await workflow.createRun({ runId: runIdToUse });
               const { resumeData, suspend } = context?.agent ?? {};
+
+              console.dir({ resumeData, workflowInputData }, { depth: null });
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
@@ -2143,7 +2154,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    runId: runId || '',
+                    runId: inputData.suspendedToolRunId || runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
                   },
@@ -2272,19 +2283,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
     });
 
-    const customTools = await this.listCustomTools({
-      toolsets,
-      clientTools,
-      threadId,
-      resourceId,
-      runId,
-      requestContext,
-      tracingContext,
-      outputWriter,
-      methodType,
-      memoryConfig,
-      mastraProxy,
-    });
+    // const customTools = await this.listCustomTools({
+    //   toolsets,
+    //   clientTools,
+    //   threadId,
+    //   resourceId,
+    //   runId,
+    //   requestContext,
+    //   tracingContext,
+    //   outputWriter,
+    //   methodType,
+    //   memoryConfig,
+    //   mastraProxy,
+    // });
 
     return this.formatTools({
       ...assignedTools,
@@ -2293,7 +2304,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       ...clientSideTools,
       ...agentTools,
       ...workflowTools,
-      ...customTools,
+      // ...customTools,
     });
   }
 

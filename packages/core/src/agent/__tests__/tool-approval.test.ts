@@ -7,6 +7,7 @@ import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import { getOpenAIModel } from './mock-model';
 import { MockMemory } from '../../memory';
+import { randomUUID } from 'node:crypto';
 
 const mockStorage = new InMemoryStore();
 
@@ -268,6 +269,112 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(email).toBe('test@test.com');
       }, 15000);
 
+      it('should call findUserTool with suspend and resume via stream', async () => {
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          suspendSchema: z.object({
+            message: z.string(),
+          }),
+          resumeSchema: z.object({
+            age: z.number(),
+          }),
+          execute: async (inputData, context) => {
+            // console.log('context', context);
+            if (!context?.agent?.resumeData) {
+              return await context?.agent?.suspend({ message: 'Please provide the age of the user' });
+            }
+
+            return {
+              name: inputData.name,
+              age: context?.agent?.resumeData?.age,
+              email: 'test@test.com',
+            };
+          },
+        });
+
+        const findUserProfessionTool = createTool({
+          id: 'Find user profession tool',
+          description: 'This is a test tool that returns the profession of the user',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          execute: async () => {
+            return {
+              profession: 'Software Engineer',
+            };
+          },
+        });
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool, findUserProfessionTool },
+          memory: new MockMemory(),
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        const suspendData = {
+          suspendPayload: null,
+          suspendedToolName: '',
+        };
+        const memory = {
+          thread: randomUUID(),
+          resource: randomUUID(),
+        };
+        const stream = await agentOne.stream('Find the name, age and profession of the user - Dero Israel', {
+          memory,
+        });
+        for await (const _chunk of stream.fullStream) {
+          if (_chunk.type === 'tool-call-suspended') {
+            suspendData.suspendPayload = _chunk.payload.suspendPayload;
+            suspendData.suspendedToolName = _chunk.payload.toolName;
+          }
+        }
+        if (suspendData.suspendPayload) {
+          const resumeStream = await agentOne.stream('He is 25 years old', {
+            memory,
+          });
+          let resumeText = '';
+          for await (const _chunk of resumeStream.fullStream) {
+            if (_chunk.type === 'text-delta') {
+              resumeText += _chunk.payload.text;
+            }
+          }
+          console.log('resumeText', resumeText);
+
+          const toolResults = await resumeStream.toolResults;
+
+          console.dir({ toolResults }, { depth: null });
+
+          const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
+
+          const name = (toolCall?.result as any)?.name;
+          const email = (toolCall?.result as any)?.email;
+          const age = (toolCall?.result as any)?.age;
+
+          expect(name).toBe('Dero Israel');
+          expect(email).toBe('test@test.com');
+          expect(age).toBe(25);
+        }
+
+        expect(suspendData.suspendPayload).toBeDefined();
+        expect(suspendData.suspendedToolName).toBe('findUserTool');
+        expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
+      }, 15000);
+
       it('should call findUserWorkflow with suspend and resume', async () => {
         const findUserStep = createStep({
           id: 'find-user-step',
@@ -345,10 +452,6 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             suspendData.suspendedToolName = _chunk.payload.toolName;
           }
         }
-        const db = stream.messageList.get.response.db();
-        const aiv5Ui = stream.messageList.get.response.aiV5.ui();
-        console.dir({ db }, { depth: null });
-        console.dir({ aiv5Ui }, { depth: null });
         if (suspendData.suspendPayload) {
           const resumeStream = await agentOne.resumeStream(
             { name: 'Dero Israel' },
@@ -386,10 +489,10 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the name of the user');
       }, 15000);
 
-      it.only('should call findUserWorkflow with suspend and resume via stream', async () => {
+      it('should call findUserWorkflow with suspend and resume via stream', async () => {
         const findUserStep = createStep({
           id: 'find-user-step',
-          description: 'This is a test step that returns the name and email',
+          description: 'This is a test step that returns the name, email and age',
           inputSchema: z.object({
             name: z.string(),
           }),
@@ -397,33 +500,36 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             message: z.string(),
           }),
           resumeSchema: z.object({
-            name: z.string(),
+            age: z.number(),
           }),
           outputSchema: z.object({
             name: z.string(),
             email: z.string(),
+            age: z.number(),
           }),
-          execute: async ({ suspend, resumeData }) => {
+          execute: async ({ suspend, resumeData, inputData }) => {
             if (!resumeData) {
-              return await suspend({ message: 'Please provide the name of the user' });
+              return await suspend({ message: 'Please provide the age of the user' });
             }
 
             return {
-              name: resumeData?.name,
+              name: inputData?.name,
               email: 'test@test.com',
+              age: resumeData?.age,
             };
           },
         });
 
         const findUserWorkflow = createWorkflow({
           id: 'find-user-workflow',
-          description: 'This is a test tool that returns the name and email',
+          description: 'This is a test tool that returns the name, and age',
           inputSchema: z.object({
             name: z.string(),
           }),
           outputSchema: z.object({
             name: z.string(),
             email: z.string(),
+            age: z.number(),
           }),
         })
           .then(findUserStep)
@@ -447,7 +553,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('userAgent');
 
         let toolCall;
-        const stream = await agentOne.stream('Find the user with name - Dero Israel', {
+        const stream = await agentOne.stream('Find the user with name and age of - Dero Israel', {
           memory: {
             thread: 'test-thread',
             resource: 'test-resource',
@@ -457,28 +563,14 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           suspendPayload: null,
           suspendedToolName: '',
         };
-        let text = '';
         for await (const _chunk of stream.fullStream) {
           if (_chunk.type === 'tool-call-suspended') {
-            console.dir({ 'tool-call-suspended': _chunk }, { depth: null });
             suspendData.suspendPayload = _chunk.payload.suspendPayload;
             suspendData.suspendedToolName = _chunk.payload.toolName;
           }
-          if (_chunk.type === 'text-delta') {
-            text += _chunk.payload.text;
-          }
         }
-
-        const systemMessages = stream.messageList.getSystemMessages();
-        console.dir({ systemMessages }, { depth: null });
-
-        const db = stream.messageList.get.response.db();
-        const aiv5Ui = stream.messageList.get.response.aiV5.ui();
-        console.dir({ db }, { depth: null });
-        console.dir({ aiv5Ui }, { depth: null });
-        console.log('text', text);
         if (suspendData.suspendPayload) {
-          const resumeStream = await agentOne.stream("The user's name is Dero Israel", {
+          const resumeStream = await agentOne.stream('He is 25 years old', {
             memory: {
               thread: 'test-thread',
               resource: 'test-resource',
@@ -486,7 +578,6 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           });
           let resumeText = '';
           for await (const _chunk of resumeStream.fullStream) {
-            // console.dir({ _chunk }, { depth: null });
             if (_chunk.type === 'text-delta') {
               resumeText += _chunk.payload.text;
             }
@@ -501,16 +592,16 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
           const name = toolCall?.result?.result?.name;
           const email = toolCall?.result?.result?.email;
+          const age = toolCall?.result?.result?.age;
 
           expect(name).toBe('Dero Israel');
           expect(email).toBe('test@test.com');
+          expect(age).toBe(25);
         }
 
-        console.dir(suspendData, { depth: null });
-
-        // expect(suspendData.suspendPayload).toBeDefined();
-        // expect(suspendData.suspendedToolName).toBe('workflow-findUserWorkflow');
-        // expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the name of the user');
+        expect(suspendData.suspendPayload).toBeDefined();
+        expect(suspendData.suspendedToolName).toBe('workflow-findUserWorkflow');
+        expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
       }, 15000);
     });
 
