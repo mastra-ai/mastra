@@ -136,41 +136,6 @@ if (result?.status === 'success') {
 }
 ```
 
-## Example with Inngest cron trigger
-
-When using `startAsync()` with Inngest scheduled workflows, wrap the trigger in a memoized step to prevent duplicate executions:
-
-```typescript showLineNumbers copy
-inngest.createFunction(
-  { id: 'cron-my-workflow' },
-  { cron: '0 9 * * *' }, // Every day at 9am
-  async ({ step }) => {
-    // Step 1: Create run (memoized)
-    const runId = await step.run('create-run', async () => {
-      const run = await workflow.createRun();
-      return run.runId;
-    });
-
-    // Step 2: Trigger workflow if not already running
-    await step.run('trigger', async () => {
-      const status = await workflow.getWorkflowRunExecutionResult(runId);
-      if (!status || status.status === 'pending') {
-        const run = await workflow.createRun({ runId });
-        await run.startAsync({ inputData: {} });
-      }
-    });
-
-    // Step 3: Poll for completion (separate from trigger)
-    const result = await step.run('wait', async () => {
-      // Poll workflow.getWorkflowRunExecutionResult(runId)
-      // until status is 'success', 'failed', or 'canceled'
-    });
-
-    return result;
-  }
-);
-```
-
 ## Related
 
 - [Run.start()](./start) - Start a workflow and wait for completion
