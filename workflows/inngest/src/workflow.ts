@@ -238,15 +238,15 @@ export class InngestWorkflow<
           // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
           outputOptions,
           outputWriter: async (chunk: WorkflowStreamEvent) => {
-            void pubsub
-              .publish(`workflow.events.v2.${runId}`, {
+            try {
+              await pubsub.publish(`workflow.events.v2.${runId}`, {
                 type: 'watch',
                 runId,
                 data: chunk,
-              })
-              .catch(err => {
-                this.logger.debug?.('Failed to publish watch event:', err);
               });
+            } catch (err) {
+              this.logger.debug?.('Failed to publish watch event:', err);
+            }
           },
         });
 
