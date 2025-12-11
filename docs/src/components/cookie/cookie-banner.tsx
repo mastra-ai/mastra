@@ -4,9 +4,6 @@ import useIsBrowser from "@docusaurus/useIsBrowser";
 import { useFeatureFlagEnabled } from "posthog-js/react";
 import { Button } from "../ui/button";
 
-// Are you in EU -> yes -> cookie-consent = false -> show banner
-// Are you not in Eu -> no -> cookie-consent = true -> hide banner
-
 declare global {
   interface Window {
     gtag?: (...args: any[]) => void;
