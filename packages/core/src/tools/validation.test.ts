@@ -56,6 +56,25 @@ describe('Tool Input Validation Integration Tests', () => {
       });
     });
 
+    it('should normalize nullish input for mixed required/optional fields', async () => {
+      const tool = createTool({
+        id: 'nullish-mixed-test',
+        description: 'Test nullish input with mixed fields',
+        inputSchema: z.object({
+          requiredField: z.string(),
+          optionalField: z.string().optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, data: inputData };
+        },
+      });
+
+      // Nullish input with required field should fail validation
+      const result = await tool.execute(undefined as any);
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('requiredField');
+    });
 
     it('should validate field types', async () => {
       const tool = createTool({

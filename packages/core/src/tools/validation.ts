@@ -80,8 +80,15 @@ function normalizeNullishInput(schema: ZodLikeSchema, input: unknown): unknown {
     const normalized: Record<string, unknown> = {};
     for (const key in schema.shape) {
       const field = schema.shape[key];
-      // optional fields stay undefined, required fields get a default
-      normalized[key] = field.isOptional() ? undefined : field instanceof z.ZodArray ? [] : {};
+      // Optional fields explicitly set to undefined (valid for Zod optional validation)
+      // Required fields get invalid placeholder ({} or []) to trigger validation errors
+      if (field.isOptional()) {
+        normalized[key] = undefined;
+      } else if (field instanceof z.ZodArray) {
+        normalized[key] = [];
+      } else {
+        normalized[key] = {};
+      }
     }
     return normalized;
   }
