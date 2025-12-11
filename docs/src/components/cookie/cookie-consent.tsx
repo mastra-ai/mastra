@@ -31,12 +31,16 @@ export const CookieConsent = () => {
     console.warn("Hubspot Portal ID is not defined");
   }
 
+  const hasGottenConsentForGoogleTracking =
+    cookieConsent && GA_ID ? true : false;
+  const hasGottenConsentForHubspotTracking =
+    cookieConsent && HS_PORTAL_ID ? true : false;
   return (
     <>
       <CookieBanner onConsentChange={setCookieConsent} />
 
       {/* Google Analytics - Only load with consent */}
-      {cookieConsent && GA_ID && (
+      {hasGottenConsentForGoogleTracking ? (
         <>
           <Head>
             <script
@@ -55,10 +59,10 @@ export const CookieConsent = () => {
             </script>
           </Head>
         </>
-      )}
+      ) : null}
 
       {/* HubSpot - Only load with consent */}
-      {cookieConsent && HS_PORTAL_ID && (
+      {hasGottenConsentForHubspotTracking ? (
         <Head>
           <script
             async
@@ -66,10 +70,10 @@ export const CookieConsent = () => {
             id="hs-script-loader"
           />
         </Head>
-      )}
+      ) : null}
 
       {/* HubSpot - Tell it not to track if consent denied */}
-      {cookieConsent === false && HS_PORTAL_ID && (
+      {!hasGottenConsentForHubspotTracking ? (
         <Head>
           <script id="hubspot-gdpr">
             {`
@@ -78,7 +82,7 @@ export const CookieConsent = () => {
             `}
           </script>
         </Head>
-      )}
+      ) : null}
 
       {/* Reo.dev tracking - Only load with consent */}
       {cookieConsent && (
