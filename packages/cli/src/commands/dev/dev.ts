@@ -125,7 +125,7 @@ const startServer = async (
         if (
           !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on port')
+          !output.includes('Mastra API running on ')
         ) {
           process.stdout.write(output);
         }
@@ -138,7 +138,7 @@ const startServer = async (
         if (
           !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on port')
+          !output.includes('Mastra API running on ')
         ) {
           process.stderr.write(output);
         }
