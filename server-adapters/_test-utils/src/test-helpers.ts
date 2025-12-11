@@ -267,6 +267,17 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   const agent = createTestAgent({ name: 'test-agent', memory });
   mockAgentMethods(agent);
 
+  // Mock Agent.prototype.generate for routes that create new Agent instances
+  // (e.g., ENHANCE_INSTRUCTIONS_ROUTE creates a systemPromptAgent)
+  // This needs to return both text and object for different use cases
+  vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
+    text: 'test response',
+    object: {
+      explanation: 'Enhanced the instructions for clarity and specificity.',
+      new_prompt: 'You are a helpful assistant with enhanced instructions.',
+    },
+  } as any);
+
   // Create test workflow with mocks
   const workflow = createTestWorkflow({ id: 'test-workflow' });
   const mergeTemplateWorkflow = createTestWorkflow({ id: 'merge-template' });
