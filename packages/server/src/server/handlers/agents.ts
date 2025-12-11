@@ -41,6 +41,22 @@ import type { Context } from '../types';
 import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
 
+/**
+ * Checks if a provider has its required API key environment variable(s) configured.
+ * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
+ * @param providerId - The provider identifier (may include a suffix like ".chat")
+ * @returns true if all required environment variables are set, false otherwise
+ */
+function isProviderConnected(providerId: string): boolean {
+  // Clean provider ID (e.g., "openai.chat" -> "openai")
+  const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
+  const provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+  if (!provider) return false;
+
+  const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+  return envVars.every(envVar => !!process.env[envVar]);
+}
+
 export interface SerializedProcessor {
   id: string;
   name?: string;
@@ -656,17 +672,13 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   handler: async () => {
     try {
       const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
-        // Check if the provider is connected by checking for its API key env var(s)
-        const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
-        const connected = envVars.every(envVar => !!process.env[envVar]);
-
         return {
           id,
           name: provider.name,
           label: (provider as any).label || provider.name,
           description: (provider as any).description || '',
           envVar: provider.apiKeyEnvVar,
-          connected,
+          connected: isProviderConnected(id),
           docUrl: provider.docUrl,
           models: [...provider.models], // Convert readonly array to regular array
         };
@@ -1026,17 +1038,6 @@ Return a structured response with:
 - Core domain concepts
 
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
-
-// Helper to check if a provider has its API key configured
-function isProviderConnected(providerId: string): boolean {
-  // Clean provider ID (e.g., "openai.chat" -> "openai")
-  const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
-  const provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
-  if (!provider) return false;
-
-  const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
-  return envVars.every(envVar => !!process.env[envVar]);
-}
 
 // Helper to find the first model with a connected provider
 async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
