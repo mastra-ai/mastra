@@ -19,13 +19,13 @@ export function CookieBanner({
 }: {
   onConsentChange: (consent: boolean) => void;
 }) {
-  const [showBanner, setShowBanner] = useState(false);
+  const [showBanner, setShowBanner] = useState(null);
   const isBrowser = useIsBrowser();
 
   // Try to use feature flag, but default to true if undefined
   // This ensures the banner works even if PostHog isn't properly initialized
   const featureFlag = useFeatureFlagEnabled("cookie-banner");
-  const isInEU = featureFlag !== undefined ? featureFlag : true;
+  const isInEU = featureFlag !== undefined ? featureFlag : false;
 
   useEffect(() => {
     if (!isBrowser) return;
@@ -40,6 +40,8 @@ export function CookieBanner({
         ad_personalization: "granted",
       });
       return;
+    } else {
+      setShowBanner(true);
     }
   }, [isInEU, isBrowser]);
 
@@ -67,7 +69,8 @@ export function CookieBanner({
     setShowBanner(false);
   };
 
-  if (!showBanner || !isInEU) return null;
+  if (showBanner === null) return null;
+  if (showBanner === false) return null;
 
   return (
     <div className="fixed shadow-[0_4px_24px_rgba(0,0,0,.1)] bottom-8 right-20 z-50 flex w-[322px] items-center justify-center rounded-xl dark:border-neutral-700 dark:border bg-white dark:bg-black p-4">
