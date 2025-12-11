@@ -1,21 +1,113 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { ObservationFocus, ObservationFocusType } from './types';
 
 /**
- * Observer Agent System Prompt
- *
- * This prompt instructs the Observer to extract observations from message history.
- * The observations become the agent's "subconscious memory" - the ONLY information
- * the main agent will have about past interactions.
+ * Focus area descriptions for the observer prompt.
+ * Maps focus types to their prompt instructions.
  */
-export const OBSERVER_SYSTEM_PROMPT = `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
+const FOCUS_AREA_DESCRIPTIONS: Record<string, string> = {
+  'personal-facts': `PERSONAL/BIOGRAPHICAL FACTS (HIGH PRIORITY):
+- Education: degrees, schools, majors, graduation dates
+- Work history: jobs, companies, roles, career changes
+- Personal identity: name, age, location, nationality
+- Family: spouse, children, parents, siblings mentioned
+- Life events: moves, marriages, milestones
+- Any "I am...", "I have...", "I graduated...", "I work at..." statements
+- Capture these EXACTLY as stated - they are critical for recall`,
+
+  preferences: `USER PREFERENCES:
+- Explicit preferences (e.g., "I prefer short answers", "I like examples")
+- Communication style (e.g., "User dislikes verbose explanations")
+- Tool/technology preferences
+- Format preferences (bullet points, code examples, etc.)`,
+
+  tasks: `CURRENT TASKS & PROJECTS:
+- What the user is working on
+- Goals and objectives stated
+- Progress and milestones
+- Next steps mentioned
+- Blockers or challenges`,
+
+  technical: `TECHNICAL CONTEXT:
+- Programming languages and frameworks used
+- Technical level and expertise
+- Code snippets and implementations
+- Architecture decisions
+- Technical requirements and constraints`,
+
+  temporal: `TEMPORAL INFORMATION:
+- Specific dates mentioned (deadlines, events, appointments)
+- Schedules and routines
+- Time-sensitive information
+- "Yesterday", "last week", "next month" references with context`,
+
+  relationships: `RELATIONSHIPS & PEOPLE:
+- Names of people mentioned (colleagues, friends, family)
+- Relationships between people
+- Organizations and teams
+- Contact information if shared`,
+
+  health: `HEALTH & WELLNESS:
+- Health conditions mentioned
+- Medications or treatments
+- Fitness goals and activities
+- Dietary preferences or restrictions`,
+
+  financial: `FINANCIAL INFORMATION:
+- Budget constraints mentioned
+- Financial goals
+- Purchases or expenses discussed
+- Financial preferences`,
+
+  location: `LOCATION & TRAVEL:
+- Current location/residence
+- Places mentioned
+- Travel plans or history
+- Geographic preferences`,
+};
+
+/**
+ * Build the focus areas section of the prompt based on configuration.
+ */
+function buildFocusSection(focus?: ObservationFocus): string {
+  // Default focus areas if none specified
+  const defaultFocus: ObservationFocusType[] = ['preferences', 'tasks', 'technical'];
+  const includedTypes = focus?.include ?? defaultFocus;
+  const excludedTypes = focus?.exclude ?? [];
+
+  const sections: string[] = [];
+
+  for (const focusType of includedTypes) {
+    // Skip if excluded
+    if (typeof focusType === 'string' && excludedTypes.includes(focusType)) {
+      continue;
+    }
+
+    if (typeof focusType === 'string') {
+      const description = FOCUS_AREA_DESCRIPTIONS[focusType];
+      if (description) {
+        sections.push(description);
+      }
+    } else if (focusType.custom) {
+      // Custom focus area
+      sections.push(`CUSTOM FOCUS:\n${focusType.custom}`);
+    }
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Build the complete observer system prompt with focus areas.
+ */
+export function buildObserverSystemPrompt(focus?: ObservationFocus): string {
+  const focusSection = buildFocusSection(focus);
+
+  return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
 
 Extract observations that will help the assistant remember:
 
-CRITICAL USER INFORMATION:
-- Explicit preferences (e.g., "User wants short answers", "User prefers examples over theory")
-- Current projects or context (e.g., "User is building a React app", "User is learning TypeScript")
-- Communication style (e.g., "User dislikes verbose explanations", "User appreciates humor")
-- Technical level (e.g., "User is familiar with JavaScript", "User is new to async programming")
+${focusSection}
 
 CONVERSATION CONTEXT:
 - What the user is working on or asking about
@@ -91,6 +183,16 @@ In addition to observations, make sure you add a section at the bottom saying ex
 Note that the user messages are extremely important. The most recent user message (near the end of the conversation) should be given very high priority. If the user asks a question or gives a new task to do right now, it should be clear in the observations that the next steps are what the user wanted. Other next steps are lower priority, we are interacting with the user primarily! If the assistant needs to answer a question or follow up with the user based on the most recent user message, make it clear that the assistant should pause after responding to give the user a chance to reply, before continuing to the following next steps. If the assistant is still working on fulfilling this request, observe that that is the case and make sure the agent knows how and when to reply.
 
 Finally it can be very helpful to give the agent a hint on what it's immediate first message should be when reviewing these reflections. eg should the agent call a specific tool? or should they respond with some text. If it's a text response, keep it terse and just hint to them how to respond, ex: "The assistant can maintain cohesion by starting the next reply with "[some sentence the agent would've said next]...". Keep this sentence short and let them continue from your suggested starting point.`;
+}
+
+/**
+ * Observer Agent System Prompt (default - for backwards compatibility)
+ *
+ * This prompt instructs the Observer to extract observations from message history.
+ * The observations become the agent's "subconscious memory" - the ONLY information
+ * the main agent will have about past interactions.
+ */
+export const OBSERVER_SYSTEM_PROMPT = buildObserverSystemPrompt();
 
 /**
  * Result from the Observer agent
@@ -157,6 +259,7 @@ export function formatMessagesForObserver(messages: MastraDBMessage[]): string {
 
 /**
  * Build the full prompt for the Observer agent.
+ * Includes emphasis on the most recent user message for priority handling.
  */
 export function buildObserverPrompt(
   existingObservations: string | undefined,
@@ -168,16 +271,55 @@ export function buildObserverPrompt(
 
   if (existingObservations) {
     prompt += `## Previous Observations\n\n${existingObservations}\n\n---\n\n`;
+    prompt +=
+      'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
   }
 
   prompt += `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n`;
-  prompt += `## Your Task\n\nExtract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
+
+  // Find and emphasize the most recent user message
+  const recentUserMessage = findMostRecentUserMessage(messagesToObserve);
+  if (recentUserMessage) {
+    prompt += `## IMPORTANT: Most Recent User Message\n\n`;
+    prompt += `The most recent user message is CRITICAL and should be given HIGH PRIORITY in your observations:\n\n`;
+    prompt += `"${recentUserMessage}"\n\n`;
+    prompt += `Make sure your observations clearly capture what the user wants from this message, and ensure the Current Task section reflects this.\n\n---\n\n`;
+  }
+
+  prompt += `## Your Task\n\n`;
+  prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.\n\n`;
+  prompt += `IMPORTANT: You MUST end your observations with a "**Current Task:**" line that clearly states what the assistant should do next based on the most recent user request.`;
 
   return prompt;
 }
 
 /**
+ * Find the most recent user message from the messages array.
+ */
+function findMostRecentUserMessage(messages: MastraDBMessage[]): string | null {
+  // Look from the end backwards
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role === 'user') {
+      // Extract text content
+      if (typeof msg.content === 'string') {
+        return msg.content;
+      } else if (msg.content?.content) {
+        return msg.content.content;
+      } else if (msg.content?.parts) {
+        const textPart = msg.content.parts.find((p: { type: string }) => p.type === 'text');
+        if (textPart && 'text' in textPart) {
+          return textPart.text;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Parse the Observer's output to extract observations and continuity message.
+ * Also validates that a Current Task section is present.
  */
 export function parseObserverOutput(output: string): ObserverResult {
   // Look for the continuity/cohesion hint
@@ -190,12 +332,45 @@ export function parseObserverOutput(output: string): ObserverResult {
     suggestedContinuation = cohesionMatch[1]?.trim();
   }
 
-  // The observations are everything in the output (we'll store the full thing)
+  // Validate and potentially add Current Task section if missing
+  let observations = output.trim();
+  if (!hasCurrentTaskSection(observations)) {
+    console.warn('[OM Observer] Warning: Observations missing "Current Task" section. Adding default.');
+    observations += '\n\n**Current Task:** Continue based on the most recent user message.';
+  }
+
   return {
-    observations: output.trim(),
+    observations,
     suggestedContinuation,
     rawOutput: output,
   };
+}
+
+/**
+ * Check if observations contain a Current Task section.
+ */
+export function hasCurrentTaskSection(observations: string): boolean {
+  // Look for various forms of "Current Task" header
+  const currentTaskPatterns = [
+    /\*\*Current Task:?\*\*/i,
+    /^Current Task:/im,
+    /\*\*Current Task\*\*:/i,
+    /## Current Task/i,
+  ];
+
+  return currentTaskPatterns.some(pattern => pattern.test(observations));
+}
+
+/**
+ * Extract the Current Task content from observations.
+ */
+export function extractCurrentTask(observations: string): string | null {
+  // Match "**Current Task:** content until next section or end"
+  const match = observations.match(/\*\*Current Task:?\*\*:?\s*(.+?)(?=\n\n|\n\*\*|\n##|$)/is);
+  if (match?.[1]) {
+    return match[1].trim();
+  }
+  return null;
 }
 
 /**

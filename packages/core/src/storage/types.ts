@@ -315,6 +315,8 @@ export interface ObservationalMemoryRecord {
   totalTokensObserved: number;
   /** Current size of active observations */
   observationTokenCount: number;
+  /** Accumulated tokens from pending (unobserved) messages across sessions */
+  pendingMessageTokens: number;
 
   // State flags
   /** Is a reflection currently in progress? */

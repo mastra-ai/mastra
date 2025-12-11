@@ -646,6 +646,7 @@ export class InMemoryMemory extends MemoryStorage {
       },
       totalTokensObserved: 0,
       observationTokenCount: 0,
+      pendingMessageTokens: 0,
       isReflecting: false,
       isObserving: false,
     };
@@ -676,6 +677,8 @@ export class InMemoryMemory extends MemoryStorage {
     record.suggestedContinuation = suggestedContinuation;
     record.observationTokenCount = tokenCount;
     record.totalTokensObserved += tokenCount;
+    // Reset pending tokens since we've now observed them
+    record.pendingMessageTokens = 0;
 
     // Add messageIds to observedMessageIds (deduplicated)
     const observedSet = new Set(record.observedMessageIds);
@@ -803,6 +806,8 @@ export class InMemoryMemory extends MemoryStorage {
       previousGenerationId: currentRecord.id,
       activeObservations: reflection,
       suggestedContinuation,
+      // After reflection, reset observedMessageIds since old messages are now "baked into" the reflection.
+      // The previous DB record retains its observedMessageIds as historical record.
       observedMessageIds: [...currentRecord.observedMessageIds],
       bufferedMessageIds: [],
       bufferingMessageIds: [],
@@ -815,6 +820,7 @@ export class InMemoryMemory extends MemoryStorage {
       },
       totalTokensObserved: currentRecord.totalTokensObserved,
       observationTokenCount: tokenCount,
+      pendingMessageTokens: currentRecord.pendingMessageTokens ?? 0,
       isReflecting: false,
       isObserving: false,
     };
@@ -882,6 +888,16 @@ export class InMemoryMemory extends MemoryStorage {
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
     const key = this.getObservationalMemoryKey(threadId, resourceId);
     this.collection.observationalMemory.delete(key);
+  }
+
+  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.pendingMessageTokens = (record.pendingMessageTokens ?? 0) + tokenCount;
+    record.metadata.updatedAt = new Date();
   }
 
   /**

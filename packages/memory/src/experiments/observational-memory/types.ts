@@ -1,3 +1,5 @@
+import type { MastraModelConfig } from '@mastra/core/llm';
+
 /**
  * Threshold can be a simple number or a dynamic range.
  *
@@ -58,14 +60,67 @@ export interface ProviderOptions {
 }
 
 /**
+ * Predefined observation focus areas.
+ * These control what types of information the observer prioritizes.
+ */
+export type ObservationFocusType =
+  /** Personal/biographical facts: education, work history, family, location, age, etc. */
+  | 'personal-facts'
+  /** User preferences and communication style */
+  | 'preferences'
+  /** Current projects, tasks, and goals */
+  | 'tasks'
+  /** Technical context and code-related information */
+  | 'technical'
+  /** Temporal information: dates, deadlines, schedules */
+  | 'temporal'
+  /** Relationships and people mentioned */
+  | 'relationships'
+  /** Health and wellness information */
+  | 'health'
+  /** Financial information */
+  | 'financial'
+  /** Location and travel information */
+  | 'location'
+  /** Custom focus area with description */
+  | { custom: string };
+
+/**
+ * Configuration for observation focus areas.
+ * Controls what types of information the observer prioritizes extracting.
+ */
+export interface ObservationFocus {
+  /**
+   * Focus areas to prioritize.
+   * Can be predefined types or custom descriptions.
+   *
+   * @example
+   * // Use predefined focus areas
+   * focus: ['personal-facts', 'preferences', 'tasks']
+   *
+   * @example
+   * // Add custom focus area
+   * focus: ['personal-facts', { custom: 'Product preferences and purchase history' }]
+   */
+  include: ObservationFocusType[];
+
+  /**
+   * Optional: Areas to explicitly deprioritize or skip.
+   * Useful for privacy or to reduce noise.
+   */
+  exclude?: ObservationFocusType[];
+}
+
+/**
  * Configuration for the Observer agent
  */
 export interface ObserverConfig {
   /**
-   * Model ID for the Observer agent.
+   * Model for the Observer agent.
+   * Can be a model ID string (e.g., 'openai/gpt-4o') or a LanguageModel instance.
    * @default 'google/gemini-2.5-flash'
    */
-  model?: string;
+  model?: MastraModelConfig;
 
   /**
    * Token threshold for message history before triggering observation.
@@ -99,6 +154,32 @@ export interface ObserverConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 215 } } }
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Focus areas for observation extraction.
+   * Controls what types of information the observer prioritizes.
+   *
+   * @default { include: ['preferences', 'tasks', 'technical'] }
+   *
+   * @example
+   * // For a personal assistant that needs to remember user facts
+   * focus: {
+   *   include: ['personal-facts', 'preferences', 'relationships', 'health']
+   * }
+   *
+   * @example
+   * // For a coding assistant
+   * focus: {
+   *   include: ['technical', 'tasks', 'preferences']
+   * }
+   *
+   * @example
+   * // For a benchmark like LongMemEval
+   * focus: {
+   *   include: ['personal-facts', 'preferences', 'temporal', 'relationships', 'tasks']
+   * }
+   */
+  focus?: ObservationFocus;
 }
 
 /**
@@ -106,10 +187,11 @@ export interface ObserverConfig {
  */
 export interface ReflectorConfig {
   /**
-   * Model ID for the Reflector agent.
+   * Model for the Reflector agent.
+   * Can be a model ID string (e.g., 'openai/gpt-4o') or a LanguageModel instance.
    * @default 'google/gemini-2.5-flash'
    */
-  model?: string;
+  model?: MastraModelConfig;
 
   /**
    * Token threshold for observations before triggering reflection.
@@ -162,4 +244,42 @@ export interface ReflectorResult {
 
   /** Suggested continuation for the Actor */
   suggestedContinuation?: string;
+}
+
+/**
+ * Configuration for memory collapsing (graceful decay).
+ * Older observation sections are collapsed into summaries
+ * while recent sections remain fully expanded.
+ */
+export interface CollapseConfig {
+  /**
+   * Whether to enable automatic collapsing.
+   * @default true
+   */
+  enabled?: boolean;
+
+  /**
+   * Minimum number of children in a section before it can be collapsed.
+   * @default 5
+   */
+  minChildrenToCollapse?: number;
+
+  /**
+   * Number of most recent top-level sections to keep fully expanded.
+   * @default 2
+   */
+  keepRecentSections?: number;
+
+  /**
+   * Number of child items to keep visible after collapse (shown at end).
+   * @default 5
+   */
+  keepLastChildren?: number;
+
+  /**
+   * Regex patterns for sections that should never be collapsed.
+   * For example, you might want to keep "Current Task" sections always visible.
+   * @default [/Current Task/i]
+   */
+  excludePatterns?: RegExp[];
 }

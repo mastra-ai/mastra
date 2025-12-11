@@ -15,17 +15,42 @@
 export { ObservationalMemory, type ObservationalMemoryConfig } from './observational-memory';
 
 // Types
-export type { ObserverConfig, ReflectorConfig, ObserverResult, ReflectorResult } from './types';
+export type {
+  ObserverConfig,
+  ReflectorConfig,
+  ObserverResult,
+  ReflectorResult,
+  ObservationFocus,
+  ObservationFocusType,
+  CollapseConfig,
+} from './types';
 
 // Observer Agent
 export {
   OBSERVER_SYSTEM_PROMPT,
+  buildObserverSystemPrompt,
   buildObserverPrompt,
   parseObserverOutput,
   optimizeObservationsForContext,
   formatMessagesForObserver,
+  hasCurrentTaskSection,
+  extractCurrentTask,
   type ObserverResult as ObserverAgentResult,
 } from './observer-agent';
+
+// Memory Collapsing
+export {
+  collapseObservations,
+  parseObservationSections,
+  retrieveCollapsedSection,
+  expandCollapsedSection,
+  generateSectionId,
+  type ObservationSection,
+  type CollapseOptions,
+  type CollapsedSection,
+  type CollapseResult,
+  type RetrieveResult,
+} from './collapser';
 
 // Re-export storage types from core for convenience
 export type {

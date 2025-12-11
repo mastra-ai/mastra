@@ -230,6 +230,15 @@ export abstract class MemoryStorage extends MastraBase {
   async clearObservationalMemory(_threadId: string | null, _resourceId: string): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
+
+  /**
+   * Add to the pending message token count.
+   * Called when messages are processed but observation hasn't triggered yet.
+   * This allows accumulating tokens across multiple sessions.
+   */
+  async addPendingMessageTokens(_id: string, _tokenCount: number): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
 }
 
 const THREAD_ORDER_BY_SET: Record<ThreadOrderBy, true> = {

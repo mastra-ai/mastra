@@ -1,9 +1,13 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import type { Processor, ProcessInputArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
+
+import { collapseObservations } from './collapser';
+import type { CollapsedSection } from './collapser';
 import {
-  OBSERVER_SYSTEM_PROMPT,
+  buildObserverSystemPrompt,
   buildObserverPrompt,
   parseObserverOutput,
   optimizeObservationsForContext,
@@ -15,7 +19,15 @@ import {
   validateCompression,
 } from './reflector-agent';
 import { TokenCounter } from './token-counter';
-import type { ObserverConfig, ReflectorConfig, ThresholdRange, ModelSettings, ProviderOptions } from './types';
+import type {
+  ObserverConfig,
+  ReflectorConfig,
+  ThresholdRange,
+  ModelSettings,
+  ProviderOptions,
+  ObservationFocus,
+  CollapseConfig,
+} from './types';
 
 /**
  * Configuration for ObservationalMemory
@@ -43,25 +55,41 @@ export interface ObservationalMemoryConfig {
    * If false (default), observations are per-thread.
    */
   resourceScope?: boolean;
+
+  /**
+   * Configuration for memory collapsing (graceful decay).
+   * When enabled, older observation sections are collapsed into summaries
+   * while recent sections remain fully expanded.
+   */
+  collapse?: CollapseConfig;
 }
 
 /**
  * Internal resolved config with all defaults applied
  */
 interface ResolvedObserverConfig {
-  model: string;
+  model: MastraModelConfig;
   historyThreshold: number | ThresholdRange;
+  bufferEvery?: number;
+  modelSettings: Required<ModelSettings>;
+  providerOptions: ProviderOptions;
+  focus?: ObservationFocus;
+}
+
+interface ResolvedReflectorConfig {
+  model: MastraModelConfig;
+  observationThreshold: number | ThresholdRange;
   bufferEvery?: number;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
 }
 
-interface ResolvedReflectorConfig {
-  model: string;
-  observationThreshold: number | ThresholdRange;
-  bufferEvery?: number;
-  modelSettings: Required<ModelSettings>;
-  providerOptions: ProviderOptions;
+interface ResolvedCollapseConfig {
+  enabled: boolean;
+  minChildrenToCollapse: number;
+  keepRecentSections: number;
+  keepLastChildren: number;
+  excludePatterns: RegExp[];
 }
 
 /**
@@ -87,7 +115,7 @@ const DEFAULTS = {
     model: 'google/gemini-2.5-flash',
     observationThreshold: 30_000,
     modelSettings: {
-      temperature: 0.3,
+      temperature: 0, // Use 0 for maximum consistency in reflections
       maxOutputTokens: 100_000,
     },
     providerOptions: {
@@ -165,6 +193,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private resourceScope: boolean;
   private observerConfig: ResolvedObserverConfig;
   private reflectorConfig: ResolvedReflectorConfig;
+  private collapseConfig: ResolvedCollapseConfig;
+
+  /**
+   * Store collapsed sections for retrieval.
+   * Key is recordId, value is array of collapsed sections.
+   */
+  private collapsedSectionsCache: Map<string, CollapsedSection[]> = new Map();
 
   /** Internal Observer agent - created lazily */
   private observerAgent?: Agent;
@@ -199,6 +234,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           config.observer?.modelSettings?.maxOutputTokens ?? DEFAULTS.observer.modelSettings.maxOutputTokens,
       },
       providerOptions: config.observer?.providerOptions ?? DEFAULTS.observer.providerOptions,
+      focus: config.observer?.focus,
     };
 
     // Resolve reflector config with defaults
@@ -212,6 +248,15 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           config.reflector?.modelSettings?.maxOutputTokens ?? DEFAULTS.reflector.modelSettings.maxOutputTokens,
       },
       providerOptions: config.reflector?.providerOptions ?? DEFAULTS.reflector.providerOptions,
+    };
+
+    // Resolve collapse config with defaults
+    this.collapseConfig = {
+      enabled: config.collapse?.enabled ?? true,
+      minChildrenToCollapse: config.collapse?.minChildrenToCollapse ?? 5,
+      keepRecentSections: config.collapse?.keepRecentSections ?? 2,
+      keepLastChildren: config.collapse?.keepLastChildren ?? 5,
+      excludePatterns: config.collapse?.excludePatterns ?? [/Current Task/i],
     };
 
     this.tokenCounter = new TokenCounter();
@@ -285,10 +330,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObserverAgent(): Agent {
     if (!this.observerAgent) {
+      // Build system prompt with focus configuration
+      const systemPrompt = buildObserverSystemPrompt(this.observerConfig.focus);
+
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
         name: 'Observer',
-        instructions: OBSERVER_SYSTEM_PROMPT,
+        instructions: systemPrompt,
         model: this.observerConfig.model,
       });
     }
@@ -624,7 +672,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Format observations for injection into context.
-   * Applies token optimization before presenting to the Actor.
+   * Applies collapsing and token optimization before presenting to the Actor.
    *
    * In resource scope mode, filters continuity messages to only show
    * the message for the current thread.
@@ -634,9 +682,32 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedContinuation?: string,
     currentThreadId?: string,
     threadContinuityMessages?: Record<string, string>,
+    recordId?: string,
   ): string {
+    let processedObservations = observations;
+
+    // Apply collapsing if enabled
+    if (this.collapseConfig.enabled) {
+      const collapseResult = collapseObservations(observations, {
+        minChildrenToCollapse: this.collapseConfig.minChildrenToCollapse,
+        keepRecentCount: this.collapseConfig.keepRecentSections,
+        keepLastChildren: this.collapseConfig.keepLastChildren,
+        excludePatterns: this.collapseConfig.excludePatterns,
+      });
+
+      processedObservations = collapseResult.text;
+
+      // Cache collapsed sections for potential retrieval
+      if (recordId && collapseResult.collapsedSections.length > 0) {
+        this.collapsedSectionsCache.set(recordId, collapseResult.collapsedSections);
+        console.info(
+          `[OM] Collapsed ${collapseResult.collapsedSections.length} sections, saved ${collapseResult.tokensSaved} tokens`,
+        );
+      }
+    }
+
     // Optimize observations to save tokens
-    const optimized = optimizeObservationsForContext(observations);
+    const optimized = optimizeObservationsForContext(processedObservations);
 
     let content = `<observational_memory>
 ${optimized}
@@ -719,6 +790,7 @@ ${continuityMessage}
         record.suggestedContinuation,
         threadId, // Current thread for continuity message filtering
         record.threadContinuityMessages, // Per-thread continuity messages (resource scope)
+        record.id, // Record ID for caching collapsed sections
       );
       console.log(`[OM processInput] Injecting observations (${observationSystemMessage.length} chars)`);
       if (this.resourceScope) {
@@ -767,36 +839,47 @@ ${continuityMessage}
 
     const allMessages = messageList.get.all.db();
     const unobservedMessages = this.getUnobservedMessages(allMessages, record);
-    const messageTokens = this.tokenCounter.countMessages(unobservedMessages);
+    const currentSessionTokens = this.tokenCounter.countMessages(unobservedMessages);
     const currentObservationTokens = record.observationTokenCount ?? 0;
+    // Include pending tokens from previous sessions for threshold check
+    // Use type assertion since pendingMessageTokens was just added to ObservationalMemoryRecord
+    const pendingTokens = record.pendingMessageTokens ?? 0;
+    const totalPendingTokens = pendingTokens + currentSessionTokens;
 
     console.log(
-      `[OM processOutputResult] Messages: ${allMessages.length}, Unobserved: ${unobservedMessages.length}, Tokens: ${messageTokens}, Threshold: ${this.getMaxThreshold(this.observerConfig.historyThreshold)}`,
+      `[OM processOutputResult] Messages: ${allMessages.length}, Unobserved: ${unobservedMessages.length}, ` +
+        `SessionTokens: ${currentSessionTokens}, PendingTokens: ${pendingTokens}, TotalPending: ${totalPendingTokens}, ` +
+        `Threshold: ${this.getMaxThreshold(this.observerConfig.historyThreshold)}`,
     );
 
     // ═══════════════════════════════════════════════════════════════════
     // STEP 1: Check if we should START async buffering (proactive)
     // ═══════════════════════════════════════════════════════════════════
     const bufferEvery = this.observerConfig.bufferEvery;
-    const shouldBuffer = this.shouldStartObservationBuffering(record.id, messageTokens, currentObservationTokens);
-    console.log(`[OM] Buffer check: tokens=${messageTokens}, bufferEvery=${bufferEvery}, shouldBuffer=${shouldBuffer}`);
+    const shouldBuffer = this.shouldStartObservationBuffering(record.id, totalPendingTokens, currentObservationTokens);
+    console.log(
+      `[OM] Buffer check: totalPending=${totalPendingTokens}, bufferEvery=${bufferEvery}, shouldBuffer=${shouldBuffer}`,
+    );
 
     if (shouldBuffer) {
-      console.log(`[OM] Starting async observation buffering (${messageTokens} >= ${bufferEvery})`);
-      this.startObservationBuffering(record, threadId, unobservedMessages, messageTokens);
+      console.log(`[OM] Starting async observation buffering (${totalPendingTokens} >= ${bufferEvery})`);
+      this.startObservationBuffering(record, threadId, unobservedMessages, totalPendingTokens);
       // Don't wait - continue with normal flow
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // STEP 2: Check if we need to OBSERVE (threshold exceeded)
+    // Use totalPendingTokens to trigger observation when accumulated across sessions
     // ═══════════════════════════════════════════════════════════════════
     const threshold = this.calculateDynamicThreshold(
       this.observerConfig.historyThreshold,
       currentObservationTokens,
       this.getMaxThreshold(this.reflectorConfig.observationThreshold),
     );
-    const shouldObserveNow = this.shouldObserve(messageTokens, currentObservationTokens);
-    console.log(`[OM] Observe check: tokens=${messageTokens} > threshold=${threshold} ? ${shouldObserveNow}`);
+    const shouldObserveNow = this.shouldObserve(totalPendingTokens, currentObservationTokens);
+    console.log(
+      `[OM] Observe check: totalPending=${totalPendingTokens} > threshold=${threshold} ? ${shouldObserveNow}`,
+    );
 
     if (shouldObserveNow) {
       const threshold = this.calculateDynamicThreshold(
@@ -805,7 +888,7 @@ ${continuityMessage}
         this.getMaxThreshold(this.reflectorConfig.observationThreshold),
       );
 
-      console.log(`[OM] History threshold exceeded (${messageTokens} > ${threshold})`);
+      console.log(`[OM] History threshold exceeded (${totalPendingTokens} > ${threshold})`);
 
       // Check if buffering is in progress
       const bufferingOp = this.observationBuffering.get(record.id);
@@ -851,6 +934,14 @@ ${continuityMessage}
 
         await this.doSynchronousObservation(record, threadId, unobservedMessages);
       }
+    } else if (currentSessionTokens > 0) {
+      // ═══════════════════════════════════════════════════════════════════
+      // Observation not triggered - accumulate pending tokens for next check
+      // This allows observations to trigger after multiple small sessions
+      // ═══════════════════════════════════════════════════════════════════
+      console.log(`[OM] Accumulating ${currentSessionTokens} pending tokens (total will be ${totalPendingTokens})`);
+      // Use type assertion since addPendingMessageTokens was just added to MemoryStorage
+      await (this.storage as any).addPendingMessageTokens(record.id, currentSessionTokens);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1085,5 +1176,38 @@ ${continuityMessage}
    */
   getReflectorConfig(): ResolvedReflectorConfig {
     return this.reflectorConfig;
+  }
+
+  /**
+   * Get current collapse configuration
+   */
+  getCollapseConfig(): ResolvedCollapseConfig {
+    return this.collapseConfig;
+  }
+
+  /**
+   * Get collapsed sections for a specific record.
+   * Returns the cached collapsed sections that can be expanded if needed.
+   */
+  getCollapsedSections(recordId: string): CollapsedSection[] {
+    return this.collapsedSectionsCache.get(recordId) ?? [];
+  }
+
+  /**
+   * Expand a collapsed section by ID.
+   * Returns the original full content of the collapsed section.
+   *
+   * @param recordId - The record ID
+   * @param sectionId - The 4-character hex ID of the collapsed section
+   * @returns The original content or null if not found
+   */
+  expandCollapsedSection(recordId: string, sectionId: string): string | null {
+    const sections = this.collapsedSectionsCache.get(recordId);
+    if (!sections) return null;
+
+    const section = sections.find(s => s.id === sectionId);
+    if (!section) return null;
+
+    return section.originalContent;
   }
 }

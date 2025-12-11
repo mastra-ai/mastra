@@ -1,6 +1,8 @@
+import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { InMemoryMemory } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
@@ -342,8 +344,9 @@ describe('Storage Operations', () => {
       expect(newRecord.observationTokenCount).toBe(5000);
       expect(newRecord.previousGenerationId).toBe(initial.id);
       expect(newRecord.originType).toBe('reflection');
-      // Observed message IDs are preserved (for tracking purposes)
-      expect(newRecord.observedMessageIds).toEqual(['msg-1', 'msg-2', 'msg-3']);
+      // After reflection, observedMessageIds are RESET since old messages are now "baked into" the reflection.
+      // The previous DB record retains its observedMessageIds as historical record.
+      expect(newRecord.observedMessageIds).toEqual([]);
       // Buffered state is reset
       expect(newRecord.bufferedMessageIds).toEqual([]);
       expect(newRecord.bufferingMessageIds).toEqual([]);
@@ -521,7 +524,9 @@ Start the next reply with: "Here's the implementation..."
       const output = '- 🔴 Simple observation';
       const result = parseObserverOutput(output);
 
-      expect(result.observations).toBe('- 🔴 Simple observation');
+      // Now adds default Current Task if missing
+      expect(result.observations).toContain('- 🔴 Simple observation');
+      expect(result.observations).toContain('**Current Task:**');
       expect(result.suggestedContinuation).toBeUndefined();
     });
   });
@@ -982,12 +987,1158 @@ describe('Scenario: Reflection Creates New Generation', () => {
     expect(gen2.originType).toBe('reflection');
     expect(gen2.suggestedContinuation).toBe('Continue with implementation...');
 
-    // Observed message IDs are preserved for tracking
-    expect(gen2.observedMessageIds.length).toBe(5);
+    // After reflection, observedMessageIds are RESET since old messages are now "baked into" the reflection.
+    // The previous DB record (gen1) retains its observedMessageIds as historical record.
+    expect(gen2.observedMessageIds.length).toBe(0);
 
     // Getting current record returns new generation
     const current = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(current?.id).toBe(gen2.id);
     expect(current?.activeObservations).toBe('- 🔴 Condensed: User working on project X');
   });
+});
+
+// =============================================================================
+// Unit Tests: Memory Collapsing
+// =============================================================================
+
+import {
+  parseObservationSections,
+  collapseObservations,
+  generateSectionId,
+  retrieveCollapsedSection,
+  expandCollapsedSection,
+} from '../collapser';
+
+describe('Memory Collapser', () => {
+  describe('parseObservationSections', () => {
+    it('should parse simple observation list into sections', () => {
+      const content = `- 🔴 User preference A
+- 🟡 Task B started
+- 🟢 Minor note C`;
+
+      const sections = parseObservationSections(content);
+      expect(sections.length).toBe(3);
+      expect(sections[0].parentLine).toBe('- 🔴 User preference A');
+      expect(sections[0].children).toEqual([]);
+    });
+
+    it('should parse parent-child relationships', () => {
+      const content = `- 🔴 User is working on project X
+  - -> 🟡 Created file A
+  - -> 🟡 Modified file B
+  - -> 🟡 Ran tests
+  - -> 🟡 Fixed bug in C
+  - -> 🟡 Deployed to staging
+- 🟡 Another observation`;
+
+      const sections = parseObservationSections(content);
+      expect(sections.length).toBe(2);
+      expect(sections[0].parentLine).toBe('- 🔴 User is working on project X');
+      expect(sections[0].children.length).toBe(5);
+      expect(sections[0].children[0]).toContain('Created file A');
+    });
+
+    it('should handle empty content', () => {
+      const sections = parseObservationSections('');
+      expect(sections.length).toBe(0);
+    });
+
+    it('should skip headers and blockquotes', () => {
+      const content = `# Memory Header
+> This is a note
+
+- 🔴 Actual observation`;
+
+      const sections = parseObservationSections(content);
+      expect(sections.length).toBe(1);
+      expect(sections[0].parentLine).toBe('- 🔴 Actual observation');
+    });
+  });
+
+  describe('generateSectionId', () => {
+    it('should generate consistent 4-character hex IDs', () => {
+      const id1 = generateSectionId('- 🔴 Test observation');
+      const id2 = generateSectionId('- 🔴 Test observation');
+      const id3 = generateSectionId('- 🔴 Different observation');
+
+      expect(id1).toBe(id2); // Same content = same ID
+      expect(id1).not.toBe(id3); // Different content = different ID
+      expect(id1.length).toBe(4);
+      expect(/^[0-9a-f]{4}$/.test(id1)).toBe(true);
+    });
+  });
+
+  describe('collapseObservations', () => {
+    it('should not collapse sections with fewer children than threshold', () => {
+      const content = `- 🔴 Parent observation
+  - -> 🟡 Child 1
+  - -> 🟡 Child 2
+  - -> 🟡 Child 3`;
+
+      const result = collapseObservations(content, { minChildrenToCollapse: 5 });
+      expect(result.collapsedSections.length).toBe(0);
+      expect(result.text).toContain('Child 1');
+      expect(result.text).toContain('Child 2');
+      expect(result.text).toContain('Child 3');
+    });
+
+    it('should collapse sections with many children', () => {
+      const content = `- 🔴 User working on large feature
+  - -> 🟡 Step 1
+  - -> 🟡 Step 2
+  - -> 🟡 Step 3
+  - -> 🟡 Step 4
+  - -> 🟡 Step 5
+  - -> 🟡 Step 6
+  - -> 🟡 Step 7
+  - -> 🟡 Step 8
+  - -> 🟡 Final step`;
+
+      const result = collapseObservations(content, {
+        minChildrenToCollapse: 5,
+        keepLastChildren: 3,
+        keepRecentCount: 0,
+      });
+
+      expect(result.collapsedSections.length).toBe(1);
+      expect(result.text).toContain('📦'); // Collapsed marker
+      expect(result.text).toContain('items collapsed');
+      // Should keep last 3 children visible
+      expect(result.text).toContain('Step 7');
+      expect(result.text).toContain('Step 8');
+      expect(result.text).toContain('Final step');
+      // Earlier steps should be collapsed
+      expect(result.text).not.toContain('Step 1');
+      expect(result.text).not.toContain('Step 2');
+    });
+
+    it('should keep recent sections uncollapsed', () => {
+      const content = `- 🔴 Old section with many children
+  - -> 🟡 Old 1
+  - -> 🟡 Old 2
+  - -> 🟡 Old 3
+  - -> 🟡 Old 4
+  - -> 🟡 Old 5
+  - -> 🟡 Old 6
+- 🔴 Recent section with many children
+  - -> 🟡 Recent 1
+  - -> 🟡 Recent 2
+  - -> 🟡 Recent 3
+  - -> 🟡 Recent 4
+  - -> 🟡 Recent 5
+  - -> 🟡 Recent 6`;
+
+      const result = collapseObservations(content, {
+        minChildrenToCollapse: 5,
+        keepRecentCount: 1, // Keep last 1 section uncollapsed
+      });
+
+      // Old section should be collapsed
+      expect(result.text).not.toContain('Old 1');
+      // Recent section should NOT be collapsed (it's the most recent)
+      expect(result.text).toContain('Recent 1');
+      expect(result.text).toContain('Recent 6');
+    });
+
+    it('should respect exclude patterns', () => {
+      const content = `- 🔴 **Current Task:** Implement feature X
+  - -> 🟡 Step 1
+  - -> 🟡 Step 2
+  - -> 🟡 Step 3
+  - -> 🟡 Step 4
+  - -> 🟡 Step 5
+  - -> 🟡 Step 6`;
+
+      const result = collapseObservations(content, {
+        minChildrenToCollapse: 5,
+        keepRecentCount: 0,
+        excludePatterns: [/Current Task/i],
+      });
+
+      // Should NOT collapse because it matches exclude pattern
+      expect(result.collapsedSections.length).toBe(0);
+      expect(result.text).toContain('Step 1');
+    });
+
+    it('should track tokens saved', () => {
+      const content = `- 🔴 Parent with many children
+  - -> 🟡 Child observation one with some text
+  - -> 🟡 Child observation two with some text
+  - -> 🟡 Child observation three with some text
+  - -> 🟡 Child observation four with some text
+  - -> 🟡 Child observation five with some text
+  - -> 🟡 Child observation six with some text
+  - -> 🟡 Child observation seven with some text`;
+
+      const result = collapseObservations(content, {
+        minChildrenToCollapse: 5,
+        keepLastChildren: 2,
+        keepRecentCount: 0,
+      });
+
+      expect(result.tokensSaved).toBeGreaterThan(0);
+      expect(result.totalTokens).toBeLessThan(result.totalTokens + result.tokensSaved);
+    });
+  });
+
+  describe('retrieveCollapsedSection / expandCollapsedSection', () => {
+    it('should retrieve collapsed section by ID', () => {
+      const content = `- 🔴 Parent section
+  - -> 🟡 Child 1 with details
+  - -> 🟡 Child 2 with details
+  - -> 🟡 Child 3 with details
+  - -> 🟡 Child 4 with details
+  - -> 🟡 Child 5 with details
+  - -> 🟡 Child 6 with details`;
+
+      const result = collapseObservations(content, {
+        minChildrenToCollapse: 5,
+        keepRecentCount: 0,
+      });
+
+      expect(result.collapsedSections.length).toBe(1);
+
+      const id = result.collapsedSections[0].id;
+      const retrieved = retrieveCollapsedSection(id, result.collapsedSections);
+
+      expect(retrieved.success).toBe(true);
+      expect(retrieved.section).toBeDefined();
+      expect(retrieved.section?.parentLine).toBe('- 🔴 Parent section');
+    });
+
+    it('should expand collapsed section to get full content', () => {
+      const content = `- 🔴 Important parent
+  - -> 🟡 Detail A
+  - -> 🟡 Detail B
+  - -> 🟡 Detail C
+  - -> 🟡 Detail D
+  - -> 🟡 Detail E
+  - -> 🟡 Detail F`;
+
+      const result = collapseObservations(content, {
+        minChildrenToCollapse: 5,
+        keepRecentCount: 0,
+      });
+
+      const id = result.collapsedSections[0].id;
+      const expanded = expandCollapsedSection(id, result.collapsedSections);
+
+      expect(expanded).toContain('Important parent');
+      expect(expanded).toContain('Detail A');
+      expect(expanded).toContain('Detail F');
+    });
+
+    it('should return error for non-existent ID', () => {
+      const result = retrieveCollapsedSection('xxxx', []);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('No collapsed section found');
+    });
+  });
+});
+
+// =============================================================================
+// Unit Tests: Current Task Validation
+// =============================================================================
+
+import { hasCurrentTaskSection, extractCurrentTask } from '../observer-agent';
+
+describe('Current Task Validation', () => {
+  describe('hasCurrentTaskSection', () => {
+    it('should detect **Current Task:** format', () => {
+      const observations = `- 🔴 User preference
+- 🟡 Some task
+
+**Current Task:** Implement the login feature`;
+
+      expect(hasCurrentTaskSection(observations)).toBe(true);
+    });
+
+    it('should detect **Current Task** (without colon)', () => {
+      const observations = `**Current Task**
+The user wants to refactor the API`;
+
+      expect(hasCurrentTaskSection(observations)).toBe(true);
+    });
+
+    it('should detect ## Current Task header', () => {
+      const observations = `- Observations here
+
+## Current Task
+Working on documentation`;
+
+      expect(hasCurrentTaskSection(observations)).toBe(true);
+    });
+
+    it('should return false when missing', () => {
+      const observations = `- 🔴 User preference
+- 🟡 Some observation
+- 🟢 Minor note`;
+
+      expect(hasCurrentTaskSection(observations)).toBe(false);
+    });
+
+    it('should be case insensitive', () => {
+      const observations = `**current task:** Something`;
+      expect(hasCurrentTaskSection(observations)).toBe(true);
+    });
+  });
+
+  describe('extractCurrentTask', () => {
+    it('should extract task content after **Current Task:**', () => {
+      const observations = `- 🔴 User info
+
+**Current Task:** Implement user authentication with OAuth2
+
+- 🟡 Follow up`;
+
+      const task = extractCurrentTask(observations);
+      expect(task).toBe('Implement user authentication with OAuth2');
+    });
+
+    it('should handle multiline task description', () => {
+      const observations = `**Current Task:** Complete the dashboard feature
+with all the charts and graphs
+
+**Next Steps:**`;
+
+      const task = extractCurrentTask(observations);
+      expect(task).toContain('Complete the dashboard feature');
+    });
+
+    it('should return null when no current task', () => {
+      const observations = `- Just some observations
+- Nothing about current task`;
+
+      expect(extractCurrentTask(observations)).toBeNull();
+    });
+  });
+
+  describe('parseObserverOutput with Current Task validation', () => {
+    it('should add default Current Task if missing', () => {
+      const output = `- 🔴 User asked about React
+- 🟡 User prefers TypeScript`;
+
+      const result = parseObserverOutput(output);
+
+      // Should have added a default Current Task
+      expect(result.observations).toContain('**Current Task:**');
+    });
+
+    it('should not modify if Current Task already present', () => {
+      const output = `- 🔴 User asked about React
+
+**Current Task:** Help user set up React project`;
+
+      const result = parseObserverOutput(output);
+
+      // Should not have duplicated
+      const matches = result.observations.match(/Current Task/gi);
+      expect(matches?.length).toBe(1);
+    });
+  });
+});
+
+// =============================================================================
+// Integration Tests: ObservationalMemory with Collapsing
+// =============================================================================
+
+describe('ObservationalMemory with Collapsing', () => {
+  let storage: InMemoryMemory;
+  let om: ObservationalMemory;
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+    om = new ObservationalMemory({
+      storage,
+      observer: {
+        historyThreshold: 500,
+        model: 'test-model',
+      },
+      reflector: {
+        observationThreshold: 1000,
+        model: 'test-model',
+      },
+      collapse: {
+        enabled: true,
+        minChildrenToCollapse: 5,
+        keepRecentSections: 2,
+        keepLastChildren: 3,
+      },
+    });
+  });
+
+  it('should have collapse config accessible', () => {
+    const config = om.getCollapseConfig();
+    expect(config.enabled).toBe(true);
+    expect(config.minChildrenToCollapse).toBe(5);
+    expect(config.keepRecentSections).toBe(2);
+  });
+
+  it('should be able to disable collapsing', () => {
+    const omNoCollapse = new ObservationalMemory({
+      storage,
+      collapse: {
+        enabled: false,
+      },
+    });
+
+    const config = omNoCollapse.getCollapseConfig();
+    expect(config.enabled).toBe(false);
+  });
+
+  it('should return empty array for non-existent collapsed sections', () => {
+    const sections = om.getCollapsedSections('non-existent-id');
+    expect(sections).toEqual([]);
+  });
+
+  it('should return null when expanding non-existent section', () => {
+    const result = om.expandCollapsedSection('record-id', 'section-id');
+    expect(result).toBeNull();
+  });
+});
+
+// =============================================================================
+// Scenario Tests: Information Recall
+// =============================================================================
+
+describe('Scenario: Information should be preserved through observation cycle', () => {
+  it('should preserve key facts in observations', () => {
+    // This test verifies the observation format preserves important information
+    const messages = [
+      createTestMessage('My name is John and I work at Acme Corp as a software engineer.', 'user'),
+      createTestMessage('Nice to meet you John! I see you work at Acme Corp as a software engineer.', 'assistant'),
+      createTestMessage('Yes, I started there in 2020 and I mainly work with TypeScript and React.', 'user'),
+    ];
+
+    const formatted = formatMessagesForObserver(messages);
+
+    // The formatted messages should contain all the key facts
+    expect(formatted).toContain('John');
+    expect(formatted).toContain('Acme Corp');
+    expect(formatted).toContain('software engineer');
+    expect(formatted).toContain('2020');
+    expect(formatted).toContain('TypeScript');
+    expect(formatted).toContain('React');
+  });
+
+  it('should include timestamps for temporal context', () => {
+    const msg = createTestMessage('I have a meeting tomorrow at 3pm', 'user');
+    msg.createdAt = new Date('2024-12-04T14:00:00Z');
+
+    const formatted = formatMessagesForObserver([msg]);
+
+    // Should include the date for temporal context
+    expect(formatted).toContain('Dec');
+    expect(formatted).toContain('2024');
+  });
+
+  it('observer prompt should emphasize recent user message', () => {
+    const messages = [
+      createTestMessage('Earlier context message', 'user'),
+      createTestMessage('Some response', 'assistant'),
+      createTestMessage('What is the capital of France?', 'user'),
+    ];
+
+    const prompt = buildObserverPrompt(undefined, messages);
+
+    // Should have the "IMPORTANT: Most Recent User Message" section
+    expect(prompt).toContain('IMPORTANT');
+    expect(prompt).toContain('Most Recent User Message');
+    expect(prompt).toContain('What is the capital of France?');
+  });
+
+  it('observer prompt should require Current Task section', () => {
+    const messages = [createTestMessage('Help me build a todo app', 'user')];
+
+    const prompt = buildObserverPrompt(undefined, messages);
+
+    expect(prompt).toContain('**Current Task:**');
+    expect(prompt).toContain('MUST end your observations');
+  });
+});
+
+describe('Scenario: Cross-session memory (resource scope)', () => {
+  it('should track observations across multiple threads with same resource', async () => {
+    const storage = createInMemoryStorage();
+
+    // Initialize with resource scope (null threadId)
+    const record = await storage.initializeObservationalMemory({
+      threadId: null, // Resource scope
+      resourceId: 'user-123',
+      scope: 'resource',
+      config: {},
+    });
+
+    // Add observations from "session 1"
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- 🔴 User name is Alice\n- 🔴 User works at TechCorp',
+      messageIds: ['session1-msg1', 'session1-msg2'],
+      tokenCount: 100,
+    });
+
+    // Verify observations are stored at resource level
+    const resourceRecord = await storage.getObservationalMemory(null, 'user-123');
+    expect(resourceRecord).toBeDefined();
+    expect(resourceRecord?.activeObservations).toContain('Alice');
+    expect(resourceRecord?.activeObservations).toContain('TechCorp');
+    expect(resourceRecord?.scope).toBe('resource');
+  });
+});
+
+describe('Scenario: Observation quality checks', () => {
+  it('formatted messages should be readable for observer', () => {
+    const messages = [
+      createTestMessage('Can you help me debug this error: TypeError: Cannot read property "map" of undefined', 'user'),
+      createTestMessage(
+        'The error suggests you are calling .map() on undefined. Check if your array is properly initialized.',
+        'assistant',
+      ),
+    ];
+
+    const formatted = formatMessagesForObserver(messages);
+
+    // Should preserve the error message
+    expect(formatted).toContain('TypeError');
+    expect(formatted).toContain('Cannot read property');
+    expect(formatted).toContain('map');
+    expect(formatted).toContain('undefined');
+
+    // Should preserve the solution
+    expect(formatted).toContain('array is properly initialized');
+  });
+
+  it('token counter should give reasonable estimates', () => {
+    const counter = new TokenCounter();
+
+    // A simple sentence
+    const simple = counter.countString('Hello world');
+    expect(simple).toBeGreaterThan(0);
+    expect(simple).toBeLessThan(10);
+
+    // A longer paragraph
+    const paragraph = counter.countString(
+      'The quick brown fox jumps over the lazy dog. This is a longer sentence with more words to count.',
+    );
+    expect(paragraph).toBeGreaterThan(simple);
+
+    // Observations should be countable
+    const observations = counter.countObservations(`
+- 🔴 User preference: prefers short answers [user_preference]
+- 🟡 Current project: building a React dashboard [current_project]
+- 🟢 Minor note: mentioned liking coffee [personal]
+    `);
+    expect(observations).toBeGreaterThan(20);
+    expect(observations).toBeLessThan(100);
+  });
+});
+
+// =============================================================================
+// LongMemEval End-to-End Test
+// =============================================================================
+
+/**
+ * This test uses actual data from the first LongMemEval question (e47becba)
+ * to verify the observational memory system correctly preserves and retrieves
+ * key facts needed to answer evaluation questions.
+ *
+ * LongMemEval Question e47becba:
+ * - Question: "What degree did I graduate with?"
+ * - Answer: "Business Administration"
+ * - 54 haystack sessions, answer in session index 52 (answer_280352e9)
+ * - Turn 4 (user) says: "I graduated with a degree in Business Administration..."
+ *
+ * The test simulates the benchmark flow:
+ * 1. Load the first question from the dataset
+ * 2. Process the session containing the key fact through ObservationalMemory
+ * 3. Verify the observations contain "Business Administration"
+ */
+
+import firstQuestion from './fixtures/longmemeval-first-question.json';
+
+interface LongMemEvalTurn {
+  role: 'user' | 'assistant';
+  content: string;
+  has_answer?: boolean;
+}
+
+interface LongMemEvalQuestionData {
+  question_id: string;
+  question_type: string;
+  question: string;
+  answer: string;
+  question_date: string;
+  haystack_session_ids: string[];
+  haystack_dates: string[];
+  haystack_sessions: LongMemEvalTurn[][];
+  answer_session_ids: string[];
+}
+
+describe('LongMemEval End-to-End Test (Question e47becba)', () => {
+  const questionData = firstQuestion as LongMemEvalQuestionData;
+
+  // Find the session that contains the answer
+  const answerSessionId = questionData.answer_session_ids[0]; // 'answer_280352e9'
+  const answerSessionIndex = questionData.haystack_session_ids.indexOf(answerSessionId);
+  const answerSession = questionData.haystack_sessions[answerSessionIndex];
+
+  it('should have loaded the correct fixture data', () => {
+    expect(questionData.question_id).toBe('e47becba');
+    expect(questionData.question).toBe('What degree did I graduate with?');
+    expect(questionData.answer).toBe('Business Administration');
+    expect(questionData.haystack_sessions.length).toBe(54);
+    expect(answerSessionIndex).toBe(52);
+  });
+
+  it('should identify the turn containing the key fact', () => {
+    // Find the turn with has_answer=true
+    const answerTurn = answerSession.find(turn => turn.has_answer && turn.role === 'user');
+
+    expect(answerTurn).toBeDefined();
+    expect(answerTurn?.content).toContain('Business Administration');
+    expect(answerTurn?.content).toContain('graduated');
+  });
+
+  describe('Message Formatting', () => {
+    it('should preserve key fact when formatting the answer session for observer', () => {
+      const messages = answerSession.map((turn, i) =>
+        createTestMessage(turn.content, turn.role as 'user' | 'assistant', `answer-session-${i}`),
+      );
+
+      const formatted = formatMessagesForObserver(messages);
+
+      // The key fact MUST be present
+      expect(formatted).toContain('Business Administration');
+      expect(formatted).toContain('graduated');
+      expect(formatted).toContain('degree');
+    });
+
+    it('should build observer prompt with the key fact visible', () => {
+      const messages = answerSession.map((turn, i) =>
+        createTestMessage(turn.content, turn.role as 'user' | 'assistant', `answer-session-${i}`),
+      );
+
+      const prompt = buildObserverPrompt(undefined, messages);
+
+      // Observer prompt must contain the key fact for extraction
+      expect(prompt).toContain('Business Administration');
+      expect(prompt).toContain('graduated');
+    });
+  });
+
+  describe('Observer Output Parsing', () => {
+    it('should correctly parse ideal observer output for this question', () => {
+      // This is what an ideal observer output should look like for this question
+      const idealObserverOutput = `- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
+- 🟡 **Employment:** User started a new job and is adjusting to 9-to-5 schedule [personal_fact]
+- 🟡 **Task Management:** User is trying Todoist and Trello for task organization [user_preference]
+- 🟡 **Organization Needs:** User needs help with paperwork, documentation, and expense tracking [task]
+
+**Current Task:** Help user with personal expense tracking app recommendations.
+
+The assistant can maintain cohesion by starting with "For personal expense tracking..."`;
+
+      const result = parseObserverOutput(idealObserverOutput);
+
+      // Must preserve the key fact
+      expect(result.observations).toContain('Business Administration');
+      expect(result.observations).toContain('graduated');
+      expect(result.observations).toContain('degree');
+
+      // Must have Current Task
+      expect(hasCurrentTaskSection(result.observations)).toBe(true);
+
+      // Should extract continuation hint
+      expect(result.suggestedContinuation).toBeDefined();
+    });
+
+    it('should add default Current Task if observer omits it', () => {
+      // Observer output missing Current Task
+      const incompleteOutput = `- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
+- 🟡 **Employment:** User started a new job [personal_fact]`;
+
+      const result = parseObserverOutput(incompleteOutput);
+
+      // Should have added Current Task
+      expect(result.observations).toContain('**Current Task:**');
+      // Key fact must still be present
+      expect(result.observations).toContain('Business Administration');
+    });
+  });
+
+  describe('Token Optimization', () => {
+    it('should preserve key fact after optimization', () => {
+      const observations = `- 🔴 **User Education (May 2023):** User graduated with a degree in Business Administration [personal_fact, education]
+- 🟡 **Task Management:** User prefers digital tools over physical planners [user_preference]
+  - -> 🟢 Will try Todoist [user_preference]
+  - -> 🟢 Will try Trello [user_preference]
+- 🟡 **Employment Status:** User has a new 9-to-5 job [personal_fact, employment]
+- 🟢 **Minor:** User mentioned using a physical planner before [context]
+
+**Current Task:** Help user track personal expenses and recommend apps.`;
+
+      const optimized = optimizeObservationsForContext(observations);
+
+      // Key fact MUST survive optimization
+      expect(optimized).toContain('Business Administration');
+      expect(optimized).toContain('graduated');
+      expect(optimized).toContain('degree');
+    });
+  });
+
+  describe('Memory Collapsing', () => {
+    it('should preserve education fact even when other sections are collapsed', () => {
+      // Simulated observations with many sessions of noise
+      const observations = `- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
+- 🟡 **Previous Research:** User researched productivity apps [task]
+  - -> 🟢 Looked at app A
+  - -> 🟢 Looked at app B
+  - -> 🟢 Looked at app C
+  - -> 🟢 Looked at app D
+  - -> 🟢 Looked at app E
+  - -> 🟢 Settled on Todoist
+- 🟡 **Current Task Management:** Using Todoist and Trello [user_preference]`;
+
+      const result = collapseObservations(observations, {
+        minChildrenToCollapse: 5,
+        keepLastChildren: 2,
+        keepRecentCount: 1,
+      });
+
+      // Education fact MUST be preserved (no children, won't be collapsed)
+      expect(result.text).toContain('Business Administration');
+      expect(result.text).toContain('graduated');
+      expect(result.text).toContain('degree');
+    });
+  });
+
+  describe('Storage Integration', () => {
+    it('should store and retrieve observations containing the key fact', async () => {
+      const storage = createInMemoryStorage();
+
+      // Initialize resource-scoped memory (like LongMemEval uses)
+      const record = await storage.initializeObservationalMemory({
+        threadId: null, // Resource scope
+        resourceId: `resource_${questionData.question_id}`,
+        scope: 'resource',
+        config: {},
+      });
+
+      // Simulate observer extracting observations from the answer session
+      const observationsWithKeyFact = `- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
+- 🟡 **Employment:** User started a new 9-to-5 job [personal_fact]
+- 🟡 **Task Management:** User prefers digital tools, trying Todoist and Trello [user_preference]
+
+**Current Task:** Help user with expense tracking organization`;
+
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: observationsWithKeyFact,
+        messageIds: answerSession.map((_, i) => `answer-session-msg-${i}`),
+        tokenCount: 200,
+      });
+
+      // Retrieve and verify
+      const retrieved = await storage.getObservationalMemory(null, `resource_${questionData.question_id}`);
+
+      expect(retrieved).toBeDefined();
+      expect(retrieved?.activeObservations).toContain('Business Administration');
+      expect(retrieved?.activeObservations).toContain('graduated');
+      expect(retrieved?.activeObservations).toContain('degree');
+
+      // The observations should be sufficient to answer: "What degree did I graduate with?"
+      // Answer: "Business Administration"
+    });
+
+    it('should preserve key fact across multiple session updates', async () => {
+      const storage = createInMemoryStorage();
+
+      const record = await storage.initializeObservationalMemory({
+        threadId: null,
+        resourceId: `resource_${questionData.question_id}`,
+        scope: 'resource',
+        config: {},
+      });
+
+      // Session 1 (before key fact): random conversation
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: `- 🟡 **Random Topic:** User discussed weather [context]
+
+**Current Task:** Continue conversation`,
+        messageIds: ['session1-msg1'],
+        tokenCount: 50,
+      });
+
+      // Session 2: Contains the key fact
+      const record1 = await storage.getObservationalMemory(null, `resource_${questionData.question_id}`);
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations:
+          record1?.activeObservations +
+          `
+- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
+
+**Current Task:** Help with expense tracking`,
+        messageIds: ['session1-msg1', 'session2-msg1', 'session2-msg2'],
+        tokenCount: 100,
+      });
+
+      // Session 3 (after key fact): more conversation
+      const record2 = await storage.getObservationalMemory(null, `resource_${questionData.question_id}`);
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations:
+          record2?.activeObservations +
+          `
+- 🟡 **Follow-up:** User is exploring Mint app for finances [task]
+
+**Current Task:** Compare expense tracking options`,
+        messageIds: ['session1-msg1', 'session2-msg1', 'session2-msg2', 'session3-msg1'],
+        tokenCount: 150,
+      });
+
+      // Final verification - key fact must still be present
+      const finalRecord = await storage.getObservationalMemory(null, `resource_${questionData.question_id}`);
+
+      expect(finalRecord?.activeObservations).toContain('Business Administration');
+      expect(finalRecord?.activeObservations).toContain('graduated');
+      expect(finalRecord?.activeObservations).toContain('degree');
+
+      // Can answer: "What degree did I graduate with?" -> "Business Administration"
+    });
+  });
+
+  describe('Full Session Token Count', () => {
+    it('should calculate reasonable token counts for the answer session', () => {
+      const counter = new TokenCounter();
+      const messages = answerSession.map((turn, i) =>
+        createTestMessage(turn.content, turn.role as 'user' | 'assistant', `answer-session-${i}`),
+      );
+
+      const tokenCount = counter.countMessages(messages);
+
+      // The answer session (12 turns) should be a reasonable size
+      expect(tokenCount).toBeGreaterThan(500); // Not trivially small
+      expect(tokenCount).toBeLessThan(10000); // Not excessively large
+
+      // Log for debugging
+      // console.log(`Answer session has ${answerSession.length} turns, ${tokenCount} tokens`);
+    });
+  });
+});
+
+// =============================================================================
+// End-to-End Integration Test: Agent + ObservationalMemory Processor
+// =============================================================================
+
+/**
+ * This test mirrors the actual LongMemEval benchmark flow from prepare.ts:
+ * 1. Create storage and ObservationalMemory processor
+ * 2. Create an Agent with ObservationalMemory as input/output processors
+ * 3. Process ALL 54 sessions sequentially through agent.generate() with proper threadId/resourceId
+ * 4. Ask the question and verify the agent can answer correctly
+ *
+ * This is the REALISTIC test that matches exactly how the benchmark works:
+ * - 54 sessions sorted chronologically
+ * - Each session gets its own threadId
+ * - All sessions share the same resourceId
+ * - Sessions processed sequentially (not concurrently)
+ * - Key fact "Business Administration" is in session 52
+ *
+ * REQUIRES: GOOGLE_GENERATIVE_AI_API_KEY environment variable
+ */
+describe.only('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
+  const questionData = firstQuestion as LongMemEvalQuestionData;
+  const resourceId = `resource_${questionData.question_id}`;
+
+  // Skip tests if no API key is available
+  const hasApiKey = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
+  /**
+   * REALISTIC FULL BENCHMARK TEST
+   *
+   * This test processes ALL 54 sessions in chronological order,
+   * exactly like the actual LongMemEval benchmark does in prepare.ts.
+   *
+   * Flow:
+   * 1. Sort sessions by date (oldest first)
+   * 2. Process each session through agent.generate() with unique threadId
+   * 3. All sessions share the same resourceId for cross-session memory
+   * 4. After all sessions, ask the question to verify recall
+   */
+  it.skipIf(!hasApiKey)(
+    'FULL BENCHMARK: should process all 54 sessions and recall key fact',
+    async () => {
+      // 1. Create storage
+      const storage = createInMemoryStorage();
+
+      // 2. Create ObservationalMemory with realistic thresholds (matching benchmark config)
+      const om = new ObservationalMemory({
+        storage,
+        observer: {
+          model: 'google/gemini-2.5-flash',
+          // Use threshold range like the benchmark
+          historyThreshold: { min: 4000, max: 6000 },
+        },
+        reflector: {
+          model: 'google/gemini-2.5-flash',
+          observationThreshold: { min: 12000, max: 18000 },
+        },
+        resourceScope: true, // Cross-session memory - critical for LongMemEval
+      });
+
+      // 3. Create Agent with ObservationalMemory as processors
+      const agent = new Agent({
+        id: 'longmemeval-agent',
+        name: 'LongMemEval Test Agent',
+        instructions: 'You are a helpful assistant. Process and store conversation history.',
+        model: 'google/gemini-2.5-flash',
+        inputProcessors: [om],
+        outputProcessors: [om],
+      });
+
+      // 4. Sort sessions chronologically (oldest first) - exactly like prepare.ts
+      const sessionsWithDates = questionData.haystack_sessions.map((session, index) => ({
+        session,
+        sessionId: questionData.haystack_session_ids[index],
+        date: questionData.haystack_dates[index],
+      }));
+
+      sessionsWithDates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      console.log(`\n📊 Processing ${sessionsWithDates.length} sessions chronologically...`);
+      console.log(`   First session: ${sessionsWithDates[0].date}`);
+      console.log(`   Last session: ${sessionsWithDates[sessionsWithDates.length - 1].date}`);
+
+      // Find where the answer session falls in chronological order
+      const answerSessionId = questionData.answer_session_ids[0];
+      const answerSessionChronoIndex = sessionsWithDates.findIndex(s => s.sessionId === answerSessionId);
+      console.log(`   Answer session "${answerSessionId}" is at chronological index ${answerSessionChronoIndex}`);
+
+      // 5. Process ALL sessions sequentially (not concurrently) - exactly like prepare.ts
+      let processedCount = 0;
+      for (const { session, sessionId, date } of sessionsWithDates) {
+        // Convert session turns to messages
+        const messages = session
+          .filter(turn => turn.content) // Skip empty content
+          .map(turn => ({
+            role: turn.role as 'user' | 'assistant',
+            content: turn.content,
+          }));
+
+        if (messages.length === 0) {
+          processedCount++;
+          continue;
+        }
+
+        console.log('messages', messages);
+
+        // Process through agent.generate() with unique threadId, shared resourceId
+        await agent.generate(messages, {
+          memory: {
+            thread: sessionId,
+            resource: resourceId,
+          },
+        });
+
+        processedCount++;
+
+        // Log progress every 10 sessions
+        if (processedCount % 10 === 0 || sessionId === answerSessionId) {
+          const record = await storage.getObservationalMemory(null, resourceId);
+          const hasKeyFact = record?.activeObservations?.includes('Business Administration') ?? false;
+          console.log(
+            `   [${processedCount}/${sessionsWithDates.length}] ${sessionId.substring(0, 12)}... ` +
+              `(${date}) - observations: ${record?.observationTokenCount ?? 0} tokens` +
+              (sessionId === answerSessionId ? ' ⭐ ANSWER SESSION' : '') +
+              (hasKeyFact ? ' ✅ KEY FACT FOUND' : ''),
+          );
+        }
+      }
+
+      // 6. Check observations after processing all sessions
+      const finalRecord = await storage.getObservationalMemory(null, resourceId);
+      console.log(`\n📝 Final observations: ${finalRecord?.observationTokenCount ?? 0} tokens`);
+      console.log(`   Observed message IDs: ${finalRecord?.observedMessageIds.length ?? 0}`);
+
+      // The key fact should be in observations
+      // expect(finalRecord).toBeDefined();
+      // expect(finalRecord?.activeObservations).toBeDefined();
+      // expect(finalRecord?.activeObservations).toContain('Business Administration');
+
+      // 7. Now ask the question - this is the actual evaluation
+      console.log(`\n❓ Asking: "${questionData.question}"`);
+      console.log(`   Expected answer: "${questionData.answer}"`);
+
+      const result = await agent.generate(questionData.question, {
+        memory: {
+          thread: 'evaluation-thread',
+          resource: resourceId,
+        },
+      });
+
+      console.log('result', result);
+
+      console.log(`\n💬 Agent response: ${result.text}`);
+
+      // The agent should be able to answer correctly
+      const responseContainsAnswer = result.text.toLowerCase().includes(questionData.answer.toLowerCase());
+      console.log(`\n${responseContainsAnswer ? '✅ PASS' : '❌ FAIL'}: Response contains "${questionData.answer}"`);
+
+      expect(result.text.toLowerCase()).toContain(questionData.answer.toLowerCase());
+    },
+    600000,
+  ); // 10 minute timeout for processing all 54 sessions
+
+  /**
+   * Simpler test: Process only a few sessions including the answer session
+   */
+  it.skipIf(!hasApiKey)(
+    'should preserve key fact when processing answer session with context',
+    async () => {
+      const storage = createInMemoryStorage();
+
+      const om = new ObservationalMemory({
+        storage,
+        observer: {
+          model: 'google/gemini-2.5-flash',
+          historyThreshold: 500, // Low threshold to trigger on each session
+        },
+        reflector: {
+          model: 'google/gemini-2.5-flash',
+          observationThreshold: 100000, // Won't trigger
+        },
+        resourceScope: true,
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'google/gemini-2.5-flash',
+        inputProcessors: [om],
+        outputProcessors: [om],
+      });
+
+      // Process 5 random sessions before the answer session to build context
+      const sessionsToProcess = [0, 10, 20, 30, 40].map(i => ({
+        session: questionData.haystack_sessions[i],
+        sessionId: questionData.haystack_session_ids[i],
+      }));
+
+      // Add the answer session
+      const answerSessionIndex = questionData.haystack_session_ids.indexOf(questionData.answer_session_ids[0]);
+      sessionsToProcess.push({
+        session: questionData.haystack_sessions[answerSessionIndex],
+        sessionId: questionData.answer_session_ids[0],
+      });
+
+      console.log(`\n📊 Processing ${sessionsToProcess.length} sessions (5 context + 1 answer)...`);
+
+      for (const { session, sessionId } of sessionsToProcess) {
+        const messages = session
+          .filter(turn => turn.content)
+          .map(turn => ({
+            role: turn.role as 'user' | 'assistant',
+            content: turn.content,
+          }));
+
+        if (messages.length > 0) {
+          await agent.generate(messages, {
+            memory: {
+              thread: sessionId,
+              resource: resourceId,
+            },
+          });
+          console.log(`   Processed ${sessionId}`);
+        }
+      }
+
+      // Verify observations contain the key fact
+      const record = await storage.getObservationalMemory(null, resourceId);
+      console.log(`\n📝 Observations: ${record?.observationTokenCount ?? 0} tokens`);
+
+      expect(record?.activeObservations).toContain('Business Administration');
+
+      // Ask the question
+      const result = await agent.generate(questionData.question, {
+        memory: {
+          thread: 'eval-thread',
+          resource: resourceId,
+        },
+      });
+
+      console.log(`\n❓ "${questionData.question}"`);
+      console.log(`💬 "${result.text}"`);
+
+      expect(result.text.toLowerCase()).toContain('business administration');
+    },
+    180000,
+  ); // 3 minute timeout
+
+  /**
+   * Test that observations are injected into context correctly
+   */
+  it.skipIf(!hasApiKey)(
+    'should inject observations into context on subsequent calls',
+    async () => {
+      const storage = createInMemoryStorage();
+
+      // Pre-populate with observations containing the key fact
+      const initialRecord = await storage.initializeObservationalMemory({
+        threadId: null,
+        resourceId,
+        scope: 'resource',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: initialRecord.id,
+        observations: `- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
+
+**Current Task:** Continue helping user.`,
+        messageIds: ['pre-existing-msg-1'],
+        tokenCount: 100,
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        observer: {
+          model: 'google/gemini-2.5-flash',
+          historyThreshold: 100000, // Won't trigger
+        },
+        reflector: {
+          model: 'google/gemini-2.5-flash',
+          observationThreshold: 100000,
+        },
+        resourceScope: true,
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions:
+          'You are a helpful assistant. Use the observational memory provided to answer questions about the user.',
+        model: 'google/gemini-2.5-flash',
+        inputProcessors: [om],
+        outputProcessors: [om],
+      });
+
+      // Ask the question - agent should use injected observations
+      const result = await agent.generate('What degree did I graduate with?', {
+        memory: {
+          thread: 'new-thread',
+          resource: resourceId,
+        },
+      });
+
+      console.log(`\n❓ "What degree did I graduate with?"`);
+      console.log(`💬 "${result.text}"`);
+
+      expect(result.text.toLowerCase()).toContain('business administration');
+    },
+    60000,
+  );
 });

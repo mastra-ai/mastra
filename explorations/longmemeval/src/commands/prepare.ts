@@ -20,8 +20,9 @@ import type { CoreMessage } from 'ai';
 
 import { getMemoryOptions, observationalMemoryConfig } from '../config';
 import { makeRetryModel } from '../retry-model';
+import { google } from '@ai-sdk/google';
 
-const retry4o = makeRetryModel(openai('gpt-4o'));
+const retry4o = makeRetryModel(google('gemini-2.5-flash'));
 
 export interface PrepareOptions {
   dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';
@@ -491,11 +492,11 @@ export class PrepareCommand {
       observationalMemory = new ObservationalMemory({
         storage: omStorage,
         observer: {
-          model: 'openai/gpt-4o-mini',
+          model: model,
           historyThreshold: observationalMemoryConfig.historyThreshold,
         },
         reflector: {
-          model: 'openai/gpt-4o-mini',
+          model: model,
           observationThreshold: observationalMemoryConfig.observationThreshold,
         },
         resourceScope: observationalMemoryConfig.resourceScope,
@@ -519,7 +520,7 @@ export class PrepareCommand {
       memory: usesObservationalMemory ? undefined : memory,
       // For OM, use processors instead of memory
       inputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
-      outputProcessors: usesObservationalMemory ? [observationalMemory!, messageHistory!] : undefined,
+      outputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
     });
 
     // Process all haystack sessions
@@ -705,8 +706,8 @@ export class PrepareCommand {
                 options: memoryOptions.options,
               },
               modelSettings: {
-                temperature: 0.3,
-                frequencyPenalty: 0.3,
+                temperature: 0,
+                // frequencyPenalty: 0.3,
               },
             });
           } catch (error) {

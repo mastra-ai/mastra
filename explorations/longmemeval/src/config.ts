@@ -1,3 +1,4 @@
+import type { ObservationFocus } from '@mastra/memory/experiments';
 import { MemoryConfigOptions } from './data/types';
 
 const semanticRecall = {
@@ -8,15 +9,30 @@ const semanticRecall = {
 
 const lastMessages = 10;
 
+// Focus areas for LongMemEval - prioritize personal facts since that's what the benchmark tests
+const longMemEvalFocus: ObservationFocus = {
+  include: [
+    'personal-facts', // Education, work history, family - critical for LongMemEval
+    'preferences', // User preferences
+    'temporal', // Dates and times mentioned
+    'relationships', // People and relationships
+    'tasks', // Current tasks and goals
+    'health', // Health information
+    'location', // Location information
+  ],
+};
+
 // Observational Memory configuration
-// These thresholds are tuned for LongMemEval's session-based structure
+// These thresholds allow more context to accumulate before triggering observation/reflection
 export const observationalMemoryConfig = {
-  // Observer triggers after ~500 tokens of new messages (roughly 5-10 exchanges)
-  historyThreshold: { min: 400, max: 600 },
-  // Reflector triggers when observations exceed ~2000 tokens
-  observationThreshold: { min: 1500, max: 2500 },
+  // Observer triggers after ~5000 tokens of new messages (more context per observation)
+  historyThreshold: { min: 4000, max: 6000 },
+  // Reflector triggers when observations exceed ~15000 tokens
+  observationThreshold: { min: 12000, max: 18000 },
   // Resource scope for cross-session memory
   resourceScope: true,
+  // Focus areas for the observer
+  focus: longMemEvalFocus,
 } as const;
 
 export function getMemoryOptions(memoryConfig: string): MemoryConfigOptions {

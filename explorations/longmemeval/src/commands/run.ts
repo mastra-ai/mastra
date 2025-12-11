@@ -355,11 +355,12 @@ export class RunCommand {
 
       observationalMemory = new ObservationalMemory({
         storage: omStorage,
-        observerConfig: {
+        observer: {
           model: retry4o.model,
           historyThreshold: observationalMemoryConfig.historyThreshold,
+          focus: observationalMemoryConfig.focus,
         },
-        reflectorConfig: {
+        reflector: {
           model: retry4o.model,
           observationThreshold: observationalMemoryConfig.observationThreshold,
         },
@@ -398,7 +399,9 @@ Be specific rather than generic when the user has expressed clear preferences in
     const response = await agent.generate(meta.question, {
       threadId: evalThreadId,
       resourceId: meta.resourceId,
-      temperature: 0,
+      modelSettings: {
+        temperature: 0,
+      },
       context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
     });
 
