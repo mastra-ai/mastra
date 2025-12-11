@@ -193,8 +193,6 @@ export class MastraLLMVNext extends MastraBase {
         messages: [...messageList.getSystemMessages(), ...messages],
       },
       attributes: {
-        agentId,
-        agentName,
         model: firstModel.modelId,
         provider: firstModel.provider,
         streaming: true,

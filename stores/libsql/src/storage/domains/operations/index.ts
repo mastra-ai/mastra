@@ -1,6 +1,12 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_SPANS } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  TABLE_WORKFLOW_SNAPSHOT,
+  StoreOperations,
+  TABLE_SPANS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -93,6 +99,11 @@ export class StoreOperationsLibSQL extends StoreOperations {
       this.logger.debug(`Creating database table`, { tableName, operation: 'schema init' });
       const sql = this.getCreateTableSQL(tableName, schema);
       await this.client.execute(sql);
+
+      // Run migrations for Spans table
+      if (tableName === TABLE_SPANS) {
+        await this.migrateSpansTable();
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -105,6 +116,56 @@ export class StoreOperationsLibSQL extends StoreOperations {
         },
         error,
       );
+    }
+  }
+
+  /**
+   * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
+   * This adds new columns that don't exist in old schema.
+   */
+  private async migrateSpansTable(): Promise<void> {
+    const parsedTableName = parseSqlIdentifier(TABLE_SPANS, 'table name');
+    const schema = TABLE_SCHEMAS[TABLE_SPANS];
+
+    try {
+      // Add new columns from current schema that don't exist
+      const newColumns = [
+        'entityType',
+        'entityId',
+        'entityName',
+        'userId',
+        'organizationId',
+        'resourceId',
+        'runId',
+        'sessionId',
+        'threadId',
+        'requestId',
+        'environment',
+        'source',
+        'serviceName',
+        'tags',
+      ];
+
+      for (const columnName of newColumns) {
+        const columnDef = schema[columnName];
+        if (columnDef) {
+          const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
+          if (!columnExists) {
+            const sqlType = this.getSqlType(columnDef.type);
+            const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+            const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+            const alterSql =
+              `ALTER TABLE ${parsedTableName} ADD COLUMN ${columnName} ${sqlType} ${nullable} ${defaultValue}`.trim();
+            await this.client.execute(alterSql);
+            this.logger?.debug?.(`Added column '${columnName}' to ${parsedTableName}`);
+          }
+        }
+      }
+
+      this.logger?.info?.(`Migration completed for ${parsedTableName}`);
+    } catch (error) {
+      // Log warning but don't fail - migrations should be best-effort
+      this.logger?.warn?.(`Failed to migrate spans table ${parsedTableName}:`, error);
     }
   }
 
@@ -197,7 +258,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     let statement = `SELECT * FROM ${parsedTableName}`;
 
     if (whereClause?.sql) {
-      statement += `${whereClause.sql}`;
+      statement += ` ${whereClause.sql}`;
     }
 
     if (orderBy) {

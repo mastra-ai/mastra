@@ -372,6 +372,8 @@ describe('AISdkNetworkTransformer', () => {
           result: 'Weather is sunny',
           isComplete: true,
           iteration: 0,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          runId: 'run-123',
         },
         runId: 'run-123',
         from: ChunkFrom.NETWORK,
@@ -415,6 +417,8 @@ describe('AISdkNetworkTransformer', () => {
           result: 'Final result',
           isComplete: true,
           iteration: 0,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          runId: 'run-123',
         },
         runId: 'run-123',
         from: ChunkFrom.NETWORK,
@@ -457,6 +461,8 @@ describe('AISdkNetworkTransformer', () => {
           result: 'Result',
           isComplete: true,
           iteration: 0,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          runId: 'run-123',
         },
         runId: 'run-123',
         from: ChunkFrom.NETWORK,
@@ -478,6 +484,8 @@ describe('AISdkNetworkTransformer', () => {
           result: 'Result',
           isComplete: true,
           iteration: 0,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          runId: 'run-123',
         },
         runId: 'run-123',
         from: ChunkFrom.NETWORK,
@@ -1051,6 +1059,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'workflow-execution-start',
         payload: {
           name: 'data-workflow',
+          workflowId: 'data-workflow',
           runId: 'wf-run-1',
           args: {
             task: 'Process data',
@@ -1097,6 +1106,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'workflow-execution-start',
         payload: {
           name: 'workflow',
+          workflowId: 'workflow',
           runId: 'wf-run-1',
           args: {
             task: 'Task',
@@ -1123,6 +1133,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'workflow-execution-start',
         payload: {
           name: 'workflow',
+          workflowId: 'workflow',
           runId: 'wf-run-1',
           args: {
             task: 'Task',
@@ -1145,6 +1156,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'workflow-execution-start',
         payload: {
           name: 'workflow',
+          workflowId: 'workflow',
           runId: '',
           args: {
             task: 'Task',

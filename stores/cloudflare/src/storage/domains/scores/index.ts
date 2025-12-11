@@ -1,6 +1,12 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type {
+  ListScoresResponse,
+  SaveScorePayload,
+  ScoreRowData,
+  ScoringSource,
+  ValidatedSaveScorePayload,
+} from '@mastra/core/evals';
 import {
   createStorageErrorId,
   ScoresStorage,
@@ -9,7 +15,7 @@ import {
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
+import type { StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
 
 /**
@@ -130,7 +136,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const keys = await this.operations.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
@@ -199,7 +205,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const keys = await this.operations.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
@@ -259,7 +265,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const keys = await this.operations.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
@@ -319,7 +325,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const keys = await this.operations.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];

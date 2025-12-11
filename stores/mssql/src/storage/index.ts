@@ -1,6 +1,6 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 
@@ -16,7 +16,7 @@ import type {
   StorageDomains,
   SpanRecord,
   TraceRecord,
-  TracesPaginatedArg,
+  ListTracesArgs,
   UpdateSpanRecord,
   CreateIndexOptions,
   IndexInfo,
@@ -446,8 +446,8 @@ export class MSSQLStore extends MastraStorage {
     return this.getObservabilityStore().getTrace(traceId);
   }
 
-  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    return this.getObservabilityStore().getTracesPaginated(args);
+  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    return this.getObservabilityStore().listTraces(args);
   }
 
   async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
@@ -487,7 +487,7 @@ export class MSSQLStore extends MastraStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({
       scorerId: _scorerId,
       pagination: _pagination,
@@ -507,7 +507,7 @@ export class MSSQLStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId: _runId, pagination: _pagination });
   }
 
@@ -519,7 +519,7 @@ export class MSSQLStore extends MastraStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({
       entityId: _entityId,
       entityType: _entityType,
@@ -535,7 +535,7 @@ export class MSSQLStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination: _pagination });
   }
 }

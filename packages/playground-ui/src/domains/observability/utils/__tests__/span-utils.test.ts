@@ -13,6 +13,7 @@ describe('span-utils', () => {
     attributes,
     metadata: null,
     links: null,
+    tags: null,
     startedAt: new Date('2025-01-01T00:00:00Z'),
     endedAt: new Date('2025-01-01T00:00:01Z'),
     input: null,
@@ -21,6 +22,23 @@ describe('span-utils', () => {
     createdAt: new Date('2025-01-01T00:00:00Z'),
     updatedAt: new Date('2025-01-01T00:00:01Z'),
     isEvent: false,
+    // Entity identification
+    entityType: null,
+    entityId: null,
+    entityName: null,
+    // Identity & Tenancy
+    userId: null,
+    organizationId: null,
+    resourceId: null,
+    // Correlation IDs
+    runId: null,
+    sessionId: null,
+    threadId: null,
+    requestId: null,
+    // Deployment context
+    environment: null,
+    source: null,
+    serviceName: null,
   });
 
   describe('isTokenLimitExceeded', () => {

@@ -1,17 +1,35 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { TracingStorageStrategy } from '../../../observability';
+import type { PaginationInfo } from '../../types';
+import type { StoreOperations } from '../operations';
+import type { JsonValue } from '../shared';
+import { ObservabilityStorage } from './base';
 import type {
+  CreateSpanRecord,
+  ListTracesArgs,
   SpanRecord,
   TraceRecord,
-  TracesPaginatedArg,
-  CreateSpanRecord,
-  PaginationInfo,
+  TracingStorageStrategy,
   UpdateSpanRecord,
-} from '../../types';
-import type { StoreOperations } from '../operations';
-import { ObservabilityStorage } from './base';
+} from './base';
+import { TraceStatus } from './types';
 
-export type InMemoryObservability = Map<string, SpanRecord>;
+/**
+ * Internal structure for storing a trace with computed properties for efficient filtering
+ */
+interface TraceEntry {
+  /** All spans in this trace, keyed by spanId */
+  spans: Record<string, SpanRecord>;
+  /** Root span for this trace (parentSpanId === null) */
+  rootSpan: SpanRecord | null;
+  /** Computed trace status based on root span state */
+  status: TraceStatus;
+  /** True if any span in the trace has an error */
+  hasChildError: boolean;
+}
+
+/** In-memory storage: Record<traceId, TraceEntry> */
+export type InMemoryObservability = Map<string, TraceEntry>;
+
 export class ObservabilityInMemory extends ObservabilityStorage {
   operations: StoreOperations;
   collection: InMemoryObservability;
@@ -34,16 +52,26 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async createSpan(span: CreateSpanRecord): Promise<void> {
     this.validateCreateSpan(span);
-    const id = this.generateId(span);
-    const record = span as SpanRecord;
-    record.createdAt = new Date();
-    record.updatedAt = record.createdAt;
-    this.collection.set(id, record);
+    const now = new Date();
+    const record: SpanRecord = {
+      ...span,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.upsertSpanToTrace(record);
   }
 
   async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
-    for (const record of args.records) {
-      await this.createSpan(record);
+    const now = new Date();
+    for (const span of args.records) {
+      this.validateCreateSpan(span);
+      const record: SpanRecord = {
+        ...span,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.upsertSpanToTrace(record);
     }
   }
 
@@ -67,15 +95,71 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
-  private generateId({ traceId, spanId }: { traceId: string; spanId: string }): string {
-    return `${traceId}-${spanId}`;
+  /**
+   * Inserts or updates a span in the trace and recomputes trace-level properties
+   */
+  private upsertSpanToTrace(span: SpanRecord): void {
+    const { traceId, spanId } = span;
+    let traceEntry = this.collection.get(traceId);
+
+    if (!traceEntry) {
+      traceEntry = {
+        spans: {},
+        rootSpan: null,
+        status: TraceStatus.RUNNING,
+        hasChildError: false,
+      };
+      this.collection.set(traceId, traceEntry);
+    }
+
+    traceEntry.spans[spanId] = span;
+
+    // Update root span if this is a root span
+    if (span.parentSpanId === null) {
+      traceEntry.rootSpan = span;
+    }
+
+    this.recomputeTraceProperties(traceEntry);
+  }
+
+  /**
+   * Recomputes derived trace properties from all spans
+   */
+  private recomputeTraceProperties(traceEntry: TraceEntry): void {
+    const spans = Object.values(traceEntry.spans);
+    if (spans.length === 0) return;
+
+    // Compute hasChildError
+    traceEntry.hasChildError = spans.some(s => s.error !== null);
+
+    // Compute status from root span
+    const rootSpan = traceEntry.rootSpan;
+    if (rootSpan) {
+      if (rootSpan.error !== null) {
+        traceEntry.status = TraceStatus.ERROR;
+      } else if (rootSpan.endedAt === null) {
+        traceEntry.status = TraceStatus.RUNNING;
+      } else {
+        traceEntry.status = TraceStatus.SUCCESS;
+      }
+    } else {
+      // No root span yet, consider it running
+      traceEntry.status = TraceStatus.RUNNING;
+    }
   }
 
   async getTrace(traceId: string): Promise<TraceRecord | null> {
-    const spans = Array.from(this.collection.values()).filter(span => span.traceId === traceId);
+    const traceEntry = this.collection.get(traceId);
+    if (!traceEntry) {
+      return null;
+    }
+
+    const spans = Object.values(traceEntry.spans);
     if (spans.length === 0) {
       return null;
     }
+
+    // Sort spans by startedAt
     spans.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
     return {
@@ -84,24 +168,55 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async getTracesPaginated({
+  async listTraces({
     filters,
     pagination,
-  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    const allRootSpans = this.filterForRootSpans(Array.from(this.collection.values()));
-    const filteredRootSpans = this.filterSpansByFilter(allRootSpans, filters);
+    orderBy,
+  }: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    // Collect all traces that match filters
+    const matchingRootSpans: SpanRecord[] = [];
 
-    const startDate = pagination?.dateRange?.start;
-    const endDate = pagination?.dateRange?.end;
-    const filteredRootSpansByDate = this.filterSpansByDate(filteredRootSpans, startDate, endDate);
+    for (const [, traceEntry] of this.collection) {
+      if (!traceEntry.rootSpan) continue;
 
-    const total = filteredRootSpansByDate.length;
+      if (this.traceMatchesFilters(traceEntry, filters)) {
+        matchingRootSpans.push(traceEntry.rootSpan);
+      }
+    }
+
+    // Sort by orderBy field
+    const sortField = orderBy?.field ?? 'startedAt';
+    const sortDirection = orderBy?.direction ?? 'DESC';
+
+    matchingRootSpans.sort((a, b) => {
+      let aVal: Date | null;
+      let bVal: Date | null;
+
+      if (sortField === 'endedAt') {
+        aVal = a.endedAt;
+        bVal = b.endedAt;
+      } else {
+        aVal = a.startedAt;
+        bVal = b.startedAt;
+      }
+
+      // Handle nulls (running spans) - put them at the end for DESC, start for ASC
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return sortDirection === 'DESC' ? 1 : -1;
+      if (bVal === null) return sortDirection === 'DESC' ? -1 : 1;
+
+      const diff = aVal.getTime() - bVal.getTime();
+      return sortDirection === 'DESC' ? -diff : diff;
+    });
+
+    // Apply pagination
+    const total = matchingRootSpans.length;
     const page = pagination?.page ?? 0;
-    const perPage = pagination?.perPage ?? 10;
-
+    const perPage = pagination?.perPage ?? 100;
     const start = page * perPage;
     const end = start + perPage;
-    const paged = this.filterSpansByPagination(filteredRootSpansByDate, pagination);
+
+    const paged = matchingRootSpans.slice(start, end);
 
     return {
       spans: paged,
@@ -109,43 +224,183 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  private filterForRootSpans(spans: SpanRecord[]): SpanRecord[] {
-    return spans.filter(span => span.parentSpanId === null);
+  /**
+   * Check if a trace matches all provided filters
+   */
+  private traceMatchesFilters(traceEntry: TraceEntry, filters: ListTracesArgs['filters']): boolean {
+    if (!filters) return true;
+
+    const rootSpan = traceEntry.rootSpan;
+    if (!rootSpan) return false;
+
+    // Date range filters on startedAt (based on root span)
+    if (filters.startedAt) {
+      if (filters.startedAt.start && rootSpan.startedAt < filters.startedAt.start) {
+        return false;
+      }
+      if (filters.startedAt.end && rootSpan.startedAt > filters.startedAt.end) {
+        return false;
+      }
+    }
+
+    // Date range filters on endedAt (based on root span)
+    if (filters.endedAt) {
+      // If root span is still running (endedAt is null), it doesn't match endedAt filters
+      if (rootSpan.endedAt === null) {
+        return false;
+      }
+      if (filters.endedAt.start && rootSpan.endedAt < filters.endedAt.start) {
+        return false;
+      }
+      if (filters.endedAt.end && rootSpan.endedAt > filters.endedAt.end) {
+        return false;
+      }
+    }
+
+    // Span type filter (on root span)
+    if (filters.spanType !== undefined && rootSpan.spanType !== filters.spanType) {
+      return false;
+    }
+
+    // Entity filters
+    if (filters.entityType !== undefined && rootSpan.entityType !== filters.entityType) {
+      return false;
+    }
+    if (filters.entityId !== undefined && rootSpan.entityId !== filters.entityId) {
+      return false;
+    }
+    if (filters.entityName !== undefined && rootSpan.entityName !== filters.entityName) {
+      return false;
+    }
+
+    // Identity & Tenancy filters
+    if (filters.userId !== undefined && rootSpan.userId !== filters.userId) {
+      return false;
+    }
+    if (filters.organizationId !== undefined && rootSpan.organizationId !== filters.organizationId) {
+      return false;
+    }
+    if (filters.resourceId !== undefined && rootSpan.resourceId !== filters.resourceId) {
+      return false;
+    }
+
+    // Correlation ID filters
+    if (filters.runId !== undefined && rootSpan.runId !== filters.runId) {
+      return false;
+    }
+    if (filters.sessionId !== undefined && rootSpan.sessionId !== filters.sessionId) {
+      return false;
+    }
+    if (filters.threadId !== undefined && rootSpan.threadId !== filters.threadId) {
+      return false;
+    }
+    if (filters.requestId !== undefined && rootSpan.requestId !== filters.requestId) {
+      return false;
+    }
+
+    // Deployment context filters
+    if (filters.environment !== undefined && rootSpan.environment !== filters.environment) {
+      return false;
+    }
+    if (filters.source !== undefined && rootSpan.source !== filters.source) {
+      return false;
+    }
+    if (filters.serviceName !== undefined && rootSpan.serviceName !== filters.serviceName) {
+      return false;
+    }
+
+    // Scope filter (partial match - all provided keys must match)
+    if (filters.scope !== undefined && rootSpan.scope !== null) {
+      for (const [key, value] of Object.entries(filters.scope)) {
+        if (!this.jsonValueEquals(rootSpan.scope[key], value)) {
+          return false;
+        }
+      }
+    } else if (filters.scope !== undefined && rootSpan.scope === null) {
+      return false;
+    }
+
+    // Metadata filter (partial match - all provided keys must match)
+    if (filters.metadata !== undefined && rootSpan.metadata !== null) {
+      for (const [key, value] of Object.entries(filters.metadata)) {
+        if (!this.jsonValueEquals(rootSpan.metadata[key], value)) {
+          return false;
+        }
+      }
+    } else if (filters.metadata !== undefined && rootSpan.metadata === null) {
+      return false;
+    }
+
+    // Tags filter (all provided tags must be present)
+    if (filters.tags !== undefined && filters.tags.length > 0) {
+      if (rootSpan.tags === null) {
+        return false;
+      }
+      for (const tag of filters.tags) {
+        if (!rootSpan.tags.includes(tag)) {
+          return false;
+        }
+      }
+    }
+
+    // Derived status filter
+    if (filters.status !== undefined && traceEntry.status !== filters.status) {
+      return false;
+    }
+
+    // Has child error filter
+    if (filters.hasChildError !== undefined && traceEntry.hasChildError !== filters.hasChildError) {
+      return false;
+    }
+
+    return true;
   }
 
-  private filterSpansByDate(spans: SpanRecord[], startDate: Date | undefined, endDate: Date | undefined): SpanRecord[] {
-    return spans.filter(span => {
-      if (startDate && span.startedAt < startDate) return false;
-      if (endDate && span.startedAt > endDate) return false;
-      return true;
-    });
-  }
-
-  private filterSpansByFilter(spans: SpanRecord[], filter: TracesPaginatedArg['filters']): SpanRecord[] {
-    return spans.filter(span => {
-      if (filter?.name && span.name !== filter.name) return false;
-      if (filter?.spanType && span.spanType !== filter.spanType) return false;
-
-      if (filter?.entityType === 'agent' && filter.entityId !== span.attributes?.agentId) return false;
-
-      if (filter?.entityType === 'workflow' && filter.entityId !== span.attributes?.workflowId) return false;
-
-      return true;
-    });
-  }
-
-  private filterSpansByPagination(spans: SpanRecord[], pagination: TracesPaginatedArg['pagination']): SpanRecord[] {
-    const page = pagination?.page ?? 0;
-    const perPage = pagination?.perPage ?? 10;
-    const start = page * perPage;
-    const end = start + perPage;
-    return spans.slice(start, end);
+  /**
+   * Deep equality check for JSON values
+   */
+  private jsonValueEquals(a: JsonValue | undefined, b: JsonValue | undefined): boolean {
+    if (a === undefined || b === undefined) {
+      return a === b;
+    }
+    if (a === null || b === null) {
+      return a === b;
+    }
+    if (typeof a !== typeof b) {
+      return false;
+    }
+    if (typeof a === 'object') {
+      if (Array.isArray(a) && Array.isArray(b)) {
+        if (a.length !== b.length) return false;
+        return a.every((val, i) => this.jsonValueEquals(val, b[i]));
+      }
+      if (Array.isArray(a) || Array.isArray(b)) {
+        return false;
+      }
+      const aKeys = Object.keys(a);
+      const bKeys = Object.keys(b);
+      if (aKeys.length !== bKeys.length) return false;
+      return aKeys.every(key =>
+        this.jsonValueEquals((a as Record<string, JsonValue>)[key], (b as Record<string, JsonValue>)[key]),
+      );
+    }
+    return a === b;
   }
 
   async updateSpan(params: { spanId: string; traceId: string; updates: Partial<UpdateSpanRecord> }): Promise<void> {
-    const id = this.generateId(params);
-    const span = this.collection.get(id);
+    const { traceId, spanId, updates } = params;
+    const traceEntry = this.collection.get(traceId);
 
+    if (!traceEntry) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_UPDATE_SPAN_NOT_FOUND',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.SYSTEM,
+        text: 'Trace not found for span update',
+      });
+    }
+
+    const span = traceEntry.spans[spanId];
     if (!span) {
       throw new MastraError({
         id: 'OBSERVABILITY_UPDATE_SPAN_NOT_FOUND',
@@ -155,7 +410,20 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       });
     }
 
-    this.collection.set(id, { ...span, ...params.updates, updatedAt: new Date() });
+    const updatedSpan: SpanRecord = {
+      ...span,
+      ...updates,
+      updatedAt: new Date(),
+    };
+
+    traceEntry.spans[spanId] = updatedSpan;
+
+    // Update root span reference if this is the root span
+    if (updatedSpan.parentSpanId === null) {
+      traceEntry.rootSpan = updatedSpan;
+    }
+
+    this.recomputeTraceProperties(traceEntry);
   }
 
   async batchUpdateSpans(args: {
@@ -172,10 +440,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     for (const traceId of args.traceIds) {
-      const spans = Array.from(this.collection.values()).filter(span => span.traceId === traceId);
-      for (const span of spans) {
-        this.collection.delete(this.generateId(span));
-      }
+      this.collection.delete(traceId);
     }
   }
 }

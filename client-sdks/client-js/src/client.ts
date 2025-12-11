@@ -1,6 +1,7 @@
+import type { ListScoresResponse } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { TraceRecord, TracesPaginatedArg } from '@mastra/core/storage';
+import type { TraceRecord, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
@@ -15,6 +16,7 @@ import {
   Observability,
   StoredAgent,
 } from './resources';
+import type { ListScoresBySpanParams } from './resources/observability';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -31,13 +33,10 @@ import type {
   McpServerToolListResponse,
   GetScorerResponse,
   ListScoresByScorerIdParams,
-  ListScoresResponse,
   ListScoresByRunIdParams,
   ListScoresByEntityIdParams,
-  ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
-  GetTracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   ListMemoryThreadMessagesResponse,
@@ -49,6 +48,7 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListScoresResponse as ListScoresResponseOld,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -588,7 +588,7 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
-  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponse> {
+  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponseOld> {
     const { page, perPage, scorerId, entityId, entityType } = params;
     const searchParams = new URLSearchParams();
 
@@ -614,7 +614,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing run ID and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponse> {
+  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponseOld> {
     const { runId, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -634,7 +634,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing entity ID, type, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponse> {
+  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponseOld> {
     const { entityId, entityType, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -667,7 +667,7 @@ export class MastraClient extends BaseResource {
     return this.observability.getTrace(traceId);
   }
 
-  getTraces(params: TracesPaginatedArg): Promise<GetTracesResponse> {
+  getTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     return this.observability.getTraces(params);
   }
 

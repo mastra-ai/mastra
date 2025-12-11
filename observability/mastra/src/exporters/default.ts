@@ -1,12 +1,7 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  InitExporterOptions,
-  TracingStorageStrategy,
-} from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, InitExporterOptions } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
-import type { MastraStorage, CreateSpanRecord, UpdateSpanRecord } from '@mastra/core/storage';
+import type { MastraStorage, CreateSpanRecord, UpdateSpanRecord, TracingStorageStrategy } from '@mastra/core/storage';
 import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 
@@ -178,7 +173,7 @@ export class DefaultExporter extends BaseExporter {
     this.logger.warn('Out-of-order span update detected - skipping event', {
       spanId: event.exportedSpan.id,
       traceId: event.exportedSpan.traceId,
-      spanName: event.exportedSpan.name,
+      span: event.exportedSpan.name,
       eventType: event.type,
     });
   }
@@ -365,22 +360,50 @@ export class DefaultExporter extends BaseExporter {
   }
 
   private buildCreateRecord(span: AnyExportedSpan): CreateSpanRecord {
+    const metadata = span.metadata ?? {};
+
     return {
       traceId: span.traceId,
       spanId: span.id,
       parentSpanId: span.parentSpanId ?? null,
       name: span.name,
-      scope: null,
+
+      // Entity identification - from span
+      entityType: span.entityType ?? null,
+      entityId: span.entityId ?? null,
+      entityName: span.entityName ?? null,
+
+      // Identity & Tenancy - extracted from metadata if present
+      userId: (metadata.userId as string) ?? null,
+      organizationId: (metadata.organizationId as string) ?? null,
+      resourceId: (metadata.resourceId as string) ?? null,
+
+      // Correlation IDs - extracted from metadata if present
+      runId: (metadata.runId as string) ?? null,
+      sessionId: (metadata.sessionId as string) ?? null,
+      threadId: (metadata.threadId as string) ?? null,
+      requestId: (metadata.requestId as string) ?? null,
+
+      // Deployment context - extracted from metadata if present
+      environment: (metadata.environment as string) ?? null,
+      source: (metadata.source as string) ?? null,
+      serviceName: (metadata.serviceName as string) ?? null,
+      scope: (metadata.scope as Record<string, any>) ?? null,
+
+      // Span data
       spanType: span.type,
       attributes: this.serializeAttributes(span),
-      metadata: span.metadata ?? null,
+      metadata: span.metadata ?? null, // Keep all metadata including extracted fields
+      tags: span.tags ?? null,
       links: null,
+      input: span.input ?? null,
+      output: span.output ?? null,
+      error: span.errorInfo ?? null,
+      isEvent: span.isEvent,
+
+      // Timestamps
       startedAt: span.startTime,
       endedAt: span.endTime ?? null,
-      input: span.input,
-      output: span.output,
-      error: span.errorInfo,
-      isEvent: span.isEvent,
     };
   }
 
@@ -394,7 +417,7 @@ export class DefaultExporter extends BaseExporter {
       endedAt: span.endTime ?? null,
       input: span.input,
       output: span.output,
-      error: span.errorInfo,
+      error: span.errorInfo ?? null,
     };
   }
 

@@ -279,6 +279,21 @@ export class StoreOperationsPG extends StoreOperations {
             `
                 : ''
             }
+          ${
+            tableName === TABLE_SPANS
+              ? `
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_ai_spans_traceid_spanid_pk'
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
+                ADD CONSTRAINT ${constraintPrefix}mastra_ai_spans_traceid_spanid_pk
+                PRIMARY KEY ("traceId", "spanId");
+              END IF;
+            END $$;
+            `
+              : ''
+          }
           `;
 
       await this.client.none(sql);
@@ -289,9 +304,10 @@ export class StoreOperationsPG extends StoreOperations {
         ifNotExists: timeZColumnNames,
       });
 
-      // Set up timestamp triggers for Spans table
+      // Set up timestamp triggers and run migrations for Spans table
       if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
+        await this.migrateSpansTable();
       }
     } catch (error) {
       throw new MastraError(
@@ -353,6 +369,57 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       // Log warning but don't fail table creation
       this.logger?.warn?.(`Failed to set up timestamp triggers for ${fullTableName}:`, error);
+    }
+  }
+
+  /**
+   * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
+   * This adds new columns that don't exist in old schema.
+   */
+  private async migrateSpansTable(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const schema = TABLE_SCHEMAS[TABLE_SPANS];
+
+    try {
+      // Add new columns from current schema that don't exist
+      // These columns were added in the new schema
+      const newColumns = [
+        'entityType',
+        'entityId',
+        'entityName',
+        'userId',
+        'organizationId',
+        'resourceId',
+        'runId',
+        'sessionId',
+        'threadId',
+        'requestId',
+        'environment',
+        'source',
+        'serviceName',
+        'tags',
+      ];
+
+      for (const columnName of newColumns) {
+        const columnDef = schema[columnName];
+        if (columnDef) {
+          const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
+          if (!columnExists) {
+            const sqlType = this.getSqlType(columnDef.type);
+            const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+            const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+            const alterSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+            await this.client.none(alterSql);
+            this.logger?.debug?.(`Added column '${columnName}' to ${fullTableName}`);
+          }
+        }
+      }
+
+      this.logger?.info?.(`Migration completed for ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail - migrations should be best-effort
+      this.logger?.warn?.(`Failed to migrate spans table ${fullTableName}:`, error);
     }
   }
 
@@ -764,6 +831,44 @@ export class StoreOperationsPG extends StoreOperations {
         name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
         table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
+      },
+      // Root spans partial index - every listTraces query filters parentSpanId IS NULL
+      {
+        name: `${schemaPrefix}mastra_ai_spans_root_spans_idx`,
+        table: TABLE_SPANS,
+        columns: ['startedAt DESC'],
+        where: '"parentSpanId" IS NULL',
+      },
+      // Entity identification indexes - common filtering patterns
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityid_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityId'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityname_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityName'],
+      },
+      // Multi-tenant filtering - organizationId + userId
+      {
+        name: `${schemaPrefix}mastra_ai_spans_orgid_userid_idx`,
+        table: TABLE_SPANS,
+        columns: ['organizationId', 'userId'],
+      },
+      // Metadata JSONB GIN index - for custom filtering with @> containment
+      {
+        name: `${schemaPrefix}mastra_ai_spans_metadata_gin_idx`,
+        table: TABLE_SPANS,
+        columns: ['metadata'],
+        method: 'gin',
+      },
+      // Tags array GIN index - for array containment queries
+      {
+        name: `${schemaPrefix}mastra_ai_spans_tags_gin_idx`,
+        table: TABLE_SPANS,
+        columns: ['tags'],
+        method: 'gin',
       },
     ];
   }

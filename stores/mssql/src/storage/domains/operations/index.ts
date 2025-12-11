@@ -305,6 +305,29 @@ export class StoreOperationsMSSQL extends StoreOperations {
           await this.pool.request().query(addConstraintSql);
         }
       }
+
+      // Run migrations and add composite primary key for Spans table
+      if (tableName === TABLE_SPANS) {
+        await this.migrateSpansTable();
+
+        // Add composite primary key for spans table (traceId, spanId)
+        const pkConstraintName = 'mastra_ai_spans_traceid_spanid_pk';
+        const checkPkRequest = this.pool.request();
+        checkPkRequest.input('constraintName', pkConstraintName);
+        const pkResult = await checkPkRequest.query(
+          `SELECT 1 AS found FROM sys.key_constraints WHERE name = @constraintName`,
+        );
+        const pkExists = Array.isArray(pkResult.recordset) && pkResult.recordset.length > 0;
+        if (!pkExists) {
+          try {
+            const addPkSql = `ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} ADD CONSTRAINT ${pkConstraintName} PRIMARY KEY ([traceId], [spanId])`;
+            await this.pool.request().query(addPkSql);
+          } catch (pkError) {
+            // Log warning but don't fail - existing tables might have data issues
+            this.logger?.warn?.(`Failed to add composite primary key to spans table:`, pkError);
+          }
+        }
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -317,6 +340,60 @@ export class StoreOperationsMSSQL extends StoreOperations {
         },
         error,
       );
+    }
+  }
+
+  /**
+   * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
+   * This adds new columns that don't exist in old schema.
+   */
+  private async migrateSpansTable(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const schema = TABLE_SCHEMAS[TABLE_SPANS];
+
+    try {
+      // Add new columns from current schema that don't exist
+      const newColumns = [
+        'entityType',
+        'entityId',
+        'entityName',
+        'userId',
+        'organizationId',
+        'resourceId',
+        'runId',
+        'sessionId',
+        'threadId',
+        'requestId',
+        'environment',
+        'source',
+        'serviceName',
+        'tags',
+      ];
+
+      for (const columnName of newColumns) {
+        const columnDef = schema[columnName];
+        if (columnDef) {
+          const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
+          if (!columnExists) {
+            // Apply the same large data column logic as createTable
+            const largeDataColumns = ['metadata', 'input', 'output'];
+            const useLargeStorage = largeDataColumns.includes(columnName);
+            const isIndexed = !!columnDef.primaryKey;
+            const sqlType = this.getSqlType(columnDef.type, isIndexed, useLargeStorage);
+            const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+            const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+            const alterSql =
+              `ALTER TABLE ${fullTableName} ADD [${columnName}] ${sqlType} ${nullable} ${defaultValue}`.trim();
+            await this.pool.request().query(alterSql);
+            this.logger?.debug?.(`Added column '${columnName}' to ${fullTableName}`);
+          }
+        }
+      }
+
+      this.logger?.info?.(`Migration completed for ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail - migrations should be best-effort
+      this.logger?.warn?.(`Failed to migrate spans table ${fullTableName}:`, error);
     }
   }
 
@@ -1091,6 +1168,32 @@ export class StoreOperationsMSSQL extends StoreOperations {
         table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
       },
+      // Root spans filtered index - every listTraces query filters parentSpanId IS NULL
+      {
+        name: `${schemaPrefix}mastra_ai_spans_root_spans_idx`,
+        table: TABLE_SPANS,
+        columns: ['startedAt DESC'],
+        where: '[parentSpanId] IS NULL',
+      },
+      // Entity identification indexes - common filtering patterns
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityid_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityId'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityname_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityName'],
+      },
+      // Multi-tenant filtering - organizationId + userId
+      {
+        name: `${schemaPrefix}mastra_ai_spans_orgid_userid_idx`,
+        table: TABLE_SPANS,
+        columns: ['organizationId', 'userId'],
+      },
+      // Note: MSSQL doesn't support GIN indexes for JSONB/array containment queries
+      // Metadata and tags filtering will use full table scans on NVARCHAR(MAX) columns
     ];
   }
 

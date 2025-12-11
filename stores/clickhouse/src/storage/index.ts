@@ -2,12 +2,11 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_SCHEMAS,
-  PaginationInfo,
   StorageColumn,
   TABLE_NAMES,
   WorkflowRun,
@@ -350,7 +349,7 @@ export class ClickhouseStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId, pagination });
   }
 
@@ -362,7 +361,7 @@ export class ClickhouseStore extends MastraStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 
@@ -378,7 +377,7 @@ export class ClickhouseStore extends MastraStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
@@ -390,7 +389,7 @@ export class ClickhouseStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 

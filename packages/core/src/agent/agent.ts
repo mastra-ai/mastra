@@ -28,9 +28,9 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
-import { SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
+import { EntityType, SpanType, getOrCreateSpan } from '../observability';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -2623,10 +2623,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
       name: `agent run: '${this.id}'`,
+      entityType: EntityType.AGENT,
+      entityId: this.id,
+      entityName: this.name,
       input: options.messages,
       attributes: {
-        agentId: this.id,
-        agentName: this.name,
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
       },

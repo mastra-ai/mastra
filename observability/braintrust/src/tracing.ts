@@ -171,7 +171,7 @@ export class BraintrustExporter extends BaseExporter {
       this.logger.warn('Braintrust exporter: No Braintrust span found for span update/end', {
         traceId: span.traceId,
         spanId: span.id,
-        spanName: span.name,
+        span: span.name,
         spanType: span.type,
         isRootSpan: span.isRootSpan,
         parentSpanId: span.parentSpanId,
@@ -208,7 +208,7 @@ export class BraintrustExporter extends BaseExporter {
       this.logger.debug('Braintrust exporter: Creating logger for event', {
         traceId: span.traceId,
         spanId: span.id,
-        spanName: span.name,
+        span: span.name,
         method: 'handleEventSpan',
       });
 
@@ -319,7 +319,7 @@ export class BraintrustExporter extends BaseExporter {
     this.logger.warn('Braintrust exporter: No span data found for span', {
       traceId: span.traceId,
       spanId: span.id,
-      spanName: span.name,
+      span: span.name,
       spanType: span.type,
       isRootSpan: span.isRootSpan,
       parentSpanId: span.parentSpanId,
@@ -356,7 +356,7 @@ export class BraintrustExporter extends BaseExporter {
     this.logger.warn('Braintrust exporter: No parent data found for span', {
       traceId: span.traceId,
       spanId: span.id,
-      spanName: span.name,
+      span: span.name,
       spanType: span.type,
       isRootSpan: span.isRootSpan,
       parentSpanId: span.parentSpanId,

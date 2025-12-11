@@ -1,15 +1,17 @@
 import type { SerializedError } from '../error';
-import type { MastraDBMessage, StorageThreadType } from '../memory/types';
-import type { SpanType } from '../observability';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
+import { z } from 'zod';
+import type { MastraDBMessage, StorageThreadType } from '../memory/types';
 
 export type StoragePagination = {
   page: number;
   perPage: number | false;
 };
 
+export type StorageColumnType = 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint' | 'boolean';
+
 export interface StorageColumn {
-  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint' | 'boolean';
+  type: StorageColumnType;
   primaryKey?: boolean;
   nullable?: boolean;
   references?: {
@@ -38,15 +40,6 @@ export interface WorkflowRun {
   updatedAt: Date;
   resourceId?: string;
 }
-
-export type PaginationArgs = {
-  dateRange?: {
-    start?: Date;
-    end?: Date;
-  };
-  page?: number;
-  perPage?: number;
-};
 
 export type PaginationInfo = {
   total: number;
@@ -163,44 +156,6 @@ export interface ThreadSortOptions {
 export type ThreadOrderBy = 'createdAt' | 'updatedAt';
 
 export type ThreadSortDirection = 'ASC' | 'DESC';
-
-export interface SpanRecord {
-  traceId: string;
-  spanId: string;
-  parentSpanId: string | null;
-  name: string;
-  scope: Record<string, any> | null;
-  spanType: SpanType;
-  attributes: Record<string, any> | null;
-  metadata: Record<string, any> | null;
-  links: any;
-  startedAt: Date;
-  endedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date | null;
-  input: any;
-  output: any;
-  error: any;
-  isEvent: boolean;
-}
-
-export type CreateSpanRecord = Omit<SpanRecord, 'createdAt' | 'updatedAt'>;
-export type UpdateSpanRecord = Omit<CreateSpanRecord, 'spanId' | 'traceId'>;
-
-export interface TraceRecord {
-  traceId: string;
-  spans: SpanRecord[];
-}
-
-export interface TracesPaginatedArg {
-  filters?: {
-    name?: string;
-    spanType?: SpanType;
-    entityId?: string;
-    entityType?: 'agent' | 'workflow';
-  };
-  pagination?: PaginationArgs;
-}
 
 // Agent Storage Types
 
@@ -324,11 +279,86 @@ export interface StorageIndexStats extends IndexInfo {
 }
 
 // Workflow Storage Types
-
 export interface UpdateWorkflowStateOptions {
   status: WorkflowRunStatus;
   result?: StepResult<any, any, any, any>;
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
+}
+
+function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
+  let current = schema;
+  let nullable = false;
+
+  while (true) {
+    if (current instanceof z.ZodNullable) {
+      nullable = true;
+      current = current._def.innerType;
+      continue;
+    }
+
+    if (current instanceof z.ZodOptional) {
+      // For DB purposes, we usually treat "optional" as "nullable"
+      nullable = true;
+      current = current._def.innerType;
+      continue;
+    }
+
+    if (current instanceof z.ZodDefault) {
+      current = current._def.innerType;
+      continue;
+    }
+
+    if (current instanceof z.ZodEffects) {
+      current = current._def.schema;
+      continue;
+    }
+
+    if (current instanceof z.ZodBranded) {
+      current = current._def.type;
+      continue;
+    }
+
+    // If you ever use ZodCatch/ZodPipeline, you can unwrap them here too.
+    break;
+  }
+
+  return { base: current, nullable };
+}
+
+function zodToStorageType(schema: z.ZodTypeAny): StorageColumnType {
+  if (schema instanceof z.ZodString || schema instanceof z.ZodNativeEnum) {
+    return 'text';
+  }
+  if (schema instanceof z.ZodDate) {
+    return 'timestamp';
+  }
+  if (schema instanceof z.ZodBoolean) {
+    return 'boolean';
+  }
+  // fall back for objects/records/unknown
+  return 'jsonb';
+}
+
+/**
+ * Converts a zod schema into a database schema
+ * @param zObject A zod schema object
+ * @returns database schema record with StorageColumns
+ */
+export function buildStorageSchema<Shape extends z.ZodRawShape>(
+  zObject: z.ZodObject<Shape>,
+): Record<keyof Shape & string, StorageColumn> {
+  const shape = zObject.shape;
+  const result: Record<string, StorageColumn> = {};
+
+  for (const [key, field] of Object.entries(shape)) {
+    const { base, nullable } = unwrapSchema(field as z.ZodTypeAny);
+    result[key] = {
+      type: zodToStorageType(base),
+      nullable,
+    };
+  }
+
+  return result as Record<keyof Shape & string, StorageColumn>;
 }

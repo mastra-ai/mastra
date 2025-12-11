@@ -1,15 +1,17 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { createStorageErrorId, ObservabilityStorage, TABLE_SPANS, TraceStatus } from '@mastra/core/storage';
 import type {
   SpanRecord,
   CreateSpanRecord,
   UpdateSpanRecord,
   TraceRecord,
-  TracesPaginatedArg,
+  ListTracesArgs,
   PaginationInfo,
+  TracingStorageStrategy,
 } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StoreOperationsLibSQL } from '../operations';
-import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow } from '../utils';
+import { transformFromSqlRow } from '../utils';
 
 export class ObservabilityLibSQL extends ObservabilityStorage {
   private operations: StoreOperationsLibSQL;
@@ -18,12 +20,26 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     this.operations = operations;
   }
 
+  public override get tracingStrategy(): {
+    preferred: TracingStorageStrategy;
+    supported: TracingStorageStrategy[];
+  } {
+    return {
+      preferred: 'batch-with-updates',
+      supported: ['batch-with-updates', 'insert-only'],
+    };
+  }
+
   async createSpan(span: CreateSpanRecord): Promise<void> {
     try {
-      // Explicitly set createdAt/updatedAt timestamps
+      const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
+      const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
       const now = new Date().toISOString();
+
       const record = {
         ...span,
+        startedAt,
+        endedAt,
         createdAt: now,
         updatedAt: now,
       };
@@ -38,7 +54,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
             spanId: span.spanId,
             traceId: span.traceId,
             spanType: span.spanType,
-            spanName: span.name,
+            name: span.name,
           },
         },
         error,
@@ -51,7 +67,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       const spans = await this.operations.loadMany<SpanRecord>({
         tableName: TABLE_SPANS,
         whereClause: { sql: ' WHERE traceId = ?', args: [traceId] },
-        orderBy: 'startedAt DESC',
+        orderBy: 'startedAt ASC',
       });
 
       if (!spans || spans.length === 0) {
@@ -87,10 +103,18 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     try {
+      const data: Record<string, any> = { ...updates };
+      if (data.endedAt instanceof Date) {
+        data.endedAt = data.endedAt.toISOString();
+      }
+      if (data.startedAt instanceof Date) {
+        data.startedAt = data.startedAt.toISOString();
+      }
+
       await this.operations.update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
-        data: { ...updates, updatedAt: new Date().toISOString() },
+        data,
       });
     } catch (error) {
       throw new MastraError(
@@ -108,92 +132,199 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
   }
 
-  async getTracesPaginated({
+  async listTraces({
     filters,
     pagination,
-  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    orderBy,
+  }: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     const page = pagination?.page ?? 0;
-    const perPage = pagination?.perPage ?? 10;
-    const { entityId, entityType, ...actualFilters } = filters || {};
+    const perPage = pagination?.perPage ?? 100;
 
-    const filtersWithDateRange: Record<string, any> = {
-      ...actualFilters,
-      ...buildDateRangeFilter(pagination?.dateRange, 'startedAt'),
-      parentSpanId: null,
-    };
-    const whereClause = prepareWhereClause(filtersWithDateRange, SPAN_SCHEMA);
+    const tableName = parseSqlIdentifier(TABLE_SPANS, 'table name');
 
-    let actualWhereClause = whereClause.sql || '';
-
-    if (entityId && entityType) {
-      const statement = `name = ?`;
-      let name = '';
-      if (entityType === 'workflow') {
-        name = `workflow run: '${entityId}'`;
-      } else if (entityType === 'agent') {
-        name = `agent run: '${entityId}'`;
-      } else {
-        const error = new MastraError({
-          id: createStorageErrorId('LIBSQL', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            entityType,
-          },
-          text: `Cannot filter by entity type: ${entityType}`,
-        });
-        this.logger?.trackException(error);
-        throw error;
-      }
-
-      whereClause.args.push(name);
-
-      if (actualWhereClause) {
-        actualWhereClause += ` AND ${statement}`;
-      } else {
-        actualWhereClause += `WHERE ${statement}`;
-      }
-    }
-
-    const orderBy = 'startedAt DESC';
-
-    let count = 0;
     try {
-      count = await this.operations.loadTotalCount({
+      // Build WHERE clause for filters
+      const conditions: string[] = ['parentSpanId IS NULL']; // Only root spans
+      const args: any[] = [];
+
+      if (filters) {
+        // Date range filters
+        if (filters.startedAt?.start) {
+          conditions.push(`startedAt >= ?`);
+          args.push(filters.startedAt.start.toISOString());
+        }
+        if (filters.startedAt?.end) {
+          conditions.push(`startedAt <= ?`);
+          args.push(filters.startedAt.end.toISOString());
+        }
+        if (filters.endedAt?.start) {
+          conditions.push(`endedAt >= ?`);
+          args.push(filters.endedAt.start.toISOString());
+        }
+        if (filters.endedAt?.end) {
+          conditions.push(`endedAt <= ?`);
+          args.push(filters.endedAt.end.toISOString());
+        }
+
+        // Span type filter
+        if (filters.spanType !== undefined) {
+          conditions.push(`spanType = ?`);
+          args.push(filters.spanType);
+        }
+
+        // Entity filters
+        if (filters.entityType !== undefined) {
+          conditions.push(`entityType = ?`);
+          args.push(filters.entityType);
+        }
+        if (filters.entityId !== undefined) {
+          conditions.push(`entityId = ?`);
+          args.push(filters.entityId);
+        }
+        if (filters.entityName !== undefined) {
+          conditions.push(`entityName = ?`);
+          args.push(filters.entityName);
+        }
+
+        // Identity & Tenancy filters
+        if (filters.userId !== undefined) {
+          conditions.push(`userId = ?`);
+          args.push(filters.userId);
+        }
+        if (filters.organizationId !== undefined) {
+          conditions.push(`organizationId = ?`);
+          args.push(filters.organizationId);
+        }
+        if (filters.resourceId !== undefined) {
+          conditions.push(`resourceId = ?`);
+          args.push(filters.resourceId);
+        }
+
+        // Correlation ID filters
+        if (filters.runId !== undefined) {
+          conditions.push(`runId = ?`);
+          args.push(filters.runId);
+        }
+        if (filters.sessionId !== undefined) {
+          conditions.push(`sessionId = ?`);
+          args.push(filters.sessionId);
+        }
+        if (filters.threadId !== undefined) {
+          conditions.push(`threadId = ?`);
+          args.push(filters.threadId);
+        }
+        if (filters.requestId !== undefined) {
+          conditions.push(`requestId = ?`);
+          args.push(filters.requestId);
+        }
+
+        // Deployment context filters
+        if (filters.environment !== undefined) {
+          conditions.push(`environment = ?`);
+          args.push(filters.environment);
+        }
+        if (filters.source !== undefined) {
+          conditions.push(`source = ?`);
+          args.push(filters.source);
+        }
+        if (filters.serviceName !== undefined) {
+          conditions.push(`serviceName = ?`);
+          args.push(filters.serviceName);
+        }
+
+        // Scope filter (JSON containment - SQLite uses json_extract)
+        if (filters.scope !== undefined) {
+          // For SQLite/libsql, we need to check each key in the scope object
+          for (const [key, value] of Object.entries(filters.scope)) {
+            conditions.push(`json_extract(scope, '$.${key}') = ?`);
+            args.push(typeof value === 'string' ? value : JSON.stringify(value));
+          }
+        }
+
+        // Metadata filter (JSON containment)
+        if (filters.metadata !== undefined) {
+          for (const [key, value] of Object.entries(filters.metadata)) {
+            conditions.push(`json_extract(metadata, '$.${key}') = ?`);
+            args.push(typeof value === 'string' ? value : JSON.stringify(value));
+          }
+        }
+
+        // Tags filter (all tags must be present)
+        if (filters.tags !== undefined && filters.tags.length > 0) {
+          // For SQLite, we check if each tag exists in the JSON array
+          for (const tag of filters.tags) {
+            conditions.push(`json_array_length(tags) > 0 AND tags LIKE ?`);
+            args.push(`%"${tag}"%`);
+          }
+        }
+
+        // Status filter (derived from error and endedAt)
+        if (filters.status !== undefined) {
+          switch (filters.status) {
+            case TraceStatus.ERROR:
+              conditions.push(`error IS NOT NULL`);
+              break;
+            case TraceStatus.RUNNING:
+              conditions.push(`endedAt IS NULL AND error IS NULL`);
+              break;
+            case TraceStatus.SUCCESS:
+              conditions.push(`endedAt IS NOT NULL AND error IS NULL`);
+              break;
+          }
+        }
+
+        // hasChildError filter (requires subquery)
+        if (filters.hasChildError !== undefined) {
+          if (filters.hasChildError) {
+            conditions.push(`EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c.traceId = ${tableName}.traceId AND c.error IS NOT NULL
+            )`);
+          } else {
+            conditions.push(`NOT EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c.traceId = ${tableName}.traceId AND c.error IS NOT NULL
+            )`);
+          }
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Order by clause
+      // SQLite doesn't support NULLS LAST, so we use COALESCE or CASE for similar behavior
+      const sortField = orderBy?.field === 'endedAt' ? 'endedAt' : 'startedAt';
+      const sortDirection = orderBy?.direction === 'ASC' ? 'ASC' : 'DESC';
+      // For DESC, we want NULLs last (they normally come first in DESC)
+      // For ASC, NULLs come first by default which matches NULLS FIRST behavior
+      const orderByClause =
+        sortDirection === 'DESC'
+          ? `CASE WHEN ${sortField} IS NULL THEN 1 ELSE 0 END, ${sortField} DESC`
+          : `${sortField} ASC`;
+
+      // Get total count
+      const count = await this.operations.loadTotalCount({
         tableName: TABLE_SPANS,
-        whereClause: { sql: actualWhereClause, args: whereClause.args },
+        whereClause: { sql: whereClause, args },
       });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'GET_TRACES_PAGINATED', 'COUNT_FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-        },
-        error,
-      );
-    }
 
-    if (count === 0) {
-      return {
-        pagination: {
-          total: 0,
-          page,
-          perPage,
-          hasMore: false,
-        },
-        spans: [],
-      };
-    }
+      if (count === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage,
+            hasMore: false,
+          },
+          spans: [],
+        };
+      }
 
-    try {
+      // Get paginated spans
       const spans = await this.operations.loadMany<SpanRecord>({
         tableName: TABLE_SPANS,
-        whereClause: {
-          sql: actualWhereClause,
-          args: whereClause.args,
-        },
-        orderBy,
+        whereClause: { sql: whereClause, args },
+        orderBy: orderByClause,
         offset: page * perPage,
         limit: perPage,
       });
@@ -203,14 +334,14 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
           total: count,
           page,
           perPage,
-          hasMore: spans.length === perPage,
+          hasMore: (page + 1) * perPage < count,
         },
         spans: spans.map(span => transformFromSqlRow<SpanRecord>({ tableName: TABLE_SPANS, sqlRow: span })),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'GET_TRACES_PAGINATED', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'LIST_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -221,15 +352,23 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
     try {
-      // Use single timestamp for all records in the batch
       const now = new Date().toISOString();
-      return this.operations.batchInsert({
-        tableName: TABLE_SPANS,
-        records: args.records.map(record => ({
+      const records = args.records.map(record => {
+        const startedAt = record.startedAt instanceof Date ? record.startedAt.toISOString() : record.startedAt;
+        const endedAt = record.endedAt instanceof Date ? record.endedAt.toISOString() : record.endedAt;
+
+        return {
           ...record,
+          startedAt,
+          endedAt,
           createdAt: now,
           updatedAt: now,
-        })),
+        };
+      });
+
+      return this.operations.batchInsert({
+        tableName: TABLE_SPANS,
+        records,
       });
     } catch (error) {
       throw new MastraError(
@@ -253,10 +392,20 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     try {
       return this.operations.batchUpdate({
         tableName: TABLE_SPANS,
-        updates: args.records.map(record => ({
-          keys: { spanId: record.spanId, traceId: record.traceId },
-          data: { ...record.updates, updatedAt: new Date().toISOString() },
-        })),
+        updates: args.records.map(record => {
+          const data: Record<string, any> = { ...record.updates };
+          if (data.endedAt instanceof Date) {
+            data.endedAt = data.endedAt.toISOString();
+          }
+          if (data.startedAt instanceof Date) {
+            data.startedAt = data.startedAt.toISOString();
+          }
+
+          return {
+            keys: { spanId: record.spanId, traceId: record.traceId },
+            data,
+          };
+        }),
       });
     } catch (error) {
       throw new MastraError(

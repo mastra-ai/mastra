@@ -1,7 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import {
   createStorageErrorId,
   TABLE_SCORERS,
@@ -10,7 +10,7 @@ import {
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
 
 export class ScoresLibSQL extends ScoresStorage {
@@ -28,7 +28,7 @@ export class ScoresLibSQL extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
 
@@ -96,7 +96,7 @@ export class ScoresLibSQL extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
 
@@ -196,7 +196,7 @@ export class ScoresLibSQL extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -252,7 +252,7 @@ export class ScoresLibSQL extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
 
@@ -316,7 +316,7 @@ export class ScoresLibSQL extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);

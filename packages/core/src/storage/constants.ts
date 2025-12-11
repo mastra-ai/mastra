@@ -1,3 +1,5 @@
+import { spanRecordSchema } from './domains/observability/types';
+import { buildStorageSchema } from './types';
 import type { StorageColumn } from './types';
 
 export const TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
@@ -57,7 +59,9 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp' },
 };
 
-export const SPAN_SCHEMA: Record<string, StorageColumn> = {
+export const SPAN_SCHEMA = buildStorageSchema(spanRecordSchema);
+
+export const OLD_SPAN_SCHEMA: Record<string, StorageColumn> = {
   // Composite primary key of traceId and spanId
   traceId: { type: 'text', nullable: false },
   spanId: { type: 'text', nullable: false },

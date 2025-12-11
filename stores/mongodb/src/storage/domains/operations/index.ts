@@ -1,5 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, safelyParseJSON, StoreOperations, TABLE_SCHEMAS } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  safelyParseJSON,
+  StoreOperations,
+  TABLE_SCHEMAS,
+  TABLE_SPANS,
+} from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ConnectorHandler } from '../../connectors/base';
 
@@ -24,8 +30,43 @@ export class StoreOperationsMongoDB extends StoreOperations {
     return true;
   }
 
-  async createTable(): Promise<void> {
-    // Nothing to do here, MongoDB is schemaless
+  async createTable(args?: { tableName?: TABLE_NAMES }): Promise<void> {
+    // MongoDB is schemaless, so no table creation needed
+    // However, we create indexes for performance on the spans collection
+    if (args?.tableName === TABLE_SPANS) {
+      await this.createSpansIndexes();
+    }
+  }
+
+  /**
+   * Creates indexes for the spans collection for optimal query performance
+   * MongoDB indexes are idempotent - creating an existing index is a no-op
+   */
+  private async createSpansIndexes(): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+
+      // Composite primary key equivalent - unique index on traceId + spanId
+      await collection.createIndex({ traceId: 1, spanId: 1 }, { unique: true, name: 'spans_traceid_spanid_unique' });
+
+      // Root spans partial index - for listTraces() which always filters parentSpanId: null
+      await collection.createIndex(
+        { startedAt: -1 },
+        { name: 'spans_root_spans_idx', partialFilterExpression: { parentSpanId: null } },
+      );
+
+      // Entity identification indexes
+      await collection.createIndex({ entityType: 1, entityId: 1 }, { name: 'spans_entitytype_entityid_idx' });
+      await collection.createIndex({ entityType: 1, entityName: 1 }, { name: 'spans_entitytype_entityname_idx' });
+
+      // Multi-tenant filtering
+      await collection.createIndex({ organizationId: 1, userId: 1 }, { name: 'spans_orgid_userid_idx' });
+
+      this.logger?.info?.('Created indexes for spans collection');
+    } catch (error) {
+      // Log warning but don't fail - index creation should be best-effort
+      this.logger?.warn?.('Failed to create indexes for spans collection:', error);
+    }
   }
 
   async alterTable(_args: {
