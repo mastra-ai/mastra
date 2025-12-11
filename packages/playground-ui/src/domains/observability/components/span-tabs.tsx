@@ -75,7 +75,7 @@ export function SpanTabs({
             </Section.Header>
             <SpanScoring
               traceId={trace?.traceId}
-              isTopLevelSpan={span?.parentSpanId === null}
+              isTopLevelSpan={!Boolean(span?.parentSpanId)}
               spanId={span?.spanId}
               entityType={entityType}
               scorers={scorers}

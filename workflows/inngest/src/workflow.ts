@@ -15,6 +15,7 @@ import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import type { z } from 'zod';
 import { InngestExecutionEngine } from './execution-engine';
+import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type { InngestEngineType, InngestFlowControlConfig, InngestWorkflowConfig } from './types';
 
@@ -84,6 +85,7 @@ export class InngestWorkflow<
   }
 
   __registerMastra(mastra: Mastra) {
+    super.__registerMastra(mastra);
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
     const updateNested = (step: StepFlowEntry) => {
@@ -211,32 +213,8 @@ export class InngestWorkflow<
           });
         }
 
-        const emitter = {
-          emit: async (event: string, data: any) => {
-            if (!publish) {
-              return;
-            }
-
-            try {
-              await publish({
-                channel: `workflow:${this.id}:${runId}`,
-                topic: event,
-                data,
-              });
-            } catch (err: any) {
-              this.logger.error('Error emitting event: ' + (err?.stack ?? err?.message ?? err));
-            }
-          },
-          on: (_event: string, _callback: (data: any) => void) => {
-            // no-op
-          },
-          off: (_event: string, _callback: (data: any) => void) => {
-            // no-op
-          },
-          once: (_event: string, _callback: (data: any) => void) => {
-            // no-op
-          },
-        };
+        // Create InngestPubSub instance with the publish function from Inngest context
+        const pubsub = new InngestPubSub(this.inngest, this.id, publish);
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
         const result = await engine.execute<
@@ -251,7 +229,7 @@ export class InngestWorkflow<
           serializedStepGraph: this.serializedStepGraph,
           input: inputData,
           initialState,
-          emitter,
+          pubsub,
           retryConfig: this.retryConfig,
           requestContext: new RequestContext(Object.entries(event.data.requestContext ?? {})),
           resume,
@@ -261,7 +239,15 @@ export class InngestWorkflow<
           // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
           outputOptions,
           outputWriter: async (chunk: WorkflowStreamEvent) => {
-            void emitter.emit('watch', chunk).catch(() => {});
+            try {
+              await pubsub.publish(`workflow.events.v2.${runId}`, {
+                type: 'watch',
+                runId,
+                data: chunk,
+              });
+            } catch (err) {
+              this.logger.debug?.('Failed to publish watch event:', err);
+            }
           },
         });
 
