@@ -64,6 +64,19 @@ export function validateToolSuspendData<T = any>(
   return { data: suspendData, error };
 }
 
+function getInnerType(field: z.ZodTypeAny): z.ZodTypeAny {
+  if (field instanceof z.ZodOptional || field instanceof z.ZodNullable) {
+    return getInnerType(field.unwrap());
+  }
+  if (field instanceof z.ZodDefault) {
+    return getInnerType(field.removeDefault());
+  }
+  if (field instanceof z.ZodEffects) {
+    return getInnerType(field.innerType());
+  }
+  return field;
+}
+
 /**
  * Normalizes undefined/null input to an appropriate default value based on schema type.
  * This handles LLMs (Claude Sonnet 4.5, Gemini 2.4, etc.) that send undefined/null
@@ -80,11 +93,12 @@ function normalizeNullishInput(schema: ZodLikeSchema, input: unknown): unknown {
     const normalized: Record<string, unknown> = {};
     for (const key in schema.shape) {
       const field = schema.shape[key];
+      const innerField = getInnerType(field);
       // Optional fields explicitly set to undefined (valid for Zod optional validation)
       // Required fields get invalid placeholder ({} or []) to trigger validation errors
       if (field.isOptional()) {
         normalized[key] = undefined;
-      } else if (field instanceof z.ZodArray) {
+      } else if (innerField instanceof z.ZodArray) {
         normalized[key] = [];
       } else {
         normalized[key] = {};
