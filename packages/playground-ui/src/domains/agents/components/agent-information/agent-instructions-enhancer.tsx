@@ -69,9 +69,13 @@ const PromptEnhancerTextarea = ({ agentId }: { agentId: string }) => {
     const form = e.target as HTMLFormElement;
     const formData = new FormData(form);
     const userComment = formData.get('userComment') as string;
-    const result = await enhancePrompt({ instructions: prompt, userComment });
-    form.reset();
-    setPrompt(result.new_prompt);
+    try {
+      const result = await enhancePrompt({ instructions: prompt, userComment });
+      form.reset();
+      setPrompt(result.new_prompt);
+    } catch {
+      // Error is already handled by the hook with toast
+    }
   };
 
   return (
