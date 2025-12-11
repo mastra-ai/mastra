@@ -74,21 +74,19 @@ export function validateToolSuspendData<T = any>(
  * @returns The normalized input (original value, {}, or [])
  */
 function normalizeNullishInput(schema: ZodLikeSchema, input: unknown): unknown {
-  if (input !== undefined && input !== null) {
-    return input;
-  }
+  if (input !== undefined && input !== null) return input;
 
-  // Check if schema is an array type
-  if (schema instanceof z.ZodArray) {
-    return [];
-  }
-
-  // Check if schema is an object type
   if (schema instanceof z.ZodObject) {
-    return {};
+    const normalized: Record<string, unknown> = {};
+    for (const key in schema.shape) {
+      const field = schema.shape[key];
+      // optional fields stay undefined, required fields get a default
+      normalized[key] = field.isOptional() ? undefined : field instanceof z.ZodArray ? [] : {};
+    }
+    return normalized;
   }
 
-  // For other schema types, return the original input and let Zod validate
+  if (schema instanceof z.ZodArray) return [];
   return input;
 }
 

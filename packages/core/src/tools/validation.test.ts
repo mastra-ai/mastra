@@ -26,6 +26,37 @@ describe('Tool Input Validation Integration Tests', () => {
       expect(result.message).toContain('- age: Required');
     });
 
+    it('should allow missing optional fields without errors', async () => {
+      const tool = createTool({
+        id: 'optional-fields-test',
+        description: 'Test optional fields',
+        inputSchema: z.object({
+          requiredField: z.string(),
+          optionalField: z.string().optional(),
+          optionalArray: z.array(z.number()).optional(),
+          optionalObject: z.object({ sub: z.string() }).optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, data: inputData };
+        },
+      });
+
+      // Provide only required field
+      const result = await tool.execute({
+        requiredField: 'hello',
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({
+        requiredField: 'hello',
+        optionalField: undefined,
+        optionalArray: undefined,
+        optionalObject: undefined,
+      });
+    });
+
+
     it('should validate field types', async () => {
       const tool = createTool({
         id: 'type-test',
