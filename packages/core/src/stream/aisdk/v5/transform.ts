@@ -15,7 +15,8 @@ export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
       type: 'finish';
-      finishReason: LanguageModelV2FinishReason;
+      /** Includes 'tripwire' and 'retry' for processor scenarios */
+      finishReason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
       usage: LanguageModelV2Usage;
       providerMetadata: SharedV2ProviderMetadata;
       messages: {
@@ -361,7 +362,8 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'finish': {
       return {
         type: 'finish',
-        finishReason: chunk.payload.stepResult.reason,
+        // Cast needed: Mastra extends reason with 'tripwire' | 'retry' for processor scenarios
+        finishReason: chunk.payload.stepResult.reason as LanguageModelV2FinishReason,
         totalUsage: chunk.payload.output.usage,
       };
     }

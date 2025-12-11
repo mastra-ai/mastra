@@ -1060,9 +1060,9 @@ export const privateAgent = new Agent({
 
 ### Handling blocked requests
 
-When a processor blocks a request, the agent will still return successfully without throwing an error. To handle blocked requests, check for `tripwire` or `tripwireReason` in the response.
+When a processor blocks a request, the agent will still return successfully without throwing an error. To handle blocked requests, check for `tripwire` in the response.
 
-For example, if an agent uses the `PIIDetector` with `strategy: "block"` and the request includes a credit card number, it will be blocked and the response will include a `tripwireReason`.
+For example, if an agent uses the `PIIDetector` with `strategy: "block"` and the request includes a credit card number, it will be blocked and the response will include tripwire information.
 
 #### `.generate()` example
 
@@ -1071,8 +1071,14 @@ const result = await agent.generate(
   "Is this credit card number valid?: 4543 1374 5089 4332",
 );
 
-console.error(result.tripwire);
-console.error(result.tripwireReason);
+if (result.tripwire) {
+  console.error("Blocked:", result.tripwire.reason);
+  console.error("Processor:", result.tripwire.processorId);
+  // Optional: check if retry was requested
+  console.error("Retry requested:", result.tripwire.retry);
+  // Optional: access additional metadata
+  console.error("Metadata:", result.tripwire.metadata);
+}
 ```
 
 #### `.stream()` example
@@ -1084,16 +1090,47 @@ const stream = await agent.stream(
 
 for await (const chunk of stream.fullStream) {
   if (chunk.type === "tripwire") {
-    console.error(chunk.payload.tripwireReason);
+    console.error("Blocked:", chunk.payload.reason);
+    console.error("Processor:", chunk.payload.processorId);
   }
 }
 ```
 
-In this case, the `tripwireReason` indicates that a credit card number was detected:
+In this case, the `reason` indicates that a credit card number was detected:
 
 ```text
 PII detected. Types: credit-card
 ```
+
+### Requesting retries
+
+Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks:
+
+```typescript showLineNumbers
+export class QualityChecker implements Processor {
+  id = "quality-checker";
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const score = await evaluateQuality(text);
+
+    if (score < 0.7 && retryCount < 3) {
+      // Request retry with feedback for the LLM
+      abort("Response quality too low. Please be more specific.", {
+        retry: true,
+        metadata: { score },
+      });
+    }
+
+    return [];
+  }
+}
+```
+
+The `abort()` function accepts an optional second parameter with:
+- `retry: true` - Request the LLM retry the step
+- `metadata: unknown` - Attach additional data for debugging/logging
+
+Use `retryCount` to track retry attempts and prevent infinite loops.
 
 ## Custom processors
 
@@ -1689,6 +1726,8 @@ Processors are configured as:
 - **`inputProcessors`**: Run before messages reach the language model.
 - **`outputProcessors`**: Run after the language model generates a response, but before it's returned to users.
 
+You can use individual `Processor` objects or compose them into workflows using Mastra's workflow primitives. Workflows give you advanced control over processor execution order, parallel processing, and conditional logic.
+
 Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
 
 ## When to use processors
@@ -2025,10 +2064,84 @@ const agent = new Agent({
 
 > **Note:** The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
 
+## Using workflows as processors
+
+You can use Mastra workflows as processors to create complex processing pipelines with parallel execution, conditional branching, and error handling:
+
+```typescript title="src/mastra/processors/moderation-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { ProcessorStepSchema } from "@mastra/core/processors";
+import { Agent } from "@mastra/core/agent";
+
+// Create a workflow that runs multiple checks in parallel
+const moderationWorkflow = createWorkflow({
+  id: "moderation-pipeline",
+  inputSchema: ProcessorStepSchema,
+  outputSchema: ProcessorStepSchema,
+})
+  .then(createStep(new LengthValidator({ maxLength: 10000 })))
+  .parallel([
+    createStep(new PIIDetector({ strategy: "redact" })),
+    createStep(new ToxicityChecker({ threshold: 0.8 })),
+  ])
+  .commit();
+
+// Use the workflow as an input processor
+const agent = new Agent({
+  id: "moderated-agent",
+  name: "Moderated Agent",
+  model: "openai/gpt-4o",
+  inputProcessors: [moderationWorkflow],
+});
+```
+
+When an agent is registered with Mastra, processor workflows are automatically registered as workflows, allowing you to view and debug them in the playground.
+
+## Retry mechanism
+
+Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks, output validation, or iterative refinement:
+
+```typescript title="src/mastra/processors/quality-checker.ts" showLineNumbers copy
+import type { Processor } from "@mastra/core";
+
+export class QualityChecker implements Processor {
+  id = "quality-checker";
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const qualityScore = await evaluateQuality(text);
+
+    if (qualityScore < 0.7 && retryCount < 3) {
+      // Request a retry with feedback for the LLM
+      abort("Response quality score too low. Please provide a more detailed answer.", {
+        retry: true,
+        metadata: { score: qualityScore },
+      });
+    }
+
+    return [];
+  }
+}
+
+const agent = new Agent({
+  id: "quality-agent",
+  name: "Quality Agent",
+  model: "openai/gpt-4o",
+  outputProcessors: [new QualityChecker()],
+  maxProcessorRetries: 3, // Maximum retry attempts (default: 3)
+});
+```
+
+The retry mechanism:
+- Only works in `processOutputStep` and `processInputStep` methods
+- Replays the step with the abort reason added as context for the LLM
+- Tracks retry count via the `retryCount` parameter
+- Respects `maxProcessorRetries` limit on the agent
+
 ## Related documentation
 
 - [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
 - [Memory Processors](/docs/v1/memory/memory-processors) - Memory-specific processors and automatic integration
+- [Processor Interface](/reference/v1/processors/processor-interface) - Full API reference for processors
 
 
 ---
@@ -6811,6 +6924,63 @@ If you followed the automatic installation, you'll see a popup when you open cur
 />
 
 [More info on using MCP servers with Cursor](https://cursor.com/de/docs/context/mcp)
+
+### Antigravity
+
+Google Antigravity is an agent-first development platform that supports MCP servers for accessing external documentation, APIs, and project context.
+
+1. Open your Antigravity MCP configuration file:
+   - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
+   - You can access it through the MCP Store interface in Antigravity
+
+   <img
+     src="/img/antigravity_mcp_server.png"
+     alt="Antigravity interface showing configured Mastra MCP server"
+     width={800}
+     className="rounded-lg"
+   />
+
+2. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.  
+   <img
+     src="/img/antigravity_managed_mcp.png"
+     alt="Antigravity interface showing configured Mastra MCP server"
+     width={800}
+     className="rounded-lg"
+   />
+
+3. Add the Mastra MCP server configuration:
+
+   ```json copy
+   {
+      "mcpServers": {
+          "mastra-docs": {
+              "command": "npx",
+              "args": [
+                  "-y",
+                  "@mastra/mcp-docs-server"
+              ]
+          }
+      }
+  }
+   ```
+
+4. Save the configuration and restart Antigravity
+    <img
+      src="/img/antigravity_final_interface_mcp.png"
+      alt="Antigravity interface showing configured Mastra MCP server"
+      width={800}
+      className="rounded-lg"
+   />
+
+Once configured, the Mastra MCP server exposes the following to Antigravity agents:
+- Indexed documentation and API schemas for Mastra, enabling programmatic retrieval of relevant context during code generation
+- Access to example code snippets and usage patterns stored in Mastra Docs
+- Structured data for error handling and debugging references in the editor
+- Metadata about current Mastra project patterns for code suggestion and completion
+
+The MCP server will appear in Antigravity's MCP Store, where you can manage its connection status and authentication if needed.
+
+[More info on using MCP servers with Antigravity](https://antigravity.google)
 
 ### Visual Studio Code
 
@@ -18982,7 +19152,7 @@ export const testWorkflow = createWorkflow({
 
 ## Simultaneous steps with `.parallel()`
 
-Use `.parallel()` to run steps at the same time. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
+Use `.parallel()` to run steps at the same time. All parallel steps must complete before the workflow continues to the next step. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
@@ -19098,6 +19268,8 @@ export const testWorkflow = createWorkflow({
 - All parallel steps execute simultaneously
 - The next step receives an object containing all parallel step outputs
 - You must define the `inputSchema` of the following step to match this structure
+
+> See [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
 
 ## Conditional logic with `.branch()`
 
@@ -19351,7 +19523,7 @@ export const testWorkflow = createWorkflow({
 
 ### Looping with `.foreach()`
 
-Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step’s logic to each one.
+Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step's logic to each one. See [Choosing the right pattern](#choosing-the-right-pattern) for guidance on when to use `.foreach()` vs other methods.
 
 ![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
@@ -19377,6 +19549,32 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
+#### Output structure
+
+The `.foreach()` method always returns an array containing the output of each iteration. The order of outputs matches the order of inputs.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const addTenStep = createStep({
+  id: "add-ten",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ value: z.number() }),
+  execute: async ({ inputData }) => ({
+    value: inputData.value + 10
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  id: "foreach-output-example",
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.array(z.object({ value: z.number() }))
+})
+  .foreach(addTenStep)
+  .commit();
+
+// When executed with [{ value: 1 }, { value: 22 }, { value: 333 }]
+// Output: [{ value: 11 }, { value: 32 }, { value: 343 }]
+```
+
 #### Concurrency limits
 
 Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
@@ -19387,6 +19585,324 @@ const step1 = createStep({...})
 export const testWorkflow = createWorkflow({...})
   .foreach(step1, { concurrency: 4 })
   .commit();
+```
+
+#### Aggregating results after `.foreach()`
+
+Since `.foreach()` outputs an array, you can use `.then()` or `.map()` to aggregate or transform the results. The step following `.foreach()` receives the entire array as its input.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const processItemStep = createStep({
+  id: "process-item",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ processed: z.number() }),
+  execute: async ({ inputData }) => ({
+    processed: inputData.value * 2
+  })
+});
+
+const aggregateStep = createStep({
+  id: "aggregate",
+  // Input is an array of outputs from foreach
+  inputSchema: z.array(z.object({ processed: z.number() })),
+  outputSchema: z.object({ total: z.number() }),
+  execute: async ({ inputData }) => ({
+    // Sum all processed values
+    total: inputData.reduce((sum, item) => sum + item.processed, 0)
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  id: "foreach-aggregate-example",
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.object({ total: z.number() })
+})
+  .foreach(processItemStep)
+  .then(aggregateStep)  // Receives the full array from foreach
+  .commit();
+
+// When executed with [{ value: 1 }, { value: 2 }, { value: 3 }]
+// After foreach: [{ processed: 2 }, { processed: 4 }, { processed: 6 }]
+// After aggregate: { total: 12 }
+```
+
+You can also use `.map()` to transform the array output:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...})
+  .foreach(processItemStep)
+  .map(async ({ inputData }) => ({
+    // Transform the array into a different structure
+    values: inputData.map(item => item.processed),
+    count: inputData.length
+  }))
+  .then(nextStep)
+  .commit();
+```
+
+#### Chaining multiple `.foreach()` calls
+
+When you chain `.foreach()` calls, each operates on the array output of the previous step. This is useful when each item in your array needs to be transformed by multiple steps in sequence.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const chunkStep = createStep({
+  id: "chunk",
+  // Takes a document, returns an array of chunks
+  inputSchema: z.object({ content: z.string() }),
+  outputSchema: z.array(z.object({ chunk: z.string() })),
+  execute: async ({ inputData }) => {
+    // Split document into chunks
+    const chunks = inputData.content.match(/.{1,100}/g) || [];
+    return chunks.map(chunk => ({ chunk }));
+  }
+});
+
+const embedStep = createStep({
+  id: "embed",
+  // Takes a single chunk, returns embedding
+  inputSchema: z.object({ chunk: z.string() }),
+  outputSchema: z.object({ embedding: z.array(z.number()) }),
+  execute: async ({ inputData }) => ({
+    embedding: [/* vector embedding */]
+  })
+});
+
+// For a single document that produces multiple chunks:
+export const singleDocWorkflow = createWorkflow({
+  id: "single-doc-rag",
+  inputSchema: z.object({ content: z.string() }),
+  outputSchema: z.array(z.object({ embedding: z.array(z.number()) }))
+})
+  .then(chunkStep)      // Returns array of chunks
+  .foreach(embedStep)   // Process each chunk -> array of embeddings
+  .commit();
+```
+
+For processing multiple documents where each produces multiple chunks, you have options:
+
+**Option 1: Process all documents in a single step with batching control**
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const downloadAndChunkStep = createStep({
+  id: "download-and-chunk",
+  inputSchema: z.array(z.string()),  // Array of URLs
+  outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
+  execute: async ({ inputData: urls }) => {
+    // Control batching/parallelization within the step
+    const allChunks = [];
+    for (const url of urls) {
+      const content = await fetch(url).then(r => r.text());
+      const chunks = content.match(/.{1,100}/g) || [];
+      allChunks.push(...chunks.map(chunk => ({ chunk, source: url })));
+    }
+    return allChunks;
+  }
+});
+
+export const multiDocWorkflow = createWorkflow({...})
+  .then(downloadAndChunkStep)  // Returns flat array of all chunks
+  .foreach(embedStep, { concurrency: 10 })  // Embed each chunk in parallel
+  .commit();
+```
+
+**Option 2: Use foreach for documents, aggregate chunks, then foreach for embeddings**
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const downloadStep = createStep({
+  id: "download",
+  inputSchema: z.string(),  // Single URL
+  outputSchema: z.object({ content: z.string(), source: z.string() }),
+  execute: async ({ inputData: url }) => ({
+    content: await fetch(url).then(r => r.text()),
+    source: url
+  })
+});
+
+const chunkDocStep = createStep({
+  id: "chunk-doc",
+  inputSchema: z.object({ content: z.string(), source: z.string() }),
+  outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
+  execute: async ({ inputData }) => {
+    const chunks = inputData.content.match(/.{1,100}/g) || [];
+    return chunks.map(chunk => ({ chunk, source: inputData.source }));
+  }
+});
+
+export const multiDocWorkflow = createWorkflow({
+  id: "multi-doc-rag",
+  inputSchema: z.array(z.string()),  // Array of URLs
+  outputSchema: z.array(z.object({ embedding: z.array(z.number()) }))
+})
+  .foreach(downloadStep, { concurrency: 5 })  // Download docs in parallel
+  .foreach(chunkDocStep)  // Chunk each doc -> array of chunk arrays
+  .map(async ({ inputData }) => {
+    // Flatten nested arrays: [[chunks], [chunks]] -> [chunks]
+    return inputData.flat();
+  })
+  .foreach(embedStep, { concurrency: 10 })  // Embed all chunks
+  .commit();
+```
+
+**Key points about chaining `.foreach()`:**
+- Each `.foreach()` operates on the array from the previous step
+- If a step inside `.foreach()` returns an array, the output becomes an array of arrays
+- Use `.map()` with `.flat()` to flatten nested arrays when needed
+- For complex RAG pipelines, Option 1 (handling batching in a single step) often provides better control
+
+#### Nested workflows inside foreach
+
+The step after `.foreach()` only executes after all iterations complete. If you need to run multiple sequential operations per item, use a nested workflow instead of chaining multiple `.foreach()` calls. This keeps all operations for each item together and makes the data flow clearer.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+// Define a workflow that processes a single document
+const processDocumentWorkflow = createWorkflow({
+  id: "process-document",
+  inputSchema: z.object({ url: z.string() }),
+  outputSchema: z.object({
+    embeddings: z.array(z.array(z.number())),
+    metadata: z.object({ url: z.string(), chunkCount: z.number() })
+  })
+})
+  .then(downloadStep)      // Download the document
+  .then(chunkStep)         // Split into chunks
+  .then(embedChunksStep)   // Embed all chunks for this document
+  .then(formatResultStep)  // Format the final output
+  .commit();
+
+// Use the nested workflow inside foreach
+export const batchProcessWorkflow = createWorkflow({
+  id: "batch-process-documents",
+  inputSchema: z.array(z.object({ url: z.string() })),
+  outputSchema: z.array(z.object({
+    embeddings: z.array(z.array(z.number())),
+    metadata: z.object({ url: z.string(), chunkCount: z.number() })
+  }))
+})
+  .foreach(processDocumentWorkflow, { concurrency: 3 })
+  .commit();
+
+// Each document goes through all 4 steps before the next document starts (with concurrency: 1)
+// With concurrency: 3, up to 3 documents process their full pipelines in parallel
+```
+
+**Why use nested workflows:**
+- **Better parallelism**: With `concurrency: N`, multiple items run their full pipelines simultaneously. Chained `.foreach().foreach()` processes all items through step 1, waits, then all through step 2 - nested workflows let each item progress independently
+- All steps for one item complete together before results are collected
+- Cleaner than multiple `.foreach()` calls which create nested arrays
+- Each nested workflow execution is independent with its own data flow
+- Easier to test and reuse the per-item logic separately
+
+**How it works:**
+1. The parent workflow passes each array item to an instance of the nested workflow
+2. Each nested workflow runs its full step sequence for that item
+3. With `concurrency > 1`, multiple nested workflows execute in parallel
+4. The nested workflow's final output becomes one element in the result array
+5. After all nested workflows complete, the next step in the parent receives the full array
+
+## Choosing the right pattern
+
+Use this section as a reference for selecting the appropriate control flow method.
+
+### Quick reference
+
+| Method | Purpose | Input | Output | Concurrency |
+|--------|---------|-------|--------|-------------|
+| `.then(step)` | Sequential processing | `T` | `U` | N/A (one at a time) |
+| `.parallel([a, b])` | Different operations on same input | `T` | `{ a: U, b: V }` | All run simultaneously |
+| `.foreach(step)` | Same operation on each array item | `T[]` | `U[]` | Configurable (default: 1) |
+| `.branch([...])` | Conditional path selection | `T` | `{ selectedStep: U }` | Only one branch runs |
+
+### `.parallel()` vs `.foreach()`
+
+**Use `.parallel()` when you have one input that needs different processing:**
+
+```typescript
+// Same user data processed differently in parallel
+workflow
+  .parallel([validateStep, enrichStep, scoreStep])
+  .then(combineResultsStep)
+```
+
+**Use `.foreach()` when you have many inputs that need the same processing:**
+
+```typescript
+// Multiple URLs each processed the same way
+workflow
+  .foreach(downloadStep, { concurrency: 5 })
+  .then(aggregateStep)
+```
+
+### When to use nested workflows
+
+**Inside `.foreach()`** - when each array item needs multiple sequential steps:
+
+```typescript
+// Each document goes through a full pipeline
+const processDocWorkflow = createWorkflow({...})
+  .then(downloadStep)
+  .then(parseStep)
+  .then(embedStep)
+  .commit();
+
+workflow.foreach(processDocWorkflow, { concurrency: 3 })
+```
+
+This is cleaner than chaining `.foreach().foreach()`, which creates nested arrays.
+
+**Inside `.parallel()`** - when a parallel branch needs its own multi-step pipeline:
+
+```typescript
+const pipelineA = createWorkflow({...}).then(step1).then(step2).commit();
+const pipelineB = createWorkflow({...}).then(step3).then(step4).commit();
+
+workflow.parallel([pipelineA, pipelineB])
+```
+
+### Chaining patterns
+
+| Pattern | What happens | Common use case |
+|---------|--------------|-----------------|
+| `.then().then()` | Sequential steps | Simple pipelines |
+| `.parallel().then()` | Run in parallel, then combine | Fan-out/fan-in |
+| `.foreach().then()` | Process all items, then aggregate | Map-reduce |
+| `.foreach().foreach()` | Creates array of arrays | Avoid - use nested workflow or `.map()` with `.flat()` |
+| `.foreach(workflow)` | Full pipeline per item | Multi-step processing per array item |
+
+### Synchronization: when does the next step run?
+
+Both `.parallel()` and `.foreach()` are synchronization points. The next step in the workflow only executes after all parallel branches or all array iterations have completed.
+
+```typescript
+workflow
+  .parallel([stepA, stepB, stepC])  // All 3 run simultaneously
+  .then(combineStep)                // Waits for ALL 3 to finish before running
+  .commit();
+
+workflow
+  .foreach(processStep, { concurrency: 5 })  // Up to 5 items process at once
+  .then(aggregateStep)                       // Waits for ALL items to finish before running
+  .commit();
+```
+
+This means:
+- `.parallel()` collects all branch outputs into an object, then passes it to the next step
+- `.foreach()` collects all iteration outputs into an array, then passes it to the next step
+- There is no way to "stream" results to the next step as they complete
+
+### Concurrency behavior
+
+| Method | Behavior |
+|--------|----------|
+| `.then()` | Sequential - one step at a time |
+| `.parallel()` | All branches run simultaneously (no limit option) |
+| `.foreach()` | Controlled via `{ concurrency: N }` - default is 1 (sequential) |
+| Nested workflow in `.foreach()` | Respects parent's concurrency setting |
+
+**Performance tip:** For I/O-bound operations in `.foreach()`, increase concurrency to process items in parallel:
+
+```typescript
+// Process up to 10 items simultaneously
+workflow.foreach(fetchDataStep, { concurrency: 10 })
 ```
 
 ## Loop management
@@ -31155,6 +31671,55 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
   });
 ```
 
+### Tripwire response format changed
+
+The tripwire response format has changed from separate `tripwire` and `tripwireReason` fields to a single `tripwire` object containing all related data.
+
+To migrate, update your code to access tripwire data from the new object structure.
+
+```diff
+  const result = await agent.generate('Hello');
+
+- if (result.tripwire) {
+-   console.log(result.tripwireReason);
+- }
++ if (result.tripwire) {
++   console.log(result.tripwire.reason);
++   // New fields available:
++   // result.tripwire.retry - whether this step should be retried
++   // result.tripwire.metadata - additional metadata from the processor
++   // result.tripwire.processorId - which processor triggered the tripwire
++ }
+```
+
+For streaming responses:
+
+```diff
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'tripwire') {
+-     console.log(chunk.payload.tripwireReason);
++     console.log(chunk.payload.reason);
++     // New fields available:
++     // chunk.payload.retry
++     // chunk.payload.metadata
++     // chunk.payload.processorId
+    }
+  }
+```
+
+The step results now also include tripwire information:
+
+```diff
+  const result = await agent.generate('Hello');
+
+  for (const step of result.steps) {
+-   // No tripwire info on steps
++   if (step.tripwire) {
++     console.log('Step was blocked:', step.tripwire.reason);
++   }
+  }
+```
+
 ### `prepareStep` messages format
 
 The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5 model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
@@ -35406,7 +35971,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 60+ AI providers and 1328+ models through Mastra's model router."
+description: "Access 60+ AI providers and 1335+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35419,7 +35984,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1328 models from 60 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1335 models from 60 providers through a single API.
 
 ## Features
 
@@ -40488,7 +41053,7 @@ For detailed provider-specific documentation, see the [AI SDK Deep Infra provide
 
 ---
 title: "DeepSeek | Models | Mastra"
-description: "Use DeepSeek models with Mastra. 3 models available."
+description: "Use DeepSeek models with Mastra. 2 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -40498,7 +41063,7 @@ description: "Use DeepSeek models with Mastra. 3 models available."
 # <img src="https://models.dev/logos/deepseek.svg" alt="DeepSeek logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DeepSeek
 [EN] Source: https://mastra.ai/en/models/providers/deepseek
 
-Access 3 DeepSeek models through Mastra's model router. Authentication is handled automatically using the `DEEPSEEK_API_KEY` environment variable.
+Access 2 DeepSeek models through Mastra's model router. Authentication is handled automatically using the `DEEPSEEK_API_KEY` environment variable.
 
 Learn more in the [DeepSeek documentation](https://platform.deepseek.com).
 
@@ -40553,18 +41118,6 @@ for await (const chunk of stream) {
     "maxOutput": 128000,
     "inputCost": 0.28,
     "outputCost": 0.42
-  },
-  {
-    "model": "deepseek/deepseek-v3.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8000,
-    "inputCost": 0.28,
-    "outputCost": 0.42
   }
 ]}
 />
@@ -40597,7 +41150,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "deepseek/deepseek-v3.2"
+      ? "deepseek/deepseek-reasoner"
       : "deepseek/deepseek-chat";
   }
 });
@@ -44594,7 +45147,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/google.svg"
     />    <CardGridItem
       title="DeepSeek"
-      description="3 models"
+      description="2 models"
       href="/models/v1/providers/deepseek"
       logo="https://models.dev/logos/deepseek.svg"
     />    <CardGridItem
@@ -44604,7 +45157,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/groq.svg"
     />    <CardGridItem
       title="Mistral"
-      description="22 models"
+      description="23 models"
       href="/models/v1/providers/mistral"
       logo="https://models.dev/logos/mistral.svg"
     />    <CardGridItem
@@ -44759,7 +45312,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nebius.svg"
     />    <CardGridItem
       title="Nvidia"
-      description="21 models"
+      description="24 models"
       href="/models/v1/providers/nvidia"
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
@@ -44834,12 +45387,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/wandb.svg"
     />    <CardGridItem
       title="Z.AI"
-      description="5 models"
+      description="6 models"
       href="/models/v1/providers/zai"
       logo="https://models.dev/logos/zai.svg"
     />    <CardGridItem
       title="Z.AI Coding Plan"
-      description="5 models"
+      description="6 models"
       href="/models/v1/providers/zai-coding-plan"
       logo="https://models.dev/logos/zai-coding-plan.svg"
     />    <CardGridItem
@@ -44849,12 +45402,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/zenmux.svg"
     />    <CardGridItem
       title="Zhipu AI"
-      description="5 models"
+      description="6 models"
       href="/models/v1/providers/zhipuai"
       logo="https://models.dev/logos/zhipuai.svg"
     />    <CardGridItem
       title="Zhipu AI Coding Plan"
-      description="5 models"
+      description="6 models"
       href="/models/v1/providers/zhipuai-coding-plan"
       logo="https://models.dev/logos/zhipuai-coding-plan.svg"
     />
@@ -46398,7 +46951,7 @@ npm install @ai-sdk/anthropic
 
 ---
 title: "Mistral | Models | Mastra"
-description: "Use Mistral models with Mastra. 22 models available."
+description: "Use Mistral models with Mastra. 23 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -46409,7 +46962,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
 [EN] Source: https://mastra.ai/en/models/providers/mistral
 
-Access 22 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
+Access 23 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
 
 Learn more in the [Mistral documentation](https://docs.mistral.ai/getting-started/models/).
 
@@ -46498,6 +47051,18 @@ for await (const chunk of stream) {
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "mistral/labs-devstral-small-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
     "inputCost": 0.1,
     "outputCost": 0.3
   },
@@ -47627,7 +48192,7 @@ const agent = new Agent({
 
 ---
 title: "Nvidia | Models | Mastra"
-description: "Use Nvidia models with Mastra. 21 models available."
+description: "Use Nvidia models with Mastra. 24 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -47637,7 +48202,7 @@ description: "Use Nvidia models with Mastra. 21 models available."
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 [EN] Source: https://mastra.ai/en/models/providers/nvidia
 
-Access 21 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
+Access 24 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
 
 Learn more in the [Nvidia documentation](https://docs.api.nvidia.com/nim/).
 
@@ -47748,6 +48313,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "nvidia/mistralai/devstral-2-123b-instruct-2512",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/mistralai/ministral-14b-instruct-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "nvidia/mistralai/mistral-large-3-675b-instruct-2512",
     "imageInput": true,
     "audioInput": false,
@@ -47778,6 +48367,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/moonshotai/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
     "inputCost": null,
@@ -54189,7 +54790,7 @@ For detailed provider-specific documentation, see the [AI SDK xAI provider docs]
 
 ---
 title: "Z.AI Coding Plan | Models | Mastra"
-description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
+description: "Use Z.AI Coding Plan models with Mastra. 6 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54199,7 +54800,7 @@ description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
 # <img src="https://models.dev/logos/zai-coding-plan.svg" alt="Z.AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zai-coding-plan
 
-Access 5 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 6 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Z.AI Coding Plan documentation](https://docs.z.ai/devpack/overview).
 
@@ -54296,6 +54897,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -54328,7 +54941,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zai-coding-plan/glm-4.6"
+      ? "zai-coding-plan/glm-4.6v"
       : "zai-coding-plan/glm-4.5";
   }
 });
@@ -54339,7 +54952,7 @@ const agent = new Agent({
 
 ---
 title: "Z.AI | Models | Mastra"
-description: "Use Z.AI models with Mastra. 5 models available."
+description: "Use Z.AI models with Mastra. 6 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54349,7 +54962,7 @@ description: "Use Z.AI models with Mastra. 5 models available."
 # <img src="https://models.dev/logos/zai.svg" alt="Z.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI
 [EN] Source: https://mastra.ai/en/models/providers/zai
 
-Access 5 Z.AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 6 Z.AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Z.AI documentation](https://docs.z.ai/guides/overview/pricing).
 
@@ -54446,6 +55059,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 2.2
+  },
+  {
+    "model": "zai/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
   }
 ]}
 />
@@ -54478,7 +55103,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zai/glm-4.6"
+      ? "zai/glm-4.6v"
       : "zai/glm-4.5";
   }
 });
@@ -54831,7 +55456,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI Coding Plan | Models | Mastra"
-description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
+description: "Use Zhipu AI Coding Plan models with Mastra. 6 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54841,7 +55466,7 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai-coding-plan
 
-Access 5 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 6 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI Coding Plan documentation](https://docs.bigmodel.cn/cn/coding-plan/overview).
 
@@ -54938,6 +55563,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zhipuai-coding-plan/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -54970,7 +55607,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai-coding-plan/glm-4.6"
+      ? "zhipuai-coding-plan/glm-4.6v"
       : "zhipuai-coding-plan/glm-4.5";
   }
 });
@@ -54981,7 +55618,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI | Models | Mastra"
-description: "Use Zhipu AI models with Mastra. 5 models available."
+description: "Use Zhipu AI models with Mastra. 6 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54991,7 +55628,7 @@ description: "Use Zhipu AI models with Mastra. 5 models available."
 # <img src="https://models.dev/logos/zhipuai.svg" alt="Zhipu AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai
 
-Access 5 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 6 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI documentation](https://docs.z.ai/guides/overview/pricing).
 
@@ -55088,6 +55725,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 2.2
+  },
+  {
+    "model": "zhipuai/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
   }
 ]}
 />
@@ -55120,7 +55769,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai/glm-4.6"
+      ? "zhipuai/glm-4.6v"
       : "zhipuai/glm-4.5";
   }
 });
@@ -55344,17 +55993,24 @@ export const agent = new Agent({
     },
     {
       name: "inputProcessors",
-      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
+      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
       isOptional: true,
       description:
-        "Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+        "Input processors that can modify or validate messages before they are processed by the agent. Can be individual Processor objects or workflows created with `createWorkflow()` using ProcessorStepSchema.",
     },
     {
       name: "outputProcessors",
-      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
+      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
       isOptional: true,
       description:
-        "Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+        "Output processors that can modify or validate messages from the agent before they are sent to the client. Can be individual Processor objects or workflows.",
+    },
+    {
+      name: "maxProcessorRetries",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of times a processor can request retrying the LLM step.",
     },
   ]}
 />
@@ -75608,7 +76264,7 @@ The `Processor` interface defines the contract for all processors in Mastra. Pro
 
 ## When processor methods run
 
-The four processor methods run at different points in the agent execution lifecycle:
+The five processor methods run at different points in the agent execution lifecycle:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -75638,6 +76294,11 @@ The four processor methods run at different points in the agent execution lifecy
 │  │  └──────────┬───────────┘                               │    │
 │  │             │                                           │    │
 │  │             ▼                                           │    │
+│  │  ┌──────────────────────┐                               │    │
+│  │  │  processOutputStep   │  ← Runs after EACH LLM step   │    │
+│  │  └──────────┬───────────┘                               │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
 │  │     Tool Execution (if needed)                          │    │
 │  │             │                                           │    │
 │  │             └──────── Loop back if tools called ────────│    │
@@ -75659,6 +76320,7 @@ The four processor methods run at different points in the agent execution lifecy
 | `processInput` | Once at the start, before the agentic loop | Validate/transform initial user input, add context |
 | `processInputStep` | At each step of the agentic loop, before each LLM call | Transform messages between steps, handle tool results |
 | `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
+| `processOutputStep` | After each LLM response, before tool execution | Validate output quality, implement guardrails with retry |
 | `processOutputResult` | Once after generation completes | Post-process final response, log results |
 
 ## Interface definition
@@ -75669,9 +76331,10 @@ interface Processor<TId extends string = string> {
   readonly name?: string;
 
   processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
-  processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
-  processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
   processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+  processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
+  processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
+  processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
 }
 ```
 
@@ -75728,9 +76391,15 @@ processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInpu
     },
     {
       name: "abort",
-      type: "(reason?: string) => never",
-      description: "Function to abort processing. Throws a TripWire error that stops execution.",
+      type: "(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never",
+      description: "Function to abort processing. Throws a TripWire error that stops execution. Pass `retry: true` to request the LLM retry the step with feedback.",
       isOptional: false,
+    },
+    {
+      name: "retryCount",
+      type: "number",
+      description: "Number of times processors have triggered retry for this generation. Use this to limit retry attempts.",
+      isOptional: true,
     },
     {
       name: "tracingContext",
@@ -76092,6 +76761,125 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
   ]}
 />
 
+---
+
+### processOutputStep
+
+Processes output after each LLM response in the agentic loop, before tool execution. Unlike `processOutputResult` which runs once at the end, this runs at every step. This is the ideal method for implementing guardrails that can trigger retries.
+
+```typescript copy
+processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
+```
+
+#### ProcessOutputStepArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "All messages including the latest LLM response.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "MessageList instance for managing messages.",
+      isOptional: false,
+    },
+    {
+      name: "stepNumber",
+      type: "number",
+      description: "Current step number (0-indexed).",
+      isOptional: false,
+    },
+    {
+      name: "finishReason",
+      type: "string",
+      description: "The finish reason from the LLM (stop, tool-use, length, etc.).",
+      isOptional: true,
+    },
+    {
+      name: "toolCalls",
+      type: "ToolCallInfo[]",
+      description: "Tool calls made in this step (if any).",
+      isOptional: true,
+    },
+    {
+      name: "text",
+      type: "string",
+      description: "Generated text from this step.",
+      isOptional: true,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "All system messages for read/modify access.",
+      isOptional: true,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never",
+      description: "Function to abort processing. Pass `retry: true` to request the LLM retry the step.",
+      isOptional: false,
+    },
+    {
+      name: "retryCount",
+      type: "number",
+      description: "Number of times processors have triggered retry. Use this to limit retry attempts.",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Use cases
+
+- Implementing quality guardrails that can request retries
+- Validating LLM output before tool execution
+- Adding per-step logging or metrics
+- Implementing output moderation with retry capability
+
+#### Example: Quality guardrail with retry
+
+```typescript title="src/mastra/processors/quality-guardrail.ts" showLineNumbers copy
+import type { Processor } from "@mastra/core";
+
+export class QualityGuardrail implements Processor {
+  id = "quality-guardrail";
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const score = await evaluateResponseQuality(text);
+
+    if (score < 0.7) {
+      if (retryCount < 3) {
+        // Request retry with feedback for the LLM
+        abort("Response quality too low. Please provide more detail.", {
+          retry: true,
+          metadata: { qualityScore: score },
+        });
+      } else {
+        // Max retries reached, block the response
+        abort("Response quality too low after multiple attempts.");
+      }
+    }
+
+    return [];
+  }
+}
+```
+
 ## Processor types
 
 Mastra provides type aliases to ensure processors implement the required methods:
@@ -76103,9 +76891,10 @@ type InputProcessor = Processor & (
   | { processInputStep: required }
 );
 
-// Must implement processOutputStream OR processOutputResult (or both)
+// Must implement processOutputStream, processOutputStep, OR processOutputResult (or any combination)
 type OutputProcessor = Processor & (
   | { processOutputStream: required }
+  | { processOutputStep: required }
   | { processOutputResult: required }
 );
 ```
@@ -84085,7 +84874,7 @@ Contains monitoring and observability data from agent execution. Can include wor
 
 ### tripwire
 
-Emitted when the stream is forcibly terminated due to content being blocked by output processors. This acts as a safety mechanism to prevent harmful or inappropriate content from being streamed.
+Emitted when the stream is forcibly terminated due to content being blocked by a processor. This acts as a safety mechanism to prevent harmful or inappropriate content from being streamed. The payload includes information about why the content was blocked and whether a retry was requested.
 
 <PropertiesTable
   content={[
@@ -84104,10 +84893,31 @@ Emitted when the stream is forcibly terminated due to content being blocked by o
           type: "TripwirePayload",
           parameters: [
             {
-              name: "tripwireReason",
+              name: "reason",
               type: "string",
               description:
                 "Explanation of why the content was blocked (e.g., 'Output processor blocked content')",
+            },
+            {
+              name: "retry",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Whether the processor requested a retry of the step",
+            },
+            {
+              name: "metadata",
+              type: "unknown",
+              isOptional: true,
+              description:
+                "Additional metadata from the processor (e.g., scores, categories)",
+            },
+            {
+              name: "processorId",
+              type: "string",
+              isOptional: true,
+              description:
+                "ID of the processor that triggered the tripwire",
             },
           ],
         },
@@ -104008,7 +104818,7 @@ description: Documentation for the `Workflow.foreach()` method in workflows, whi
 # Workflow.foreach()
 [EN] Source: https://mastra.ai/en/reference/workflows/workflow-methods/foreach
 
-The `.foreach()` method creates a loop that executes a step for each item in an array.
+The `.foreach()` method creates a loop that executes a step for each item in an array. It always returns an array containing the output from each iteration, preserving the original order.
 
 ## Usage example
 
@@ -104053,14 +104863,79 @@ workflow.foreach(step1, { concurrency: 2 });
     {
       name: "workflow",
       type: "Workflow",
-      description: "The workflow instance for method chaining",
+      description: "The workflow instance for method chaining. The output type is an array of the step's output type.",
     },
   ]}
 />
 
+## Behavior
+
+### Execution and waiting
+
+The `.foreach()` method processes all items before the next step executes. The step following `.foreach()` only runs after every iteration has completed, regardless of concurrency settings. With `concurrency: 1` (default), items process sequentially. With higher concurrency, items process in parallel batches, but the next step still waits for all batches to finish.
+
+If you need to run multiple operations per item, use a nested workflow as the step. This keeps all operations for each item together and is cleaner than chaining multiple `.foreach()` calls. See [Nested workflows inside foreach](/docs/v1/workflows/control-flow#nested-workflows-inside-foreach) for examples.
+
+### Output structure
+
+`.foreach()` always outputs an array. Each element in the output array corresponds to the result of processing the element at the same index in the input array.
+
+```typescript copy
+// Input: [{ value: 1 }, { value: 2 }, { value: 3 }]
+// Step adds 10 to each value
+// Output: [{ value: 11 }, { value: 12 }, { value: 13 }]
+```
+
+### Using `.then()` after `.foreach()`
+
+When you chain `.then()` after `.foreach()`, the next step receives the entire output array as its input. This allows you to aggregate or process all results together.
+
+```typescript copy
+workflow
+  .foreach(processItemStep)    // Output: array of processed items
+  .then(aggregateStep)         // Input: the entire array
+  .commit();
+```
+
+### Using `.map()` after `.foreach()`
+
+Use `.map()` to transform the array output before passing it to the next step:
+
+```typescript copy
+workflow
+  .foreach(processItemStep)
+  .map(async ({ inputData }) => ({
+    total: inputData.reduce((sum, item) => sum + item.value, 0),
+    count: inputData.length
+  }))
+  .then(nextStep)
+  .commit();
+```
+
+### Chaining multiple `.foreach()` calls
+
+When you chain `.foreach()` calls, each operates on the array from the previous step:
+
+```typescript copy
+workflow
+  .foreach(stepA)    // If input is [a, b, c], output is [A, B, C]
+  .foreach(stepB)    // Operates on [A, B, C], output is [A', B', C']
+  .commit();
+```
+
+If a step inside `.foreach()` returns an array, the output becomes an array of arrays. Use `.map()` with `.flat()` to flatten:
+
+```typescript copy
+workflow
+  .foreach(chunkStep)           // Output: [[chunk1, chunk2], [chunk3, chunk4]]
+  .map(async ({ inputData }) => inputData.flat())  // Output: [chunk1, chunk2, chunk3, chunk4]
+  .foreach(embedStep)
+  .commit();
+```
+
 ## Related
 
-- [Repeating with foreach](/docs/v1/workflows/control-flow#looping-with-foreach)
+- [Looping with foreach](/docs/v1/workflows/control-flow#looping-with-foreach)
 
 
 ---
@@ -104683,8 +105558,31 @@ A workflow's `status` indicates its current execution state. The possible values
       description:
         "Workflow execution is paused waiting for resume, with suspended step information",
     },
+    {
+      name: "tripwire",
+      type: "string",
+      description:
+        "Workflow was terminated by a processor tripwire. This occurs when an agent step within the workflow triggers a tripwire (e.g., content was blocked by a guardrail). The tripwire information is available on the result.",
+    },
   ]}
 />
+
+### Handling tripwire status
+
+When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+const result = await run.start({ inputData: { message: "Hello" } });
+
+if (result.status === "tripwire") {
+  console.log("Workflow terminated by tripwire:", result.tripwire?.reason);
+  console.log("Processor ID:", result.tripwire?.processorId);
+  console.log("Retry requested:", result.tripwire?.retry);
+}
+```
+
+This is distinct from `status: 'failed'` which indicates an unexpected error. A tripwire status means a processor intentionally stopped execution (e.g., for content moderation).
 
 ## Related
 

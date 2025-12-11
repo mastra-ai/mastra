@@ -1,7 +1,9 @@
+import { TripWire } from '../agent/trip-wire';
 import type { RequestContext } from '../di';
 import type { IErrorDefinition } from '../error';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
+import type { PubSub } from '../events/pubsub';
 import type { Span, SpanType, TracingContext } from '../observability';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -26,7 +28,6 @@ import { executeStep as executeStepHandler } from './handlers/step';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import type {
   DefaultEngineType,
-  Emitter,
   EntryExecutionResult,
   ExecutionContext,
   MutableContext,
@@ -37,6 +38,7 @@ import type {
   StepFailure,
   StepFlowEntry,
   StepResult,
+  StepTripwireInfo,
   TimeTravelExecutionParams,
 } from './types';
 
@@ -194,7 +196,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async onStepExecutionStart(params: {
     step: Step<string, any, any>;
     inputData: any;
-    emitter: Emitter;
+    pubsub: PubSub;
     executionContext: ExecutionContext;
     stepCallId: string;
     stepInfo: Record<string, any>;
@@ -204,12 +206,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return this.wrapDurableOperation(params.operationId, async () => {
       const startedAt = Date.now();
       if (!params.skipEmits) {
-        await params.emitter.emit('watch', {
-          type: 'workflow-step-start',
-          payload: {
-            id: params.step.id,
-            stepCallId: params.stepCallId,
-            ...params.stepInfo,
+        await params.pubsub.publish(`workflow.events.v2.${params.executionContext.runId}`, {
+          type: 'watch',
+          runId: params.executionContext.runId,
+          data: {
+            type: 'workflow-step-start',
+            payload: {
+              id: params.step.id,
+              stepCallId: params.stepCallId,
+              ...params.stepInfo,
+            },
           },
         });
       }
@@ -239,7 +245,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     timeTravel?: TimeTravelExecutionParams;
     prevOutput: any;
     inputData: any;
-    emitter: Emitter;
+    pubsub: PubSub;
     startedAt: number;
     abortController: AbortController;
     requestContext: RequestContext;
@@ -272,7 +278,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowId: string;
       runId: string;
     },
-  ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: string; endedAt: number } }> {
+  ): Promise<
+    | {
+        ok: true;
+        result: T;
+      }
+    | {
+        ok: false;
+        error: {
+          status: 'failed';
+          error: string;
+          endedAt: number;
+          tripwire?: StepTripwireInfo;
+        };
+      }
+  > {
     for (let i = 0; i < params.retries + 1; i++) {
       if (i > 0 && params.delay) {
         await new Promise(resolve => setTimeout(resolve, params.delay));
@@ -310,6 +330,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               status: 'failed',
               error: `Error: ${errorInstance.message}`,
               endedAt: Date.now(),
+              // Preserve TripWire data as plain object for proper serialization
+              tripwire:
+                e instanceof TripWire
+                  ? {
+                      reason: e.message,
+                      retry: e.options?.retry,
+                      metadata: e.options?.metadata,
+                      processorId: e.processorId,
+                    }
+                  : undefined,
             },
           };
         }
@@ -335,7 +365,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   protected async fmtReturnValue<TOutput>(
-    emitter: Emitter,
+    _pubsub: PubSub,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | string,
@@ -349,7 +379,24 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (lastOutput.status === 'success') {
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
-      base.error = this.formatResultError(error, lastOutput);
+      // Check if the failure was due to a TripWire
+      const tripwireData = lastOutput?.tripwire;
+      if (tripwireData instanceof TripWire) {
+        // Use 'tripwire' status instead of 'failed' for tripwire errors (TripWire instance)
+        base.status = 'tripwire';
+        base.tripwire = {
+          reason: tripwireData.message,
+          retry: tripwireData.options?.retry,
+          metadata: tripwireData.options?.metadata,
+          processorId: tripwireData.processorId,
+        };
+      } else if (tripwireData && typeof tripwireData === 'object' && 'reason' in tripwireData) {
+        // Use 'tripwire' status for plain tripwire data objects (already serialized)
+        base.status = 'tripwire';
+        base.tripwire = tripwireData;
+      } else {
+        base.error = this.formatResultError(error, lastOutput);
+      }
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -445,7 +492,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       label?: string;
       forEachIndex?: number;
     };
-    emitter: Emitter;
+    pubsub: PubSub;
     retryConfig?: {
       attempts?: number;
       delay?: number;
@@ -543,7 +590,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: workflowSpan,
         },
         abortController: params.abortController,
-        emitter: params.emitter,
+        pubsub: params.pubsub,
         requestContext: currentRequestContext,
         outputWriter: params.outputWriter,
         disableScorers,
@@ -564,7 +611,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           lastOutput.result.status = 'success';
         }
 
-        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result)) as any;
+        const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -604,7 +651,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     // after all steps are successful, return result
-    const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result)) as any;
+    const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
     await this.persistStepUpdate({
       workflowId,
       runId,

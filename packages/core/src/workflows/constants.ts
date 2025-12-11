@@ -1,3 +1,3 @@
-// symbol is used to not leak emitter to the user
-export const EMITTER_SYMBOL = Symbol('emitter');
+// symbol is used to not leak pubsub to the user
+export const PUBSUB_SYMBOL = Symbol('pubsub');
 export const STREAM_FORMAT_SYMBOL = Symbol('stream_format');
