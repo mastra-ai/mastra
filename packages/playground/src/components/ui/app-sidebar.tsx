@@ -23,6 +23,7 @@ import {
   type NavSection,
   LogoWithoutText,
   SettingsIcon,
+  MastraPackageVersions,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -136,12 +137,11 @@ export function AppSidebar() {
 
   const location = useLocation();
   const pathname = location.pathname;
-
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
 
   return (
     <MainSidebar>
-      <div className="pt-[.75rem] mb-[1rem] -ml-[.2rem] sticky top-0 bg-surface1 z-10">
+      <div className="pt-[.75rem] mb-[2rem] -ml-[.2rem] sticky top-0 bg-surface1 z-10">
         {state === 'collapsed' ? (
           <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
         ) : (
@@ -176,6 +176,9 @@ export function AppSidebar() {
       </MainSidebar.Nav>
 
       <MainSidebar.Bottom>
+        <MainSidebar.NavHeader className="[&>*]:lowercase">@mastra/</MainSidebar.NavHeader>
+        <MastraPackageVersions />
+
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavSeparator />

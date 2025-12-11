@@ -13,6 +13,7 @@ export * from './components/threads';
 export * from './components/ui/entity-header';
 export * from './components/ui/playground-tabs';
 export * from './components/ui/elements';
+export * from './components/ui/dialog';
 export * from './types';
 export * from './ds/components/Badge/index';
 export * from './ds/components/Button/index';
@@ -31,6 +32,7 @@ export * from './components/ui/entry';
 export * from './hooks';
 export * from './lib/tanstack-query';
 export * from './domains/memory/hooks';
+export * from './domains/mastra';
 
 export * from './store/playground-store';
 export * from './lib/framework';
