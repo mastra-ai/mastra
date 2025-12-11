@@ -166,7 +166,7 @@ Returns a `WorkflowRunOutput` object that implements the async iterable interfac
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const stream = await run.stream({
+const stream = run.stream({
   inputData: {
     value: "initial data",
   },
