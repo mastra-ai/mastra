@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV2 } from 'ai-v5/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
@@ -3894,6 +3895,152 @@ describe('Workflow', () => {
         name: 'Error',
         message: 'Step execution failed',
       });
+
+      await mastra.stopEventEngine();
+    });
+
+    // Tests for error property preservation
+    it('should preserve custom error properties like statusCode', async () => {
+      // Custom error simulating an API rate limit error
+      class RateLimitError extends Error {
+        statusCode: number;
+        code: string;
+        constructor(message: string, statusCode: number, code: string) {
+          super(message);
+          this.name = 'RateLimitError';
+          this.statusCode = statusCode;
+          this.code = code;
+        }
+      }
+
+      const rateLimitError = new RateLimitError(
+        'Rate limit exceeded: Limit 30000, Requested 35076',
+        429,
+        'rate_limit_exceeded',
+      );
+
+      const failingStep = createStep({
+        id: 'api-call-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async () => {
+          throw rateLimitError;
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'rate-limit-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'rate-limit-workflow': workflow },
+        storage: testStorage,
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // The error should be an object, not a string
+      expect(typeof result.error).toBe('object');
+
+      // Custom properties should be preserved
+      const error = result.error as any;
+      expect(error.statusCode).toBe(429);
+      expect(error.code).toBe('rate_limit_exceeded');
+      expect(error.message).toContain('Rate limit exceeded');
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should preserve error cause chain from agent API errors', async () => {
+      // Create a custom error class to simulate API errors with status codes
+      class APIError extends Error {
+        statusCode: number;
+        code: string;
+        constructor(message: string, statusCode: number, code: string) {
+          super(message);
+          this.name = 'APIError';
+          this.statusCode = statusCode;
+          this.code = code;
+        }
+      }
+
+      // Create an agent with a v2 mock model that throws a rate limit error
+      const failingAgent = new Agent({
+        id: 'visual-design-quality-agent',
+        name: 'Visual Design Quality Agent',
+        instructions: 'Analyze visual design quality',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => {
+            const apiError = new APIError(
+              'Rate limit exceeded on tokens per minute (TPM): Limit 30000, Requested 35076',
+              429,
+              'rate_limit_exceeded',
+            );
+            throw apiError;
+          },
+        }),
+      });
+
+      // Create a step that calls the agent and wraps any errors
+      const analysisStep = createStep({
+        id: 'visual-design-quality-analysis-step',
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.object({ analysis: z.string() }),
+        execute: async ({ inputData }) => {
+          try {
+            const response = await failingAgent.generate(inputData.prompt);
+            return { analysis: response.text };
+          } catch (agentError) {
+            // This is the pattern users often use - wrap agent errors with context
+            const stepError = new Error(`Visual analysis failed: ${(agentError as Error).message}`);
+            stepError.cause = agentError;
+            throw stepError;
+          }
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'analysis-workflow',
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.object({ analysis: z.string() }),
+      });
+
+      workflow.then(analysisStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'analysis-workflow': workflow },
+        agents: { 'visual-design-quality-agent': failingAgent },
+        storage: testStorage,
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { prompt: 'Analyze this design' } });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status !== 'failed') {
+        throw new Error('Expected workflow to fail');
+      }
+
+      // The error should be an object, not a string
+      const error = result.error as any;
+      expect(typeof error).toBe('object');
+      expect(error.message).toContain('Visual analysis failed');
+
+      // The cause should be the API error with its custom properties preserved
+      expect(error.cause).toBeDefined();
+      expect(error.cause.message).toContain('Rate limit exceeded');
+      expect(error.cause.statusCode).toBe(429);
+      expect(error.cause.code).toBe('rate_limit_exceeded');
 
       await mastra.stopEventEngine();
     });
