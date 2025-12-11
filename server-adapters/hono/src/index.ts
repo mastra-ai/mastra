@@ -2,6 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -9,6 +10,7 @@ import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
+import { ZodError } from 'zod';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
@@ -292,11 +294,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
           } catch (error) {
             console.error('Error parsing query params', error);
-            // Zod validation errors should return 400 Bad Request, not 500
+            // Zod validation errors should return 400 Bad Request with structured issues
+            if (error instanceof ZodError) {
+              return c.json(formatZodError(error, 'query parameters'), 400);
+            }
             return c.json(
               {
                 error: 'Invalid query parameters',
-                details: error instanceof Error ? error.message : 'Unknown error',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
               },
               400,
             );
@@ -308,11 +313,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
             console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
-            // Zod validation errors should return 400 Bad Request, not 500
+            // Zod validation errors should return 400 Bad Request with structured issues
+            if (error instanceof ZodError) {
+              return c.json(formatZodError(error, 'request body'), 400);
+            }
             return c.json(
               {
                 error: 'Invalid request body',
-                details: error instanceof Error ? error.message : 'Unknown error',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
               },
               400,
             );

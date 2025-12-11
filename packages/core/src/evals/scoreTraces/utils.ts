@@ -3,6 +3,44 @@ import { SpanType } from '../../observability';
 import type { SpanRecord, TraceRecord } from '../../storage';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 
+// Types for span input/output structures
+interface SpanMessage {
+  role: string;
+  content: string | Array<{ type: string; text: string }>;
+}
+
+interface SpanInputWithMessages {
+  messages: SpanMessage[];
+}
+
+interface SpanOutputWithText {
+  text?: string;
+}
+
+// Type guards for span data
+function isSpanMessage(value: unknown): value is SpanMessage {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'role' in value &&
+    typeof (value as SpanMessage).role === 'string' &&
+    'content' in value
+  );
+}
+
+function hasMessagesArray(value: unknown): value is SpanInputWithMessages {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'messages' in value &&
+    Array.isArray((value as SpanInputWithMessages).messages)
+  );
+}
+
+function hasTextProperty(value: unknown): value is SpanOutputWithText {
+  return typeof value === 'object' && value !== null && 'text' in value;
+}
+
 // // Span tree structure for efficient lookups
 interface SpanTree {
   spanMap: Map<string, SpanRecord>;
@@ -25,7 +63,8 @@ export function buildSpanTree(spans: SpanRecord[]): SpanTree {
 
   // Second pass: build parent-child relationships
   for (const span of spans) {
-    if (span.parentSpanId === null) {
+    if (span.parentSpanId == null) {
+      // Root span (parentSpanId is null or undefined)
       rootSpans.push(span);
     } else {
       const siblings = childrenMap.get(span.parentSpanId) || [];
@@ -110,13 +149,13 @@ function extractInputMessages(agentSpan: SpanRecord): MastraDBMessage[] {
   }
 
   if (Array.isArray(input)) {
-    return input.map(msg => createMastraDBMessage(msg, agentSpan.startedAt));
+    const messages = input.filter(isSpanMessage) as unknown as SpanMessage[];
+    return messages.map(msg => createMastraDBMessage(msg, agentSpan.startedAt));
   }
 
-  // @ts-ignore
-  if (input && typeof input === 'object' && Array.isArray(input.messages)) {
-    // @ts-ignore
-    return input.messages.map((msg: any) => createMastraDBMessage(msg, agentSpan.startedAt));
+  if (hasMessagesArray(input)) {
+    const messages = input.messages.filter(isSpanMessage) as unknown as SpanMessage[];
+    return messages.map(msg => createMastraDBMessage(msg, agentSpan.startedAt));
   }
   return [];
 }
@@ -125,9 +164,13 @@ function extractInputMessages(agentSpan: SpanRecord): MastraDBMessage[] {
  * Extract system messages from LLM span
  */
 function extractSystemMessages(llmSpan: SpanRecord): Array<{ role: 'system'; content: string }> {
-  return (llmSpan.input?.messages || [])
-    .filter((msg: any) => msg.role === 'system')
-    .map((msg: any) => ({
+  const input = llmSpan.input;
+  if (!hasMessagesArray(input)) {
+    return [];
+  }
+  return input.messages
+    .filter((msg): msg is SpanMessage & { role: 'system' } => isSpanMessage(msg) && msg.role === 'system')
+    .map(msg => ({
       role: 'system' as const,
       content: normalizeMessageContent(msg.content),
     }));
@@ -138,11 +181,16 @@ function extractSystemMessages(llmSpan: SpanRecord): Array<{ role: 'system'; con
  * Excludes system messages and the current input message
  */
 function extractRememberedMessages(llmSpan: SpanRecord, currentInputContent: string): MastraDBMessage[] {
-  const messages = (llmSpan.input?.messages || [])
-    .filter((msg: any) => msg.role !== 'system')
-    .filter((msg: any) => normalizeMessageContent(msg.content) !== currentInputContent);
+  const input = llmSpan.input;
+  if (!hasMessagesArray(input)) {
+    return [];
+  }
+  const filtered = input.messages.filter(isSpanMessage) as unknown as SpanMessage[];
+  const messages = filtered
+    .filter(msg => msg.role !== 'system')
+    .filter(msg => normalizeMessageContent(msg.content) !== currentInputContent);
 
-  return messages.map((msg: any) => createMastraDBMessage(msg, llmSpan.startedAt));
+  return messages.map(msg => createMastraDBMessage(msg, llmSpan.startedAt));
 }
 
 /**
@@ -153,7 +201,8 @@ function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string) {
 
   return toolSpans.map(toolSpan => ({
     toolCallId: toolSpan.spanId,
-    toolName: toolSpan.attributes?.toolId || '',
+    toolName: toolSpan.entityName ?? toolSpan.entityId ?? 'unknown',
+    toolId: toolSpan.entityId,
     args: toolSpan.input || {},
     result: toolSpan.output || {},
     state: 'result' as const,
@@ -243,7 +292,7 @@ export function transformTraceToScorerInputAndOutput(trace: TraceRecord): {
 
   // Build output
   const toolInvocations = reconstructToolInvocations(spanTree, rootAgentSpan.spanId);
-  const responseText = rootAgentSpan.output.text || '';
+  const responseText = hasTextProperty(rootAgentSpan.output) ? (rootAgentSpan.output.text ?? '') : '';
 
   // Build parts array: tool invocations first, then text
   const parts: Array<{ type: 'tool-invocation'; toolInvocation: any } | { type: 'text'; text: string }> = [];

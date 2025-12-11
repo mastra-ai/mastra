@@ -184,7 +184,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       await scoresStorage.saveScore(scorer);
 
       const result = await scoresStorage.listScoresByEntityId({
-        entityId: scorer.entity!.id!,
+        entityId: scorer.entity!.id as string,
         entityType: scorer.entityType!,
         pagination: { page: 0, perPage: 10 },
       });

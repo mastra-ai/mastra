@@ -1,27 +1,26 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 
 export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 import type {
-  PaginationInfo,
   StorageResourceType,
   WorkflowRun,
   WorkflowRuns,
   StoragePagination,
   StorageDomains,
-  SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  UpdateSpanRecord,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
-  CreateIndexOptions,
+  StorageSupports,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
+import { MssqlDB } from './db';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
@@ -140,6 +139,7 @@ export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
   private isConnected: Promise<boolean> | null = null;
+  #db: MssqlDB;
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
@@ -179,6 +179,8 @@ export class MSSQLStore extends MastraStorage {
           options: config.options || { encrypt: true, trustServerCertificate: true },
         });
       }
+
+      this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
 
       const domainConfig = {
         pool: this.pool,
@@ -239,16 +241,17 @@ export class MSSQLStore extends MastraStorage {
     }
   }
 
-  public get supports() {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
-      listScoresBySpan: true,
-      observabilityInstance: true,
+      observability: true,
       indexManagement: true,
+      listScoresBySpan: true,
+      agents: false,
     };
   }
 
@@ -409,60 +412,22 @@ export class MSSQLStore extends MastraStorage {
   }
 
   /**
-   * Tracing / Observability
+   * Index Management
    */
-  private getObservabilityStore(): ObservabilityMSSQL {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('MSSQL', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability as ObservabilityMSSQL;
+  async createIndex(options: CreateIndexOptions): Promise<void> {
+    return this.#db.createIndex(options);
   }
 
-  async createSpan(span: SpanRecord): Promise<void> {
-    return this.getObservabilityStore().createSpan(span);
+  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
+    return this.#db.listIndexes(tableName);
   }
 
-  async updateSpan({
-    spanId,
-    traceId,
-    updates,
-  }: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<UpdateSpanRecord>;
-  }): Promise<void> {
-    return this.getObservabilityStore().updateSpan({ spanId, traceId, updates });
+  async describeIndex(indexName: string): Promise<StorageIndexStats> {
+    return this.#db.describeIndex(indexName);
   }
 
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
-    return this.getObservabilityStore().getTrace(traceId);
-  }
-
-  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    return this.getObservabilityStore().getTracesPaginated(args);
-  }
-
-  async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
-    return this.getObservabilityStore().batchCreateSpans(args);
-  }
-
-  async batchUpdateSpans(args: {
-    records: {
-      traceId: string;
-      spanId: string;
-      updates: Partial<UpdateSpanRecord>;
-    }[];
-  }): Promise<void> {
-    return this.getObservabilityStore().batchUpdateSpans(args);
-  }
-
-  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
-    return this.getObservabilityStore().batchDeleteTraces(args);
+  async dropIndex(indexName: string): Promise<void> {
+    return this.#db.dropIndex(indexName);
   }
 
   /**
@@ -484,7 +449,7 @@ export class MSSQLStore extends MastraStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({
       scorerId: _scorerId,
       pagination: _pagination,
@@ -504,7 +469,7 @@ export class MSSQLStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId: _runId, pagination: _pagination });
   }
 
@@ -516,7 +481,7 @@ export class MSSQLStore extends MastraStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({
       entityId: _entityId,
       entityType: _entityType,
@@ -532,7 +497,7 @@ export class MSSQLStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination: _pagination });
   }
 }

@@ -2,6 +2,28 @@ import { z, ZodSchema } from 'zod';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 
 /**
+ * Get the Zod typeName from a schema, compatible with both Zod 3 and Zod 4.
+ * Uses string-based typeName instead of instanceof to avoid dual-package hazard.
+ */
+function getZodTypeName(schema: z.ZodTypeAny): string | undefined {
+  const schemaAny = schema as any;
+  // Zod 4 structure
+  if (schemaAny._zod?.def?.typeName) {
+    return schemaAny._zod.def.typeName;
+  }
+  // Zod 3 structure
+  return schemaAny._def?.typeName;
+}
+
+/**
+ * Get the def object from a Zod schema, compatible with both Zod 3 and Zod 4.
+ */
+function getZodDef(schema: z.ZodTypeAny): any {
+  const schemaAny = schema as any;
+  return schemaAny._zod?.def ?? schemaAny._def;
+}
+
+/**
  * Generate context-aware test value based on field name
  */
 export function generateContextualValue(fieldName?: string): string {
@@ -40,47 +62,55 @@ export function generateContextualValue(fieldName?: string): string {
  * Generate valid test data from a Zod schema
  */
 export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: string): any {
-  while (schema instanceof z.ZodEffects) {
-    schema = schema._def.schema;
+  let typeName = getZodTypeName(schema);
+  let def = getZodDef(schema);
+
+  // Unwrap effects first
+  while (typeName === 'ZodEffects') {
+    schema = def.schema;
+    typeName = getZodTypeName(schema);
+    def = getZodDef(schema);
   }
 
-  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
-    return generateValidDataFromSchema(schema._def.innerType, fieldName);
+  if (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
+    return generateValidDataFromSchema(def.innerType, fieldName);
   }
-  if (schema instanceof z.ZodDefault) {
-    return schema._def.defaultValue();
+  if (typeName === 'ZodDefault') {
+    return def.defaultValue();
   }
 
-  if (schema instanceof z.ZodString) return generateContextualValue(fieldName);
-  if (schema instanceof z.ZodNumber) return 10;
-  if (schema instanceof z.ZodBoolean) return true;
-  if (schema instanceof z.ZodNull) return null;
-  if (schema instanceof z.ZodUndefined) return undefined;
-  if (schema instanceof z.ZodDate) return new Date();
-  if (schema instanceof z.ZodBigInt) return BigInt(0);
+  if (typeName === 'ZodString') return generateContextualValue(fieldName);
+  if (typeName === 'ZodNumber') return 10;
+  if (typeName === 'ZodBoolean') return true;
+  if (typeName === 'ZodNull') return null;
+  if (typeName === 'ZodUndefined') return undefined;
+  if (typeName === 'ZodDate') return new Date();
+  if (typeName === 'ZodBigInt') return BigInt(0);
 
-  if (schema instanceof z.ZodLiteral) return schema._def.value;
+  if (typeName === 'ZodLiteral') return def.value;
 
-  if (schema instanceof z.ZodEnum) return schema._def.values[0];
-  if (schema instanceof z.ZodNativeEnum) {
-    const values = Object.values(schema._def.values);
+  if (typeName === 'ZodEnum') return def.values[0];
+  if (typeName === 'ZodNativeEnum') {
+    const values = Object.values(def.values);
     return values[0];
   }
 
-  if (schema instanceof z.ZodArray) {
-    return [generateValidDataFromSchema(schema._def.type, fieldName)];
+  if (typeName === 'ZodArray') {
+    return [generateValidDataFromSchema(def.type, fieldName)];
   }
 
-  if (schema instanceof z.ZodObject) {
-    const shape = schema._def.shape();
+  if (typeName === 'ZodObject') {
+    const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
     const obj: any = {};
     for (const [key, fieldSchema] of Object.entries(shape)) {
-      if (fieldSchema instanceof z.ZodOptional) {
+      const fieldTypeName = getZodTypeName(fieldSchema as z.ZodTypeAny);
+      if (fieldTypeName === 'ZodOptional') {
         // Special case: workflow routes need inputData field even when optional
         // because _run.start() expects { inputData?, ... } structure, not just {}
         // Without this, z.object({}).safeParse(undefined) fails with "Required" error
         if (key === 'inputData') {
-          const innerType = fieldSchema._def.innerType;
+          const fieldDef = getZodDef(fieldSchema as z.ZodTypeAny);
+          const innerType = fieldDef.innerType;
           obj[key] = generateValidDataFromSchema(innerType, key);
         }
         continue;
@@ -90,30 +120,30 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     return obj;
   }
 
-  if (schema instanceof z.ZodRecord) {
-    return { key: generateValidDataFromSchema(schema._def.valueType, fieldName) };
+  if (typeName === 'ZodRecord') {
+    return { key: generateValidDataFromSchema(def.valueType, fieldName) };
   }
 
-  if (schema instanceof z.ZodUnion) {
-    return generateValidDataFromSchema(schema._def.options[0], fieldName);
+  if (typeName === 'ZodUnion') {
+    return generateValidDataFromSchema(def.options[0], fieldName);
   }
 
-  if (schema instanceof z.ZodDiscriminatedUnion) {
-    const options = Array.from(schema._def.options.values());
+  if (typeName === 'ZodDiscriminatedUnion') {
+    const options = Array.from(def.options.values());
     return generateValidDataFromSchema(options[0] as z.ZodTypeAny, fieldName);
   }
 
-  if (schema instanceof z.ZodIntersection) {
-    const left = generateValidDataFromSchema(schema._def.left, fieldName);
-    const right = generateValidDataFromSchema(schema._def.right, fieldName);
+  if (typeName === 'ZodIntersection') {
+    const left = generateValidDataFromSchema(def.left, fieldName);
+    const right = generateValidDataFromSchema(def.right, fieldName);
     return { ...left, ...right };
   }
 
-  if (schema instanceof z.ZodTuple) {
-    return schema._def.items.map((item: z.ZodTypeAny) => generateValidDataFromSchema(item, fieldName));
+  if (typeName === 'ZodTuple') {
+    return def.items.map((item: z.ZodTypeAny) => generateValidDataFromSchema(item, fieldName));
   }
 
-  if (schema instanceof z.ZodAny || schema instanceof z.ZodUnknown) {
+  if (typeName === 'ZodAny' || typeName === 'ZodUnknown') {
     if (fieldName === 'content') {
       return [{ type: 'text', text: 'test message content' }];
     }

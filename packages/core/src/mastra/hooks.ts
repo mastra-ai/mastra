@@ -14,10 +14,10 @@ export function createOnScorerHook(mastra: Mastra) {
       return;
     }
 
-    const entityId = hookData.entity.id;
+    const entityId = hookData.entity.id as string;
     const entityType = hookData.entityType;
     const scorer = hookData.scorer;
-    const scorerId = scorer.id;
+    const scorerId = scorer.id as string;
 
     if (!scorerId) {
       mastra.getLogger()?.warn('Scorer ID not found, skipping score validation and saving');
@@ -100,7 +100,7 @@ export function createOnScorerHook(mastra: Mastra) {
           domain: ErrorDomain.SCORER,
           category: ErrorCategory.USER,
           details: {
-            scorerId: scorer.id,
+            scorerId,
             entityId,
             entityType,
           },

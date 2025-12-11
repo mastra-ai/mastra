@@ -250,12 +250,12 @@ describe('DefaultExporter', () => {
 
         await exporter.exportTracingEvent(mockEvent);
 
-        expect(mockStorage.createSpan).toHaveBeenCalledWith(
-          expect.objectContaining({
+        expect(mockStorage.createSpan).toHaveBeenCalledWith({
+          span: expect.objectContaining({
             traceId: 'trace-1',
             spanId: 'span-1',
           }),
-        );
+        });
       });
     });
 

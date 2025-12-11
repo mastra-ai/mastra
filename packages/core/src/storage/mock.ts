@@ -1,9 +1,18 @@
 import type { MastraDBMessage } from '../agent';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../evals/types';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../evals/types';
 import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
+import type {
+  BatchCreateSpansArgs,
+  BatchDeleteTracesArgs,
+  BatchUpdateSpansArgs,
+  GetTraceResponse,
+  UpdateSpanArgs,
+  CreateSpanArgs,
+  GetTraceArgs,
+} from './domains';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
 import { InMemoryMemory } from './domains/memory/inmemory';
@@ -12,13 +21,11 @@ import { ScoresInMemory } from './domains/scores/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 
 import type {
-  SpanRecord,
-  TraceRecord,
-  PaginationInfo,
   StoragePagination,
   StorageResourceType,
   UpdateWorkflowStateOptions,
   WorkflowRun,
+  StorageSupports,
 } from './types';
 
 export class InMemoryStore extends MastraStorage {
@@ -49,14 +56,14 @@ export class InMemoryStore extends MastraStorage {
     };
   }
 
-  public get supports() {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
       deleteMessages: true,
-      observabilityInstance: true,
+      observability: true,
       indexManagement: false,
       listScoresBySpan: true,
       agents: true,
@@ -214,7 +221,7 @@ export class InMemoryStore extends MastraStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
   }
 
@@ -224,7 +231,7 @@ export class InMemoryStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId, pagination });
   }
 
@@ -236,7 +243,7 @@ export class InMemoryStore extends MastraStorage {
     entityId: string;
     entityType: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 
@@ -248,7 +255,7 @@ export class InMemoryStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 
@@ -266,33 +273,27 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
-  async createSpan(span: SpanRecord): Promise<void> {
-    return this.stores.observability!.createSpan(span);
+  async createSpan(args: CreateSpanArgs): Promise<void> {
+    return this.stores.observability!.createSpan(args);
   }
 
-  async updateSpan(params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
-    return this.stores.observability!.updateSpan(params);
+  async updateSpan(args: UpdateSpanArgs): Promise<void> {
+    return this.stores.observability!.updateSpan(args);
   }
 
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
-    return this.stores.observability!.getTrace(traceId);
+  async getTrace(args: GetTraceArgs): Promise<GetTraceResponse | null> {
+    return this.stores.observability!.getTrace(args);
   }
 
-  async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
     return this.stores.observability!.batchCreateSpans(args);
   }
 
-  async batchUpdateSpans(args: {
-    records: { traceId: string; spanId: string; updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>> }[];
-  }): Promise<void> {
+  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     return this.stores.observability!.batchUpdateSpans(args);
   }
 
-  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     return this.stores.observability!.batchDeleteTraces(args);
   }
 }

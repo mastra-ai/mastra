@@ -1,8 +1,13 @@
-import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
+import type {
+  ListScoresResponse,
+  SaveScorePayload,
+  ScoreRowData,
+  ScoringEntityType,
+  ScoringSource,
+} from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   StorageResourceType,
-  PaginationInfo,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
@@ -12,6 +17,7 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   UpdateWorkflowStateOptions,
+  StorageSupports,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -106,15 +112,17 @@ export class ConvexStore extends MastraStorage {
     };
   }
 
-  public get supports() {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
       deleteMessages: true,
-      observabilityInstance: false,
+      observability: false,
+      indexManagement: false,
       listScoresBySpan: false,
+      agents: false,
     };
   }
 
@@ -274,7 +282,7 @@ export class ConvexStore extends MastraStorage {
     entityId?: string | undefined;
     entityType?: ScoringEntityType | undefined;
     source?: ScoringSource | undefined;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
@@ -284,7 +292,7 @@ export class ConvexStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.scores.listScoresByRunId({ runId, pagination });
   }
 
@@ -296,7 +304,7 @@ export class ConvexStore extends MastraStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: ScoringEntityType;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 }

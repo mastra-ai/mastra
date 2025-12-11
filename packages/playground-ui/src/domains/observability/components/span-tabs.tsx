@@ -8,10 +8,11 @@ import {
   SpanScoreList,
   useLinkComponent,
 } from '@/index';
-import { TraceSpanUsage } from './trace-span-usage';
+import { TraceSpanUsage, type TokenUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { CircleGaugeIcon } from 'lucide-react';
-import { ListScoresResponse, type GetScorerResponse } from '@mastra/client-js';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import type { GetScorerResponse } from '@mastra/client-js';
 import { SpanRecord } from '@mastra/core/storage';
 
 type SpanTabsProps = {
@@ -60,7 +61,7 @@ export function SpanTabs({
       </Tabs.List>
       <Tabs.Content value="details">
         <Sections>
-          {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} />}
+          {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage as TokenUsage} />}
           <KeyValueList data={spanInfo} LinkComponent={Link} />
           <SpanDetails span={span} />
         </Sections>

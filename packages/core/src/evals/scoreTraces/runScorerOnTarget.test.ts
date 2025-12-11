@@ -93,6 +93,7 @@ class TestContext {
               traceId: target.traceId,
               parentSpanId: null,
               name: 'root-span',
+              entityId: 'root-span',
               spanType: SpanType.AGENT_RUN,
             }),
             createMockSpanRecord({
@@ -100,6 +101,7 @@ class TestContext {
               traceId: target.traceId,
               parentSpanId: 'span-1',
               name: 'child-span',
+              entityId: 'child-span',
               spanType: SpanType.MODEL_GENERATION,
             }),
           ]
@@ -109,6 +111,7 @@ class TestContext {
               traceId: target.traceId,
               parentSpanId: null,
               name: 'root-span',
+              entityId: 'root-span',
               spanType: SpanType.AGENT_RUN,
             }),
           ],
@@ -217,7 +220,7 @@ describe('runScorerOnTarget Function', () => {
 
       await testContext.runTarget(target);
 
-      expect(testContext.mockStorage.getTrace).toHaveBeenCalledWith('trace-1');
+      expect(testContext.mockStorage.getTrace).toHaveBeenCalledWith({ traceId: 'trace-1' });
       expect(testContext.mockScorer.run).toHaveBeenCalled();
       expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
         expect.objectContaining({
