@@ -9536,4 +9536,54 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
   });
+
+  describe('startAsync', () => {
+    it('should start workflow and complete successfully', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-startAsync-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-startAsync-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const { runId } = await run.startAsync({ inputData: {} });
+
+      expect(runId).toBe(run.runId);
+
+      // Poll for completion
+      let result;
+      for (let i = 0; i < 10; i++) {
+        result = await workflow.getWorkflowRunExecutionResult(runId);
+        if (result?.status === 'success') break;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      expect(result?.status).toBe('success');
+      expect(result?.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      await mastra.stopEventEngine();
+    });
+  });
 });
