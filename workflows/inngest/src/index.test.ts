@@ -11922,4 +11922,82 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
   });
+
+  describe.sequential('startAsync', () => {
+    it('should start workflow and complete successfully', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-startAsync-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-startAsync-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const { runId } = await run.startAsync({ inputData: {} });
+
+      expect(runId).toBe(run.runId);
+
+      // Poll for completion with longer timeout for Inngest
+      let result;
+      for (let i = 0; i < 30; i++) {
+        result = await workflow.getWorkflowRunExecutionResult(runId);
+        if (result?.status === 'success' || result?.status === 'failed') break;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      expect(result?.status).toBe('success');
+      expect(result?.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      srv.close();
+    }, 60000);
+  });
 }, 80e3);
