@@ -12,7 +12,7 @@ import {
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext } from '../../observability';
+import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -263,8 +263,9 @@ export class CoreToolBuilder extends MastraBase {
         type: SpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
+        entityType: EntityType.TOOL,
+        entityName: options.name,
         attributes: {
-          toolId: options.name,
           toolDescription: options.description,
           toolType: logType || 'tool',
         },

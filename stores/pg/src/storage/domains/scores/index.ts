@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination } from '@mastra/core/storage';
 import {
   calculatePagination,
   createStorageErrorId,
@@ -87,7 +87,7 @@ export class ScoresPG extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const conditions: string[] = [`"scorerId" = $1`];
       const queryParams: any[] = [scorerId];
@@ -158,7 +158,7 @@ export class ScoresPG extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -168,7 +168,7 @@ export class ScoresPG extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer?.id ?? 'unknown',
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
             entityId: score.entityId ?? 'unknown',
             entityType: score.entityType ?? 'unknown',
             traceId: score.traceId ?? '',
@@ -234,7 +234,7 @@ export class ScoresPG extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const total = await this.#db.client.oneOrNone<{ count: string }>(
         `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "runId" = $1`,
@@ -292,7 +292,7 @@ export class ScoresPG extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const total = await this.#db.client.oneOrNone<{ count: string }>(
         `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "entityId" = $1 AND "entityType" = $2`,
@@ -350,7 +350,7 @@ export class ScoresPG extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) });
       const countSQLResult = await this.#db.client.oneOrNone<{ count: string }>(

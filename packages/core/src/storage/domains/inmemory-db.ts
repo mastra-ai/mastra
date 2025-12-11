@@ -1,12 +1,7 @@
 import type { ScoreRowData } from '../../evals/types';
 import type { StorageThreadType } from '../../memory/types';
-import type {
-  StorageAgentType,
-  StorageMessageType,
-  StorageResourceType,
-  StorageWorkflowRun,
-  SpanRecord,
-} from '../types';
+import type { StorageAgentType, StorageMessageType, StorageResourceType, StorageWorkflowRun } from '../types';
+import type { TraceEntry } from './observability';
 
 /**
  * InMemoryDB is a thin database layer for in-memory storage.
@@ -21,7 +16,7 @@ export class InMemoryDB {
   readonly resources = new Map<string, StorageResourceType>();
   readonly workflows = new Map<string, StorageWorkflowRun>();
   readonly scores = new Map<string, ScoreRowData>();
-  readonly spans = new Map<string, SpanRecord>();
+  readonly traces = new Map<string, TraceEntry>();
   readonly agents = new Map<string, StorageAgentType>();
 
   /**
@@ -34,7 +29,7 @@ export class InMemoryDB {
     this.resources.clear();
     this.workflows.clear();
     this.scores.clear();
-    this.spans.clear();
+    this.traces.clear();
     this.agents.clear();
   }
 }

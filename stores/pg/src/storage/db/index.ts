@@ -288,7 +288,19 @@ export class PgDB extends MastraBase {
     try {
       const schemaName = getSchemaName(this.schemaName);
       const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
-      await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
+
+      // Check if table exists before truncating (handles case where init failed)
+      const tableExists = await this.client.oneOrNone<{ exists: boolean }>(
+        `SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = $1 AND table_name = $2
+        )`,
+        [this.schemaName || 'mastra', tableName],
+      );
+
+      if (tableExists?.exists) {
+        await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -360,6 +372,21 @@ export class PgDB extends MastraBase {
             `
                 : ''
             }
+          ${
+            tableName === TABLE_SPANS
+              ? `
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_ai_spans_traceid_spanid_pk'
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
+                ADD CONSTRAINT ${constraintPrefix}mastra_ai_spans_traceid_spanid_pk
+                PRIMARY KEY ("traceId", "spanId");
+              END IF;
+            END $$;
+            `
+              : ''
+          }
           `;
 
       await this.client.none(sql);
@@ -370,8 +397,10 @@ export class PgDB extends MastraBase {
         ifNotExists: timeZColumnNames,
       });
 
+      // Set up timestamp triggers and run migrations for Spans table
       if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
+        await this.migrateSpansTable();
       }
     } catch (error) {
       throw new MastraError(
@@ -428,6 +457,44 @@ export class PgDB extends MastraBase {
     }
   }
 
+  /**
+   * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
+   * This adds new columns that don't exist in old schema.
+   */
+  private async migrateSpansTable(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const schema = TABLE_SCHEMAS[TABLE_SPANS];
+
+    try {
+      // Add any columns from current schema that don't exist in the database
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
+        if (!columnExists) {
+          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const sqlType = this.getSqlType(columnDef.type);
+          // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
+          const nullable = columnDef.nullable ? '' : 'NOT NULL';
+          const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+          await this.client.none(alterSql);
+          this.logger?.debug?.(`Added column '${columnName}' to ${fullTableName}`);
+        }
+      }
+
+      this.logger?.info?.(`Migration completed for ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail - migrations should be best-effort
+      this.logger?.warn?.(`Failed to migrate spans table ${fullTableName}:`, error);
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable({
     tableName,
     schema,
@@ -443,19 +510,20 @@ export class PgDB extends MastraBase {
       for (const columnName of ifNotExists) {
         if (schema[columnName]) {
           const columnDef = schema[columnName];
-          const sqlType = this.getSqlType(columnDef.type);
-          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
-          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
           const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const sqlType = this.getSqlType(columnDef.type);
+          // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
+          const nullable = columnDef.nullable ? '' : 'NOT NULL';
+          const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
           const alterSql =
             `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 
           await this.client.none(alterSql);
 
           if (sqlType === 'TIMESTAMP') {
-            const alterSql =
+            const timestampZSql =
               `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
-            await this.client.none(alterSql);
+            await this.client.none(timestampZSql);
           }
 
           this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);
@@ -801,6 +869,44 @@ export class PgDB extends MastraBase {
         name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
         table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
+      },
+      // Root spans partial index - every listTraces query filters parentSpanId IS NULL
+      {
+        name: `${schemaPrefix}mastra_ai_spans_root_spans_idx`,
+        table: TABLE_SPANS,
+        columns: ['startedAt DESC'],
+        where: '"parentSpanId" IS NULL',
+      },
+      // Entity identification indexes - common filtering patterns
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityid_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityId'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityname_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityName'],
+      },
+      // Multi-tenant filtering - organizationId + userId
+      {
+        name: `${schemaPrefix}mastra_ai_spans_orgid_userid_idx`,
+        table: TABLE_SPANS,
+        columns: ['organizationId', 'userId'],
+      },
+      // Metadata JSONB GIN index - for custom filtering with @> containment
+      {
+        name: `${schemaPrefix}mastra_ai_spans_metadata_gin_idx`,
+        table: TABLE_SPANS,
+        columns: ['metadata'],
+        method: 'gin',
+      },
+      // Tags array GIN index - for array containment queries
+      {
+        name: `${schemaPrefix}mastra_ai_spans_tags_gin_idx`,
+        table: TABLE_SPANS,
+        columns: ['tags'],
+        method: 'gin',
       },
     ];
   }

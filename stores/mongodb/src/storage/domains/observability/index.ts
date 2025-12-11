@@ -1,13 +1,28 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { createStorageErrorId, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  listTracesArgsSchema,
+  ObservabilityStorage,
+  TABLE_SPANS,
+  TraceStatus,
+} from '@mastra/core/storage';
 import type {
   SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  CreateSpanRecord,
-  PaginationInfo,
   UpdateSpanRecord,
+  PaginationInfo,
+  ListTracesArgs,
+  TracingStorageStrategy,
+  UpdateSpanArgs,
+  BatchDeleteTracesArgs,
+  BatchCreateSpansArgs,
+  BatchUpdateSpansArgs,
+  CreateSpanArgs,
+  GetSpanArgs,
+  GetSpanResponse,
+  GetRootSpanArgs,
+  GetRootSpanResponse,
+  GetTraceArgs,
+  GetTraceResponse,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -40,7 +55,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     await collection.deleteMany({});
   }
 
-  public get tracingStrategy(): {
+  public override get tracingStrategy(): {
     preferred: TracingStorageStrategy;
     supported: TracingStorageStrategy[];
   } {
@@ -50,7 +65,8 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     };
   }
 
-  async createSpan(span: CreateSpanRecord): Promise<void> {
+  async createSpan(args: CreateSpanArgs): Promise<void> {
+    const { span } = args;
     try {
       const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
       const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
@@ -75,7 +91,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
             spanId: span.spanId,
             traceId: span.traceId,
             spanType: span.spanType,
-            spanName: span.name,
+            name: span.name,
           },
         },
         error,
@@ -83,11 +99,64 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
+  async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
+    const { traceId, spanId } = args;
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+      const span = await collection.findOne({ traceId, spanId });
+
+      if (!span) {
+        return null;
+      }
+
+      return {
+        span: this.transformSpanFromMongo(span),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_SPAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { traceId, spanId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
+    const { traceId } = args;
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+      const span = await collection.findOne({ traceId, parentSpanId: null });
+
+      if (!span) {
+        return null;
+      }
+
+      return {
+        span: this.transformSpanFromMongo(span),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_ROOT_SPAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { traceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTrace(args: GetTraceArgs): Promise<GetTraceResponse | null> {
+    const { traceId } = args;
     try {
       const collection = await this.getCollection(TABLE_SPANS);
 
-      const spans = await collection.find({ traceId }).sort({ startedAt: -1 }).toArray();
+      const spans = await collection.find({ traceId }).sort({ startedAt: 1 }).toArray();
 
       if (!spans || spans.length === 0) {
         return null;
@@ -112,15 +181,8 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async updateSpan({
-    spanId,
-    traceId,
-    updates,
-  }: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<UpdateSpanRecord>;
-  }): Promise<void> {
+  async updateSpan(args: UpdateSpanArgs): Promise<void> {
+    const { traceId, spanId, updates } = args;
     try {
       const data = { ...updates };
       if (data.endedAt instanceof Date) {
@@ -154,13 +216,10 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async getTracesPaginated({
-    filters,
-    pagination,
-  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    const page = pagination?.page ?? 0;
-    const perPage = pagination?.perPage ?? 10;
-    const { entityId, entityType, ...actualFilters } = filters || {};
+  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    // Parse args through schema to apply defaults
+    const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
+    const { page, perPage } = pagination;
 
     try {
       const collection = await this.getCollection(TABLE_SPANS);
@@ -168,52 +227,218 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       // Build MongoDB query filter
       const mongoFilter: Record<string, any> = {
         parentSpanId: null, // Only get root spans for traces
-        ...actualFilters,
       };
+      const andConditions: Record<string, any>[] = [];
 
-      // Handle date range filtering
-      if (pagination?.dateRange) {
-        const dateFilter: Record<string, any> = {};
-        if (pagination.dateRange.start) {
-          dateFilter.$gte =
-            pagination.dateRange.start instanceof Date
-              ? pagination.dateRange.start.toISOString()
-              : pagination.dateRange.start;
+      if (filters) {
+        // Date range filters
+        if (filters.startedAt) {
+          const startedAtFilter: Record<string, any> = {};
+          if (filters.startedAt.start) {
+            startedAtFilter.$gte = filters.startedAt.start.toISOString();
+          }
+          if (filters.startedAt.end) {
+            startedAtFilter.$lte = filters.startedAt.end.toISOString();
+          }
+          if (Object.keys(startedAtFilter).length > 0) {
+            mongoFilter.startedAt = startedAtFilter;
+          }
         }
-        if (pagination.dateRange.end) {
-          dateFilter.$lte =
-            pagination.dateRange.end instanceof Date
-              ? pagination.dateRange.end.toISOString()
-              : pagination.dateRange.end;
+
+        if (filters.endedAt) {
+          const endedAtFilter: Record<string, any> = {};
+          if (filters.endedAt.start) {
+            endedAtFilter.$gte = filters.endedAt.start.toISOString();
+          }
+          if (filters.endedAt.end) {
+            endedAtFilter.$lte = filters.endedAt.end.toISOString();
+          }
+          if (Object.keys(endedAtFilter).length > 0) {
+            andConditions.push({ endedAt: endedAtFilter });
+          }
         }
-        if (Object.keys(dateFilter).length > 0) {
-          mongoFilter.startedAt = dateFilter;
+
+        // Span type filter
+        if (filters.spanType !== undefined) {
+          mongoFilter.spanType = filters.spanType;
+        }
+
+        // Entity filters
+        if (filters.entityType !== undefined) {
+          mongoFilter.entityType = filters.entityType;
+        }
+        if (filters.entityId !== undefined) {
+          mongoFilter.entityId = filters.entityId;
+        }
+        if (filters.entityName !== undefined) {
+          mongoFilter.entityName = filters.entityName;
+        }
+
+        // Identity & Tenancy filters
+        if (filters.userId !== undefined) {
+          mongoFilter.userId = filters.userId;
+        }
+        if (filters.organizationId !== undefined) {
+          mongoFilter.organizationId = filters.organizationId;
+        }
+        if (filters.resourceId !== undefined) {
+          mongoFilter.resourceId = filters.resourceId;
+        }
+
+        // Correlation ID filters
+        if (filters.runId !== undefined) {
+          mongoFilter.runId = filters.runId;
+        }
+        if (filters.sessionId !== undefined) {
+          mongoFilter.sessionId = filters.sessionId;
+        }
+        if (filters.threadId !== undefined) {
+          mongoFilter.threadId = filters.threadId;
+        }
+        if (filters.requestId !== undefined) {
+          mongoFilter.requestId = filters.requestId;
+        }
+
+        // Deployment context filters
+        if (filters.environment !== undefined) {
+          mongoFilter.environment = filters.environment;
+        }
+        if (filters.source !== undefined) {
+          mongoFilter.source = filters.source;
+        }
+        if (filters.serviceName !== undefined) {
+          mongoFilter.serviceName = filters.serviceName;
+        }
+
+        // Scope filter (MongoDB supports dot notation for nested fields)
+        if (filters.scope != null) {
+          for (const [key, value] of Object.entries(filters.scope)) {
+            mongoFilter[`scope.${key}`] = value;
+          }
+        }
+
+        // Metadata filter
+        if (filters.metadata != null) {
+          for (const [key, value] of Object.entries(filters.metadata)) {
+            mongoFilter[`metadata.${key}`] = value;
+          }
+        }
+
+        // Tags filter (all tags must be present)
+        if (filters.tags != null && filters.tags.length > 0) {
+          mongoFilter.tags = { $all: filters.tags };
+        }
+
+        // Status filter (derived from error and endedAt)
+        if (filters.status !== undefined) {
+          switch (filters.status) {
+            case TraceStatus.ERROR:
+              andConditions.push({ error: { $exists: true, $ne: null } });
+              break;
+            case TraceStatus.RUNNING:
+              andConditions.push({ endedAt: null, error: null });
+              break;
+            case TraceStatus.SUCCESS:
+              andConditions.push({ endedAt: { $exists: true, $ne: null }, error: null });
+              break;
+          }
         }
       }
+      if (andConditions.length) {
+        mongoFilter.$and = andConditions;
+      }
 
-      // Handle entity filtering
-      if (entityId && entityType) {
-        let name = '';
-        if (entityType === 'workflow') {
-          name = `workflow run: '${entityId}'`;
-        } else if (entityType === 'agent') {
-          name = `agent run: '${entityId}'`;
-        } else {
-          const error = new MastraError({
-            id: createStorageErrorId('MONGODB', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: {
-              entityType,
+      // Build sort
+      const sortField = orderBy.field;
+      const sortDirection = orderBy.direction === 'ASC' ? 1 : -1;
+
+      // hasChildError filter requires $lookup aggregation for efficiency
+      // Instead of fetching all traceIds with errors (unbounded), we use $lookup
+      // to check for child errors within each trace
+      if (filters?.hasChildError !== undefined) {
+        const pipeline: any[] = [
+          { $match: mongoFilter },
+          // Lookup child spans with errors for this trace
+          {
+            $lookup: {
+              from: TABLE_SPANS,
+              let: { traceId: '$traceId' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ['$traceId', '$$traceId'] },
+                    error: { $exists: true, $ne: null },
+                  },
+                },
+                { $limit: 1 }, // Only need to know if at least one exists
+              ],
+              as: '_errorSpans',
             },
-            text: `Cannot filter by entity type: ${entityType}`,
-          });
-          throw error;
+          },
+          // Filter based on whether error spans exist
+          {
+            $match: filters.hasChildError
+              ? { _errorSpans: { $ne: [] } } // Has at least one child with error
+              : { _errorSpans: { $eq: [] } }, // No children with errors
+          },
+        ];
+
+        // Get count using aggregation
+        const countResult = await collection.aggregate([...pipeline, { $count: 'total' }]).toArray();
+        const count = countResult[0]?.total || 0;
+
+        if (count === 0) {
+          return {
+            pagination: {
+              total: 0,
+              page,
+              perPage,
+              hasMore: false,
+            },
+            spans: [],
+          };
         }
-        mongoFilter.name = name;
+
+        // Get paginated spans with proper NULL ordering for endedAt
+        let aggregationPipeline: any[];
+        if (sortField === 'endedAt') {
+          // Add helper field to sort NULLs first for DESC, last for ASC
+          const nullSortValue = sortDirection === -1 ? 0 : 1;
+          aggregationPipeline = [
+            ...pipeline,
+            {
+              $addFields: {
+                _endedAtNull: { $cond: [{ $eq: ['$endedAt', null] }, nullSortValue, sortDirection === -1 ? 1 : 0] },
+              },
+            },
+            { $sort: { _endedAtNull: 1, [sortField]: sortDirection } },
+            { $skip: page * perPage },
+            { $limit: perPage },
+            { $project: { _errorSpans: 0, _endedAtNull: 0 } },
+          ];
+        } else {
+          aggregationPipeline = [
+            ...pipeline,
+            { $sort: { [sortField]: sortDirection } },
+            { $skip: page * perPage },
+            { $limit: perPage },
+            { $project: { _errorSpans: 0 } },
+          ];
+        }
+        const spans = await collection.aggregate(aggregationPipeline).toArray();
+
+        return {
+          pagination: {
+            total: count,
+            page,
+            perPage,
+            hasMore: (page + 1) * perPage < count,
+          },
+          spans: spans.map((span: any) => this.transformSpanFromMongo(span)),
+        };
       }
 
-      // Get total count
+      // Standard query path (no hasChildError filter)
       const count = await collection.countDocuments(mongoFilter);
 
       if (count === 0) {
@@ -229,26 +454,51 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       }
 
       // Get paginated spans
-      const spans = await collection
-        .find(mongoFilter)
-        .sort({ startedAt: -1 })
-        .skip(page * perPage)
-        .limit(perPage)
-        .toArray();
+      // MongoDB's natural NULL ordering: NULLs first for ASC, last for DESC
+      // For endedAt we want the opposite: NULLs FIRST for DESC, LAST for ASC
+      // So we need aggregation with $addFields to control NULL ordering for endedAt
+      let spans: any[];
+      if (sortField === 'endedAt') {
+        // Use aggregation to handle NULL ordering for endedAt
+        // Add a helper field to sort NULLs first for DESC, last for ASC
+        const nullSortValue = sortDirection === -1 ? 0 : 1; // DESC: NULLs first (0), ASC: NULLs last (1)
+        spans = await collection
+          .aggregate([
+            { $match: mongoFilter },
+            {
+              $addFields: {
+                _endedAtNull: { $cond: [{ $eq: ['$endedAt', null] }, nullSortValue, sortDirection === -1 ? 1 : 0] },
+              },
+            },
+            { $sort: { _endedAtNull: 1, [sortField]: sortDirection } },
+            { $skip: page * perPage },
+            { $limit: perPage },
+            { $project: { _endedAtNull: 0 } },
+          ])
+          .toArray();
+      } else {
+        // For startedAt (never null), use simple find()
+        spans = await collection
+          .find(mongoFilter)
+          .sort({ [sortField]: sortDirection })
+          .skip(page * perPage)
+          .limit(perPage)
+          .toArray();
+      }
 
       return {
         pagination: {
           total: count,
           page,
           perPage,
-          hasMore: spans.length === perPage,
+          hasMore: (page + 1) * perPage < count,
         },
         spans: spans.map((span: any) => this.transformSpanFromMongo(span)),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('MONGODB', 'GET_TRACES_PAGINATED', 'FAILED'),
+          id: createStorageErrorId('MONGODB', 'LIST_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -257,7 +507,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
     try {
       const records = args.records.map(record => {
         const startedAt = record.startedAt instanceof Date ? record.startedAt.toISOString() : record.startedAt;
@@ -288,13 +538,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async batchUpdateSpans(args: {
-    records: {
-      traceId: string;
-      spanId: string;
-      updates: Partial<UpdateSpanRecord>;
-    }[];
-  }): Promise<void> {
+  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     try {
       if (args.records.length === 0) {
         return;
@@ -338,7 +582,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     try {
       const collection = await this.getCollection(TABLE_SPANS);
 
@@ -365,17 +609,17 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     const { _id, ...span } = doc;
 
     // Ensure dates are properly formatted
-    if (span.startedAt && typeof span.startedAt === 'string') {
-      span.startedAt = span.startedAt;
-    }
-    if (span.endedAt && typeof span.endedAt === 'string') {
-      span.endedAt = span.endedAt;
-    }
     if (span.createdAt && typeof span.createdAt === 'string') {
       span.createdAt = new Date(span.createdAt);
     }
     if (span.updatedAt && typeof span.updatedAt === 'string') {
       span.updatedAt = new Date(span.updatedAt);
+    }
+    if (span.startedAt && typeof span.startedAt === 'string') {
+      span.startedAt = new Date(span.startedAt);
+    }
+    if (span.endedAt && typeof span.endedAt === 'string') {
+      span.endedAt = new Date(span.endedAt);
     }
 
     return span as SpanRecord;

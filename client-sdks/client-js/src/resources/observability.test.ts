@@ -1,4 +1,4 @@
-import type { SpanType } from '@mastra/core/observability';
+import { SpanType, EntityType } from '@mastra/core/observability';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
 
@@ -47,6 +47,19 @@ describe('Observability Methods', () => {
       );
     });
 
+    it('should URL-encode trace IDs with special characters', async () => {
+      mockSuccessfulResponse();
+
+      await client.getTrace('trace/with/slashes');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/trace%2Fwith%2Fslashes`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
     it('should handle HTTP errors gracefully', async () => {
       const errorResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
@@ -55,7 +68,14 @@ describe('Observability Methods', () => {
     });
   });
 
-  describe('getTraces()', () => {
+  /**
+   * Legacy getTraces() API tests
+   * Uses the old parameter structure for backward compatibility:
+   * - pagination: { page, perPage, dateRange }
+   * - filters: { name, spanType, entityId, entityType }
+   * @deprecated Use listTraces() for new code
+   */
+  describe('getTraces() - Legacy API', () => {
     it('should fetch traces without any parameters', async () => {
       mockSuccessfulResponse();
 
@@ -87,38 +107,18 @@ describe('Observability Methods', () => {
       );
     });
 
-    it('should fetch traces with name filter', async () => {
-      mockSuccessfulResponse();
-
-      await client.getTraces({
-        filters: {
-          name: 'test-trace',
-        },
-      });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?name=test-trace`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
-    });
-
     it('should fetch traces with spanType filter', async () => {
       mockSuccessfulResponse();
 
       await client.getTraces({
         filters: {
-          spanType: 'agent_run' as SpanType,
+          spanType: SpanType.AGENT_RUN,
         },
       });
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?spanType=agent_run`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('spanType=agent_run');
     });
 
     it('should fetch traces with entity filters', async () => {
@@ -131,15 +131,13 @@ describe('Observability Methods', () => {
         },
       });
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?entityId=entity-123&entityType=agent`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('entityId=entity-123');
+      expect(url).toContain('entityType=agent');
     });
 
-    it('should fetch traces with date range filter using Date objects', async () => {
+    it('should fetch traces with legacy dateRange in pagination', async () => {
       mockSuccessfulResponse();
 
       const startDate = new Date('2024-01-01T00:00:00Z');
@@ -159,76 +157,38 @@ describe('Observability Methods', () => {
         end: endDate.toISOString(),
       });
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?dateRange=${encodeURIComponent(expectedDateRange)}`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain(`dateRange=${encodeURIComponent(expectedDateRange)}`);
     });
 
-    it('should fetch traces with date range filter using string dates', async () => {
+    it('should fetch traces with all legacy parameters combined', async () => {
       mockSuccessfulResponse();
 
       const startDate = new Date('2024-01-01T00:00:00Z');
-      const endDate = new Date('2024-01-31T23:59:59Z');
-
-      await client.getTraces({
-        pagination: {
-          dateRange: {
-            start: startDate,
-            end: endDate,
-          },
-        },
-      });
-
-      const expectedDateRange = JSON.stringify({
-        start: startDate.toISOString(),
-        end: endDate.toISOString(),
-      });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?dateRange=${encodeURIComponent(expectedDateRange)}`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
-    });
-
-    it('should fetch traces with all filters combined', async () => {
-      mockSuccessfulResponse();
-
-      const startDate = new Date('2024-01-01T00:00:00Z');
-      const endDate = new Date('2024-01-31T23:59:59Z');
 
       await client.getTraces({
         pagination: {
           page: 1,
           perPage: 5,
-          dateRange: {
-            start: startDate,
-            end: endDate,
-          },
+          dateRange: { start: startDate },
         },
         filters: {
-          name: 'test-trace',
-          spanType: 'agent_run' as SpanType,
+          spanType: SpanType.AGENT_RUN,
           entityId: 'entity-123',
           entityType: 'agent',
         },
       });
 
-      const expectedDateRange = JSON.stringify({
-        start: startDate.toISOString(),
-        end: endDate.toISOString(),
-      });
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces?page=1&perPage=5&name=test-trace&spanType=agent_run&entityId=entity-123&entityType=agent&dateRange=${encodeURIComponent(expectedDateRange)}`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
+      expect(url).toContain('page=1');
+      expect(url).toContain('perPage=5');
+      expect(url).toContain('spanType=agent_run');
+      expect(url).toContain('entityId=entity-123');
+      expect(url).toContain('entityType=agent');
+      expect(url).toContain('dateRange=');
     });
 
     it('should handle HTTP errors gracefully', async () => {
@@ -236,6 +196,163 @@ describe('Observability Methods', () => {
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
       await expect(client.getTraces({})).rejects.toThrow();
+    });
+  });
+
+  /**
+   * New listTraces() API tests
+   * Uses the new parameter structure with improved filtering:
+   * - pagination: { page, perPage }
+   * - filters: { startedAt, endedAt, spanType, entityId, entityType, entityName, userId }
+   * - orderBy: { field, direction }
+   */
+  describe('listTraces() - New API', () => {
+    it('should fetch traces without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listTraces();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should fetch traces with pagination parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listTraces({
+        pagination: {
+          page: 2,
+          perPage: 10,
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('page=2');
+      expect(url).toContain('perPage=10');
+    });
+
+    it('should fetch traces with spanType filter', async () => {
+      mockSuccessfulResponse();
+
+      await client.listTraces({
+        filters: {
+          spanType: SpanType.AGENT_RUN,
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('spanType=agent_run');
+    });
+
+    it('should fetch traces with entity filters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listTraces({
+        filters: {
+          entityId: 'entity-123',
+          entityType: EntityType.AGENT,
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('entityId=entity-123');
+      expect(url).toContain('entityType=agent');
+    });
+
+    it('should fetch traces with date range filter (startedAt)', async () => {
+      mockSuccessfulResponse();
+
+      const startDate = new Date('2024-01-01T00:00:00Z');
+      const endDate = new Date('2024-01-31T23:59:59Z');
+
+      await client.listTraces({
+        filters: {
+          startedAt: {
+            start: startDate,
+            end: endDate,
+          },
+        },
+      });
+
+      const expectedDateRange = JSON.stringify({
+        start: startDate.toISOString(),
+        end: endDate.toISOString(),
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain(`startedAt=${encodeURIComponent(expectedDateRange)}`);
+    });
+
+    it('should fetch traces with orderBy parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listTraces({
+        orderBy: {
+          field: 'startedAt',
+          direction: 'DESC',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('field=startedAt');
+      expect(url).toContain('direction=DESC');
+    });
+
+    it('should fetch traces with userId filter', async () => {
+      mockSuccessfulResponse();
+
+      await client.listTraces({
+        filters: {
+          userId: 'user-456',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('userId=user-456');
+    });
+
+    it('should fetch traces with all parameters combined', async () => {
+      mockSuccessfulResponse();
+
+      await client.listTraces({
+        pagination: { page: 1, perPage: 5 },
+        filters: {
+          spanType: SpanType.AGENT_RUN,
+          entityId: 'entity-123',
+          entityType: EntityType.AGENT,
+          userId: 'user-456',
+        },
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+
+      expect(url).toContain('page=1');
+      expect(url).toContain('perPage=5');
+      expect(url).toContain('spanType=agent_run');
+      expect(url).toContain('entityId=entity-123');
+      expect(url).toContain('entityType=agent');
+      expect(url).toContain('userId=user-456');
+      expect(url).toContain('field=startedAt');
+      expect(url).toContain('direction=DESC');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.listTraces()).rejects.toThrow();
     });
   });
 

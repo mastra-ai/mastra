@@ -138,7 +138,7 @@ export class ScoresUpstash extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer?.id ?? 'unknown',
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
             entityId: score.entityId ?? 'unknown',
             entityType: score.entityType ?? 'unknown',
             traceId: score.traceId ?? '',

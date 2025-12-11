@@ -2,7 +2,7 @@ import type { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import type z from 'zod';
+import type { z } from 'zod';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
@@ -104,5 +104,5 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
 ];
 
 // Export route builder and OpenAPI utilities
-export { createRoute } from './route-builder';
+export { createRoute, pickParams, jsonQueryParam, wrapSchemaForQueryParams } from './route-builder';
 export { generateOpenAPIDocument } from '../openapi-utils';

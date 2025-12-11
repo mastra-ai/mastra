@@ -20,7 +20,7 @@ import type {
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
-import type z from 'zod';
+import type { z } from 'zod';
 import type { InngestEngineType } from './types';
 
 export class InngestRun<

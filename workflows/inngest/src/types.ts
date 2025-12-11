@@ -1,6 +1,6 @@
 import type { Step, WorkflowConfig } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
-import type z from 'zod';
+import type { z } from 'zod';
 
 // Extract Inngest's native flow control configuration types
 export type InngestCreateFunctionConfig = Parameters<Inngest['createFunction']>[0];
