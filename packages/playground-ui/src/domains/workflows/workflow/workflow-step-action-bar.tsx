@@ -5,6 +5,7 @@ import { useContext, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { WorkflowRunContext } from '../context/workflow-run-context';
+import { WorkflowStepDetailContext } from '../context/workflow-step-detail-context';
 import type { TripwireData } from '../context/use-current-run';
 
 export interface WorkflowStepActionBarProps {
@@ -41,10 +42,10 @@ export const WorkflowStepActionBar = ({
   const [isResumeDataOpen, setIsResumeDataOpen] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
   const [isTripwireOpen, setIsTripwireOpen] = useState(false);
-  const [isMapConfigOpen, setIsMapConfigOpen] = useState(false);
   const [isTimeTravelOpen, setIsTimeTravelOpen] = useState(false);
 
   const { withoutTimeTravel } = useContext(WorkflowRunContext);
+  const { showMapConfig } = useContext(WorkflowStepDetailContext);
 
   const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
   const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
@@ -80,26 +81,7 @@ export const WorkflowStepActionBar = ({
               </Dialog>
             </>
           )}
-          {mapConfig && (
-            <>
-              <Button onClick={() => setIsMapConfigOpen(true)}>Map config</Button>
-
-              <Dialog open={isMapConfigOpen} onOpenChange={setIsMapConfigOpen}>
-                <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>
-                    <div className="flex flex-col gap-1">
-                      <div>{stepName} Map Config</div>
-                      {stepId && stepId !== stepName && <div className="text-xs text-icon3 font-normal">{stepId}</div>}
-                    </div>
-                  </DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
-                    <CodeDialogContent data={mapConfig} />
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
+          {mapConfig && <Button onClick={() => showMapConfig({ stepName, stepId, mapConfig })}>Map config</Button>}
           {input && (
             <>
               <Button onClick={() => setIsInputOpen(true)}>Input</Button>

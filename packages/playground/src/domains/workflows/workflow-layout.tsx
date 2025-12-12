@@ -2,6 +2,7 @@ import { useParams } from 'react-router';
 
 import {
   WorkflowRunProvider,
+  WorkflowStepDetailProvider,
   Header,
   HeaderTitle,
   MainContentLayout,
@@ -72,16 +73,18 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
       <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
-        <MainContentLayout>
-          <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
-          <MainContentContent isDivided={true} hasLeftServiceColumn={true}>
-            <WorkflowRunList workflowId={workflowId} runId={runId} />
+        <WorkflowStepDetailProvider>
+          <MainContentLayout>
+            <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
+            <MainContentContent isDivided={true} hasLeftServiceColumn={true}>
+              <WorkflowRunList workflowId={workflowId} runId={runId} />
 
-            {children}
+              {children}
 
-            <WorkflowInformation workflowId={workflowId} initialRunId={runId} />
-          </MainContentContent>
-        </MainContentLayout>
+              <WorkflowInformation workflowId={workflowId} initialRunId={runId} />
+            </MainContentContent>
+          </MainContentLayout>
+        </WorkflowStepDetailProvider>
       </WorkflowRunProvider>
     </TracingSettingsProvider>
   );

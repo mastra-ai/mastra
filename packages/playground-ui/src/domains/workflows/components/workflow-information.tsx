@@ -12,8 +12,10 @@ import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { toast } from '@/lib/toast';
 import { WorkflowRunContext } from '../context/workflow-run-context';
+import { WorkflowStepDetailContext } from '../context/workflow-step-detail-context';
 import { PlaygroundTabs, TabList, Tab, TabContent } from '@/components/ui/playground-tabs';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
+import { WorkflowStepDetail } from './workflow-step-detail';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -35,6 +37,8 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     isCancellingWorkflowRun,
   } = useContext(WorkflowRunContext);
 
+  const { stepDetail } = useContext(WorkflowStepDetailContext);
+
   const [tab, setTab] = useState<string>('current-run');
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
@@ -53,6 +57,13 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
       toast.error(`Error loading workflow: ${errorMessage}`);
     }
   }, [error]);
+
+  // Auto-switch to 'current-run' tab when step detail is opened
+  useEffect(() => {
+    if (stepDetail) {
+      setTab('current-run');
+    }
+  }, [stepDetail]);
 
   if (error) {
     return null;
@@ -85,52 +96,55 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         </div>
       </EntityHeader>
 
-      <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
-        <PlaygroundTabs defaultTab="current-run" value={tab} onValueChange={setTab}>
-          <TabList>
-            <Tab value="current-run">Current Run</Tab>
-            <Tab value="run-options">Run options</Tab>
-          </TabList>
+      <div className="flex-1 overflow-auto border-t-sm border-border1 flex flex-col">
+        <div className="flex-shrink-0">
+          <PlaygroundTabs defaultTab="current-run" value={tab} onValueChange={setTab} className="h-auto">
+            <TabList>
+              <Tab value="current-run">Current Run</Tab>
+              <Tab value="run-options">Run options</Tab>
+            </TabList>
 
-          <TabContent value="current-run">
-            {workflowId ? (
-              initialRunId ? (
-                <WorkflowRunDetail
-                  workflowId={workflowId}
-                  runId={initialRunId}
-                  setRunId={setRunId}
-                  workflow={workflow ?? undefined}
-                  isLoading={isLoading}
-                  createWorkflowRun={createWorkflowRun}
-                  streamWorkflow={streamWorkflow}
-                  resumeWorkflow={resumeWorkflow}
-                  streamResult={streamResult}
-                  isStreamingWorkflow={isStreamingWorkflow}
-                  isCancellingWorkflowRun={isCancellingWorkflowRun}
-                  cancelWorkflowRun={cancelWorkflowRun}
-                  observeWorkflowStream={observeWorkflowStream}
-                />
-              ) : (
-                <WorkflowTrigger
-                  workflowId={workflowId}
-                  setRunId={setRunId}
-                  workflow={workflow ?? undefined}
-                  isLoading={isLoading}
-                  createWorkflowRun={createWorkflowRun}
-                  streamWorkflow={streamWorkflow}
-                  resumeWorkflow={resumeWorkflow}
-                  streamResult={streamResult}
-                  isStreamingWorkflow={isStreamingWorkflow}
-                  isCancellingWorkflowRun={isCancellingWorkflowRun}
-                  cancelWorkflowRun={cancelWorkflowRun}
-                />
-              )
-            ) : null}
-          </TabContent>
-          <TabContent value="run-options">
-            <TracingRunOptions />
-          </TabContent>
-        </PlaygroundTabs>
+            <TabContent value="current-run">
+              {workflowId ? (
+                initialRunId ? (
+                  <WorkflowRunDetail
+                    workflowId={workflowId}
+                    runId={initialRunId}
+                    setRunId={setRunId}
+                    workflow={workflow ?? undefined}
+                    isLoading={isLoading}
+                    createWorkflowRun={createWorkflowRun}
+                    streamWorkflow={streamWorkflow}
+                    resumeWorkflow={resumeWorkflow}
+                    streamResult={streamResult}
+                    isStreamingWorkflow={isStreamingWorkflow}
+                    isCancellingWorkflowRun={isCancellingWorkflowRun}
+                    cancelWorkflowRun={cancelWorkflowRun}
+                    observeWorkflowStream={observeWorkflowStream}
+                  />
+                ) : (
+                  <WorkflowTrigger
+                    workflowId={workflowId}
+                    setRunId={setRunId}
+                    workflow={workflow ?? undefined}
+                    isLoading={isLoading}
+                    createWorkflowRun={createWorkflowRun}
+                    streamWorkflow={streamWorkflow}
+                    resumeWorkflow={resumeWorkflow}
+                    streamResult={streamResult}
+                    isStreamingWorkflow={isStreamingWorkflow}
+                    isCancellingWorkflowRun={isCancellingWorkflowRun}
+                    cancelWorkflowRun={cancelWorkflowRun}
+                  />
+                )
+              ) : null}
+            </TabContent>
+            <TabContent value="run-options">
+              <TracingRunOptions />
+            </TabContent>
+          </PlaygroundTabs>
+        </div>
+        {tab === 'current-run' && stepDetail && <WorkflowStepDetail />}
       </div>
     </div>
   );
