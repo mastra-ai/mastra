@@ -24,6 +24,7 @@ import type {
   StorageColumn,
   StoragePagination,
   StorageResourceType,
+  UpdateWorkflowStateOptions,
   WorkflowRun,
 } from './types';
 
@@ -172,13 +173,7 @@ export class InMemoryStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
