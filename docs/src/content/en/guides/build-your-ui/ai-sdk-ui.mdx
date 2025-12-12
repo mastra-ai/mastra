@@ -959,6 +959,10 @@ For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-doj
 
 To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/v1/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/v1/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
 
+### Loading historical messages
+
+When loading messages from Mastra's memory to display in a chat UI, use [`toAISdkV5Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v5-messages) or [`toAISdkV4Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v4-messages) to convert them to the appropriate AI SDK format for `useChat()`'s `initialMessages`.
+
 ### Passing additional data
 
 [`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`](/docs/v1/server/request-context).
