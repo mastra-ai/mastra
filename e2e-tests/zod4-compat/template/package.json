@@ -1,0 +1,13 @@
+{
+  "name": "zod4-compat-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "latest",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}
