@@ -31,6 +31,13 @@ jobs:
           WORKFLOW_NAME="${{ inputs.workflow_name }}"
           BASE_URL="${{ inputs.base_url }}"
           
+          # Validate workflow_name to prevent unsafe characters in URL paths
+          if ! echo "$WORKFLOW_NAME" | grep -Eq '^[a-zA-Z0-9_-]+$'; then
+            echo "Error: Invalid workflow_name '$WORKFLOW_NAME'"
+            echo "Workflow name must contain only alphanumeric characters, underscores, and hyphens"
+            exit 1
+          fi
+          
           echo "Creating workflow run for: $WORKFLOW_NAME"
           
           # Create the workflow run and capture the runId
