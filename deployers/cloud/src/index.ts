@@ -70,12 +70,6 @@ import { HttpTransport } from '@mastra/loggers/http';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
-const serverPort = process.env.MASTRA_SERVER_PORT
-const serverConfig = mastra.getServer()
-if (serverPort && serverConfig) {
-    mastra.__setServer({ ...serverConfig, port: serverPort })
-}
-
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
@@ -113,6 +107,17 @@ const existingLogger = mastra?.getLogger();
 const combinedLogger = existingLogger ? new MultiLogger([logger, existingLogger]) : logger;
 
 mastra.setLogger({ logger: combinedLogger });
+
+const serverPortEnv = process.env.MASTRA_SERVER_PORT
+const serverConfig = mastra.getServer()
+if (serverPortEnv && serverConfig) {
+  const serverPort = parseInt(serverPortEnv, 10);
+  if (isNaN(serverPort) || serverPort < 1 || serverPort > 65535) {
+    throw new Error(\`Invalid MASTRA_SERVER_PORT: \${serverPortEnv}. Must be a number between 1 and 65535.\`);
+  }
+  logger.debug('Port as been set to ' + serverPort);
+  mastra.__setServer({ ...serverConfig, port: serverPort });
+}
 
 if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
   const { MastraStorage } = await import('@mastra/core/storage');
