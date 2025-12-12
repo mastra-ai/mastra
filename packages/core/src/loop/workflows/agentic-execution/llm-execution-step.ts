@@ -2,7 +2,6 @@ import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
-import { isEqual } from 'radash';
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
@@ -471,6 +470,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   requestContext,
   methodType,
   modelSpanTracker,
+  autoResumeSuspendedTools,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -579,77 +579,37 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               }
             }
 
-            const messages = messageList.get.all.db().reverse();
-            const assistantMessages = messages.filter(message => message.role === 'assistant');
-            const suspendedToolsMessage = assistantMessages.find(
-              message => message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals,
-            );
+            if (autoResumeSuspendedTools) {
+              const messages = messageList.get.all.db().reverse();
+              const assistantMessages = messages.filter(message => message.role === 'assistant');
+              const suspendedToolsMessage = assistantMessages.find(
+                message => message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals,
+              );
 
-            if (suspendedToolsMessage) {
-              const metadata = suspendedToolsMessage.content.metadata;
-              const suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<
-                string,
-                any
-              >;
-              const suspendedTools = Object.values(suspendedToolObj);
-              if (suspendedTools.length > 0) {
-                inputMessages = inputMessages.map(message => {
-                  if (message.role === 'system') {
-                    message.content =
-                      message.content +
-                      `Analyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
+              if (suspendedToolsMessage) {
+                const metadata = suspendedToolsMessage.content.metadata;
+                const suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<
+                  string,
+                  any
+                >;
+                const suspendedTools = Object.values(suspendedToolObj);
+                if (suspendedTools.length > 0) {
+                  inputMessages = inputMessages.map(message => {
+                    if (message.role === 'system') {
+                      message.content =
+                        message.content +
+                        `Analyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
                       resumeData can not be an empty object nor null/undefined.
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
-                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.`;
-                    // message.content =
-                    //   message.content +
-                    //   `Analyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly and call 'resume-tool' with these arguments:
-                    //   resumeData - this is constructed using the resumeSchema of the suspended tool and messages available to you, it cannot be an empty object nor null/undefined.
-                    //   toolCallId - the toolCallId of the suspended tool.
-                    //   toolName - the toolName of the suspended tool.
-                    //   args - the args of the suspended tool.
-                    //   runId - the runId of the suspended tool.
-                    //   Do not call 'resume-tool' for any tool that you cannot construct the resumeData for.
-                    //   If you are able to construct resumeData for a suspended tool, get the name of the tool from suspendedTool.toolName, and make sure that toolName is not among the tools calls you attemot to make.`;
-                  }
-
-                  return message;
-                });
-              }
-            }
-
-            // console.dir({ stepTools }, { depth: null });
-
-            inputMessages = inputMessages.map(message => {
-              if (message.role === 'assistant' || message.role === 'tool') {
-                const resumeTool = message.content.find(content => {
-                  if (content.type === 'tool-call' || content.type === 'tool-result') {
-                    return content.toolName === 'resume-tool';
-                  }
-
-                  return false;
-                });
-                if (resumeTool?.type === 'tool-call') {
-                  const otherToolCallId = (resumeTool.input as any).toolCallId;
-                  message.content = message.content.filter(content => {
-                    if (content.type === 'tool-call' && content.toolName !== 'resume-tool') {
-                      return content.toolCallId !== otherToolCallId;
+                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
+                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message.`;
                     }
 
-                    return true;
-                  });
-                } else if (resumeTool?.type === 'tool-result') {
-                  message.content = message.content.filter(content => {
-                    if (content.type === 'tool-result' && content.toolName !== 'resume-tool') {
-                      return !isEqual(content.output, resumeTool.output);
-                    }
-
-                    return true;
+                    return message;
                   });
                 }
               }
-              return message;
-            });
+            }
 
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,

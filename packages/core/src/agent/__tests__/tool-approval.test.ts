@@ -1,13 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import { getOpenAIModel } from './mock-model';
-import { MockMemory } from '../../memory';
-import { randomUUID } from 'node:crypto';
 
 const mockStorage = new InMemoryStore();
 
@@ -204,6 +204,74 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(mockFindUser).toHaveBeenCalled();
         expect(name).toBe('Dero Israel');
       }, 500000);
+
+      it('should call findUserTool with requireToolApproval on tool and resume via stream when autoResumeSuspendedTools is true', async () => {
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          requireApproval: true,
+          execute: async input => {
+            return mockFindUser(input) as Promise<Record<string, any>>;
+          },
+        });
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool },
+          memory: new MockMemory(),
+          defaultOptions: {
+            autoResumeSuspendedTools: true,
+          },
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+        const memory = {
+          thread: randomUUID(),
+          resource: randomUUID(),
+        };
+
+        const stream = await agentOne.stream('Find the user with name - Dero Israel', { memory });
+        let toolName = '';
+        for await (const _chunk of stream.fullStream) {
+          if (_chunk.type === 'tool-call-approval') {
+            toolName = _chunk.payload.toolName;
+          }
+        }
+        if (toolName) {
+          const resumeStream = await agentOne.stream('Approve', {
+            memory,
+          });
+          let resumeText = '';
+          for await (const _chunk of resumeStream.fullStream) {
+            if (_chunk.type === 'text-delta') {
+              resumeText += _chunk.payload.text;
+            }
+          }
+          console.log('resumeText', resumeText);
+
+          const toolResults = await resumeStream.toolResults;
+
+          const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
+
+          const name = (toolCall?.result as any)?.name;
+
+          expect(mockFindUser).toHaveBeenCalled();
+          expect(name).toBe('Dero Israel');
+          expect(toolName).toBe('findUserTool');
+        }
+      }, 500000);
     });
 
     describe.skipIf(version === 'v1')('suspension', () => {
@@ -269,7 +337,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(email).toBe('test@test.com');
       }, 15000);
 
-      it('should call findUserTool with suspend and resume via stream', async () => {
+      it('should call findUserTool with suspend and resume via stream when autoResumeSuspendedTools is true', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
           description: 'This is a test tool that returns the name and email',
@@ -316,6 +384,9 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           model: openaiModel,
           tools: { findUserTool, findUserProfessionTool },
           memory: new MockMemory(),
+          defaultOptions: {
+            autoResumeSuspendedTools: true,
+          },
         });
 
         const mastra = new Mastra({
@@ -356,8 +427,6 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           console.log('resumeText', resumeText);
 
           const toolResults = await resumeStream.toolResults;
-
-          console.dir({ toolResults }, { depth: null });
 
           const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
 
@@ -466,11 +535,6 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           for await (const _chunk of resumeStream.fullStream) {
           }
 
-          const resumeDb = resumeStream.messageList.get.response.db();
-          const resumeAiv5Ui = resumeStream.messageList.get.response.aiV5.ui();
-          console.dir({ resumeDb }, { depth: null });
-          console.dir({ resumeAiv5Ui }, { depth: null });
-
           const toolResults = await resumeStream.toolResults;
 
           toolCall = toolResults?.find(
@@ -489,7 +553,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the name of the user');
       }, 15000);
 
-      it('should call findUserWorkflow with suspend and resume via stream', async () => {
+      it('should call findUserWorkflow with suspend and resume via stream when autoResumeSuspendedTools is true', async () => {
         const findUserStep = createStep({
           id: 'find-user-step',
           description: 'This is a test step that returns the name, email and age',
@@ -542,6 +606,9 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           model: openaiModel,
           workflows: { findUserWorkflow },
           memory: new MockMemory(),
+          defaultOptions: {
+            autoResumeSuspendedTools: true,
+          },
         });
 
         const mastra = new Mastra({

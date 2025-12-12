@@ -119,6 +119,9 @@ export type AgentExecutionOptions<
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
 
+  /** Automatically resume suspended tools */
+  autoResumeSuspendedTools?: boolean;
+
   /** Structured output generation with enhanced developer experience  */
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
 

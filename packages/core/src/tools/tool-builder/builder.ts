@@ -49,6 +49,15 @@ export class CoreToolBuilder extends MastraBase {
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
+    if (this.originalTool && 'inputSchema' in this.originalTool) {
+      this.originalTool.inputSchema = this.originalTool.inputSchema.extend({
+        suspendedToolRunId: z.string().optional().describe('The runId of the suspended tool'),
+        resumeData: z
+          .any()
+          .optional()
+          .describe('The resumeData object created from the resumeSchema of suspended tool'),
+      });
+    }
   }
 
   // Helper to get parameters based on tool type

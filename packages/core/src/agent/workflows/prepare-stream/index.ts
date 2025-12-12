@@ -107,6 +107,7 @@ export function createPrepareStreamWorkflow<
     memoryConfig,
     memory,
     resourceId,
+    autoResumeSuspendedTools: options.autoResumeSuspendedTools,
   });
 
   const mapResultsStep = createMapResultsStep({

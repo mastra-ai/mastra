@@ -151,8 +151,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           async () => {
             const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
 
-            console.dir({ prompt }, { depth: null });
-
             const streamResult = await fn({
               ...toolsAndToolChoice,
               prompt,

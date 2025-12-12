@@ -1635,15 +1635,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           return;
         }
 
-        if ((tool as any).inputSchema) {
-          // @ts-ignore
-          tool.inputSchema = tool.inputSchema.extend({
-            resumeData: z
-              .any()
-              .optional()
-              .describe('The resumeData object created from the resumeSchema of suspended tool'),
-          });
-        }
+        // if ((tool as any).inputSchema) {
+        //   // @ts-ignore
+        //   tool.inputSchema = tool.inputSchema.extend({
+        //     resumeData: z
+        //       .any()
+        //       .optional()
+        //       .describe('The resumeData object created from the resumeSchema of suspended tool'),
+        //   });
+        // }
 
         const options: ToolOptions = {
           name: k,
@@ -2017,11 +2017,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         const extendedInputSchema = z.object({
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
-          suspendedToolRunId: z.string().optional().describe('The runId of the suspended tool'),
-          resumeData: z
-            .any()
-            .optional()
-            .describe('The resumeData object created from the resumeSchema of suspended tool'),
+          // suspendedToolRunId: z.string().optional().describe('The runId of the suspended tool'),
+          // resumeData: z
+          //   .any()
+          //   .optional()
+          //   .describe('The resumeData object created from the resumeSchema of suspended tool'),
         });
 
         const toolObj = createTool({
@@ -2043,7 +2043,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
             try {
-              const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData;
+              const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
               const runIdToUse = suspendedToolRunId ?? runId;
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
@@ -2056,8 +2056,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
               const run = await workflow.createRun({ runId: runIdToUse });
               const { resumeData, suspend } = context?.agent ?? {};
-
-              console.dir({ resumeData, workflowInputData }, { depth: null });
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
@@ -2154,7 +2152,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    runId: inputData.suspendedToolRunId || runId || '',
+                    runId: (inputData as any).suspendedToolRunId || runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
                   },

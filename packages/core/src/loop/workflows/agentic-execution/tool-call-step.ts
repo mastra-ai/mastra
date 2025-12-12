@@ -27,7 +27,7 @@ export function createToolCallStep<
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData, requestContext }) => {
+    execute: async ({ inputData, suspend, resumeData: workflowResumeData, requestContext }) => {
       // Helper function to add tool approval metadata to the assistant message
       const addToolApprovalMetadata = (toolCallId: string, toolName: string, args: unknown) => {
         // Find the last assistant message in the response (which should contain this tool call)
@@ -43,14 +43,18 @@ export function createToolCallStep<
               ? (lastAssistantMessage.content.metadata as Record<string, any>)
               : {};
           metadata.pendingToolApprovals = metadata.pendingToolApprovals || {};
-          metadata.pendingToolApprovals[toolCallId] = {
+          metadata.pendingToolApprovals[toolName] = {
             toolCallId,
             toolName,
             args,
             type: 'approval',
             runId, // Store the runId so we can resume after page refresh
             resumeSchema: z.object({
-              approve: z.boolean().describe('Whether to approve the tool call'),
+              approved: z
+                .boolean()
+                .describe(
+                  'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                ),
             }),
           };
           lastAssistantMessage.content.metadata = metadata;
@@ -58,7 +62,7 @@ export function createToolCallStep<
       };
 
       // Helper function to remove tool approval metadata after approval/decline
-      const removeToolApprovalMetadata = async (toolCallId: string) => {
+      const removeToolApprovalMetadata = async (toolName: string) => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
@@ -81,7 +85,7 @@ export function createToolCallStep<
         const lastAssistantMessage = [...allMessages].reverse().find(msg => {
           const metadata = getMetadata(msg);
           const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
-          return !!pendingToolApprovals?.[toolCallId];
+          return !!pendingToolApprovals?.[toolName];
         });
 
         if (lastAssistantMessage) {
@@ -89,7 +93,7 @@ export function createToolCallStep<
           const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
 
           if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
-            delete pendingToolApprovals[toolCallId];
+            delete pendingToolApprovals[toolName];
 
             // If no more pending suspensions, remove the whole object
             if (metadata && Object.keys(pendingToolApprovals).length === 0) {
@@ -262,11 +266,11 @@ export function createToolCallStep<
 
         const { resumeData: resumeDataFromArgs, ...args } = inputData.args;
 
-        console.dir({ resumeDataFromArgs, args }, { depth: null });
+        const resumeData = resumeDataFromArgs ?? workflowResumeData;
 
         const isResumeToolCall = !!resumeDataFromArgs;
-        console.dir({ isResumeToolCall }, { depth: null });
-        if (!isResumeToolCall && (requireToolApproval || (tool as any).requireApproval)) {
+
+        if (requireToolApproval || (tool as any).requireApproval) {
           if (!resumeData) {
             controller.enqueue({
               type: 'tool-call-approval',
@@ -309,10 +313,7 @@ export function createToolCallStep<
               };
             }
           }
-        }
-
-        // If we are resuming and the tool did not require approval, remove the suspension metadata
-        if (isResumeToolCall) {
+        } else if (isResumeToolCall) {
           await removeToolSuspensionMetadata(inputData.toolName);
         }
 
@@ -355,7 +356,7 @@ export function createToolCallStep<
               },
             );
           },
-          resumeData: resumeDataFromArgs ?? resumeData,
+          resumeData,
         };
 
         const result = await tool.execute(args, toolOptions);
