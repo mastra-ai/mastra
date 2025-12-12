@@ -10,7 +10,7 @@ npm install @mastra/clickhouse
 
 ## Prerequisites
 
-- Clickhouse server (version 21.8 or higher recommended)
+- Clickhouse server (version 21.12 or higher recommended)
 - Node.js 16 or higher
 
 ## Usage
@@ -141,6 +141,8 @@ The store supports the following data types:
 - `jsonb`: String (JSON serialized)
 - `integer`: Int64
 - `bigint`: Int64
+- `float`: Float64
+- `boolean`: Bool
 
 ## Related Links
 
