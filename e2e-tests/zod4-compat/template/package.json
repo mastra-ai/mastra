@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mastra/core": "latest",
+    "@mastra/core": "zod4-compat-e2e-test",
     "zod": "^4"
   },
   "devDependencies": {
