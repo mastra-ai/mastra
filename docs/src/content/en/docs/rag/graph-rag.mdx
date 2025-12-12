@@ -1,15 +1,15 @@
 ---
-title: "Graph RAG | RAG"
+title: "GraphRAG | RAG"
 description: Guide on graph-based retrieval in Mastra's RAG systems for documents with complex relationships.
 ---
 
-# Graph RAG
+# GraphRAG
 
 Graph-based retrieval enhances traditional vector search by following relationships between chunks of information. This approach is useful when information is spread across multiple documents or when documents reference each other.
 
-## When to Use Graph RAG
+## When to use GraphRAG
 
-Graph RAG is particularly effective when:
+GraphRAG is particularly effective when:
 
 - Information is spread across multiple documents
 - Documents reference each other
@@ -19,9 +19,9 @@ Graph RAG is particularly effective when:
 
 For straightforward semantic search without relationship traversal, use [standard retrieval methods](/docs/v1/rag/retrieval).
 
-## How Graph RAG Works
+## How GraphRAG works
 
-Graph RAG combines vector similarity with knowledge graph traversal:
+GraphRAG combines vector similarity with knowledge graph traversal:
 
 1. Initial vector search retrieves relevant chunks based on semantic similarity
 2. A knowledge graph is constructed from the retrieved chunks
@@ -30,7 +30,7 @@ Graph RAG combines vector similarity with knowledge graph traversal:
 
 This process helps surface information that might not be semantically similar to the query but is contextually relevant through connections.
 
-## Creating a Graph Query Tool
+## Creating a graph query tool
 
 The Graph Query Tool provides agents with the ability to perform graph-based retrieval:
 
@@ -48,7 +48,7 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-### Configuration Options
+### Configuration options
 
 The `graphOptions` parameter controls how the knowledge graph is built and traversed:
 
@@ -67,7 +67,7 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-## Using Graph RAG with Agents
+## Using GraphRAG with agents
 
 Integrate the graph query tool with an agent to enable graph-based retrieval:
 
@@ -87,7 +87,7 @@ Base your answers on the context provided by the tool, and clearly state if the 
 });
 ```
 
-## Document Processing and Storage
+## Document processing and storage
 
 Before using graph-based retrieval, process documents into chunks and store their embeddings:
 
@@ -125,7 +125,7 @@ await vectorStore.upsert({
 });
 ```
 
-## Querying with Graph RAG
+## Querying with GraphRAG
 
 Once configured, the agent can perform graph-based queries:
 
@@ -143,7 +143,7 @@ The agent uses the graph query tool to:
 4. Traverse the graph to find connected information
 5. Return comprehensive context for generating the response
 
-## Choosing the Right Threshold
+## Choosing the right threshold
 
 The threshold parameter significantly impacts retrieval quality:
 
@@ -175,9 +175,9 @@ const broadGraphTool = createGraphQueryTool({
 });
 ```
 
-## Combining with Other Retrieval Methods
+## Combining with other retrieval methods
 
-Graph RAG can be used alongside other retrieval approaches:
+GraphRAG can be used alongside other retrieval approaches:
 
 ```ts showLineNumbers copy
 import { createVectorQueryTool } from "@mastra/rag";

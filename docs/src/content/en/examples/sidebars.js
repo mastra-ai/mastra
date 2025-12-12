@@ -26,24 +26,6 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "RAG",
-      collapsed: true,
-      items: [
-        {
-          type: "category",
-          label: "Embedding",
-          items: [
-            {
-              type: "doc",
-              id: "rag/embedding/metadata-extraction",
-              label: "Metadata Extraction",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "Voice",
       collapsed: true,
       items: [

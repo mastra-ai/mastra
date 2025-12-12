@@ -288,7 +288,7 @@ const sidebars = {
         {
           type: "doc",
           id: "rag/graph-rag",
-          label: "Graph RAG",
+          label: "GraphRAG",
         },
       ],
     },

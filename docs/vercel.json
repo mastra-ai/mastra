@@ -349,6 +349,11 @@
       "source": "/examples/v1/rag/usage/graph-rag",
       "destination": "/docs/v1/rag/graph-rag",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/embedding/metadata-extraction",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-metadata-extraction",
+      "permanent": true
     }
   ]
 }

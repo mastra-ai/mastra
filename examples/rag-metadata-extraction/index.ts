@@ -2,7 +2,7 @@ import { MDocument } from '@mastra/rag';
 
 const doc = MDocument.fromText(`Title: The Benefits of Regular Exercise
 
-Regular exercise has numerous health benefits. It improves cardiovascular health, 
+Regular exercise has numerous health benefits. It improves cardiovascular health,
 strengthens muscles, and boosts mental wellbeing.
 
 Key Benefits:
@@ -11,7 +11,7 @@ Key Benefits:
 • Helps maintain healthy weight
 • Increases energy levels
 
-For optimal results, experts recommend at least 150 minutes of moderate exercise 
+For optimal results, experts recommend at least 150 minutes of moderate exercise
 per week.`);
 
 // Example 1: Direct metadata extraction

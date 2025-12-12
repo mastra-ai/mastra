@@ -1,14 +1,6 @@
----
-title: "Example: Metadata Extraction | RAG"
-description: Example of extracting and utilizing metadata from documents in Mastra for enhanced document processing and retrieval.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
 # Metadata Extraction
 
-This example demonstrates how to extract and utilize metadata from documents using Mastra's document processing capabilities.
-The extracted metadata can be used for document organization, filtering, and enhanced retrieval in RAG systems.
+This example demonstrates how to extract and utilize metadata from documents using Mastra's document processing capabilities. The extracted metadata can be used for document organization, filtering, and enhanced retrieval in RAG systems.
 
 ## Overview
 
@@ -17,24 +9,42 @@ The system demonstrates metadata extraction in two ways:
 1. Direct metadata extraction from a document
 2. Chunking with metadata extraction
 
-## Setup
+## Prerequisites
 
-### Dependencies
+- Node.js v20.0+
+- pnpm (recommended) or npm
 
-Import the necessary dependencies:
+## Getting Started
 
-```typescript copy showLineNumbers title="src/index.ts"
-import { MDocument } from "@mastra/rag";
-```
+1. Clone the repository and navigate to the project directory:
+
+   ```bash
+   git clone https://github.com/mastra-ai/mastra
+   cd examples/rag-metadata-extraction
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   pnpm install
+   ```
+
+3. Run the example:
+
+   ```bash
+   pnpm start
+   ```
 
 ## Document Creation
 
 Create a document from text content:
 
-```typescript copy showLineNumbers{3} title="src/index.ts"
+```typescript
+import { MDocument } from '@mastra/rag';
+
 const doc = MDocument.fromText(`Title: The Benefits of Regular Exercise
 
-Regular exercise has numerous health benefits. It improves cardiovascular health, 
+Regular exercise has numerous health benefits. It improves cardiovascular health,
 strengthens muscles, and boosts mental wellbeing.
 
 Key Benefits:
@@ -43,7 +53,7 @@ Key Benefits:
 • Helps maintain healthy weight
 • Increases energy levels
 
-For optimal results, experts recommend at least 150 minutes of moderate exercise 
+For optimal results, experts recommend at least 150 minutes of moderate exercise
 per week.`);
 ```
 
@@ -51,7 +61,7 @@ per week.`);
 
 Extract metadata directly from the document:
 
-```typescript copy showLineNumbers{17} title="src/index.ts"
+```typescript
 // Configure metadata extraction options
 await doc.extractMetadata({
   keywords: true, // Extract important keywords
@@ -60,7 +70,7 @@ await doc.extractMetadata({
 
 // Retrieve the extracted metadata
 const meta = doc.getMetadata();
-console.log("Extracted Metadata:", meta);
+console.log('Extracted Metadata:', meta);
 
 // Example Output:
 // Extracted Metadata: {
@@ -80,11 +90,11 @@ console.log("Extracted Metadata:", meta);
 
 Combine document chunking with metadata extraction:
 
-```typescript copy showLineNumbers{40} title="src/index.ts"
+```typescript
 // Configure chunking with metadata extraction
 await doc.chunk({
-  strategy: "recursive", // Use recursive chunking strategy
-  size: 200, // Maximum chunk size
+  strategy: 'recursive', // Use recursive chunking strategy
+  maxSize: 200, // Maximum chunk size
   extract: {
     keywords: true, // Extract keywords per chunk
     summary: true, // Generate summary per chunk
@@ -93,7 +103,7 @@ await doc.chunk({
 
 // Get metadata from chunks
 const metaTwo = doc.getMetadata();
-console.log("Chunk Metadata:", metaTwo);
+console.log('Chunk Metadata:', metaTwo);
 
 // Example Output:
 // Chunk Metadata: {
@@ -108,14 +118,3 @@ console.log("Chunk Metadata:", metaTwo);
 //   summary: 'Regular exercise provides multiple health benefits including improved cardiovascular health, muscle strength, and mental wellbeing. Key benefits include stress reduction, better sleep, weight management, and increased energy. Recommended exercise duration is 150 minutes per week.'
 // }
 ```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  href={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
-  }
-/>
