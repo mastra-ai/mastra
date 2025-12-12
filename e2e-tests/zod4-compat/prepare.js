@@ -19,6 +19,10 @@ export async function setupTestProject(pathToStoreFiles) {
     env: process.env,
   });
 
+  if (res.error) {
+    throw new Error(`[Setup Test Project] pnpm install failed to execute: ${res.error.message}`);
+  }
+
   if (res.status !== 0) {
     throw new Error(`[Setup Test Project] pnpm install failed with exit code ${res.status}`);
   }
