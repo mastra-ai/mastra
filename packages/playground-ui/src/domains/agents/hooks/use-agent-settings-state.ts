@@ -25,27 +25,19 @@ export function useAgentSettingsState({ agentId, defaultSettings: defaultSetting
   useEffect(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const mergedSettings = {
-          ...parsed,
-          modelSettings: {
-            ...defaultSettings.modelSettings,
-            ...(defaultSettingsProp?.modelSettings ?? {}),
-            ...(parsed?.modelSettings ?? {}),
-          },
-        };
-        setSettingsState(mergedSettings);
-      } else {
-        // No localStorage data - use agent defaults merged with fallback defaults
-        const mergedSettings = {
-          modelSettings: {
-            ...defaultSettings.modelSettings,
-            ...(defaultSettingsProp?.modelSettings ?? {}),
-          },
-        };
-        setSettingsState(mergedSettings);
-      }
+      const parsed = stored ? JSON.parse(stored) : {};
+
+      // Merge order: fallback defaults < localStorage < agent code defaults
+      // Agent code defaults win so developers can iterate on their defaults
+      const mergedSettings = {
+        ...parsed,
+        modelSettings: {
+          ...defaultSettings.modelSettings,
+          ...(parsed?.modelSettings ?? {}),
+          ...(defaultSettingsProp?.modelSettings ?? {}), // Code defaults win
+        },
+      };
+      setSettingsState(mergedSettings);
     } catch (e) {
       // ignore
     }
@@ -66,7 +58,8 @@ export function useAgentSettingsState({ agentId, defaultSettings: defaultSetting
     };
     setSettingsState(resetSettings);
 
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(resetSettings));
+    // Clear localStorage so code defaults take precedence on next load
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
   };
 
   return {

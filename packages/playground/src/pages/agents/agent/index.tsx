@@ -63,9 +63,12 @@ function Agent() {
     return {
       modelSettings: {
         ...(restModelSettings as AgentSettingsType['modelSettings']),
-        maxTokens: maxOutputTokens,
-        maxSteps: agentDefaultOptions?.maxSteps, // maxSteps is at top level of defaultOptions, not in modelSettings
-        providerOptions: agentDefaultOptions?.providerOptions,
+        // Only include properties if they have actual values (to not override fallback defaults)
+        ...(maxOutputTokens !== undefined && { maxTokens: maxOutputTokens }),
+        ...(agentDefaultOptions?.maxSteps !== undefined && { maxSteps: agentDefaultOptions.maxSteps }),
+        ...(agentDefaultOptions?.providerOptions !== undefined && {
+          providerOptions: agentDefaultOptions.providerOptions,
+        }),
       },
     };
   }, [agent]);
