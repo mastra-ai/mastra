@@ -26747,6 +26747,10 @@ For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-doj
 
 To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/v1/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/v1/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
 
+### Loading historical messages
+
+When loading messages from Mastra's memory to display in a chat UI, use [`toAISdkV5Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v5-messages) or [`toAISdkV4Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v4-messages) to convert them to the appropriate AI SDK format for `useChat()`'s `initialMessages`.
+
 ### Passing additional data
 
 [`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`](/docs/v1/server-db/request-context).
@@ -28646,7 +28650,7 @@ Install AI SDK along with the Mastra adapter:
 
 ```bash
 npm install \
-    @mastra/ai-sdk \
+    @mastra/ai-sdk@beta \
     @ai-sdk/react \
     ai
 ```
@@ -28665,39 +28669,48 @@ This downloads the entire AI Elements UI component library into a `@/components/
 Create `src/app/api/chat/route.ts`:
 
 ```ts title="src/app/api/chat/route.ts"
-import { mastra } from "@/mastra";
-import { NextResponse } from "next/server";
-import { toAISdkStream } from "@mastra/ai-sdk";
-import { convertMessages } from "@mastra/core/agent";
-import { createUIMessageStreamResponse } from "ai";
+import { handleChatStream } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/mastra';
+import { NextResponse } from 'next/server';
 
-const weatherAgent = mastra.getAgent("weatherAgent");
+const THREAD_ID = 'example-user-id';
+const RESOURCE_ID = 'weather-chat';
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
-
-  const stream = await weatherAgent.stream(messages, {
-    memory: {
-      thread: "example-user-id",
-      resource: "weather-chat",
+  const params = await req.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params: {
+      ...params,
+      memory: {
+        ...params.memory,
+        thread: THREAD_ID,
+        resource: RESOURCE_ID,
+      }
     },
   });
-
-  return createUIMessageStreamResponse({
-    stream: toAISdkStream(stream, { from: "agent" }),
-  })
+  return createUIMessageStreamResponse({ stream });
 }
 
 export async function GET() {
-  const memory = await weatherAgent.getMemory();
-  const response = await memory?.query({
-    threadId: "example-user-id",
-    resourceId: "weather-chat",
-  });
+  const memory = await mastra.getAgent('weatherAgent').getMemory()
+  let response = null
+  
+  try {
+    response = await memory?.recall({
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+    })
+  } catch {
+    console.log('No previous messages found.')
+  }
 
-  const uiMessages =
-    convertMessages(response?.uiMessages ?? []).to("AIV5.UI");
-  return NextResponse.json(uiMessages);
+  const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+  return NextResponse.json(uiMessages)
 }
 ```
 
@@ -28712,7 +28725,7 @@ Create `src/app/chat/page.tsx`:
 
 import '@/app/globals.css';
 import { useEffect, useState } from 'react';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, ToolUIPart } from 'ai';
 import { useChat } from '@ai-sdk/react';
 
 import {
@@ -28768,9 +28781,9 @@ function Chat() {
       <div className="flex flex-col h-full">
         <Conversation className="h-full">
           <ConversationContent>
-            {messages.map((message: any) => (
+            {messages.map((message) => (
               <div key={message.id}>
-                {message.parts?.map((part: any, i: number) => {
+                {message.parts?.map((part, i) => {
                   if (part.type === 'text') {
                     return (
                       <Message
@@ -28787,15 +28800,15 @@ function Chat() {
                     return (
                       <Tool key={`${message.id}-${i}`}>
                         <ToolHeader
-                          type={part.type}
-                          state={part.state || 'output-available'}
+                          type={(part as ToolUIPart).type}
+                          state={(part as ToolUIPart).state || 'output-available'}
                           className="cursor-pointer"
                         />
                         <ToolContent>
-                          <ToolInput input={part.input || part.args || {}} />
+                          <ToolInput input={(part as ToolUIPart).input || {}} />
                           <ToolOutput
-                            output={part.output || part.result}
-                            errorText={part.errorText || part.error}
+                            output={(part as ToolUIPart).output}
+                            errorText={(part as ToolUIPart).errorText}
                           />
                         </ToolContent>
                       </Tool>
@@ -28813,7 +28826,7 @@ function Chat() {
         <PromptInput onSubmit={handleSubmit} className="mt-20">
           <PromptInputBody>
             <PromptInputTextarea
-              onChange={(e: any) => setInput(e.target.value)}
+              onChange={(e) => setInput(e.target.value)}
               className="md:leading-10"
               value={input}
               placeholder="Type your message..."
@@ -28836,9 +28849,7 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 
 ## Test your agent
 1. Run your Next.js app with `npm run dev`
-
 2. Open the chat at http://localhost:3000/chat
-
 3. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
 ## Next steps
@@ -28851,9 +28862,9 @@ From here, you can extend the project with your own tools and logic:
 - Give your agent its own [tools](/docs/v1/agents/using-tools)
 - Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
 
-When you're ready, read more about how Mastra integrates with AI SDK and Next.js, and how to deploy your agent anywhere, including Vercel:
+When you're ready, read more about how Mastra integrates with AI SDK UI and Next.js, and how to deploy your agent anywhere, including Vercel:
 
-- Integrate Mastra with [AI SDK](/guides/v1/build-your-ui/ai-sdk-ui)
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
 - Deploy your agent to [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
 - Deploy your agent [anywhere](/docs/v1/deployment/overview)
 
@@ -60532,6 +60543,246 @@ const uiMessageStream = createUIMessageStream({
 for await (const part of uiMessageStream) {
   console.log(part);
 }
+```
+
+
+---
+title: "Reference: toAISdkV4Messages() | AI SDK"
+description: API reference for toAISdkV4Messages(), a function to convert Mastra messages to AI SDK v4 UI messages.
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# toAISdkV4Messages()
+[EN] Source: https://mastra.ai/en/reference/ai-sdk/to-ai-sdk-v4-messages
+
+Converts messages from various input formats to AI SDK V4 UI message format. This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V4 `UIMessage` format, which is suitable for use with AI SDK UI components like `useChat()`.
+
+## Usage example
+
+```typescript title="app/chat/page.tsx" copy
+import { toAISdkV4Messages } from "@mastra/ai-sdk";
+import { useChat } from "ai/react"; // AI SDK V4
+
+// Stored messages from your database, memory or API
+const storedMessages = [
+  { id: "1", role: "user", parts: [{ type: "text", text: "Hello" }] },
+  { id: "2", role: "assistant", parts: [{ type: "text", text: "Hi there!" }] }
+];
+
+export default function Chat() {
+  const { messages } = useChat({
+    initialMessages: toAISdkV4Messages(storedMessages)
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.role}: {message.content}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MessageListInput",
+      description: "Messages to convert. Can be a string, array of strings, a single message object, or an array of message objects in any supported format.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+Returns an array of AI SDK V4 `UIMessage` objects with the following structure:
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique message identifier.",
+    },
+    {
+      name: "role",
+      type: "'user' | 'assistant' | 'system'",
+      description: "The role of the message sender.",
+    },
+    {
+      name: "content",
+      type: "string",
+      description: "Text content of the message.",
+    },
+    {
+      name: "parts",
+      type: "UIMessagePart[]",
+      description: "Array of UI parts including text, tool-invocation, file, reasoning, source, and step markers.",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "Message creation timestamp.",
+    },
+    {
+      name: "toolInvocations",
+      type: "ToolInvocation[]",
+      description: "Array of tool invocations for assistant messages.",
+      isOptional: true,
+    },
+    {
+      name: "experimental_attachments",
+      type: "Attachment[]",
+      description: "File attachments on the message.",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "Custom metadata attached to the message.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Examples
+
+### Converting simple text messages
+
+```typescript copy
+import { toAISdkV4Messages } from "@mastra/ai-sdk";
+
+const messages = toAISdkV4Messages(["Hello", "How can I help you today?"]);
+// Returns array of UIMessage objects with user role and content string
+```
+
+### Loading messages with Mastra client
+
+```typescript copy
+import { MastraClient } from "@mastra/client-js";
+import { toAISdkV4Messages } from "@mastra/ai-sdk";
+
+const client = new MastraClient();
+
+const { messages } = await client.listThreadMessages("thread-id", { agentId: "myAgent" });
+const uiMessages = toAISdkV4Messages(messages);
+```
+
+
+---
+title: "Reference: toAISdkV5Messages() | AI SDK"
+description: API reference for toAISdkV5Messages(), a function to convert Mastra messages to AI SDK v5 UI messages.
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# toAISdkV5Messages()
+[EN] Source: https://mastra.ai/en/reference/ai-sdk/to-ai-sdk-v5-messages
+
+Converts messages from various input formats to AI SDK V5 UI message format. This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V5 `UIMessage` format, which is suitable for use with AI SDK UI components like `useChat()`.
+
+## Usage example
+
+```typescript title="app/chat/page.tsx" copy
+import { toAISdkV5Messages } from "@mastra/ai-sdk";
+import { useChat } from "ai/react";
+
+// Stored messages from your database, memory or API
+const storedMessages = [
+  { id: "1", role: "user", content: "Hello", parts: [{ type: "text", text: "Hello" }] },
+  { id: "2", role: "assistant", content: "Hi there!", parts: [{ type: "text", text: "Hi there!" }] }
+];
+
+export default function Chat() {
+  const { messages } = useChat({
+    initialMessages: toAISdkV5Messages(storedMessages)
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.role}: {message.parts.map(part => 
+            part.type === "text" ? part.text : null
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MessageListInput",
+      description: "Messages to convert. Can be a string, array of strings, a single message object, or an array of message objects in any supported format.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+Returns an array of AI SDK V5 `UIMessage` objects with the following structure:
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique message identifier.",
+    },
+    {
+      name: "role",
+      type: "'user' | 'assistant' | 'system'",
+      description: "The role of the message sender.",
+    },
+    {
+      name: "parts",
+      type: "UIMessagePart[]",
+      description: "Array of UI parts including text, tool results, files, reasoning, sources, and step markers.",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "Optional metadata including createdAt, threadId, resourceId, and custom fields.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Examples
+
+### Converting simple text messages
+
+```typescript copy
+import { toAISdkV5Messages } from "@mastra/ai-sdk";
+
+const messages = toAISdkV5Messages(["Hello", "How can I help you today?"]);
+// Returns array of UIMessage objects with user role
+```
+
+### Loading messages with Mastra client
+
+```typescript copy
+import { MastraClient } from "@mastra/client-js";
+import { toAISdkV5Messages } from "@mastra/ai-sdk";
+
+const client = new MastraClient();
+
+const { messages } = await client.listThreadMessages("thread-id", { agentId: "myAgent" });
+const uiMessages = toAISdkV5Messages(messages);
 ```
 
 
