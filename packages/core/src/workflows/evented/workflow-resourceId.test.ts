@@ -10,12 +10,18 @@ import { createStep, createWorkflow } from '.';
 const testStorage = new MockStore();
 
 describe('Workflow resourceId', () => {
+  let mastra: Mastra | null = null;
+
   beforeEach(() => {
     vi.resetAllMocks();
     testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    if (mastra) {
+      await mastra.stopEventEngine();
+      mastra = null;
+    }
     testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   });
 
@@ -35,7 +41,7 @@ describe('Workflow resourceId', () => {
     });
     workflow.then(step1).commit();
 
-    const mastra = new Mastra({
+    mastra = new Mastra({
       workflows: { 'test-workflow': workflow },
       storage: testStorage,
       pubsub: new EventEmitterPubSub(),
@@ -85,7 +91,7 @@ describe('Workflow resourceId', () => {
     });
     workflow.then(step1).commit();
 
-    const mastra = new Mastra({
+    mastra = new Mastra({
       workflows: { 'test-workflow': workflow },
       storage: testStorage,
       pubsub: new EventEmitterPubSub(),
@@ -131,7 +137,7 @@ describe('Workflow resourceId', () => {
     });
     workflow.then(step1).commit();
 
-    const mastra = new Mastra({
+    mastra = new Mastra({
       workflows: { 'test-workflow': workflow },
       storage: testStorage,
       pubsub: new EventEmitterPubSub(),
@@ -185,7 +191,7 @@ describe('Workflow resourceId', () => {
     });
     workflow.then(step1).commit();
 
-    const mastra = new Mastra({
+    mastra = new Mastra({
       workflows: { 'test-workflow': workflow },
       storage: testStorage,
       pubsub: new EventEmitterPubSub(),

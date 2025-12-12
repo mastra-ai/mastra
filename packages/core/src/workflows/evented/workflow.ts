@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import z from 'zod';
 import type { Agent } from '../../agent';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '../../di';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '../../request-context';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { Tool } from '../../tools';
