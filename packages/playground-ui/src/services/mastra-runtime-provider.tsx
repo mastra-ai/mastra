@@ -239,7 +239,7 @@ export function MastraRuntimeProvider({
 
   const baseClient = useMastraClient();
 
-  const isVNext = modelVersion === 'v2';
+  const isVNext = modelVersion === 'v2' || modelVersion === 'v3';
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');

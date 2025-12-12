@@ -5,7 +5,6 @@ const agent = new Agent({
   id: 'example-agent',
   name: 'Example Agent',
   instructions: 'You are a helpful assistant',
-
   model: openai('gpt-4o'),
 });
 
