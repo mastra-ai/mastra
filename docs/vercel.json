@@ -322,22 +322,22 @@
     },
     {
       "source": "/examples/v1/rag/usage/database-specific-config",
-      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-database-specific-config",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/database-specific-config",
       "permanent": true
     },
     {
       "source": "/examples/v1/rag/usage/cleanup-rag",
-      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-optimizing-information-density",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cleanup-rag",
       "permanent": true
     },
     {
       "source": "/examples/v1/rag/usage/filter-rag",
-      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-metadata-filtering",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag",
       "permanent": true
     },
     {
       "source": "/examples/v1/rag/usage/cot-rag",
-      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-chain-of-thought-prompting",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cot-rag",
       "permanent": true
     },
     {
@@ -352,7 +352,7 @@
     },
     {
       "source": "/examples/v1/rag/embedding/metadata-extraction",
-      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-metadata-extraction",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/metadata-extraction",
       "permanent": true
     }
   ]
