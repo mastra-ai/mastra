@@ -139,20 +139,6 @@ export default app;
       description: "Task store for A2A (Agent-to-Agent) operations",
       isOptional: true,
     },
-    {
-      name: "playground",
-      type: "boolean",
-      description: "Can be read to set context values",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "isDev",
-      type: "boolean",
-      description: "Development mode flag",
-      isOptional: true,
-      defaultValue: "false",
-    },
   ]}
 />
 
@@ -210,8 +196,6 @@ Available context keys:
 | `abortSignal` | Request cancellation signal |
 | `tools` | Available tools |
 | `taskStore` | Task store for A2A operations |
-| `playground` | Whether playground is enabled |
-| `isDev` | Whether running in development mode |
 | `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |
 

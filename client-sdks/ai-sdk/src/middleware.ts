@@ -21,6 +21,7 @@ import { convertFullStreamChunkToMastra } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { wrapLanguageModel } from 'ai';
+import { toAISDKFinishReason } from './helpers';
 
 /**
  * Memory context for processors that need thread/resource info
@@ -737,7 +738,7 @@ function convertMastraChunkToAISDKStreamPart(chunk: ChunkType): LanguageModelV2S
       const usage = chunk.payload.output?.usage;
       return {
         type: 'finish',
-        finishReason: chunk.payload.stepResult?.reason || 'stop',
+        finishReason: toAISDKFinishReason(chunk.payload.stepResult?.reason || 'stop'),
         usage: usage
           ? {
               inputTokens: usage.inputTokens || 0,

@@ -130,8 +130,31 @@ A workflow's `status` indicates its current execution state. The possible values
       description:
         "Workflow execution is paused waiting for resume, with suspended step information",
     },
+    {
+      name: "tripwire",
+      type: "string",
+      description:
+        "Workflow was terminated by a processor tripwire. This occurs when an agent step within the workflow triggers a tripwire (e.g., content was blocked by a guardrail). The tripwire information is available on the result.",
+    },
   ]}
 />
+
+### Handling tripwire status
+
+When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
+
+```typescript showLineNumbers copy
+const run = await workflow.createRun();
+const result = await run.start({ inputData: { message: "Hello" } });
+
+if (result.status === "tripwire") {
+  console.log("Workflow terminated by tripwire:", result.tripwire?.reason);
+  console.log("Processor ID:", result.tripwire?.processorId);
+  console.log("Retry requested:", result.tripwire?.retry);
+}
+```
+
+This is distinct from `status: 'failed'` which indicates an unexpected error. A tripwire status means a processor intentionally stopped execution (e.g., for content moderation).
 
 ## Related
 

@@ -1,5 +1,37 @@
 # mastra
 
+## 1.0.0-beta.9
+
+### Patch Changes
+
+- Allow to run mastra studio from anywhere in the file system, and not necessarily inside a mastra project ([#11067](https://github.com/mastra-ai/mastra/pull/11067))
+
+- Make sure to verify that a mastra instance is running on server.port OR 4111 by default ([#11066](https://github.com/mastra-ai/mastra/pull/11066))
+
+- Internal changes to enable a custom base path for Mastra Studio ([#10441](https://github.com/mastra-ai/mastra/pull/10441))
+
+- Updated dependencies [[`38380b6`](https://github.com/mastra-ai/mastra/commit/38380b60fca905824bdf6b43df307a58efb1aa15), [`798d0c7`](https://github.com/mastra-ai/mastra/commit/798d0c740232653b1d754870e6b43a55c364ffe2), [`ffe84d5`](https://github.com/mastra-ai/mastra/commit/ffe84d54f3b0f85167fe977efd027dba027eb998), [`2c212e7`](https://github.com/mastra-ai/mastra/commit/2c212e704c90e2db83d4109e62c03f0f6ebd2667), [`4ca4306`](https://github.com/mastra-ai/mastra/commit/4ca430614daa5fa04730205a302a43bf4accfe9f), [`2c212e7`](https://github.com/mastra-ai/mastra/commit/2c212e704c90e2db83d4109e62c03f0f6ebd2667), [`3bf6c5f`](https://github.com/mastra-ai/mastra/commit/3bf6c5f104c25226cd84e0c77f9dec15f2cac2db)]:
+  - @mastra/core@1.0.0-beta.11
+  - @mastra/deployer@1.0.0-beta.11
+
+## 1.0.0-beta.8
+
+### Minor Changes
+
+- Fix "MessagePartRuntime is not available" error when chatting with agents in Studio playground by replacing deprecated `useMessagePart` hook with `useAssistantState` ([#11039](https://github.com/mastra-ai/mastra/pull/11039))
+
+### Patch Changes
+
+- Add delete workflow run API ([#10991](https://github.com/mastra-ai/mastra/pull/10991))
+
+  ```typescript
+  await workflow.deleteWorkflowRunById(runId);
+  ```
+
+- Updated dependencies [[`edb07e4`](https://github.com/mastra-ai/mastra/commit/edb07e49283e0c28bd094a60e03439bf6ecf0221), [`b7e17d3`](https://github.com/mastra-ai/mastra/commit/b7e17d3f5390bb5a71efc112204413656fcdc18d), [`26346be`](https://github.com/mastra-ai/mastra/commit/26346beb6e637a114d1dd2eaf5127512c5af84fd), [`261473a`](https://github.com/mastra-ai/mastra/commit/261473ac637e633064a22076671e2e02b002214d), [`5d7000f`](https://github.com/mastra-ai/mastra/commit/5d7000f757cd65ea9dc5b05e662fd83dfd44e932), [`4f0331a`](https://github.com/mastra-ai/mastra/commit/4f0331a79bf6eb5ee598a5086e55de4b5a0ada03), [`8a000da`](https://github.com/mastra-ai/mastra/commit/8a000da0c09c679a2312f6b3aa05b2ca78ca7393)]:
+  - @mastra/core@1.0.0-beta.10
+  - @mastra/deployer@1.0.0-beta.10
+
 ## 1.0.0-beta.7
 
 ### Patch Changes

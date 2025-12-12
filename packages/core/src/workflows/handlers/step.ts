@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../di';
-import { ErrorDomain, ErrorCategory } from '../../error';
+import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
+import type { PubSub } from '../../events/pubsub';
 import { SpanType, wrapMastra } from '../../observability';
 import type { TracingContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { Step, SuspendOptions } from '../step';
 import { getStepResult } from '../step';
 import type {
-  Emitter,
   ExecutionContext,
   OutputWriter,
   RestartExecutionParams,
@@ -46,7 +46,7 @@ export interface ExecuteStepParams {
     forEachIndex?: number;
   };
   prevOutput: any;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   skipEmits?: boolean;
@@ -72,7 +72,7 @@ export async function executeStep(
     resume,
     timeTravel,
     prevOutput,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     skipEmits = false,
@@ -147,7 +147,7 @@ export async function executeStep(
   await engine.onStepExecutionStart({
     step,
     inputData,
-    emitter,
+    pubsub,
     executionContext,
     stepCallId,
     stepInfo,
@@ -179,7 +179,7 @@ export async function executeStep(
       timeTravel,
       prevOutput,
       inputData,
-      emitter,
+      pubsub,
       startedAt: startTime ?? Date.now(),
       abortController,
       requestContext,
@@ -336,7 +336,7 @@ export async function executeStep(
                 resumeData: timeTravel?.resumeData,
               }
             : undefined,
-        [EMITTER_SYMBOL]: emitter,
+        [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
@@ -423,7 +423,8 @@ export async function executeStep(
         stepId: step.id,
         stepCallId,
         execResults: { ...stepInfo, ...execResults } as StepResult<any, any, any, any>,
-        emitter,
+        pubsub,
+        runId,
       });
     });
   }
@@ -475,9 +476,9 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
       scorersToUse = await scorersToUse({
         requestContext: requestContext,
       });
-    } catch (error) {
-      engine.preprocessExecutionError(
-        error,
+    } catch (e) {
+      const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
+      const mastraError = new MastraError(
         {
           id: 'WORKFLOW_FAILED_TO_FETCH_SCORERS',
           domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -488,8 +489,10 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
             stepId,
           },
         },
-        'Error fetching scorers: ',
+        errorInstance,
       );
+      engine.getLogger()?.trackException(mastraError);
+      engine.getLogger()?.error('Error fetching scorers: ' + errorInstance?.stack);
     }
   }
 
@@ -523,24 +526,28 @@ export async function emitStepResultEvents(params: {
   stepId: string;
   stepCallId?: string;
   execResults: StepResult<any, any, any, any>;
-  emitter: Emitter;
+  pubsub: PubSub;
+  runId: string;
 }): Promise<void> {
-  const { stepId, stepCallId, execResults, emitter } = params;
+  const { stepId, stepCallId, execResults, pubsub, runId } = params;
   const payloadBase = stepCallId ? { id: stepId, stepCallId } : { id: stepId };
 
   if (execResults.status === 'suspended') {
-    await emitter.emit('watch', {
-      type: 'workflow-step-suspended',
-      payload: { ...payloadBase, ...execResults },
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'workflow-step-suspended', payload: { ...payloadBase, ...execResults } },
     });
   } else {
-    await emitter.emit('watch', {
-      type: 'workflow-step-result',
-      payload: { ...payloadBase, ...execResults },
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'workflow-step-result', payload: { ...payloadBase, ...execResults } },
     });
-    await emitter.emit('watch', {
-      type: 'workflow-step-finish',
-      payload: { ...payloadBase, metadata: {} },
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'workflow-step-finish', payload: { ...payloadBase, metadata: {} } },
     });
   }
 }

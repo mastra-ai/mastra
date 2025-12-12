@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
-import { getServerOptions } from '@mastra/deployer/build';
+import { getServerOptions, normalizeStudioBase } from '@mastra/deployer/build';
 import { execa } from 'execa';
 import getPort from 'get-port';
 
@@ -53,9 +53,11 @@ const startServer = async (
   {
     port,
     host,
+    studioBasePath,
   }: {
     port: number;
     host: string;
+    studioBasePath: string;
   },
   env: Map<string, string>,
   startOptions: StartOptions = {},
@@ -123,7 +125,7 @@ const startServer = async (
         if (
           !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on port')
+          !output.includes('Mastra API running on ')
         ) {
           process.stdout.write(output);
         }
@@ -136,7 +138,7 @@ const startServer = async (
         if (
           !output.includes('Studio available') &&
           !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on port')
+          !output.includes('Mastra API running on ')
         ) {
           process.stderr.write(output);
         }
@@ -153,14 +155,14 @@ const startServer = async (
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
-        devLogger.ready(host, port, serverStartTime, startOptions.https);
+        devLogger.ready(host, port, studioBasePath, serverStartTime, startOptions.https);
         devLogger.watching();
 
         await restartAllActiveWorkflowRuns({ host, port });
 
         // Send refresh signal
         try {
-          await fetch(`http://${host}:${port}/__refresh`, {
+          await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -170,7 +172,7 @@ const startServer = async (
           // Retry after another second
           await new Promise(resolve => setTimeout(resolve, 1500));
           try {
-            await fetch(`http://${host}:${port}/__refresh`, {
+            await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -211,6 +213,7 @@ const startServer = async (
           {
             port,
             host,
+            studioBasePath,
           },
           env,
           startOptions,
@@ -226,9 +229,11 @@ async function checkAndRestart(
   {
     port,
     host,
+    studioBasePath,
   }: {
     port: number;
     host: string;
+    studioBasePath: string;
   },
   bundler: DevBundler,
   startOptions: StartOptions = {},
@@ -239,7 +244,7 @@ async function checkAndRestart(
 
   try {
     // Check if hot reload is disabled due to template installation
-    const response = await fetch(`http://${host}:${port}/__hot-reload-status`);
+    const response = await fetch(`http://${host}:${port}${studioBasePath}/__hot-reload-status`);
     if (response.ok) {
       const status = (await response.json()) as { disabled: boolean; timestamp: string };
       if (status.disabled) {
@@ -254,7 +259,7 @@ async function checkAndRestart(
 
   // Proceed with restart
   devLogger.info('[Mastra Dev] - ✅ Restarting server...');
-  await rebundleAndRestart(dotMastraPath, { port, host }, bundler, startOptions);
+  await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath }, bundler, startOptions);
 }
 
 async function rebundleAndRestart(
@@ -262,9 +267,11 @@ async function rebundleAndRestart(
   {
     port,
     host,
+    studioBasePath,
   }: {
     port: number;
     host: string;
+    studioBasePath: string;
   },
   bundler: DevBundler,
   startOptions: StartOptions = {},
@@ -294,6 +301,7 @@ async function rebundleAndRestart(
       {
         port,
         host,
+        studioBasePath,
       },
       env,
       startOptions,
@@ -347,6 +355,8 @@ export async function dev({
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
+  const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
+
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
     portToUse = String(
@@ -386,6 +396,7 @@ export async function dev({
     {
       port: Number(portToUse),
       host: hostToUse,
+      studioBasePath: studioBasePathToUse,
     },
     loadedEnv,
     startOptions,
@@ -404,6 +415,7 @@ export async function dev({
         {
           port: Number(portToUse),
           host: hostToUse,
+          studioBasePath: studioBasePathToUse,
         },
         bundler,
         startOptions,

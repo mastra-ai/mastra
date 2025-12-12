@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../di';
+import type { PubSub } from '../../events/pubsub';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ExecuteFunction } from '../step';
 import { getStepResult } from '../step';
 import type {
   DefaultEngineType,
-  Emitter,
   ExecutionContext,
   OutputWriter,
   SerializedStepFlowEntry,
@@ -37,7 +37,7 @@ export interface ExecuteSleepParams {
     resumePath: number[];
   };
   executionContext: ExecutionContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -51,7 +51,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     entry,
     prevOutput,
     stepResults,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     executionContext,
@@ -96,7 +96,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
         abort: () => {
           abortController?.abort();
         },
-        [EMITTER_SYMBOL]: emitter,
+        [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
@@ -149,7 +149,7 @@ export interface ExecuteSleepUntilParams {
     resumePath: number[];
   };
   executionContext: ExecutionContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -166,7 +166,7 @@ export async function executeSleepUntil(
     entry,
     prevOutput,
     stepResults,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     executionContext,
@@ -212,7 +212,7 @@ export async function executeSleepUntil(
         abort: () => {
           abortController?.abort();
         },
-        [EMITTER_SYMBOL]: emitter,
+        [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,

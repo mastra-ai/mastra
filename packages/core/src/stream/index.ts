@@ -1,11 +1,14 @@
 export type {
   ChunkType,
   DataChunkType,
+  LanguageModelUsage,
   NetworkChunkType,
   ReadonlyJSONObject,
   AgentChunkType,
   StepFinishPayload,
   StepStartPayload,
+  MastraFinishReason,
+  ProviderMetadata,
 } from './types';
 export { ChunkFrom } from './types';
 export { MastraModelOutput } from './base/output';

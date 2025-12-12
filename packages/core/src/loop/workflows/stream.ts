@@ -1,5 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from 'ai-v5';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
 import { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
@@ -46,6 +47,24 @@ export function workflowLoopStream<
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
       const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
+        // Handle data-* chunks (custom data chunks from writer.custom())
+        // These need to be persisted to storage, not just streamed
+        if (chunk.type.startsWith('data-') && messageId) {
+          const dataPart = {
+            type: chunk.type as `data-${string}`,
+            data: 'data' in chunk ? chunk.data : undefined,
+          };
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [dataPart],
+            },
+            createdAt: new Date(),
+          };
+          messageList.add(message, 'response');
+        }
         void controller.enqueue(chunk);
       };
 
@@ -125,22 +144,7 @@ export function workflowLoopStream<
 
       if (executionResult.status !== 'success') {
         if (executionResult.status === 'failed') {
-          // Temporary fix for cleaning of workflow result error message.
-          // executionResult.error is typed as Error but is actually a string and has "Error: Error: " prepended to the message.
-          // TODO: This string handling can be removed when the workflow execution result error type is fixed (issue #9348) -- https://github.com/mastra-ai/mastra/issues/9348
-          let executionResultError: string | Error = executionResult.error;
-          if (typeof executionResult.error === 'string') {
-            const prependedErrorString = 'Error: ';
-            if ((executionResult.error as string).startsWith(`${prependedErrorString}${prependedErrorString}`)) {
-              executionResultError = (executionResult.error as string).substring(
-                `${prependedErrorString}${prependedErrorString}`.length,
-              );
-            } else if ((executionResult.error as string).startsWith(prependedErrorString)) {
-              executionResultError = (executionResult.error as string).substring(prependedErrorString.length);
-            }
-          }
-
-          const error = getErrorFromUnknown(executionResultError, {
+          const error = getErrorFromUnknown(executionResult.error, {
             fallbackMessage: 'Unknown error in agent workflow stream',
           });
 
@@ -160,11 +164,9 @@ export function workflowLoopStream<
         return;
       }
 
-      if (executionResult.result.stepResult?.reason === 'abort') {
-        controller.close();
-        return;
-      }
-
+      // Always emit finish chunk, even for abort (tripwire) cases
+      // This ensures the stream properly completes and all promises are resolved
+      // The tripwire/abort status is communicated through the stepResult.reason
       controller.enqueue({
         type: 'finish',
         runId,
@@ -173,7 +175,7 @@ export function workflowLoopStream<
           ...executionResult.result,
           stepResult: {
             ...executionResult.result.stepResult,
-            // @ts-ignore we add 'abort' for tripwires so the type is not compatible
+            // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
             reason: executionResult.result.stepResult.reason,
           },
         },

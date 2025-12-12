@@ -1,5 +1,5 @@
 {
-  "name": "pkg-outputs",
+  "name": "e2e-monorepo",
   "version": "0.0.1",
   "private": true,
   "devDependencies": {

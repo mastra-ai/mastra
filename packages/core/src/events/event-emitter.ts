@@ -5,9 +5,9 @@ import type { Event } from './types';
 export class EventEmitterPubSub extends PubSub {
   private emitter: EventEmitter;
 
-  constructor() {
+  constructor(existingEmitter?: EventEmitter) {
     super();
-    this.emitter = new EventEmitter();
+    this.emitter = existingEmitter ?? new EventEmitter();
   }
 
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
@@ -30,5 +30,12 @@ export class EventEmitterPubSub extends PubSub {
 
   async flush(): Promise<void> {
     // no-op
+  }
+
+  /**
+   * Clean up all listeners during graceful shutdown.
+   */
+  async close(): Promise<void> {
+    this.emitter.removeAllListeners();
   }
 }

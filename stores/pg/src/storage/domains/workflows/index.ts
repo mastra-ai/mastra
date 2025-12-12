@@ -5,7 +5,12 @@ import {
   WorkflowsStorage,
   createStorageErrorId,
 } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  UpdateWorkflowStateOptions,
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
@@ -76,13 +81,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');

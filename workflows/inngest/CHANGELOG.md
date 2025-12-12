@@ -1,5 +1,73 @@
 # @mastra/inngest
 
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Support new Workflow tripwire run status. Tripwires that are thrown from within a workflow will now bubble up and return a graceful state with information about tripwires. ([#10947](https://github.com/mastra-ai/mastra/pull/10947))
+
+  When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
+
+  ```typescript showLineNumbers copy
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData: { message: 'Hello' } });
+
+  if (result.status === 'tripwire') {
+    console.log('Workflow terminated by tripwire:', result.tripwire?.reason);
+    console.log('Processor ID:', result.tripwire?.processorId);
+    console.log('Retry requested:', result.tripwire?.retry);
+  }
+  ```
+
+  Adds new UI state for tripwire in agent chat and workflow UI.
+
+  This is distinct from `status: 'failed'` which indicates an unexpected error. A tripwire status means a processor intentionally stopped execution (e.g., for content moderation).
+
+- Updated dependencies [[`38380b6`](https://github.com/mastra-ai/mastra/commit/38380b60fca905824bdf6b43df307a58efb1aa15), [`798d0c7`](https://github.com/mastra-ai/mastra/commit/798d0c740232653b1d754870e6b43a55c364ffe2), [`ffe84d5`](https://github.com/mastra-ai/mastra/commit/ffe84d54f3b0f85167fe977efd027dba027eb998), [`2c212e7`](https://github.com/mastra-ai/mastra/commit/2c212e704c90e2db83d4109e62c03f0f6ebd2667), [`4ca4306`](https://github.com/mastra-ai/mastra/commit/4ca430614daa5fa04730205a302a43bf4accfe9f), [`3bf6c5f`](https://github.com/mastra-ai/mastra/commit/3bf6c5f104c25226cd84e0c77f9dec15f2cac2db)]:
+  - @mastra/core@1.0.0-beta.11
+
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Internal code refactoring ([#10830](https://github.com/mastra-ai/mastra/pull/10830))
+
+- Add support for typed structured output in agent workflow steps ([#11014](https://github.com/mastra-ai/mastra/pull/11014))
+
+  When wrapping an agent with `createStep()` and providing a `structuredOutput.schema`, the step's `outputSchema` is now correctly inferred from the provided schema instead of defaulting to `{ text: string }`.
+
+  This enables type-safe chaining of agent steps with structured output to subsequent steps:
+
+  ```typescript
+  const articleSchema = z.object({
+    title: z.string(),
+    summary: z.string(),
+    tags: z.array(z.string()),
+  });
+
+  // Agent step with structured output - outputSchema is now articleSchema
+  const agentStep = createStep(agent, {
+    structuredOutput: { schema: articleSchema },
+  });
+
+  // Next step can receive the structured output directly
+  const processStep = createStep({
+    id: 'process',
+    inputSchema: articleSchema, // Matches agent's outputSchema
+    outputSchema: z.object({ tagCount: z.number() }),
+    execute: async ({ inputData }) => ({
+      tagCount: inputData.tags.length, // Fully typed!
+    }),
+  });
+
+  workflow.then(agentStep).then(processStep).commit();
+  ```
+
+  When `structuredOutput` is not provided, the agent step continues to use the default `{ text: string }` output schema.
+
+- Updated dependencies [[`edb07e4`](https://github.com/mastra-ai/mastra/commit/edb07e49283e0c28bd094a60e03439bf6ecf0221), [`b7e17d3`](https://github.com/mastra-ai/mastra/commit/b7e17d3f5390bb5a71efc112204413656fcdc18d), [`261473a`](https://github.com/mastra-ai/mastra/commit/261473ac637e633064a22076671e2e02b002214d), [`5d7000f`](https://github.com/mastra-ai/mastra/commit/5d7000f757cd65ea9dc5b05e662fd83dfd44e932), [`4f0331a`](https://github.com/mastra-ai/mastra/commit/4f0331a79bf6eb5ee598a5086e55de4b5a0ada03), [`8a000da`](https://github.com/mastra-ai/mastra/commit/8a000da0c09c679a2312f6b3aa05b2ca78ca7393)]:
+  - @mastra/core@1.0.0-beta.10
+
 ## 1.0.0-beta.4
 
 ### Patch Changes

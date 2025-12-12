@@ -3,23 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { PubSub } from '../events';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { DefaultExecutionEngine } from './default';
-import type { Emitter, StepResult } from './types';
+import type { StepResult } from './types';
 
 describe('DefaultExecutionEngine.executeConditional error handling', () => {
   let engine: DefaultExecutionEngine;
-  let emitter: Emitter;
+  let pubsub: PubSub;
   let requestContext: RequestContext;
   let abortController: AbortController;
 
   beforeEach(() => {
     engine = new DefaultExecutionEngine({ mastra: undefined });
-    emitter = {
-      emit: async (_event: string, _data: any) => {},
-      on: (_event: string, _callback: (data: any) => void) => {},
-      off: (_event: string, _callback: (data: any) => void) => {},
-      once: (_event: string, _callback: (data: any) => void) => {},
-    };
+    pubsub = new EventEmitterPubSub();
     requestContext = new RequestContext();
     abortController = new AbortController();
   });
@@ -78,7 +75,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
         resumeLabels: {},
         state: {},
       },
-      emitter,
+      pubsub,
       abortController,
       requestContext,
       tracingContext: {},
@@ -166,7 +163,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     expect(wrappedError.category).toBe(ErrorCategory.USER);
     expect(wrappedError.details).toEqual({ workflowId, runId });
 
-    // Verify that the original stack trace is preserved
-    expect(wrappedError.stack).toContain(regularError.stack?.split('\n')[1] || '');
+    // Verify that the original error is preserved as the cause
+    expect(wrappedError.cause).toBe(regularError);
   });
 });

@@ -164,6 +164,7 @@ export class MastraLLMVNext extends MastraBase {
     requestContext,
     methodType,
     includeRawChunks,
+    maxProcessorRetries,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -234,6 +235,7 @@ export class MastraLLMVNext extends MastraBase {
         requestContext,
         methodType,
         includeRawChunks,
+        maxProcessorRetries,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -283,6 +285,7 @@ export class MastraLLMVNext extends MastraBase {
           onFinish: async props => {
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span
+            // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
             modelSpanTracker?.endGeneration({
               output: {
                 files: props?.files,
@@ -295,16 +298,11 @@ export class MastraLLMVNext extends MastraBase {
               },
               attributes: {
                 finishReason: props?.finishReason,
-                usage: {
-                  inputTokens: props?.totalUsage?.inputTokens,
-                  outputTokens: props?.totalUsage?.outputTokens,
-                  totalTokens: props?.totalUsage?.totalTokens,
-                  reasoningTokens: props?.totalUsage?.reasoningTokens,
-                  cachedInputTokens: props?.totalUsage?.cachedInputTokens,
-                },
                 responseId: props?.response.id,
                 responseModel: props?.response.modelId,
               },
+              usage: props?.totalUsage,
+              providerMetadata: props?.providerMetadata,
             });
 
             try {

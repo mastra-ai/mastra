@@ -74,6 +74,7 @@ export const AgentBadge = ({ agentId, messages = [], metadata, toolCallId, toolA
               type="tool-call"
               toolCallId={message.toolCallId}
               addResult={() => {}}
+              resume={() => {}}
               metadata={{
                 mode: 'stream',
               }}
