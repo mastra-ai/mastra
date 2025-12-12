@@ -51,11 +51,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     const columns = Object.entries(schema).map(([name, col]) => {
       const parsedColumnName = parseSqlIdentifier(name, 'column name');
-      let type = col.type.toUpperCase();
-      if (type === 'TEXT') type = 'TEXT';
-      if (type === 'TIMESTAMP') type = 'TEXT'; // Store timestamps as ISO strings
-      // if (type === 'BIGINT') type = 'INTEGER';
-
+      const type = this.getSqlType(col.type);
       const nullable = col.nullable ? '' : 'NOT NULL';
       const primaryKey = col.primaryKey ? 'PRIMARY KEY' : '';
 
@@ -112,8 +108,10 @@ export class StoreOperationsLibSQL extends StoreOperations {
     switch (type) {
       case 'bigint':
         return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
-      case 'jsonb':
-        return 'TEXT'; // Store JSON as TEXT in SQLite
+      case 'timestamp':
+        return 'TEXT'; // Store timestamps as ISO strings in SQLite
+      // jsonb falls through to base class which returns 'JSONB'
+      // SQLite's flexible type system treats JSONB as TEXT affinity
       default:
         return super.getSqlType(type);
     }
