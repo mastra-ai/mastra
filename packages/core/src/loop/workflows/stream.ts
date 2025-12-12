@@ -42,6 +42,7 @@ export function workflowLoopStream<
   streamState,
   agentId,
   toolCallId,
+  toolCallConcurrency,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
@@ -82,6 +83,8 @@ export function workflowLoopStream<
         startTimestamp,
         streamState,
         agentId,
+        requireToolApproval,
+        toolCallConcurrency,
         ...rest,
       });
 

@@ -14,6 +14,7 @@ import {
   RESET_AGENT_MODEL_ROUTE,
   REORDER_AGENT_MODEL_LIST_ROUTE,
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
+  ENHANCE_INSTRUCTIONS_ROUTE,
   STREAM_VNEXT_DEPRECATED_ROUTE,
   STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE,
   STREAM_UI_MESSAGE_DEPRECATED_ROUTE,
@@ -71,6 +72,11 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   RESET_AGENT_MODEL_ROUTE,
   REORDER_AGENT_MODEL_LIST_ROUTE,
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
+
+  // ============================================================================
+  // Instruction Enhancement Routes
+  // ============================================================================
+  ENHANCE_INSTRUCTIONS_ROUTE,
 
   // ============================================================================
   // Agent Tool Routes

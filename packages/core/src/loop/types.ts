@@ -104,6 +104,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSc
   requireToolApproval?: boolean;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
+  toolCallConcurrency?: number;
   agentName?: string;
   requestContext?: RequestContext;
   methodType: ModelMethodType;

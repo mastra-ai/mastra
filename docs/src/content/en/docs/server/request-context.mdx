@@ -1,0 +1,193 @@
+---
+title: "Request Context | Server"
+description: Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
+---
+
+# Request Context
+
+Agents, tools, and workflows can all accept `RequestContext` as a parameter, making request-specific values available to the underlying primitives.
+
+## When to use `RequestContext`
+
+Use `RequestContext` when a primitive’s behavior should change based on runtime conditions. For example, you might switch models or storage backends based on user attributes, or adjust instructions and tool selection based on language.
+
+:::note
+
+**Note:** `RequestContext` is primarily used for passing data into specific
+requests. It's distinct from agent memory, which handles conversation
+history and state persistence across multiple calls.
+
+:::
+
+## Setting values
+
+Pass `requestContext` into an agent, network, workflow, or tool call to make values available to all underlying primitives during execution. Use `.set()` to define values before making the call.
+
+The `.set()` method takes two arguments:
+
+1. **key**: The name used to identify the value.
+2. **value**: The data to associate with that key.
+
+```typescript showLineNumbers
+import { RequestContext } from "@mastra/core/request-context";
+
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const requestContext = new RequestContext<UserTier>();
+requestContext.set("user-tier", "enterprise");
+
+const agent = mastra.getAgent("weatherAgent");
+await agent.generate("What's the weather in London?", {
+  requestContext,
+});
+
+const routingAgent = mastra.getAgent("routingAgent");
+routingAgent.network("What's the weather in London?", {
+  requestContext,
+});
+
+const run = await mastra.getWorkflow("weatherWorkflow").createRun();
+await run.start({
+  inputData: {
+    location: "London",
+  },
+  requestContext,
+});
+await run.resume({
+  resumeData: {
+    city: "New York",
+  },
+  requestContext,
+});
+
+await weatherTool.execute({
+  context: {
+    location: "London",
+  },
+  requestContext,
+});
+```
+
+### Setting values based on request headers
+
+You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { RequestContext } from "@mastra/core/request-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const requestContext = context.get("requestContext");
+
+        requestContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        await next();
+      },
+    ],
+  },
+});
+```
+
+> See [Middleware](/docs/v1/server/middleware) for how to use server middleware.
+
+## Accessing values with agents
+
+You can access the `requestContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `requestContext`.
+
+```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "Weather Agent",
+  instructions: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {
+      // ...
+    }
+    // ...
+  },
+  model: ({ requestContext }) => {
+    // ...
+  },
+  tools: ({ requestContext }) => {
+    // ...
+  },
+  memory: ({ requestContext }) => {
+    // ...
+  },
+});
+```
+
+You can also use `requestContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
+
+> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
+
+## Accessing values from workflow steps
+
+You can access the `requestContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `requestContext`.
+
+```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const stepOne = createStep({
+  id: "step-one",
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {
+      // ...
+    }
+    // ...
+  },
+});
+```
+
+> See [createStep()](/reference/v1/workflows/step) for a full list of configuration options.
+
+## Accessing values with tools
+
+You can access the `requestContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
+
+```typescript {7-8} title="src/mastra/tools/weather-tool.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {
+      // ...
+    }
+    // ...
+  },
+});
+```
+
+> See [createTool()](/reference/v1/tools/create-tool) for a full list of configuration options.
+
+## Related
+
+- [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
+- [Workflow Request Context](../workflows/overview#using-requestcontext)
+- [Tool Request Context](../mcp/overview#using-requestcontext)
+- [Server Middleware](/docs/v1/server/middleware)

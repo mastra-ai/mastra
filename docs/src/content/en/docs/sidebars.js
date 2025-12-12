@@ -239,6 +239,11 @@ const sidebars = {
           items: [
             {
               type: "doc",
+              id: "memory/storage/overview",
+              label: "Overview",
+            },
+            {
+              type: "doc",
               id: "memory/storage/memory-with-libsql",
               label: "Memory with LibSQL",
             },
@@ -285,51 +290,98 @@ const sidebars = {
           id: "rag/retrieval",
           label: "Retrieval",
         },
+        {
+          type: "doc",
+          id: "rag/graph-rag",
+          label: "GraphRAG",
+        },
       ],
     },
     {
       type: "category",
-      label: "Server & DB",
+      label: "Server",
       items: [
         {
           type: "doc",
-          id: "server-db/mastra-server",
+          id: "server/mastra-server",
           label: "Server Configuration",
         },
         {
           type: "doc",
-          id: "server-db/server-adapters",
+          id: "server/server-adapters",
           label: "Server Adapters",
+          customProps: {
+            tags: ["new"],
+          },
         },
         {
           type: "doc",
-          id: "server-db/custom-adapters",
+          id: "server/custom-adapters",
           label: "Custom Adapters",
+          customProps: {
+            tags: ["new"],
+          },
         },
         {
           type: "doc",
-          id: "server-db/middleware",
+          id: "server/middleware",
           label: "Middleware",
         },
         {
           type: "doc",
-          id: "server-db/request-context",
+          id: "server/request-context",
           label: "Request Context",
         },
         {
           type: "doc",
-          id: "server-db/custom-api-routes",
+          id: "server/custom-api-routes",
           label: "Custom API Routes",
         },
         {
           type: "doc",
-          id: "server-db/storage",
-          label: "Storage",
+          id: "server/mastra-client",
+          label: "Mastra Client",
         },
         {
-          type: "doc",
-          id: "server-db/mastra-client",
-          label: "Mastra Client",
+          type: "category",
+          label: "Auth",
+          items: [
+            {
+              type: "doc",
+              id: "server/auth/index",
+              label: "Overview",
+            },
+            {
+              type: "doc",
+              id: "server/auth/jwt",
+              label: "JSON Web Token",
+            },
+            {
+              type: "doc",
+              id: "server/auth/clerk",
+              label: "Clerk",
+            },
+            {
+              type: "doc",
+              id: "server/auth/supabase",
+              label: "Supabase",
+            },
+            {
+              type: "doc",
+              id: "server/auth/firebase",
+              label: "Firebase",
+            },
+            {
+              type: "doc",
+              id: "server/auth/workos",
+              label: "WorkOS",
+            },
+            {
+              type: "doc",
+              id: "server/auth/auth0",
+              label: "Auth0",
+            },
+          ],
         },
       ],
     },
@@ -551,47 +603,6 @@ const sidebars = {
           type: "doc",
           id: "evals/running-in-ci",
           label: "Running in CI",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Auth",
-      items: [
-        {
-          type: "doc",
-          id: "auth/index",
-          label: "Overview",
-        },
-        {
-          type: "doc",
-          id: "auth/jwt",
-          label: "JSON Web Token",
-        },
-        {
-          type: "doc",
-          id: "auth/clerk",
-          label: "Clerk",
-        },
-        {
-          type: "doc",
-          id: "auth/supabase",
-          label: "Supabase",
-        },
-        {
-          type: "doc",
-          id: "auth/firebase",
-          label: "Firebase",
-        },
-        {
-          type: "doc",
-          id: "auth/workos",
-          label: "WorkOS",
-        },
-        {
-          type: "doc",
-          id: "auth/auth0",
-          label: "Auth0",
         },
       ],
     },
