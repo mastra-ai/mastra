@@ -13,7 +13,7 @@ export async function setupTestProject(pathToStoreFiles) {
   await cp(projectPath, newPath, { recursive: true });
 
   console.log('Installing dependencies...');
-  const res = spawnSync('pnpm', ['install'], {
+  const res = spawnSync('pnpm', ['install', '--ignore-workspace'], {
     cwd: newPath,
     stdio: 'inherit',
     env: process.env,
