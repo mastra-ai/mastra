@@ -339,6 +339,11 @@
       "source": "/examples/v1/rag/usage/cot-rag",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-chain-of-thought-prompting",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/query/hybrid-vector-search",
+      "destination": "/docs/v1/rag/retrieval#metadata-filtering",
+      "permanent": true
     }
   ]
 }

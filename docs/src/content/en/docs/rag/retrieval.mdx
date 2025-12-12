@@ -76,7 +76,9 @@ Results include both the text content and a similarity score:
 
 ### Metadata Filtering
 
-Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources, time periods, or with specific attributes. Mastra provides a unified MongoDB-style query syntax that works across all supported vector stores.
+Filter results based on metadata fields to narrow down the search space. This approach - combining vector similarity search with metadata filters - is sometimes called hybrid vector search, as it merges semantic search with structured filtering criteria.
+
+This is useful when you have documents from different sources, time periods, or with specific attributes. Mastra provides a unified MongoDB-style query syntax that works across all supported vector stores.
 
 For detailed information about available operators and syntax, see the [Metadata Filters Reference](/reference/v1/rag/metadata-filters).
 
@@ -145,8 +147,6 @@ Common use cases for metadata filtering:
 - Filter by numerical ranges (e.g., price, rating)
 - Combine multiple conditions for precise querying
 - Filter by document attributes (e.g., language, author)
-
-For an example of how to use metadata filtering, see the [Hybrid Vector Search](/examples/v1/rag/query/hybrid-vector-search) example.
 
 ### Vector Query Tool
 

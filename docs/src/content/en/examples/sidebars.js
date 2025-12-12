@@ -42,17 +42,6 @@ const sidebars = {
         },
         {
           type: "category",
-          label: "Query",
-          items: [
-            {
-              type: "doc",
-              id: "rag/query/hybrid-vector-search",
-              label: "Hybrid Vector Search",
-            },
-          ],
-        },
-        {
-          type: "category",
           label: "Usage",
           items: [
             {
