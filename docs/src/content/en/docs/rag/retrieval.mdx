@@ -153,6 +153,9 @@ For an example of how to use metadata filtering, see the [Hybrid Vector Search](
 Sometimes you want to give your agent the ability to query a vector database directly. The Vector Query Tool allows your agent to be in charge of retrieval decisions, combining semantic search with optional filtering and reranking based on the agent's understanding of the user's needs.
 
 ```ts showLineNumbers copy
+import { createVectorQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -180,6 +183,9 @@ Connection credentials (URLs, auth tokens) are configured when you instantiate t
 :::
 
 ```ts showLineNumbers copy
+import { createVectorQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
 // Pinecone with namespace
 const pineconeQueryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
@@ -535,8 +541,9 @@ The weights control how different factors influence the final ranking:
 - `vector`: Higher values favor the original vector similarity scores
 - `position`: Higher values help maintain the original ordering of results
 
-
-> **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+:::note
+For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+:::
 
 You can also use other relevance score providers like Cohere or ZeroEntropy:
 
@@ -563,6 +570,9 @@ For documents with complex relationships, graph-based retrieval can follow conne
 Example setup:
 
 ```ts showLineNumbers copy
+import { createGraphQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
 const graphQueryTool = createGraphQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
