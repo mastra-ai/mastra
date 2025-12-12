@@ -10,6 +10,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CodeDisplay } from './code-display';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface AgentWorkingMemoryProps {
   agentId: string;
@@ -122,15 +123,30 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           <div className="flex gap-2">
             {!isEditing ? (
               <>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setIsEditing(true)}
-                  disabled={!threadExists || isUpdating}
-                  className="text-xs"
-                >
-                  Edit Working Memory
-                </Button>
+                {!threadExists ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0}>
+                        <Button variant="secondary" size="sm" disabled className="text-xs pointer-events-none">
+                          Edit Working Memory
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Working memory will be available after the agent calls updateWorkingMemory</p>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsEditing(true)}
+                    disabled={isUpdating}
+                    className="text-xs"
+                  >
+                    Edit Working Memory
+                  </Button>
+                )}
               </>
             ) : (
               <>

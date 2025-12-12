@@ -315,7 +315,7 @@ When running the local mastra server, all active workflow runs will be restarted
 
 ## Using `RequestContext`
 
-Use [RequestContext](/docs/v1/server-db/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
@@ -336,7 +336,7 @@ const step1 = createStep({
 });
 ```
 
-> See [Request Context](/docs/v1/server-db/request-context) for more information.
+> See [Request Context](/docs/v1/server/request-context) for more information.
 
 ## Testing with Studio
 

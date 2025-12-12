@@ -320,11 +320,15 @@ export function WorkflowTrigger({
                     const { status } = step;
                     let output = undefined;
                     let suspendOutput = undefined;
+                    let error = undefined;
                     if (step.status === 'suspended') {
                       suspendOutput = step.suspendOutput;
                     }
                     if (step.status === 'success') {
                       output = step.output;
+                    }
+                    if (step.status === 'failed') {
+                      error = step.error;
                     }
 
                     // Build tripwire info from step or workflow-level result
@@ -349,7 +353,7 @@ export function WorkflowTrigger({
                         key={stepId}
                         stepId={stepId}
                         status={displayStatus}
-                        result={output ?? suspendOutput ?? {}}
+                        result={output ?? suspendOutput ?? error ?? {}}
                         tripwire={tripwireInfo}
                       />
                     );
