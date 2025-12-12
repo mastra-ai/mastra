@@ -1,7 +1,7 @@
 import type { Processor } from '..';
 import type { MessageList } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
-import { parseMemoryRuntimeContext } from '../../memory';
+import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage, MemoryConfig } from '../../memory';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
@@ -81,7 +81,7 @@ export class WorkingMemory implements Processor {
     const { messageList, requestContext } = args;
 
     // Get threadId and resourceId from runtime context
-    const memoryContext = parseMemoryRuntimeContext(requestContext);
+    const memoryContext = parseMemoryRequestContext(requestContext);
     const threadId = memoryContext?.thread?.id;
     const resourceId = memoryContext?.resourceId;
 

@@ -13,9 +13,10 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   TABLE_NAMES,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import type { ConvexAdminClientConfig } from './client';
 import { ConvexAdminClient } from './client';
@@ -205,13 +206,7 @@ export class ConvexStore extends MastraStorage {
   async updateWorkflowState(params: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: WorkflowRunStatus;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.workflows.updateWorkflowState(params);
   }

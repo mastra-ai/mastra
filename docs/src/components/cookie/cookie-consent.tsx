@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Head from "@docusaurus/Head";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CookieBanner } from "./cookie-banner";
 import HubspotTracker from "./hubspot-tracker";
 
@@ -18,6 +18,14 @@ const REO_CLIENT_ID = "fdd9258c52d6769";
 export const CookieConsent = () => {
   const { siteConfig } = useDocusaurusContext();
   const [cookieConsent, setCookieConsent] = useState<boolean | null>(null);
+  const [
+    hasGottenConsentForGoogleTracking,
+    setHasGottenConsentForGoogleTracking,
+  ] = useState<boolean>(false);
+  const [
+    hasGottenConsentForHubspotTracking,
+    setHasGottenConsentForHubspotTracking,
+  ] = useState<boolean>(false);
 
   const GA_ID = siteConfig.customFields?.gaId as string | undefined;
   const HS_PORTAL_ID = siteConfig.customFields?.hsPortalId as
@@ -31,12 +39,18 @@ export const CookieConsent = () => {
     console.warn("Hubspot Portal ID is not defined");
   }
 
+  useEffect(() => {
+    if (cookieConsent) {
+      setHasGottenConsentForGoogleTracking(true);
+      setHasGottenConsentForHubspotTracking(true);
+    }
+  }, [cookieConsent]);
+
   return (
     <>
       <CookieBanner onConsentChange={setCookieConsent} />
 
-      {/* Google Analytics - Only load with consent */}
-      {cookieConsent && GA_ID && (
+      {hasGottenConsentForGoogleTracking ? (
         <>
           <Head>
             <script
@@ -55,10 +69,10 @@ export const CookieConsent = () => {
             </script>
           </Head>
         </>
-      )}
+      ) : null}
 
       {/* HubSpot - Only load with consent */}
-      {cookieConsent && HS_PORTAL_ID && (
+      {hasGottenConsentForHubspotTracking ? (
         <Head>
           <script
             async
@@ -66,10 +80,10 @@ export const CookieConsent = () => {
             id="hs-script-loader"
           />
         </Head>
-      )}
+      ) : null}
 
       {/* HubSpot - Tell it not to track if consent denied */}
-      {cookieConsent === false && HS_PORTAL_ID && (
+      {!hasGottenConsentForHubspotTracking ? (
         <Head>
           <script id="hubspot-gdpr">
             {`
@@ -78,7 +92,7 @@ export const CookieConsent = () => {
             `}
           </script>
         </Head>
-      )}
+      ) : null}
 
       {/* Reo.dev tracking - Only load with consent */}
       {cookieConsent && (

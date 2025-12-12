@@ -2,7 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-import { CopyIcon } from 'lucide-react';
+import { CopyIcon, Cpu } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useWorkflow } from '@/hooks/use-workflows';
 import { EntityHeader } from '@/components/ui/entity-header';
@@ -76,6 +76,12 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
           <Badge>
             {stepsCount} step{stepsCount > 1 ? 's' : ''}
           </Badge>
+
+          {workflow?.isProcessorWorkflow && (
+            <Badge icon={<Cpu className="h-3 w-3" />} className="bg-violet-500/20 text-violet-400">
+              Processor
+            </Badge>
+          )}
         </div>
       </EntityHeader>
 

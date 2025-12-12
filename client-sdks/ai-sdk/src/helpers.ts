@@ -1,8 +1,26 @@
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { PartialSchemaOutput, OutputSchema, DataChunkType, ChunkType } from '@mastra/core/stream';
+import type {
+  PartialSchemaOutput,
+  OutputSchema,
+  DataChunkType,
+  ChunkType,
+  MastraFinishReason,
+} from '@mastra/core/stream';
 
-import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
+import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, FinishReason } from 'ai';
 import { isDataChunkType } from './utils';
+
+/**
+ * Maps Mastra's extended finish reasons to AI SDK-compatible values.
+ * 'tripwire' and 'retry' are Mastra-specific reasons for processor scenarios,
+ * which are mapped to 'other' for AI SDK compatibility.
+ */
+export function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
+  if (reason === 'tripwire' || reason === 'retry') {
+    return 'other';
+  }
+  return reason;
+}
 
 export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
   | TextStreamPart<ToolSet>
@@ -42,7 +60,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'finish': {
       return {
         type: 'finish',
-        finishReason: chunk.payload.stepResult.reason,
+        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
         totalUsage: chunk.payload.output.usage,
       };
     }
@@ -182,7 +200,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           ...rest,
         },
         usage: chunk.payload.output.usage,
-        finishReason: chunk.payload.stepResult.reason,
+        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
         providerMetadata,
       };
     }
@@ -246,7 +264,10 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
       return {
         type: 'data-tripwire',
         data: {
-          tripwireReason: chunk.payload.tripwireReason,
+          reason: chunk.payload.reason,
+          retry: chunk.payload.retry,
+          metadata: chunk.payload.metadata,
+          processorId: chunk.payload.processorId,
         },
       };
     default:

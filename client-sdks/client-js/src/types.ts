@@ -34,7 +34,13 @@ import type {
 import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
-import type { TimeTravelContext, Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
+import type {
+  TimeTravelContext,
+  Workflow,
+  WorkflowResult,
+  WorkflowRunStatus,
+  WorkflowState,
+} from '@mastra/core/workflows';
 
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -172,6 +178,7 @@ export interface ListWorkflowRunsParams {
   page?: number;
   perPage?: number;
   resourceId?: string;
+  status?: WorkflowRunStatus;
   /** @deprecated Use page instead */
   offset?: number;
   /** @deprecated Use perPage instead */
@@ -211,6 +218,8 @@ export interface GetWorkflowResponse {
   stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
+  /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
+  isProcessorWorkflow?: boolean;
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;

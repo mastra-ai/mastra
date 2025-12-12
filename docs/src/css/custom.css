@@ -328,14 +328,22 @@ span[class*="categoryLinkLabel"] {
 
 .menu__link:hover {
   background: transparent;
-  color: var(--ifm-menu-color-active);
+  color: var(--mastra-green-accent-3);
+}
+
+[data-theme="dark"] .menu__link:hover {
+  color: var(--mastra-green-accent);
 }
 
 .menu__link--active {
   background: transparent;
-  color: var(--ifm-menu-color-active);
+  color: var(--mastra-green-accent-3);
   font-weight: 500;
   position: relative;
+}
+
+[data-theme="dark"] .menu__link--active {
+  color: var(--mastra-green-accent);
 }
 
 h2:has(code) {
@@ -1231,8 +1239,12 @@ ol {
     top: calc(0.25rem * 1);
     bottom: 0;
     width: 1.5px;
-    background: var(--mastra-text-primary);
+    background: var(--mastra-green-accent-3);
     border-radius: 8px;
+  }
+
+  [data-theme="dark"] .menu__link--active:not(.menu__link--sublist)::before {
+    background: var(--mastra-green-accent);
   }
 
   .theme-doc-sidebar-item-link-level-3 {

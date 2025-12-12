@@ -155,6 +155,8 @@ export const useStreamWorkflow = () => {
       if (streamStatus === 'failed') {
         throw new Error(metadata?.errorMessage || 'Workflow execution failed');
       }
+      // Tripwire status is not an error - it's handled separately in the UI
+      // Don't throw an error for tripwire status
     }
   };
 

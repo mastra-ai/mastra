@@ -324,6 +324,11 @@ export function deepClean(
 
   _seen.add(value);
 
+  // Handle Date objects - return as-is (they are JSON-serializable)
+  if (value instanceof Date) {
+    return value;
+  }
+
   if (Array.isArray(value)) {
     return value.map(item => deepClean(item, options, _seen, _depth + 1));
   }

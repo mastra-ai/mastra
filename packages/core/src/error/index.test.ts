@@ -78,7 +78,12 @@ describe('MastraError (Base Class)', () => {
       const jsonError = error.toJSON();
       expect(jsonError.code).toBe('BASE_TEST_001');
       expect(jsonError.message).toBe('Original cause');
-      expect(jsonError.details).toEqual(jsonDetails);
+      expect(jsonError.domain).toBe(ErrorDomain.AGENT);
+      expect(jsonError.category).toBe(ErrorCategory.UNKNOWN);
+      expect(jsonError.details).toEqual(sampleContext);
+      // cause should be serialized
+      expect(jsonError.cause).toBeDefined();
+      expect(jsonError.cause?.message).toBe('Original cause');
     });
 
     it('should serialize to JSON without a cause', () => {
@@ -93,7 +98,10 @@ describe('MastraError (Base Class)', () => {
       const jsonError = error.toJSON();
       expect(jsonError.code).toBe('BASE_TEST_001');
       expect(jsonError.message).toBe('Unknown error');
-      expect(jsonError.details).toEqual(jsonDetails);
+      expect(jsonError.domain).toBe(ErrorDomain.AGENT);
+      expect(jsonError.category).toBe(ErrorCategory.UNKNOWN);
+      expect(jsonError.details).toEqual(sampleContext);
+      expect(jsonError.cause).toBeUndefined();
     });
   });
 });
