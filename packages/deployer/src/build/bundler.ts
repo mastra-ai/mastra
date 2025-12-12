@@ -48,10 +48,7 @@ export async function getInputOptions(
         });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
-  const externalDependencies = Array.from(externalsCopy);
-  // When externalsPreset is true, we don't pass externals to Rollup's external option
-  // (we let the plugins handle resolution), but we still need the list for subpathExternalsResolver
-  const externals = externalsPreset ? [] : externalDependencies;
+  const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
   const normalizedEntryFile = slash(entryFile);
   return {
@@ -60,7 +57,7 @@ export async function getInputOptions(
     preserveSymlinks: true,
     external: externals,
     plugins: [
-      subpathExternalsResolver(externalDependencies),
+      subpathExternalsResolver(externals),
       {
         name: 'alias-optimized-deps',
         resolveId(id: string) {
@@ -129,7 +126,7 @@ export async function getInputOptions(
         extensions: ['.js', '.ts'],
         transformMixedEsModules: true,
         esmExternals(id) {
-          return externalDependencies.includes(id);
+          return externals.includes(id);
         },
       }),
       enableEsmShim ? esmShim() : undefined,
