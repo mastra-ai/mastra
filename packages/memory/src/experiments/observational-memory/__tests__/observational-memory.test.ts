@@ -252,6 +252,35 @@ describe('Storage Operations', () => {
       expect(record?.observedMessageIds).toContain('msg-1');
       expect(record?.observedMessageIds).toContain('msg-2');
     });
+
+    it('should set lastObservedAt when swapping buffered to active', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Initially, lastObservedAt should be undefined
+      expect(initial.metadata.lastObservedAt).toBeUndefined();
+
+      // Add buffered observations
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        observations: '- 🟡 Buffered observation',
+        messageIds: ['msg-1'],
+      });
+
+      const beforeSwap = new Date();
+      await storage.swapBufferedToActive(initial.id);
+      const afterSwap = new Date();
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.metadata.lastObservedAt).toBeDefined();
+      // lastObservedAt should be set to approximately now
+      expect(record!.metadata.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeSwap.getTime());
+      expect(record!.metadata.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterSwap.getTime());
+    });
   });
 
   describe('updateActiveObservations', () => {
@@ -276,6 +305,61 @@ describe('Storage Operations', () => {
       expect(record?.observedMessageIds).toEqual(['msg-1', 'msg-2']);
       expect(record?.observationTokenCount).toBe(100);
       expect(record?.suggestedContinuation).toBe('Continue with...');
+    });
+
+    it('should set lastObservedAt when provided', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Initially, lastObservedAt should be undefined
+      expect(initial.metadata.lastObservedAt).toBeUndefined();
+
+      const observedAt = new Date('2025-01-15T10:00:00Z');
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Test observation',
+        messageIds: ['msg-1'],
+        tokenCount: 100,
+        lastObservedAt: observedAt,
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.metadata.lastObservedAt).toEqual(observedAt);
+    });
+
+    it('should preserve lastObservedAt if not provided in update', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // First update with lastObservedAt
+      const firstObservedAt = new Date('2025-01-15T10:00:00Z');
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 First observation',
+        messageIds: ['msg-1'],
+        tokenCount: 100,
+        lastObservedAt: firstObservedAt,
+      });
+
+      // Second update without lastObservedAt - should preserve the previous value
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Second observation',
+        messageIds: ['msg-2'],
+        tokenCount: 150,
+        // Note: no lastObservedAt provided
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.metadata.lastObservedAt).toEqual(firstObservedAt);
     });
   });
 
@@ -350,6 +434,46 @@ describe('Storage Operations', () => {
       // Buffered state is reset
       expect(newRecord.bufferedMessageIds).toEqual([]);
       expect(newRecord.bufferingMessageIds).toEqual([]);
+    });
+
+    it('should set lastObservedAt on new reflection generation', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Set an older lastObservedAt on the initial record
+      const oldObservedAt = new Date('2025-01-01T00:00:00Z');
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Original observations',
+        messageIds: ['msg-1'],
+        tokenCount: 30000,
+        lastObservedAt: oldObservedAt,
+      });
+
+      const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
+      expect(currentRecord?.metadata.lastObservedAt).toEqual(oldObservedAt);
+
+      const beforeReflection = new Date();
+      const newRecord = await storage.createReflectionGeneration({
+        currentRecord: currentRecord!,
+        reflection: '- 🔴 Condensed reflection',
+        tokenCount: 5000,
+      });
+      const afterReflection = new Date();
+
+      // New record should have a fresh lastObservedAt (approximately now)
+      expect(newRecord.metadata.lastObservedAt).toBeDefined();
+      expect(newRecord.metadata.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeReflection.getTime());
+      expect(newRecord.metadata.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterReflection.getTime());
+
+      // Previous record should retain its original lastObservedAt
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId);
+      const previousRecord = history?.find(r => r.id === initial.id);
+      expect(previousRecord?.metadata.lastObservedAt).toEqual(oldObservedAt);
     });
   });
 
@@ -874,6 +998,253 @@ describe('ObservationalMemory Integration', () => {
     it('should return the storage instance', () => {
       const s = om.getStorage();
       expect(s).toBe(storage);
+    });
+  });
+
+  describe('cursor-based message loading (lastObservedAt)', () => {
+    it('should load only messages created after lastObservedAt', async () => {
+      // 1. Create some "old" messages (before observation)
+      const oldTime = new Date('2025-01-01T10:00:00Z');
+      const oldMsg1: MastraDBMessage = {
+        id: 'old-msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Old message 1' }] },
+        type: 'text',
+        createdAt: oldTime,
+        threadId,
+      };
+      const oldMsg2: MastraDBMessage = {
+        id: 'old-msg-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Old response 1' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:01:00Z'),
+        threadId,
+      };
+
+      // Save old messages to storage
+      await storage.saveMessages({ messages: [oldMsg1, oldMsg2] });
+
+      // 2. Initialize OM record with lastObservedAt set to AFTER the old messages
+      const observedAt = new Date('2025-01-01T12:00:00Z');
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: '- 🔴 User discussed old topics',
+        messageIds: ['old-msg-1', 'old-msg-2'],
+        tokenCount: 100,
+        lastObservedAt: observedAt,
+      });
+
+      // 3. Create "new" messages (after observation)
+      const newTime = new Date('2025-01-01T14:00:00Z');
+      const newMsg1: MastraDBMessage = {
+        id: 'new-msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'New message after observation' }] },
+        type: 'text',
+        createdAt: newTime,
+        threadId,
+      };
+      const newMsg2: MastraDBMessage = {
+        id: 'new-msg-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'New response' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T14:01:00Z'),
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [newMsg1, newMsg2] });
+
+      // 4. Query messages using dateRange.start (simulating what loadUnobservedMessages does)
+      const result = await storage.listMessages({
+        threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: {
+          dateRange: {
+            start: observedAt,
+          },
+        },
+      });
+
+      // 5. Should only get the new messages, not the old ones
+      expect(result.messages.length).toBe(2);
+      expect(result.messages.map(m => m.id)).toEqual(['new-msg-1', 'new-msg-2']);
+      expect(result.messages.map(m => m.id)).not.toContain('old-msg-1');
+      expect(result.messages.map(m => m.id)).not.toContain('old-msg-2');
+    });
+
+    it('should load all messages when lastObservedAt is undefined (first observation)', async () => {
+      // Create messages at various times
+      const msg1: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'First message' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+      };
+      const msg2: MastraDBMessage = {
+        id: 'msg-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Response' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:01:00Z'),
+        threadId,
+      };
+      const msg3: MastraDBMessage = {
+        id: 'msg-3',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Another message' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:02:00Z'),
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [msg1, msg2, msg3] });
+
+      // Initialize OM record WITHOUT lastObservedAt (first time, no observations yet)
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Query without dateRange filter (simulating first observation)
+      const result = await storage.listMessages({
+        threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        // No filter - should get all messages
+      });
+
+      // Should get ALL messages
+      expect(result.messages.length).toBe(3);
+      expect(result.messages.map(m => m.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
+    });
+
+    it('should handle messages created at exact same timestamp as lastObservedAt', async () => {
+      // Edge case: message created at exact same time as lastObservedAt
+      const exactTime = new Date('2025-01-01T12:00:00Z');
+
+      const msgAtExactTime: MastraDBMessage = {
+        id: 'msg-exact',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Message at exact observation time' }] },
+        type: 'text',
+        createdAt: exactTime,
+        threadId,
+      };
+
+      const msgAfter: MastraDBMessage = {
+        id: 'msg-after',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Message after observation' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T12:00:01Z'),
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [msgAtExactTime, msgAfter] });
+
+      // Query with dateRange.start = exactTime
+      // The InMemoryMemory implementation uses >= for start, so exact time should be included
+      const result = await storage.listMessages({
+        threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: {
+          dateRange: {
+            start: exactTime,
+          },
+        },
+      });
+
+      // Both messages should be included (>= comparison)
+      // This is why we also have the ID-based safety filter in processInput
+      expect(result.messages.length).toBe(2);
+      expect(result.messages.map(m => m.id)).toContain('msg-exact');
+      expect(result.messages.map(m => m.id)).toContain('msg-after');
+    });
+
+    it('should use lastObservedAt cursor after reflection creates new generation', async () => {
+      // 1. Create messages before reflection
+      const preReflectionMsg: MastraDBMessage = {
+        id: 'pre-reflection-msg',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Message before reflection' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [preReflectionMsg] });
+
+      // 2. Initialize and observe
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const firstObservedAt = new Date('2025-01-01T11:00:00Z');
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: '- 🔴 Pre-reflection observations',
+        messageIds: ['pre-reflection-msg'],
+        tokenCount: 30000, // High token count to trigger reflection
+        lastObservedAt: firstObservedAt,
+      });
+
+      // 3. Create reflection (new generation)
+      const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
+      const newRecord = await storage.createReflectionGeneration({
+        currentRecord: currentRecord!,
+        reflection: '- 🔴 Condensed reflection',
+        tokenCount: 5000,
+      });
+
+      // 4. New record should have fresh lastObservedAt
+      expect(newRecord.metadata.lastObservedAt).toBeDefined();
+      const reflectionTime = newRecord.metadata.lastObservedAt!;
+
+      // 5. Create post-reflection messages
+      const postReflectionMsg: MastraDBMessage = {
+        id: 'post-reflection-msg',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Message after reflection' }] },
+        type: 'text',
+        createdAt: new Date(reflectionTime.getTime() + 60000), // 1 minute after reflection
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [postReflectionMsg] });
+
+      // 6. Query using new record's lastObservedAt
+      const result = await storage.listMessages({
+        threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: {
+          dateRange: {
+            start: reflectionTime,
+          },
+        },
+      });
+
+      // Should only get post-reflection message, not pre-reflection
+      expect(result.messages.map(m => m.id)).toContain('post-reflection-msg');
+      expect(result.messages.map(m => m.id)).not.toContain('pre-reflection-msg');
     });
   });
 });
@@ -1849,7 +2220,7 @@ The assistant can maintain cohesion by starting with "For personal expense track
  *
  * REQUIRES: GOOGLE_GENERATIVE_AI_API_KEY environment variable
  */
-describe.only('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
+describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
   const questionData = firstQuestion as LongMemEvalQuestionData;
   const resourceId = `resource_${questionData.question_id}`;
 

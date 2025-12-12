@@ -667,6 +667,7 @@ export class InMemoryMemory extends MemoryStorage {
       suggestedContinuation,
       currentThreadId,
       threadContinuityMessages,
+      lastObservedAt,
     } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -700,6 +701,11 @@ export class InMemoryMemory extends MemoryStorage {
         ...record.threadContinuityMessages,
         ...threadContinuityMessages,
       };
+    }
+
+    // Update lastObservedAt for cursor-based message loading
+    if (lastObservedAt) {
+      record.metadata.lastObservedAt = lastObservedAt;
     }
 
     record.metadata.updatedAt = new Date();
@@ -756,6 +762,8 @@ export class InMemoryMemory extends MemoryStorage {
     record.bufferedMessageIds = [];
     record.bufferingMessageIds = [];
 
+    // Update lastObservedAt for cursor-based message loading
+    record.metadata.lastObservedAt = new Date();
     record.metadata.updatedAt = new Date();
   }
 
@@ -808,7 +816,7 @@ export class InMemoryMemory extends MemoryStorage {
       suggestedContinuation,
       // After reflection, reset observedMessageIds since old messages are now "baked into" the reflection.
       // The previous DB record retains its observedMessageIds as historical record.
-      observedMessageIds: [...currentRecord.observedMessageIds],
+      observedMessageIds: [],
       bufferedMessageIds: [],
       bufferingMessageIds: [],
       config: currentRecord.config,
@@ -817,6 +825,8 @@ export class InMemoryMemory extends MemoryStorage {
         updatedAt: new Date(),
         reflectionCount: currentRecord.metadata.reflectionCount + 1,
         lastReflectionAt: new Date(),
+        // Reset lastObservedAt since we're starting fresh after reflection
+        lastObservedAt: new Date(),
       },
       totalTokensObserved: currentRecord.totalTokensObserved,
       observationTokenCount: tokenCount,

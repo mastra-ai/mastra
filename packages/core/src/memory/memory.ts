@@ -545,7 +545,10 @@ https://mastra.ai/en/docs/memory/overview`,
       // Check if user already manually added MessageHistory
       const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
 
-      if (!hasMessageHistory) {
+      // Check if ObservationalMemory is present - it handles its own message loading
+      const hasObservationalMemory = configuredProcessors.some(p => p.constructor.name === 'ObservationalMemory');
+
+      if (!hasMessageHistory && !hasObservationalMemory) {
         processors.push(
           new MessageHistory({
             storage: this.storage.stores.memory,
@@ -686,7 +689,10 @@ https://mastra.ai/en/docs/memory/overview`,
       // Check if user already manually added MessageHistory
       const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
 
-      if (!hasMessageHistory) {
+      // Check if ObservationalMemory is present - it handles its own message loading
+      const hasObservationalMemory = configuredProcessors.some(p => p.constructor.name === 'ObservationalMemory');
+
+      if (!hasMessageHistory && !hasObservationalMemory) {
         processors.push(
           new MessageHistory({
             storage: this.storage.stores.memory,

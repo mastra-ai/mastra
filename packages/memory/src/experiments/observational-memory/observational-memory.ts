@@ -801,16 +801,34 @@ ${continuityMessage}
       messageList.addSystem(observationSystemMessage, 'observational-memory');
     }
 
-    // Remove observed messages from context
-    const observedIds = [...record.observedMessageIds, ...record.bufferedMessageIds];
+    // Load unobserved messages from storage using cursor-based query
+    // This is more efficient than loading all messages and filtering by ID
+    const lastObservedAt = record.metadata.lastObservedAt;
+    const historicalMessages = await this.loadUnobservedMessages(threadId, lastObservedAt);
 
-    const beforeCount = messageList.get.all.db().length;
+    if (historicalMessages.length > 0) {
+      console.log(
+        `[OM processInput] Loaded ${historicalMessages.length} messages since ${lastObservedAt?.toISOString() ?? 'beginning'}`,
+      );
+
+      // Add historical messages to messageList (excluding system messages)
+      for (const msg of historicalMessages) {
+        if (msg.role !== 'system') {
+          messageList.add(msg, 'memory');
+        }
+      }
+    }
+
+    // Safety net: also filter by observed IDs in case of edge cases
+    // (e.g., messages created at exact same timestamp as lastObservedAt)
+    const observedIds = [...record.observedMessageIds, ...record.bufferedMessageIds];
     if (observedIds.length > 0) {
+      const beforeCount = messageList.get.all.db().length;
       messageList.removeByIds(observedIds);
       const afterCount = messageList.get.all.db().length;
-      console.log(
-        `[OM processInput] Removed ${beforeCount - afterCount} observed messages (${beforeCount} → ${afterCount})`,
-      );
+      if (beforeCount !== afterCount) {
+        console.log(`[OM processInput] Safety filter removed ${beforeCount - afterCount} messages by ID`);
+      }
     }
 
     // Log what agent will actually see
@@ -818,6 +836,27 @@ ${continuityMessage}
     console.log(`[OM processInput] Agent will see: observations + ${finalMessages.length} unobserved messages`);
 
     return messageList;
+  }
+
+  /**
+   * Load messages from storage that haven't been observed yet.
+   * Uses cursor-based query with lastObservedAt timestamp for efficiency.
+   */
+  private async loadUnobservedMessages(threadId: string, lastObservedAt?: Date): Promise<MastraDBMessage[]> {
+    const result = await this.storage.listMessages({
+      threadId,
+      perPage: false, // Get all messages (no pagination limit)
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      filter: lastObservedAt
+        ? {
+            dateRange: {
+              start: lastObservedAt,
+            },
+          }
+        : undefined,
+    });
+
+    return result.messages;
   }
 
   /**
@@ -997,6 +1036,7 @@ ${continuityMessage}
         tokenCount: totalTokenCount,
         suggestedContinuation: result.suggestedContinuation,
         currentThreadId: this.resourceScope ? threadId : undefined,
+        lastObservedAt: new Date(),
       });
 
       console.log(`[OM] Observations stored successfully`);

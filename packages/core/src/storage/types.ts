@@ -256,6 +256,8 @@ export interface ObservationalMemoryMetadata {
   reflectionCount: number;
   /** When the last reflection occurred */
   lastReflectionAt?: Date;
+  /** When messages were last observed (for cursor-based message queries) */
+  lastObservedAt?: Date;
 }
 
 /**
@@ -348,6 +350,8 @@ export interface UpdateActiveObservationsInput {
   currentThreadId?: string;
   /** Per-thread continuity messages (from Reflector) */
   threadContinuityMessages?: Record<string, string>;
+  /** Timestamp when these observations were created (for cursor-based message loading) */
+  lastObservedAt?: Date;
 }
 
 /**
