@@ -89,26 +89,26 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
-    const currentState = await this.mastra.getStorage()?.updateWorkflowState({
-      workflowName: workflowId,
+    // Note: Storage is already updated to 'canceled' by EventedRun.cancel() via super.cancel()
+    // This handler only publishes events for listeners/watchers
+
+    // Publish to watch channel for any watchers
+    await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
       runId,
-      opts: {
-        status: 'canceled',
+      data: {
+        type: 'workflow-finish',
+        payload: {
+          runId,
+        },
       },
     });
 
-    await this.endWorkflow({
-      workflow: undefined as any,
-      workflowId,
+    // Publish to workflows-finish channel (same pattern as processWorkflowFail)
+    await this.mastra.pubsub.publish('workflows-finish', {
+      type: 'workflow.cancel',
       runId,
-      stepResults: currentState?.context as any,
-      prevResult: { status: 'canceled' } as any,
-      requestContext: currentState?.requestContext as any,
-      executionPath: [],
-      activeSteps: {},
-      resumeSteps: [],
-      resumeData: undefined,
-      parentWorkflow: undefined,
+      data: { workflowId, runId },
     });
   }
 

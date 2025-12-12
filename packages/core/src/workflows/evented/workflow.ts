@@ -709,6 +709,11 @@ export class EventedRun<
   }
 
   async cancel() {
+    // First update storage directly so status is updated immediately
+    // This ensures that after `await run.cancel()`, the status is already 'canceled'
+    await super.cancel();
+
+    // Also publish event for event-driven architecture compatibility
     await this.mastra?.pubsub.publish('workflows', {
       type: 'workflow.cancel',
       runId: this.runId,

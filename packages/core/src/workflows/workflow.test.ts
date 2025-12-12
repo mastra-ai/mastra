@@ -5994,6 +5994,51 @@ describe('Workflow', () => {
       //   endedAt: expect.any(Number),
       // });
     });
+
+    it('should be able to cancel a suspended workflow (issue #11049)', async () => {
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: async ({ suspend }) => {
+          await suspend({ reason: 'waiting for approval' });
+          return { done: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+        suspendSchema: z.object({ reason: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+      });
+
+      workflow.then(suspendStep).commit();
+
+      const storage = new MockStore();
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage,
+      });
+
+      const run = await workflow.createRun();
+      const runId = run.runId;
+
+      // Start the workflow and wait for it to suspend
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe('suspended');
+
+      // Verify status is suspended in storage
+      const beforeCancel = await workflow.getWorkflowRunById(runId);
+      expect((beforeCancel?.snapshot as any)?.status).toBe('suspended');
+
+      // Cancel the suspended workflow
+      await run.cancel();
+
+      // Check status IMMEDIATELY after cancel() returns
+      const afterCancel = await workflow.getWorkflowRunById(runId);
+      expect((afterCancel?.snapshot as any)?.status).toBe('canceled');
+    });
   });
 
   describe('Error Handling', () => {
