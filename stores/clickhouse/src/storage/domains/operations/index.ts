@@ -3,7 +3,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ClickhouseConfig } from '../utils';
-import { COLUMN_TYPES, TABLE_ENGINES, transformRow } from '../utils';
+import { TABLE_ENGINES, transformRow } from '../utils';
 
 export class StoreOperationsClickhouse extends StoreOperations {
   protected ttl: ClickhouseConfig['ttl'];
@@ -26,14 +26,18 @@ export class StoreOperationsClickhouse extends StoreOperations {
   protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
       case 'text':
+      case 'uuid':
+      case 'jsonb':
         return 'String';
       case 'timestamp':
         return 'DateTime64(3)';
       case 'integer':
       case 'bigint':
         return 'Int64';
-      case 'jsonb':
-        return 'String';
+      case 'float':
+        return 'Float64';
+      case 'boolean':
+        return 'Bool';
       default:
         return super.getSqlType(type); // fallback to base implementation
     }
@@ -56,7 +60,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
             constraints.push("DEFAULT '{}'");
           }
           const columnTtl = this.ttl?.[tableName]?.columns?.[name];
-          return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
+          return `"${name}" ${this.getSqlType(def.type)} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
         })
         .join(',\n');
 
@@ -266,7 +270,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
       const conditions = keyEntries
         .map(
           ([key]) =>
-            `"${key}" = {var_${key}:${COLUMN_TYPES[TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text']}}`,
+            `"${key}" = {var_${key}:${this.getSqlType(TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text')}}`,
         )
         .join(' AND ');
       const values = keyEntries.reduce((acc, [key, value]) => {
