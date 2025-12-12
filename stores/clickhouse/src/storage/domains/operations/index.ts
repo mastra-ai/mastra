@@ -56,7 +56,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
           const constraints = [];
           if (!def.nullable) constraints.push('NOT NULL');
           // Add DEFAULT '{}' for metadata columns to prevent empty string issues
-          if (name === 'metadata' && (def.type === 'text' || def.type === 'jsonb') && def.nullable) {
+          if (name === 'metadata' && def.type === 'text' && def.nullable) {
             constraints.push("DEFAULT '{}'");
           }
           const columnTtl = this.ttl?.[tableName]?.columns?.[name];
