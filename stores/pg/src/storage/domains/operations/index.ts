@@ -246,7 +246,7 @@ export class StoreOperationsPG extends StoreOperations {
         const constraints = [];
         if (def.primaryKey) constraints.push('PRIMARY KEY');
         if (!def.nullable) constraints.push('NOT NULL');
-        return `"${parsedName}" ${def.type.toUpperCase()} ${constraints.join(' ')}`;
+        return `"${parsedName}" ${this.getSqlType(def.type)} ${constraints.join(' ')}`;
       });
 
       // Create schema if it doesn't exist
