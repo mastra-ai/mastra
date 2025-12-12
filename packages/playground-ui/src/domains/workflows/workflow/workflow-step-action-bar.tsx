@@ -45,12 +45,34 @@ export const WorkflowStepActionBar = ({
   const [isTimeTravelOpen, setIsTimeTravelOpen] = useState(false);
 
   const { withoutTimeTravel } = useContext(WorkflowRunContext);
-  const { showMapConfig } = useContext(WorkflowStepDetailContext);
+  const { showMapConfig, stepDetail, closeStepDetail } = useContext(WorkflowStepDetailContext);
 
   const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
   const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
 
   const showTimeTravel = !withoutTimeTravel && stepKey && !mapConfig;
+
+  // Check if this step's detail is currently open
+  const isMapConfigOpen = stepDetail?.type === 'map-config' && stepDetail?.stepName === stepName;
+  const isNestedGraphOpen = stepDetail?.type === 'nested-graph' && stepDetail?.stepName === stepName;
+
+  const activeButtonClass = 'ring-2 ring-accent1 ring-offset-1 ring-offset-transparent';
+
+  const handleMapConfigClick = () => {
+    if (isMapConfigOpen) {
+      closeStepDetail();
+    } else {
+      showMapConfig({ stepName, stepId, mapConfig: mapConfig! });
+    }
+  };
+
+  const handleNestedGraphClick = () => {
+    if (isNestedGraphOpen) {
+      closeStepDetail();
+    } else {
+      onShowNestedGraph?.();
+    }
+  };
 
   return (
     <>
@@ -66,7 +88,11 @@ export const WorkflowStepActionBar = ({
             status === 'running' && 'bg-accent6Dark',
           )}
         >
-          {onShowNestedGraph && <Button onClick={onShowNestedGraph}>View nested graph</Button>}
+          {onShowNestedGraph && (
+            <Button onClick={handleNestedGraphClick} className={cn(isNestedGraphOpen && activeButtonClass)}>
+              View nested graph
+            </Button>
+          )}
           {showTimeTravel && (
             <>
               <Button onClick={() => setIsTimeTravelOpen(true)}>Time travel</Button>
@@ -81,7 +107,11 @@ export const WorkflowStepActionBar = ({
               </Dialog>
             </>
           )}
-          {mapConfig && <Button onClick={() => showMapConfig({ stepName, stepId, mapConfig })}>Map config</Button>}
+          {mapConfig && (
+            <Button onClick={handleMapConfigClick} className={cn(isMapConfigOpen && activeButtonClass)}>
+              Map config
+            </Button>
+          )}
           {input && (
             <>
               <Button onClick={() => setIsInputOpen(true)}>Input</Button>
