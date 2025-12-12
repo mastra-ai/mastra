@@ -1,4 +1,4 @@
-name: Discord Triage Cron
+name: Discord to GitHub Sync Cron
 permissions:
   contents: none
 
@@ -9,13 +9,13 @@ on:
   workflow_dispatch: # Allow manual triggering
 
 jobs:
-  discord-triage:
+  discord-github-sync:
     runs-on: ubuntu-latest
     steps:
       - name: Create workflow run and execute
         run: |
           # Create the workflow run and capture the runId
-          response=$(curl -s 'https://shrilling-scarce-finland.mastra.cloud/api/workflows/discordToGithubWorkflow/create-run' \
+          response=$(curl -s 'https://shrilling-scarce-finland.mastra.cloud/api/workflows/discordSyncWorkflow/create-run' \
             -X 'POST' \
             -H 'Authorization: Bearer ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}' \
             -H 'Referer: https://cloud.mastra.ai/' \
@@ -29,13 +29,13 @@ jobs:
             
             # Follow-up request using the runId
             echo "Starting workflow with runId: $runId"
-            start_response=$(curl --max-time 300 "https://shrilling-scarce-finland.mastra.cloud/api/workflows/discordToGithubWorkflow/start?runId=$runId" \
+            start_response=$(curl --max-time 300 "https://shrilling-scarce-finland.mastra.cloud/api/workflows/discordSyncWorkflow/start?runId=$runId" \
               -X 'POST' \
               -H 'Authorization: Bearer ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}' \
               -H 'Referer: https://cloud.mastra.ai/' \
               -H 'User-Agent: Github Action' \
               -H 'Content-Type: application/json' \
-              --data-raw '{"inputData":{"forumChannelId":"1349006916902191125","fetchLimit":1},"requestContext":{}}')
+              --data-raw '{"inputData":{"owner":"mastra-ai","repo":"mastra"},"requestContext":{}}')
             
             echo "Workflow start response:"
             echo "$start_response" | jq .
