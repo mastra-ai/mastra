@@ -125,8 +125,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults,
     requestContext,
   }: ProcessorArgs) {
-    // Extract resourceId from requestContext
-    const resourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY] as string | undefined;
+    // Extract resourceId from requestContext with type validation
+    const contextValue = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+    const resourceId = typeof contextValue === 'string' ? contextValue : undefined;
 
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,

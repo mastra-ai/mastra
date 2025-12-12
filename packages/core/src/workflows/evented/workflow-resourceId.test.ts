@@ -227,4 +227,98 @@ describe('Workflow resourceId', () => {
 
     expect(workflowRun?.resourceId).toBe(resourceId);
   });
+
+  it('should ignore non-string values in RequestContext', async () => {
+    const step1 = createStep({
+      id: 'step1',
+      execute: async () => ({ result: 'success' }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'test-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      steps: [step1],
+    });
+    workflow.then(step1).commit();
+
+    mastra = new Mastra({
+      workflows: { 'test-workflow': workflow },
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+    await mastra.startEventEngine();
+
+    const runId = 'test-run-id';
+    const run = await workflow.createRun({ runId });
+
+    // Set a non-string value in RequestContext (shouldn't be used)
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 12345 as any); // Invalid: number instead of string
+
+    await run.start({
+      inputData: {},
+      requestContext,
+    });
+
+    const workflowRun = await testStorage.getWorkflowRunById({
+      runId,
+      workflowName: 'test-workflow',
+    });
+
+    // Non-string value should be ignored (resourceId should be undefined)
+    expect(workflowRun?.resourceId).toBeUndefined();
+  });
+
+  it('should use constructor resourceId when RequestContext has non-string value', async () => {
+    const step1 = createStep({
+      id: 'step1',
+      execute: async () => ({ result: 'success' }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'test-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      steps: [step1],
+    });
+    workflow.then(step1).commit();
+
+    mastra = new Mastra({
+      workflows: { 'test-workflow': workflow },
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+    await mastra.startEventEngine();
+
+    const runId = 'test-run-id';
+    const validResourceId = 'valid-user-123';
+
+    // Pass valid resourceId in createRun
+    const run = await workflow.createRun({
+      runId,
+      resourceId: validResourceId,
+    });
+
+    // Set a non-string value in RequestContext (should be ignored, fall back to constructor value)
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, { userId: 'object' } as any); // Invalid: object instead of string
+
+    await run.start({
+      inputData: {},
+      requestContext,
+    });
+
+    const workflowRun = await testStorage.getWorkflowRunById({
+      runId,
+      workflowName: 'test-workflow',
+    });
+
+    // Should fall back to constructor resourceId since RequestContext value is invalid
+    expect(workflowRun?.resourceId).toBe(validResourceId);
+  });
 });

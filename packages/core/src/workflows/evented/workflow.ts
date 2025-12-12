@@ -464,11 +464,13 @@ export class EventedRun<
 
     // Extract resourceId from RequestContext with precedence over constructor parameter
     // This matches agent behavior for security (prevents attackers from hijacking another user's memory)
-    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const contextValue = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+    const resourceIdFromContext = typeof contextValue === 'string' ? contextValue : undefined;
     const resourceId = resourceIdFromContext || this.resourceId;
 
     // If we have a resourceId, ensure it's in the RequestContext so it's available throughout execution
-    if (resourceId && !resourceIdFromContext) {
+    // Only set if it's a valid string value
+    if (resourceId && typeof resourceId === 'string' && !resourceIdFromContext) {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
     }
 
@@ -552,11 +554,13 @@ export class EventedRun<
     requestContext = requestContext ?? new RequestContext();
 
     // Extract resourceId from RequestContext with precedence over constructor parameter
-    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const contextValue = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+    const resourceIdFromContext = typeof contextValue === 'string' ? contextValue : undefined;
     const resourceId = resourceIdFromContext || this.resourceId;
 
     // If we have a resourceId, ensure it's in the RequestContext so it's available throughout execution
-    if (resourceId && !resourceIdFromContext) {
+    // Only set if it's a valid string value
+    if (resourceId && typeof resourceId === 'string' && !resourceIdFromContext) {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
     }
 
