@@ -1,8 +1,9 @@
 import { TripWire } from '../agent/trip-wire';
 import type { RequestContext } from '../di';
-import type { IErrorDefinition } from '../error';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
+import type { PubSub } from '../events/pubsub';
 import type { Span, SpanType, TracingContext } from '../observability';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -26,8 +27,8 @@ import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import type {
+  FormattedWorkflowResult,
   DefaultEngineType,
-  Emitter,
   EntryExecutionResult,
   ExecutionContext,
   MutableContext,
@@ -49,29 +50,6 @@ export type { ExecutionContext } from './types';
  * Default implementation of the ExecutionEngine
  */
 export class DefaultExecutionEngine extends ExecutionEngine {
-  /**
-   * Preprocesses an error caught during workflow execution.
-   *
-   * - Wraps a non-MastraError exception
-   * - Logs error details
-   */
-  preprocessExecutionError(
-    e: unknown,
-    errorDefinition: IErrorDefinition<ErrorDomain, ErrorCategory>,
-    logPrefix: string,
-  ): MastraError {
-    const error = e instanceof MastraError ? e : new MastraError(errorDefinition, e);
-
-    // Preserve original stack trace
-    if (!(e instanceof MastraError) && e instanceof Error && e.stack) {
-      error.stack = e.stack;
-    }
-
-    this.logger?.trackException(error);
-    this.logger?.error(logPrefix + error?.stack);
-    return error;
-  }
-
   /**
    * The retryCounts map is used to keep track of the retry count for each step.
    * The step id is used as the key and the retry count is the value.
@@ -196,7 +174,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async onStepExecutionStart(params: {
     step: Step<string, any, any>;
     inputData: any;
-    emitter: Emitter;
+    pubsub: PubSub;
     executionContext: ExecutionContext;
     stepCallId: string;
     stepInfo: Record<string, any>;
@@ -206,12 +184,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return this.wrapDurableOperation(params.operationId, async () => {
       const startedAt = Date.now();
       if (!params.skipEmits) {
-        await params.emitter.emit('watch', {
-          type: 'workflow-step-start',
-          payload: {
-            id: params.step.id,
-            stepCallId: params.stepCallId,
-            ...params.stepInfo,
+        await params.pubsub.publish(`workflow.events.v2.${params.executionContext.runId}`, {
+          type: 'watch',
+          runId: params.executionContext.runId,
+          data: {
+            type: 'workflow-step-start',
+            payload: {
+              id: params.step.id,
+              stepCallId: params.stepCallId,
+              ...params.stepInfo,
+            },
           },
         });
       }
@@ -241,7 +223,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     timeTravel?: TimeTravelExecutionParams;
     prevOutput: any;
     inputData: any;
-    emitter: Emitter;
+    pubsub: PubSub;
     startedAt: number;
     abortController: AbortController;
     requestContext: RequestContext;
@@ -283,7 +265,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         ok: false;
         error: {
           status: 'failed';
-          error: string;
+          error: Error;
           endedAt: number;
           tripwire?: StepTripwireInfo;
         };
@@ -299,32 +281,35 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       } catch (e) {
         if (i === params.retries) {
           // Retries exhausted - return failed result
-          const processedError = this.preprocessExecutionError(
-            e,
+          // Use getErrorFromUnknown directly on the original error to preserve custom properties
+          const errorInstance = getErrorFromUnknown(e, {
+            serializeStack: false,
+            fallbackMessage: 'Unknown step execution error',
+          });
+
+          // Log the error for observability
+          const mastraError = new MastraError(
             {
               id: 'WORKFLOW_STEP_INVOKE_FAILED',
               domain: ErrorDomain.MASTRA_WORKFLOW,
               category: ErrorCategory.USER,
               details: { workflowId: params.workflowId, runId: params.runId, stepId },
             },
-            `Error executing step ${stepId}: `,
+            errorInstance,
           );
+          this.logger?.trackException(mastraError);
+          this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
 
           params.stepSpan?.error({
-            error: processedError,
+            error: mastraError,
             attributes: { status: 'failed' },
-          });
-
-          const errorInstance = getErrorFromUnknown(processedError, {
-            includeStack: false,
-            fallbackMessage: 'Unknown step execution error',
           });
 
           return {
             ok: false,
             error: {
               status: 'failed',
-              error: `Error: ${errorInstance.message}`,
+              error: errorInstance,
               endedAt: Date.now(),
               // Preserve TripWire data as plain object for proper serialization
               tripwire:
@@ -343,30 +328,30 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
     }
     // Should never reach here, but TypeScript needs it
-    return { ok: false, error: { status: 'failed', error: 'Unknown error', endedAt: Date.now() } };
+    return { ok: false, error: { status: 'failed', error: new Error('Unknown error'), endedAt: Date.now() } };
   }
 
   /**
    * Format an error for the workflow result.
    * Override to customize error formatting (e.g., include stack traces).
    */
-  protected formatResultError(error: Error | string | undefined, lastOutput: StepResult<any, any, any, any>): string {
+  protected formatResultError(error: Error | unknown, lastOutput: StepResult<any, any, any, any>): SerializedError {
     const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
     const errorSource = error || outputError;
     const errorInstance = getErrorFromUnknown(errorSource, {
-      includeStack: false,
+      serializeStack: false,
       fallbackMessage: 'Unknown workflow error',
     });
-    return typeof errorSource === 'string' ? errorInstance.message : `Error: ${errorInstance.message}`;
+    return errorInstance.toJSON();
   }
 
   protected async fmtReturnValue<TOutput>(
-    emitter: Emitter,
+    _pubsub: PubSub,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
-    error?: Error | string,
+    error?: Error | unknown,
   ): Promise<TOutput> {
-    const base: any = {
+    const base: FormattedWorkflowResult = {
       status: lastOutput.status,
       steps: stepResults,
       input: stepResults.input,
@@ -488,7 +473,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       label?: string;
       forEachIndex?: number;
     };
-    emitter: Emitter;
+    pubsub: PubSub;
     retryConfig?: {
       attempts?: number;
       delay?: number;
@@ -586,7 +571,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: workflowSpan,
         },
         abortController: params.abortController,
-        emitter: params.emitter,
+        pubsub: params.pubsub,
         requestContext: currentRequestContext,
         outputWriter: params.outputWriter,
         disableScorers,
@@ -607,7 +592,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           lastOutput.result.status = 'success';
         }
 
-        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result)) as any;
+        const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -647,7 +632,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     // after all steps are successful, return result
-    const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result)) as any;
+    const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
     await this.persistStepUpdate({
       workflowId,
       runId,

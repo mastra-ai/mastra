@@ -1,6 +1,11 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  StorageListWorkflowRunsInput,
+  WorkflowRuns,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import {
   createStorageErrorId,
   ensureDate,
@@ -63,13 +68,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');

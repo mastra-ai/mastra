@@ -1,7 +1,9 @@
 import type { WritableStream } from 'node:stream/web';
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod';
+import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
+import type { PubSub } from '../events/pubsub';
 import type { Mastra } from '../mastra';
 import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -42,13 +44,6 @@ export type TimeTravelExecutionParams = {
   resumeData?: any;
 };
 
-export type Emitter = {
-  emit: (event: string, data: any) => Promise<void>;
-  on: (event: string, callback: (data: any) => void) => void;
-  off: (event: string, callback: (data: any) => void) => void;
-  once: (event: string, callback: (data: any) => void) => void;
-};
-
 export type StepMetadata = Record<string, any>;
 
 export type StepSuccess<P, R, S, T> = {
@@ -75,7 +70,7 @@ export interface StepTripwireInfo {
 
 export type StepFailure<P, R, S, T> = {
   status: 'failed';
-  error: string | Error;
+  error: Error;
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
@@ -123,6 +118,25 @@ export type StepWaiting<P, R, S, T> = {
 
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
+  | StepFailure<P, R, S, T>
+  | StepSuspended<P, S, T>
+  | StepRunning<P, R, S, T>
+  | StepWaiting<P, R, S, T>;
+
+/**
+ * Serialized version of StepFailure where error is a SerializedError
+ * (used when loading workflow runs from storage)
+ */
+export type SerializedStepFailure<P, R, S, T> = Omit<StepFailure<P, R, S, T>, 'error'> & {
+  error: SerializedError;
+};
+
+/**
+ * Step result type that accounts for serialized errors when loaded from storage
+ */
+export type SerializedStepResult<P, R, S, T> =
+  | StepSuccess<P, R, S, T>
+  | SerializedStepFailure<P, R, S, T>
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
@@ -248,7 +262,7 @@ export interface WorkflowState {
       output?: Record<string, any>;
       payload?: Record<string, any>;
       resumePayload?: Record<string, any>;
-      error?: string | Error;
+      error?: SerializedError;
       startedAt: number;
       endedAt: number;
       suspendedAt?: number;
@@ -257,7 +271,7 @@ export interface WorkflowState {
   >;
   result?: Record<string, any>;
   payload?: Record<string, any>;
-  error?: string | Error;
+  error?: SerializedError;
 }
 
 export interface WorkflowRunState {
@@ -265,10 +279,10 @@ export interface WorkflowRunState {
   runId: string;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
-  error?: string | Error;
+  error?: SerializedError;
   requestContext?: Record<string, any>;
   value: Record<string, string>;
-  context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
+  context: { input?: Record<string, any> } & Record<string, SerializedStepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
   activePaths: Array<number>;
   activeStepsPath: Record<string, number[]>;
@@ -657,7 +671,7 @@ export type StepExecutionStartParams = {
   runId: string;
   step: Step<any, any, any>;
   inputData: any;
-  emitter: Emitter;
+  pubsub: PubSub;
   executionContext: ExecutionContext;
   stepCallId: string;
   stepInfo: Record<string, any>;
@@ -680,7 +694,7 @@ export type RegularStepExecutionParams = {
   timeTravel?: TimeTravelExecutionParams;
   prevOutput: any;
   inputData: any;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   tracingContext?: TracingContext;
@@ -752,4 +766,18 @@ export type PersistenceWrapParams = {
 export type DurableOperationWrapParams<T> = {
   operationId: string;
   operationFn: () => Promise<T>;
+};
+
+/**
+ * Base type for formatted workflow results returned by fmtReturnValue.
+ */
+export type FormattedWorkflowResult = {
+  status: WorkflowStepStatus | 'tripwire';
+  steps: Record<string, StepResult<any, any, any, any>>;
+  input: StepResult<any, any, any, any> | undefined;
+  result?: any;
+  error?: SerializedError;
+  suspended?: string[][];
+  /** Tripwire data when status is 'tripwire' */
+  tripwire?: StepTripwireInfo;
 };

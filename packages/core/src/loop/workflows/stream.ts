@@ -147,22 +147,7 @@ export function workflowLoopStream<
 
       if (executionResult.status !== 'success') {
         if (executionResult.status === 'failed') {
-          // Temporary fix for cleaning of workflow result error message.
-          // executionResult.error is typed as Error but is actually a string and has "Error: Error: " prepended to the message.
-          // TODO: This string handling can be removed when the workflow execution result error type is fixed (issue #9348) -- https://github.com/mastra-ai/mastra/issues/9348
-          let executionResultError: string | Error = executionResult.error;
-          if (typeof executionResult.error === 'string') {
-            const prependedErrorString = 'Error: ';
-            if ((executionResult.error as string).startsWith(`${prependedErrorString}${prependedErrorString}`)) {
-              executionResultError = (executionResult.error as string).substring(
-                `${prependedErrorString}${prependedErrorString}`.length,
-              );
-            } else if ((executionResult.error as string).startsWith(prependedErrorString)) {
-              executionResultError = (executionResult.error as string).substring(prependedErrorString.length);
-            }
-          }
-
-          const error = getErrorFromUnknown(executionResultError, {
+          const error = getErrorFromUnknown(executionResult.error, {
             fallbackMessage: 'Unknown error in agent workflow stream',
           });
 
