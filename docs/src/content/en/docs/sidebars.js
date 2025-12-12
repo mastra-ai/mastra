@@ -285,6 +285,11 @@ const sidebars = {
           id: "rag/retrieval",
           label: "Retrieval",
         },
+        {
+          type: "doc",
+          id: "rag/graph-rag",
+          label: "Graph RAG",
+        },
       ],
     },
     {

@@ -40,17 +40,6 @@ const sidebars = {
             },
           ],
         },
-        {
-          type: "category",
-          label: "Usage",
-          items: [
-            {
-              type: "doc",
-              id: "rag/usage/graph-rag",
-              label: "Graph RAG",
-            },
-          ],
-        },
       ],
     },
     {

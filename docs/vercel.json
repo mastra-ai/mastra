@@ -344,6 +344,11 @@
       "source": "/examples/v1/rag/query/hybrid-vector-search",
       "destination": "/docs/v1/rag/retrieval#metadata-filtering",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/graph-rag",
+      "destination": "/docs/v1/rag/graph-rag",
+      "permanent": true
     }
   ]
 }
