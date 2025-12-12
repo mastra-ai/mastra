@@ -57,33 +57,8 @@ const sidebars = {
           items: [
             {
               type: "doc",
-              id: "rag/usage/cleanup-rag",
-              label: "Optimizing Information Density",
-            },
-            {
-              type: "doc",
-              id: "rag/usage/filter-rag",
-              label: "Metadata Filtering",
-            },
-            {
-              type: "doc",
-              id: "rag/usage/cot-rag",
-              label: "Chain of Thought Prompting",
-            },
-            {
-              type: "doc",
-              id: "rag/usage/cot-workflow-rag",
-              label: "Structured Reasoning with Workflows",
-            },
-            {
-              type: "doc",
               id: "rag/usage/graph-rag",
               label: "Graph RAG",
-            },
-            {
-              type: "doc",
-              id: "rag/usage/database-specific-config",
-              label: "Database-Specific Configurations",
             },
           ],
         },

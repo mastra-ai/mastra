@@ -319,6 +319,26 @@
       "source": "/reference/v1/streaming/workflows/resumeStreamVNext",
       "destination": "/reference/v1/streaming/workflows/resumeStream",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/database-specific-config",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-database-specific-config",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/cleanup-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-optimizing-information-density",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/filter-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-metadta-filtering",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/cot-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-chain-of-thought-prompting",
+      "permanent": true
     }
   ]
 }
