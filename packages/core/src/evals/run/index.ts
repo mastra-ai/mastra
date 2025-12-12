@@ -1,5 +1,6 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
+import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
@@ -226,7 +227,7 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
 
 async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
   const model = await agent.getModel();
-  if (model.specificationVersion === 'v2') {
+  if (isSupportedLanguageModel(model)) {
     return await agent.generate(item.input as any, {
       scorers: {},
       returnScorerData: true,

@@ -19,10 +19,15 @@ import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types';
-import { isV2Model } from '../llm/model/is-v2-model';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import type { MastraLanguageModel, MastraLanguageModelV2, MastraModelConfig } from '../llm/model/shared.types';
+import type {
+  MastraLanguageModel,
+  MastraLanguageModelV2,
+  MastraLegacyLanguageModel,
+  MastraModelConfig,
+} from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
+import { isSupportedLanguageModel } from './utils';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -965,7 +970,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM | Promise<MastraLLM>;
-      if (resolvedModel.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(resolvedModel)) {
         const modelsPromise =
           Array.isArray(this.model) && !model
             ? this.prepareModels(requestContext)
@@ -1009,7 +1014,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   private async resolveModelConfig(
     modelConfig: DynamicArgument<MastraModelConfig>,
     requestContext: RequestContext,
-  ): Promise<MastraLanguageModel> {
+  ): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
     try {
       return await resolveModelConfig(modelConfig, requestContext, this.#mastra);
     } catch (error) {
@@ -1047,7 +1052,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     modelConfig = this.model,
   }: { requestContext?: RequestContext; modelConfig?: Agent['model'] } = {}):
     | MastraLanguageModel
-    | Promise<MastraLanguageModel> {
+    | MastraLegacyLanguageModel
+    | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
     if (!Array.isArray(modelConfig)) return this.resolveModelConfig(modelConfig, requestContext);
 
     if (modelConfig.length === 0 || !modelConfig[0]) {
@@ -1292,7 +1298,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     let text = '';
 
-    if (llm.getModel().specificationVersion === 'v2') {
+    if (isSupportedLanguageModel(llm.getModel())) {
       const messageList = new MessageList()
         .add(
           [
@@ -2459,10 +2465,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   ): Promise<Array<AgentModelManagerConfig>> {
     if (model || !Array.isArray(this.model)) {
       const modelToUse = model ?? this.model;
-      const resolvedModel =
-        typeof modelToUse === 'function' ? await modelToUse({ requestContext, mastra: this.#mastra }) : modelToUse;
+      const resolvedModel = await this.resolveModelConfig(
+        modelToUse as DynamicArgument<MastraModelConfig>,
+        requestContext,
+      );
 
-      if ((resolvedModel as MastraLanguageModel)?.specificationVersion !== 'v2') {
+      if (!isSupportedLanguageModel(resolvedModel)) {
         const mastraError = new MastraError({
           id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
           domain: ErrorDomain.AGENT,
@@ -2470,7 +2478,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           details: {
             agentName: this.name,
           },
-          text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+          text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
         });
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
@@ -2480,8 +2488,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       return [
         {
           id: 'main',
-          // TODO fix type check
-          model: resolvedModel as MastraLanguageModelV2,
+          model: resolvedModel,
           maxRetries: this.maxRetries ?? 0,
           enabled: true,
         },
@@ -2492,7 +2499,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.model.map(async modelConfig => {
         const model = await this.resolveModelConfig(modelConfig.model, requestContext);
 
-        if (!isV2Model(model)) {
+        if (!isSupportedLanguageModel(model)) {
           const mastraError = new MastraError({
             id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
             domain: ErrorDomain.AGENT,
@@ -2500,7 +2507,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             details: {
               agentName: this.name,
             },
-            text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+            text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
           });
           this.logger.trackException(mastraError);
           this.logger.error(mastraError.toString());

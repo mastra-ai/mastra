@@ -1,5 +1,5 @@
-import { Agent } from '@mastra/core/agent';
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import { Agent, isSupportedLanguageModel } from '@mastra/core/agent';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
 import { defaultTitleCombinePromptTemplate, defaultTitleExtractorPromptTemplate, PromptTemplate } from '../prompts';
 import type { TitleCombinePrompt, TitleExtractorPrompt } from '../prompts';
 import { TextNode } from '../schema';
@@ -16,7 +16,7 @@ type ExtractTitle = {
  * Extract title from a list of nodes.
  */
 export class TitleExtractor extends BaseExtractor {
-  llm: MastraLanguageModel;
+  llm: MastraLegacyLanguageModel | MastraLanguageModel;
   isTextNodeOnly: boolean = false;
   nodes: number = 5;
   nodeTemplate: TitleExtractorPrompt;
@@ -114,7 +114,7 @@ export class TitleExtractor extends BaseExtractor {
 
       let title = '';
 
-      if (this.llm.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(this.llm)) {
         const miniAgent = new Agent({
           id: 'title-extractor',
           model: this.llm,
@@ -161,7 +161,7 @@ export class TitleExtractor extends BaseExtractor {
 
     const titleJobs = nodes.map(async node => {
       let completion: string;
-      if (this.llm.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(this.llm)) {
         const result = await miniAgent.generate([
           { role: 'user', content: this.nodeTemplate.format({ context: node.getContent() }) },
         ]);

@@ -3,7 +3,12 @@ import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve, extname, basename } from 'node:path';
 import { openai } from '@ai-sdk/openai';
-import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '@mastra/core/agent';
+import {
+  Agent,
+  tryGenerateWithJsonFallback,
+  tryStreamWithJsonFallback,
+  isSupportedLanguageModel,
+} from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
@@ -211,7 +216,8 @@ Return the actual exported names of the units, as well as the file names.`,
         },
       });
 
-      const isV2 = model.specificationVersion === 'v2';
+      const resolvedModel = await agent.getModel();
+      const isSupported = isSupportedLanguageModel(resolvedModel);
 
       const prompt = `Analyze the Mastra project directory structure at "${templateDir}".
 
@@ -233,7 +239,7 @@ Return the actual exported names of the units, as well as the file names.`,
         other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
       });
 
-      const result = isV2
+      const result = isSupported
         ? await tryGenerateWithJsonFallback(agent, prompt, {
             structuredOutput: {
               schema: output,
@@ -1163,8 +1169,9 @@ Start by listing your tasks and work through them systematically!
 `;
 
       // Process tasks systematically
-      const isV2 = model.specificationVersion === 'v2';
-      const result = isV2 ? await agentBuilder.stream(prompt) : await agentBuilder.streamLegacy(prompt);
+      const resolvedModel = await agentBuilder.getModel();
+      const isSupported = isSupportedLanguageModel(resolvedModel);
+      const result = isSupported ? await agentBuilder.stream(prompt) : await agentBuilder.streamLegacy(prompt);
 
       // Extract actual conflict resolution details from agent execution
       const actualResolutions: Array<{
@@ -1439,9 +1446,10 @@ Start by running validateCode with all validation types to get a complete pictur
 
 Previous iterations may have fixed some issues, so start by re-running validateCode to see the current state, then fix any remaining issues.`;
 
-        const isV2 = model.specificationVersion === 'v2';
+        const resolvedModel = await validationAgent.getModel();
+        const isSupported = isSupportedLanguageModel(resolvedModel);
         const output = z.object({ success: z.boolean() });
-        const result = isV2
+        const result = isSupported
           ? await tryStreamWithJsonFallback(validationAgent, iterationPrompt, {
               structuredOutput: {
                 schema: output,

@@ -11,7 +11,7 @@ import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -663,11 +663,11 @@ export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: To
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type ExecuteStreamModelManager<T> = (
-  callback: (model: MastraLanguageModelV2, isLastModel: boolean) => Promise<T>,
+  callback: (model: MastraLanguageModel, isLastModel: boolean) => Promise<T>,
 ) => Promise<T>;
 
 export type ModelManagerModelConfig = {
-  model: MastraLanguageModelV2;
+  model: MastraLanguageModel;
   maxRetries: number;
   id: string;
 };
