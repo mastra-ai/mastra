@@ -25,6 +25,7 @@ interface TestResult {
  */
 describe('Zod 4 Compatibility', () => {
   let fixturePath: string;
+  let prevRegistry: string | undefined;
 
   beforeAll(async () => {
     const tag = inject('tag');
@@ -34,11 +35,14 @@ describe('Zod 4 Compatibility', () => {
     console.log('tag', tag);
     fixturePath = await mkdtemp(join(tmpdir(), 'mastra-zod4-compat-test-'));
 
+    prevRegistry = process.env.npm_config_registry;
     process.env.npm_config_registry = registry;
     await setupTestProject(fixturePath);
   }, 120 * 1000);
 
   afterAll(async () => {
+    process.env.npm_config_registry = prevRegistry;
+
     try {
       await rm(fixturePath, {
         force: true,
