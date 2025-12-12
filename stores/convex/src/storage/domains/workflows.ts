@@ -1,6 +1,12 @@
 import { TABLE_WORKFLOW_SNAPSHOT, normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput, StorageWorkflowRun, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
+import type {
+  StorageListWorkflowRunsInput,
+  StorageWorkflowRun,
+  WorkflowRun,
+  WorkflowRuns,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import type { StoreOperationsConvex } from '../operations';
 
@@ -53,19 +59,13 @@ export class WorkflowsConvex extends WorkflowsStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: WorkflowRunStatus;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     const run = await this.getRun(workflowName, runId);
     if (!run) return undefined;
 
     const snapshot = this.ensureSnapshot(run);
-    const updated: WorkflowRunState = { ...snapshot, ...opts };
+    const updated = { ...snapshot, ...opts };
 
     await this.persistWorkflowSnapshot({
       workflowName,
