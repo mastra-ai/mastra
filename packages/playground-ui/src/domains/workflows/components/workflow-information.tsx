@@ -12,7 +12,7 @@ import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { toast } from '@/lib/toast';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { WorkflowStepDetailContext } from '../context/workflow-step-detail-context';
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { PlaygroundTabs, TabList, Tab, TabContent } from '@/components/ui/playground-tabs';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { WorkflowStepDetail } from './workflow-step-detail';
@@ -37,7 +37,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     isCancellingWorkflowRun,
   } = useContext(WorkflowRunContext);
 
-  const { stepDetail } = useContext(WorkflowStepDetailContext);
+  const { stepDetail } = useWorkflowStepDetail();
 
   const [tab, setTab] = useState<string>('current-run');
   const [runId, setRunId] = useState<string>('');

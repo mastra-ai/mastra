@@ -5,7 +5,7 @@ import { useContext, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { WorkflowStepDetailContext } from '../context/workflow-step-detail-context';
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import type { TripwireData } from '../context/use-current-run';
 
 export interface WorkflowStepActionBarProps {
@@ -45,7 +45,7 @@ export const WorkflowStepActionBar = ({
   const [isTimeTravelOpen, setIsTimeTravelOpen] = useState(false);
 
   const { withoutTimeTravel } = useContext(WorkflowRunContext);
-  const { showMapConfig, stepDetail, closeStepDetail } = useContext(WorkflowStepDetailContext);
+  const { showMapConfig, stepDetail, closeStepDetail } = useWorkflowStepDetail();
 
   const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
   const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';

@@ -1,17 +1,16 @@
-import { useContext } from 'react';
 import { X, List } from 'lucide-react';
 import { ReactFlowProvider } from '@xyflow/react';
 
 import { Txt } from '@/ds/components/Txt';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
-import { WorkflowStepDetailContext } from '../context/workflow-step-detail-context';
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { CodeDialogContent } from '../workflow/workflow-code-dialog-content';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
 import { BADGE_COLORS } from '../workflow/workflow-node-badges';
 
 export function WorkflowStepDetail() {
-  const { stepDetail, closeStepDetail } = useContext(WorkflowStepDetailContext);
+  const { stepDetail, closeStepDetail } = useWorkflowStepDetail();
 
   if (!stepDetail) {
     return null;

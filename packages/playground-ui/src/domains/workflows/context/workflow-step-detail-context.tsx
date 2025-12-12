@@ -1,5 +1,5 @@
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { createContext, useState, type ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, type ReactNode, useCallback } from 'react';
 
 export type StepDetailType = 'map-config' | 'nested-graph' | null;
 
@@ -22,9 +22,15 @@ type WorkflowStepDetailContextType = {
   closeStepDetail: () => void;
 };
 
-export const WorkflowStepDetailContext = createContext<WorkflowStepDetailContextType>(
-  {} as WorkflowStepDetailContextType,
-);
+export const WorkflowStepDetailContext = createContext<WorkflowStepDetailContextType | null>(null);
+
+export function useWorkflowStepDetail() {
+  const context = useContext(WorkflowStepDetailContext);
+  if (!context) {
+    throw new Error('useWorkflowStepDetail must be used within WorkflowStepDetailProvider');
+  }
+  return context;
+}
 
 export function WorkflowStepDetailProvider({ children }: { children: ReactNode }) {
   const [stepDetail, setStepDetail] = useState<StepDetailData | null>(null);

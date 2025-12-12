@@ -1,6 +1,6 @@
-import { createContext, useContext } from 'react';
+import { createContext } from 'react';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { WorkflowStepDetailContext } from './workflow-step-detail-context';
+import { useWorkflowStepDetail } from './workflow-step-detail-context';
 
 type WorkflowNestedGraphContextType = {
   showNestedGraph: ({
@@ -20,7 +20,7 @@ export const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphConte
 );
 
 export function WorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
-  const { showNestedGraph: showNestedGraphInPanel, closeStepDetail } = useContext(WorkflowStepDetailContext);
+  const { showNestedGraph: showNestedGraphInPanel, closeStepDetail } = useWorkflowStepDetail();
 
   const showNestedGraph = ({
     label,
