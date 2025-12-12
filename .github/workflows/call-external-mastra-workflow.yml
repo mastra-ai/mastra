@@ -11,6 +11,10 @@ on:
         description: 'JSON input data for the workflow'
         required: true
         type: string
+      base_url:
+        description: 'Base URL for the Mastra Cloud API'
+        required: true
+        type: string
     secrets:
       MASTRA_TRIAGE_JWT_KEY:
         required: true
@@ -25,7 +29,7 @@ jobs:
           set -e
           
           WORKFLOW_NAME="${{ inputs.workflow_name }}"
-          BASE_URL="https://shrilling-scarce-finland.mastra.cloud/api/workflows"
+          BASE_URL="${{ inputs.base_url }}"
           
           echo "Creating workflow run for: $WORKFLOW_NAME"
           
@@ -61,6 +65,9 @@ jobs:
           # Start the workflow with the runId
           echo "Starting workflow with runId: $runId"
           
+          # Use jq to properly escape and validate the input data
+          echo '${{ inputs.input_data }}' | jq -c . > /tmp/input_data.json
+          
           http_code=$(curl -w "%{http_code}" -o /tmp/start_response.json -s \
             --max-time 300 \
             "${BASE_URL}/${WORKFLOW_NAME}/start?runId=${runId}" \
@@ -69,7 +76,7 @@ jobs:
             -H 'Referer: https://cloud.mastra.ai/' \
             -H 'User-Agent: Github Action' \
             -H 'Content-Type: application/json' \
-            --data-raw '${{ inputs.input_data }}')
+            --data-binary @/tmp/input_data.json)
           
           start_response=$(cat /tmp/start_response.json)
           
