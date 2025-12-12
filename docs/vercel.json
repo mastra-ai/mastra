@@ -400,7 +400,7 @@
       "destination": "/docs/v1/server/auth/auth0",
       "permanent": true
     },
-        {
+    {
       "source": "/examples/v1/rag/usage/database-specific-config",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/database-specific-config",
       "permanent": true
