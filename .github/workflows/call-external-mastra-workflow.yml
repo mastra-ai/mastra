@@ -17,6 +17,7 @@ on:
 
 jobs:
   execute-workflow:
+    permissions: {}
     runs-on: ubuntu-latest
     steps:
       - name: Create and execute workflow run
