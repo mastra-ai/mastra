@@ -350,6 +350,7 @@ export type ProviderModelsMap = {
     'llama-3.2-3b',
     'llama-3.3-70b',
     'mistral-31-24b',
+    'openai-gpt-52',
     'openai-gpt-oss-120b',
     'qwen3-235b',
     'qwen3-235b-a22b-instruct-2507',
@@ -493,9 +494,13 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8',
     'deepseek-ai/DeepSeek-R1',
     'deepseek-ai/DeepSeek-V3',
+    'deepseek-ai/DeepSeek-V3-1',
+    'essentialai/Rnj-1-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
     'moonshotai/Kimi-K2-Instruct',
+    'moonshotai/Kimi-K2-Thinking',
     'openai/gpt-oss-120b',
+    'zai-org/GLM-4.6',
   ];
   readonly baseten: readonly [
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',

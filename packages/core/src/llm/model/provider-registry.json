@@ -471,6 +471,7 @@
         "llama-3.2-3b",
         "llama-3.3-70b",
         "mistral-31-24b",
+        "openai-gpt-52",
         "openai-gpt-oss-120b",
         "qwen3-235b",
         "qwen3-235b-a22b-instruct-2507",
@@ -654,9 +655,13 @@
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
         "deepseek-ai/DeepSeek-R1",
         "deepseek-ai/DeepSeek-V3",
+        "deepseek-ai/DeepSeek-V3-1",
+        "essentialai/Rnj-1-Instruct",
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "moonshotai/Kimi-K2-Instruct",
-        "openai/gpt-oss-120b"
+        "moonshotai/Kimi-K2-Thinking",
+        "openai/gpt-oss-120b",
+        "zai-org/GLM-4.6"
       ],
       "docUrl": "https://docs.together.ai/docs/serverless-models",
       "gateway": "models.dev"
@@ -2207,6 +2212,7 @@
       "llama-3.2-3b",
       "llama-3.3-70b",
       "mistral-31-24b",
+      "openai-gpt-52",
       "openai-gpt-oss-120b",
       "qwen3-235b",
       "qwen3-235b-a22b-instruct-2507",
@@ -2350,9 +2356,13 @@
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
       "deepseek-ai/DeepSeek-R1",
       "deepseek-ai/DeepSeek-V3",
+      "deepseek-ai/DeepSeek-V3-1",
+      "essentialai/Rnj-1-Instruct",
       "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       "moonshotai/Kimi-K2-Instruct",
-      "openai/gpt-oss-120b"
+      "moonshotai/Kimi-K2-Thinking",
+      "openai/gpt-oss-120b",
+      "zai-org/GLM-4.6"
     ],
     "baseten": [
       "Qwen/Qwen3-Coder-480B-A35B-Instruct",
