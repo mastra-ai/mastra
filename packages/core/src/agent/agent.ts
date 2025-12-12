@@ -2964,7 +2964,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const modelInfo = llm.getModel();
 
-    if (modelInfo.specificationVersion !== 'v2') {
+    if (!isSupportedLanguageModel(modelInfo)) {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
 
@@ -2972,7 +2972,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5 models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
         details: {
           agentName: this.name,
           modelId,
@@ -3043,7 +3043,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const modelInfo = llm.getModel();
 
-    if (modelInfo.specificationVersion !== 'v2') {
+    if (!isSupportedLanguageModel(modelInfo)) {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
 
@@ -3051,7 +3051,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5 models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
         details: {
           agentName: this.name,
           modelId,
@@ -3124,7 +3124,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext: mergedStreamOptions.requestContext,
     });
 
-    if (llm.getModel().specificationVersion !== 'v2') {
+    if (!isSupportedLanguageModel(llm.getModel())) {
       throw new MastraError({
         id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
