@@ -372,11 +372,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     // Create a single workflow with all processors chained
     // Mark it as a processor workflow type
+    // validateInputs is disabled because ProcessorStepSchema contains z.custom() fields
+    // that may hold user-provided Zod schemas. When users use Zod 4 schemas while Mastra
+    // uses Zod 3 internally, validation fails due to incompatible internal structures.
     let workflow = createWorkflow({
       id: workflowId,
       inputSchema: ProcessorStepSchema,
       outputSchema: ProcessorStepSchema,
       type: 'processor',
+      options: { validateInputs: false },
     });
 
     for (const processorOrWorkflow of validProcessors) {
