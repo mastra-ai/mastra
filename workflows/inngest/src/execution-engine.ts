@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { getErrorFromUnknown } from '@mastra/core/error';
+import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
@@ -35,17 +37,20 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   // =============================================================================
 
   /**
-   * Format errors with stack traces for better debugging in Inngest
+   * Format errors while preserving Error instances and their custom properties.
+   * Uses getErrorFromUnknown to ensure all error properties are preserved.
    */
-  protected formatResultError(error: Error | string | undefined, lastOutput: StepResult<any, any, any, any>): string {
-    if (error instanceof Error) {
-      return error.stack ?? error.message;
-    }
+  protected formatResultError(
+    error: Error | string | undefined,
+    lastOutput: StepResult<any, any, any, any>,
+  ): SerializedError {
     const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
-    if (outputError instanceof Error) {
-      return outputError.message;
-    }
-    return outputError ?? (error as string) ?? 'Unknown error';
+    const errorSource = error || outputError;
+    const errorInstance = getErrorFromUnknown(errorSource, {
+      serializeStack: true, // Include stack in JSON for better debugging in Inngest
+      fallbackMessage: 'Unknown workflow error',
+    });
+    return errorInstance.toJSON();
   }
 
   /**
@@ -79,7 +84,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       workflowId: string;
       runId: string;
     },
-  ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: string; endedAt: number } }> {
+  ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: Error; endedAt: number } }> {
     try {
       // Pass retry config to wrapDurableOperation so RetryAfterError is thrown INSIDE step.run()
       const result = await this.wrapDurableOperation(stepId, runStep, { delay: params.delay });
@@ -92,20 +97,27 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           error: e,
           attributes: { status: 'failed' },
         });
+        // Ensure cause.error is an Error instance
+        if (cause.error && !(cause.error instanceof Error)) {
+          cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
+        }
         return { ok: false, error: cause };
       }
 
-      // Fallback for other errors
-      const errorMessage = e instanceof Error ? e.message : String(e);
+      // Fallback for other errors - preserve the original error instance
+      const errorInstance = getErrorFromUnknown(e, {
+        serializeStack: false,
+        fallbackMessage: 'Unknown step execution error',
+      });
       params.stepSpan?.error({
-        error: e,
+        error: errorInstance,
         attributes: { status: 'failed' },
       });
       return {
         ok: false,
         error: {
           status: 'failed',
-          error: `Error: ${errorMessage}`,
+          error: errorInstance,
           endedAt: Date.now(),
         },
       };
@@ -142,11 +154,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       } catch (e) {
         if (retryConfig) {
           // Throw RetryAfterError INSIDE step.run() to trigger step-level retry
-          const errorMessage = e instanceof Error ? e.message : String(e);
-          throw new RetryAfterError(errorMessage, retryConfig.delay, {
+          // Preserve the original error instance with all its properties
+          const errorInstance = getErrorFromUnknown(e, {
+            serializeStack: false,
+            fallbackMessage: 'Unknown step execution error',
+          });
+          throw new RetryAfterError(errorInstance.message, retryConfig.delay, {
             cause: {
               status: 'failed',
-              error: `Error: ${errorMessage}`,
+              error: errorInstance,
               endedAt: Date.now(),
             },
           });
