@@ -34,8 +34,8 @@ export const stockPrices = createTool({
   execute: async (inputData, context) => {
     console.log('Using tool to fetch stock price for', inputData.symbol);
     return {
-      symbol: inputData.symbol,
-      currentPrice: await getStockPrice(inputData.symbol),
+      symbol: inputData.context.symbol,
+      currentPrice: await getStockPrice(inputData.context.symbol),
     };
   },
 });
