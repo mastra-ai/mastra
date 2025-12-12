@@ -332,7 +332,7 @@
     },
     {
       "source": "/examples/v1/rag/usage/filter-rag",
-      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-metadta-filtering",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/rag-metadata-filtering",
       "permanent": true
     },
     {
