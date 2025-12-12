@@ -73,7 +73,35 @@ async function testBasicStructuredOutput(): Promise<void> {
       return;
     }
 
-    await res.object;
+    const obj = await res.object;
+
+    // Validate shape and types
+    if (typeof obj !== 'object' || obj === null) {
+      result.basicStructuredOutput = { passed: false, error: `Expected object, got ${typeof obj}` };
+      return;
+    }
+    if (typeof obj.name !== 'string') {
+      result.basicStructuredOutput = { passed: false, error: `Expected name to be string, got ${typeof obj.name}` };
+      return;
+    }
+    if (typeof obj.age !== 'number') {
+      result.basicStructuredOutput = { passed: false, error: `Expected age to be number, got ${typeof obj.age}` };
+      return;
+    }
+
+    // Validate expected values from mock
+    if (obj.name !== 'Test User') {
+      result.basicStructuredOutput = { passed: false, error: `Expected name 'Test User', got '${obj.name}'` };
+      return;
+    }
+    if (obj.age !== 25) {
+      result.basicStructuredOutput = { passed: false, error: `Expected age 25, got ${obj.age}` };
+      return;
+    }
+
+    // Verify schema can parse the result (confirms Zod 4 schema validation works)
+    schema.parse(obj);
+
     result.basicStructuredOutput = { passed: true };
   } catch (err: any) {
     result.basicStructuredOutput = { passed: false, error: err.message };
@@ -112,7 +140,38 @@ async function testStructuredOutputWithMemory(): Promise<void> {
       return;
     }
 
-    await res.object;
+    const obj = await res.object;
+
+    // Validate shape and types
+    if (typeof obj !== 'object' || obj === null) {
+      result.structuredOutputWithMemory = { passed: false, error: `Expected object, got ${typeof obj}` };
+      return;
+    }
+    if (typeof obj.name !== 'string') {
+      result.structuredOutputWithMemory = {
+        passed: false,
+        error: `Expected name to be string, got ${typeof obj.name}`,
+      };
+      return;
+    }
+    if (typeof obj.age !== 'number') {
+      result.structuredOutputWithMemory = { passed: false, error: `Expected age to be number, got ${typeof obj.age}` };
+      return;
+    }
+
+    // Validate expected values from mock
+    if (obj.name !== 'Test User') {
+      result.structuredOutputWithMemory = { passed: false, error: `Expected name 'Test User', got '${obj.name}'` };
+      return;
+    }
+    if (obj.age !== 25) {
+      result.structuredOutputWithMemory = { passed: false, error: `Expected age 25, got ${obj.age}` };
+      return;
+    }
+
+    // Verify schema can parse the result (confirms Zod 4 schema validation works)
+    schema.parse(obj);
+
     result.structuredOutputWithMemory = { passed: true };
   } catch (err: any) {
     result.structuredOutputWithMemory = { passed: false, error: err.message };
