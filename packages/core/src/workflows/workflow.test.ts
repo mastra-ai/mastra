@@ -6007,19 +6007,21 @@ describe('Workflow', () => {
         suspendSchema: z.object({ reason: z.string() }),
       });
 
-      const workflow = createWorkflow({
+      const testWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({ done: z.boolean() }),
       });
 
-      workflow.then(suspendStep).commit();
+      testWorkflow.then(suspendStep).commit();
 
       const storage = new MockStore();
       const mastra = new Mastra({
-        workflows: { 'test-workflow': workflow },
+        workflows: { 'test-workflow': testWorkflow },
         storage,
       });
+
+      const workflow = mastra.getWorkflow('test-workflow');
 
       const run = await workflow.createRun();
       const runId = run.runId;
