@@ -13,9 +13,13 @@ export async function setupTestProject(pathToStoreFiles) {
   await cp(projectPath, newPath, { recursive: true });
 
   console.log('Installing dependencies...');
-  spawnSync('pnpm', ['install'], {
+  const res = spawnSync('pnpm', ['install'], {
     cwd: newPath,
     stdio: 'inherit',
-    shell: true,
+    env: process.env,
   });
+
+  if (res.status !== 0) {
+    throw new Error(`[Setup Test Project] pnpm install failed with exit code ${res.status}`);
+  }
 }
