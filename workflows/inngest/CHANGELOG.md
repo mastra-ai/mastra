@@ -1,5 +1,67 @@
 # @mastra/inngest
 
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Preserve error details when thrown from workflow steps ([#10992](https://github.com/mastra-ai/mastra/pull/10992))
+  - Errors thrown in workflow steps now preserve full error details including `cause` chain and custom properties
+  - Added `SerializedError` type with proper cause chain support
+  - Added `SerializedStepResult` and `SerializedStepFailure` types for handling errors loaded from storage
+  - Enhanced `addErrorToJSON` to recursively serialize error cause chains with max depth protection
+  - Added `hydrateSerializedStepErrors` to convert serialized errors back to Error instances
+  - Fixed Inngest workflow error handling to extract original error from `NonRetriableError.cause`
+
+- Refactor internal event system from Emitter to PubSub abstraction for workflow event handling. This change replaces the EventEmitter-based event system with a pluggable PubSub interface, enabling support for distributed workflow execution backends like Inngest. Adds `close()` method to PubSub implementations for proper cleanup. ([#11052](https://github.com/mastra-ai/mastra/pull/11052))
+
+- Add `startAsync()` method and fix Inngest duplicate workflow execution bug ([#11093](https://github.com/mastra-ai/mastra/pull/11093))
+
+  **New Feature: `startAsync()` for fire-and-forget workflow execution**
+  - Add `Run.startAsync()` to base workflow class - starts workflow in background and returns `{ runId }` immediately
+  - Add `EventedRun.startAsync()` - publishes workflow start event without subscribing for completion
+  - Add `InngestRun.startAsync()` - sends Inngest event without polling for result
+
+  **Bug Fix: Prevent duplicate Inngest workflow executions**
+  - Fix `getRuns()` to properly handle rate limits (429), empty responses, and JSON parse errors with retry logic and exponential backoff
+  - Fix `getRunOutput()` to throw `NonRetriableError` when polling fails, preventing Inngest from retrying the parent function and re-triggering the workflow
+  - Add timeout to `getRunOutput()` polling (default 5 minutes) with `NonRetriableError` on timeout
+
+  This fixes a production issue where polling failures after successful workflow completion caused Inngest to retry the parent function, which fired a new workflow event and resulted in duplicate executions (e.g., duplicate Slack messages).
+
+- Preserve error details when thrown from workflow steps ([#10992](https://github.com/mastra-ai/mastra/pull/10992))
+
+  Workflow errors now retain custom properties like `statusCode`, `responseHeaders`, and `cause` chains. This enables error-specific recovery logic in your applications.
+
+  **Before:**
+
+  ```typescript
+  const result = await workflow.execute({ input });
+  if (result.status === 'failed') {
+    // Custom error properties were lost
+    console.log(result.error); // "Step execution failed" (just a string)
+  }
+  ```
+
+  **After:**
+
+  ```typescript
+  const result = await workflow.execute({ input });
+  if (result.status === 'failed') {
+    // Custom properties are preserved
+    console.log(result.error.message); // "Step execution failed"
+    console.log(result.error.statusCode); // 429
+    console.log(result.error.cause?.name); // "RateLimitError"
+  }
+  ```
+
+  **Type change:** `WorkflowState.error` and `WorkflowRunState.error` types changed from `string | Error` to `SerializedError`.
+
+  Other changes:
+  - Added `UpdateWorkflowStateOptions` type for workflow state updates
+
+- Updated dependencies [[`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`24b76d8`](https://github.com/mastra-ai/mastra/commit/24b76d8e17656269c8ed09a0c038adb9cc2ae95a), [`243a823`](https://github.com/mastra-ai/mastra/commit/243a8239c5906f5c94e4f78b54676793f7510ae3), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`c61fac3`](https://github.com/mastra-ai/mastra/commit/c61fac3add96f0dcce0208c07415279e2537eb62), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`4524734`](https://github.com/mastra-ai/mastra/commit/45247343e384717a7c8404296275c56201d6470f), [`2a53598`](https://github.com/mastra-ai/mastra/commit/2a53598c6d8cfeb904a7fc74e57e526d751c8fa6), [`847c212`](https://github.com/mastra-ai/mastra/commit/847c212caba7df0d6f2fc756b494ac3c75c3720d)]:
+  - @mastra/core@1.0.0-beta.12
+
 ## 1.0.0-beta.6
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- fix isTopLevelSpan value definition on SpanScoring to properly recognize lack of span?.parentSpanId value (null or empty string) ([#11083](https://github.com/mastra-ai/mastra/pull/11083))
+
 ## 1.0.0-beta.9
 
 ## 1.0.0-beta.8
