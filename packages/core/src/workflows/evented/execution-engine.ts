@@ -5,6 +5,7 @@ import type { Mastra } from '../../mastra';
 import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
 import type { SerializedStepFlowEntry, StepResult, RestartExecutionParams, TimeTravelExecutionParams } from '../types';
+import { hydrateSerializedStepErrors } from '../utils';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
@@ -123,6 +124,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
         if (['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type)) {
           await ack?.();
           await pubsub.unsubscribe('workflows-finish', finishCb);
+          // Re-hydrate serialized errors back to Error instances when workflow fails
+          if (event.type === 'workflow.fail' && event.data.stepResults) {
+            event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
+          }
           resolve(event.data);
           return;
         }
