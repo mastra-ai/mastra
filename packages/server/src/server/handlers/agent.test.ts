@@ -19,6 +19,7 @@ import {
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
   STREAM_GENERATE_LEGACY_ROUTE,
   STREAM_GENERATE_ROUTE,
+  ENHANCE_INSTRUCTIONS_ROUTE,
 } from './agents';
 import { createTestServerContext } from './test-utils';
 class MockAgent extends Agent {
@@ -590,6 +591,40 @@ describe('Agent Handlers', () => {
       expect(updatedModelList?.[1].model.modelId).toBe('gpt-5');
       expect(updatedModelList?.[1].maxRetries).toBe(4);
       expect(updatedModelList?.[2].model.modelId).toBe('gpt-4.1');
+    });
+  });
+
+  describe('enhanceInstructionsHandler', () => {
+    it('should enhance instructions and return structured output', async () => {
+      const mockEnhancedResult = {
+        object: {
+          explanation: 'Added more specific guidelines for tone and response format.',
+          new_prompt:
+            'You are a helpful assistant. Always respond in a friendly, professional tone. Keep responses concise.',
+        },
+      };
+
+      // Spy on Agent.prototype.generate since the handler creates a new Agent instance
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue(mockEnhancedResult as any);
+
+      try {
+        const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          agentId: 'test-agent',
+          instructions: 'You are a helpful assistant.',
+          comment: 'Make it more specific about tone',
+        });
+
+        expect(result).toEqual({
+          explanation: 'Added more specific guidelines for tone and response format.',
+          new_prompt:
+            'You are a helpful assistant. Always respond in a friendly, professional tone. Keep responses concise.',
+        });
+
+        expect(generateSpy).toHaveBeenCalledOnce();
+      } finally {
+        generateSpy.mockRestore();
+      }
     });
   });
 });
