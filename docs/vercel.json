@@ -399,6 +399,41 @@
       "source": "/docs/v1/auth/auth0",
       "destination": "/docs/v1/server/auth/auth0",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/database-specific-config",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/database-specific-config",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/cleanup-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cleanup-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/filter-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/cot-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cot-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/query/hybrid-vector-search",
+      "destination": "/docs/v1/rag/retrieval#metadata-filtering",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/graph-rag",
+      "destination": "/docs/v1/rag/graph-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/embedding/metadata-extraction",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/metadata-extraction",
+      "permanent": true
     }
   ]
 }

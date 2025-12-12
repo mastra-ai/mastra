@@ -1,11 +1,3 @@
----
-title: "Example: Database-Specific Configurations | RAG"
-description: Learn how to use database-specific configurations to optimize vector search performance and leverage unique features of different vector stores.
----
-
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
 # Database-Specific Configurations
 
 This example demonstrates how to use database-specific configurations with vector query tools to optimize performance and leverage unique features of different vector stores.
@@ -14,20 +6,19 @@ This example demonstrates how to use database-specific configurations with vecto
 
 Use different configurations for different environments:
 
-<Tabs>
-  <TabItem value="typescript" label="TypeScript">
+### TypeScript
 
 ```typescript
-import { createVectorQueryTool } from "@mastra/rag";
-import { RequestContext } from "@mastra/core/request-context";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { createVectorQueryTool } from '@mastra/rag';
+import { RequestContext } from '@mastra/core/request-context';
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 
 // Base configuration
-const createSearchTool = (environment: "dev" | "staging" | "prod") => {
+const createSearchTool = (environment: 'dev' | 'staging' | 'prod') => {
   return createVectorQueryTool({
-    vectorStoreName: "pinecone",
-    indexName: "documents",
-    model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+    vectorStoreName: 'pinecone',
+    indexName: 'documents',
+    model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
     databaseConfig: {
       pinecone: {
         namespace: environment,
@@ -37,20 +28,20 @@ const createSearchTool = (environment: "dev" | "staging" | "prod") => {
 };
 
 // Create environment-specific tools
-const devSearchTool = createSearchTool("dev");
-const prodSearchTool = createSearchTool("prod");
+const devSearchTool = createSearchTool('dev');
+const prodSearchTool = createSearchTool('prod');
 
 // Or use runtime override
 const dynamicSearchTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "documents",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'documents',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
 });
 
 // Switch environment at runtime
 const switchEnvironment = async (environment: string, query: string) => {
   const requestContext = new RequestContext();
-  requestContext.set("databaseConfig", {
+  requestContext.set('databaseConfig', {
     pinecone: {
       namespace: environment,
     },
@@ -64,19 +55,18 @@ const switchEnvironment = async (environment: string, query: string) => {
 };
 ```
 
-  </TabItem>
-  <TabItem value="javascript" label="JavaScript">
+### JavaScript
 
 ```javascript
-import { createVectorQueryTool } from "@mastra/rag";
-import { RequestContext } from "@mastra/core/request-context";
+import { createVectorQueryTool } from '@mastra/rag';
+import { RequestContext } from '@mastra/core/request-context';
 
 // Base configuration
-const createSearchTool = (environment) => {
+const createSearchTool = environment => {
   return createVectorQueryTool({
-    vectorStoreName: "pinecone",
-    indexName: "documents",
-    model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+    vectorStoreName: 'pinecone',
+    indexName: 'documents',
+    model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
     databaseConfig: {
       pinecone: {
         namespace: environment,
@@ -86,20 +76,20 @@ const createSearchTool = (environment) => {
 };
 
 // Create environment-specific tools
-const devSearchTool = createSearchTool("dev");
-const prodSearchTool = createSearchTool("prod");
+const devSearchTool = createSearchTool('dev');
+const prodSearchTool = createSearchTool('prod');
 
 // Or use runtime override
 const dynamicSearchTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "documents",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'documents',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
 });
 
 // Switch environment at runtime
 const switchEnvironment = async (environment, query) => {
   const requestContext = new RequestContext();
-  requestContext.set("databaseConfig", {
+  requestContext.set('databaseConfig', {
     pinecone: {
       namespace: environment,
     },
@@ -113,24 +103,20 @@ const switchEnvironment = async (environment, query) => {
 };
 ```
 
-  </TabItem>
-</Tabs>
-
 ## Performance Optimization with pgVector
 
 Optimize search performance for different use cases:
 
-<Tabs>
-  <TabItem value="high-accuracy" label="High Accuracy">
+### High Accuracy
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 
 // High accuracy configuration - slower but more precise
 const highAccuracyTool = createVectorQueryTool({
-  vectorStoreName: "postgres",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'postgres',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   databaseConfig: {
     pgvector: {
       ef: 400, // High accuracy for HNSW
@@ -152,17 +138,16 @@ const criticalSearch = async (query: string) => {
 };
 ```
 
-  </TabItem>
-  <TabItem value="high-speed" label="High Speed">
+### High Speed
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 
 // High speed configuration - faster but less precise
 const highSpeedTool = createVectorQueryTool({
-  vectorStoreName: "postgres",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'postgres',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   databaseConfig: {
     pgvector: {
       ef: 50, // Lower accuracy for speed
@@ -184,17 +169,16 @@ const realtimeSearch = async (query: string) => {
 };
 ```
 
-  </TabItem>
-  <TabItem value="balanced" label="Balanced">
+### Balanced
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 
 // Balanced configuration - good compromise
 const balancedTool = createVectorQueryTool({
-  vectorStoreName: "postgres",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'postgres',
+  indexName: 'embeddings',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   databaseConfig: {
     pgvector: {
       ef: 150, // Moderate accuracy
@@ -210,7 +194,7 @@ const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
 
   if (isHighLoad) {
     // Reduce quality for speed during high load
-    requestContext.set("databaseConfig", {
+    requestContext.set('databaseConfig', {
       pgvector: {
         ef: 75,
         probes: 5,
@@ -227,15 +211,12 @@ const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
 };
 ```
 
-  </TabItem>
-</Tabs>
-
 ## Multi-Tenant Application with Pinecone
 
 Implement tenant isolation using Pinecone namespaces:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 
 interface Tenant {
   id: string;
@@ -248,9 +229,9 @@ class MultiTenantSearchService {
 
   constructor() {
     this.searchTool = createVectorQueryTool({
-      vectorStoreName: "pinecone",
-      indexName: "shared-documents",
-      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+      vectorStoreName: 'pinecone',
+      indexName: 'shared-documents',
+      model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
     });
   }
 
@@ -258,7 +239,7 @@ class MultiTenantSearchService {
     const requestContext = new RequestContext();
 
     // Isolate search to tenant's namespace
-    requestContext.set("databaseConfig", {
+    requestContext.set('databaseConfig', {
       pinecone: {
         namespace: tenant.namespace,
       },
@@ -283,9 +264,7 @@ class MultiTenantSearchService {
   }
 
   async bulkSearchForTenants(tenants: Tenant[], query: string) {
-    const promises = tenants.map((tenant) =>
-      this.searchForTenant(tenant, query),
-    );
+    const promises = tenants.map(tenant => this.searchForTenant(tenant, query));
 
     return await Promise.all(promises);
   }
@@ -295,14 +274,11 @@ class MultiTenantSearchService {
 const searchService = new MultiTenantSearchService();
 
 const tenants = [
-  { id: "1", name: "Company A", namespace: "company-a" },
-  { id: "2", name: "Company B", namespace: "company-b" },
+  { id: '1', name: 'Company A', namespace: 'company-a' },
+  { id: '2', name: 'Company B', namespace: 'company-b' },
 ];
 
-const results = await searchService.searchForTenant(
-  tenants[0],
-  "product documentation",
-);
+const results = await searchService.searchForTenant(tenants[0], 'product documentation');
 ```
 
 ## Hybrid Search with Pinecone
@@ -310,15 +286,15 @@ const results = await searchService.searchForTenant(
 Combine semantic and keyword search:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 
 const hybridSearchTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "documents",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'documents',
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   databaseConfig: {
     pinecone: {
-      namespace: "production",
+      namespace: 'production',
       sparseVector: {
         // Example sparse vector for keyword "API"
         indices: [1, 5, 10, 15],
@@ -336,7 +312,7 @@ const generateSparseVector = (keywords: string[]) => {
   const values: number[] = [];
 
   keywords.forEach((keyword, i) => {
-    const hash = keyword.split("").reduce((a, b) => {
+    const hash = keyword.split('').reduce((a, b) => {
       a = (a << 5) - a + b.charCodeAt(0);
       return a & a;
     }, 0);
@@ -353,9 +329,9 @@ const hybridSearch = async (query: string, keywords: string[]) => {
 
   if (keywords.length > 0) {
     const sparseVector = generateSparseVector(keywords);
-    requestContext.set("databaseConfig", {
+    requestContext.set('databaseConfig', {
       pinecone: {
-        namespace: "production",
+        namespace: 'production',
         sparseVector,
       },
     });
@@ -369,11 +345,7 @@ const hybridSearch = async (query: string, keywords: string[]) => {
 };
 
 // Usage
-const results = await hybridSearch("How to use the REST API", [
-  "API",
-  "REST",
-  "documentation",
-]);
+const results = await hybridSearch('How to use the REST API', ['API', 'REST', 'documentation']);
 ```
 
 ## Quality-Gated Search
@@ -383,9 +355,9 @@ Implement progressive search quality:
 ```typescript
 const createQualityGatedSearch = () => {
   const baseConfig = {
-    vectorStoreName: "postgres",
-    indexName: "embeddings",
-    model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+    vectorStoreName: 'postgres',
+    indexName: 'embeddings',
+    model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   };
 
   return {
@@ -437,7 +409,7 @@ const progressiveSearch = async (query: string, minResults: number = 3) => {
   });
 
   if (results.sources.length >= minResults) {
-    return { quality: "high", ...results };
+    return { quality: 'high', ...results };
   }
 
   // Fallback to medium quality
@@ -447,7 +419,7 @@ const progressiveSearch = async (query: string, minResults: number = 3) => {
   });
 
   if (results.sources.length >= minResults) {
-    return { quality: "medium", ...results };
+    return { quality: 'medium', ...results };
   }
 
   // Last resort: low quality
@@ -456,14 +428,12 @@ const progressiveSearch = async (query: string, minResults: number = 3) => {
     mastra,
   });
 
-  return { quality: "low", ...results };
+  return { quality: 'low', ...results };
 };
 
 // Usage
-const results = await progressiveSearch("complex technical query", 5);
-console.log(
-  `Found ${results.sources.length} results with ${results.quality} quality`,
-);
+const results = await progressiveSearch('complex technical query', 5);
+console.log(`Found ${results.sources.length} results with ${results.quality} quality`);
 ```
 
 ## Key Takeaways
