@@ -1,0 +1,30 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+overrides:
+  '@mastra/rag': link:../../../../packages/rag
+
+importers:
+
+  .:
+    dependencies:
+      '@mastra/rag':
+        specifier: link:../../../../packages/rag
+        version: link:../../../../packages/rag
+    devDependencies:
+      dotenv:
+        specifier: ^17.0.0
+        version: 17.0.1
+
+packages:
+
+  dotenv@17.0.1:
+    resolution: {integrity: sha512-GLjkduuAL7IMJg/ZnOPm9AnWKJ82mSE2tzXLaJ/6hD6DhwGfZaXG77oB8qbReyiczNxnbxQKyh0OE5mXq0bAHA==}
+    engines: {node: '>=12'}
+
+snapshots:
+
+  dotenv@17.0.1: {}
