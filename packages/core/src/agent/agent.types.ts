@@ -125,6 +125,9 @@ export type AgentExecutionOptions<
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
 
+  /** Maximum number of tool calls to execute concurrently (default: 1 when approval may be required, otherwise 10) */
+  toolCallConcurrency?: number;
+
   /** Structured output generation with enhanced developer experience  */
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
 
