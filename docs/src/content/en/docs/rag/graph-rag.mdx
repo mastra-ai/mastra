@@ -35,10 +35,10 @@ This process helps surface information that might not be semantically similar to
 The Graph Query Tool provides agents with the ability to perform graph-based retrieval:
 
 ```ts showLineNumbers copy
-import { createGraphQueryTool } from "@mastra/rag";
+import { createGraphRAGTool } from "@mastra/rag";
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
-const graphQueryTool = createGraphQueryTool({
+const graphQueryTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
   model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
@@ -56,7 +56,7 @@ The `graphOptions` parameter controls how the knowledge graph is built and trave
 - `dimension`: Vector embedding dimension. Must match the embedding model's output dimension (e.g., 1536 for OpenAI's text-embedding-3-small).
 
 ```ts showLineNumbers copy
-const graphQueryTool = createGraphQueryTool({
+const graphQueryTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
   model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
@@ -155,7 +155,7 @@ Start with 0.7 and adjust based on your specific use case:
 
 ```ts showLineNumbers copy
 // Strict connections for precise answers
-const strictGraphTool = createGraphQueryTool({
+const strictGraphTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
   model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
@@ -165,7 +165,7 @@ const strictGraphTool = createGraphQueryTool({
 });
 
 // Broader connections for exploratory queries
-const broadGraphTool = createGraphQueryTool({
+const broadGraphTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
   model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
@@ -188,7 +188,7 @@ const vectorQueryTool = createVectorQueryTool({
   model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 
-const graphQueryTool = createGraphQueryTool({
+const graphQueryTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
   model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
@@ -217,4 +217,4 @@ This gives the agent flexibility to choose the appropriate retrieval method base
 For detailed API documentation, see:
 
 - [GraphRAG Class](/reference/v1/rag/graph-rag)
-- [createGraphQueryTool()](/reference/v1/tools/graph-rag-tool)
+- [createGraphRAGTool()](/reference/v1/tools/graph-rag-tool)
