@@ -24,10 +24,18 @@ export type MastraUIMessageMetadata = {
   | {
       mode: 'stream';
       requireApprovalMetadata?: {
-        [toolCallId: string]: {
+        [toolName: string]: {
           toolCallId: string;
           toolName: string;
           args: Record<string, any>;
+        };
+      };
+      suspendedTools?: {
+        [toolName: string]: {
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, any>;
+          suspendPayload: any;
         };
       };
     }

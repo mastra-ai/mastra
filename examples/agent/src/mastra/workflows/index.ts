@@ -241,7 +241,7 @@ export const lessComplexWorkflow = createWorkflow({
   .map(async ({ inputData }) => {
     // The branch step returns either short-text or long-text result
     const result = inputData['short-text'] || inputData['long-text'];
-    return { text: result.text };
+    return { text: result?.text };
   })
 
   // Nested workflow

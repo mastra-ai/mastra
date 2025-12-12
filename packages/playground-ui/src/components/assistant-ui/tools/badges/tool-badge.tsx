@@ -14,6 +14,7 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   result: any;
   metadata?: MastraUIMessage['metadata'];
   toolOutput: Array<{ toolId: string }>;
+  suspendPayload?: any;
 }
 
 export const ToolBadge = ({
@@ -24,6 +25,7 @@ export const ToolBadge = ({
   toolOutput,
   toolCallId,
   toolApprovalMetadata,
+  suspendPayload,
 }: ToolBadgeProps) => {
   let argSlot = null;
 
@@ -39,6 +41,13 @@ export const ToolBadge = ({
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
     ) : (
       <SyntaxHighlighter data={result} data-testid="tool-result" />
+    );
+
+  let suspendPayloadSlot =
+    typeof suspendPayload === 'string' ? (
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
+    ) : (
+      <SyntaxHighlighter data={suspendPayload} data-testid="tool-suspend-payload" />
     );
 
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
@@ -66,6 +75,13 @@ export const ToolBadge = ({
           <p className="font-medium pb-2">Tool arguments</p>
           {argSlot}
         </div>
+
+        {suspendPayloadSlot !== undefined && suspendPayload && (
+          <div>
+            <p className="font-medium pb-2">Tool suspend payload</p>
+            {suspendPayloadSlot}
+          </div>
+        )}
 
         {resultSlot !== undefined && result && (
           <div>

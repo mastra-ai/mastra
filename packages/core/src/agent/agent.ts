@@ -1634,16 +1634,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           return;
         }
 
-        // if ((tool as any).inputSchema) {
-        //   // @ts-ignore
-        //   tool.inputSchema = tool.inputSchema.extend({
-        //     resumeData: z
-        //       .any()
-        //       .optional()
-        //       .describe('The resumeData object created from the resumeSchema of suspended tool'),
-        //   });
-        // }
-
         const options: ToolOptions = {
           name: k,
           runId,

@@ -333,7 +333,12 @@ export function createToolCallStep<
               type: 'tool-call-suspended',
               runId,
               from: ChunkFrom.AGENT,
-              payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
+              payload: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                suspendPayload,
+                args: inputData.args,
+              },
             });
 
             // Add suspension metadata to message before persisting

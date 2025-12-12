@@ -175,6 +175,19 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
       };
     }
 
+    // Convert suspendedTools from DB format to stream format
+    const suspendedTools = extendedMessage.metadata?.suspendedTools as Record<string, any> | undefined;
+    if (suspendedTools && typeof suspendedTools === 'object') {
+      return {
+        ...message,
+        metadata: {
+          ...message.metadata,
+          mode: 'stream' as const,
+          suspendedTools,
+        },
+      };
+    }
+
     // Return original message if it's not a network message
     return message;
   });

@@ -21,9 +21,20 @@ export const weatherInfo = createTool({
   inputSchema: z.object({
     city: z.string(),
   }),
+  // suspendSchema: z.object({
+  //   message: z.string(),
+  // }),
+  // resumeSchema: z.object({
+  //   city: z.string(),
+  // }),
   execute: async inputData => {
+    // if (!context?.agent?.resumeData) {
+    //   return context?.agent?.suspend({
+    //     message: 'What city do you want to know the weather for?',
+    //   });
+    // }
     return {
-      city: inputData.city,
+      city: inputData?.city,
       weather: 'sunny',
       temperature_celsius: 19,
       temperature_fahrenheit: 66,
@@ -102,6 +113,9 @@ export const chefModelV2Agent = new Agent({
   },
   memory,
   inputProcessors: [moderationProcessor],
+  defaultOptions: {
+    autoResumeSuspendedTools: true,
+  },
 });
 
 const weatherAgent = new Agent({

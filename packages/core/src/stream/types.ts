@@ -486,6 +486,7 @@ interface ToolCallSuspendedPayload {
   toolCallId: string;
   toolName: string;
   suspendPayload: any;
+  args: Record<string, any>;
 }
 
 export type DataChunkType = {
