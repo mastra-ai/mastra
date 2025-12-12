@@ -1,5 +1,6 @@
 import { isEmpty } from 'radash';
 import type z from 'zod';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
@@ -39,8 +40,16 @@ export async function validateStepInput({
     if (!validatedInput.success) {
       const errors = getZodErrors(validatedInput.error);
       const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-
-      validationError = new Error('Step input validation failed: \n' + errorMessages);
+      validationError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: 'Step input validation failed: \n' + errorMessages,
+        },
+        // keep the original zod error as the cause for consumers
+        validatedInput.error,
+      );
     } else {
       const isEmptyData = isEmpty(validatedInput.data);
       inputData = isEmptyData ? prevOutput : validatedInput.data;
@@ -64,7 +73,16 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
     if (!validatedResumeData.success) {
       const errors = getZodErrors(validatedResumeData.error);
       const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-      validationError = new Error('Step resume data validation failed: \n' + errorMessages);
+      validationError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_RESUME_DATA_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: 'Step resume data validation failed: \n' + errorMessages,
+        },
+        // keep the original zod error as the cause for consumers
+        validatedResumeData.error,
+      );
     } else {
       resumeData = validatedResumeData.data;
     }
@@ -94,7 +112,16 @@ export async function validateStepSuspendData({
     if (!validatedSuspendData.success) {
       const errors = getZodErrors(validatedSuspendData.error!);
       const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-      validationError = new Error('Step suspend data validation failed: \n' + errorMessages);
+      validationError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_SUSPEND_DATA_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: 'Step suspend data validation failed: \n' + errorMessages,
+        },
+        // keep the original zod error as the cause for consumers
+        validatedSuspendData.error,
+      );
     } else {
       suspendData = validatedSuspendData.data;
     }
@@ -342,3 +369,22 @@ export const createTimeTravelExecutionParams = (params: {
 
   return timeTravelData;
 };
+
+/**
+ * Re-hydrates serialized errors in step results back into proper Error instances.
+ * This is useful when errors have been serialized through an event system (e.g., evented engine, Inngest)
+ * and need to be converted back to Error instances with their custom properties preserved.
+ *
+ * @param steps - The workflow step results (context) that may contain serialized errors
+ * @returns The same steps object with errors hydrated as Error instances
+ */
+export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) {
+  if (steps) {
+    for (const step of Object.values(steps)) {
+      if (step.status === 'failed' && 'error' in step && step.error) {
+        step.error = getErrorFromUnknown(step.error, { serializeStack: false });
+      }
+    }
+  }
+  return steps;
+}
