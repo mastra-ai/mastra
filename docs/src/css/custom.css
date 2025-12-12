@@ -2,7 +2,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is([data-theme= "dark"] *));
+@custom-variant dark (&:is([data-theme="dark"] *));
 
 /* ==================== LIGHT MODE ==================== */
 :root {
