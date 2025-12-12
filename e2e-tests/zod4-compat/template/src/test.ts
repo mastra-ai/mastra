@@ -31,12 +31,31 @@ if (!result.zod4Detected) {
   process.exit(1);
 }
 
+// Create a mock model that returns JSON for structured output
+const mockModel = {
+  specificationVersion: 'v2' as const,
+  provider: 'mock',
+  modelId: 'mock-model',
+  defaultObjectGenerationMode: 'json' as const,
+  supportsStructuredOutputs: true,
+  doGenerate: async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop' as const,
+    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    content: [{ type: 'text' as const, text: JSON.stringify({ name: 'Test User', age: 25 }) }],
+    warnings: [],
+  }),
+  doStream: async () => {
+    throw new Error('Stream not implemented in mock');
+  },
+};
+
 async function testBasicStructuredOutput(): Promise<void> {
   const agent = new Agent({
     id: 'test-agent',
     name: 'Test Agent',
     instructions: 'You return user data',
-    model: 'openai/gpt-4o',
+    model: mockModel as any,
   });
 
   const schema = z.object({
@@ -70,7 +89,7 @@ async function testStructuredOutputWithMemory(): Promise<void> {
     id: 'test-agent-with-memory',
     name: 'Test Agent with Memory',
     instructions: 'You return user data',
-    model: 'openai/gpt-4o',
+    model: mockModel as any,
     memory: memory,
   });
 
