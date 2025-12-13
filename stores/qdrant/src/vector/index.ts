@@ -28,6 +28,10 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
 
 type QdrantQueryVectorParams = QueryVectorParams<QdrantVectorFilter>;
 
+// NOTE: PayloadSchemaType mirrors Qdrant payload schema types
+// as of @qdrant/js-client-rest@1.15.1.
+// Reference: https://qdrant.tech/documentation/concepts/indexing/#payload-index
+// This is intentionally duplicated because the client does not export the type.
 export type PayloadSchemaType = 'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid';
 
 export class QdrantVector extends MastraVector {
@@ -131,13 +135,26 @@ export class QdrantVector extends MastraVector {
     fieldName: string,
     fieldSchema: PayloadSchemaType,
   ): Promise<void> {
+    if (!indexName?.trim() || !fieldName?.trim()) {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'CREATE_PAYLOAD_INDEX', 'INVALID_ARGS'),
+        text: 'indexName and fieldName must be non-empty strings',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, fieldName, fieldSchema },
+      });
+    }
     try {
       await this.client.createPayloadIndex(indexName, {
         field_name: fieldName,
         field_schema: fieldSchema,
         wait: true,
       });
-    } catch (error) {
+    } catch (error: any) {
+      const message = error?.message || error?.toString() || '';
+      if (error?.status === 409 || message.toLowerCase().includes('exists')) {
+        return; // idempotent create
+      }
       throw new MastraError(
         {
           id: createVectorErrorId('QDRANT', 'CREATE_PAYLOAD_INDEX', 'FAILED'),
