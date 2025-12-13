@@ -1,4 +1,4 @@
-import type { PaginationArgs, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES, DateRange } from '@mastra/core/storage';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
@@ -16,7 +16,7 @@ export function getTableName({ indexName, schemaName }: { indexName: string; sch
 /**
  * Build date range filter for queries
  */
-export function buildDateRangeFilter(dateRange: PaginationArgs['dateRange'], fieldName: string): Record<string, any> {
+export function buildDateRangeFilter(dateRange: DateRange | undefined, fieldName: string): Record<string, any> {
   const filters: Record<string, any> = {};
   if (dateRange?.start) {
     filters[`${fieldName}_gte`] = dateRange.start;

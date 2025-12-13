@@ -1,14 +1,19 @@
+import type z from 'zod';
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { TracingStorageStrategy } from '../../../observability';
-import type {
-  SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  CreateSpanRecord,
-  PaginationInfo,
-  UpdateSpanRecord,
-} from '../../types';
+import type { dbTimestamps } from '../shared';
+import type { listTracesResponseSchema, listTracesSchema, spanIds, spanRecordSchema, traceRecordSchema } from './types';
+
+export type SpanRecord = z.infer<typeof spanRecordSchema>;
+export type CreateSpanRecord = Omit<SpanRecord, keyof typeof dbTimestamps>;
+export type UpdateSpanRecord = Omit<CreateSpanRecord, keyof typeof spanIds>;
+
+export type TraceRecord = z.infer<typeof traceRecordSchema>;
+
+export type ListTracesArgs = z.input<typeof listTracesSchema>;
+export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
+
+export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
 
 export class ObservabilityStorage extends MastraBase {
   constructor() {
@@ -69,14 +74,14 @@ export class ObservabilityStorage extends MastraBase {
   }
 
   /**
-   * Retrieves a paginated list of traces with optional filtering.
+   * Retrieves a list of traces with optional filtering.
    */
-  getTracesPaginated(_args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  listTraces(_args: ListTracesArgs): Promise<ListTracesResponse> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_GET_TRACES_PAGINATED_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_LIST_TRACES_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support getting traces paginated',
+      text: 'This storage provider does not support listing traces',
     });
   }
 

@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '../agent';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../evals/types';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../evals/types';
 import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
@@ -9,6 +9,7 @@ import { InMemoryAgentsStorage } from './domains/agents/inmemory';
 import type { InMemoryAgents } from './domains/agents/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
+import type { SpanRecord, TraceRecord } from './domains/observability/base';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import type { InMemoryObservability } from './domains/observability/inmemory';
 import { StoreOperationsInMemory } from './domains/operations/inmemory';
@@ -18,9 +19,6 @@ import { WorkflowsInMemory } from './domains/workflows';
 import type { InMemoryWorkflows } from './domains/workflows/inmemory';
 
 import type {
-  SpanRecord,
-  TraceRecord,
-  PaginationInfo,
   StorageColumn,
   StoragePagination,
   StorageResourceType,
@@ -266,7 +264,7 @@ export class InMemoryStore extends MastraStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
   }
 
@@ -276,7 +274,7 @@ export class InMemoryStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId, pagination });
   }
 
@@ -288,7 +286,7 @@ export class InMemoryStore extends MastraStorage {
     entityId: string;
     entityType: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 
@@ -300,7 +298,7 @@ export class InMemoryStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 

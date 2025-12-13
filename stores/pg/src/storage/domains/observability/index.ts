@@ -1,17 +1,17 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { createStorageErrorId, ObservabilityStorage, TABLE_SPANS, TraceStatus } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
-  TracesPaginatedArg,
   CreateSpanRecord,
-  PaginationInfo,
   UpdateSpanRecord,
+  TracingStorageStrategy,
+  ListTracesArgs,
+  PaginationInfo,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
-import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
+import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorage {
   public client: IDatabase<{}>;
@@ -54,7 +54,6 @@ export class ObservabilityPG extends ObservabilityStorage {
         endedAt,
         startedAtZ: startedAt,
         endedAtZ: endedAt,
-        // Note: createdAt/updatedAt will be set by database triggers
       };
 
       return this.operations.insert({ tableName: TABLE_SPANS, record });
@@ -68,7 +67,7 @@ export class ObservabilityPG extends ObservabilityStorage {
             spanId: span.spanId,
             traceId: span.traceId,
             spanType: span.spanType,
-            spanName: span.name,
+            name: span.name,
           },
         },
         error,
@@ -85,13 +84,18 @@ export class ObservabilityPG extends ObservabilityStorage {
 
       const spans = await this.client.manyOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
-          "attributes", "metadata", "links", "input", "output", "error", "isEvent",
+          "traceId", "spanId", "parentSpanId", "name",
+          "entityType", "entityId", "entityName",
+          "userId", "organizationId", "resourceId",
+          "runId", "sessionId", "threadId", "requestId",
+          "environment", "source", "serviceName", "scope",
+          "spanType", "attributes", "metadata", "tags", "links",
+          "input", "output", "error", "isEvent",
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
         WHERE "traceId" = $1
-        ORDER BY "startedAtZ" DESC`,
+        ORDER BY "startedAtZ" ASC`,
         [traceId],
       );
 
@@ -133,14 +137,17 @@ export class ObservabilityPG extends ObservabilityStorage {
     updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     try {
-      const data = { ...updates };
+      const data: Record<string, any> = { ...updates };
       if (data.endedAt instanceof Date) {
-        data.endedAt = data.endedAt.toISOString() as any;
+        const endedAt = data.endedAt.toISOString();
+        data.endedAt = endedAt;
+        data.endedAtZ = endedAt;
       }
       if (data.startedAt instanceof Date) {
-        data.startedAt = data.startedAt.toISOString() as any;
+        const startedAt = data.startedAt.toISOString();
+        data.startedAt = startedAt;
+        data.startedAtZ = startedAt;
       }
-      // Note: updatedAt will be set by database trigger automatically
 
       await this.operations.update({
         tableName: TABLE_SPANS,
@@ -163,55 +170,13 @@ export class ObservabilityPG extends ObservabilityStorage {
     }
   }
 
-  async getTracesPaginated({
+  async listTraces({
     filters,
     pagination,
-  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    orderBy,
+  }: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     const page = pagination?.page ?? 0;
-    const perPage = pagination?.perPage ?? 10;
-    const { entityId, entityType, ...actualFilters } = filters || {};
-
-    const filtersWithDateRange: Record<string, any> = {
-      ...actualFilters,
-      ...buildDateRangeFilter(pagination?.dateRange, 'startedAtZ'),
-      parentSpanId: null, // Only get root spans for traces
-    };
-
-    const whereClause = prepareWhereClause(filtersWithDateRange, SPAN_SCHEMA);
-
-    let actualWhereClause = whereClause.sql;
-    let currentParamIndex = whereClause.args.length + 1;
-
-    // Handle entity filtering
-    if (entityId && entityType) {
-      let name = '';
-      if (entityType === 'workflow') {
-        name = `workflow run: '${entityId}'`;
-      } else if (entityType === 'agent') {
-        name = `agent run: '${entityId}'`;
-      } else {
-        const error = new MastraError({
-          id: createStorageErrorId('PG', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            entityType,
-          },
-          text: `Cannot filter by entity type: ${entityType}`,
-        });
-        this.logger?.trackException(error);
-        throw error;
-      }
-
-      whereClause.args.push(name);
-      const statement = `"name" = $${currentParamIndex++}`;
-
-      if (actualWhereClause) {
-        actualWhereClause += ` AND ${statement}`;
-      } else {
-        actualWhereClause = ` WHERE ${statement}`;
-      }
-    }
+    const perPage = pagination?.perPage ?? 100;
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
@@ -219,10 +184,156 @@ export class ObservabilityPG extends ObservabilityStorage {
     });
 
     try {
+      // Build WHERE clause for filters
+      const conditions: string[] = ['r."parentSpanId" IS NULL']; // Only root spans
+      const args: any[] = [];
+      let paramIndex = 1;
+
+      if (filters) {
+        // Date range filters
+        if (filters.startedAt?.start) {
+          conditions.push(`r."startedAtZ" >= $${paramIndex++}`);
+          args.push(filters.startedAt.start.toISOString());
+        }
+        if (filters.startedAt?.end) {
+          conditions.push(`r."startedAtZ" <= $${paramIndex++}`);
+          args.push(filters.startedAt.end.toISOString());
+        }
+        if (filters.endedAt?.start) {
+          conditions.push(`r."endedAtZ" >= $${paramIndex++}`);
+          args.push(filters.endedAt.start.toISOString());
+        }
+        if (filters.endedAt?.end) {
+          conditions.push(`r."endedAtZ" <= $${paramIndex++}`);
+          args.push(filters.endedAt.end.toISOString());
+        }
+
+        // Span type filter
+        if (filters.spanType !== undefined) {
+          conditions.push(`r."spanType" = $${paramIndex++}`);
+          args.push(filters.spanType);
+        }
+
+        // Entity filters
+        if (filters.entityType !== undefined) {
+          conditions.push(`r."entityType" = $${paramIndex++}`);
+          args.push(filters.entityType);
+        }
+        if (filters.entityId !== undefined) {
+          conditions.push(`r."entityId" = $${paramIndex++}`);
+          args.push(filters.entityId);
+        }
+        if (filters.entityName !== undefined) {
+          conditions.push(`r."entityName" = $${paramIndex++}`);
+          args.push(filters.entityName);
+        }
+
+        // Identity & Tenancy filters
+        if (filters.userId !== undefined) {
+          conditions.push(`r."userId" = $${paramIndex++}`);
+          args.push(filters.userId);
+        }
+        if (filters.organizationId !== undefined) {
+          conditions.push(`r."organizationId" = $${paramIndex++}`);
+          args.push(filters.organizationId);
+        }
+        if (filters.resourceId !== undefined) {
+          conditions.push(`r."resourceId" = $${paramIndex++}`);
+          args.push(filters.resourceId);
+        }
+
+        // Correlation ID filters
+        if (filters.runId !== undefined) {
+          conditions.push(`r."runId" = $${paramIndex++}`);
+          args.push(filters.runId);
+        }
+        if (filters.sessionId !== undefined) {
+          conditions.push(`r."sessionId" = $${paramIndex++}`);
+          args.push(filters.sessionId);
+        }
+        if (filters.threadId !== undefined) {
+          conditions.push(`r."threadId" = $${paramIndex++}`);
+          args.push(filters.threadId);
+        }
+        if (filters.requestId !== undefined) {
+          conditions.push(`r."requestId" = $${paramIndex++}`);
+          args.push(filters.requestId);
+        }
+
+        // Deployment context filters
+        if (filters.environment !== undefined) {
+          conditions.push(`r."environment" = $${paramIndex++}`);
+          args.push(filters.environment);
+        }
+        if (filters.source !== undefined) {
+          conditions.push(`r."source" = $${paramIndex++}`);
+          args.push(filters.source);
+        }
+        if (filters.serviceName !== undefined) {
+          conditions.push(`r."serviceName" = $${paramIndex++}`);
+          args.push(filters.serviceName);
+        }
+
+        // Scope filter (JSONB containment)
+        if (filters.scope !== undefined) {
+          conditions.push(`r."scope" @> $${paramIndex++}`);
+          args.push(JSON.stringify(filters.scope));
+        }
+
+        // Metadata filter (JSONB containment)
+        if (filters.metadata !== undefined) {
+          conditions.push(`r."metadata" @> $${paramIndex++}`);
+          args.push(JSON.stringify(filters.metadata));
+        }
+
+        // Tags filter (all tags must be present)
+        if (filters.tags !== undefined && filters.tags.length > 0) {
+          conditions.push(`r."tags" @> $${paramIndex++}`);
+          args.push(JSON.stringify(filters.tags));
+        }
+
+        // Status filter (derived from error and endedAt)
+        if (filters.status !== undefined) {
+          switch (filters.status) {
+            case TraceStatus.ERROR:
+              conditions.push(`r."error" IS NOT NULL`);
+              break;
+            case TraceStatus.RUNNING:
+              conditions.push(`r."endedAtZ" IS NULL AND r."error" IS NULL`);
+              break;
+            case TraceStatus.SUCCESS:
+              conditions.push(`r."endedAtZ" IS NOT NULL AND r."error" IS NULL`);
+              break;
+          }
+        }
+
+        // hasChildError filter (requires subquery)
+        if (filters.hasChildError !== undefined) {
+          if (filters.hasChildError) {
+            conditions.push(`EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c."traceId" = r."traceId" AND c."error" IS NOT NULL
+            )`);
+          } else {
+            conditions.push(`NOT EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c."traceId" = r."traceId" AND c."error" IS NOT NULL
+            )`);
+          }
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Order by clause
+      const sortField = orderBy?.field === 'endedAt' ? 'endedAtZ' : 'startedAtZ';
+      const sortDirection = orderBy?.direction === 'ASC' ? 'ASC' : 'DESC';
+      const orderClause = `ORDER BY r."${sortField}" ${sortDirection} NULLS LAST`;
+
       // Get total count
       const countResult = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${tableName}${actualWhereClause}`,
-        whereClause.args,
+        `SELECT COUNT(*) FROM ${tableName} r ${whereClause}`,
+        args,
       );
       const count = Number(countResult?.count ?? 0);
 
@@ -241,14 +352,20 @@ export class ObservabilityPG extends ObservabilityStorage {
       // Get paginated spans
       const spans = await this.client.manyOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
-          "attributes", "metadata", "links", "input", "output", "error", "isEvent",
-          "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
-          "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
-        FROM ${tableName}${actualWhereClause}
-        ORDER BY "startedAtZ" DESC
-        LIMIT $${currentParamIndex} OFFSET $${currentParamIndex + 1}`,
-        [...whereClause.args, perPage, page * perPage],
+          r."traceId", r."spanId", r."parentSpanId", r."name",
+          r."entityType", r."entityId", r."entityName",
+          r."userId", r."organizationId", r."resourceId",
+          r."runId", r."sessionId", r."threadId", r."requestId",
+          r."environment", r."source", r."serviceName", r."scope",
+          r."spanType", r."attributes", r."metadata", r."tags", r."links",
+          r."input", r."output", r."error", r."isEvent",
+          r."startedAtZ" as "startedAt", r."endedAtZ" as "endedAt",
+          r."createdAtZ" as "createdAt", r."updatedAtZ" as "updatedAt"
+        FROM ${tableName} r
+        ${whereClause}
+        ${orderClause}
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...args, perPage, page * perPage],
       );
 
       return {
@@ -256,7 +373,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           total: count,
           page,
           perPage,
-          hasMore: spans.length === perPage,
+          hasMore: (page + 1) * perPage < count,
         },
         spans: spans.map(span =>
           transformFromSqlRow<SpanRecord>({
@@ -268,7 +385,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'GET_TRACES_PAGINATED', 'FAILED'),
+          id: createStorageErrorId('PG', 'LIST_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -289,7 +406,6 @@ export class ObservabilityPG extends ObservabilityStorage {
           endedAt,
           startedAtZ: startedAt,
           endedAtZ: endedAt,
-          // Note: createdAt/updatedAt will be set by database triggers
         };
       });
 
@@ -320,23 +436,17 @@ export class ObservabilityPG extends ObservabilityStorage {
       return this.operations.batchUpdate({
         tableName: TABLE_SPANS,
         updates: args.records.map(record => {
-          const data: Partial<UpdateSpanRecord> & {
-            endedAtZ?: string;
-            startedAtZ?: string;
-          } = {
-            ...record.updates,
-          };
+          const data: Record<string, any> = { ...record.updates };
           if (data.endedAt instanceof Date) {
             const endedAt = data.endedAt.toISOString();
-            data.endedAt = endedAt as any;
+            data.endedAt = endedAt;
             data.endedAtZ = endedAt;
           }
           if (data.startedAt instanceof Date) {
             const startedAt = data.startedAt.toISOString();
-            data.startedAt = startedAt as any;
+            data.startedAt = startedAt;
             data.startedAtZ = startedAt;
           }
-          // Note: updatedAt will be set by database trigger automatically
 
           return {
             keys: { spanId: record.spanId, traceId: record.traceId },

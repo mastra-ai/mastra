@@ -1,7 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
@@ -15,7 +15,7 @@ import type {
   StorageDomains,
   SpanRecord,
   TraceRecord,
-  TracesPaginatedArg,
+  ListTracesArgs,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
@@ -268,7 +268,7 @@ export class LibSQLStore extends MastraStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
   }
 
@@ -278,7 +278,7 @@ export class LibSQLStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId, pagination });
   }
 
@@ -290,7 +290,7 @@ export class LibSQLStore extends MastraStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 
@@ -404,8 +404,8 @@ export class LibSQLStore extends MastraStorage {
     return this.stores.observability!.getTrace(traceId);
   }
 
-  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    return this.stores.observability!.getTracesPaginated(args);
+  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    return this.stores.observability!.listTraces(args);
   }
 
   async listScoresBySpan({
@@ -416,7 +416,7 @@ export class LibSQLStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 

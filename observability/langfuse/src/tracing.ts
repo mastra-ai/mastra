@@ -205,7 +205,7 @@ export class LangfuseExporter extends BaseExporter {
       this.logger.warn('Langfuse exporter: No Langfuse span found for span update/end', {
         traceId: span.traceId,
         spanId: span.id,
-        spanName: span.name,
+        span: span.name,
         spanType: span.type,
         isRootSpan: span.isRootSpan,
         parentSpanId: span.parentSpanId,
@@ -238,7 +238,7 @@ export class LangfuseExporter extends BaseExporter {
       this.logger.debug('Langfuse exporter: Creating trace', {
         traceId: span.traceId,
         spanId: span.id,
-        spanName: span.name,
+        span: span.name,
         method: 'handleEventSpan',
       });
       this.initTrace(span);
@@ -275,7 +275,7 @@ export class LangfuseExporter extends BaseExporter {
       this.logger.debug('Langfuse exporter: Reusing existing trace from local map', {
         traceId: span.traceId,
         spanId: span.id,
-        spanName: span.name,
+        span: span.name,
       });
       return; // Reuse existing trace
     }
@@ -317,7 +317,7 @@ export class LangfuseExporter extends BaseExporter {
     this.logger.warn('Langfuse exporter: No trace data found for span', {
       traceId: span.traceId,
       spanId: span.id,
-      spanName: span.name,
+      span: span.name,
       spanType: span.type,
       isRootSpan: span.isRootSpan,
       parentSpanId: span.parentSpanId,
@@ -345,7 +345,7 @@ export class LangfuseExporter extends BaseExporter {
     this.logger.warn('Langfuse exporter: No parent data found for span', {
       traceId: span.traceId,
       spanId: span.id,
-      spanName: span.name,
+      span: span.name,
       spanType: span.type,
       isRootSpan: span.isRootSpan,
       parentSpanId: span.parentSpanId,

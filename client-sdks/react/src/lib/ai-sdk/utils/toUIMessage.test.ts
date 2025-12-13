@@ -332,7 +332,7 @@ describe('toUIMessage', () => {
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
-      expect(result.suspended).toEqual([['step1', 'nested1', 'nested2']]);
+      expect((result as any).suspended).toEqual([['step1', 'nested1', 'nested2']]);
     });
 
     it('should handle workflow-step-waiting chunk', () => {
@@ -823,7 +823,7 @@ describe('toUIMessage', () => {
         payload: {
           toolCallId: 'call-1',
           toolName: 'search',
-          args: { query: 'weather' },
+          args: { query: 'weather' } as any,
           providerMetadata: { latency: { value: 100 } },
         },
         runId: 'run-123',
@@ -857,7 +857,7 @@ describe('toUIMessage', () => {
         payload: {
           toolCallId: 'call-1',
           toolName: 'calculator',
-          args: { a: 1, b: 2 },
+          args: { a: 1, b: 2 } as any,
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,

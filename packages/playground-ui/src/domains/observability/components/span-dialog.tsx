@@ -1,8 +1,8 @@
 import { SideDialog, type KeyValueListItemData, TextAndIcon, getShortId } from '@/components/ui/elements';
 import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
 import { SpanRecord } from '@mastra/core/storage';
-
-import { ListScoresResponse, type GetScorerResponse } from '@mastra/client-js';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import type { GetScorerResponse } from '@mastra/client-js';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
 

@@ -583,7 +583,7 @@ const mockModelV2 = new MockLanguageModelV2({
           },
         ],
         finishReason: 'tool-calls' as const,
-        usage: { inputTokens: 15, outputTokens: 10 },
+        usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
         warnings: [],
       };
     }
@@ -601,7 +601,7 @@ const mockModelV2 = new MockLanguageModelV2({
       return {
         content: [{ type: 'text', text: JSON.stringify(structuredData) }],
         finishReason: 'stop' as const,
-        usage: { inputTokens: 15, outputTokens: 25 },
+        usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
         warnings: [],
       };
     }
@@ -610,7 +610,7 @@ const mockModelV2 = new MockLanguageModelV2({
     return {
       content: [{ type: 'text', text: 'Mock V2 generate response' }],
       finishReason: 'stop' as const,
-      usage: { inputTokens: 15, outputTokens: 25 },
+      usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
       warnings: [],
     };
   },
@@ -643,7 +643,7 @@ const mockModelV2 = new MockLanguageModelV2({
             args: argsJson,
             input: argsJson,
           },
-          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 15, outputTokens: 10 } },
+          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 } },
         ]),
       };
     }
@@ -662,7 +662,7 @@ const mockModelV2 = new MockLanguageModelV2({
       return {
         stream: convertArrayToReadableStream([
           { type: 'text-delta', id: '1', delta: structuredOutput },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25 } },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 } },
         ]),
       };
     }
@@ -673,7 +673,7 @@ const mockModelV2 = new MockLanguageModelV2({
         { type: 'text-delta', id: '1', delta: 'Mock ' },
         { type: 'text-delta', id: '2', delta: 'V2 stream ' },
         { type: 'text-delta', id: '3', delta: 'response' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25 } },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 } },
       ]),
     };
   },
@@ -1998,12 +1998,10 @@ describe('Tracing Integration Tests', () => {
           { type: 'text-delta', id: '1', delta: 'Test response from agent' },
           {
             type: 'finish',
-            id: '1',
             finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20 },
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
           },
         ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
       }),
     });
 

@@ -1,5 +1,5 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
   createStorageErrorId,
@@ -9,7 +9,7 @@ import {
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
+import type { StoragePagination } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
 import { createSqlBuilder } from '../../sql-builder';
 import type { StoreOperationsD1 } from '../operations';
@@ -67,7 +67,7 @@ export class ScoresStorageD1 extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -146,7 +146,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -229,7 +229,7 @@ export class ScoresStorageD1 extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -299,7 +299,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -374,7 +374,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);

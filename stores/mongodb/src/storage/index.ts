@@ -1,6 +1,6 @@
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   PaginationInfo,
@@ -13,7 +13,7 @@ import type {
   WorkflowRuns,
   SpanRecord,
   TraceRecord,
-  TracesPaginatedArg,
+  ListTracesArgs,
   CreateSpanRecord,
   UpdateSpanRecord,
   StorageListWorkflowRunsInput,
@@ -306,7 +306,7 @@ export class MongoDBStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId, pagination });
   }
 
@@ -318,7 +318,7 @@ export class MongoDBStore extends MastraStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 
@@ -334,7 +334,7 @@ export class MongoDBStore extends MastraStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
@@ -346,7 +346,7 @@ export class MongoDBStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 
@@ -424,7 +424,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.observability.getTrace(traceId);
   }
 
-  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: createStorageErrorId('MONGODB', 'OBSERVABILITY', 'NOT_INITIALIZED'),
@@ -433,7 +433,7 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.getTracesPaginated(args);
+    return this.stores.observability.listTraces(args);
   }
 
   async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {

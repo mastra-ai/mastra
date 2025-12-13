@@ -110,7 +110,7 @@ function extractInputMessages(agentSpan: SpanRecord): MastraDBMessage[] {
   }
 
   if (Array.isArray(input)) {
-    return input.map(msg => createMastraDBMessage(msg, agentSpan.startedAt));
+    return input.map(msg => createMastraDBMessage(msg as any, agentSpan.startedAt));
   }
 
   // @ts-ignore
@@ -125,7 +125,8 @@ function extractInputMessages(agentSpan: SpanRecord): MastraDBMessage[] {
  * Extract system messages from LLM span
  */
 function extractSystemMessages(llmSpan: SpanRecord): Array<{ role: 'system'; content: string }> {
-  return (llmSpan.input?.messages || [])
+  const input = llmSpan.input as any;
+  return (input?.messages || [])
     .filter((msg: any) => msg.role === 'system')
     .map((msg: any) => ({
       role: 'system' as const,
@@ -138,7 +139,8 @@ function extractSystemMessages(llmSpan: SpanRecord): Array<{ role: 'system'; con
  * Excludes system messages and the current input message
  */
 function extractRememberedMessages(llmSpan: SpanRecord, currentInputContent: string): MastraDBMessage[] {
-  const messages = (llmSpan.input?.messages || [])
+  const input = llmSpan.input as any;
+  const messages = (input?.messages || [])
     .filter((msg: any) => msg.role !== 'system')
     .filter((msg: any) => normalizeMessageContent(msg.content) !== currentInputContent);
 
@@ -153,7 +155,8 @@ function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string) {
 
   return toolSpans.map(toolSpan => ({
     toolCallId: toolSpan.spanId,
-    toolName: toolSpan.attributes?.toolId || '',
+    toolName: toolSpan.entityName ?? toolSpan.entityId ?? 'unknown',
+    toolId: toolSpan.entityId,
     args: toolSpan.input || {},
     result: toolSpan.output || {},
     state: 'result' as const,
@@ -243,7 +246,8 @@ export function transformTraceToScorerInputAndOutput(trace: TraceRecord): {
 
   // Build output
   const toolInvocations = reconstructToolInvocations(spanTree, rootAgentSpan.spanId);
-  const responseText = rootAgentSpan.output.text || '';
+  const rootSpanOutput = rootAgentSpan.output as any;
+  const responseText = rootSpanOutput.text || '';
 
   // Build parts array: tool invocations first, then text
   const parts: Array<{ type: 'tool-invocation'; toolInvocation: any } | { type: 'text'; text: string }> = [];

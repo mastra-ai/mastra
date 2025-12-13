@@ -2,7 +2,7 @@ import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
@@ -10,7 +10,6 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   TABLE_NAMES,
-  PaginationInfo,
   StorageColumn,
   StoragePagination,
   StorageDomains,
@@ -426,7 +425,7 @@ export class DynamoDBStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId: _runId, pagination: _pagination });
   }
 
@@ -438,7 +437,7 @@ export class DynamoDBStore extends MastraStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({
       entityId: _entityId,
       entityType: _entityType,
@@ -458,7 +457,7 @@ export class DynamoDBStore extends MastraStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({ scorerId, source, entityId, entityType, pagination });
   }
 
@@ -470,7 +469,7 @@ export class DynamoDBStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 }

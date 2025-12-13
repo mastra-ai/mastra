@@ -1,7 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import {
   createStorageErrorId,
   ScoresStorage,
@@ -11,7 +11,7 @@ import {
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsClickhouse } from '../operations';
 
 export class ScoresStorageClickhouse extends ScoresStorage {
@@ -70,7 +70,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -142,7 +142,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       // Get total count
       const countResult = await this.client.query({
@@ -228,7 +228,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     let whereClause = `scorerId = {var_scorerId:String}`;
     if (entityId) {
       whereClause += ` AND entityId = {var_entityId:String}`;
@@ -329,7 +329,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       // Get total count
       const countResult = await this.client.query({
@@ -412,7 +412,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const countResult = await this.client.query({
         query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String}`,

@@ -1,5 +1,11 @@
 import { SpanRecord } from '@mastra/core/storage';
 
+type TokenUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+};
+
 /**
  * Check if a span indicates that the token limit was exceeded
  */
@@ -11,7 +17,7 @@ export function isTokenLimitExceeded(span?: SpanRecord): boolean {
  * Get a human-readable message for token limit exceeded
  */
 export function getTokenLimitMessage(span?: SpanRecord): string {
-  const usage = span?.attributes?.usage;
+  const usage = span?.attributes?.usage as TokenUsage | undefined;
 
   if (!usage) {
     return `The model stopped generating because it reached the maximum token limit. The response was truncated and may be incomplete.`;
