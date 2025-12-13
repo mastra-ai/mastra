@@ -5,7 +5,7 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2Source,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
+import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
 import type {
   StepResult,
   ModelMessage,
@@ -18,7 +18,7 @@ import type {
   DynamicToolCall,
   DynamicToolResult,
   GeneratedFile,
-} from 'ai-v5';
+} from '@internal/ai-sdk-v5';
 import z from 'zod';
 import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 

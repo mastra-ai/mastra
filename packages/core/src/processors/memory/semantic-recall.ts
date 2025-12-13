@@ -1,4 +1,4 @@
-import type { SystemModelMessage } from 'ai-v5';
+import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';

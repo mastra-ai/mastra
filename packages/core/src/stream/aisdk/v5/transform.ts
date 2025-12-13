@@ -4,7 +4,7 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
+import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
 import type { OutputSchema, PartialSchemaOutput } from '../../base/schema';
 import type { ChunkType } from '../../types';

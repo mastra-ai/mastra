@@ -1,7 +1,7 @@
 import type { z as zV3 } from 'zod/v3';
 import type { z as zV4, ZodType } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import type { JSONSchema7 } from './json-schema';
+import type { JSONSchema7, Schema } from './json-schema';
 import {
   SchemaCompatLayer as SchemaCompatLayerV3,
   ALL_STRING_CHECKS,
@@ -28,7 +28,7 @@ import type {
   ShapeValue as ShapeValueV4,
   AllZodType as AllZodTypeV4,
 } from './schema-compatibility-v4';
-import type { Schema, ModelInformation } from './types';
+import type { ModelInformation } from './types';
 
 import { convertZodSchemaToAISDKSchema } from './utils';
 

@@ -5,7 +5,7 @@ import {
   convertResponseStreamToArray,
   mockId,
 } from '@ai-sdk/provider-utils-v5/test';
-import { mockValues } from 'ai-v5/test';
+import { mockValues } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import type { loop } from '../loop';

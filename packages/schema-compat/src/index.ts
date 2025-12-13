@@ -39,5 +39,5 @@ export { MetaSchemaCompatLayer } from './provider-compats/meta';
 export { OpenAISchemaCompatLayer } from './provider-compats/openai';
 export { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reasoning';
 
-export { type Schema, type ModelInformation } from './types';
-export { type JSONSchema7, jsonSchema } from './json-schema';
+export { type ModelInformation } from './types';
+export { type JSONSchema7, type Schema, jsonSchema } from './json-schema';

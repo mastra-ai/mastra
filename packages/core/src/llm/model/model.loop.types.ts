@@ -6,7 +6,7 @@ import type {
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
   ModelMessage,
   UIMessage,
-} from 'ai-v5';
+} from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent';

@@ -1,4 +1,4 @@
-import type { StepResult, ToolSet } from 'ai-v5';
+import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';

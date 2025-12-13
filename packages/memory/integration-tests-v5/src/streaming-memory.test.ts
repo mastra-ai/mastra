@@ -11,7 +11,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
-import type { UIMessage } from 'ai-v5';
+import type { UIMessage } from '@internal/ai-sdk-v5';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { memory, weatherAgent } from './mastra/agents/weather';

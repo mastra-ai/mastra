@@ -1,5 +1,5 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import type { ModelMessage } from 'ai-v5';
+import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 
 type GeminiCompatibleMessage = ModelMessage | CoreMessage;
