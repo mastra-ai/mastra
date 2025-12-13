@@ -6923,6 +6923,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const messageList = createMessageListWithUserMessage();
       const customMessageId = 'custom-assistant-message-id';
 
+      // Note: at the loop level, assistantMessageId is a direct parameter.
+      // At the agent level, it's nested under memory.assistantMessageId
       const result = loopFn({
         methodType: 'stream',
         runId,

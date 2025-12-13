@@ -222,6 +222,8 @@ export type AgentMemoryOption = {
   resource: string;
   options?: MemoryConfig;
   readOnly?: boolean;
+  /** Custom ID to use for the assistant response message when saving to memory */
+  assistantMessageId?: string;
 };
 
 /**

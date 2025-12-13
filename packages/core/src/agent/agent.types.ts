@@ -133,9 +133,6 @@ export type AgentExecutionOptions<
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
-
-  /** Custom ID to use for the assistant response message when saving to memory */
-  assistantMessageId?: string;
 };
 
 export type InnerAgentExecutionOptions<
