@@ -709,18 +709,46 @@ export class EventedRun<
   }
 
   async cancel() {
-    // First update storage directly so status is updated immediately
-    // This ensures that after `await run.cancel()`, the status is already 'canceled'
-    await super.cancel();
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow cancellation');
+    }
 
-    // Also publish event for event-driven architecture compatibility
-    await this.mastra?.pubsub.publish('workflows', {
-      type: 'workflow.cancel',
-      runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
+    const pubsub = this.mastra.pubsub;
+    const runId = this.runId;
+
+    // Wait for the cancel to be fully processed (similar to how start/resume wait)
+    await new Promise<void>((resolve, reject) => {
+      const finishCb = async (event: Event, ack?: () => Promise<void>) => {
+        if (event.runId !== runId) {
+          await ack?.();
+          return;
+        }
+
+        // processWorkflowCancel calls endWorkflow which publishes workflow.end
+        if (event.type === 'workflow.end') {
+          await ack?.();
+          await pubsub.unsubscribe('workflows-finish', finishCb);
+          resolve();
+          return;
+        }
+
+        await ack?.();
+      };
+
+      pubsub.subscribe('workflows-finish', finishCb).catch(err => {
+        console.error('Failed to subscribe to workflows-finish:', err);
+        reject(err);
+      });
+
+      // Publish the cancel event after subscribing
+      pubsub.publish('workflows', {
+        type: 'workflow.cancel',
         runId: this.runId,
-      },
+        data: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+        },
+      });
     });
   }
 }
