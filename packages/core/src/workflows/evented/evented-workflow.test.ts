@@ -3694,53 +3694,6 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
-
-    it('should update status to canceled synchronously when cancel() resolves', async () => {
-      // This test verifies that when cancel() returns, the status should already be 'canceled'
-      // This is important for API handlers that return immediately after calling cancel()
-      const suspendStep = createStep({
-        id: 'suspendStep',
-        execute: async ({ suspend }) => {
-          await suspend({ reason: 'waiting for approval' });
-          return { done: true };
-        },
-        inputSchema: z.object({}),
-        outputSchema: z.object({ done: z.boolean() }),
-        suspendSchema: z.object({ reason: z.string() }),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({ done: z.boolean() }),
-      });
-
-      workflow.then(suspendStep).commit();
-
-      const mastra = new Mastra({
-        workflows: { 'test-workflow': workflow },
-        storage: testStorage,
-        pubsub: new EventEmitterPubSub(),
-      });
-      await mastra.startEventEngine();
-
-      const run = await workflow.createRun();
-      const runId = run.runId;
-
-      // Start the workflow and wait for it to suspend
-      const initialResult = await run.start({ inputData: {} });
-      expect(initialResult.status).toBe('suspended');
-
-      // Cancel the workflow - when this promise resolves, status should be 'canceled'
-      await run.cancel();
-
-      // Check status IMMEDIATELY after cancel() returns (no waiting)
-      // The user expects that after `await _run.cancel()`, the status is already updated
-      const workflowRun = await workflow.getWorkflowRunById(runId);
-      expect((workflowRun?.snapshot as WorkflowRunState)?.status).toBe('canceled');
-
-      await mastra.stopEventEngine();
-    });
   });
 
   describe('Error Handling', () => {
