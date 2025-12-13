@@ -47,10 +47,52 @@ export type ParentWorkflow = {
 
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
+  // Map of runId -> AbortController for active workflow runs
+  private abortControllers: Map<string, AbortController> = new Map();
+  // Map of child runId -> parent runId for tracking nested workflows
+  private parentChildRelationships: Map<string, string> = new Map();
 
   constructor({ mastra }: { mastra: Mastra }) {
     super({ mastra });
     this.stepExecutor = new StepExecutor({ mastra });
+  }
+
+  /**
+   * Get or create an AbortController for a workflow run
+   */
+  private getOrCreateAbortController(runId: string): AbortController {
+    let controller = this.abortControllers.get(runId);
+    if (!controller) {
+      controller = new AbortController();
+      this.abortControllers.set(runId, controller);
+    }
+    return controller;
+  }
+
+  /**
+   * Cancel a workflow run and all its nested child workflows
+   */
+  private cancelRunAndChildren(runId: string): void {
+    // Abort the controller for this run
+    const controller = this.abortControllers.get(runId);
+    if (controller) {
+      controller.abort();
+    }
+
+    // Find and cancel all child workflows
+    for (const [childRunId, parentRunId] of this.parentChildRelationships.entries()) {
+      if (parentRunId === runId) {
+        this.cancelRunAndChildren(childRunId);
+      }
+    }
+  }
+
+  /**
+   * Clean up abort controller and relationships when a workflow completes
+   */
+  private cleanupRun(runId: string): void {
+    this.abortControllers.delete(runId);
+    this.parentChildRelationships.delete(runId);
   }
 
   __registerMastra(mastra: Mastra) {
@@ -89,6 +131,9 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
+    // Cancel this workflow and all nested child workflows
+    this.cancelRunAndChildren(runId);
+
     const currentState = await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
       runId,
@@ -125,6 +170,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults,
     requestContext,
   }: ProcessorArgs) {
+    // Create abort controller for this workflow run
+    this.getOrCreateAbortController(runId);
+
+    // Track parent-child relationship if this is a nested workflow
+    if (parentWorkflow?.runId) {
+      this.parentChildRelationships.set(runId, parentWorkflow.runId);
+    }
+
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
       runId,
@@ -198,6 +251,9 @@ export class WorkflowEventProcessor extends EventProcessor {
   protected async processWorkflowEnd(args: ProcessorArgs) {
     const { resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, requestContext, runId, timeTravel } =
       args;
+
+    // Clean up abort controller and parent-child tracking
+    this.cleanupRun(runId);
 
     // handle nested workflow
     if (parentWorkflow) {
@@ -285,6 +341,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       requestContext,
       timeTravel,
     } = args;
+
+    // Clean up abort controller and parent-child tracking
+    this.cleanupRun(runId);
 
     await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
@@ -709,6 +768,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       resumeDataToUse = resumeData;
     }
 
+    // Get the abort controller for this workflow run
+    const abortController = this.getOrCreateAbortController(runId);
+
     const stepResult = await this.stepExecutor.execute({
       workflowId,
       step: step.step,
@@ -723,6 +785,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       retryCount,
       foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
       validateInputs: workflow.options.validateInputs,
+      abortController,
     });
     requestContext = Object.fromEntries(rc.entries());
 

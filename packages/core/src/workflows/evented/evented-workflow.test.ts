@@ -9433,6 +9433,107 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    describe('abort signal propagation to nested workflows', () => {
+      it('should propagate abort signal to nested workflow when parent is cancelled', async () => {
+        // Track if nested step was cancelled or completed
+        let nestedStepStarted = false;
+        let nestedStepCompleted = false;
+        let parentStepCompleted = false;
+
+        const nestedLongRunningStep = createStep({
+          id: 'nested-long-step',
+          inputSchema: z.object({ doubled: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData, abortSignal }) => {
+            console.log('NESTED STEP STARTED');
+            nestedStepStarted = true;
+            // Long running operation that should be cancelled
+            await new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                console.log('NESTED STEP TIMEOUT FIRED - COMPLETED!');
+                nestedStepCompleted = true;
+                resolve(undefined);
+              }, 5000);
+
+              abortSignal.addEventListener('abort', () => {
+                console.log('NESTED STEP ABORT SIGNAL RECEIVED!');
+                clearTimeout(timeout);
+                reject(new Error('Aborted'));
+              });
+            });
+            return { result: `completed: ${inputData.doubled}` };
+          },
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-workflow',
+          inputSchema: z.object({ doubled: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { validateInputs: false },
+        })
+          .then(nestedLongRunningStep)
+          .commit();
+
+        const parentStep = createStep({
+          id: 'parent-step',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ doubled: z.number() }),
+          execute: async ({ inputData }) => {
+            console.log('PARENT STEP COMPLETED');
+            parentStepCompleted = true;
+            return { doubled: inputData.value * 2 };
+          },
+        });
+
+        const parentWorkflow = createWorkflow({
+          id: 'parent-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { validateInputs: false },
+        })
+          .then(parentStep)
+          .then(nestedWorkflow)
+          .commit();
+
+        const mastra = new Mastra({
+          workflows: { 'parent-workflow': parentWorkflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
+        await mastra.startEventEngine();
+
+        const run = await parentWorkflow.createRun();
+
+        // Start the workflow
+        const resultPromise = run.start({ inputData: { value: 5 } });
+
+        // Wait for nested step to start
+        await vi.waitFor(() => expect(nestedStepStarted).toBe(true), { timeout: 2000 });
+
+        // Cancel the parent workflow while nested is running
+        await run.cancel();
+
+        // Wait for the result
+        const result = await resultPromise;
+
+        // Parent should be cancelled
+        expect(result.status).toBe('canceled');
+
+        // Nested step should NOT have completed (was cancelled)
+        expect(nestedStepCompleted).toBe(false);
+
+        // Wait a bit to ensure the abort signal was properly propagated
+        // If abort signal was NOT propagated, the nested step will still complete after 5s
+        await new Promise(resolve => setTimeout(resolve, 6000));
+
+        // If abort signal was properly propagated, the step should still not have completed
+        // If abort signal was NOT propagated, the step will have completed in the background
+        expect(nestedStepCompleted).toBe(false);
+
+        await mastra.stopEventEngine();
+      });
+    });
   });
 
   describe('Dependency Injection', () => {
