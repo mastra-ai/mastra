@@ -1,0 +1,31 @@
+{
+  "name": "template",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.2",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "type-check-test",
+    "zod": "^3.25.76",
+    "openai-v4": "npm:@ai-sdk/openai@^1.0.0",
+    "openai-v5": "npm:@ai-sdk/openai@^2.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.15",
+    "@types/node": "22.13.17",
+    "typescript": "^5.9.3"
+  }
+}
