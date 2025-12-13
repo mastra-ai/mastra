@@ -955,19 +955,23 @@ describe('QdrantVector', () => {
       console.log(`${numQueries} concurrent queries took ${duration}ms`);
     }, 50000);
   });
+});
 
-  describe('Payload Index Operations', () => {
-    beforeAll(async () => {
-      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
-      await qdrant.createIndex({ indexName: testCollectionName, dimension });
-    });
+// Metadata filtering tests for Memory system
+describe('Qdrant Metadata Filtering', () => {
+  const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-metadata-test' });
 
-    afterAll(async () => {
-      await qdrant.deleteIndex({ indexName: testCollectionName });
-    }, 50000);
-
-    it('should create payload index', async () => {
-      await expect(qdrant.createPayloadIndex(testCollectionName, 'test_field', 'keyword')).resolves.not.toThrow();
-    }, 50000);
+  createVectorTestSuite({
+    vector: qdrantVector,
+    createIndex: async (indexName: string) => {
+      await qdrantVector.createIndex({ indexName, dimension: 1536 });
+    },
+    deleteIndex: async (indexName: string) => {
+      await qdrantVector.deleteIndex({ indexName });
+    },
+    waitForIndexing: async () => {
+      // Qdrant indexes immediately
+      await new Promise(resolve => setTimeout(resolve, 100));
+    },
   });
 });
