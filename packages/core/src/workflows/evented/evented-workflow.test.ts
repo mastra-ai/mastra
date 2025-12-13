@@ -3685,10 +3685,6 @@ describe('Workflow', () => {
       // Now cancel the suspended workflow
       await run.cancel();
 
-      // Wait a bit for the cancel event to be processed
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Verify the status in storage is 'canceled', not 'suspended' or 'success'
       const workflowRun = await workflow.getWorkflowRunById(run.runId);
       expect((workflowRun?.snapshot as WorkflowRunState)?.status).toBe('canceled');
 

@@ -89,7 +89,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
-    const currentState = await this.mastra.getStorage()?.loadWorkflowSnapshot({
+    const storage = this.mastra.getStorage();
+    const currentState = await storage?.loadWorkflowSnapshot({
       workflowName: workflowId,
       runId,
     });
@@ -99,9 +100,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflow: undefined as any,
         workflowId,
         runId,
-        stepResults: currentState?.context as any,
+        stepResults: (currentState?.context ?? {}) as any,
         prevResult: { status: 'canceled' } as any,
-        requestContext: currentState?.requestContext as any,
+        requestContext: (currentState?.requestContext ?? {}) as any,
         executionPath: [],
         activeSteps: {},
         resumeSteps: [],

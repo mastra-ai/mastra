@@ -13,7 +13,7 @@ import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowRunState, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -5998,8 +5998,10 @@ describe('Workflow', () => {
     it('should be able to cancel a suspended workflow', async () => {
       const suspendStep = createStep({
         id: 'suspendStep',
-        execute: async ({ suspend }) => {
-          await suspend({ reason: 'waiting for approval' });
+        execute: async ({ suspend, resumeData }) => {
+          if (!resumeData) {
+            return suspend({ reason: 'waiting for approval' });
+          }
           return { done: true };
         },
         inputSchema: z.object({}),
@@ -6032,14 +6034,16 @@ describe('Workflow', () => {
 
       // Verify status is suspended in storage
       const beforeCancel = await workflow.getWorkflowRunById(runId);
-      expect((beforeCancel?.snapshot as any)?.status).toBe('suspended');
+      expect(beforeCancel).not.toBeNull();
+      expect((beforeCancel!.snapshot as WorkflowRunState).status).toBe('suspended');
 
       // Cancel the suspended workflow
       await run.cancel();
 
       // Check status IMMEDIATELY after cancel() returns
       const afterCancel = await workflow.getWorkflowRunById(runId);
-      expect((afterCancel?.snapshot as any)?.status).toBe('canceled');
+      expect(afterCancel).not.toBeNull();
+      expect((afterCancel!.snapshot as WorkflowRunState).status).toBe('canceled');
     });
   });
 
