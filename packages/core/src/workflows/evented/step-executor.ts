@@ -41,10 +41,12 @@ export class StepExecutor extends MastraBase {
     retryCount?: number;
     foreachIdx?: number;
     validateInputs?: boolean;
+    abortController?: AbortController;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    // Use provided abortController or create a new one for backwards compatibility
+    const abortController = params.abortController ?? new AbortController();
 
     let suspended: { payload: any } | undefined;
     let bailed: { payload: any } | undefined;
