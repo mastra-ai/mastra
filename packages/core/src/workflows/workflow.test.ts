@@ -5995,7 +5995,7 @@ describe('Workflow', () => {
       // });
     });
 
-    it('should be able to cancel a suspended workflow (issue #11049)', async () => {
+    it('should be able to cancel a suspended workflow', async () => {
       const suspendStep = createStep({
         id: 'suspendStep',
         execute: async ({ suspend }) => {
