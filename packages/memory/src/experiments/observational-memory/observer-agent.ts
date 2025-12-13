@@ -278,12 +278,10 @@ export function buildObserverPrompt(
   prompt += `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n`;
 
   // Find and emphasize the most recent user message
-  const recentUserMessage = findMostRecentUserMessage(messagesToObserve);
-  if (recentUserMessage) {
-    prompt += `## IMPORTANT: Most Recent User Message\n\n`;
-    prompt += `The most recent user message is CRITICAL and should be given HIGH PRIORITY in your observations:\n\n`;
-    prompt += `"${recentUserMessage}"\n\n`;
-    prompt += `Make sure your observations clearly capture what the user wants from this message, and ensure the Current Task section reflects this.\n\n---\n\n`;
+  const hasUserMessages = messagesToObserve.some(m => m.role === `user`);
+  if (hasUserMessages) {
+    prompt += `## IMPORTANT: user messages are CRITICAL and should be given HIGH PRIORITY in your observations:\n\n`;
+    prompt += `Make sure your observations clearly capture what the user wants from each message, and ensure the Current Task section reflects this.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;
@@ -291,30 +289,6 @@ export function buildObserverPrompt(
   prompt += `IMPORTANT: You MUST end your observations with a "**Current Task:**" line that clearly states what the assistant should do next based on the most recent user request.`;
 
   return prompt;
-}
-
-/**
- * Find the most recent user message from the messages array.
- */
-function findMostRecentUserMessage(messages: MastraDBMessage[]): string | null {
-  // Look from the end backwards
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg?.role === 'user') {
-      // Extract text content
-      if (typeof msg.content === 'string') {
-        return msg.content;
-      } else if (msg.content?.content) {
-        return msg.content.content;
-      } else if (msg.content?.parts) {
-        const textPart = msg.content.parts.find((p: { type: string }) => p.type === 'text');
-        if (textPart && 'text' in textPart) {
-          return textPart.text;
-        }
-      }
-    }
-  }
-  return null;
 }
 
 /**
