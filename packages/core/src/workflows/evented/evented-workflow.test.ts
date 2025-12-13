@@ -9439,7 +9439,6 @@ describe('Workflow', () => {
         // Track if nested step was cancelled or completed
         let nestedStepStarted = false;
         let nestedStepCompleted = false;
-        let parentStepCompleted = false;
 
         const nestedLongRunningStep = createStep({
           id: 'nested-long-step',
@@ -9480,8 +9479,6 @@ describe('Workflow', () => {
           inputSchema: z.object({ value: z.number() }),
           outputSchema: z.object({ doubled: z.number() }),
           execute: async ({ inputData }) => {
-            console.log('PARENT STEP COMPLETED');
-            parentStepCompleted = true;
             return { doubled: inputData.value * 2 };
           },
         });
