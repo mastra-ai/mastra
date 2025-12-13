@@ -955,6 +955,21 @@ describe('QdrantVector', () => {
       console.log(`${numQueries} concurrent queries took ${duration}ms`);
     }, 50000);
   });
+
+  describe('Payload Index Operations', () => {
+    beforeAll(async () => {
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
+      await qdrant.createIndex({ indexName: testCollectionName, dimension });
+    });
+
+    afterAll(async () => {
+      await qdrant.deleteIndex({ indexName: testCollectionName });
+    }, 50000);
+
+    it('should create payload index', async () => {
+      await expect(qdrant.createPayloadIndex(testCollectionName, 'test_field', 'keyword')).resolves.not.toThrow();
+    }, 50000);
+  });
 });
 
 // Metadata filtering tests for Memory system

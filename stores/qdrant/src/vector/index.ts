@@ -28,6 +28,8 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
 
 type QdrantQueryVectorParams = QueryVectorParams<QdrantVectorFilter>;
 
+export type PayloadSchemaType = 'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid';
+
 export class QdrantVector extends MastraVector {
   private client: QdrantClient;
 
@@ -118,6 +120,30 @@ export class QdrantVector extends MastraVector {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, dimension, metric },
+        },
+        error,
+      );
+    }
+  }
+
+  async createPayloadIndex(
+    indexName: string,
+    fieldName: string,
+    fieldSchema: PayloadSchemaType,
+  ): Promise<void> {
+    try {
+      await this.client.createPayloadIndex(indexName, {
+        field_name: fieldName,
+        field_schema: fieldSchema,
+        wait: true,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('QDRANT', 'CREATE_PAYLOAD_INDEX', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, fieldName, fieldSchema },
         },
         error,
       );
