@@ -1146,7 +1146,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId: workflowData.runId,
     });
 
-    if (currentState?.status === 'canceled' && type !== 'workflow.end') {
+    if (currentState?.status === 'canceled' && type !== 'workflow.end' && type !== 'workflow.cancel') {
       return;
     }
 
