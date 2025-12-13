@@ -2434,6 +2434,10 @@ export class Mastra<
     return this.#server;
   }
 
+  __setServer(server: ServerConfig): void {
+    this.#server = server;
+  }
+
   /**
    * Sets the server adapter for this Mastra instance.
    *
