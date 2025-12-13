@@ -8,5 +8,5 @@ Mastra Source code: [mastra-text-to-sql](https://github.com/mastra-ai/text-to-sq
 
 ## Blog Post
 
-Read the detailed walkthrough here:
-    [Text to SQL with Mastra](https://mastra.ai/blog/txt-to-sql)
+Detailed walkthrough:
+[Text to SQL with Mastra](https://mastra.ai/blog/txt-to-sql)
