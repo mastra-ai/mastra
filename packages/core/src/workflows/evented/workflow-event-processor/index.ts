@@ -4,7 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '..
 import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
-import { RequestContext } from '../../../request-context/';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '../../../request-context/';
 import type { StepFlowEntry, StepResult, TimeTravelExecutionParams, WorkflowRunState } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
@@ -125,9 +125,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults,
     requestContext,
   }: ProcessorArgs) {
+    // Extract resourceId from requestContext with type validation
+    const contextValue = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+    const resourceId = typeof contextValue === 'string' ? contextValue : undefined;
+
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
       runId,
+      resourceId,
       snapshot: {
         activePaths: [],
         suspendedPaths: {},

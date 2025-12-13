@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import z from 'zod';
 import type { Agent } from '../../agent';
-import { RequestContext } from '../../di';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '../../request-context';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
 import { Workflow, Run } from '../../workflows';
@@ -352,7 +352,10 @@ export class EventedWorkflow<
     this.executionEngine.__registerMastra(mastra);
   }
 
-  async createRun(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  async createRun(options?: {
+    runId?: string;
+    resourceId?: string;
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -361,6 +364,7 @@ export class EventedWorkflow<
       new EventedRun({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -385,6 +389,7 @@ export class EventedWorkflow<
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -418,6 +423,7 @@ export class EventedRun<
   constructor(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -456,9 +462,22 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
+    // Extract resourceId from RequestContext with precedence over constructor parameter
+    // This matches agent behavior for security (prevents attackers from hijacking another user's memory)
+    const contextValue = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+    const resourceIdFromContext = typeof contextValue === 'string' ? contextValue : undefined;
+    const resourceId = resourceIdFromContext || this.resourceId;
+
+    // If we have a resourceId, ensure it's in the RequestContext so it's available throughout execution
+    // Only set if it's a valid string value
+    if (resourceId && typeof resourceId === 'string' && !resourceIdFromContext) {
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+    }
+
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      resourceId,
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
@@ -534,9 +553,21 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
+    // Extract resourceId from RequestContext with precedence over constructor parameter
+    const contextValue = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+    const resourceIdFromContext = typeof contextValue === 'string' ? contextValue : undefined;
+    const resourceId = resourceIdFromContext || this.resourceId;
+
+    // If we have a resourceId, ensure it's in the RequestContext so it's available throughout execution
+    // Only set if it's a valid string value
+    if (resourceId && typeof resourceId === 'string' && !resourceIdFromContext) {
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+    }
+
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      resourceId,
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
