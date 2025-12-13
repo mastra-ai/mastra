@@ -106,10 +106,12 @@ const memory = new Memory({
     workingMemory: {
       enabled: true,
       scope: "thread", // Memory is isolated per thread
-      template: `# User Profile
-- **Name**:
-- **Interests**:
-- **Current Goal**:
+      template: `# Conversation Context
+- **Current Topic**:
+- **Active Tasks**:
+- **Decisions Made**:
+- **Next Steps**:
+- **Open Questions**:
 `,
     },
   },
