@@ -24,6 +24,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   requireToolApproval,
   agentId,
   toolCallConcurrency,
+  assistantMessageId,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -65,7 +66,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
 
   let startTimestamp = internalToUse.now?.();
 
-  const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
+  const messageId = assistantMessageId || rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
 
   let modelOutput: MastraModelOutput<OUTPUT> | undefined;
   const serializeStreamState = () => {

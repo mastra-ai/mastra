@@ -6917,4 +6917,61 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
     });
   });
+
+  describe('options.assistantMessageId', () => {
+    it('should use provided assistantMessageId for the response message', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const customMessageId = 'custom-assistant-message-id';
+
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        messageList,
+        models: createTestModels(),
+        assistantMessageId: customMessageId,
+        agentId: 'agent-id',
+      });
+
+      expect(await convertReadableStreamToArray(result.aisdk.v5.toUIMessageStream())).toMatchInlineSnapshot(`
+        [
+          {
+            "messageId": "custom-assistant-message-id",
+            "type": "start",
+          },
+          {
+            "type": "start-step",
+          },
+          {
+            "id": "text-1",
+            "type": "text-start",
+          },
+          {
+            "delta": "Hello",
+            "id": "text-1",
+            "type": "text-delta",
+          },
+          {
+            "delta": ", ",
+            "id": "text-1",
+            "type": "text-delta",
+          },
+          {
+            "delta": "world!",
+            "id": "text-1",
+            "type": "text-delta",
+          },
+          {
+            "id": "text-1",
+            "type": "text-end",
+          },
+          {
+            "type": "finish-step",
+          },
+          {
+            "type": "finish",
+          },
+        ]
+      `);
+    });
+  });
 }

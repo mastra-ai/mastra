@@ -44,6 +44,7 @@ export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSche
   threadId?: string;
   returnScorerData?: boolean;
   messageList: MessageList;
-} & Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
+  assistantMessageId?: string;
+} & Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList' | 'assistantMessageId'>;
 
 export type ModelMethodType = 'generate' | 'stream';

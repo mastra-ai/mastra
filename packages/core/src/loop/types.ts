@@ -93,6 +93,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSc
   inputProcessors?: InputProcessorOrWorkflow[];
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;
+  assistantMessageId?: string;
   stopWhen?: StopCondition<NoInfer<TOOLS>> | Array<StopCondition<NoInfer<TOOLS>>>;
   maxSteps?: number;
   _internal?: StreamInternal;

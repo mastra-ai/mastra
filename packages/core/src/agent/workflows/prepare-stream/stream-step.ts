@@ -29,6 +29,7 @@ interface StreamStepOptions {
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
   resourceId?: string;
+  assistantMessageId?: string;
 }
 
 export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
@@ -46,6 +47,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   memoryConfig,
   memory,
   resourceId,
+  assistantMessageId,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -94,6 +96,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
         agentName,
         toolCallId,
         methodType: modelMethodType,
+        assistantMessageId,
       });
 
       return streamResult;
