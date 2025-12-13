@@ -70,7 +70,10 @@ export default defineConfig({
   sourcemap: true,
   onSuccess: async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
-    await generateTypes(process.cwd(), new Set(['@internal/ai-sdk-v4']));
+    await generateTypes(
+      process.cwd(),
+      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types']),
+    );
 
     // Copy provider-registry.json to dist folder
     const srcJson = path.join(process.cwd(), 'src/llm/model/provider-registry.json');
@@ -94,11 +97,5 @@ export default defineConfig({
       fs.copyFileSync(srcDts, distDts);
       console.info('✓ Copied provider-types.generated.d.ts to dist/llm/model/');
     }
-
-    // const typeFilePath = path.join(process.cwd(), 'src/_types/ai-sdk.types.d.ts');
-    // copyFileSync(typeFilePath, path.join(process.cwd(), 'dist/ai-sdk.types.d.ts'));
-    // console.info('* Fixing local ai-sdk v4 types');
-    // fixDtsFiles(path.join(process.cwd(), 'dist'));
-    // console.info('✓ Fixed local ai-sdk v4 types');
   },
 });
