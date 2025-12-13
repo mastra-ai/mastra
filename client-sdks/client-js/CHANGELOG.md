@@ -1,5 +1,66 @@
 # @mastra/client-js
 
+## 1.0.0-beta.12
+
+### Patch Changes
+
+- Deserialize workflow errors on the client side ([#10992](https://github.com/mastra-ai/mastra/pull/10992))
+
+  When workflows fail, the server sends error data as JSON over HTTP. This change deserializes those errors back to proper `Error` instances on the client.
+
+  **Before:**
+
+  ```typescript
+  const result = await workflow.startAsync({ input });
+  if (result.status === 'failed') {
+    // result.error was a plain object, couldn't use instanceof
+    console.log(result.error.message); // TypeScript error
+  }
+  ```
+
+  **After:**
+
+  ```typescript
+  const result = await workflow.startAsync({ input });
+  if (result.status === 'failed') {
+    // result.error is now a proper Error instance
+    if (result.error instanceof MyCustomError) {
+      console.log(result.error.statusCode); // Works!
+    }
+  }
+  ```
+
+  This enables proper error handling and type checking in client applications, allowing developers to implement error-specific recovery logic based on custom error types and properties.
+
+  Features:
+  - `instanceof Error` checks
+  - Access to `error.message`, `error.name`, `error.stack`
+  - Preservation of custom error properties (e.g., `statusCode`, `responseHeaders`)
+  - Nested error tracking via `error.cause`
+
+  Affected methods:
+  - `startAsync()`
+  - `resumeAsync()`
+  - `restartAsync()`
+  - `timeTravelAsync()`
+
+- Add missing status parameter to workflow.runs() method ([#11095](https://github.com/mastra-ai/mastra/pull/11095))
+
+  The `status` parameter was supported by the server API but was missing from the TypeScript types in @mastra/client-js.
+
+  Now you can filter workflow runs by status:
+
+  ```typescript
+  // Get only running workflows
+  const runningRuns = await workflow.runs({ status: 'running' });
+
+  // Get completed workflows
+  const completedRuns = await workflow.runs({ status: 'success' });
+  ```
+
+- Updated dependencies [[`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`24b76d8`](https://github.com/mastra-ai/mastra/commit/24b76d8e17656269c8ed09a0c038adb9cc2ae95a), [`243a823`](https://github.com/mastra-ai/mastra/commit/243a8239c5906f5c94e4f78b54676793f7510ae3), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`c61fac3`](https://github.com/mastra-ai/mastra/commit/c61fac3add96f0dcce0208c07415279e2537eb62), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`4524734`](https://github.com/mastra-ai/mastra/commit/45247343e384717a7c8404296275c56201d6470f), [`2a53598`](https://github.com/mastra-ai/mastra/commit/2a53598c6d8cfeb904a7fc74e57e526d751c8fa6), [`847c212`](https://github.com/mastra-ai/mastra/commit/847c212caba7df0d6f2fc756b494ac3c75c3720d)]:
+  - @mastra/core@1.0.0-beta.12
+
 ## 1.0.0-beta.11
 
 ### Patch Changes
