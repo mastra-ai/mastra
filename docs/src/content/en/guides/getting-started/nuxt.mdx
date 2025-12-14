@@ -1,0 +1,176 @@
+---
+title: "Nuxt | Frameworks"
+description: "Get started with Mastra and Nuxt"
+---
+
+# Integrate Mastra in your Nuxt project
+
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Nuxt by importing and calling the agent directly from your server routes.
+
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) to create a beautiful, interactive chat experience.
+
+<figure>
+<img src="/img/nextjs-quickstart.png" alt="Screenshot of a chat-style web app" />
+<figcaption class="text-sm text-center">What you'll build: an agent that can call a weather tool, streamed to a chat UI in Nuxt.</figcaption>
+</figure>
+
+## Before you begin
+
+* You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+
+## Create a new Nuxt app (optional)
+
+If you already have a Nuxt app, skip to the next step.
+
+Run the following command to create a new Nuxt app:
+
+```bash
+npx nuxi@latest init my-nuxt-agent
+```
+
+## Initialize Mastra
+
+`cd` into your Nuxt project and run [`mastra init`](/reference/v1/cli/create-mastra).
+
+```bash
+cd my-nuxt-agent
+npx --force mastra@beta init
+```
+
+When prompted, choose a provider (e.g. OpenAI) and enter your key.
+
+This creates a `src/mastra` folder with an example weather agent.
+
+## Install AI SDK
+
+Install AI SDK along with the Mastra adapter and Vue hooks:
+
+```bash
+npm install @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+## Configure Nuxt
+
+Ensure your `tsconfig.json` excludes the `.mastra` directory to avoid conflicts:
+
+```json title="tsconfig.json"
+{
+  "extends": "./.nuxt/tsconfig.json",
+  "exclude": [".mastra"]
+}
+```
+
+## Create a chat route
+
+Create a server event handler to handle the chat stream. In Nuxt, server routes live in the `server/api` directory.
+
+Create `server/api/chat.post.ts`:
+
+```ts title="server/api/chat.post.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { mastra } from '@/src/mastra';
+import { createUIMessageStreamResponse } from 'ai';
+
+export default defineEventHandler(async (event) => {
+  const params = await readBody(event);
+  
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+  });
+
+  return createUIMessageStreamResponse({ stream });
+});
+```
+
+> **Note**: Depending on your project structure, the import path to `mastra` might vary. If your `mastra` folder is in the root, use `@/mastra`. If `mastra init` created it in `src/mastra` and your Nuxt app is in the root, use `@/src/mastra`.
+
+## Create a chat page
+
+Update `app.vue` to render the chat interface:
+
+```vue title="app.vue"
+<script setup lang="ts">
+import { useChat } from '@ai-sdk/vue';
+
+const { messages, input, handleSubmit } = useChat({
+  api: '/api/chat',
+});
+</script>
+
+<template>
+  <div class="chat-container">
+    <div class="messages">
+      <div v-for="m in messages" :key="m.id" class="message">
+        <strong>{{ m.role === 'user' ? 'User: ' : 'AI: ' }}</strong>
+        {{ m.content }}
+      </div>
+    </div>
+
+    <form @submit="handleSubmit" class="input-form">
+      <input
+        v-model="input"
+        placeholder="Say something..."
+      />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+</template>
+
+<style scoped>
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 2rem;
+  height: 100vh;
+}
+.messages {
+  flex-grow: 1;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+.message {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  background: #f4f4f5;
+  border-radius: 4px;
+}
+.input-form {
+  display: flex;
+  gap: 0.5rem;
+}
+input {
+  flex-grow: 1;
+  padding: 0.5rem;
+  border: 1px solid #e4e4e7;
+  border-radius: 4px;
+}
+button {
+  padding: 0.5rem 1rem;
+  background: #000;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+</style>
+```
+
+## Test your agent
+
+1. Run your Nuxt app:
+   ```bash
+   npm run dev
+   ```
+
+2. Open http://localhost:3000
+
+3. Try asking "What is the weather in London?"
+
+## Next steps
+
+- [Deploy to Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
+- [Learn about Agents](/docs/v1/agents/overview)

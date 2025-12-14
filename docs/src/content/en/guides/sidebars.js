@@ -30,6 +30,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "getting-started/nuxt",
+          label: "Nuxt",
+        },
+        {
+          type: "doc",
           id: "getting-started/vite-react",
           label: "React",
         },
