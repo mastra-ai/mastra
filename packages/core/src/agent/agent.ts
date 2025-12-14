@@ -50,6 +50,7 @@ import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
+import { AgentBranch, type BranchOptions } from './agent-branch';
 import type {
   AgentConfig,
   AgentGenerateOptions,
@@ -3204,6 +3205,33 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
   ): Promise<MastraModelOutput<OUTPUT>> {
     return this.resumeStream({ approved: false }, options);
+  }
+
+  /**
+   * Creates a branch from an existing conversation thread.
+   *
+   * Lazily copies all messages from the source thread to a new thread when
+   * `.stream()` or `.generate()` is first called on the returned object.
+   *
+   * @example
+   * ```typescript
+   * // Branch and continue conversation
+   * const result = await agent
+   *   .branch({ threadId: 'source-thread', resourceId: 'user-123' })
+   *   .stream('Continue from here...');
+   *
+   * // With custom new thread ID
+   * const branch = agent.branch({
+   *   threadId: 'source-thread',
+   *   resourceId: 'user-123',
+   *   newThreadId: 'custom-branch-id'
+   * });
+   * console.log('New thread:', branch.newThreadId);
+   * await branch.generate('New message');
+   * ```
+   */
+  branch(options: BranchOptions): AgentBranch<TAgentId, TTools> {
+    return new AgentBranch(this, options);
   }
 
   /**
