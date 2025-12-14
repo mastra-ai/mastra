@@ -1,12 +1,21 @@
 'use client';
 
-import { AttachmentPrimitive, MessagePrimitive, TextMessagePart, useAttachment, useMessage } from '@assistant-ui/react';
+import { useState } from 'react';
+import {
+  ActionBarPrimitive,
+  AttachmentPrimitive,
+  MessagePrimitive,
+  TextMessagePart,
+  useAttachment,
+  useMessage,
+} from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-preview-dialog';
+import { BookmarkButton } from '../bookmarks/bookmark-button';
 
 export interface InMessageAttachmentProps {
   type: string;
@@ -38,13 +47,30 @@ const InMessageAttachment = ({ type, contentType, nameSlot, src, data }: InMessa
   );
 };
 
+const UserActionBar = () => {
+  const [isBookmarkPopoverOpen, setIsBookmarkPopoverOpen] = useState(false);
+
+  return (
+    <ActionBarPrimitive.Root
+      hideWhenRunning
+      autohide={isBookmarkPopoverOpen ? 'never' : 'always'}
+      className="flex gap-1 items-center"
+    >
+      <BookmarkButton
+        className="bg-transparent text-icon3 hover:text-icon6"
+        isPopoverOpen={isBookmarkPopoverOpen}
+        onPopoverOpenChange={setIsBookmarkPopoverOpen}
+      />
+    </ActionBarPrimitive.Root>
+  );
+};
+
 export const UserMessage = () => {
   const message = useMessage();
   const messageId = message?.id;
 
   return (
     <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col" data-message-id={messageId}>
-      {/* <UserActionBar /> */}
       <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
         <MessagePrimitive.Parts
           components={{
@@ -83,8 +109,9 @@ export const UserMessage = () => {
           }}
         />
       </div>
-
-      {/* <BranchPicker className="col-span-full col-start-1 row-start-3 -mr-1 justify-end" /> */}
+      <div className="h-6 pt-2">
+        <UserActionBar />
+      </div>
     </MessagePrimitive.Root>
   );
 };

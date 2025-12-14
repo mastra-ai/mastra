@@ -62,7 +62,13 @@ export const AgentChat = ({
       settings={settings}
       requestContext={requestContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} hasModelList={Boolean(modelList)} />
+      <Thread
+        agentName={agentName ?? ''}
+        hasMemory={memory}
+        agentId={agentId}
+        hasModelList={Boolean(modelList)}
+        threadId={threadId}
+      />
     </MastraRuntimeProvider>
   );
 };
