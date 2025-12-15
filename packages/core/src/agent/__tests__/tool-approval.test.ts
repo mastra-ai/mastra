@@ -253,13 +253,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           const resumeStream = await agentOne.stream('Approve', {
             memory,
           });
-          let resumeText = '';
           for await (const _chunk of resumeStream.fullStream) {
-            if (_chunk.type === 'text-delta') {
-              resumeText += _chunk.payload.text;
-            }
           }
-          console.log('resumeText', resumeText);
 
           const toolResults = await resumeStream.toolResults;
 
@@ -418,13 +413,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           const resumeStream = await agentOne.stream('He is 25 years old', {
             memory,
           });
-          let resumeText = '';
           for await (const _chunk of resumeStream.fullStream) {
-            if (_chunk.type === 'text-delta') {
-              resumeText += _chunk.payload.text;
-            }
           }
-          console.log('resumeText', resumeText);
 
           const toolResults = await resumeStream.toolResults;
 
@@ -643,13 +633,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
               resource: 'test-resource',
             },
           });
-          let resumeText = '';
           for await (const _chunk of resumeStream.fullStream) {
-            if (_chunk.type === 'text-delta') {
-              resumeText += _chunk.payload.text;
-            }
           }
-          console.log('resumeText', resumeText);
 
           const toolResults = await resumeStream.toolResults;
 

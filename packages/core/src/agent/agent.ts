@@ -1396,6 +1396,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     mastraProxy,
     memoryConfig,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1404,6 +1405,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
 
@@ -1440,7 +1442,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options);
+        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
@@ -1611,6 +1613,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     mastraProxy,
     outputWriter,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1619,6 +1622,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1654,7 +1658,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        return [k, makeCoreTool(tool, options)];
+        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools)];
       }),
     );
 
@@ -1681,6 +1685,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     mastraProxy,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1689,6 +1694,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1717,7 +1723,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
           };
-          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset', autoResumeSuspendedTools);
           toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
@@ -1738,6 +1744,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     mastraProxy,
     clientTools,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1746,6 +1753,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
     const memory = await this.getMemory({ requestContext });
@@ -1772,7 +1780,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
+        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool', autoResumeSuspendedTools);
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -1791,6 +1799,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     methodType,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1798,6 +1807,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     methodType: AgentMethodType;
+    autoResumeSuspendedTools?: boolean;
   }) {
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ requestContext });
@@ -1977,7 +1987,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         };
 
         // TODO; fix recursion type
-        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(toolObj as any, options);
+        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(
+          toolObj as any,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+        );
       }
     }
 
@@ -1995,6 +2010,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     methodType,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -2002,6 +2018,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     methodType: AgentMethodType;
+    autoResumeSuspendedTools?: boolean;
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.listWorkflows({ requestContext });
@@ -2112,7 +2129,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 const suspendedStep = result?.suspended?.[0]?.[0]!;
                 const suspendPayload = result?.steps?.[suspendedStep]?.suspendPayload;
                 const suspendedStepIds = result?.suspended?.map(stepPath => stepPath.join('.'));
-                const firstSuspendedStepPath = result?.suspended?.[0];
+                const firstSuspendedStepPath = [...(result?.suspended?.[0] ?? [])];
                 let wflowStep = workflow;
                 while (firstSuspendedStepPath.length > 0) {
                   const key = firstSuspendedStepPath.shift();
@@ -2170,7 +2187,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(toolObj, options);
+        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+        );
       }
     }
 
@@ -2192,6 +2214,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     outputWriter,
     methodType,
     memoryConfig,
+    autoResumeSuspendedTools,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -2203,6 +2226,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     outputWriter?: OutputWriter;
     methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -2219,6 +2243,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       outputWriter,
+      autoResumeSuspendedTools,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -2229,6 +2254,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       memoryConfig,
+      autoResumeSuspendedTools,
     });
 
     const toolsetTools = await this.listToolsets({
@@ -2239,6 +2265,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       toolsets: toolsets!,
+      autoResumeSuspendedTools,
     });
 
     const clientSideTools = await this.listClientTools({
@@ -2249,6 +2276,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       clientTools: clientTools!,
+      autoResumeSuspendedTools,
     });
 
     const agentTools = await this.listAgentTools({
@@ -2258,6 +2286,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       methodType,
       tracingContext,
+      autoResumeSuspendedTools,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -2267,6 +2296,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       methodType,
       tracingContext,
+      autoResumeSuspendedTools,
     });
 
     return this.formatTools({

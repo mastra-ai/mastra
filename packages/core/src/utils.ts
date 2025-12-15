@@ -335,16 +335,18 @@ export function makeCoreTool(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType }).build();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).build();
 }
 
 export function makeCoreToolV5(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): VercelToolV5 {
-  return new CoreToolBuilder({ originalTool, options, logType }).buildV5();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
 }
 
 /**

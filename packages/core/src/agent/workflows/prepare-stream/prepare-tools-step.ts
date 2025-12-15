@@ -74,6 +74,7 @@ export function createPrepareToolsStep<
         outputWriter: options.outputWriter,
         methodType,
         memoryConfig: options.memory?.options,
+        autoResumeSuspendedTools: options.autoResumeSuspendedTools,
       });
 
       return {

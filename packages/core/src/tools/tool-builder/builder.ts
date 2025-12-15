@@ -44,12 +44,17 @@ export class CoreToolBuilder extends MastraBase {
   private options: ToolOptions;
   private logType?: LogType;
 
-  constructor(input: { originalTool: ToolToConvert; options: ToolOptions; logType?: LogType }) {
+  constructor(input: {
+    originalTool: ToolToConvert;
+    options: ToolOptions;
+    logType?: LogType;
+    autoResumeSuspendedTools?: boolean;
+  }) {
     super({ name: 'CoreToolBuilder' });
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
-    if (!isVercelTool(this.originalTool)) {
+    if (!isVercelTool(this.originalTool) && input.autoResumeSuspendedTools) {
       let schema = this.originalTool.inputSchema;
       if (typeof schema === 'function') {
         schema = schema();
@@ -57,13 +62,15 @@ export class CoreToolBuilder extends MastraBase {
       if (!schema) {
         schema = z.object({});
       }
-      this.originalTool.inputSchema = schema.extend({
-        suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional(),
-        resumeData: z
-          .any()
-          .describe('The resumeData object created from the resumeSchema of suspended tool')
-          .optional(),
-      });
+      if (schema instanceof z.ZodObject) {
+        this.originalTool.inputSchema = schema.extend({
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional(),
+          resumeData: z
+            .any()
+            .describe('The resumeData object created from the resumeSchema of suspended tool')
+            .optional(),
+        });
+      }
     }
   }
 

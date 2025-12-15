@@ -93,15 +93,13 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     // Handle dynamic-tool parts (tool calls)
     if (part.type === 'dynamic-tool') {
       // Build the tool call matching the inline type from ThreadMessageLike
-      if ((part.input as any)?.suspendedToolRunId !== undefined) {
-        delete (part.input as any).suspendedToolRunId;
-      }
+      const { suspendedToolRunId, ...cleanInput } = 'input' in part ? (part.input as any) : {};
       const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
         toolCallId: part.toolCallId,
         toolName: part.toolName,
-        argsText: JSON.stringify(part.input),
-        args: part.input as ReadonlyJSONObject,
+        argsText: JSON.stringify(cleanInput ?? {}),
+        args: cleanInput as ReadonlyJSONObject,
         metadata: message.metadata,
       };
 
@@ -120,16 +118,14 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     // Handle typed tool parts (tool-{NAME} pattern from AI SDK)
     if (part.type.startsWith('tool-') && (part as any).state !== 'input-available') {
       const toolName = 'toolName' in part && typeof part.toolName === 'string' ? part.toolName : part.type.substring(5);
-      if ((part as any).input?.suspendedToolRunId !== undefined) {
-        delete (part as any).input.suspendedToolRunId;
-      }
+      const { suspendedToolRunId, ...cleanInput } = 'input' in part ? (part.input as any) : {};
 
       const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
         toolCallId: 'toolCallId' in part && typeof part.toolCallId === 'string' ? part.toolCallId : '',
         toolName,
-        argsText: 'input' in part ? JSON.stringify(part.input) : '{}',
-        args: 'input' in part ? part.input : {},
+        argsText: JSON.stringify(cleanInput ?? {}),
+        args: cleanInput ?? {},
         metadata: message.metadata,
       };
 
@@ -159,15 +155,13 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     const partToolCallId = 'toolCallId' in part && typeof part.toolCallId === 'string' ? part.toolCallId : undefined;
     const suspensionData = toolName ? (requireApprovalMetadata?.[toolName] ?? suspendedTools?.[toolName]) : undefined;
     if (suspensionData) {
-      if ((part as any).input?.suspendedToolRunId !== undefined) {
-        delete (part as any).input.suspendedToolRunId;
-      }
+      const { suspendedToolRunId, ...cleanInput } = 'input' in part ? (part.input as any) : {};
       return {
         type: 'tool-call' as const,
         toolCallId: partToolCallId!,
         toolName,
-        argsText: 'input' in part ? JSON.stringify(part.input) : '{}',
-        args: ('input' in part ? part.input : {}) as ReadonlyJSONObject,
+        argsText: JSON.stringify(cleanInput ?? {}),
+        args: cleanInput as ReadonlyJSONObject,
         metadata: extendedMessage.metadata,
       };
     }

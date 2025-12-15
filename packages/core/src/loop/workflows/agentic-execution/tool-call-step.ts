@@ -157,7 +157,7 @@ export function createToolCallStep<
         }
       };
 
-      // Helper function to remove tool approval metadata after approval/decline
+      // Helper function to remove tool suspension metadata after resume
       const removeToolSuspensionMetadata = async (toolName: string) => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
 
@@ -268,7 +268,14 @@ export function createToolCallStep<
       try {
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
 
-        const { resumeData: resumeDataFromArgs, ...args } = inputData.args;
+        let resumeDataFromArgs: any = undefined;
+        let args: any = inputData.args;
+
+        if (typeof inputData.args === 'object' && inputData.args !== null) {
+          const { resumeData: resumeDataFromInput, ...argsFromInput } = inputData.args;
+          args = argsFromInput;
+          resumeDataFromArgs = resumeDataFromInput;
+        }
 
         const resumeData = resumeDataFromArgs ?? workflowResumeData;
 
