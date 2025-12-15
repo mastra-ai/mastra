@@ -90,7 +90,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
 
-      if (inputData?.every(toolCall => toolCall?.result === undefined)) {
+      if (inputData?.some(toolCall => toolCall?.result === undefined)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error);
 
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
@@ -144,7 +144,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         if (initialResult.stepResult.reason !== 'retry') {
           initialResult.stepResult.isContinued = false;
         }
-        return bail(initialResult);
+        return bail({
+          ...initialResult,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
+          },
+        });
       }
 
       if (inputData?.length) {
@@ -209,6 +216,16 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           },
         };
       }
+
+      // Fallback: if inputData is empty or undefined, return with messages
+      return {
+        ...initialResult,
+        messages: {
+          all: rest.messageList.get.all.aiV5.model(),
+          user: rest.messageList.get.input.aiV5.model(),
+          nonUser: rest.messageList.get.response.aiV5.model(),
+        },
+      };
     },
   });
 }
