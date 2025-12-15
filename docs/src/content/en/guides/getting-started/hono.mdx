@@ -140,10 +140,14 @@ bun add @mastra/hono@beta
 
 Open the Hono entry file at `src/index.ts` and add the required import and initialization code:
 
-```typescript copy title="src/index.ts" {3-4,6-9}
+```typescript copy title="src/index.ts" {3-8,10-11,13}
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
-import { type HonoBindings, type HonoVariables, MastraServer } from '@mastra/hono';
+import {
+  type HonoBindings,
+  type HonoVariables,
+  MastraServer
+} from '@mastra/hono';
 import { mastra } from './mastra/index.js';
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
