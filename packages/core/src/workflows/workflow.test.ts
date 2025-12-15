@@ -14,7 +14,7 @@ import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
 import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
-import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable, PUBSUB_SYMBOL } from './workflow';
+import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
 
