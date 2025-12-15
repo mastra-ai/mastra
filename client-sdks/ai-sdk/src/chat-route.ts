@@ -304,10 +304,13 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
-      if (contextRequestContext && defaultOptions?.requestContext) {
+      const routeRequestContext = contextRequestContext || defaultOptions?.requestContext;
+      if (routeRequestContext && params.requestContext) {
         mastra
           .getLogger()
-          ?.warn(`"requestContext" set in the route options will be overridden by the request's "requestContext".`);
+          ?.warn(
+            `"requestContext" from the request body will be ignored because "requestContext" is already set in the route options.`,
+          );
       }
 
       if (!agentToUse) {
