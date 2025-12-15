@@ -57,7 +57,13 @@ export default {
       height: {
         ...Sizes,
       },
+      maxHeight: {
+        ...Sizes,
+      },
       width: {
+        ...Sizes,
+      },
+      maxWidth: {
         ...Sizes,
       },
       colors: {

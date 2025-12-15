@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
 import { realtimeMiddleware } from '@inngest/realtime/middleware';
@@ -164,7 +164,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -228,7 +228,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -475,7 +475,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'step1',
         execute: async ({ state, setState }) => {
           calls++;
-          setState({ ...state, value: state.value + '!!!' });
+          await setState({ ...state, value: state.value + '!!!' });
           return {};
         },
         inputSchema: z.object({}),
@@ -837,7 +837,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -926,7 +926,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const execute = vi.fn().mockResolvedValue({ value: 1000 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1021,7 +1021,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1114,7 +1114,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const execute = vi.fn().mockResolvedValue({ value: 1000 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1209,7 +1209,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1255,7 +1255,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1524,7 +1524,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
 
       const step1 = createStep({
         id: 'step1',
@@ -1686,7 +1686,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
       });
@@ -1753,7 +1753,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         cool: z.string(),
       });
@@ -1832,10 +1832,10 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({
+      const step1Action = vi.fn().mockResolvedValue({
         nested: { value: 'step1-data' },
       });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success' });
 
       const step1 = createStep({
         id: 'step1',
@@ -2145,11 +2145,11 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       let err: Error | undefined;
-      const step1Action = vi.fn<any>().mockImplementation(() => {
+      const step1Action = vi.fn().mockImplementation(() => {
         err = new Error('Failed');
         throw err;
       });
-      const step2Action = vi.fn<any>();
+      const step2Action = vi.fn();
 
       const step1 = createStep({
         id: 'step1',
@@ -2212,10 +2212,10 @@ describe('MastraInngestWorkflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).not.toHaveBeenCalled();
-      expect(result?.steps).toMatchObject({
-        input: {},
-        step1: { status: 'failed', error: 'Failed' },
-      });
+      expect(result?.steps?.input).toEqual({});
+      expect(result?.steps?.step1.status).toBe('failed');
+      expect(result?.steps?.step1.error).toBeInstanceOf(Error);
+      expect((result?.steps?.step1.error as Error).message).toBe('Failed');
     });
 
     it('should support simple string conditions', async ctx => {
@@ -2226,9 +2226,9 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ status: 'success' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'step2' });
-      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'step3' });
+      const step1Action = vi.fn().mockResolvedValue({ status: 'success' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'step2' });
+      const step3Action = vi.fn().mockResolvedValue({ result: 'step3' });
       const step1 = createStep({
         id: 'step1',
         execute: step1Action,
@@ -2330,8 +2330,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ count: 5 });
-      const step2Action = vi.fn<any>();
+      const step1Action = vi.fn().mockResolvedValue({ count: 5 });
+      const step2Action = vi.fn();
 
       const step1 = createStep({
         id: 'step1',
@@ -2418,7 +2418,7 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockRejectedValue(error);
+      const failingAction = vi.fn().mockRejectedValue(error);
 
       const step1 = createStep({
         id: 'step1',
@@ -2464,14 +2464,209 @@ describe('MastraInngestWorkflow', () => {
 
       const run = await workflow.createRun();
 
-      await expect(run.start({ inputData: {} })).resolves.toMatchObject({
-        steps: {
-          step1: {
-            error: 'Step execution failed',
-            status: 'failed',
-          },
+      const result = await run.start({ inputData: {} });
+
+      expect(result.steps.step1.status).toBe('failed');
+      // Error should be an Error instance (re-hydrated from serialized form)
+      expect(result.steps.step1.error).toBeInstanceOf(Error);
+      expect((result.steps.step1.error as Error).message).toBe('Step execution failed');
+
+      srv.close();
+    });
+
+    it('should preserve custom error properties through Inngest serialization', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      // Create an error with custom properties (like AIAPICallError from AI SDK)
+      const customError = new Error('API rate limit exceeded');
+      (customError as any).statusCode = 429;
+      (customError as any).responseHeaders = { 'retry-after': '60' };
+      (customError as any).isRetryable = true;
+
+      const failingAction = vi.fn().mockRejectedValue(customError);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-error-props-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-error-props-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
         },
       });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Step-level error should be an Error instance with custom properties preserved
+      const stepError = result.steps.step1;
+      expect(stepError.status).toBe('failed');
+      expect(stepError.error).toBeInstanceOf(Error);
+      expect((stepError.error as Error).message).toBe('API rate limit exceeded');
+      // Custom properties should be preserved through serialization/deserialization
+      expect((stepError.error as any).statusCode).toBe(429);
+      expect((stepError.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+      expect((stepError.error as any).isRetryable).toBe(true);
+
+      // Workflow-level error should also be an Error instance
+      // Note: In Inngest, the workflow-level error comes from formatResultError
+      // which uses the step's error (the original error with all its properties)
+      if (result.status === 'failed') {
+        expect(result.error).toBeInstanceOf(Error);
+        // The workflow-level error should have the original error message
+        // (formatResultError gets the error from the step result)
+        expect((result.error as Error).message).toBe('API rate limit exceeded');
+        // Custom properties should also be preserved on workflow-level error
+        expect((result.error as any).statusCode).toBe(429);
+        expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((result.error as any).isRetryable).toBe(true);
+      }
+
+      srv.close();
+    });
+
+    it('should preserve error cause chains through Inngest serialization', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      // Create a nested error with cause chain
+      const rootCause = new Error('Database connection failed');
+      (rootCause as any).code = 'ECONNREFUSED';
+      (rootCause as any).host = 'localhost';
+      (rootCause as any).port = 5432;
+
+      const middleCause = new Error('Query execution failed', { cause: rootCause });
+      (middleCause as any).query = 'SELECT * FROM users';
+
+      const topError = new Error('Failed to fetch user data', { cause: middleCause });
+      (topError as any).userId = '12345';
+
+      const failingAction = vi.fn().mockRejectedValue(topError);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-error-cause-chain-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-error-cause-chain-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Step-level error should preserve the cause chain
+      const stepError = result.steps.step1;
+      expect(stepError.status).toBe('failed');
+      expect(stepError.error).toBeInstanceOf(Error);
+      expect((stepError.error as Error).message).toBe('Failed to fetch user data');
+      expect((stepError.error as any).userId).toBe('12345');
+
+      // Check middle cause
+      const stepMiddleCause = (stepError.error as Error).cause;
+      expect(stepMiddleCause).toBeDefined();
+      expect((stepMiddleCause as Error).message).toBe('Query execution failed');
+      expect((stepMiddleCause as any).query).toBe('SELECT * FROM users');
+
+      // Check root cause
+      const stepRootCause = (stepMiddleCause as Error).cause;
+      expect(stepRootCause).toBeDefined();
+      expect((stepRootCause as Error).message).toBe('Database connection failed');
+      expect((stepRootCause as any).code).toBe('ECONNREFUSED');
+      expect((stepRootCause as any).host).toBe('localhost');
+      expect((stepRootCause as any).port).toBe(5432);
+
+      // Workflow-level error should also preserve the cause chain
+      if (result.status === 'failed') {
+        expect(result.error).toBeInstanceOf(Error);
+        expect((result.error as Error).message).toBe('Failed to fetch user data');
+
+        const workflowMiddleCause = (result.error as Error).cause;
+        expect(workflowMiddleCause).toBeDefined();
+        expect((workflowMiddleCause as Error).message).toBe('Query execution failed');
+
+        const workflowRootCause = (workflowMiddleCause as Error).cause;
+        expect(workflowRootCause).toBeDefined();
+        expect((workflowRootCause as Error).message).toBe('Database connection failed');
+      }
 
       srv.close();
     });
@@ -2485,8 +2680,8 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockRejectedValue(error);
-      const successAction = vi.fn<any>().mockResolvedValue({});
+      const failingAction = vi.fn().mockRejectedValue(error);
+      const successAction = vi.fn().mockResolvedValue({});
 
       const step1 = createStep({
         id: 'step1',
@@ -2550,15 +2745,11 @@ describe('MastraInngestWorkflow', () => {
       const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps).toMatchObject({
-        step1: {
-          status: 'success',
-        },
-        step2: {
-          status: 'failed',
-          error: 'Step execution failed',
-        },
-      });
+      expect(result.steps.step1.status).toBe('success');
+      expect(result.steps.step2.status).toBe('failed');
+      // Error should be an Error instance (re-hydrated from serialized form)
+      expect(result.steps.step2.error).toBeInstanceOf(Error);
+      expect((result.steps.step2.error as Error).message).toBe('Step execution failed');
 
       srv.close();
     });
@@ -2572,8 +2763,8 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockRejectedValue(error);
-      const successAction = vi.fn<any>().mockResolvedValue({});
+      const failingAction = vi.fn().mockRejectedValue(error);
+      const successAction = vi.fn().mockResolvedValue({});
 
       const step1 = createStep({
         id: 'step1',
@@ -2645,12 +2836,10 @@ describe('MastraInngestWorkflow', () => {
       const run = await mainWorkflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps).toMatchObject({
-        'test-workflow': {
-          status: 'failed',
-          error: 'Step execution failed',
-        },
-      });
+      expect(result.steps['test-workflow'].status).toBe('failed');
+      // Error should be an Error instance (re-hydrated from serialized form)
+      expect(result.steps['test-workflow'].error).toBeInstanceOf(Error);
+      expect((result.steps['test-workflow'].error as Error).message).toBe('Step execution failed');
 
       srv.close();
     });
@@ -2665,13 +2854,13 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({
+      const step1Action = vi.fn().mockResolvedValue({
         status: 'partial',
         score: 75,
         flags: { isValid: true },
       });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'step2' });
-      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'step3' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'step2' });
+      const step3Action = vi.fn().mockResolvedValue({ result: 'step3' });
 
       const step1 = createStep({
         id: 'step1',
@@ -3090,6 +3279,128 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
     });
+
+    it('should run foreach with nested workflow', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      // Steps for the nested workflow (from issue #9965)
+      const cyclePhasesStep1 = createStep({
+        id: 'phase-1',
+        description: 'phase number 1',
+        inputSchema: z.object({
+          element: z.string(),
+        }),
+        outputSchema: z.object({
+          element: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          return { element: inputData.element };
+        },
+      });
+
+      const cyclePhasesStep2 = createStep({
+        id: 'phase-2',
+        description: 'phase number 2',
+        inputSchema: z.object({
+          element: z.string(),
+        }),
+        outputSchema: z.object({
+          element: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          return { element: inputData.element };
+        },
+      });
+
+      const cyclePhasesStep3 = createStep({
+        id: 'phase-3',
+        description: 'phase number 3',
+        inputSchema: z.object({
+          element: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          return { result: inputData.element };
+        },
+      });
+
+      // Create nested workflow with multiple steps
+      const dynamicWorkflowPhases = createWorkflow({
+        id: 'dynamicWorkflowPhases',
+        inputSchema: z.object({
+          element: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      })
+        .then(cyclePhasesStep1)
+        .then(cyclePhasesStep2)
+        .then(cyclePhasesStep3)
+        .commit();
+
+      // Issue #9965: Wrap the nested workflow in createStep() - this causes the bug
+      // because createStep() strips the InngestWorkflow class identity
+      const dynamicWorkflowPhasesStep = createStep(dynamicWorkflowPhases);
+
+      // Create orchestrator workflow that uses foreach with the nested workflow
+      const dynamicWorkflowOrchestrator = createWorkflow({
+        id: 'dynamicWorkflowOrchestrator',
+        inputSchema: z.object({
+          elements: z.array(z.string()),
+        }),
+        outputSchema: z.array(z.object({ result: z.string() })),
+      })
+        .map(async ({ inputData }) => {
+          return inputData.elements.map(element => {
+            return { element: element };
+          });
+        })
+        .foreach(dynamicWorkflowPhasesStep)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': dynamicWorkflowOrchestrator,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await dynamicWorkflowOrchestrator.createRun();
+      const result = await run.start({ inputData: { elements: ['a', 'b', 'c'] } });
+
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual([{ result: 'a' }, { result: 'b' }, { result: 'c' }]);
+
+      srv.close();
+    });
   });
 
   describe('if-else branching', () => {
@@ -3415,7 +3726,7 @@ describe('MastraInngestWorkflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({
           required: z.string(),
           nested: z.object({
@@ -3469,31 +3780,31 @@ describe('MastraInngestWorkflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success1' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success1' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success2' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success2' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step3 = createStep({
         id: 'step3',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success3' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success3' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step4 = createStep({
         id: 'step4',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success4' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success4' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step5 = createStep({
         id: 'step5',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success5' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success5' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -3576,13 +3887,13 @@ describe('MastraInngestWorkflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockRejectedValue(new Error('Step failed')),
+        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -3628,7 +3939,9 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
 
       expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toMatchObject({ status: 'failed', error: 'Step failed' });
+      expect(result.steps.step2.status).toBe('failed');
+      expect(result.steps.step2.error).toBeInstanceOf(Error);
+      expect((result.steps.step2.error as Error).message).toBe('Step failed');
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
@@ -3643,13 +3956,13 @@ describe('MastraInngestWorkflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockRejectedValue(new Error('Step failed')),
+        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -3716,7 +4029,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
+      const step1Action = vi.fn().mockResolvedValue({ name: 'step1' });
 
       const step1 = createStep({
         id: 'step1',
@@ -3726,7 +4039,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ name }) => {
+      const toolAction = vi.fn().mockImplementation(async ({ name }) => {
         return { name };
       });
 
@@ -4032,7 +4345,7 @@ describe('MastraInngestWorkflow', () => {
       const improveResponseAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend, state, setState }) => {
-          setState({ ...state, value: 'test state' });
+          await setState({ ...state, value: 'test state' });
           await suspend();
           return undefined;
         })
@@ -4182,6 +4495,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -4231,6 +4546,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -4253,6 +4570,7 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
         },
         evaluateImprovedResponse: {
           status: 'success',
@@ -4479,8 +4797,9 @@ describe('MastraInngestWorkflow', () => {
       expect(initialResult.steps['branch-step-2'].suspendOutput).toBeUndefined();
       if (initialResult.status === 'suspended') {
         expect(initialResult.suspended).toHaveLength(2);
-        expect(initialResult.suspended[0]).toContain('branch-step-1');
-        expect(initialResult.suspended[1]).toContain('branch-step-2');
+        const suspendedStepIds = initialResult.suspended.map(s => s[0]);
+        expect(suspendedStepIds).toContain('branch-step-1');
+        expect(suspendedStepIds).toContain('branch-step-2');
       }
 
       const resumedResult1 = await run.resume({
@@ -4529,7 +4848,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -4644,7 +4963,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -4728,7 +5047,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -4808,7 +5127,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -4889,6 +5208,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: {
             value: 0,
@@ -4943,6 +5263,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           step1: {
@@ -4995,7 +5316,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -5066,13 +5387,12 @@ describe('MastraInngestWorkflow', () => {
       const run = await workflow.createRun();
       const failedRun = await run.start({ inputData: { value: 0 } });
       expect(failedRun.status).toBe('failed');
-      expect(failedRun.steps.step2).toEqual({
-        status: 'failed',
-        payload: { step1Result: 2 },
-        error: 'Simulated error',
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
+      expect(failedRun.steps.step2.status).toBe('failed');
+      expect(failedRun.steps.step2.payload).toEqual({ step1Result: 2 });
+      expect(failedRun.steps.step2.error).toBeInstanceOf(Error);
+      expect((failedRun.steps.step2.error as Error).message).toBe('Simulated error');
+      expect(failedRun.steps.step2.startedAt).toEqual(expect.any(Number));
+      expect(failedRun.steps.step2.endedAt).toEqual(expect.any(Number));
 
       const result = await run.timeTravel({
         step: step2,
@@ -5090,6 +5410,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: {
             value: 0,
@@ -5143,6 +5464,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: { value: 0 },
           step1: {
@@ -5195,8 +5517,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
-      const executeStep2 = vi.fn<any>().mockResolvedValue({ step2Result: 3 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
+      const executeStep2 = vi.fn().mockResolvedValue({ step2Result: 3 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -5308,6 +5630,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: { value: 0 },
           step1: {
@@ -5361,6 +5684,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           step1: {
@@ -5408,6 +5732,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result3.status).toBe('success');
       expect(result3).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           step1: {
@@ -5615,6 +5940,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -5805,6 +6132,8 @@ describe('MastraInngestWorkflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
         },
         evaluateToneConsistency: {
           status: 'success',
@@ -5930,6 +6259,7 @@ describe('MastraInngestWorkflow', () => {
       });
       expect(result).toEqual({
         status: 'success',
+        input: { value: 0 },
         steps: {
           input: {
             value: 0,
@@ -5955,6 +6285,7 @@ describe('MastraInngestWorkflow', () => {
               value: 10,
             },
             endedAt: expect.any(Number),
+            metadata: { iterationCount: 5 },
           },
           final: {
             payload: {
@@ -6104,6 +6435,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           initialStep: {
@@ -6231,6 +6563,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
+        input: { input: 'start' },
         steps: {
           input: { input: 'start' },
           initialStep: {
@@ -6319,6 +6652,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result3.status).toBe('success');
       expect(result3).toEqual({
         status: 'success',
+        input: {},
         steps: {
           input: {},
           initialStep: {
@@ -6525,7 +6859,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const finalStep = createStep({
         id: 'finalStep',
         inputSchema: z.object({
@@ -8161,8 +8495,8 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  // TODO: can we support this on inngest?
-  describe.skip('Dependency Injection', () => {
+  // Testing requestContext persistence across Inngest memoization
+  describe('Dependency Injection', () => {
     it('should inject requestContext dependencies into steps during run', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -8184,7 +8518,12 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false },
+      });
       workflow.then(step).commit();
 
       const mastra = new Mastra({
@@ -8334,6 +8673,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'increment-workflow',
         inputSchema: z.object({ value: z.number() }),
         outputSchema: z.object({ value: z.number() }),
+        options: { validateInputs: false },
       })
         .then(incrementStep)
         .then(resumeStep)
@@ -8351,11 +8691,30 @@ describe('MastraInngestWorkflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
-        storage: testStorage,
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
         workflows: { incrementWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
       });
+
+      const app = await createHonoServer(mastra);
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
 
       const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
@@ -8365,6 +8724,8 @@ describe('MastraInngestWorkflow', () => {
         resumeData: { value: 21 },
         step: ['resume'],
       });
+
+      srv.close();
 
       expect(resumeResult.status).toBe('success');
     });
@@ -8421,6 +8782,7 @@ describe('MastraInngestWorkflow', () => {
         id: 'increment-workflow',
         inputSchema: z.object({ value: z.number() }),
         outputSchema: z.object({ value: z.number() }),
+        options: { validateInputs: false },
       })
         .then(incrementStep)
         .then(resumeStep)
@@ -8438,11 +8800,30 @@ describe('MastraInngestWorkflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
-        storage: testStorage,
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
         workflows: { incrementWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
       });
+
+      const app = await createHonoServer(mastra);
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
 
       const run = await incrementWorkflow.createRun();
       const result = await run.start({ inputData: { value: 0 } });
@@ -8452,6 +8833,8 @@ describe('MastraInngestWorkflow', () => {
         resumeData: { value: 21 },
         step: ['resume'],
       });
+
+      srv.close();
 
       expect(resumeResult.status).toBe('success');
     });
@@ -8533,8 +8916,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -8707,8 +9090,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -8911,8 +9294,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ value: 1000 });
-      const step2Action = vi.fn<any>().mockResolvedValue({ value: 2000 });
+      const step1Action = vi.fn().mockResolvedValue({ value: 1000 });
+      const step2Action = vi.fn().mockResolvedValue({ value: 2000 });
 
       const step1 = createStep({
         id: 'step1',
@@ -9718,8 +10101,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -9891,8 +10274,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -10009,7 +10392,11 @@ describe('MastraInngestWorkflow', () => {
         {
           payload: {
             id: 'step2',
-            error: 'Step input validation failed: \n- value: Required',
+            // After JSON.parse(JSON.stringify(...)), Error becomes a plain object
+            error: expect.objectContaining({
+              message: expect.stringMatching(/Step input validation failed/),
+              name: expect.any(String),
+            }),
             endedAt: expect.any(Number),
             startedAt: expect.any(Number),
             payload: {
@@ -10045,15 +10432,12 @@ describe('MastraInngestWorkflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect(executionResult.steps.step2).toMatchObject({
-        status: 'failed',
-        error: 'Step input validation failed: \n- value: Required',
-        payload: {
-          result: 'success1',
-        },
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
+      expect(executionResult.steps.step2.status).toBe('failed');
+      expect(executionResult.steps.step2.error).toBeInstanceOf(Error);
+      expect((executionResult.steps.step2.error as Error).message).toMatch(/Step input validation failed/);
+      expect(executionResult.steps.step2.payload).toEqual({ result: 'success1' });
+      expect(executionResult.steps.step2.startedAt).toEqual(expect.any(Number));
+      expect(executionResult.steps.step2.endedAt).toEqual(expect.any(Number));
     });
 
     it('should generate a stream with custom events', async ctx => {
@@ -10279,8 +10663,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -11434,8 +11818,8 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -11526,8 +11910,8 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -11590,5 +11974,227 @@ describe('MastraInngestWorkflow', () => {
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
       srv.close();
     });
+  });
+
+  describe('Agent step with structured output schema', () => {
+    it('should pass structured output from agent step to next step with correct types', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      // Define the structured output schema for the agent
+      const articleSchema = z.object({
+        title: z.string(),
+        summary: z.string(),
+        tags: z.array(z.string()),
+      });
+
+      const articleJson = JSON.stringify({
+        title: 'Test Article',
+        summary: 'This is a test summary',
+        tags: ['test', 'article'],
+      });
+
+      // Mock agent using V2 model that properly supports structured output
+      // Use simulateReadableStream for proper async streaming behavior (matches other passing tests)
+      const agent = new Agent({
+        id: 'article-generator',
+        name: 'Article Generator',
+        instructions: 'Generate an article with title, summary, and tags',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: articleJson }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: articleJson },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ],
+            }),
+          }),
+        }),
+      });
+
+      // Create agent step WITH structuredOutput schema
+      const agentStep = createStep(agent, {
+        structuredOutput: {
+          schema: articleSchema,
+        },
+      });
+
+      // This step receives the structured output from the agent directly
+      const processArticleStep = createStep({
+        id: 'process-article',
+        description: 'Process the generated article',
+        inputSchema: articleSchema,
+        outputSchema: z.object({
+          processed: z.boolean(),
+          tagCount: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          // inputData should have title, summary, tags - not just text
+          return {
+            processed: true,
+            tagCount: inputData.tags.length,
+          };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'article-workflow',
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.object({ processed: z.boolean(), tagCount: z.number() }),
+      });
+
+      // Chain directly - no map needed if outputSchema matches inputSchema
+      workflow.then(agentStep).then(processArticleStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'article-workflow': workflow },
+        agents: { 'article-generator': agent },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun({ runId: 'structured-output-test' });
+      const streamOutput = run.streamVNext({
+        inputData: { prompt: 'Generate an article about testing' },
+      });
+
+      for await (const _data of streamOutput.fullStream) {
+        // consume stream
+      }
+
+      const result = await streamOutput.result;
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({
+          processed: true,
+          tagCount: 2,
+        });
+      }
+      srv.close();
+    });
+  });
+
+  describe.sequential('startAsync', () => {
+    it('should start workflow and complete successfully', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => {
+          return { result: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      // Extra delay to ensure Inngest has fully synced functions
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const run = await workflow.createRun();
+      const { runId } = await run.startAsync({ inputData: {} });
+
+      expect(runId).toBe(run.runId);
+
+      // Poll for completion with longer timeout for Inngest
+      let result;
+      for (let i = 0; i < 30; i++) {
+        result = await workflow.getWorkflowRunExecutionResult(runId);
+        if (result?.status === 'success' || result?.status === 'failed') break;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      expect(result?.status).toBe('success');
+      expect(result?.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      srv.close();
+    }, 60000);
   });
 }, 80e3);

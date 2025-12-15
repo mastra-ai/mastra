@@ -361,7 +361,10 @@ describe('convertFullStreamChunkToMastra', () => {
     // Arrange: Create tripwire input with reason
     const tripwireInput = {
       type: 'tripwire',
-      tripwireReason: 'content_filter_triggered',
+      reason: 'content_filter_triggered',
+      retry: true,
+      metadata: { test: 'data' },
+      processorId: 'test-processor',
     };
 
     // Act: Convert the tripwire value
@@ -373,7 +376,10 @@ describe('convertFullStreamChunkToMastra', () => {
       runId: testContext.runId,
       from: ChunkFrom.AGENT,
       payload: {
-        tripwireReason: 'content_filter_triggered',
+        reason: 'content_filter_triggered',
+        retry: true,
+        metadata: { test: 'data' },
+        processorId: 'test-processor',
       },
     });
   });

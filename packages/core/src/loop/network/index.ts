@@ -88,13 +88,22 @@ export function getLastMessage(messages: MessageListInput) {
     const lastMessage = Array.isArray(messages) ? messages[messages.length - 1] : messages;
     if (typeof lastMessage === 'string') {
       message = lastMessage;
-    } else if (lastMessage && `content` in lastMessage && lastMessage?.content) {
+    } else if (lastMessage && 'content' in lastMessage && lastMessage?.content) {
       const lastMessageContent = lastMessage.content;
       if (typeof lastMessageContent === 'string') {
         message = lastMessageContent;
       } else if (Array.isArray(lastMessageContent)) {
         const lastPart = lastMessageContent[lastMessageContent.length - 1];
         if (lastPart?.type === 'text') {
+          message = lastPart.text;
+        }
+      }
+    } else if (lastMessage && 'parts' in lastMessage && lastMessage?.parts) {
+      // Handle messages with 'parts' format (e.g. from MessageList)
+      const parts = lastMessage.parts;
+      if (Array.isArray(parts)) {
+        const lastPart = parts[parts.length - 1];
+        if (lastPart?.type === 'text' && lastPart?.text) {
           message = lastPart.text;
         }
       }
@@ -595,9 +604,25 @@ export async function createNetworkLoop({
         runId,
       });
 
+      // Get memory context from initData to pass to sub-agents
+      // This ensures sub-agents can access the same thread/resource for memory operations
+      const initData = await getInitData();
+      const threadId = initData?.threadId || runId;
+      const resourceId = initData?.threadResourceId || networkName;
+
+      const agentHasOwnMemory = agentForStep.hasOwnMemory();
+
       const result = await agentForStep.stream(inputData.prompt, {
         requestContext: requestContext,
         runId,
+        ...(agentHasOwnMemory
+          ? {
+              memory: {
+                thread: threadId,
+                resource: resourceId,
+              },
+            }
+          : {}),
       });
 
       for await (const chunk of result.fullStream) {
@@ -614,7 +639,6 @@ export async function createNetworkLoop({
 
       const memory = await agent.getMemory({ requestContext: requestContext });
 
-      const initData = await getInitData();
       const messages = result.messageList.get.all.v1();
 
       await memory?.saveMessages({
@@ -933,6 +957,7 @@ export async function createNetworkLoop({
           mastra: agent.getMastraInstance(),
           agent: {
             resourceId: initData.threadResourceId || networkName,
+            toolCallId,
             threadId: initData.threadId,
           },
           runId,

@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -65,7 +66,7 @@ export class QdrantVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('QDRANT', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, vectorCount: vectors.length },
@@ -86,7 +87,7 @@ export class QdrantVector extends MastraVector {
     } catch (validationError) {
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          id: createVectorErrorId('QDRANT', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName, dimension, metric },
@@ -113,7 +114,7 @@ export class QdrantVector extends MastraVector {
 
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('QDRANT', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, dimension, metric },
@@ -170,7 +171,7 @@ export class QdrantVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('QDRANT', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, topK },
@@ -187,7 +188,7 @@ export class QdrantVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('QDRANT', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -216,7 +217,7 @@ export class QdrantVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('QDRANT', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -242,7 +243,7 @@ export class QdrantVector extends MastraVector {
       }
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('QDRANT', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -267,7 +268,7 @@ export class QdrantVector extends MastraVector {
     // Validate mutually exclusive parameters
     if (id && filter) {
       throw new MastraError({
-        id: 'STORAGE_QDRANT_VECTOR_UPDATE_MUTUALLY_EXCLUSIVE',
+        id: createVectorErrorId('QDRANT', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         text: 'Cannot specify both id and filter - they are mutually exclusive',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -277,7 +278,7 @@ export class QdrantVector extends MastraVector {
 
     if (!id && !filter) {
       throw new MastraError({
-        id: 'STORAGE_QDRANT_VECTOR_UPDATE_NO_TARGET',
+        id: createVectorErrorId('QDRANT', 'UPDATE_VECTOR', 'NO_TARGET'),
         text: 'Either id or filter must be provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -287,7 +288,7 @@ export class QdrantVector extends MastraVector {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'STORAGE_QDRANT_VECTOR_UPDATE_NO_PAYLOAD',
+        id: createVectorErrorId('QDRANT', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         text: 'No updates provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -301,7 +302,7 @@ export class QdrantVector extends MastraVector {
     // Validate filter is not empty
     if (filter && Object.keys(filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_QDRANT_VECTOR_UPDATE_EMPTY_FILTER',
+        id: createVectorErrorId('QDRANT', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
         text: 'Filter cannot be an empty filter object',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -411,7 +412,7 @@ export class QdrantVector extends MastraVector {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('QDRANT', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -444,7 +445,7 @@ export class QdrantVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('QDRANT', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -506,7 +507,7 @@ export class QdrantVector extends MastraVector {
     // Validate mutually exclusive parameters
     if (ids && filter) {
       throw new MastraError({
-        id: 'STORAGE_QDRANT_VECTOR_DELETE_VECTORS_MUTUALLY_EXCLUSIVE',
+        id: createVectorErrorId('QDRANT', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         text: 'Cannot specify both ids and filter - they are mutually exclusive',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -516,7 +517,7 @@ export class QdrantVector extends MastraVector {
 
     if (!ids && !filter) {
       throw new MastraError({
-        id: 'STORAGE_QDRANT_VECTOR_DELETE_VECTORS_NO_TARGET',
+        id: createVectorErrorId('QDRANT', 'DELETE_VECTORS', 'NO_TARGET'),
         text: 'Either filter or ids must be provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -527,7 +528,7 @@ export class QdrantVector extends MastraVector {
     // Validate ids array is not empty
     if (ids && ids.length === 0) {
       throw new MastraError({
-        id: 'STORAGE_QDRANT_VECTOR_DELETE_VECTORS_EMPTY_IDS',
+        id: createVectorErrorId('QDRANT', 'DELETE_VECTORS', 'EMPTY_IDS'),
         text: 'Cannot delete with empty ids array',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -538,7 +539,7 @@ export class QdrantVector extends MastraVector {
     // Validate filter is not empty
     if (filter && Object.keys(filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_QDRANT_VECTOR_DELETE_VECTORS_EMPTY_FILTER',
+        id: createVectorErrorId('QDRANT', 'DELETE_VECTORS', 'EMPTY_FILTER'),
         text: 'Cannot delete with empty filter object',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -577,7 +578,7 @@ export class QdrantVector extends MastraVector {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_QDRANT_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('QDRANT', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

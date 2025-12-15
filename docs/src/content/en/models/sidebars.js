@@ -93,11 +93,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/agentrouter",
-          label: "AgentRouter",
-        },
-        {
-          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },
@@ -143,6 +138,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/cloudflare-ai-gateway",
+          label: "Cloudflare AI Gateway",
+        },
+        {
+          type: "doc",
           id: "providers/cloudflare-workers-ai",
           label: "Cloudflare Workers AI",
         },
@@ -183,6 +183,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/helicone",
+          label: "Helicone",
+        },
+        {
+          type: "doc",
           id: "providers/huggingface",
           label: "Hugging Face",
         },
@@ -203,8 +208,13 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/io-intelligence",
-          label: "IO Intelligence",
+          id: "providers/io-net",
+          label: "IO.NET",
+        },
+        {
+          type: "doc",
+          id: "providers/kimi-for-coding",
+          label: "Kimi For Coding",
         },
         {
           type: "doc",
@@ -224,7 +234,12 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/minimax",
-          label: "Minimax",
+          label: "MiniMax",
+        },
+        {
+          type: "doc",
+          id: "providers/minimax-cn",
+          label: "MiniMax (China)",
         },
         {
           type: "doc",

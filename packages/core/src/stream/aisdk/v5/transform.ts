@@ -15,7 +15,8 @@ export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
       type: 'finish';
-      finishReason: LanguageModelV2FinishReason;
+      /** Includes 'tripwire' and 'retry' for processor scenarios */
+      finishReason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
       usage: LanguageModelV2Usage;
       providerMetadata: SharedV2ProviderMetadata;
       messages: {
@@ -129,7 +130,21 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
 
-    case 'tool-call':
+    case 'tool-call': {
+      let toolCallInput: Record<string, any> | undefined = undefined;
+
+      if (value.input) {
+        try {
+          toolCallInput = JSON.parse(value.input);
+        } catch (error) {
+          console.error('Error converting tool call input to JSON', {
+            error,
+            input: value.input,
+          });
+          toolCallInput = undefined;
+        }
+      }
+
       return {
         type: 'tool-call',
         runId: ctx.runId,
@@ -137,11 +152,12 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         payload: {
           toolCallId: value.toolCallId,
           toolName: value.toolName,
-          args: value.input ? JSON.parse(value.input) : undefined,
+          args: toolCallInput,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
         },
       };
+    }
 
     case 'tool-result':
       return {
@@ -346,7 +362,8 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'finish': {
       return {
         type: 'finish',
-        finishReason: chunk.payload.stepResult.reason,
+        // Cast needed: Mastra extends reason with 'tripwire' | 'retry' for processor scenarios
+        finishReason: chunk.payload.stepResult.reason as LanguageModelV2FinishReason,
         totalUsage: chunk.payload.output.usage,
       };
     }

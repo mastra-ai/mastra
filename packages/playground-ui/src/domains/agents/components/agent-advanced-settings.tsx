@@ -90,33 +90,16 @@ export const AgentAdvancedSettings = () => {
         </CollapsibleTrigger>
         <CollapsibleContent className={collapsibleContentClassName}>
           <div className="space-y-1">
-            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="top-k">
-              Top K
-            </Txt>
-            <Input
-              id="top-k"
-              type="number"
-              value={settings?.modelSettings?.topK || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    topK: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1">
             <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="frequency-penalty">
               Frequency Penalty
             </Txt>
             <Input
               id="frequency-penalty"
               type="number"
-              value={settings?.modelSettings?.frequencyPenalty || ''}
+              step="0.1"
+              min="-1"
+              max="1"
+              value={settings?.modelSettings?.frequencyPenalty ?? ''}
               onChange={e =>
                 setSettings({
                   ...settings,
@@ -136,13 +119,36 @@ export const AgentAdvancedSettings = () => {
             <Input
               id="presence-penalty"
               type="number"
-              value={settings?.modelSettings?.presencePenalty || ''}
+              step="0.1"
+              min="-1"
+              max="1"
+              value={settings?.modelSettings?.presencePenalty ?? ''}
               onChange={e =>
                 setSettings({
                   ...settings,
                   modelSettings: {
                     ...settings?.modelSettings,
                     presencePenalty: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="top-k">
+              Top K
+            </Txt>
+            <Input
+              id="top-k"
+              type="number"
+              value={settings?.modelSettings?.topK || ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    topK: e.target.value ? Number(e.target.value) : undefined,
                   },
                 })
               }
@@ -203,6 +209,26 @@ export const AgentAdvancedSettings = () => {
                   modelSettings: {
                     ...settings?.modelSettings,
                     maxRetries: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="seed">
+              Seed
+            </Txt>
+            <Input
+              id="seed"
+              type="number"
+              value={settings?.modelSettings?.seed || ''}
+              onChange={e =>
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    seed: e.target.value ? Number(e.target.value) : undefined,
                   },
                 })
               }

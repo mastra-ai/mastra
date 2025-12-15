@@ -11,7 +11,7 @@ import {
 import { TraceSpanUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { CircleGaugeIcon } from 'lucide-react';
-import { ListScoresResponse } from '@mastra/client-js';
+import { ListScoresResponse, type GetScorerResponse } from '@mastra/client-js';
 import { SpanRecord } from '@mastra/core/storage';
 
 type SpanTabsProps = {
@@ -24,6 +24,8 @@ type SpanTabsProps = {
   defaultActiveTab?: string;
   initialScoreId?: string;
   computeTraceLink: (traceId: string, spanId?: string) => string;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 };
 
 export function SpanTabs({
@@ -36,6 +38,8 @@ export function SpanTabs({
   defaultActiveTab = 'details',
   initialScoreId,
   computeTraceLink,
+  scorers,
+  isLoadingScorers,
 }: SpanTabsProps) {
   const { Link } = useLinkComponent();
 
@@ -71,9 +75,11 @@ export function SpanTabs({
             </Section.Header>
             <SpanScoring
               traceId={trace?.traceId}
-              isTopLevelSpan={span?.parentSpanId === null}
+              isTopLevelSpan={!Boolean(span?.parentSpanId)}
               spanId={span?.spanId}
               entityType={entityType}
+              scorers={scorers}
+              isLoadingScorers={isLoadingScorers}
             />
           </Section>
           <Section>

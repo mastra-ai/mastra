@@ -14,11 +14,17 @@ import type { BaseExporterConfig } from '@mastra/observability';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
-import { normalizeUsageMetrics } from './metrics';
+import { formatUsageMetrics } from './metrics';
 
 export interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   /** LangSmith client instance */
   client?: Client;
+  /**
+   * The name of the LangSmith project to send traces to.
+   * Overrides the LANGCHAIN_PROJECT environment variable.
+   * If neither is set, traces are sent to the "default" project.
+   */
+  projectName?: string;
 }
 
 type SpanData = {
@@ -32,7 +38,6 @@ const DEFAULT_SPAN_TYPE = 'chain';
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<SpanType, 'llm' | 'tool' | 'chain'>> = {
   [SpanType.MODEL_GENERATION]: 'llm',
-  [SpanType.MODEL_CHUNK]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'chain',
@@ -90,6 +95,16 @@ export class LangSmithExporter extends BaseExporter {
   }
 
   private initializeRootSpan(span: AnyExportedSpan) {
+    // Check if trace already exists - reuse existing trace data
+    if (this.traceMap.has(span.traceId)) {
+      this.logger.debug('LangSmith exporter: Reusing existing trace from local map', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+      });
+      return;
+    }
+
     this.traceMap.set(span.traceId, { spans: new Map(), activeIds: new Set() });
   }
 
@@ -165,6 +180,17 @@ export class LangSmithExporter extends BaseExporter {
     }
     if (updatePayload.error != null) {
       langsmithRunTree.error = updatePayload.error;
+    }
+
+    // Add new_token event for TTFT tracking on MODEL_GENERATION spans
+    if (span.type === SpanType.MODEL_GENERATION) {
+      const modelAttr = (span.attributes ?? {}) as ModelGenerationAttributes;
+      if (modelAttr.completionStartTime !== undefined) {
+        langsmithRunTree.addEvent({
+          name: 'new_token',
+          time: modelAttr.completionStartTime.toISOString(),
+        });
+      }
     }
 
     if (isEnd) {
@@ -285,6 +311,16 @@ export class LangSmithExporter extends BaseExporter {
       },
     };
 
+    // Add project name if configured
+    if (this.config.projectName) {
+      payload.project_name = this.config.projectName;
+    }
+
+    // Add tags for root spans
+    if (span.isRootSpan && span.tags?.length) {
+      payload.tags = span.tags;
+    }
+
     // Core span data
     if (span.input !== undefined) {
       payload.inputs = isKVMap(span.input) ? span.input : { input: span.input };
@@ -314,7 +350,7 @@ export class LangSmithExporter extends BaseExporter {
       }
 
       // Usage/token info goes to metrics
-      payload.metadata.usage_metadata = normalizeUsageMetrics(modelAttr);
+      payload.metadata.usage_metadata = formatUsageMetrics(modelAttr.usage);
 
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {
@@ -322,7 +358,7 @@ export class LangSmithExporter extends BaseExporter {
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters']);
+      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,

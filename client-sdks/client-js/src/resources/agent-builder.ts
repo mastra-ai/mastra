@@ -1,6 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { WorkflowInfo } from '@mastra/core/workflows';
-import type { ClientOptions } from '../types';
+import type { ClientOptions, ListWorkflowRunsParams } from '../types';
 import { parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
@@ -482,7 +482,7 @@ export class AgentBuilder extends BaseResource {
    * Gets all runs for this agent builder action.
    * This calls `/api/agent-builder/:actionId/runs`.
    */
-  async runs(params?: { fromDate?: Date; toDate?: Date; perPage?: number; page?: number; resourceId?: string }) {
+  async runs(params?: ListWorkflowRunsParams) {
     const searchParams = new URLSearchParams();
     if (params?.fromDate) {
       searchParams.set('fromDate', params.fromDate.toISOString());
@@ -495,6 +495,17 @@ export class AgentBuilder extends BaseResource {
     }
     if (params?.page !== undefined) {
       searchParams.set('page', String(params.page));
+    }
+    // Legacy support: also send limit/offset if provided (for older servers)
+    if (params?.limit !== null && params?.limit !== undefined) {
+      if (params.limit === false) {
+        searchParams.set('limit', 'false');
+      } else if (typeof params.limit === 'number' && params.limit > 0 && Number.isInteger(params.limit)) {
+        searchParams.set('limit', String(params.limit));
+      }
+    }
+    if (params?.offset !== null && params?.offset !== undefined && !isNaN(Number(params?.offset))) {
+      searchParams.set('offset', String(params.offset));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);

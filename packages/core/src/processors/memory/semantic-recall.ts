@@ -4,7 +4,7 @@ import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
 import { MessageList } from '../../agent';
 import type { IMastraLogger } from '../../logger';
-import { parseMemoryRuntimeContext } from '../../memory';
+import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
@@ -152,12 +152,12 @@ export class SemanticRecall implements Processor {
     messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages, messageList, runtimeContext } = args;
+    const { messages, messageList, requestContext } = args;
 
     // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(runtimeContext);
+    const memoryContext = parseMemoryRequestContext(requestContext);
     if (!memoryContext) {
       // No memory context available, return messages unchanged
       return messageList;
@@ -464,9 +464,9 @@ export class SemanticRecall implements Processor {
     messageList?: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RequestContext;
+    requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages, messageList, runtimeContext } = args;
+    const { messages, messageList, requestContext } = args;
 
     if (!this.vector || !this.embedder || !this.storage) {
       // Return messageList if available to signal no transformation occurred
@@ -474,7 +474,7 @@ export class SemanticRecall implements Processor {
     }
 
     try {
-      const memoryContext = parseMemoryRuntimeContext(runtimeContext);
+      const memoryContext = parseMemoryRequestContext(requestContext);
 
       if (!memoryContext) {
         return messageList || messages;

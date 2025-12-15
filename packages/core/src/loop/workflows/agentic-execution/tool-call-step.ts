@@ -14,7 +14,7 @@ export function createToolCallStep<
   tools,
   messageList,
   options,
-  writer,
+  outputWriter,
   controller,
   runId,
   streamState,
@@ -26,6 +26,14 @@ export function createToolCallStep<
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData, requestContext }) => {
+      // Use tools from _internal.stepTools if available (set by llmExecutionStep via prepareStep/processInputStep)
+      // This avoids serialization issues - _internal is a mutable object that preserves execute functions
+      // Fall back to the original tools from the closure if not set
+      const stepTools = (_internal?.stepTools as Tools) || tools;
+
+      const tool =
+        stepTools?.[inputData.toolName] ||
+        Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
       // Helper function to add tool approval metadata to the assistant message
       const addToolApprovalMetadata = (toolCallId: string, toolName: string, args: unknown) => {
         // Find the last assistant message in the response (which should contain this tool call)
@@ -138,10 +146,6 @@ export function createToolCallStep<
         };
       }
 
-      const tool =
-        tools?.[inputData.toolName] ||
-        Object.values(tools || {})?.find(tool => `id` in tool && tool.id === inputData.toolName);
-
       if (!tool) {
         throw new Error(`Tool ${inputData.toolName} not found`);
       }
@@ -214,7 +218,7 @@ export function createToolCallStep<
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
           messages: messageList.get.input.aiV5.model(),
-          writableStream: writer,
+          outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
           suspend: async (suspendPayload: any) => {

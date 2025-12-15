@@ -21,7 +21,7 @@ describe('Tool Input Validation Integration Tests', () => {
       // Test missing required fields - pass raw data as first arg
       const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('- name: Required');
       expect(result.message).toContain('- age: Required');
     });
@@ -45,7 +45,7 @@ describe('Tool Input Validation Integration Tests', () => {
       } as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.validationErrors).toBeDefined();
     });
 
@@ -202,7 +202,7 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute({ username: 'ab' });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed for user-registration');
+      expect(result.message).toContain('Tool input validation failed for user-registration');
     });
   });
 
@@ -376,7 +376,7 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Expected string, received number');
     });
 
@@ -401,8 +401,210 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Expected object, received string');
+    });
+  });
+
+  describe('All-optional parameters', () => {
+    it('should accept undefined input when all parameters are optional', async () => {
+      const tool = createTool({
+        id: 'all-optional-tool',
+        description: 'Tool with all optional parameters',
+        inputSchema: z.object({
+          startTime: z.string().optional(),
+          endTime: z.string().optional(),
+          limit: z.number().optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // Simulate LLM sending undefined (as Claude Sonnet 4.5, Gemini 2.4 do)
+      const result = await tool.execute!(undefined);
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.receivedArgs).toEqual({});
+    });
+
+    it('should accept null input when all parameters are optional', async () => {
+      const tool = createTool({
+        id: 'all-optional-null',
+        description: 'Tool with all optional parameters',
+        inputSchema: z.object({
+          filter: z.string().optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // Some LLMs might send null instead of undefined
+      const result = await tool.execute!(null as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.receivedArgs).toEqual({});
+    });
+
+    it('should accept empty object input when all parameters are optional', async () => {
+      const tool = createTool({
+        id: 'all-optional-empty',
+        description: 'Tool with all optional parameters',
+        inputSchema: z.object({
+          startTime: z.string().optional(),
+          endTime: z.string().optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // Empty object should work (this already works, but good to verify)
+      const result = await tool.execute!({});
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.receivedArgs).toEqual({});
+    });
+
+    it('should still validate when partial args are provided with all-optional schema', async () => {
+      const tool = createTool({
+        id: 'partial-optional',
+        description: 'Tool with all optional parameters',
+        inputSchema: z.object({
+          startTime: z.string().optional(),
+          limit: z.number().optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // Providing some args should still work
+      const result = await tool.execute!({ limit: 10 });
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.receivedArgs).toEqual({ limit: 10 });
+    });
+
+    it('should still reject invalid types even with undefined-to-empty normalization', async () => {
+      const tool = createTool({
+        id: 'optional-type-check',
+        description: 'Tool with all optional parameters',
+        inputSchema: z.object({
+          limit: z.number().optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // Invalid type should still fail
+      const result = await tool.execute!({ limit: 'not-a-number' } as any);
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool input validation failed');
+    });
+
+    it('should reject array input when object schema is expected', async () => {
+      const tool = createTool({
+        id: 'object-not-array',
+        description: 'Tool expecting object, not array',
+        inputSchema: z.object({
+          items: z.array(z.string()).optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // Array should NOT be normalized to {} - it should fail validation
+      const result = await tool.execute!(['item1', 'item2'] as any);
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool input validation failed');
+    });
+
+    it('should reject string input when object schema is expected', async () => {
+      const tool = createTool({
+        id: 'object-not-string',
+        description: 'Tool expecting object, not string',
+        inputSchema: z.object({
+          name: z.string().optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // String should NOT be normalized to {} - it should fail validation
+      const result = await tool.execute!('some string' as any);
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool input validation failed');
+    });
+
+    it('should reject number input when object schema is expected', async () => {
+      const tool = createTool({
+        id: 'object-not-number',
+        description: 'Tool expecting object, not number',
+        inputSchema: z.object({
+          count: z.number().optional(),
+        }),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // Number should NOT be normalized to {} - it should fail validation
+      const result = await tool.execute!(42 as any);
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool input validation failed');
+    });
+
+    it('should accept undefined input when schema is an array', async () => {
+      const tool = createTool({
+        id: 'array-schema',
+        description: 'Tool with array schema',
+        inputSchema: z.array(
+          z.object({
+            id: z.string().optional(),
+          }),
+        ),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // LLM might send undefined for an array schema too
+      const result = await tool.execute!(undefined as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.receivedArgs).toEqual([]);
+    });
+
+    it('should accept null input when schema is an array', async () => {
+      const tool = createTool({
+        id: 'array-schema-null',
+        description: 'Tool with array schema',
+        inputSchema: z.array(z.string()),
+        execute: async inputData => {
+          return { success: true, receivedArgs: inputData };
+        },
+      });
+
+      // LLM might send null for an array schema
+      const result = await tool.execute!(null as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.receivedArgs).toEqual([]);
     });
   });
 
@@ -416,7 +618,7 @@ describe('Tool Input Validation Integration Tests', () => {
         },
       });
 
-      const result = await tool.execute({ anything: 'goes' } as any);
+      const result = await tool.execute!({ anything: 'goes' } as any);
 
       expect(result.error).toBeUndefined();
       expect(result.received).toEqual({ anything: 'goes' });
@@ -436,7 +638,7 @@ describe('Tool Input Validation Integration Tests', () => {
 
       const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Required');
     });
 
@@ -716,7 +918,7 @@ describe('Tool Output Validation Tests', () => {
     const invalidInputResult = await tool.execute({ email: 'not-an-email' });
     if ('error' in invalidInputResult) {
       expect(invalidInputResult.error).toBe(true);
-      expect(invalidInputResult.message).toContain('Tool validation failed');
+      expect(invalidInputResult.message).toContain('Tool input validation failed');
     } else {
       throw new Error('Result is not a validation error');
     }

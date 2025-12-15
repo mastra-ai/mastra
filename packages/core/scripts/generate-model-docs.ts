@@ -1,6 +1,6 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { ProviderConfig } from '../src/llm';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
@@ -749,7 +749,7 @@ const reasoningAgent = new Agent({
 \`\`\`
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server-db/request-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server/request-context), variables, or any other logic.
 
 \`\`\`typescript showLineNumbers
 const agent = new Agent({

@@ -1,6 +1,17 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorage, normalizePerPage } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  TABLE_WORKFLOW_SNAPSHOT,
+  ensureDate,
+  WorkflowsStorage,
+  normalizePerPage,
+} from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsCloudflare } from '../operations';
 
@@ -44,13 +55,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');
@@ -80,7 +85,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error persisting workflow snapshot for workflow ${params.workflowName}, run ${params.runId}`,
@@ -109,7 +114,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error loading workflow snapshot for workflow ${params.workflowName}, run ${params.runId}`,
@@ -179,7 +184,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       if (page < 0 || !Number.isInteger(page)) {
         throw new MastraError(
           {
-            id: 'CLOUDFLARE_STORE_INVALID_PAGE',
+            id: createStorageErrorId('CLOUDFLARE', 'LIST_WORKFLOW_RUNS', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -247,7 +252,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -294,7 +299,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -307,6 +312,29 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       this.logger.trackException?.(mastraError);
       this.logger.error(mastraError.toString());
       return null;
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      if (!runId || !workflowName) {
+        throw new Error('runId and workflowName are required');
+      }
+      const key = this.operations.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId });
+      await this.operations.deleteKV(TABLE_WORKFLOW_SNAPSHOT, key);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
     }
   }
 }

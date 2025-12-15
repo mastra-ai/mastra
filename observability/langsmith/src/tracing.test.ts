@@ -43,6 +43,7 @@ describe('LangSmithExporter', () => {
       postRun: vi.fn().mockResolvedValue(undefined),
       patchRun: vi.fn().mockResolvedValue(undefined),
       end: vi.fn().mockResolvedValue(undefined),
+      addEvent: vi.fn(),
       inputs: {},
       outputs: {},
       metadata: {},
@@ -83,13 +84,48 @@ describe('LangSmithExporter', () => {
       expect(exporter.name).toBe('langsmith');
     });
 
+    it('should pass projectName to RunTree when configured', async () => {
+      // Create exporter with custom projectName
+      const exporterWithProject = new LangSmithExporter({
+        apiKey: 'test-api-key',
+        projectName: 'my-custom-project',
+      });
+
+      const rootSpan = createMockSpan({
+        id: 'test-span',
+        name: 'test',
+        type: SpanType.GENERIC,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporterWithProject.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Should pass project_name to the RunTree constructor
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project_name: 'my-custom-project',
+        }),
+      );
+    });
+
     it('should disable exporter when apiKey is missing', async () => {
+      // Temporarily clear env var to test missing apiKey behavior
+      const originalEnvKey = process.env.LANGSMITH_API_KEY;
+      delete process.env.LANGSMITH_API_KEY;
+
       const invalidConfig = {
         // Missing apiKey
         apiUrl: 'https://test.com',
       };
 
       const disabledExporter = new LangSmithExporter(invalidConfig);
+
+      // Restore env var
+      process.env.LANGSMITH_API_KEY = originalEnvKey;
 
       // Should be disabled when apiKey is missing
       expect(disabledExporter['isDisabled']).toBe(true);
@@ -202,6 +238,126 @@ describe('LangSmithExporter', () => {
       // Should post the child run
       expect(mockRunTree.postRun).toHaveBeenCalledTimes(2);
     });
+
+    it('should reuse existing trace when multiple root spans share the same traceId', async () => {
+      const sharedTraceId = 'shared-trace-123';
+
+      // First root span (e.g., first agent.stream call)
+      const firstRootSpan = createMockSpan({
+        id: 'root-span-1',
+        name: 'agent-call-1',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      firstRootSpan.traceId = sharedTraceId;
+
+      // Second root span with same traceId (e.g., second agent.stream call after client-side tool)
+      const secondRootSpan = createMockSpan({
+        id: 'root-span-2',
+        name: 'agent-call-2',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      secondRootSpan.traceId = sharedTraceId;
+
+      // Process both root spans
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondRootSpan,
+      });
+
+      // Access internal traceMap to verify trace data is shared (not overwritten)
+      const traceData = (exporter as any).traceMap.get(sharedTraceId);
+      expect(traceData).toBeDefined();
+
+      // Both root spans should be tracked in the same trace
+      expect(traceData.spans.has('root-span-1')).toBe(true);
+      expect(traceData.spans.has('root-span-2')).toBe(true);
+
+      // Both root spans should be active
+      expect(traceData.activeIds.has('root-span-1')).toBe(true);
+      expect(traceData.activeIds.has('root-span-2')).toBe(true);
+
+      // Only one trace entry should exist (not two separate ones)
+      expect((exporter as any).traceMap.size).toBe(1);
+    });
+
+    it('should pass tags to RunTree for root spans', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-with-tags',
+        name: 'tagged-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        tags: ['production', 'test-run'],
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tags: ['production', 'test-run'],
+        }),
+      );
+    });
+
+    it('should not pass tags to RunTree for non-root spans', async () => {
+      // First create root span
+      const rootSpan = createMockSpan({
+        id: 'root-span',
+        name: 'root-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Then create child span with tags (should not be passed)
+      const childSpan = createMockSpan({
+        id: 'child-span',
+        name: 'child-tool',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: {},
+        tags: ['should-not-appear'],
+      });
+      childSpan.traceId = 'root-span';
+      childSpan.parentSpanId = 'root-span';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: childSpan,
+      });
+
+      // Child should not have tags property
+      expect(mockRunTree.createChild).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          tags: expect.anything(),
+        }),
+      );
+    });
   });
 
   describe('Span Type Mappings', () => {
@@ -226,7 +382,7 @@ describe('LangSmithExporter', () => {
       );
     });
 
-    it('should map MODEL_CHUNK to "llm" type', async () => {
+    it('should map MODEL_CHUNK to "chain" type', async () => {
       const chunkSpan = createMockSpan({
         id: 'chunk-span',
         name: 'llm-chunk',
@@ -242,7 +398,7 @@ describe('LangSmithExporter', () => {
 
       expect(MockRunTreeClass).toHaveBeenCalledWith(
         expect.objectContaining({
-          run_type: 'llm',
+          run_type: 'chain',
         }),
       );
     });
@@ -387,9 +543,8 @@ describe('LangSmithExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            promptTokens: 10,
-            completionTokens: 5,
-            totalTokens: 15,
+            inputTokens: 10,
+            outputTokens: 5,
           },
           parameters: {
             temperature: 0.7,
@@ -460,6 +615,98 @@ describe('LangSmithExporter', () => {
     });
   });
 
+  describe('Time to First Token (TTFT)', () => {
+    it('should add new_token event for MODEL_GENERATION spans with completionStartTime', async () => {
+      const completionStartTime = new Date('2024-01-15T10:00:00.150Z');
+
+      const llmSpan = createMockSpan({
+        id: 'llm-streaming',
+        name: 'streaming-llm',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+          streaming: true,
+          completionStartTime,
+        },
+      });
+
+      // Start the span
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // End the span (this is when addEvent is called)
+      llmSpan.endTime = new Date('2024-01-15T10:00:01.000Z');
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should add new_token event with correct timestamp
+      expect(mockRunTree.addEvent).toHaveBeenCalledWith({
+        name: 'new_token',
+        time: completionStartTime.toISOString(),
+      });
+    });
+
+    it('should not add new_token event for MODEL_GENERATION spans without completionStartTime', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-non-streaming',
+        name: 'non-streaming-llm',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+          streaming: false,
+        },
+      });
+
+      // Start the span
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // End the span
+      llmSpan.endTime = new Date();
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should not add new_token event
+      expect(mockRunTree.addEvent).not.toHaveBeenCalled();
+    });
+
+    it('should not add new_token event for non-MODEL_GENERATION spans', async () => {
+      const toolSpan = createMockSpan({
+        id: 'tool-span',
+        name: 'calculator',
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        attributes: { toolId: 'calc' },
+      });
+
+      // Start the span
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      // End the span
+      toolSpan.endTime = new Date();
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: toolSpan,
+      });
+
+      // Should not add new_token event
+      expect(mockRunTree.addEvent).not.toHaveBeenCalled();
+    });
+  });
+
   describe('RunTree Updates', () => {
     it('should update existing RunTrees', async () => {
       // First, start a span
@@ -516,7 +763,7 @@ describe('LangSmithExporter', () => {
       // Update with usage info
       llmSpan.attributes = {
         ...llmSpan.attributes,
-        usage: { totalTokens: 150 },
+        usage: { inputTokens: 100, outputTokens: 50 },
       } as ModelGenerationAttributes;
       llmSpan.output = { content: 'Updated response' };
 
@@ -532,6 +779,8 @@ describe('LangSmithExporter', () => {
           mastra_span_type: 'model_generation',
           ls_model_name: 'gpt-4',
           usage_metadata: {
+            input_tokens: 100,
+            output_tokens: 50,
             total_tokens: 150,
           },
         }),
@@ -970,6 +1219,7 @@ function createMockSpan({
   input,
   output,
   errorInfo,
+  tags,
 }: {
   id: string;
   name: string;
@@ -980,6 +1230,7 @@ function createMockSpan({
   input?: any;
   output?: any;
   errorInfo?: any;
+  tags?: string[];
 }): AnyExportedSpan {
   const mockSpan = {
     id,
@@ -990,6 +1241,7 @@ function createMockSpan({
     input,
     output,
     errorInfo,
+    tags,
     startTime: new Date(),
     endTime: undefined,
     traceId: isRoot ? id : 'parent-trace-id',

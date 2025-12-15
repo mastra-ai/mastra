@@ -25,13 +25,13 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "getting-started/astro",
-          label: "Astro",
+          id: "getting-started/vite-react",
+          label: "React",
         },
         {
           type: "doc",
-          id: "getting-started/vite-react",
-          label: "React",
+          id: "getting-started/astro",
+          label: "Astro",
         },
         {
           type: "doc",
@@ -47,7 +47,19 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Build your UI",
+      label: "Agent Frameworks",
+      collapsed: false,
+      items: [
+        {
+          type: "doc",
+          id: "agent-frameworks/ai-sdk",
+          label: "AI SDK",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Agentic UIs",
       collapsed: false,
       items: [
         {

@@ -8,6 +8,7 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
   calculatePagination,
+  createStorageErrorId,
   normalizePerPage,
   safelyParseJSON,
 } from '@mastra/core/storage';
@@ -77,7 +78,7 @@ export class MemoryConvex extends MemoryStorage {
     const existing = await this.getThreadById({ threadId: id });
     if (!existing) {
       throw new MastraError({
-        id: 'CONVEX_STORAGE_THREAD_NOT_FOUND',
+        id: createStorageErrorId('CONVEX', 'UPDATE_THREAD', 'THREAD_NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: `Thread ${id} not found`,
@@ -151,15 +152,18 @@ export class MemoryConvex extends MemoryStorage {
   async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'CONVEX_STORAGE_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('CONVEX', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -167,9 +171,14 @@ export class MemoryConvex extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
-    let rows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
-      { field: 'thread_id', value: threadId },
-    ]);
+    // Fetch messages from all threads
+    let rows: StoredMessage[] = [];
+    for (const tid of threadIds) {
+      const threadRows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
+        { field: 'thread_id', value: tid },
+      ]);
+      rows.push(...threadRows);
+    }
 
     if (resourceId) {
       rows = rows.filter(row => row.resourceId === resourceId);
@@ -208,27 +217,55 @@ export class MemoryConvex extends MemoryStorage {
     const messageIds = new Set(messages.map(msg => msg.id));
 
     if (include && include.length > 0) {
-      // Cache messages from other threads as needed
+      // Cache messages from threads as needed
       const threadMessagesCache = new Map<string, StoredMessage[]>();
-      threadMessagesCache.set(threadId, rows);
+      // Pre-populate cache with already-fetched thread messages
+      for (const tid of threadIds) {
+        const tidRows = rows.filter(r => r.thread_id === tid);
+        threadMessagesCache.set(tid, tidRows);
+      }
 
       for (const includeItem of include) {
-        const targetThreadId = includeItem.threadId || threadId;
+        // First, find the message to get its threadId
+        let targetThreadId: string | undefined;
+        let target: StoredMessage | undefined;
 
-        // Fetch messages from other threads if needed
-        if (!threadMessagesCache.has(targetThreadId)) {
-          const otherThreadRows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
-            { field: 'thread_id', value: targetThreadId },
-          ]);
-          threadMessagesCache.set(targetThreadId, otherThreadRows);
+        // Check in cached threads first
+        for (const [tid, cachedRows] of threadMessagesCache) {
+          target = cachedRows.find(row => row.id === includeItem.id);
+          if (target) {
+            targetThreadId = tid;
+            break;
+          }
         }
 
-        const targetThreadRows = threadMessagesCache.get(targetThreadId) || [];
-        const target = targetThreadRows.find(row => row.id === includeItem.id);
-        if (target && !messageIds.has(target.id)) {
+        // If not found, query by message ID directly
+        if (!target) {
+          const messageRows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
+            { field: 'id', value: includeItem.id },
+          ]);
+          if (messageRows.length > 0) {
+            target = messageRows[0];
+            targetThreadId = target!.thread_id;
+
+            // Cache the thread's messages for context lookup
+            if (targetThreadId && !threadMessagesCache.has(targetThreadId)) {
+              const otherThreadRows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
+                { field: 'thread_id', value: targetThreadId },
+              ]);
+              threadMessagesCache.set(targetThreadId, otherThreadRows);
+            }
+          }
+        }
+
+        if (!target || !targetThreadId) continue;
+
+        if (!messageIds.has(target.id)) {
           messages.push(this.parseStoredMessage(target));
           messageIds.add(target.id);
         }
+
+        const targetThreadRows = threadMessagesCache.get(targetThreadId) || [];
         await this.addContextMessages({
           includeItem,
           allMessages: targetThreadRows,

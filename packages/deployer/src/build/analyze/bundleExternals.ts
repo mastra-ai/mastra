@@ -1,14 +1,16 @@
+import type { Config } from '@mastra/core/mastra';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
-import esmShim from '@rollup/plugin-esm-shim';
+import { esmShim } from '../plugins/esm-shim';
 import { basename } from 'node:path/posix';
 import * as path from 'node:path';
 import { rollup, type OutputChunk, type OutputAsset, type Plugin } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
 import { aliasHono } from '../plugins/hono-alias';
-import { getCompiledDepCachePath, getPackageRootPath, rollupSafeName, slash } from '../utils';
+import { getCompiledDepCachePath, isDependencyPartOfPackage, rollupSafeName, slash } from '../utils';
+import { getPackageRootPath } from '../package-info';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
@@ -17,6 +19,9 @@ import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { readFile } from 'node:fs/promises';
 import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
+import { nodeGypDetector } from '../plugins/node-gyp-detector';
+import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
+import { moduleResolveMap } from '../plugins/module-resolve-map';
 
 type VirtualDependency = {
   name: string;
@@ -37,12 +42,17 @@ export function createVirtualDependencies(
     workspaceRoot,
     outputDir,
     bundlerOptions,
-  }: { workspaceRoot: string | null; projectRoot: string; outputDir: string; bundlerOptions?: { isDev?: boolean } },
+  }: {
+    workspaceRoot: string | null;
+    projectRoot: string;
+    outputDir: string;
+    bundlerOptions?: { isDev?: boolean; externalsPreset?: boolean };
+  },
 ): {
   optimizedDependencyEntries: Map<string, VirtualDependency>;
   fileNameToDependencyMap: Map<string, string>;
 } {
-  const { isDev = false } = bundlerOptions || {};
+  const { isDev = false, externalsPreset = false } = bundlerOptions || {};
   const fileNameToDependencyMap = new Map<string, string>();
   const optimizedDependencyEntries = new Map<string, VirtualDependency>();
   const rootDir = workspaceRoot || projectRoot;
@@ -83,7 +93,7 @@ export function createVirtualDependencies(
 
   // For workspace packages, we still want the dependencies to be imported from the original path
   // We rewrite the path to the original folder inside node_modules/.cache
-  if (isDev) {
+  if (isDev || externalsPreset) {
     for (const [dep, { isWorkspace, rootPath }] of depsToOptimize.entries()) {
       if (!isWorkspace || !rootPath || !workspaceRoot) {
         continue;
@@ -119,11 +129,13 @@ async function getInputPlugins(
     workspaceMap,
     bundlerOptions,
     rootDir,
+    externals,
   }: {
     transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
-    bundlerOptions: { enableEsmShim: boolean; isDev: boolean };
+    bundlerOptions: { noBundling: boolean };
     rootDir: string;
+    externals: string[];
   },
 ) {
   const transpilePackagesMap = new Map<string, string>();
@@ -147,6 +159,7 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
+    subpathExternalsResolver(externals),
     transpilePackagesMap.size
       ? esbuild({
           format: 'esm',
@@ -162,7 +175,7 @@ async function getInputPlugins(
           }),
         })
       : null,
-    bundlerOptions.isDev
+    bundlerOptions.noBundling
       ? ({
           name: 'alias-optimized-deps',
           async resolveId(id, importer, options) {
@@ -185,7 +198,8 @@ async function getInputPlugins(
               resolvedPath = pkgJson!.main ?? 'index.js';
             }
 
-            return await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
+            const resolved = await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
+            return resolved;
           },
         } satisfies Plugin)
       : null,
@@ -197,16 +211,18 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
-    bundlerOptions.isDev
+    bundlerOptions.noBundling
       ? null
       : nodeResolve({
           preferBuiltins: true,
           exportConditions: ['node'],
         }),
-    bundlerOptions.isDev ? esmShim() : null,
+    bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
+    nodeGypDetector(),
+    moduleResolveMap(externals, rootDir),
     {
       name: 'not-found-resolver',
       resolveId: {
@@ -266,8 +282,8 @@ async function buildExternalDependencies(
     rootDir: string;
     outputDir: string;
     bundlerOptions: {
-      enableEsmShim: boolean;
       isDev: boolean;
+      externalsPreset: boolean;
     };
   },
 ) {
@@ -277,6 +293,19 @@ async function buildExternalDependencies(
   if (virtualDependencies.size === 0) {
     return [] as unknown as [OutputChunk, ...(OutputAsset | OutputChunk)[]];
   }
+
+  const noBundling = bundlerOptions.isDev || bundlerOptions.externalsPreset;
+
+  const plugins = await getInputPlugins(virtualDependencies, {
+    transpilePackages: packagesToTranspile,
+    workspaceMap,
+    bundlerOptions: {
+      noBundling,
+    },
+    rootDir,
+    externals,
+  });
+
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: Array.from(virtualDependencies.entries()).reduce(
@@ -287,13 +316,8 @@ async function buildExternalDependencies(
       {} as Record<string, string>,
     ),
     external: externals,
-    treeshake: 'safest',
-    plugins: getInputPlugins(virtualDependencies, {
-      transpilePackages: packagesToTranspile,
-      workspaceMap,
-      bundlerOptions,
-      rootDir,
-    }),
+    treeshake: noBundling ? false : 'safest',
+    plugins,
   });
 
   const outputDirRelative = prepareEntryFileName(outputDir, rootDir);
@@ -302,16 +326,18 @@ async function buildExternalDependencies(
     format: 'esm',
     dir: rootDir,
     entryFileNames: '[name].mjs',
+    // used to get the filename of the actual error
+    sourcemap: true,
     /**
      * Rollup creates chunks for common dependencies, but these chunks are by default written to the root directory instead of respecting the entryFileNames structure.
      * So we want to write them to the `.mastra/output` folder as well.
      */
     chunkFileNames: chunkInfo => {
       /**
-       * This whole bunch of logic directly below is for the edge case shown in the e2e-tests/monorepo with "tinyrainbow" package. It's used in multiple places in the package and as such Rollup creates a shared chunk for it. During 'mastra dev', we don't want that chunk to show up in the '.mastra/output' folder (outputDirRelative) but inside <pkg>/node_modules/.cache instead.
-       * We only care about this during 'mastra dev'!
+       * This whole bunch of logic directly below is for the edge case shown in the e2e-tests/monorepo with "tinyrainbow" package. It's used in multiple places in the package and as such Rollup creates a shared chunk for it. During 'mastra dev' / with externals: true, we don't want that chunk to show up in the '.mastra/output' folder (outputDirRelative) but inside <pkg>/node_modules/.cache instead.
+       * We only care about this for the "noBundling" case!
        */
-      if (bundlerOptions.isDev) {
+      if (noBundling) {
         const importedFromPackages = new Set<string>();
 
         for (const moduleId of chunkInfo.moduleIds) {
@@ -347,6 +373,7 @@ async function buildExternalDependencies(
 
       return `${outputDirRelative}/[name].mjs`;
     },
+    assetFileNames: `${outputDirRelative}/[name][extname]`,
     hoistTransitiveImports: false,
   });
 
@@ -363,7 +390,7 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
   const capturedFiles = new Set();
 
   for (const id of module.imports) {
-    if (id === external) {
+    if (isDependencyPartOfPackage(id, external)) {
       return module;
     } else {
       if (id.endsWith('.mjs')) {
@@ -399,28 +426,49 @@ export async function bundleExternals(
   depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   options: {
-    bundlerOptions?: {
-      externals?: string[];
-      transpilePackages?: string[];
-      isDev?: boolean;
-      enableEsmShim?: boolean;
-    } | null;
+    bundlerOptions?:
+      | ({
+          isDev?: boolean;
+        } & Config['bundler'])
+      | null;
     projectRoot?: string;
     workspaceRoot?: string;
     workspaceMap?: Map<string, WorkspacePackageInfo>;
   },
 ) {
   const { workspaceRoot = null, workspaceMap = new Map(), projectRoot = outputDir, bundlerOptions = {} } = options;
-  const {
-    externals: customExternals = [],
-    transpilePackages = [],
-    isDev = false,
-    enableEsmShim = true,
-  } = bundlerOptions || {};
-  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...customExternals];
+  const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
+  /**
+   * A user can set `externals: true` to indicate they want to externalize all dependencies. In this case, we set `externalsPreset` to true to skip bundling any externals.
+   */
+  let externalsPreset = false;
+
+  if (customExternals === true) {
+    externalsPreset = true;
+  }
+
+  // If `externals` is an array (and not `true`), we proceed as normal
+  const externalsList = Array.isArray(customExternals) ? customExternals : [];
+  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...externalsList];
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
+
+  /**
+   * When externals: true, we need to extract non-workspace deps from depsToOptimize
+   * and add them directly to usedExternals instead of bundling them.
+   */
+  const extractedExternals = new Map<string, string>();
+  if (externalsPreset) {
+    for (const [dep, metadata] of depsToOptimize.entries()) {
+      if (!metadata.isWorkspace) {
+        // Add to extracted externals - use rootPath or fallback to package name
+        extractedExternals.set(dep, metadata.rootPath ?? dep);
+        // Remove from depsToOptimize so it won't be bundled
+        depsToOptimize.delete(dep);
+      }
+    }
+  }
 
   const { optimizedDependencyEntries, fileNameToDependencyMap } = createVirtualDependencies(depsToOptimize, {
     workspaceRoot,
@@ -428,6 +476,7 @@ export async function bundleExternals(
     projectRoot,
     bundlerOptions: {
       isDev,
+      externalsPreset,
     },
   });
 
@@ -438,8 +487,8 @@ export async function bundleExternals(
     rootDir: workspaceRoot || projectRoot,
     outputDir,
     bundlerOptions: {
-      enableEsmShim,
       isDev,
+      externalsPreset,
     },
   });
 
@@ -485,6 +534,19 @@ export async function bundleExternals(
       innerObj[external] = value;
     }
     usedExternals[fullPath] = innerObj;
+  }
+
+  /**
+   * When externals: true, add the extracted non-workspace deps to usedExternals
+   * using a synthetic entry path to track them.
+   */
+  if (extractedExternals.size > 0) {
+    const syntheticPath = path.join(workspaceRoot || projectRoot, '__externals__');
+    const externalsObj = Object.create(null) as Record<string, string>;
+    for (const [dep, rootPath] of extractedExternals) {
+      externalsObj[dep] = rootPath;
+    }
+    usedExternals[syntheticPath] = externalsObj;
   }
 
   return { output, fileNameToDependencyMap, usedExternals };

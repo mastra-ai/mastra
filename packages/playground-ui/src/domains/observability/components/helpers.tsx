@@ -56,11 +56,9 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
 
 type getSpanInfoProps = {
   span: SpanRecord | undefined;
-  withTraceId?: boolean;
-  withSpanId?: boolean;
 };
 
-export function getSpanInfo({ span, withTraceId = true, withSpanId = true }: getSpanInfoProps) {
+export function getSpanInfo({ span }: getSpanInfoProps) {
   if (!span) {
     return [];
   }
@@ -83,11 +81,12 @@ export function getSpanInfo({ span, withTraceId = true, withSpanId = true }: get
     },
   ];
 
-  if (withSpanId) {
-    baseInfo.unshift({
-      key: 'spanId',
-      label: '#',
-      value: span?.spanId,
+  // Add finish reason if available
+  if (span?.attributes?.finishReason) {
+    baseInfo.push({
+      key: 'finishReason',
+      label: 'Finish Reason',
+      value: span.attributes.finishReason,
     });
   }
 

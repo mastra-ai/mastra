@@ -1,5 +1,5 @@
-import type { ReadableStream } from 'stream/web';
-import { TransformStream } from 'stream/web';
+import type { ReadableStream } from 'node:stream/web';
+import { TransformStream } from 'node:stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
 import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
@@ -367,7 +367,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       totalUsage: await this.#modelOutput.totalUsage,
       error: this.error,
       tripwire: this.#modelOutput.tripwire,
-      tripwireReason: this.#modelOutput.tripwireReason,
       traceId: this.traceId,
       ...(object ? { object } : {}),
     };
@@ -379,10 +378,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
 
   get tripwire() {
     return this.#modelOutput.tripwire;
-  }
-
-  get tripwireReason() {
-    return this.#modelOutput.tripwireReason;
   }
 
   get error() {

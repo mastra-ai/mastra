@@ -1,11 +1,11 @@
-import type { WritableStream } from 'stream/web';
 import { MastraBase } from '../base';
 import type { RequestContext } from '../di';
+import type { PubSub } from '../events/pubsub';
 import { RegisteredLogger } from '../logger';
+import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Span, SpanType, TracingPolicy } from '../observability';
-import type { ChunkType } from '../stream/types';
-import type { Emitter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
+import type { OutputWriter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
 /**
@@ -30,7 +30,7 @@ export interface ExecutionEngineOptions {
  * Providers will implement this class to provide their own execution logic
  */
 export abstract class ExecutionEngine extends MastraBase {
-  protected mastra?: Mastra;
+  public mastra?: Mastra;
   public options: ExecutionEngineOptions;
   constructor({ mastra, options }: { mastra?: Mastra; options: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
@@ -40,6 +40,10 @@ export abstract class ExecutionEngine extends MastraBase {
 
   __registerMastra(mastra: Mastra) {
     this.mastra = mastra;
+  }
+
+  public getLogger(): IMastraLogger {
+    return this.logger;
   }
 
   /**
@@ -67,7 +71,7 @@ export abstract class ExecutionEngine extends MastraBase {
       forEachIndex?: number;
       label?: string;
     };
-    emitter: Emitter;
+    pubsub: PubSub;
     requestContext: RequestContext;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     retryConfig?: {
@@ -75,7 +79,7 @@ export abstract class ExecutionEngine extends MastraBase {
       delay?: number;
     };
     abortController: AbortController;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;

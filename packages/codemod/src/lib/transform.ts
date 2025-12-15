@@ -1,8 +1,8 @@
-import fs from 'fs';
 import child_process from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import util from 'node:util';
-import path from 'path';
 import debug from 'debug';
 
 const exec = util.promisify(child_process.exec);

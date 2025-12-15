@@ -76,7 +76,7 @@ export interface TabContentProps {
 
 export const TabContent = ({ children, value }: TabContentProps) => {
   return (
-    <TabsContent value={value} className="h-full overflow-hidden flex flex-col">
+    <TabsContent value={value} className="h-full overflow-auto flex flex-col">
       {children}
     </TabsContent>
   );

@@ -97,7 +97,7 @@ In addition to the internal exporters, Mastra supports integration with popular 
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
+  - Supports: Dash0, Datadog, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Bridges
 
@@ -217,7 +217,6 @@ Use `configSelector` to choose the appropriate tracing configuration based on re
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Provides 'default' instance
     configs: {
       langfuse: {
         serviceName: "langfuse-service",
@@ -250,7 +249,7 @@ export const mastra = new Mastra({
         return "langfuse";
       }
 
-      return "default";
+      throw new Error('no config found')
     },
   }),
 });
@@ -464,6 +463,60 @@ requestContext.set("session", { data: { experimentId: "exp-999" } });
 2. **Automatic Extraction**: Root spans (agent runs, workflow executions) automatically extract metadata from RequestContext
 3. **Child Span Extraction**: Child spans can also extract metadata if you pass `requestContext` when creating them
 4. **Metadata Precedence**: Explicit metadata passed to span options always takes precedence over extracted metadata
+
+### Adding Tags to Traces
+
+Tags are string labels that help you categorize and filter traces. Unlike metadata (which contains structured key-value data), tags are simple strings designed for quick filtering and organization.
+
+Use `tracingOptions.tags` to add tags when executing agents or workflows:
+
+```ts showLineNumbers copy
+// With agents
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+
+// With workflows
+const run = await mastra.getWorkflow("myWorkflow").createRun();
+const result = await run.start({
+  inputData: { data: "process this" },
+  tracingOptions: {
+    tags: ["batch-processing", "priority-high"],
+  },
+});
+```
+
+#### How Tags Work
+
+- **Root span only**: Tags are applied only to the root span of a trace (the agent run or workflow run span)
+- **Widely supported**: Tags are supported by most exporters for filtering and searching traces:
+  - **Braintrust** - Native `tags` field
+  - **Langfuse** - Native `tags` field on traces
+  - **ArizeExporter** - `tag.tags` OpenInference attribute
+  - **OtelExporter** - `mastra.tags` span attribute
+  - **OtelBridge** - `mastra.tags` span attribute
+- **Combinable with metadata**: You can use both `tags` and `metadata` in the same `tracingOptions`
+
+```ts showLineNumbers copy
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Analyze this" }],
+  tracingOptions: {
+    tags: ["production", "analytics"],
+    metadata: { userId: "user-123", experimentId: "exp-456" },
+  },
+});
+```
+
+#### Common Tag Patterns
+
+- **Environment**: `"production"`, `"staging"`, `"development"`
+- **Feature flags**: `"feature-x-enabled"`, `"beta-user"`
+- **Request types**: `"user-request"`, `"batch-job"`, `"scheduled-task"`
+- **Priority levels**: `"priority-high"`, `"priority-low"`
+- **Experiments**: `"experiment-v1"`, `"control-group"`, `"treatment-a"`
 
 #### Child Spans and Metadata Extraction
 

@@ -1,13 +1,106 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
-export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
-  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'> }
-  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'> };
+export type NetworkStreamHandlerParams<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<
+  OUTPUT,
+  'mastra'
+> & {
+  messages: MessageListInput;
+};
 
+export type NetworkStreamHandlerOptions<OUTPUT extends OutputSchema = undefined> = {
+  mastra: Mastra;
+  agentId: string;
+  params: NetworkStreamHandlerParams<OUTPUT>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+};
+
+/**
+ * Framework-agnostic handler for streaming agent network execution in AI SDK-compatible format.
+ * Use this function directly when you need to handle network streaming outside of Hono or Mastra's own apiRoutes feature.
+ *
+ * @example
+ * ```ts
+ * // Next.js App Router
+ * import { handleNetworkStream } from '@mastra/ai-sdk';
+ * import { createUIMessageStreamResponse } from 'ai';
+ * import { mastra } from '@/src/mastra';
+ *
+ * export async function POST(req: Request) {
+ *   const params = await req.json();
+ *   const stream = await handleNetworkStream({
+ *     mastra,
+ *     agentId: 'routingAgent',
+ *     params,
+ *   });
+ *   return createUIMessageStreamResponse({ stream });
+ * }
+ * ```
+ */
+export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined>({
+  mastra,
+  agentId,
+  params,
+  defaultOptions,
+}: NetworkStreamHandlerOptions<OUTPUT>): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
+  const { messages, ...rest } = params;
+
+  const agentObj = mastra.getAgentById(agentId);
+
+  if (!agentObj) {
+    throw new Error(`Agent ${agentId} not found`);
+  }
+
+  const result = await agentObj.network(messages, {
+    ...defaultOptions,
+    ...rest,
+  });
+
+  return createUIMessageStream<UI_MESSAGE>({
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkV5Stream(result, { from: 'network' })) {
+        writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
+      }
+    },
+  });
+}
+
+export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
+  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> }
+  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> };
+
+/**
+ * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.
+ *
+ * This function registers an HTTP POST endpoint that accepts messages, executes an agent network, and streams the response back to the client in AI SDK-compatible format. Agent networks allow a routing agent to delegate tasks to other agents.
+ *
+ * @param {NetworkRouteOptions} options - Configuration options for the network route
+ * @param {string} [options.path='/network/:agentId'] - The route path. Include `:agentId` for dynamic routing
+ * @param {string} [options.agent] - Fixed agent ID when not using dynamic routing
+ * @param {AgentExecutionOptions} [options.defaultOptions] - Default options passed to agent execution
+ *
+ * @example
+ * // Dynamic agent routing
+ * networkRoute({
+ *   path: '/network/:agentId',
+ * });
+ *
+ * @example
+ * // Fixed agent with custom path
+ * networkRoute({
+ *   path: '/api/orchestrator',
+ *   agent: 'router-agent',
+ *   defaultOptions: {
+ *     maxSteps: 10,
+ *   },
+ * });
+ */
 export function networkRoute<OUTPUT extends OutputSchema = undefined>({
   path = '/network/:agentId',
   agent,
@@ -69,7 +162,7 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
       },
     },
     handler: async c => {
-      const { messages, ...rest } = await c.req.json();
+      const params = (await c.req.json()) as NetworkStreamHandlerParams<OUTPUT>;
       const mastra = c.get('mastra');
 
       let agentToUse: string | undefined = agent;
@@ -90,23 +183,11 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error('Agent ID is required');
       }
 
-      const agentObj = mastra.getAgentById(agentToUse);
-
-      if (!agentObj) {
-        throw new Error(`Agent ${agentToUse} not found`);
-      }
-
-      const result = await agentObj.network(messages, {
-        ...defaultOptions,
-        ...rest,
-      });
-
-      const uiMessageStream = createUIMessageStream({
-        execute: async ({ writer }) => {
-          for await (const part of toAISdkV5Stream(result, { from: 'network' })) {
-            writer.write(part);
-          }
-        },
+      const uiMessageStream = await handleNetworkStream<UIMessage, OUTPUT>({
+        mastra,
+        agentId: agentToUse,
+        params,
+        defaultOptions,
       });
 
       return createUIMessageStreamResponse({ stream: uiMessageStream });

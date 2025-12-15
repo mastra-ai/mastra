@@ -28,7 +28,9 @@ Use `chunk` to split documents into manageable pieces. Mastra supports multiple 
 - `latex`: LaTeX structure-aware splitting
 - `sentence`: Sentence-aware splitting
 
-**Note:** Each strategy accepts different parameters optimized for its chunking approach.
+:::note
+Each strategy accepts different parameters optimized for its chunking approach.
+:::
 
 Here's an example of how to use the `recursive` strategy:
 
@@ -67,15 +69,17 @@ const chunks = await doc.chunk({
 });
 ```
 
-**Note:** Metadata extraction may use LLM calls, so ensure your API key is set.
+:::note
+Metadata extraction may use LLM calls, so ensure your API key is set.
+:::
 
-We go deeper into chunking strategies in our [chunk documentation](/reference/v1/rag/chunk).
+We go deeper into chunking strategies in our [`chunk()` reference documentation](/reference/v1/rag/chunk).
 
 ## Step 2: Embedding Generation
 
-Transform chunks into embeddings using your preferred provider. Mastra supports embedding models through the model router or AI SDK packages.
+Transform chunks into embeddings using your preferred provider. Mastra supports embedding models through the model router.
 
-### Using the Model Router (Recommended)
+### Using the Model Router
 
 The simplest way is to use Mastra's model router with `provider/model` strings:
 
@@ -89,26 +93,9 @@ const { embeddings } = await embedMany({
 });
 ```
 
-Supported embedding models:
-
-- **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
-- **Google**: `gemini-embedding-001`, `text-embedding-004`
+Mastra supports OpenAI and Google embedding models. For a complete list of supported embedding models, see the [embeddings reference](/reference/v1/rag/embeddings).
 
 The model router automatically handles API key detection from environment variables.
-
-### Using AI SDK Packages
-
-You can also use AI SDK embedding models directly:
-
-```ts showLineNumbers copy
-import { embedMany } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-
-const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  values: chunks.map((chunk) => chunk.text),
-});
-```
 
 The embedding functions return vectors, arrays of numbers representing the semantic meaning of your text, ready for similarity searches in your vector database.
 
@@ -147,9 +134,9 @@ const { embeddings } = await embedMany({
 });
 ```
 
-### Vector Database Compatibility
-
+:::important[Vector Database Compatibility]
 When storing embeddings, the vector database index must be configured to match the output size of your embedding model. If the dimensions do not match, you may get errors or data corruption.
+:::
 
 ## Example: Complete Pipeline
 

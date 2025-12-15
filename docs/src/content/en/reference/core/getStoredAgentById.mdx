@@ -1,0 +1,183 @@
+---
+title: "Reference: Mastra.getStoredAgentById() | Core"
+description: "Documentation for the `Mastra.getStoredAgentById()` method in Mastra, which retrieves an agent from storage and creates an executable Agent instance."
+---
+
+# Mastra.getStoredAgentById()
+
+The `.getStoredAgentById()` method retrieves an agent configuration from storage by its ID and creates an executable `Agent` instance. Stored agents allow you to persist agent configurations in a database and dynamically load them at runtime.
+
+## Usage example
+
+```typescript copy
+// Get an Agent instance from storage
+const agent = await mastra.getStoredAgentById("my-stored-agent");
+
+if (agent) {
+  const response = await agent.generate({ messages: "Hello!" });
+  console.log(response.text);
+}
+```
+
+```typescript copy
+// Get the raw storage data instead of an Agent instance
+const storedConfig = await mastra.getStoredAgentById("my-stored-agent", { raw: true });
+
+if (storedConfig) {
+  console.log(storedConfig.instructions);
+  console.log(storedConfig.createdAt);
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "The unique identifier of the stored agent to retrieve.",
+    },
+    {
+      name: "options",
+      type: "{ raw?: boolean }",
+      description:
+        "Optional configuration object.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "raw",
+      type: "boolean",
+      description:
+        "When `true`, returns the raw `StorageAgentType` object from storage instead of creating an `Agent` instance. Useful for inspecting stored configuration or metadata.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Agent | StorageAgentType | null",
+      description:
+        "Returns an `Agent` instance by default, or `StorageAgentType` when `raw: true`. Returns `null` if no agent with the given ID exists.",
+    },
+  ]}
+/>
+
+## Primitive Resolution
+
+When creating an `Agent` instance from stored configuration, the method resolves references to registered primitives:
+
+- **Tools**: Resolved from `tools` registered in Mastra config
+- **Workflows**: Resolved from `workflows` registered in Mastra config
+- **Sub-agents**: Resolved from `agents` registered in Mastra config
+- **Memory**: Resolved from `memory` registered in Mastra config
+- **Scorers**: Resolved from `scorers` registered in Mastra config, including sampling configuration
+
+If a referenced primitive is not found in the registry, a warning is logged but the agent is still created.
+
+## StorageAgentType
+
+When using `raw: true`, the returned object has the following structure:
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the agent.",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Display name of the agent.",
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Optional description of the agent.",
+      isOptional: true,
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "System instructions for the agent.",
+    },
+    {
+      name: "model",
+      type: "Record<string, unknown>",
+      description: "Model configuration with provider and name.",
+    },
+    {
+      name: "tools",
+      type: "Record<string, unknown>",
+      description: "Tool references to resolve from registry.",
+      isOptional: true,
+    },
+    {
+      name: "workflows",
+      type: "Record<string, unknown>",
+      description: "Workflow references to resolve from registry.",
+      isOptional: true,
+    },
+    {
+      name: "agents",
+      type: "Record<string, unknown>",
+      description: "Sub-agent references to resolve from registry.",
+      isOptional: true,
+    },
+    {
+      name: "memory",
+      type: "Record<string, unknown>",
+      description: "Memory reference to resolve from registry.",
+      isOptional: true,
+    },
+    {
+      name: "scorers",
+      type: "Record<string, unknown>",
+      description: "Scorer references with optional sampling config.",
+      isOptional: true,
+    },
+    {
+      name: "defaultOptions",
+      type: "Record<string, unknown>",
+      description: "Default options passed to agent execution.",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "Custom metadata stored with the agent.",
+      isOptional: true,
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "Timestamp when the agent was created.",
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "Timestamp when the agent was last updated.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Mastra.listStoredAgents()](/reference/v1/core/listStoredAgents)
+- [Storage overview](/docs/v1/memory/storage/overview)
+- [Agents overview](/docs/v1/agents/overview)

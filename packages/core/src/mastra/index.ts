@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { Agent } from '../agent';
+import { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { MastraScorer } from '../evals';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
@@ -14,11 +14,13 @@ import type { MastraModelGateway } from '../llm/model/gateways';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
+import type { MastraMemory } from '../memory';
 import type { ObservabilityEntrypoint } from '../observability';
 import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
+import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage, WorkflowRuns } from '../storage';
+import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
@@ -27,6 +29,27 @@ import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { createOnScorerHook } from './hooks';
+
+/**
+ * Creates an error for when a null/undefined value is passed to an add* method.
+ * This commonly occurs when config is spread ({ ...config }) and the original
+ * object had getters or non-enumerable properties.
+ */
+function createUndefinedPrimitiveError(
+  type: 'agent' | 'tool' | 'processor' | 'vector' | 'scorer' | 'workflow' | 'mcp-server' | 'gateway' | 'memory',
+  value: null | undefined,
+  key?: string,
+): MastraError {
+  const typeLabel = type === 'mcp-server' ? 'MCP server' : type;
+  const errorId = `MASTRA_ADD_${type.toUpperCase().replace('-', '_')}_UNDEFINED` as Uppercase<string>;
+  return new MastraError({
+    id: errorId,
+    domain: ErrorDomain.MASTRA,
+    category: ErrorCategory.USER,
+    text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`,
+    details: { status: 400, ...(key && { key }) },
+  });
+}
 
 /**
  * Configuration interface for initializing a Mastra instance.
@@ -75,6 +98,7 @@ export interface Config<
     ToolAction<any, any, any, any, any, any>
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
+  TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -175,6 +199,12 @@ export interface Config<
   processors?: TProcessors;
 
   /**
+   * Memory instances that can be referenced by stored agents.
+   * Keys are used to look up memory instances when resolving stored agent configurations.
+   */
+  memory?: TMemory;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -241,6 +271,7 @@ export class Mastra<
     ToolAction<any, any, any, any, any, any>
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
+  TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -258,7 +289,9 @@ export class Mastra<
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
+  #memory?: TMemory;
   #server?: ServerConfig;
+  #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
@@ -369,7 +402,7 @@ export class Mastra<
    * ```
    */
   constructor(
-    config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors>,
+    config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
   ) {
     // This is only used internally for server handlers that require temporary persistence
     this.#serverCache = new InMemoryServerCache();
@@ -454,63 +487,92 @@ export class Mastra<
     this.#scorers = {} as TScorers;
     this.#tools = {} as TTools;
     this.#processors = {} as TProcessors;
+    this.#memory = {} as TMemory;
     this.#workflows = {} as TWorkflows;
     this.#gateways = {} as Record<string, MastraModelGateway>;
 
     // Now add primitives - order matters for auto-registration
     // Tools and processors should be added before agents and MCP servers that might use them
+    // Note: We validate each entry to handle cases where config was spread ({ ...config })
+    // which can cause undefined values if the source object had getters or non-enumerable properties
     if (config?.tools) {
       Object.entries(config.tools).forEach(([key, tool]) => {
-        this.addTool(tool, key);
+        if (tool != null) {
+          this.addTool(tool, key);
+        }
       });
     }
 
     if (config?.processors) {
       Object.entries(config.processors).forEach(([key, processor]) => {
-        this.addProcessor(processor, key);
+        if (processor != null) {
+          this.addProcessor(processor, key);
+        }
+      });
+    }
+
+    if (config?.memory) {
+      Object.entries(config.memory).forEach(([key, memory]) => {
+        if (memory != null) {
+          this.addMemory(memory, key);
+        }
       });
     }
 
     if (config?.vectors) {
       Object.entries(config.vectors).forEach(([key, vector]) => {
-        this.addVector(vector, key);
+        if (vector != null) {
+          this.addVector(vector, key);
+        }
       });
     }
 
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
-        this.addScorer(scorer, key);
+        if (scorer != null) {
+          this.addScorer(scorer, key);
+        }
       });
     }
 
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
-        this.addWorkflow(workflow, key);
+        if (workflow != null) {
+          this.addWorkflow(workflow, key);
+        }
       });
     }
 
     if (config?.gateways) {
       Object.entries(config.gateways).forEach(([key, gateway]) => {
-        this.addGateway(gateway, key);
+        if (gateway != null) {
+          this.addGateway(gateway, key);
+        }
       });
     }
 
     // Add MCP servers and agents last since they might reference other primitives
     if (config?.mcpServers) {
       Object.entries(config.mcpServers).forEach(([key, server]) => {
-        this.addMCPServer(server, key);
+        if (server != null) {
+          this.addMCPServer(server, key);
+        }
       });
     }
 
     if (config?.agents) {
       Object.entries(config.agents).forEach(([key, agent]) => {
-        this.addAgent(agent, key);
+        if (agent != null) {
+          this.addAgent(agent, key);
+        }
       });
     }
 
     if (config?.tts) {
       Object.entries(config.tts).forEach(([key, tts]) => {
-        (this.#tts as Record<string, MastraTTS>)[key] = tts;
+        if (tts != null) {
+          (this.#tts as Record<string, MastraTTS>)[key] = tts;
+        }
       });
     }
 
@@ -650,6 +712,416 @@ export class Mastra<
   }
 
   /**
+   * Retrieves a stored agent from the database by its unique identifier.
+   *
+   * By default, returns an executable Agent instance. Set `raw: true` to get
+   * the raw stored configuration data instead.
+   *
+   * @param id - The unique identifier of the stored agent
+   * @param options - Options for the query
+   * @param options.raw - If true, returns raw stored data instead of Agent instance
+   *
+   * @throws {MastraError} When storage is not configured or doesn't support agents
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new PostgresStore({ connectionString: process.env.DATABASE_URL })
+   * });
+   *
+   * // Get as executable Agent instance (default)
+   * const agent = await mastra.getStoredAgentById('my-agent-id');
+   * if (agent) {
+   *   const response = await agent.generate('Hello!');
+   *   console.log(response.text);
+   * }
+   *
+   * // Get raw stored configuration
+   * const rawConfig = await mastra.getStoredAgentById('my-agent-id', { raw: true });
+   * if (rawConfig) {
+   *   console.log(rawConfig.instructions);
+   * }
+   * ```
+   */
+  public async getStoredAgentById(id: string, options?: { raw?: false }): Promise<Agent | null>;
+  public async getStoredAgentById(id: string, options: { raw: true }): Promise<StorageAgentType | null>;
+  public async getStoredAgentById(id: string, options?: { raw?: boolean }): Promise<Agent | StorageAgentType | null> {
+    const storage = this.#storage;
+
+    if (!storage) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_STORED_AGENT_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Storage is not configured',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    if (!storage.supports.agents) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_STORED_AGENT_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Storage does not support agents',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    const storedAgent = await storage.getAgentById({ id });
+
+    if (!storedAgent) {
+      return null;
+    }
+
+    if (options?.raw) {
+      return storedAgent;
+    }
+
+    return this.#createAgentFromStoredConfig(storedAgent);
+  }
+
+  /**
+   * Lists all stored agents from the database with optional pagination.
+   *
+   * By default, returns executable Agent instances. Set `raw: true` to get
+   * the raw stored configuration data instead.
+   *
+   * @param args - Options for pagination and output format
+   * @param args.page - Zero-indexed page number (default: 0)
+   * @param args.perPage - Items per page, or false for all (default: 100)
+   * @param args.orderBy - Sort order configuration
+   * @param args.raw - If true, returns raw stored data instead of Agent instances
+   *
+   * @throws {MastraError} When storage is not configured or doesn't support agents
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new PostgresStore({ connectionString: process.env.DATABASE_URL })
+   * });
+   *
+   * // List as executable Agent instances (default)
+   * const result = await mastra.listStoredAgents();
+   * for (const agent of result.agents) {
+   *   const response = await agent.generate('Hello!');
+   * }
+   *
+   * // List raw stored configurations
+   * const rawResult = await mastra.listStoredAgents({ raw: true });
+   * for (const config of rawResult.agents) {
+   *   console.log(config.instructions, config.createdAt);
+   * }
+   *
+   * // With pagination
+   * const paginated = await mastra.listStoredAgents({
+   *   page: 0,
+   *   perPage: 10,
+   *   orderBy: { field: 'createdAt', direction: 'DESC' }
+   * });
+   * ```
+   */
+  public async listStoredAgents(args?: {
+    page?: number;
+    perPage?: number | false;
+    orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
+    raw?: false;
+  }): Promise<{
+    agents: Agent[];
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
+  }>;
+  public async listStoredAgents(args: {
+    page?: number;
+    perPage?: number | false;
+    orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
+    raw: true;
+  }): Promise<{
+    agents: StorageAgentType[];
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
+  }>;
+  public async listStoredAgents(args?: {
+    page?: number;
+    perPage?: number | false;
+    orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
+    raw?: boolean;
+  }): Promise<{
+    agents: Agent[] | StorageAgentType[];
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
+  }> {
+    const storage = this.#storage;
+
+    if (!storage) {
+      const error = new MastraError({
+        id: 'MASTRA_LIST_STORED_AGENTS_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Storage is not configured',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    if (!storage.supports.agents) {
+      const error = new MastraError({
+        id: 'MASTRA_LIST_STORED_AGENTS_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Storage does not support agents',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    const result = await storage.listAgents({
+      page: args?.page,
+      perPage: args?.perPage,
+      orderBy: args?.orderBy,
+    });
+
+    if (args?.raw) {
+      return result;
+    }
+
+    // Transform stored configs into Agent instances
+    const agents = result.agents.map(storedAgent => this.#createAgentFromStoredConfig(storedAgent));
+
+    return {
+      agents,
+      total: result.total,
+      page: result.page,
+      perPage: result.perPage,
+      hasMore: result.hasMore,
+    };
+  }
+
+  /**
+   * Creates an Agent instance from a stored agent configuration.
+   * @private
+   */
+  #createAgentFromStoredConfig(storedAgent: StorageAgentType): Agent {
+    // Build model config from stored data
+    // The model field stores { provider, name, ...otherConfig }
+    const modelConfig = storedAgent.model as { provider?: string; name?: string; [key: string]: unknown };
+
+    // Build the model string in "provider/modelName" format
+    if (!modelConfig.provider || !modelConfig.name) {
+      throw new MastraError({
+        id: 'MASTRA_STORED_AGENT_INVALID_MODEL',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Stored agent "${storedAgent.id}" has invalid model configuration. Both provider and name are required.`,
+        details: { agentId: storedAgent.id, model: JSON.stringify(storedAgent.model) },
+      });
+    }
+
+    // Use model router format: "provider/modelName"
+    const model = `${modelConfig.provider}/${modelConfig.name}`;
+
+    // Resolve tools from the stored tool references
+    const tools = this.#resolveStoredTools(storedAgent.tools);
+
+    // Resolve workflows from the stored workflow references
+    const workflows = this.#resolveStoredWorkflows(storedAgent.workflows);
+
+    // Resolve sub-agents from the stored agent references
+    const agents = this.#resolveStoredAgents(storedAgent.agents);
+
+    // Resolve memory from the stored memory reference
+    const memory = this.#resolveStoredMemory(storedAgent.memory);
+
+    // Resolve scorers from the stored scorer references
+    const scorers = this.#resolveStoredScorers(storedAgent.scorers);
+
+    // Create the agent instance
+    const agent = new Agent({
+      id: storedAgent.id,
+      name: storedAgent.name,
+      description: storedAgent.description,
+      instructions: storedAgent.instructions,
+      model,
+      tools,
+      workflows,
+      agents,
+      memory,
+      scorers,
+      defaultOptions: storedAgent.defaultOptions,
+    });
+
+    // Register the agent with Mastra
+    agent.__setLogger(this.#logger);
+    agent.__registerMastra(this);
+    agent.__registerPrimitives({
+      logger: this.getLogger(),
+      storage: this.getStorage(),
+      agents: this.#agents as Record<string, Agent<any>>,
+      tts: this.#tts,
+      vectors: this.#vectors,
+    });
+
+    return agent;
+  }
+
+  /**
+   * Resolves tool references from stored configuration to actual tool instances.
+   * @private
+   */
+  #resolveStoredTools(storedTools?: string[]): Record<string, ToolAction<any, any, any, any, any, any>> {
+    if (!storedTools || storedTools.length === 0) {
+      return {};
+    }
+
+    const resolvedTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+    const registeredTools = this.#tools;
+
+    for (const toolKey of storedTools) {
+      // Try to find the tool in registered tools
+      if (registeredTools && registeredTools[toolKey]) {
+        resolvedTools[toolKey] = registeredTools[toolKey];
+      } else {
+        // Tool reference exists but tool is not registered - log warning
+        this.#logger?.warn(`Tool "${toolKey}" referenced in stored agent but not registered in Mastra`);
+      }
+    }
+
+    return resolvedTools;
+  }
+
+  /**
+   * Resolves workflow references from stored configuration to actual workflow instances.
+   * @private
+   */
+  #resolveStoredWorkflows(storedWorkflows?: string[]): Record<string, Workflow<any, any, any, any, any, any>> {
+    if (!storedWorkflows || storedWorkflows.length === 0) {
+      return {};
+    }
+
+    const resolvedWorkflows: Record<string, Workflow<any, any, any, any, any, any>> = {};
+
+    for (const workflowKey of storedWorkflows) {
+      // Try to find the workflow in registered workflows
+      try {
+        const workflow = this.getWorkflow(workflowKey);
+        resolvedWorkflows[workflowKey] = workflow;
+      } catch {
+        // Try by ID
+        try {
+          const workflow = this.getWorkflowById(workflowKey);
+          resolvedWorkflows[workflowKey] = workflow;
+        } catch {
+          this.#logger?.warn(`Workflow "${workflowKey}" referenced in stored agent but not registered in Mastra`);
+        }
+      }
+    }
+
+    return resolvedWorkflows;
+  }
+
+  /**
+   * Resolves agent references from stored configuration to actual agent instances.
+   * @private
+   */
+  #resolveStoredAgents(storedAgents?: string[]): Record<string, Agent<any>> {
+    if (!storedAgents || storedAgents.length === 0) {
+      return {};
+    }
+
+    const resolvedAgents: Record<string, Agent<any>> = {};
+
+    for (const agentKey of storedAgents) {
+      // Try to find the agent in registered agents
+      try {
+        const agent = this.getAgent(agentKey as keyof TAgents);
+        resolvedAgents[agentKey] = agent;
+      } catch {
+        // Try by ID
+        try {
+          const agent = this.getAgentById(agentKey as TAgents[keyof TAgents]['id']);
+          resolvedAgents[agentKey] = agent;
+        } catch {
+          this.#logger?.warn(`Agent "${agentKey}" referenced in stored agent but not registered in Mastra`);
+        }
+      }
+    }
+
+    return resolvedAgents;
+  }
+
+  /**
+   * Resolves memory reference from stored configuration to actual memory instance.
+   * @private
+   */
+  #resolveStoredMemory(storedMemory?: string): MastraMemory | undefined {
+    if (!storedMemory) {
+      return undefined;
+    }
+
+    // Try by key first
+    try {
+      return this.getMemory(storedMemory as keyof TMemory);
+    } catch {
+      // Try by id
+      try {
+        return this.getMemoryById(storedMemory);
+      } catch {
+        this.#logger?.warn(`Memory "${storedMemory}" referenced in stored agent but not registered in Mastra`);
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Resolves scorer references from stored configuration to actual scorer instances.
+   * @private
+   */
+  #resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): MastraScorers | undefined {
+    if (!storedScorers) {
+      return undefined;
+    }
+
+    const resolvedScorers: MastraScorers = {};
+
+    for (const [scorerKey, scorerConfig] of Object.entries(storedScorers)) {
+      // Try to find the scorer in registered scorers by key
+      try {
+        const scorer = this.getScorer(scorerKey as keyof TScorers);
+        resolvedScorers[scorerKey] = {
+          scorer,
+          sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
+        };
+      } catch {
+        // Try by ID
+        try {
+          const scorer = this.getScorerById(scorerKey);
+          resolvedScorers[scorerKey] = {
+            scorer,
+            sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
+          };
+        } catch {
+          this.#logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
+        }
+      }
+    }
+
+    return Object.keys(resolvedScorers).length > 0 ? resolvedScorers : undefined;
+  }
+
+  /**
    * Adds a new agent to the Mastra instance.
    *
    * This method allows dynamic registration of agents after the Mastra instance
@@ -671,6 +1143,9 @@ export class Mastra<
    * ```
    */
   public addAgent<A extends Agent<any>>(agent: A, key?: string): void {
+    if (!agent) {
+      throw createUndefinedPrimitiveError('agent', agent, key);
+    }
     const agentKey = key || agent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
@@ -690,6 +1165,20 @@ export class Mastra<
       vectors: this.#vectors,
     });
     agents[agentKey] = agent;
+
+    // Register configured processor workflows from the agent
+    // Use .then() to handle async resolution without blocking the constructor
+    // This excludes memory-derived processors to avoid triggering memory factory functions
+    agent
+      .getConfiguredProcessorWorkflows()
+      .then(processorWorkflows => {
+        for (const workflow of processorWorkflows) {
+          this.addWorkflow(workflow, workflow.id);
+        }
+      })
+      .catch(err => {
+        this.#logger?.debug(`Failed to register processor workflows for agent ${agentKey}:`, err);
+      });
   }
 
   /**
@@ -844,6 +1333,9 @@ export class Mastra<
    * ```
    */
   public addVector<V extends MastraVector>(vector: V, key?: string): void {
+    if (!vector) {
+      throw createUndefinedPrimitiveError('vector', vector, key);
+    }
     const vectorKey = key || vector.id;
     const vectors = this.#vectors as Record<string, MastraVector>;
     if (vectors[vectorKey]) {
@@ -1132,6 +1624,9 @@ export class Mastra<
    * ```
    */
   public addScorer<S extends MastraScorer<any, any, any, any>>(scorer: S, key?: string): void {
+    if (!scorer) {
+      throw createUndefinedPrimitiveError('scorer', scorer, key);
+    }
     const scorerKey = key || scorer.id;
     const scorers = this.#scorers as Record<string, MastraScorer<any, any, any, any>>;
     if (scorers[scorerKey]) {
@@ -1139,6 +1634,9 @@ export class Mastra<
       logger.debug(`Scorer with key ${scorerKey} already exists. Skipping addition.`);
       return;
     }
+
+    // Register Mastra instance with scorer to enable custom gateway access
+    scorer.__registerMastra(this);
 
     scorers[scorerKey] = scorer;
   }
@@ -1372,6 +1870,9 @@ export class Mastra<
    * ```
    */
   public addTool<T extends ToolAction<any, any, any, any>>(tool: T, key?: string): void {
+    if (!tool) {
+      throw createUndefinedPrimitiveError('tool', tool, key);
+    }
     const toolKey = key || tool.id;
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
     if (tools[toolKey]) {
@@ -1520,6 +2021,9 @@ export class Mastra<
    * ```
    */
   public addProcessor<P extends Processor>(processor: P, key?: string): void {
+    if (!processor) {
+      throw createUndefinedPrimitiveError('processor', processor, key);
+    }
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
@@ -1529,6 +2033,139 @@ export class Mastra<
     }
 
     processors[processorKey] = processor;
+  }
+
+  /**
+   * Retrieves a registered memory instance by its registration key.
+   *
+   * @throws {MastraError} When the memory instance with the specified key is not found
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   memory: {
+   *     chat: new Memory({ storage })
+   *   }
+   * });
+   *
+   * const chatMemory = mastra.getMemory('chat');
+   * ```
+   */
+  public getMemory<TMemoryName extends keyof TMemory>(name: TMemoryName): TMemory[TMemoryName] {
+    if (!this.#memory || !this.#memory[name]) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_MEMORY_BY_KEY_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Memory with key ${String(name)} not found`,
+        details: {
+          status: 404,
+          memoryKey: String(name),
+          memory: Object.keys(this.#memory ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return this.#memory[name];
+  }
+
+  /**
+   * Retrieves a registered memory instance by its ID.
+   *
+   * Searches through all registered memory instances and returns the one whose ID matches.
+   *
+   * @throws {MastraError} When no memory instance with the specified ID is found
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   memory: {
+   *     chat: new Memory({ id: 'chat-memory', storage })
+   *   }
+   * });
+   *
+   * const memory = mastra.getMemoryById('chat-memory');
+   * ```
+   */
+  public getMemoryById(id: string): MastraMemory {
+    const allMemory = this.#memory;
+    if (allMemory) {
+      for (const [, memory] of Object.entries(allMemory)) {
+        if (memory.id === id) {
+          return memory;
+        }
+      }
+    }
+
+    const error = new MastraError({
+      id: 'MASTRA_GET_MEMORY_BY_ID_NOT_FOUND',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: `Memory with id ${id} not found`,
+      details: {
+        status: 404,
+        memoryId: id,
+        availableIds: Object.values(allMemory ?? {})
+          .map(m => m.id)
+          .join(', '),
+      },
+    });
+    this.#logger?.trackException(error);
+    throw error;
+  }
+
+  /**
+   * Returns all registered memory instances as a record keyed by their names.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   memory: {
+   *     chat: new Memory({ storage }),
+   *     longTerm: new Memory({ storage })
+   *   }
+   * });
+   *
+   * const allMemory = mastra.listMemory();
+   * console.log(Object.keys(allMemory)); // ['chat', 'longTerm']
+   * ```
+   */
+  public listMemory(): TMemory | undefined {
+    return this.#memory;
+  }
+
+  /**
+   * Adds a new memory instance to the Mastra instance.
+   *
+   * This method allows dynamic registration of memory instances after the Mastra instance
+   * has been created.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra();
+   * const chatMemory = new Memory({
+   *   id: 'chat-memory',
+   *   storage: mastra.getStorage()
+   * });
+   * mastra.addMemory(chatMemory); // Uses memory.id as key
+   * // or
+   * mastra.addMemory(chatMemory, 'customKey'); // Uses custom key
+   * ```
+   */
+  public addMemory<M extends MastraMemory>(memory: M, key?: string): void {
+    if (!memory) {
+      throw createUndefinedPrimitiveError('memory', memory, key);
+    }
+    const memoryKey = key || memory.id;
+    const memoryRegistry = this.#memory as Record<string, MastraMemory>;
+    if (memoryRegistry[memoryKey]) {
+      const logger = this.getLogger();
+      logger.debug(`Memory with key ${memoryKey} already exists. Skipping addition.`);
+      return;
+    }
+
+    memoryRegistry[memoryKey] = memory;
   }
 
   /**
@@ -1587,6 +2224,9 @@ export class Mastra<
    * ```
    */
   public addWorkflow<W extends Workflow<any, any, any, any, any, any>>(workflow: W, key?: string): void {
+    if (!workflow) {
+      throw createUndefinedPrimitiveError('workflow', workflow, key);
+    }
     const workflowKey = key || workflow.id;
     const workflows = this.#workflows as Record<string, Workflow<any, any, any, any, any, any>>;
     if (workflows[workflowKey]) {
@@ -1664,6 +2304,10 @@ export class Mastra<
       Object.keys(this.#mcpServers).forEach(key => {
         this.#mcpServers?.[key]?.__setLogger(this.#logger);
       });
+    }
+
+    if (this.#serverAdapter) {
+      this.#serverAdapter.__setLogger(this.#logger);
     }
 
     this.#observability.setLogger({ logger: this.#logger });
@@ -1788,6 +2432,78 @@ export class Mastra<
 
   public getServer() {
     return this.#server;
+  }
+
+  /**
+   * Sets the server adapter for this Mastra instance.
+   *
+   * The server adapter provides access to the underlying server app (e.g., Hono, Express)
+   * and allows users to call routes directly via `app.fetch()` instead of making HTTP requests.
+   *
+   * This is typically called by `createHonoServer` or similar factory functions during
+   * server initialization.
+   *
+   * @param adapter - The server adapter instance (e.g., MastraServer from @mastra/hono or @mastra/express)
+   *
+   * @example
+   * ```typescript
+   * const app = new Hono();
+   * const adapter = new MastraServer({ app, mastra });
+   * mastra.setMastraServer(adapter);
+   * ```
+   */
+  public setMastraServer(adapter: MastraServerBase): void {
+    if (this.#serverAdapter) {
+      this.#logger?.debug(
+        'Replacing existing server adapter. Only one adapter should be registered per Mastra instance.',
+      );
+    }
+    this.#serverAdapter = adapter;
+    // Inject the logger into the adapter
+    if (this.#logger) {
+      adapter.__setLogger(this.#logger);
+    }
+  }
+
+  /**
+   * Gets the server adapter for this Mastra instance.
+   *
+   * @returns The server adapter, or undefined if not set
+   *
+   * @example
+   * ```typescript
+   * const adapter = mastra.getMastraServer();
+   * if (adapter) {
+   *   const app = adapter.getApp<Hono>();
+   * }
+   * ```
+   */
+  public getMastraServer(): MastraServerBase | undefined {
+    return this.#serverAdapter;
+  }
+
+  /**
+   * Gets the server app from the server adapter.
+   *
+   * This is a convenience method that calls `getMastraServer()?.getApp<T>()`.
+   * Use this to access the underlying server framework's app instance (e.g., Hono, Express)
+   * for direct operations like calling routes via `app.fetch()`.
+   *
+   * @template T - The expected type of the app (e.g., Hono, Express Application)
+   * @returns The server app, or undefined if no adapter is set
+   *
+   * @example
+   * ```typescript
+   * // After createHonoServer() is called:
+   * const app = mastra.getServerApp<Hono>();
+   *
+   * // Call routes directly without HTTP overhead
+   * const response = await app?.fetch(new Request('http://localhost/health'));
+   * const data = await response?.json();
+   * ```
+   */
+  public getServerApp<T = unknown>(): T | undefined {
+    return this.#serverAdapter?.getApp<T>();
   }
 
   public getBundlerConfig() {
@@ -1940,6 +2656,9 @@ export class Mastra<
    * ```
    */
   public addMCPServer<M extends MCPServerBase>(server: M, key?: string): void {
+    if (!server) {
+      throw createUndefinedPrimitiveError('mcp-server', server, key);
+    }
     // If a key is provided, try to set it as the ID
     // The setId method will only update if the ID wasn't explicitly set by the user
     if (key) {
@@ -2284,6 +3003,9 @@ export class Mastra<
    * ```
    */
   public addGateway(gateway: MastraModelGateway, key?: string): void {
+    if (!gateway) {
+      throw createUndefinedPrimitiveError('gateway', gateway, key);
+    }
     const gatewayKey = key || gateway.getId();
     const gateways = this.#gateways as Record<string, MastraModelGateway>;
     if (gateways[gatewayKey]) {

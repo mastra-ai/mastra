@@ -1,6 +1,6 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_SPANS } from '@mastra/core/storage';
+import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_SPANS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -51,11 +51,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     const columns = Object.entries(schema).map(([name, col]) => {
       const parsedColumnName = parseSqlIdentifier(name, 'column name');
-      let type = col.type.toUpperCase();
-      if (type === 'TEXT') type = 'TEXT';
-      if (type === 'TIMESTAMP') type = 'TEXT'; // Store timestamps as ISO strings
-      // if (type === 'BIGINT') type = 'INTEGER';
-
+      const type = this.getSqlType(col.type);
       const nullable = col.nullable ? '' : 'NOT NULL';
       const primaryKey = col.primaryKey ? 'PRIMARY KEY' : '';
 
@@ -96,7 +92,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -112,8 +108,10 @@ export class StoreOperationsLibSQL extends StoreOperations {
     switch (type) {
       case 'bigint':
         return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
-      case 'jsonb':
-        return 'TEXT'; // Store JSON as TEXT in SQLite
+      case 'timestamp':
+        return 'TEXT'; // Store timestamps as ISO strings in SQLite
+      // jsonb falls through to base class which returns 'JSONB'
+      // SQLite's flexible type system treats JSONB as TEXT affinity
       default:
         return super.getSqlType(type);
     }
@@ -289,7 +287,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('LIBSQL', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -323,7 +321,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_BATCH_UPDATE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'BATCH_UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -377,7 +375,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_BATCH_DELETE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'BATCH_DELETE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -452,7 +450,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_ALTER_TABLE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'ALTER_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -471,7 +469,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     } catch (e) {
       const mastraError = new MastraError(
         {
-          id: 'LIBSQL_STORE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -492,7 +490,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     } catch (e) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_DROP_TABLE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'DROP_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

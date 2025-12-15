@@ -1,6 +1,6 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
-import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
+import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
 import type { ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
@@ -108,6 +108,20 @@ export class Tool<
   requireApproval?: boolean;
 
   /**
+   * Provider-specific options passed to the model when this tool is used.
+   * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
+   * @example
+   * ```typescript
+   * providerOptions: {
+   *   anthropic: {
+   *     cacheControl: { type: 'ephemeral' }
+   *   }
+   * }
+   * ```
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -130,6 +144,7 @@ export class Tool<
     this.resumeSchema = opts.resumeSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.providerOptions = opts.providerOptions;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
@@ -375,7 +390,7 @@ export function createTool<
       execute: (
         inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
         context?: TContext,
-      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
+      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> : unknown>;
     }
   : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
   return new Tool(opts) as any;

@@ -124,6 +124,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
+  public tags?: string[];
   public traceState?: TraceState;
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
@@ -139,6 +140,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.isEvent = options.isEvent ?? false;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
     this.traceState = options.traceState;
+    // Tags are only set for root spans (spans without a parent)
+    this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
@@ -232,6 +235,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
+      // Tags are only included for root spans
+      ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
     };
   }
 
@@ -318,6 +323,11 @@ export function deepClean(
   }
 
   _seen.add(value);
+
+  // Handle Date objects - return as-is (they are JSON-serializable)
+  if (value instanceof Date) {
+    return value;
+  }
 
   if (Array.isArray(value)) {
     return value.map(item => deepClean(item, options, _seen, _depth + 1));

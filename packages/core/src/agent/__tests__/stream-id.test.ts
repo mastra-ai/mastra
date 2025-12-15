@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { UIMessageChunk } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
@@ -159,11 +159,11 @@ describe('Stream ID Consistency', () => {
             modelId: 'mock-model-id',
             timestamp: new Date(0),
           },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello! ' },
-          { type: 'text-delta', id: '1', delta: 'I am a ' },
-          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+          { type: 'text-delta', id: 'text-1', delta: 'I am a ' },
+          { type: 'text-delta', id: 'text-1', delta: 'helpful assistant.' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -237,11 +237,11 @@ describe('Stream ID Consistency', () => {
             modelId: 'mock-model-id',
             timestamp: new Date(0),
           },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello! ' },
-          { type: 'text-delta', id: '1', delta: 'I am a ' },
-          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+          { type: 'text-delta', id: 'text-1', delta: 'I am a ' },
+          { type: 'text-delta', id: 'text-1', delta: 'helpful assistant.' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -302,9 +302,9 @@ describe('Stream ID Consistency', () => {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"name":"John","age":30}' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -384,9 +384,9 @@ describe('Stream ID Consistency', () => {
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'The person is John who is 30 years old' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'The person is John who is 30 years old' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -415,9 +415,9 @@ describe('Stream ID Consistency', () => {
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: '{"name":"John","age":30}' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -497,11 +497,11 @@ describe('Stream ID Consistency', () => {
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello! ' },
-          { type: 'text-delta', id: '1', delta: 'How can I ' },
-          { type: 'text-delta', id: '1', delta: 'help you today?' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+          { type: 'text-delta', id: 'text-1', delta: 'How can I ' },
+          { type: 'text-delta', id: 'text-1', delta: 'help you today?' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',

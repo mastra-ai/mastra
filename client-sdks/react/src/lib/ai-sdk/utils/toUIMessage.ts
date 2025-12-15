@@ -42,7 +42,9 @@ export const mapWorkflowStreamChunkToWatchResult = (
         ? { result: lastStep?.output }
         : finalStatus === 'failed' && lastStep?.status === 'failed'
           ? { error: lastStep?.error }
-          : {}),
+          : finalStatus === 'tripwire' && chunk.payload.tripwire
+            ? { tripwire: chunk.payload.tripwire }
+            : {}),
     };
   }
 
@@ -111,21 +113,59 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
   // Always return a new array reference for React
   const result = [...conversation];
 
+  // Handle data-* chunks (custom data chunks from writer.custom())
+  if (chunk.type.startsWith('data-')) {
+    const lastMessage = result[result.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') {
+      // Create a new assistant message with the data part
+      const newMessage: MastraUIMessage = {
+        id: `data-${chunk.runId}-${Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: chunk.type as `data-${string}`,
+            data: 'data' in chunk ? chunk.data : undefined,
+          },
+        ],
+        metadata,
+      };
+      return [...result, newMessage];
+    }
+
+    // Add data part to existing assistant message
+    const updatedMessage: MastraUIMessage = {
+      ...lastMessage,
+      parts: [
+        ...lastMessage.parts,
+        {
+          type: chunk.type as `data-${string}`,
+          data: 'data' in chunk ? chunk.data : undefined,
+        },
+      ],
+    };
+    return [...result.slice(0, -1), updatedMessage];
+  }
+
   switch (chunk.type) {
     case 'tripwire': {
-      // Create a new assistant message
+      // Create a new assistant message with tripwire-specific metadata
       const newMessage: MastraUIMessage = {
         id: `tripwire-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [
           {
             type: 'text',
-            text: chunk.payload.tripwireReason,
+            text: chunk.payload.reason,
           },
         ],
         metadata: {
           ...metadata,
-          status: 'warning',
+          status: 'tripwire',
+          tripwire: {
+            retry: chunk.payload.retry,
+            tripwirePayload: chunk.payload.metadata,
+            processorId: chunk.payload.processorId,
+          },
         },
       };
 

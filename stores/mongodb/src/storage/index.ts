@@ -1,6 +1,6 @@
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   PaginationInfo,
@@ -17,8 +17,9 @@ import type {
   CreateSpanRecord,
   UpdateSpanRecord,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
 import { MemoryStorageMongoDB } from './domains/memory';
@@ -36,7 +37,7 @@ const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
   } catch (error) {
     throw new MastraError(
       {
-        id: 'STORAGE_MONGODB_STORE_CONSTRUCTOR_FAILED',
+        id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { connectionHandler: true },
@@ -55,7 +56,7 @@ const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
   } catch (error) {
     throw new MastraError(
       {
-        id: 'STORAGE_MONGODB_STORE_CONSTRUCTOR_FAILED',
+        id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { url: config?.url, dbName: config?.dbName },
@@ -89,7 +90,7 @@ export class MongoDBStore extends MastraStorage {
   }
 
   constructor(config: MongoDBConfig) {
-    super({ id: config.id, name: 'MongoDBStore' });
+    super({ id: config.id, name: 'MongoDBStore', disableInit: config.disableInit });
 
     this.stores = {} as StorageDomains;
 
@@ -230,13 +231,7 @@ export class MongoDBStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -275,13 +270,17 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async close(): Promise<void> {
     try {
       await this.#connector.close();
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_CLOSE_FAILED',
+          id: createStorageErrorId('MONGODB', 'CLOSE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -297,7 +296,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 
@@ -384,7 +383,7 @@ export class MongoDBStore extends MastraStorage {
   async createSpan(span: CreateSpanRecord): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MONGODB', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -404,7 +403,7 @@ export class MongoDBStore extends MastraStorage {
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MONGODB', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -416,7 +415,7 @@ export class MongoDBStore extends MastraStorage {
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MONGODB', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -428,7 +427,7 @@ export class MongoDBStore extends MastraStorage {
   async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MONGODB', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -440,7 +439,7 @@ export class MongoDBStore extends MastraStorage {
   async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MONGODB', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -458,7 +457,7 @@ export class MongoDBStore extends MastraStorage {
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MONGODB', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -470,7 +469,7 @@ export class MongoDBStore extends MastraStorage {
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MONGODB', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',

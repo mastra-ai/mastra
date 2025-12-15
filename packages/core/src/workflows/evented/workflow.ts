@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import z from 'zod';
 import type { Agent } from '../../agent';
 import { RequestContext } from '../../di';
@@ -17,7 +17,7 @@ import type {
   WorkflowStreamEvent,
   WorkflowEngineType,
 } from '../../workflows/types';
-import { EMITTER_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
@@ -181,7 +181,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, requestContext, abortSignal, abort }) => {
+      execute: async ({ inputData, runId, [PUBSUB_SYMBOL]: pubsub, requestContext, abortSignal, abort }) => {
         // TODO: support stream
         let streamPromise = {} as {
           promise: Promise<string>;
@@ -213,22 +213,24 @@ export function createStep<
           args: inputData,
         };
 
-        await emitter.emit('watch', {
-          type: 'tool-call-streaming-start',
-          ...(toolData ?? {}),
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
         });
         for await (const chunk of fullStream) {
           if (chunk.type === 'text-delta') {
-            await emitter.emit('watch', {
-              type: 'tool-call-delta',
-              ...(toolData ?? {}),
-              argsTextDelta: chunk.textDelta,
+            await pubsub.publish(`workflow.events.v2.${runId}`, {
+              type: 'watch',
+              runId,
+              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
             });
           }
         }
-        await emitter.emit('watch', {
-          type: 'tool-call-streaming-finish',
-          ...(toolData ?? {}),
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
         });
 
         return {
@@ -476,6 +478,10 @@ export class EventedRun<
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
     const result = await this.executionEngine.execute<
       z.infer<TState>,
       z.infer<TInput>,
@@ -487,20 +493,7 @@ export class EventedRun<
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
       initialState: initialStateToUse,
-      emitter: {
-        emit: async (event: string, data: any) => {
-          this.emitter.emit(event, data);
-        },
-        on: (event: string, callback: (data: any) => void) => {
-          this.emitter.on(event, callback);
-        },
-        off: (event: string, callback: (data: any) => void) => {
-          this.emitter.off(event, callback);
-        },
-        once: (event: string, callback: (data: any) => void) => {
-          this.emitter.once(event, callback);
-        },
-      },
+      pubsub: this.mastra.pubsub,
       retryConfig: this.retryConfig,
       requestContext,
       abortController: this.abortController,
@@ -513,6 +506,75 @@ export class EventedRun<
     }
 
     return result;
+  }
+
+  /**
+   * Starts the workflow execution without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId. The workflow executes in the background via pubsub.
+   * Use this when you don't need to wait for the result or want to avoid polling failures.
+   */
+  async startAsync({
+    inputData,
+    initialState,
+    requestContext,
+  }: {
+    inputData?: z.infer<TInput>;
+    requestContext?: RequestContext;
+    initialState?: z.infer<TState>;
+  }): Promise<{ runId: string }> {
+    // Add validation checks
+    if (this.serializedStepGraph.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
+    requestContext = requestContext ?? new RequestContext();
+
+    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      snapshot: {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
+        value: {},
+        context: {} as any,
+        requestContext: Object.fromEntries(requestContext.entries()),
+        activePaths: [],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      },
+    });
+
+    const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
+    // Fire-and-forget: publish the workflow start event without subscribing for completion
+    await this.mastra.pubsub.publish('workflows', {
+      type: 'workflow.start',
+      runId: this.runId,
+      data: {
+        workflowId: this.workflowId,
+        runId: this.runId,
+        prevResult: { status: 'success', output: inputDataToUse },
+        requestContext: Object.fromEntries(requestContext.entries()),
+        initialState: initialStateToUse,
+      },
+    });
+
+    // Return immediately without waiting for completion
+    return { runId: this.runId };
   }
 
   // TODO: stream
@@ -578,6 +640,10 @@ export class EventedRun<
 
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -591,21 +657,7 @@ export class EventedRun<
           resumePayload: resumeDataToUse,
           resumePath,
         },
-        emitter: {
-          emit: (event: string, data: any) => {
-            this.emitter.emit(event, data);
-            return Promise.resolve();
-          },
-          on: (event: string, callback: (data: any) => void) => {
-            this.emitter.on(event, callback);
-          },
-          off: (event: string, callback: (data: any) => void) => {
-            this.emitter.off(event, callback);
-          },
-          once: (event: string, callback: (data: any) => void) => {
-            this.emitter.once(event, callback);
-          },
-        },
+        pubsub: this.mastra.pubsub,
         requestContext,
         abortController: this.abortController,
       })

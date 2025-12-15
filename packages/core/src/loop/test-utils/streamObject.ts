@@ -1,4 +1,4 @@
-import { fail } from 'assert';
+import { fail } from 'node:assert';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
@@ -27,14 +27,14 @@ function createTestModels({
       modelId: 'mock-model-id',
       timestamp: new Date(0),
     },
-    { type: 'text-start', id: '1' },
-    { type: 'text-delta', id: '1', delta: '{ ' },
-    { type: 'text-delta', id: '1', delta: '"content": ' },
-    { type: 'text-delta', id: '1', delta: `"Hello, ` },
-    { type: 'text-delta', id: '1', delta: `world` },
-    { type: 'text-delta', id: '1', delta: `!"` },
-    { type: 'text-delta', id: '1', delta: ' }' },
-    { type: 'text-end', id: '1' },
+    { type: 'text-start', id: 'text-1' },
+    { type: 'text-delta', id: 'text-1', delta: '{ ' },
+    { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+    { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+    { type: 'text-delta', id: 'text-1', delta: `world` },
+    { type: 'text-delta', id: 'text-1', delta: `!"` },
+    { type: 'text-delta', id: 'text-1', delta: ' }' },
+    { type: 'text-end', id: 'text-1' },
     {
       type: 'finish',
       finishReason: 'stop',
@@ -113,9 +113,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream([
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: '{"elements":[{"content":"Hello, world!"}]}' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: '{"elements":[{"content":"Hello, world!"}]}' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -521,13 +521,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'text-delta',
                   id: '1',
                   delta: '{ "content": "Hello, world!" }',
                 },
-                { type: 'text-end', id: '1' },
+                { type: 'text-end', id: 'text-1' },
                 { type: 'finish', finishReason: 'stop', usage: testUsage },
               ]),
             }),
@@ -556,13 +556,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'text-delta',
                   id: '1',
                   delta: '{ "content": "Hello, world!" }',
                 },
-                { type: 'text-end', id: '1' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -602,13 +602,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'text-delta',
                   id: '1',
                   delta: '{"content": "Hello, world!"}',
                 },
-                { type: 'text-end', id: '1' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -697,13 +697,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         modelId: 'mock-model-id',
                         timestamp: new Date(0),
                       },
-                      { type: 'text-start', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
                       {
                         type: 'text-delta',
                         id: '1',
                         delta: '{"content": "Hello, world!"}',
                       },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -738,14 +738,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"content": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -780,14 +780,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -820,14 +820,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -861,14 +861,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"content": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -907,13 +907,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         modelId: 'mock-model-id',
                         timestamp: new Date(0),
                       },
-                      { type: 'text-start', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
                       {
                         type: 'text-delta',
                         id: '1',
                         delta: '{ "content": "Hello, world!" }',
                       },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -1072,6 +1072,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "text": "{ "content": "Hello, world!" }",
                   "toolCalls": [],
                   "toolResults": [],
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1118,14 +1119,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         modelId: 'mock-model-id',
                         timestamp: new Date(0),
                       },
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -1278,6 +1279,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "text": "{ "invalid": "Hello, world!" }",
                   "toolCalls": [],
                   "toolResults": [],
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1324,14 +1326,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         modelId: 'mock-model-id',
                         timestamp: new Date(0),
                       },
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -1484,6 +1486,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "text": "{ "invalid": "Hello, world!" }",
                   "toolCalls": [],
                   "toolResults": [],
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1530,13 +1533,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
                     return {
                       stream: convertArrayToReadableStream([
-                        { type: 'text-start', id: '1' },
+                        { type: 'text-start', id: 'text-1' },
                         {
                           type: 'text-delta',
                           id: '1',
                           delta: `{ "content": "headers test" }`,
                         },
-                        { type: 'text-end', id: '1' },
+                        { type: 'text-end', id: 'text-1' },
                         {
                           type: 'finish',
                           finishReason: 'stop',
@@ -1582,13 +1585,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
                     return {
                       stream: convertArrayToReadableStream([
-                        { type: 'text-start', id: '1' },
+                        { type: 'text-start', id: 'text-1' },
                         {
                           type: 'text-delta',
                           id: '1',
                           delta: `{ "content": "provider metadata test" }`,
                         },
-                        { type: 'text-end', id: '1' },
+                        { type: 'text-end', id: 'text-1' },
                         {
                           type: 'finish',
                           finishReason: 'stop',
@@ -1687,9 +1690,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ "content": 123 }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ "content": 123 }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'response-metadata',
                         id: 'id-1',
@@ -1740,14 +1743,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"content": ' },
-                { type: 'text-delta', id: '1', delta: '"Hello, world!"' },
-                { type: 'text-delta', id: '1', delta: ' }' },
-                { type: 'text-delta', id: '1', delta: '\n```' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                { type: 'text-delta', id: 'text-1', delta: '"Hello, world!"' },
+                { type: 'text-delta', id: 'text-1', delta: ' }' },
+                { type: 'text-delta', id: 'text-1', delta: '\n```' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1780,9 +1783,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json{"content": "Hello, world!"}```' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json{"content": "Hello, world!"}```' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1808,15 +1811,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"content": ' },
-                { type: 'text-delta', id: '1', delta: '"Hello, ' },
-                { type: 'text-delta', id: '1', delta: 'world' },
-                { type: 'text-delta', id: '1', delta: '!"' },
-                { type: 'text-delta', id: '1', delta: ' }' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                { type: 'text-delta', id: 'text-1', delta: '"Hello, ' },
+                { type: 'text-delta', id: 'text-1', delta: 'world' },
+                { type: 'text-delta', id: 'text-1', delta: '!"' },
+                { type: 'text-delta', id: 'text-1', delta: ' }' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1852,14 +1855,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{"elements":[' },
-                { type: 'text-delta', id: '1', delta: '{"content":"element 1"},' },
-                { type: 'text-delta', id: '1', delta: '{"content":"element 2"}' },
-                { type: 'text-delta', id: '1', delta: ']}' },
-                { type: 'text-delta', id: '1', delta: '\n```' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{"elements":[' },
+                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 1"},' },
+                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 2"}' },
+                { type: 'text-delta', id: 'text-1', delta: ']}' },
+                { type: 'text-delta', id: 'text-1', delta: '\n```' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1881,13 +1884,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{"elements":[' },
-                { type: 'text-delta', id: '1', delta: '{"content":"element 1"},' },
-                { type: 'text-delta', id: '1', delta: '{"content":"element 2"}' },
-                { type: 'text-delta', id: '1', delta: ']}' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{"elements":[' },
+                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 1"},' },
+                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 2"}' },
+                { type: 'text-delta', id: 'text-1', delta: ']}' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1918,11 +1921,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{ "result": "sunny" }' },
-                { type: 'text-delta', id: '1', delta: '\n```' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{ "result": "sunny" }' },
+                { type: 'text-delta', id: 'text-1', delta: '\n```' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1944,15 +1947,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"result": ' },
-                { type: 'text-delta', id: '1', delta: '"su' },
-                { type: 'text-delta', id: '1', delta: 'nny' },
-                { type: 'text-delta', id: '1', delta: '"' },
-                { type: 'text-delta', id: '1', delta: ' }' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+                { type: 'text-delta', id: 'text-1', delta: '"su' },
+                { type: 'text-delta', id: 'text-1', delta: 'nny' },
+                { type: 'text-delta', id: 'text-1', delta: '"' },
+                { type: 'text-delta', id: 'text-1', delta: ' }' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1984,27 +1987,27 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '{"elements":[' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '{"elements":[' },
                 // first element:
-                { type: 'text-delta', id: '1', delta: '{' },
-                { type: 'text-delta', id: '1', delta: '"content":' },
-                { type: 'text-delta', id: '1', delta: `"element 1"` },
-                { type: 'text-delta', id: '1', delta: '},' },
+                { type: 'text-delta', id: 'text-1', delta: '{' },
+                { type: 'text-delta', id: 'text-1', delta: '"content":' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 1"` },
+                { type: 'text-delta', id: 'text-1', delta: '},' },
                 // second element:
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"content": ' },
-                { type: 'text-delta', id: '1', delta: `"element 2"` },
-                { type: 'text-delta', id: '1', delta: '},' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 2"` },
+                { type: 'text-delta', id: 'text-1', delta: '},' },
                 // third element:
-                { type: 'text-delta', id: '1', delta: '{' },
-                { type: 'text-delta', id: '1', delta: '"content":' },
-                { type: 'text-delta', id: '1', delta: `"element 3"` },
-                { type: 'text-delta', id: '1', delta: '}' },
+                { type: 'text-delta', id: 'text-1', delta: '{' },
+                { type: 'text-delta', id: 'text-1', delta: '"content":' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 3"` },
+                { type: 'text-delta', id: 'text-1', delta: '}' },
                 // end of array
-                { type: 'text-delta', id: '1', delta: ']' },
-                { type: 'text-delta', id: '1', delta: '}' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-delta', id: 'text-1', delta: ']' },
+                { type: 'text-delta', id: 'text-1', delta: '}' },
+                { type: 'text-end', id: 'text-1' },
                 // finish
                 {
                   type: 'finish',
@@ -2162,27 +2165,27 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '{"elements":[' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '{"elements":[' },
                 // first element:
-                { type: 'text-delta', id: '1', delta: '{' },
-                { type: 'text-delta', id: '1', delta: '"invalid":' },
-                { type: 'text-delta', id: '1', delta: `"element 1"` },
-                { type: 'text-delta', id: '1', delta: '},' },
+                { type: 'text-delta', id: 'text-1', delta: '{' },
+                { type: 'text-delta', id: 'text-1', delta: '"invalid":' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 1"` },
+                { type: 'text-delta', id: 'text-1', delta: '},' },
                 // second element:
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                { type: 'text-delta', id: '1', delta: `"element 2"` },
-                { type: 'text-delta', id: '1', delta: '},' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 2"` },
+                { type: 'text-delta', id: 'text-1', delta: '},' },
                 // third element:
-                { type: 'text-delta', id: '1', delta: '{' },
-                { type: 'text-delta', id: '1', delta: '"invalid":' },
-                { type: 'text-delta', id: '1', delta: `"element 3"` },
-                { type: 'text-delta', id: '1', delta: '}' },
+                { type: 'text-delta', id: 'text-1', delta: '{' },
+                { type: 'text-delta', id: 'text-1', delta: '"invalid":' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 3"` },
+                { type: 'text-delta', id: 'text-1', delta: '}' },
                 // end of array
-                { type: 'text-delta', id: '1', delta: ']' },
-                { type: 'text-delta', id: '1', delta: '}' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-delta', id: 'text-1', delta: ']' },
+                { type: 'text-delta', id: 'text-1', delta: '}' },
+                { type: 'text-end', id: 'text-1' },
                 // finish
                 {
                   type: 'finish',
@@ -2212,14 +2215,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should stream an enum value', async () => {
         const mockModels = createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{ ' },
-            { type: 'text-delta', id: '1', delta: '"result": ' },
-            { type: 'text-delta', id: '1', delta: `"su` },
-            { type: 'text-delta', id: '1', delta: `nny` },
-            { type: 'text-delta', id: '1', delta: `"` },
-            { type: 'text-delta', id: '1', delta: ' }' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+            { type: 'text-delta', id: 'text-1', delta: `"su` },
+            { type: 'text-delta', id: 'text-1', delta: `nny` },
+            { type: 'text-delta', id: 'text-1', delta: `"` },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
+            { type: 'text-end', id: 'text-1' },
             { type: 'finish', finishReason: 'stop', usage: testUsage },
           ]),
         });
@@ -2273,14 +2276,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             model: new MockLanguageModelV2({
               doStream: {
                 stream: convertArrayToReadableStream([
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '{ ' },
-                  { type: 'text-delta', id: '1', delta: '"result": ' },
-                  { type: 'text-delta', id: '1', delta: `"foo` },
-                  { type: 'text-delta', id: '1', delta: `bar` },
-                  { type: 'text-delta', id: '1', delta: `"` },
-                  { type: 'text-delta', id: '1', delta: ' }' },
-                  { type: 'text-end', id: '1' },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                  { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+                  { type: 'text-delta', id: 'text-1', delta: `"foo` },
+                  { type: 'text-delta', id: 'text-1', delta: `bar` },
+                  { type: 'text-delta', id: 'text-1', delta: `"` },
+                  { type: 'text-delta', id: 'text-1', delta: ' }' },
+                  { type: 'text-end', id: 'text-1' },
                   {
                     type: 'finish',
                     finishReason: 'stop',
@@ -2307,13 +2310,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should handle ambiguous values', async () => {
         const mockModels = createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{ ' },
-            { type: 'text-delta', id: '1', delta: '"result": ' },
-            { type: 'text-delta', id: '1', delta: `"foo` },
-            { type: 'text-delta', id: '1', delta: `bar` },
-            { type: 'text-delta', id: '1', delta: `"` },
-            { type: 'text-delta', id: '1', delta: ' }' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+            { type: 'text-delta', id: 'text-1', delta: `"foo` },
+            { type: 'text-delta', id: 'text-1', delta: `bar` },
+            { type: 'text-delta', id: 'text-1', delta: `"` },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -2342,14 +2345,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should handle non-ambiguous values', async () => {
         const mockModels = createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{ ' },
-            { type: 'text-delta', id: '1', delta: '"result": ' },
-            { type: 'text-delta', id: '1', delta: `"foo` },
-            { type: 'text-delta', id: '1', delta: `bar` },
-            { type: 'text-delta', id: '1', delta: `"` },
-            { type: 'text-delta', id: '1', delta: ' }' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+            { type: 'text-delta', id: 'text-1', delta: `"foo` },
+            { type: 'text-delta', id: 'text-1', delta: `bar` },
+            { type: 'text-delta', id: 'text-1', delta: `"` },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -2394,13 +2397,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       modelId: 'mock-model-id',
                       timestamp: new Date(0),
                     },
-                    { type: 'text-start', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
                     {
                       type: 'text-delta',
                       id: '1',
                       delta: '{ "content": "provider metadata test" ',
                     },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
@@ -2449,13 +2452,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       modelId: 'mock-model-id',
                       timestamp: new Date(0),
                     },
-                    { type: 'text-start', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
                     {
                       type: 'text-delta',
                       id: '1',
                       delta: '{ "content-a": "provider metadata test" }',
                     },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
@@ -2504,13 +2507,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       modelId: 'mock-model-id',
                       timestamp: new Date(0),
                     },
-                    { type: 'text-start', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
                     {
                       type: 'text-delta',
                       id: '1',
                       delta: '{ "content-a": "provider metadata test" }',
                     },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
@@ -2561,13 +2564,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       modelId: 'mock-model-id',
                       timestamp: new Date(0),
                     },
-                    { type: 'text-start', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
                     {
                       type: 'text-delta',
                       id: '1',
                       delta: '```json\n{ "content": "test message" }\n```',
                     },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
@@ -2619,9 +2622,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       modelId: 'mock-model-id',
                       timestamp: new Date(0),
                     },
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: '{ broken json' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: '{ broken json' },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',

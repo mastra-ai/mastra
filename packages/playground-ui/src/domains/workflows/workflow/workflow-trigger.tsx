@@ -1,4 +1,4 @@
-import jsonSchemaToZod from 'json-schema-to-zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { Braces, Loader2, StopCircle } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
 import { parse } from 'superjson';
@@ -192,10 +192,10 @@ export function WorkflowTrigger({
   const workflowActivePaths = streamResultToUse?.steps ?? {};
   const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
 
-  const doneStatuses = ['success', 'failed', 'canceled'];
+  const doneStatuses = ['success', 'failed', 'canceled', 'tripwire'];
 
   return (
-    <div className="h-full pt-3 pb-12">
+    <div className="h-full pt-3 pb-12 overflow-y-auto">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
         {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
@@ -320,18 +320,41 @@ export function WorkflowTrigger({
                     const { status } = step;
                     let output = undefined;
                     let suspendOutput = undefined;
+                    let error = undefined;
                     if (step.status === 'suspended') {
                       suspendOutput = step.suspendOutput;
                     }
                     if (step.status === 'success') {
                       output = step.output;
                     }
+                    if (step.status === 'failed') {
+                      error = step.error;
+                    }
+
+                    // Build tripwire info from step or workflow-level result
+                    // TripwireData is aligned with core schema: { reason, retry?, metadata?, processorId? }
+                    const tripwireInfo =
+                      step.status === 'failed' && step.tripwire
+                        ? step.tripwire
+                        : streamResultToUse?.status === 'tripwire'
+                          ? {
+                              reason: streamResultToUse?.tripwire?.reason,
+                              retry: streamResultToUse?.tripwire?.retry,
+                              metadata: streamResultToUse?.tripwire?.metadata,
+                              processorId: streamResultToUse?.tripwire?.processorId,
+                            }
+                          : undefined;
+
+                    // Show tripwire status for failed steps with tripwire info
+                    const displayStatus = step.status === 'failed' && step.tripwire ? 'tripwire' : status;
+
                     return (
                       <WorkflowStatus
                         key={stepId}
                         stepId={stepId}
-                        status={status}
-                        result={output ?? suspendOutput ?? {}}
+                        status={displayStatus}
+                        result={output ?? suspendOutput ?? error ?? {}}
+                        tripwire={tripwireInfo}
                       />
                     );
                   })}

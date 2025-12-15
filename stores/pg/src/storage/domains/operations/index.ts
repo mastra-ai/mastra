@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  createStorageErrorId,
   StoreOperations,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_THREADS,
@@ -178,7 +179,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_INSERT_FAILED',
+          id: createStorageErrorId('PG', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -198,7 +199,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('PG', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -245,7 +246,7 @@ export class StoreOperationsPG extends StoreOperations {
         const constraints = [];
         if (def.primaryKey) constraints.push('PRIMARY KEY');
         if (!def.nullable) constraints.push('NOT NULL');
-        return `"${parsedName}" ${def.type.toUpperCase()} ${constraints.join(' ')}`;
+        return `"${parsedName}" ${this.getSqlType(def.type)} ${constraints.join(' ')}`;
       });
 
       // Create schema if it doesn't exist
@@ -295,7 +296,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('PG', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -397,7 +398,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_ALTER_TABLE_FAILED',
+          id: createStorageErrorId('PG', 'ALTER_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -437,7 +438,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_LOAD_FAILED',
+          id: createStorageErrorId('PG', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -460,7 +461,7 @@ export class StoreOperationsPG extends StoreOperations {
       await this.client.query('ROLLBACK');
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('PG', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -481,7 +482,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_DROP_TABLE_FAILED',
+          id: createStorageErrorId('PG', 'DROP_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -577,7 +578,7 @@ export class StoreOperationsPG extends StoreOperations {
 
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_INDEX_CREATE_FAILED',
+          id: createStorageErrorId('PG', 'INDEX_CREATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -614,7 +615,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_INDEX_DROP_FAILED',
+          id: createStorageErrorId('PG', 'INDEX_DROP', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -698,7 +699,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_INDEX_LIST_FAILED',
+          id: createStorageErrorId('PG', 'INDEX_LIST', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: tableName
@@ -786,7 +787,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_CREATE_PERFORMANCE_INDEXES_FAILED',
+          id: createStorageErrorId('PG', 'CREATE_AUTOMATIC_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -856,7 +857,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_INDEX_DESCRIBE_FAILED',
+          id: createStorageErrorId('PG', 'INDEX_DESCRIBE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -914,7 +915,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_FAILED',
+          id: createStorageErrorId('PG', 'UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -949,7 +950,7 @@ export class StoreOperationsPG extends StoreOperations {
       await this.client.query('ROLLBACK');
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_BATCH_UPDATE_FAILED',
+          id: createStorageErrorId('PG', 'BATCH_UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -995,7 +996,7 @@ export class StoreOperationsPG extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_BATCH_DELETE_FAILED',
+          id: createStorageErrorId('PG', 'BATCH_DELETE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

@@ -16,11 +16,13 @@ interface StreamStepOptions {
   runId: string;
   returnScorerData?: boolean;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
@@ -34,8 +36,10 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   runId,
   returnScorerData,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
   methodType,
   saveQueueManager,
@@ -76,6 +80,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
         returnScorerData,
         tracingContext,
         requireToolApproval,
+        toolCallConcurrency,
         resumeContext,
         _internal: {
           generateId: capabilities.generateMessageId,
@@ -86,6 +91,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
           memory,
         },
         agentId,
+        agentName,
         toolCallId,
         methodType: modelMethodType,
       });

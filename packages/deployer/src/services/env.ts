@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 
 export abstract class EnvService {
   abstract getEnvValue(key: string): Promise<string | null>;

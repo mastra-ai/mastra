@@ -54,9 +54,9 @@ export function getSingleDummyResponseModel(version: 'v1' | 'v2') {
             modelId: 'mock-model-id',
             timestamp: new Date(0),
           },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Dummy response' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Dummy response' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -125,13 +125,13 @@ export function getDummyResponseModel(version: 'v1' | 'v2') {
             modelId: 'mock-model-id',
             timestamp: new Date(0),
           },
-          { type: 'text-start', id: '1' },
+          { type: 'text-start', id: 'text-1' },
           ...Array.from({ length: 10 }, (_, count) => ({
             type: 'text-delta' as const,
             id: '1',
             delta: `Dummy response ${count}`,
           })),
-          { type: 'text-end', id: '1' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
