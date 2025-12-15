@@ -93,13 +93,12 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     // Handle dynamic-tool parts (tool calls)
     if (part.type === 'dynamic-tool') {
       // Build the tool call matching the inline type from ThreadMessageLike
-      const { suspendedToolRunId, ...cleanInput } = 'input' in part ? (part.input as any) : {};
       const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
         toolCallId: part.toolCallId,
         toolName: part.toolName,
-        argsText: JSON.stringify(cleanInput ?? {}),
-        args: cleanInput as ReadonlyJSONObject,
+        argsText: JSON.stringify(part.input),
+        args: part.input as ReadonlyJSONObject,
         metadata: message.metadata,
       };
 
