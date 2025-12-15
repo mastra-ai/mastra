@@ -17,7 +17,9 @@ function AnnouncementBanner() {
         <GithubCautionIcon />
       </div>
       <div>
-        <span className="font-semibold">Mastra v1 is coming in January 2026.</span>{" "}
+        <span className="font-semibold">
+          Mastra v1 is coming in January 2026.
+        </span>{" "}
         Get ahead by starting{" "}
         <a
           className="text-yellow-700! dark:text-yellow-500! underline! hover:no-underline! font-medium!"
