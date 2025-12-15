@@ -5,18 +5,22 @@ description: Documentation for the `Run.stream()` method in workflows, which ena
 
 # Run.stream()
 
-The `.stream()` method enables real-time streaming of responses from a workflow.
+The `.stream()` method enables real-time streaming of responses from a workflow. It returns a `ReadableStream` of events directly.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const stream = run.stream({
+const stream = await run.stream({
   inputData: {
     value: "initial data",
   },
 });
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
 ```
 
 ## Parameters
@@ -129,35 +133,30 @@ const stream = run.stream({
 
 ## Returns
 
+Returns a `WorkflowRunOutput` object that implements the async iterable interface (can be used directly in `for await...of` loops) and provides access to the stream and workflow execution results.
+
 <PropertiesTable
   content={[
     {
-      name: "stream",
-      type: "MastraWorkflowStream<ChunkType>",
+      name: "fullStream",
+      type: "ReadableStream<WorkflowStreamEvent>",
       description:
-        "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
+        "A ReadableStream of workflow events that you can iterate over to track progress in real-time. You can also iterate over the WorkflowRunOutput object directly.",
     },
     {
-      name: "stream.status",
-      type: "Promise<RunStatus>",
-      description: "A promise that resolves to the current workflow run status",
-    },
-    {
-      name: "stream.result",
-      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
       description: "A promise that resolves to the final workflow result",
     },
     {
-      name: "stream.usage",
-      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
-      description: "A promise that resolves to token usage statistics",
+      name: "status",
+      type: "WorkflowRunStatus",
+      description: "The current workflow run status ('running', 'suspended', 'success', 'failed', 'canceled', or 'tripwire')",
     },
     {
-      name: "stream.traceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "The trace ID associated with this execution when Tracing is enabled.",
+      name: "usage",
+      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cachedInputTokens?: number }>",
+      description: "A promise that resolves to token usage statistics",
     },
   ]}
 />
@@ -173,7 +172,21 @@ const stream = run.stream({
   },
 });
 
+// Iterate over stream events (you can iterate over stream directly or use stream.fullStream)
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+
+// Access the final result
 const result = await stream.result;
+console.log("Final result:", result);
+
+// Access token usage
+const usage = await stream.usage;
+console.log("Token usage:", usage);
+
+// Check current status
+console.log("Status:", stream.status);
 ```
 
 ## Stream Events
