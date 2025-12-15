@@ -46,7 +46,7 @@ npm install
 
 ## Initialize Mastra
 
-Inside your Express project directory, run [`mastra init`](/reference/v1/cli/create-mastra).
+Inside your Express project directory, run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
@@ -72,7 +72,7 @@ npm install @mastra/express@beta
 
 Open the Express entry file at `src/index.ts` and add the required import and initialization code:
 
-```typescript copy {2-3,11-12}
+```typescript copy {2-3,11-12} title="src/index.ts"
 import express, { type Request, type Response } from "express";
 import { MastraServer } from "@mastra/express";
 import { mastra } from "./mastra";
