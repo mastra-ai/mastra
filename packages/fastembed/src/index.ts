@@ -34,7 +34,7 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
   if (allResults.length === 0) throw new Error('No embeddings generated');
 
   return {
-    embeddings: [],
+    embeddings: allResults,
   };
 }
 
