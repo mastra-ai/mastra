@@ -3408,6 +3408,108 @@ describe('Workflow', () => {
       expect(result.state).toEqual({ value: 'test-state!!!', otherValue: 'test-other-state' });
     });
 
+    it('should execute multiple runs of a workflow', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state, setState }) => {
+          const newState = state.value + '!!!';
+          await setState({ value: newState });
+          return { result: 'success', value: newState };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({ result: z.string(), value: z.string() }),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          return inputData;
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const [result1, result2] = await Promise.all([
+        (async () => {
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: {},
+            initialState: { value: 'test-state-one', otherValue: 'test-other-state-one' },
+            outputOptions: {
+              includeState: true,
+            },
+          });
+
+          return result;
+        })(),
+        (async () => {
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: {},
+            initialState: { value: 'test-state-two', otherValue: 'test-other-state-two' },
+            outputOptions: {
+              includeState: true,
+            },
+          });
+
+          return result;
+        })(),
+      ]);
+
+      expect(result1.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-one!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result1.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-one!!!' },
+        payload: { result: 'success', value: 'test-state-one!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result1.state).toEqual({ value: 'test-state-one!!!', otherValue: 'test-other-state-one' });
+      expect(result2.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-two!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-two!!!' },
+        payload: { result: 'success', value: 'test-state-two!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.state).toEqual({ value: 'test-state-two!!!', otherValue: 'test-other-state-two' });
+    });
+
     it('should execute a single step nested workflow successfully with state', async () => {
       let calls = 0;
       const step1 = createStep({
