@@ -144,14 +144,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         if (initialResult.stepResult.reason !== 'retry') {
           initialResult.stepResult.isContinued = false;
         }
-        return bail({
-          ...initialResult,
-          messages: {
-            all: rest.messageList.get.all.aiV5.model(),
-            user: rest.messageList.get.input.aiV5.model(),
-            nonUser: rest.messageList.get.response.aiV5.model(),
-          },
-        });
+        return bail(initialResult);
       }
 
       if (inputData?.length) {
@@ -217,15 +210,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         };
       }
 
-      // Fallback: if inputData is empty or undefined, return with messages
-      return {
-        ...initialResult,
-        messages: {
-          all: rest.messageList.get.all.aiV5.model(),
-          user: rest.messageList.get.input.aiV5.model(),
-          nonUser: rest.messageList.get.response.aiV5.model(),
-        },
-      };
+      // Fallback: if inputData is empty or undefined, return initialResult as-is
+      return initialResult;
     },
   });
 }
