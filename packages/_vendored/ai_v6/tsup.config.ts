@@ -111,7 +111,7 @@ export default defineConfig({
         ]),
       );
 
-      //await fixExportBugInDtsFile(dtsFile);
+      await fixExportBugInDtsFile(dtsFile);
     }
   },
 });
