@@ -424,14 +424,19 @@ export type ProviderModelsMap = {
     'claude-4-5-sonnet',
     'claude-sonnet-4',
     'deepseek-v3-0324',
+    'devstral-2512',
+    'devstral-small-2512',
     'gemini-2.5-pro',
     'gpt-4.1',
     'gpt-oss-120b',
+    'intellect-3',
     'kimi-k2-instruct',
+    'kimi-k2-thinking',
     'llama-3.1-405b-instruct',
     'nova-pro-v1',
     'qwen3-32b',
     'qwen3-coder-480b-a35b-instruct',
+    'qwen3-next-80b-a3b-thinking',
   ];
   readonly 'github-models': readonly [
     'ai21-labs/ai21-jamba-1.5-large',
@@ -895,6 +900,7 @@ export type ProviderModelsMap = {
     'glm-4.5v',
     'glm-4.6',
     'glm-4.6v',
+    'glm-4.6v-flash',
   ];
   readonly 'minimax-cn': readonly ['MiniMax-M2'];
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
@@ -991,6 +997,8 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b',
     'openai/gpt-oss-safeguard-20b',
     'openai/o4-mini',
+    'openrouter/sherlock-dash-alpha',
+    'openrouter/sherlock-think-alpha',
     'qwen/qwen-2.5-coder-32b-instruct',
     'qwen/qwen2.5-vl-32b-instruct:free',
     'qwen/qwen2.5-vl-72b-instruct',
@@ -1128,7 +1136,15 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.5',
   ];
-  readonly zhipuai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
+  readonly zhipuai: readonly [
+    'glm-4.5',
+    'glm-4.5-air',
+    'glm-4.5-flash',
+    'glm-4.5v',
+    'glm-4.6',
+    'glm-4.6v',
+    'glm-4.6v-flash',
+  ];
   readonly submodel: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',

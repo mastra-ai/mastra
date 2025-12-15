@@ -2,7 +2,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is([data-theme= "dark"] *));
+@custom-variant dark (&:is([data-theme="dark"] *));
 
 /* ==================== LIGHT MODE ==================== */
 :root {
@@ -511,17 +511,6 @@ p {
 /* Fallback for when side is not specified */
 [data-state="open"][data-slot="dropdown-menu-content"]:not([data-side]) {
   animation: slideDownAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus,
-textarea:-webkit-autofill,
-textarea:-webkit-autofill:hover,
-textarea:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0px 1000px var(--ifm-background-color) inset !important;
-  /* you might also set text-fill colour if needed */
-  -webkit-text-fill-color: #000 !important;
 }
 
 .menu,
