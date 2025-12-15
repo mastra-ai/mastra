@@ -1,22 +1,7 @@
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
+import type { InputTokenDetails, OutputTokenDetails } from '@mastra/core/observability';
 import { SpanRecord } from '@mastra/core/storage';
-
-// Detailed breakdown types that can appear as nested objects
-type InputTokenDetails = {
-  text?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-  audio?: number;
-  image?: number;
-};
-
-type OutputTokenDetails = {
-  text?: number;
-  reasoning?: number;
-  audio?: number;
-  image?: number;
-};
 
 // V5 format (AI SDK v5)
 type V5TokenUsage = {
