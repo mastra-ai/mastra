@@ -482,6 +482,21 @@ export class EventedRun<
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
+    // Listen for abort signal and publish cancel event
+    // This ensures that when abortController.abort() is called directly,
+    // the workflow.cancel event is still published to trigger proper cancellation
+    const abortHandler = () => {
+      void this.mastra?.pubsub.publish('workflows', {
+        type: 'workflow.cancel',
+        runId: this.runId,
+        data: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+        },
+      });
+    };
+    this.abortController.signal.addEventListener('abort', abortHandler, { once: true });
+
     const result = await this.executionEngine.execute<
       z.infer<TState>,
       z.infer<TInput>,
@@ -643,6 +658,21 @@ export class EventedRun<
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
+
+    // Listen for abort signal and publish cancel event
+    // This ensures that when abortController.abort() is called directly,
+    // the workflow.cancel event is still published to trigger proper cancellation
+    const abortHandler = () => {
+      void this.mastra?.pubsub.publish('workflows', {
+        type: 'workflow.cancel',
+        runId: this.runId,
+        data: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+        },
+      });
+    };
+    this.abortController.signal.addEventListener('abort', abortHandler, { once: true });
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
