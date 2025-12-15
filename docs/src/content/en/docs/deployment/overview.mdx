@@ -14,7 +14,7 @@ Mastra offers multiple deployment options to suit your application's needs, from
 | **Mastra Cloud**         | Teams wanting to ship quickly without infrastructure concerns | Fully-managed, automatic scaling, built-in observability             |
 | **Framework Deployment** | Teams already using Next.js, Astro etc                        | Simplify deployment with a unified codebase for frontend and backend |
 | **Server Deployment**    | Teams needing maximum control and customization               | Full control, custom middleware, integrate with existing apps        |
-| **Serverless Platforms** | Teams already using Vercel, Netlify, or Cloudflare            | Platform integration, simplified deployment, automatic scaling       |
+| **Cloud Providers**      | Teams using AWS, Azure, Digital Ocean, Vercel, Netlify, etc  | Platform integration, simplified deployment, automatic scaling       |
 
 ## Deployment Options
 
@@ -59,16 +59,60 @@ You can deploy Mastra as a standard Node.js HTTP server, which gives you full co
 
 [Building Mastra →](./building-mastra)
 
-### Serverless Platforms
+### Cloud Providers
 
-Mastra provides platform-specific deployers for popular serverless platforms, enabling you to deploy your application with minimal configuration.
+Mastra applications can be deployed to popular cloud providers and serverless platforms. These platforms offer automatic scaling, simplified deployment, and platform-specific optimizations.
 
-- Deploy to Cloudflare Workers, Vercel, or Netlify
-- Platform-specific optimizations
-- Simplified deployment process
-- Automatic scaling through the platform
+**Supported platforms:**
 
-[Building Mastra →](./building-mastra)
+- [Amazon EC2](/guides/v1/deployment/amazon-ec2) - Virtual machine deployment with full control
+- [AWS Lambda](/guides/v1/deployment/aws-lambda) - Serverless functions with automatic scaling
+- [Azure App Services](/guides/v1/deployment/azure-app-services) - Managed application hosting
+- [Cloudflare](/guides/v1/deployment/cloudflare-deployer) - Edge deployment with global distribution
+- [Digital Ocean](/guides/v1/deployment/digital-ocean) - Simple cloud infrastructure
+- [Netlify](/guides/v1/deployment/netlify-deployer) - Serverless platform with built-in CI/CD
+- [Vercel](/guides/v1/deployment/vercel-deployer) - Serverless platform optimized for frameworks
+
+For cloud provider deployments, you'll need to first build your Mastra application using the `mastra build` command. See [Building Mastra](./building-mastra) for details on the build process and platform-specific deployers.
+
+## Prerequisites
+
+Before deploying to a cloud provider, ensure you have:
+
+- A [Mastra application](/guides/v1/getting-started/quickstart)
+- Node.js `v22.13.0` or later
+- A GitHub repository for your application (required for most CI/CD setups)
+- Domain name management access (for SSL and HTTPS)
+- Basic familiarity with server setup (e.g. Nginx, environment variables)
+
+### LibSQLStore Compatibility
+
+`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of `LibSQLStore`.
+
+Specifically, ensure you've removed it from all Mastra files, including configuration on the main Mastra instance and any agents using it for memory storage:
+
+```diff title="src/mastra/index.ts"
+ export const mastra = new Mastra({
+-  storage: new LibSQLStore({
+-    id: 'mastra-storage',
+-    url: ":memory:",
+-  }),
+ });
+```
+
+```diff
+ export const weatherAgent = new Agent({
+   id: "weather-agent",
+   memory: new Memory({
+-    storage: new LibSQLStore({
+-      id: 'mastra-storage',
+-      url: "file:../mastra.db",
+-    }),
+   }),
+ });
+```
+
+For cloud deployments, use alternative storage solutions like PostgreSQL, MongoDB, or Upstash. See the [Storage documentation](/docs/v1/memory/storage/overview) for available options.
 
 ## Client Configuration
 
