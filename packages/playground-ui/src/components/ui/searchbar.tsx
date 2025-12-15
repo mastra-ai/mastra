@@ -18,6 +18,12 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300 }: Se
   }, debounceMs);
 
   useEffect(() => {
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [debouncedSearch]);
+
+  useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
 
