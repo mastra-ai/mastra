@@ -37,16 +37,16 @@
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
     "async-mutex": "^0.5.0",
-    "js-tiktoken": "^1.0.20",
+    "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
-    "lru-cache": "^11.2.2",
+    "lru-cache": "^11.2.4",
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@ai-sdk/openai": "^1.3.24",
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.53",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.86",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -55,10 +55,10 @@
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.38.0",
+    "eslint": "^9.39.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.0",
     "vitest": "catalog:"
   },
   "peerDependencies": {

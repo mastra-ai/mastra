@@ -37,7 +37,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "fastembed": "^1.14.4"
+    "fastembed": "^2.1.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
@@ -50,11 +50,9 @@
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai-v4": "npm:ai@4.3.19",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "catalog:",
-    "zod": "^3.25.76"
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=22.13.0"

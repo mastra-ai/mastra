@@ -32,12 +32,12 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@paralleldrive/cuid2": "^2.3.1",
+    "@paralleldrive/cuid2": "^3.0.4",
     "big.js": "^7.0.1",
-    "js-tiktoken": "^1.0.20",
+    "js-tiktoken": "^1.0.21",
     "node-html-better-parser": "^1.5.8",
     "pathe": "^2.0.3",
-    "zeroentropy": "0.1.0-alpha.6"
+    "zeroentropy": "0.1.0-alpha.7"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",
@@ -56,10 +56,10 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
-    "dotenv": "^17.0.0",
-    "eslint": "^9.37.0",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "dotenv": "^17.2.3",
+    "eslint": "^9.39.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },
