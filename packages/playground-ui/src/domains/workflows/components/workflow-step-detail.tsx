@@ -1,4 +1,4 @@
-import { X, List } from 'lucide-react';
+import { List, X } from 'lucide-react';
 import { ReactFlowProvider } from '@xyflow/react';
 
 import { Txt } from '@/ds/components/Txt';
@@ -9,7 +9,10 @@ import { CodeDialogContent } from '../workflow/workflow-code-dialog-content';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
 import { BADGE_COLORS } from '../workflow/workflow-node-badges';
 
-export function WorkflowStepDetail() {
+/**
+ * Content for the step detail tab panel (Map Config or Nested Workflow)
+ */
+export function WorkflowStepDetailContent() {
   const { stepDetail, closeStepDetail } = useWorkflowStepDetail();
 
   if (!stepDetail) {
@@ -17,7 +20,8 @@ export function WorkflowStepDetail() {
   }
 
   return (
-    <div className="flex flex-col border-t-sm border-border1">
+    <div className="flex flex-col h-full">
+      {/* Header with title and close button */}
       <div className="flex items-center justify-between px-4 py-3 border-b-sm border-border1 bg-surface1">
         <div className="flex items-center gap-2">
           {stepDetail.type === 'map-config' && <List className="w-4 h-4" style={{ color: BADGE_COLORS.map }} />}
@@ -26,9 +30,7 @@ export function WorkflowStepDetail() {
           )}
           <div className="flex flex-col">
             <Txt variant="ui-md" className="text-icon6 font-medium">
-              {stepDetail.type === 'map-config'
-                ? `${stepDetail.stepName} Map Config`
-                : `${stepDetail.stepName} workflow`}
+              {stepDetail.type === 'map-config' ? `${stepDetail.stepName} Config` : `${stepDetail.stepName} Workflow`}
             </Txt>
             {stepDetail.type === 'map-config' && stepDetail.stepId && stepDetail.stepId !== stepDetail.stepName && (
               <Txt variant="ui-xs" className="text-icon3">
@@ -46,10 +48,10 @@ export function WorkflowStepDetail() {
         </button>
       </div>
 
-      <div className="overflow-auto">
+      <div className="flex-1 overflow-auto">
         {stepDetail.type === 'map-config' && stepDetail.mapConfig && <CodeDialogContent data={stepDetail.mapConfig} />}
         {stepDetail.type === 'nested-graph' && stepDetail.nestedGraph && (
-          <div className="h-[400px]">
+          <div className="h-full min-h-[400px]">
             <ReactFlowProvider>
               <WorkflowNestedGraph
                 stepGraph={stepDetail.nestedGraph.stepGraph}
