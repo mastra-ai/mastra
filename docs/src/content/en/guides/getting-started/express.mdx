@@ -8,9 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # Integrate Mastra in your Express project
 
-In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to an Express app by using the [Express server adapter](/reference/v1/server/express-adapter).
-
-Express can invoke Mastra directly so you don't need to run a Mastra server alongside your Express server.
+In this guide, you'll build a tool-calling AI agent using Mastra and Express. Using the [Express server adapter](/reference/v1/server/express-adapter), you can expose your agents as HTTP endpoints without writing the routing yourself or running a separate Mastra server.
 
 ## Before you begin
 
@@ -112,16 +110,7 @@ npm run start
 In a separate terminal window, use `curl` to ask the weather agent:
 
 ```bash copy
-curl -X POST http://localhost:3000/api/agents/weather-agent/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      {
-        "role": "user",
-        "content": "What is the weather like in Seoul?"
-      }
-    ]
-  }'
+curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
 ```
 
 ## Next steps
