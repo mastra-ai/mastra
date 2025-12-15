@@ -95,7 +95,7 @@ app.listen(PORT, () => {
 });
 ```
 
-You're passing the `app` instance and the main `mastra` instance to `MastraServer`. Calling `init()` registers Mastra middleware and all available endpoints.
+The ⁠`MastraServer` is initialized with the existing Express `app` and the root ⁠`mastra` instance. Calling `⁠init()` registers the Mastra middleware and exposes all available Mastra endpoints.
 
 ## Test your agent
 
