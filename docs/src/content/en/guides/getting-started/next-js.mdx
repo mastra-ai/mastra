@@ -19,7 +19,8 @@ You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Eleme
 
 ## Before you begin
 
-* You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
 
 ## Create a new Next.js app (optional)
 
@@ -61,6 +62,7 @@ bun create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-
 This creates a project called `my-nextjs-agent`, but you can replace it with any name you want.
 
 ## Initialize Mastra
+
 `cd` into your Next.js project and run [`mastra init`](/reference/v1/cli/create-mastra).
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
@@ -363,6 +365,7 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 
 
 ## Test your agent
+
 1. Run your Next.js app with `npm run dev`
 2. Open the chat at http://localhost:3000/chat
 3. Try asking about the weather. If your API key is set up correctly, you'll get a response
