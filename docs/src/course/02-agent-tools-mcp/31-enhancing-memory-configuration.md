@@ -14,7 +14,7 @@ const memory = new Memory({
     id: "learning-memory-vector",
     connectionUrl: "file:../../memory.db",
   }),
-  embedder: "openai/text-embedding-3-small"),
+  embedder: "openai/text-embedding-3-small",
   options: {
     // Keep last 20 messages in context
     lastMessages: 20,

@@ -39,4 +39,4 @@ export const memoryAgent = new Agent({
 });
 ```
 
-For semantic recall to work, you need to have a **vector store** configured. You also need to have an **embedder** configured. You may use any compatible embedding model for this. In this example, we're using OpenAI's `opeanai/text-embedding-3-small` model.
+For semantic recall to work, you need to have a **vector store** configured. You also need to have an **embedder** configured. You may use any compatible embedding model for this. In this example, we're using OpenAI's `openai/text-embedding-3-small` model.
