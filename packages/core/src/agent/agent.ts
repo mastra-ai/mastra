@@ -2134,6 +2134,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 while (firstSuspendedStepPath.length > 0) {
                   const key = firstSuspendedStepPath.shift();
                   if (key) {
+                    if (!workflow.steps[key]) {
+                      this.logger.warn(`Suspended step '${key}' not found in workflow '${workflowName}'`);
+                      break;
+                    }
                     wflowStep = workflow.steps[key] as any;
                   }
                 }
