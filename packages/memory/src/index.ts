@@ -719,25 +719,30 @@ ${workingMemory}`;
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
-    const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content
+    const newMessage = { ...message };
+    // Only spread content if it's a proper V2 object to avoid corrupting non-object content
+    if (message.content && typeof message.content === 'object' && !Array.isArray(message.content)) {
+      newMessage.content = { ...message.content };
+    }
 
-    if (newMessage.content.content && typeof newMessage.content.content === 'string') {
+    if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
       newMessage.content.content = newMessage.content.content.replace(workingMemoryRegex, '').trim();
     }
 
-    if (newMessage.content.parts) {
+    if (Array.isArray(newMessage.content?.parts)) {
       newMessage.content.parts = newMessage.content.parts
         .filter(part => {
-          if (part.type === 'tool-invocation') {
-            return part.toolInvocation.toolName !== 'updateWorkingMemory';
+          if (part?.type === 'tool-invocation') {
+            return part.toolInvocation?.toolName !== 'updateWorkingMemory';
           }
           return true;
         })
         .map(part => {
-          if (part.type === 'text') {
+          if (part?.type === 'text') {
+            const text = typeof part.text === 'string' ? part.text : '';
             return {
               ...part,
-              text: part.text.replace(workingMemoryRegex, '').trim(),
+              text: text.replace(workingMemoryRegex, '').trim(),
             };
           }
           return part;
