@@ -1,8 +1,5 @@
 import Link from "@docusaurus/Link";
 import { GithubStarCount } from "@site/src/components/github-star-count";
-import LocaleControl from "@site/src/components/gt/LocaleControl";
-import VersionControl from "@site/src/components/version-control";
-import { ThemeSwitcher } from "@site/src/components/theme-switcher";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
