@@ -9,7 +9,13 @@
     "pre-build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
-    }
+      "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts", "!__integration-test__/**/*"]
+    },
+    "test": {
+      "dependsOn": ["test:unit", "test:types:zod", "test:integration"],
+      "inputs": ["$TURBO_DEFAULT$", "./vitest.config.ts"]
+    },
+    "test:unit": {},
+    "test:types:zod": {}
   }
 }

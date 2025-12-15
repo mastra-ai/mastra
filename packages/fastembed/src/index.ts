@@ -1,9 +1,12 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { customProvider } from 'ai';
-import { experimental_customProvider } from 'ai-v4';
+import { customProvider, type EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
+import { experimental_customProvider } from '@internal/ai-sdk-v4';
 import { FlagEmbedding, EmbeddingModel } from 'fastembed';
+
+export type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
+export type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 
 async function getModelCachePath() {
   const cachePath = path.join(os.homedir(), '.cache', 'mastra', 'fastembed-models');
@@ -61,7 +64,7 @@ const fastEmbedLegacyProvider = experimental_customProvider({
   },
 });
 
-// V2 provider for AI SDK v5 compatibility
+// // V2 provider for AI SDK v5 compatibility
 const fastEmbedProvider = customProvider({
   textEmbeddingModels: {
     'bge-small-en-v1.5': {
@@ -87,7 +90,7 @@ const fastEmbedProvider = customProvider({
   },
 });
 
-export const fastembed = Object.assign(fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`), {
+export const fastembed: EmbeddingModelV2 = Object.assign(fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`), {
   small: fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`),
   base: fastEmbedProvider.textEmbeddingModel(`bge-base-en-v1.5`),
   smallLegacy: fastEmbedLegacyProvider.textEmbeddingModel(`bge-small-en-v1.5`),
