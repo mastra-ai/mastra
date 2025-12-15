@@ -198,7 +198,7 @@ const config: Config = {
       prism: {
         theme: prismMastraLight,
         darkTheme: prismMastraDark,
-        additionalLanguages: ["diff"],
+        additionalLanguages: ["diff", "bash"],
       },
     },
 };
