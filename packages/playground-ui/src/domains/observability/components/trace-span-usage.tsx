@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
+import type { InputTokenDetails, OutputTokenDetails } from '@mastra/core/observability';
 import { SpanRecord } from '@mastra/core/storage';
 
 // V5 format (AI SDK v5)
@@ -9,6 +10,8 @@ type V5TokenUsage = {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   totalTokens: number;
+  inputDetails?: InputTokenDetails;
+  outputDetails?: OutputTokenDetails;
 };
 
 // Legacy format
@@ -19,6 +22,24 @@ type LegacyTokenUsage = {
 };
 
 type TokenUsage = V5TokenUsage | LegacyTokenUsage;
+
+type TokenDetailsObject = InputTokenDetails | OutputTokenDetails;
+type UsageValue = number | TokenDetailsObject | undefined;
+
+// Helper to check if a value is a token details object
+function isTokenDetailsObject(value: UsageValue): value is TokenDetailsObject {
+  return typeof value === 'object' && value !== null;
+}
+
+// Labels for detail keys
+const detailKeyLabels: Record<string, string> = {
+  text: 'Text',
+  cacheRead: 'Cache Read',
+  cacheWrite: 'Cache Write',
+  audio: 'Audio',
+  image: 'Image',
+  reasoning: 'Reasoning',
+};
 
 type TraceSpanUsageProps = {
   traceUsage?: TokenUsage;
@@ -147,6 +168,14 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
       label: 'Cached Input Tokens',
       icon: <ArrowRightToLineIcon />,
     },
+    inputDetails: {
+      label: 'Input Details',
+      icon: <ArrowRightIcon />,
+    },
+    outputDetails: {
+      label: 'Output Details',
+      icon: <ArrowRightToLineIcon />,
+    },
   };
   const commonTokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
     totalTokens: {
@@ -161,51 +190,87 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
     ...legacyTokenPresentations,
   };
 
-  let usageKeyOrder = [];
+  let usageKeyOrder: string[] = [];
   if (hasV5Format) {
-    usageKeyOrder = ['totalTokens', 'inputTokens', 'outputTokens', 'reasoningTokens', 'cachedInputTokens'];
+    usageKeyOrder = [
+      'totalTokens',
+      'inputTokens',
+      'outputTokens',
+      'reasoningTokens',
+      'cachedInputTokens',
+      'inputDetails',
+      'outputDetails',
+    ];
   } else {
     usageKeyOrder = ['totalTokens', 'promptTokens', 'completionTokens'];
   }
 
   const usageAsArray = Object.entries(traceUsage || spanUsage || {})
+    .filter((entry): entry is [string, number | TokenDetailsObject] => {
+      const value = entry[1];
+      return typeof value === 'number' || isTokenDetailsObject(value);
+    })
     .map(([key, value]) => ({ key, value }))
     .sort((a, b) => usageKeyOrder.indexOf(a.key) - usageKeyOrder.indexOf(b.key));
 
   return (
     <div className={cn('flex gap-[1.5rem] flex-wrap', className)}>
-      {usageAsArray.map(({ key, value }) => (
-        <div
-          className={cn('bg-white/5 p-[.75rem] px-[1rem] rounded-lg text-[0.875rem] flex-grow', {
-            'min-h-[5.5rem]': traceUsage,
-          })}
-          key={key}
-        >
+      {usageAsArray.map(({ key, value }) => {
+        const isObject = isTokenDetailsObject(value);
+
+        return (
           <div
-            className={cn(
-              'grid grid-cols-[1.5rem_1fr_auto] gap-[.5rem] items-center',
-              '[&>svg]:w-[1.5em] [&>svg]:h-[1.5em] [&>svg]:opacity-70',
-            )}
+            className={cn('bg-white/5 p-[.75rem] px-[1rem] rounded-lg text-[0.875rem] flex-grow', {
+              'min-h-[5.5rem]': traceUsage,
+            })}
+            key={key}
           >
-            {tokenPresentations?.[key]?.icon}
-            <span className="text-[0.875rem]">{tokenPresentations?.[key]?.label}</span>
-            <b className="text-[1rem]">{value}</b>
-          </div>
-          {tokensByProviderValid && (
-            <div className="text-[0.875rem] mt-[0.5rem] pl-[2rem]">
-              {Object.entries(tokensByProvider).map(([provider, providerTokens]) => (
-                <dl
-                  key={provider}
-                  className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem]  justify-between text-icon3"
-                >
-                  <dt>{provider}</dt>
-                  <dd>{providerTokens?.[key as keyof typeof providerTokens]}</dd>
-                </dl>
-              ))}
+            <div
+              className={cn(
+                'grid grid-cols-[1.5rem_1fr_auto] gap-[.5rem] items-center',
+                '[&>svg]:w-[1.5em] [&>svg]:h-[1.5em] [&>svg]:opacity-70',
+              )}
+            >
+              {tokenPresentations?.[key]?.icon}
+              <span className="text-[0.875rem]">{tokenPresentations?.[key]?.label}</span>
+              {!isObject && <b className="text-[1rem]">{value}</b>}
             </div>
-          )}
-        </div>
-      ))}
+            {isObject && (
+              <div className="text-[0.875rem] mt-[0.5rem] pl-[2rem]">
+                {Object.entries(value).map(([detailKey, detailValue]) => {
+                  if (typeof detailValue !== 'number') return null;
+                  return (
+                    <dl
+                      key={detailKey}
+                      className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem] justify-between text-icon3"
+                    >
+                      <dt>{detailKeyLabels[detailKey] || detailKey}</dt>
+                      <dd>{detailValue}</dd>
+                    </dl>
+                  );
+                })}
+              </div>
+            )}
+            {!isObject && tokensByProviderValid && (
+              <div className="text-[0.875rem] mt-[0.5rem] pl-[2rem]">
+                {Object.entries(tokensByProvider).map(([provider, providerTokens]) => {
+                  const tokenValue = providerTokens?.[key as keyof typeof providerTokens];
+                  if (typeof tokenValue !== 'number') return null;
+                  return (
+                    <dl
+                      key={provider}
+                      className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem]  justify-between text-icon3"
+                    >
+                      <dt>{provider}</dt>
+                      <dd>{tokenValue}</dd>
+                    </dl>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
