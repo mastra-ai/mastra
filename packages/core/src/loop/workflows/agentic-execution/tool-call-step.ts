@@ -75,6 +75,7 @@ export function createToolCallStep<
               ? (lastAssistantMessage.content.metadata as Record<string, any>)
               : {};
           metadata[metadataKey] = metadata[metadataKey] || {};
+          // Note: We key by toolName rather than toolCallId to track one suspension state per unique tool.
           metadata[metadataKey][toolName] = {
             toolCallId,
             toolName,
@@ -259,7 +260,7 @@ export function createToolCallStep<
             );
           } else {
             // Remove approval metadata since we're resuming (either approved or declined)
-            await removeToolMetadata(inputData.toolCallId, 'approval');
+            await removeToolMetadata(inputData.toolName, 'approval');
 
             if (!resumeData.approved) {
               return {
