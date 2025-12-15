@@ -52,7 +52,7 @@ This creates a project called `mastra-react`, but you can replace it with any na
 
 ### Tailwind
 
-Next, add Tailwind to your project. Install the required dependencies:
+Next, install Tailwind: 
 
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
@@ -97,11 +97,11 @@ export default defineConfig({
 
 Replace everything in `src/index.css` with the following:
 
-```css
+```css title="src/index.css"
 @import "tailwindcss";
 ```
 
-Edit the `tsconfig.json` to include `compilerOptions`:
+Add these `compilerOptions` to `tsconfig.json`:
 
 ```ts title="tsconfig.json"
 {
@@ -263,7 +263,7 @@ This downloads the entire AI Elements UI component library into a `@/components/
 
 ## Create a chat route
 
-Open your `src/mastra/index.ts` file and add a [`chatRoute()`](/reference/v1/ai-sdk/chat-route) to your configuration. The `chatRoute()` function creates an API route that your React frontend can call to get AI SDK-compatible chat responses. You'll use it with `useChat()` in the next step.
+Open ⁠`src/mastra/index.ts` and add a [⁠chatRoute()](https://github.com/reference/v1/ai-sdk/chat-route) to your config. This creates an API route your React frontend can call for AI SDK-compatible chat responses, which you’ll use with ⁠useChat() next.
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra';
@@ -284,7 +284,7 @@ export const mastra = new Mastra({
 
 ## Add the chat UI
 
-Edit the `src/App.tsx` file to create a chat interface:
+Replace the `src/App.tsx` file to create a chat interface:
 
 ```tsx title="src/App.tsx"
 import * as React from 'react';
