@@ -778,7 +778,7 @@ export type FormattedWorkflowResult = {
   result?: any;
   error?: SerializedError;
   suspended?: string[][];
-  suspendPayload?: Record<string, any>;
+  suspendPayload?: any;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
 };

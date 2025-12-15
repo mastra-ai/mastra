@@ -68,7 +68,7 @@ export const ToolBadge = ({
           />
         )
       }
-      initialCollapsed={!!!toolApprovalMetadata}
+      initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
       <div className="space-y-4">
         <div>

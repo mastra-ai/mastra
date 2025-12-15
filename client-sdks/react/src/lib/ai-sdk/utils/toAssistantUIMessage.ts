@@ -93,6 +93,9 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     // Handle dynamic-tool parts (tool calls)
     if (part.type === 'dynamic-tool') {
       // Build the tool call matching the inline type from ThreadMessageLike
+      if ((part.input as any)?.suspendedToolRunId !== undefined) {
+        delete (part.input as any).suspendedToolRunId;
+      }
       const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
         toolCallId: part.toolCallId,
@@ -117,6 +120,9 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     // Handle typed tool parts (tool-{NAME} pattern from AI SDK)
     if (part.type.startsWith('tool-') && (part as any).state !== 'input-available') {
       const toolName = 'toolName' in part && typeof part.toolName === 'string' ? part.toolName : part.type.substring(5);
+      if ((part as any).input?.suspendedToolRunId !== undefined) {
+        delete (part as any).input.suspendedToolRunId;
+      }
 
       const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
@@ -137,22 +143,25 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
       return baseToolCall;
     }
 
+    const toolName =
+      'toolName' in part && typeof part.toolName === 'string'
+        ? part.toolName
+        : part.type.startsWith('tool-')
+          ? part.type.substring(5)
+          : '';
     // Extract requireApprovalMetadata from message metadata (if any)
     const requireApprovalMetadata = extendedMessage.metadata?.requireApprovalMetadata as
       | Record<string, any>
       | undefined;
+    const suspendedTools = extendedMessage.metadata?.suspendedTools as Record<string, any> | undefined;
 
     // Check if this part has a toolCallId that matches requireApprovalMetadata
     const partToolCallId = 'toolCallId' in part && typeof part.toolCallId === 'string' ? part.toolCallId : undefined;
-    const suspensionData = partToolCallId ? requireApprovalMetadata?.[partToolCallId] : undefined;
+    const suspensionData = toolName ? (requireApprovalMetadata?.[toolName] ?? suspendedTools?.[toolName]) : undefined;
     if (suspensionData) {
-      const toolName =
-        'toolName' in part && typeof part.toolName === 'string'
-          ? part.toolName
-          : part.type.startsWith('tool-')
-            ? part.type.substring(5)
-            : '';
-
+      if ((part as any).input?.suspendedToolRunId !== undefined) {
+        delete (part as any).input.suspendedToolRunId;
+      }
       return {
         type: 'tool-call' as const,
         toolCallId: partToolCallId!,

@@ -10,7 +10,7 @@ const stepOne = createStep({
     doubledValue: z.number(),
   }),
   execute: async ({ inputData }) => {
-    // await new Promise(resolve => setTimeout(resolve, 10_000));
+    await new Promise(resolve => setTimeout(resolve, 10_000));
     const doubledValue = inputData.inputValue * 2;
     return { doubledValue };
   },
@@ -92,4 +92,49 @@ export const myWorkflowX = createWorkflow({
   }),
 })
   .then(nestedWorkflow)
+  .commit();
+
+const findUserStep = createStep({
+  id: 'find-user-step',
+  description: 'This is a test step that returns the name, email and age',
+  inputSchema: z.object({
+    name: z.string(),
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
+    age: z.number(),
+  }),
+  outputSchema: z.object({
+    name: z.string(),
+    email: z.string(),
+    age: z.number(),
+  }),
+  execute: async ({ suspend, resumeData, inputData }) => {
+    if (!resumeData) {
+      return await suspend({ message: 'Please provide the age of the user' });
+    }
+
+    return {
+      name: inputData?.name,
+      email: 'test@test.com',
+      age: resumeData?.age,
+    };
+  },
+});
+
+export const findUserWorkflow = createWorkflow({
+  id: 'find-user-workflow',
+  description: 'This is a test tool that returns the name, and age',
+  inputSchema: z.object({
+    name: z.string(),
+  }),
+  outputSchema: z.object({
+    name: z.string(),
+    email: z.string(),
+    age: z.number(),
+  }),
+})
+  .then(findUserStep)
   .commit();

@@ -14,27 +14,25 @@ import {
   contentModerationWorkflow,
 } from '../workflows/content-moderation';
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
+import { findUserWorkflow } from '../workflows/other';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
   description: 'Fetches the current weather information for a given city',
-  inputSchema: z.object({
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
     city: z.string(),
   }),
-  // suspendSchema: z.object({
-  //   message: z.string(),
-  // }),
-  // resumeSchema: z.object({
-  //   city: z.string(),
-  // }),
-  execute: async inputData => {
-    // if (!context?.agent?.resumeData) {
-    //   return context?.agent?.suspend({
-    //     message: 'What city do you want to know the weather for?',
-    //   });
-    // }
+  execute: async (_inputData, context) => {
+    if (!context?.agent?.resumeData) {
+      return context?.agent?.suspend({
+        message: 'What city do you want to know the weather for?',
+      });
+    }
     return {
-      city: inputData?.city,
+      city: context?.agent?.resumeData?.city,
       weather: 'sunny',
       temperature_celsius: 19,
       temperature_fahrenheit: 66,
@@ -100,6 +98,7 @@ export const chefModelV2Agent = new Agent({
   workflows: {
     myWorkflow,
     lessComplexWorkflow,
+    findUserWorkflow,
   },
   scorers: ({ mastra }) => {
     if (!mastra) {

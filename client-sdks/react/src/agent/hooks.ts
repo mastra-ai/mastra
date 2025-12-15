@@ -71,8 +71,6 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
 
-  console.dir({ messages }, { depth: null });
-
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 

@@ -733,9 +733,6 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         abortSignal,
       });
 
-      const db = streamResult.messageList.get.all.db();
-      console.dir({ db }, { depth: null });
-
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error streaming agent response');

@@ -49,13 +49,20 @@ export class CoreToolBuilder extends MastraBase {
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
-    if (this.originalTool && 'inputSchema' in this.originalTool) {
-      this.originalTool.inputSchema = this.originalTool.inputSchema.extend({
-        suspendedToolRunId: z.string().optional().describe('The runId of the suspended tool'),
+    if (!isVercelTool(this.originalTool)) {
+      let schema = this.originalTool.inputSchema;
+      if (typeof schema === 'function') {
+        schema = schema();
+      }
+      if (!schema) {
+        schema = z.object({});
+      }
+      this.originalTool.inputSchema = schema.extend({
+        suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional(),
         resumeData: z
           .any()
-          .optional()
-          .describe('The resumeData object created from the resumeSchema of suspended tool'),
+          .describe('The resumeData object created from the resumeSchema of suspended tool')
+          .optional(),
       });
     }
   }

@@ -2010,11 +2010,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         const extendedInputSchema = z.object({
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
-          // suspendedToolRunId: z.string().optional().describe('The runId of the suspended tool'),
-          // resumeData: z
-          //   .any()
-          //   .optional()
-          //   .describe('The resumeData object created from the resumeSchema of suspended tool'),
         });
 
         const toolObj = createTool({

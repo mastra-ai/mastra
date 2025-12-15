@@ -571,8 +571,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
         if (autoResumeSuspendedTools) {
-          const messages = messageList.get.all.db().reverse();
-          const assistantMessages = messages.filter(message => message.role === 'assistant');
+          const messages = messageList.get.all.db();
+          const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
           const suspendedToolsMessage = assistantMessages.find(
             message => message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals,
           );
@@ -585,8 +585,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             >;
             const suspendedTools = Object.values(suspendedToolObj);
             if (suspendedTools.length > 0) {
-              inputMessages = inputMessages.map(message => {
-                if (message.role === 'system') {
+              inputMessages = inputMessages.map((message, index) => {
+                if (message.role === 'system' && index === 0) {
                   message.content =
                     message.content +
                     `\n\nAnalyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
