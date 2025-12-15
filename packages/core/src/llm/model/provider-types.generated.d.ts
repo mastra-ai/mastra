@@ -900,6 +900,7 @@ export type ProviderModelsMap = {
     'glm-4.5v',
     'glm-4.6',
     'glm-4.6v',
+    'glm-4.6v-flash',
   ];
   readonly 'minimax-cn': readonly ['MiniMax-M2'];
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
@@ -1135,7 +1136,15 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.5',
   ];
-  readonly zhipuai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
+  readonly zhipuai: readonly [
+    'glm-4.5',
+    'glm-4.5-air',
+    'glm-4.5-flash',
+    'glm-4.5v',
+    'glm-4.6',
+    'glm-4.6v',
+    'glm-4.6v-flash',
+  ];
   readonly submodel: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
