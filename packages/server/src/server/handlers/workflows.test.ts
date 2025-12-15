@@ -21,6 +21,7 @@ import {
   CANCEL_WORKFLOW_RUN_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
   GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE,
+  STREAM_WORKFLOW_ROUTE,
 } from './workflows';
 
 vi.mock('zod', async importOriginal => {
@@ -534,6 +535,23 @@ describe('vNext Workflow Handlers', () => {
 
       expect(result).toEqual({ runId: 'test-run' });
     });
+
+    it('should create workflow run with resourceId', async () => {
+      const resourceId = 'user-create-test';
+
+      const result = await CREATE_WORKFLOW_RUN_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-with-resource-create',
+        resourceId,
+      } as any);
+
+      expect(result).toEqual({ runId: 'test-run-with-resource-create' });
+
+      // Verify resourceId is stored
+      const run = await mockWorkflow.getWorkflowRunById('test-run-with-resource-create');
+      expect(run?.resourceId).toBe(resourceId);
+    });
   });
 
   describe('START_WORKFLOW_RUN_ROUTE', () => {
@@ -932,6 +950,28 @@ describe('vNext Workflow Handlers', () => {
       // Verify resourceId is preserved
       const runAfter = await freshWorkflow.getWorkflowRunById('test-run-cancel-resource');
       expect(runAfter?.resourceId).toBe(resourceId);
+    });
+  });
+
+  describe('STREAM_WORKFLOW_ROUTE', () => {
+    it('should stream workflow with resourceId', async () => {
+      const resourceId = 'user-stream-test';
+
+      // Stream the workflow with resourceId - creates the run and sets resourceId
+      await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-stream-resource',
+        resourceId,
+        inputData: {},
+      } as any);
+
+      // Wait for stream to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify resourceId is stored
+      const storedRun = await mockWorkflow.getWorkflowRunById('test-run-stream-resource');
+      expect(storedRun?.resourceId).toBe(resourceId);
     });
   });
 });

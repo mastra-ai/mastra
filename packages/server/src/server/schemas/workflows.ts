@@ -103,6 +103,7 @@ export const listWorkflowRunsQuerySchema = createCombinedPaginationSchema().exte
  * Base schema for workflow execution with input data and tracing
  */
 const workflowExecutionBodySchema = z.object({
+  resourceId: z.string().optional(),
   inputData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
@@ -191,4 +192,13 @@ export const workflowControlResponseSchema = messageResponseSchema;
  */
 export const createWorkflowRunResponseSchema = z.object({
   runId: z.string(),
+});
+
+/**
+ * Schema for create workflow run body
+ * Used by /create-run endpoint
+ */
+export const createWorkflowRunBodySchema = z.object({
+  resourceId: z.string().optional(),
+  disableScorers: z.boolean().optional(),
 });
