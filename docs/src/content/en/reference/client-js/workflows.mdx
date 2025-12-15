@@ -88,10 +88,22 @@ const result = await run.startAsync({
 
 The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
 
-You can also pass a `resourceId` when calling `startAsync()` directly to associate the run with a specific resource:
+To associate a run with a specific resource, pass `resourceId` to `createRun()`:
 
 ```typescript
+const run = await workflow.createRun({ resourceId: "user-123" });
+
 const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+});
+```
+
+Alternatively, you can call `workflow.startAsync()` directly with `resourceId`:
+
+```typescript
+const result = await workflow.startAsync({
   inputData: {
     city: "New York",
   },
