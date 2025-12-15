@@ -1,5 +1,5 @@
 import type * as AIV4 from '@internal/ai-sdk-v4';
-import type * as AIV5 from 'ai-v5';
+import type * as AIV5 from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, UIMessageWithMetadata, MessageListInput } from '../index';
 

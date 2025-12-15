@@ -25,13 +25,13 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "getting-started/astro",
-          label: "Astro",
+          id: "getting-started/vite-react",
+          label: "React",
         },
         {
           type: "doc",
-          id: "getting-started/vite-react",
-          label: "React",
+          id: "getting-started/astro",
+          label: "Astro",
         },
         {
           type: "doc",

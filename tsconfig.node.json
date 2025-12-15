@@ -26,6 +26,6 @@
     "noEmit": true,
 
     /* If your code doesn't run in the DOM: */
-    "lib": ["es2022"]
+    "lib": ["ES2023"]
   }
 }

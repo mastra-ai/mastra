@@ -26644,221 +26644,143 @@ Let me know if you need more information!
 
 
 ---
-title: "Integrate Mastra in your Express project | Frameworks"
-description: A step-by-step guide to integrating Mastra with an Express backend.
+title: "Express | Frameworks"
+description: "Get started with Mastra and Express"
 ---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Integrate Mastra in your Express project
 [EN] Source: https://mastra.ai/en/guides/getting-started/express
 
-Mastra integrates with Express, making it easy to:
+In this guide, you'll build a tool-calling AI agent using Mastra and Express. Using the [Express server adapter](/reference/v1/server/express-adapter), you can expose your agents as HTTP endpoints without writing the routing yourself or running a separate Mastra server.
 
-- Build flexible APIs to serve AI-powered features
-- Maintain full control over your server logic and routing
-- Scale your backend independently of your frontend
+## Before you begin
 
-Express can invoke Mastra directly so you don't need to run a Mastra server alongside your Express server.
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
 
-In this guide you'll learn how to install the necessary Mastra dependencies, create an example agent, and invoke Mastra from an Express API route.
+## Create a new Express app (optional)
 
-## Prerequisites
+If you already have an Express app, skip to the next step.
 
-- An existing Express app set up with TypeScript
-- Node.js `v22.13.0` or later
-- An API key from a supported [Model Provider](/models/v1)
+Clone this [boilerplate repository](https://github.com/mastra-ai/express-ts-boilerplate) and install dependencies:
 
-## Adding Mastra
-
-First, install the necessary Mastra dependencies to run an Agent. This guide uses OpenAI as its model but you can use any supported [model provider](/models/v1).
+<Tabs>
+<TabItem value="https" label="HTTPS">
 
 ```bash copy
-npm install mastra@beta @mastra/core@beta @mastra/libsql@beta zod@^3.0.0
+git clone https://github.com/mastra-ai/express-ts-boilerplate.git
+cd express-ts-boilerplate
+npm install
 ```
 
-If not existent yet, create an `.env` file and add your OpenAI API key:
+</TabItem>
+<TabItem value="ssh" label="SSH">
 
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
+```bash copy
+git clone git@github.com:mastra-ai/express-ts-boilerplate.git
+cd express-ts-boilerplate
+npm install
 ```
 
-:::note
+</TabItem>
+</Tabs>
 
-Each LLM provider uses a different env var. See [Model Providers](/models/v1/providers/) for more information.
+## Initialize Mastra
 
-:::
+Inside your Express project directory, run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
 
-Create a Mastra configuration file at `src/mastra/index.ts`:
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-```ts title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({});
+```bash copy
+npx mastra@beta init
 ```
 
-Create a `weatherTool` that the `weatherAgent` will use at `src/mastra/tools/weather-tool.ts`. It returns a placeholder value inside the `execute()` function (you'd put your API calls in here).
+This creates a `src/mastra` folder with an example weather agent and the following files:
 
-```ts title="src/mastra/tools/weather-tool.ts" copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
-export const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get current weather for a location",
-  inputSchema: z.object({
-    location: z.string().describe("City name"),
-  }),
-  outputSchema: z.object({
-    output: z.string(),
-  }),
-  execute: async () => {
-    return {
-      output: "The weather is sunny",
-    };
-  },
-});
+You'll pass the `src/mastra/index.ts` file to the Express server adapter later.
+
+## Add server adapter
+
+Install the Express server adapter package:
+
+```bash copy
+npm install @mastra/express@beta
 ```
 
-Add a `weatherAgent` at `src/mastra/agents/weather-agent.ts`:
+Open the Express entry file at `src/index.ts` and add the required import and initialization code:
 
-```ts title="src/mastra/agents/weather-agent.ts" copy
-import { Agent } from "@mastra/core/agent";
-import { weatherTool } from "../tools/weather-tool";
-
-export const weatherAgent = new Agent({
-  id: "weather-agent",
-  name: "Weather Agent",
-  instructions: `
-      You are a helpful weather assistant that provides accurate weather information.
-
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn't in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
-
-      Use the weatherTool to fetch current weather data.
-`,
-  model: "openai/gpt-5.1",
-  tools: { weatherTool },
-});
-```
-
-Lastly, add the `weatherAgent` to `src/mastra/index.ts`:
-
-```ts title="src/mastra/index.ts" copy {2, 5}
-import { Mastra } from "@mastra/core";
-import { weatherAgent } from "./agents/weather-agent";
-
-export const mastra = new Mastra({
-  agents: { weatherAgent },
-});
-```
-
-Now you're done with setting up the Mastra boilerplate code and are ready to integrate it into your Express routes.
-
-## Using Mastra with Express
-
-Create an `/api/weather` endpoint that expects a `city` query parameter. The `city` parameter will be passed to the `weatherAgent` when asking it through a prompt.
-
-You might have a file like this in your existing project:
-
-```ts title="src/server.ts" copy
-import express, { Request, Response } from "express";
-
-const app = express();
-const port = 3456;
-
-app.get("/", (req: Request, res: Response) => {
-  res.send("Hello, world!");
-});
-
-app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
-});
-```
-
-Adding the `/api/weather` endpoint looks like this:
-
-```ts title="src/server.ts" copy {2, 11-27}
-import express, { Request, Response } from "express";
+```typescript copy {2-3,11-12} title="src/index.ts"
+import express, { type Request, type Response } from "express";
+import { MastraServer } from "@mastra/express";
 import { mastra } from "./mastra";
 
 const app = express();
-const port = 3456;
+const PORT = process.env.PORT || 3000;
 
-app.get("/", (req: Request, res: Response) => {
-  res.send("Hello, world!");
+// Middleware
+app.use(express.json());
+
+const server = new MastraServer({ app, mastra });
+await server.init();
+
+// Routes
+app.get("/", (_req: Request, res: Response) => {
+  res.json({ message: "Hello, World!" });
 });
 
-app.get("/api/weather", async (req: Request, res: Response) => {
-  const { city } = req.query as { city?: string };
-
-  if (!city) {
-    return res.status(400).send("Missing 'city' query parameter");
-  }
-
-  const agent = mastra.getAgent("weatherAgent");
-
-  try {
-    const result = await agent.generate(`What's the weather like in ${city}?`);
-    res.send(result.text);
-  } catch (error) {
-    console.error("Agent error:", error);
-    res.status(500).send("An error occurred while processing your request");
-  }
-});
-
-app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
 });
 ```
 
-By importing the `src/mastra/index.ts` file you can use methods like [`.getAgent()`](/reference/v1/core/getAgent) to get programmatic access. With [`.generate()`](/reference/v1/agents/generate) you then can interact with the respective agent.
+The ⁠`MastraServer` is initialized with the existing Express `app` and the root ⁠`mastra` instance. Calling `⁠init()` registers the Mastra middleware and exposes all available Mastra endpoints.
 
-:::note
+## Test your agent
 
-Read the [Agent reference docs](/reference/v1/agents/agent) to learn more.
+By default, Mastra's endpoints are added under the `/api` subpath and use your agent/workflow IDs. The default `weather-agent` created by `mastra init` is available at `/api/agents/weather-agent`.
 
-:::
-
-Start your Express server and visit the `/api/weather` endpoint. For example:
-
-```
-http://localhost:3456/api/weather?city=London
-```
-
-You should get a response back similar to this:
-
-```
-The weather in London is currently sunny. If you need more details like humidity, wind conditions, or precipitation, just let me know!
-```
-
-## Running the Agent Server
-
-In production it's not necessary to run Mastra alongside your Express server. But for development Mastra offers a [Local Development Environment](/docs/v1/getting-started/studio) which you can use to improve and debug your agent.
-
-Add a script to your `package.json`:
-
-```json title="package.json" copy
-{
-  "scripts": {
-    "mastra:dev": "mastra dev"
-  }
-}
-```
-
-Start the Mastra dev server:
+Start your Express server:
 
 ```bash copy
-npm run mastra:dev
+npm run start
 ```
+
+In a separate terminal window, use `curl` to ask the weather agent:
+
+```bash copy
+curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
+```
+
+## Next steps
+
+Congratulations on building your Mastra agent with Express! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with Express:
+
+- [Server Adapters](/docs/v1/server/server-adapters)
 
 
 ---
 title: "Next.js | Frameworks"
 description: "Get started with Mastra and Next.js"
 ---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Integrate Mastra in your Next.js project
 [EN] Source: https://mastra.ai/en/guides/getting-started/next-js
@@ -26874,7 +26796,8 @@ You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Eleme
 
 ## Before you begin
 
-* You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
 
 ## Create a new Next.js app (optional)
 
@@ -26882,31 +26805,80 @@ If you already have a Next.js app, skip to the next step.
 
 Run the following command to [create a new Next.js app](https://nextjs.org/docs/app/getting-started/installation):
 
-```bash
-npx create-next-app \
-    my-nextjs-agent \
-    --yes \
-    --ts \
-    --eslint \
-    --tailwind \
-    --src-dir \
-    --app \
-    --turbopack \
-    --no-react-compiler \
-    --no-import-alias
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash copy
+npx create-next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
+```
+
+</TabItem>
+</Tabs>
 
 This creates a project called `my-nextjs-agent`, but you can replace it with any name you want.
 
 ## Initialize Mastra
-`cd` into your Next.js project and run [`mastra init`](/reference/v1/cli/create-mastra).
+
+`cd` into your Next.js project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-```bash
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash copy
 cd my-nextjs-agent
 npx --force mastra@beta init
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+cd my-nextjs-agent
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+cd my-nextjs-agent
+yarn dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+cd my-nextjs-agent
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
 -	`index.ts` - Mastra config, including memory
@@ -26915,26 +26887,75 @@ This creates a `src/mastra` folder with an example weather agent and the followi
 
 You'll call `weather-agent.ts` from your Next.js routes in the next steps.
 
+## Install AI SDK UI & AI Elements
 
-## Install AI SDK and AI Elements
+Install AI SDK UI along with the Mastra adapter:
 
-Install AI SDK along with the Mastra adapter:
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
 
-```bash
-npm install \
-    @mastra/ai-sdk@beta \
-    @ai-sdk/react \
-    ai
+```bash copy
+npm install @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+</Tabs>
 
 Next, initialize AI Elements. When prompted, choose the default options:
 
-```bash
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash copy
 npx ai-elements@latest
 ```
 
-This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
 
+```bash copy
+pnpm dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bunx ai-elements@latest
+```
+
+</TabItem>
+</Tabs>
+
+This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 
 ## Create a chat route
 
@@ -27120,6 +27141,7 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 
 
 ## Test your agent
+
 1. Run your Next.js app with `npm run dev`
 2. Open the chat at http://localhost:3000/chat
 3. Try asking about the weather. If your API key is set up correctly, you'll get a response
@@ -27745,7 +27767,7 @@ If you need more details or information about a different location, feel free to
 
 
 ---
-title: "Integrate Mastra in your React + Vite project | Frameworks"
+title: "React + Vite | Frameworks"
 description: A step-by-step guide to integrating Mastra with React and Vite.
 ---
 
@@ -27755,251 +27777,421 @@ import TabItem from "@theme/TabItem";
 # Integrate Mastra in your React + Vite project
 [EN] Source: https://mastra.ai/en/guides/getting-started/vite-react
 
-Mastra integrates with Vite, making it easy to:
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to React by calling the agent directly from Mastra's standalone server.
 
-- Build flexible APIs to serve AI-powered features
-- Simplify deployment with a unified codebase for frontend and backend
-- Take advantage of Mastra's Client SDK
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
-Use this guide to scaffold and integrate Mastra with your React + Vite project.
+## Before you begin
 
-:::warning
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
 
-This guide assumes you're using React + Vite with React Router v7 at the root of your project, e.g., `app`.
+## Create a new React + Vite app (optional)
 
-:::
+If you already have a React + Vite app using Tailwind, skip to the next step.
 
-## Install Mastra
+### Project scaffold
 
-Install the required Mastra packages:
+Run the following command to [create a new React + Vite app](https://vite.dev/guide/#scaffolding-your-first-vite-project):
 
-<Tabs>
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+```bash copy
+npm create vite@latest mastra-react -- --template react-ts
+cd mastra-react
+```
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+```bash copy
+pnpm create vite mastra-react --template react-ts
+cd mastra-react
+```
+</TabItem>
+<TabItem value="yarn" label="yarn">
+```bash copy
+yarn create vite mastra-react --template react-ts
+cd mastra-react
+```
+</TabItem>
+<TabItem value="bun" label="bun">
+```bash copy
+bun create vite mastra-react --template react-ts
+cd mastra-react
+```
+</TabItem>
+</Tabs>
+
+This creates a project called `mastra-react`, but you can replace it with any name you want.
+
+### Tailwind
+
+Next, install Tailwind: 
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+```bash copy
+npm install tailwindcss @tailwindcss/vite
+```
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+```bash copy
+pnpm add tailwindcss @tailwindcss/vite
+```
+</TabItem>
+<TabItem value="yarn" label="yarn">
+```bash copy
+yarn add tailwindcss @tailwindcss/vite
+```
+</TabItem>
+<TabItem value="bun" label="bun">
+```bash copy
+bun add tailwindcss @tailwindcss/vite
+```
+</TabItem>
+</Tabs>
+
+Configure the Vite plugins:
+
+```typescript title="vite.config.ts" {3-4,7-12}
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from "path"
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+})
+```
+
+Replace everything in `src/index.css` with the following:
+
+```css title="src/index.css"
+@import "tailwindcss";
+```
+
+Add these `compilerOptions` to `tsconfig.json`:
+
+```ts title="tsconfig.json"
+{
+  // ...
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+```
+
+Edit `tsconfig.app.json` to resolve paths:
+
+```ts title="tsconfig.app.json"
+{
+  "compilerOptions": {
+    // ...
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+    // ...
+  }
+}
+```
+
+## Initialize Mastra
+
+Run [`mastra init`](/reference/v1/cli/create-mastra). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+<Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @mastra/client-js@beta
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash copy
-yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @mastra/client-js@beta
+cd mastra-react
+npx mastra@beta init
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @mastra/client-js@beta
+cd mastra-react
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+cd mastra-react
+yarn dlx mastra@beta init
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @mastra/client-js@beta
+cd mastra-react
+bunx mastra@beta init
 ```
 
 </TabItem>
 </Tabs>
 
-## Integrate Mastra
+This creates a `src/mastra` folder with an example weather agent and the following files:
 
-To integrate Mastra into your project, you have two options:
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
-### 1. Use the One-Liner
+You'll call `weather-agent.ts` from your chat UI in the next steps.
 
-Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+## Install AI SDK UI & AI Elements
 
-```bash copy
-npx mastra@beta init --dir . --components agents,tools --example --llm openai
-```
+Install AI SDK UI along with the Mastra adapter:
 
-> See [mastra init](/reference/v1/cli/create-mastra) for more information.
-
-### 2. Use the Interactive CLI
-
-If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
-
-```bash copy
-npx mastra@latest init
-```
-
-:::warning
-
-By default, `mastra init` suggests `src` as the install location. If you're using React + Vite at the root of your project (e.g., `app`, not `src/app`), enter `.` when prompted:
-
-:::
-
-Add the `dev` and `build` scripts to `package.json`:
-
-<Tabs>
-<TabItem value="app" label="app">
-
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev --dir mastra",
-    "build:mastra": "mastra build --dir mastra"
-  }
-}
-```
-
-</TabItem>
-<TabItem value="src-app" label="src/app">
-
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev --dir src/mastra",
-    "build:mastra": "mastra build --dir src/mastra"
-  }
-}
-```
-
-</TabItem>
-</Tabs>
-
-## Configure TypeScript
-
-Modify the `tsconfig.json` file in your project root:
-
-```json title="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
-```
-
-## Set Up API Keys
-
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-```
-
-> Each LLM provider uses a different env var. See [Model Capabilities](https://sdk.vercel.ai/providers) for more information.
-
-## Update .gitignore
-
-Add `.mastra` to your `.gitignore` file:
-
-```bash title=".gitignore" copy
-.mastra
-```
-
-## Start the Mastra Dev Server
-
-Start the Mastra Dev Server to expose your agents as REST endpoints:
-
-<Tabs>
+<Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm run dev:mastra
+npm install @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
 
 </TabItem>
-<TabItem value="cli" label="CLI">
+<TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-mastra dev:mastra
+pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun add @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
 
 </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
+Next, initialize AI Elements. When prompted, choose the default options:
 
-## Start Vite Dev Server
-
-With the Mastra Dev Server running, you can start your Vite app in the usual way.
-
-## Create Mastra Client
-
-Create a new directory and file. Then add the example code:
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
 
 ```bash copy
-mkdir lib
-touch lib/mastra.ts
+npx ai-elements@latest
 ```
 
-```typescript title="lib/mastra.ts" showLineNumbers copy
-import { MastraClient } from "@mastra/client-js";
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
 
-export const mastraClient = new MastraClient({
-  baseUrl: import.meta.env.VITE_MASTRA_API_URL || "http://localhost:4111",
+```bash copy
+pnpm dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bunx ai-elements@latest
+```
+
+</TabItem>
+</Tabs>
+
+This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
+
+## Create a chat route
+
+Open ⁠`src/mastra/index.ts` and add a [⁠chatRoute()](https://github.com/reference/v1/ai-sdk/chat-route) to your config. This creates an API route your React frontend can call for AI SDK-compatible chat responses, which you’ll use with ⁠useChat() next.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra';
+// Existing imports...
+import { chatRoute } from "@mastra/ai-sdk"
+
+export const mastra = new Mastra({
+  // Existing config...
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId'
+      })
+    ]
+  }
 });
 ```
 
-## Create Test Route Config
+## Add the chat UI
 
-Add new `route` to the config:
+Replace the `src/App.tsx` file to create a chat interface:
 
-```typescript title="app/routes.ts" showLineNumbers copy
-import { type RouteConfig, index, route } from "@react-router/dev/routes";
+```tsx title="src/App.tsx"
+import * as React from 'react';
+import { DefaultChatTransport, type ToolUIPart } from 'ai';
+import { useChat } from '@ai-sdk/react';
 
-export default [
-  index("routes/home.tsx"),
-  route("test", "routes/test.tsx"),
-] satisfies RouteConfig;
-```
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+} from '@/components/ai-elements/prompt-input';
 
-## Create Test Route
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
 
-Create a new Route, and add the example code:
+import {
+  Message,
+  MessageContent,
+  MessageResponse
+} from '@/components/ai-elements/message';
 
-```bash copy
-touch app/routes/test.tsx
-```
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from '@/components/ai-elements/tool';
 
-```typescript title="app/routes/test.tsx" showLineNumbers copy
-import { useState } from "react";
-import { mastraClient } from "../../lib/mastra";
+export default function App() {
+  const [input, setInput] = React.useState<string>('');
 
-export default function Test() {
-  const [result, setResult] = useState<string | null>(null);
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat/weather-agent',
+    }),
+  });
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
 
-    const formData = new FormData(event.currentTarget);
-    const city = formData.get("city")?.toString();
-    const agent = mastraClient.getAgent("weatherAgent");
-
-    const response = await agent.generate({
-      messages: [{ role: "user", content: `What's the weather like in ${city}?` }]
-    });
-
-    setResult(response.text);
-  }
+    sendMessage({ text: input });
+    setInput('');
+  };
 
   return (
-    <>
-      <h1>Test</h1>
-      <form onSubmit={handleSubmit}>
-        <input name="city" placeholder="Enter city" required />
-        <button type="submit">Get Weather</button>
-      </form>
-      {result && <pre>{result}</pre>}
-    </>
+    <div className="max-w-4xl mx-auto p-6 relative size-full h-screen">
+      <div className="flex flex-col h-full">
+        <Conversation className="h-full">
+          <ConversationContent>
+            {messages.map((message) => (
+              <div key={message.id}>
+                {message.parts?.map((part, i) => {
+                  if (part.type === 'text') {
+                    return (
+                      <Message
+                        key={`${message.id}-${i}`}
+                        from={message.role}>
+                          <MessageContent>
+                            <MessageResponse>{part.text}</MessageResponse>
+                          </MessageContent>
+                      </Message>
+                    );
+                  }
+
+                  if (part.type?.startsWith('tool-')) {
+                    return (
+                      <Tool key={`${message.id}-${i}`}>
+                        <ToolHeader
+                          type={(part as ToolUIPart).type}
+                          state={(part as ToolUIPart).state || 'output-available'}
+                          className="cursor-pointer"
+                        />
+                        <ToolContent>
+                          <ToolInput input={(part as ToolUIPart).input || {}} />
+                          <ToolOutput
+                            output={(part as ToolUIPart).output}
+                            errorText={(part as ToolUIPart).errorText}
+                          />
+                        </ToolContent>
+                      </Tool>
+                    );
+                  }
+
+                  return null;
+                })}
+              </div>
+            ))}
+            <ConversationScrollButton />
+          </ConversationContent>
+        </Conversation>
+        <PromptInput onSubmit={handleSubmit} className="mt-20">
+          <PromptInputBody>
+            <PromptInputTextarea
+              onChange={(e) => setInput(e.target.value)}
+              className="md:leading-10"
+              value={input}
+              placeholder="Ask about the weather..."
+              disabled={status !== 'ready'}
+            />
+          </PromptInputBody>
+        </PromptInput>
+      </div>
+    </div>
   );
 }
 ```
 
-> You can now navigate to `/test` in your browser to try it out.
+This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `chat/weather-agent` endpoint, sending prompts there and streaming the response back in chunks.
 
-Submitting **London** as the city would return a result similar to:
+It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
 
-```plaintext
-The current weather in London is partly cloudy with a temperature of 19.3°C, feeling like 17.4°C. The humidity is at 53%, and there is a wind speed of 15.9 km/h, with gusts up to 38.5 km/h.
-```
+## Test your agent
+
+In order to test your agent with the chat interface, you need to run both the Mastra server and the Vite development server.
+
+1. Start the Mastra development server:
+
+    ```bash copy
+    npx mastra dev
+    ```
+1. In a separate terminal window, start the Vite development server:
+
+    ```bash copy
+    npm run dev
+    ```
+1. Open your application at http://localhost:5173
+1. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
 ## Next steps
 
-- [Monorepo Deployment](/docs/v1/deployment/monorepo)
+Congratulations on building your Mastra agent with React! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK UI and React, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)
 
 
 ---
@@ -32079,6 +32271,12 @@ description: "Overview of breaking changes when upgrading to Mastra v1."
 # Upgrade to Mastra v1
 [EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/overview
 
+:::info[First update to latest 0.x version]
+Before upgrading to v1, make sure you've updated to the latest 0.x version of Mastra. Follow the [upgrade to latest 0.x guide](https://mastra.ai/guides/migrations/upgrade-to-latest-0x) first, then return here to complete the v1 migration.
+:::
+
+Mastra v1 is coming in January 2026. We recommend starting any new projects with the beta, or upgrading your existing project today to get ahead.
+
 This guide provides a comprehensive overview of breaking changes when upgrading from Mastra 0.x to v1.0. The migration is organized by package and feature area to help you systematically update your codebase.
 
 :::tip[Need help?]
@@ -34769,7 +34967,7 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="132 models"
+      description="134 models"
       href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -34898,7 +35096,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 132 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 134 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -35029,6 +35227,8 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-oss-20b` |
 | `openai/gpt-oss-safeguard-20b` |
 | `openai/o4-mini` |
+| `openrouter/sherlock-dash-alpha` |
+| `openrouter/sherlock-think-alpha` |
 | `qwen/qwen-2.5-coder-32b-instruct` |
 | `qwen/qwen2.5-vl-32b-instruct:free` |
 | `qwen/qwen2.5-vl-72b-instruct` |
@@ -35214,7 +35414,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 60+ AI providers and 1358+ models through Mastra's model router."
+description: "Access 60+ AI providers and 1362+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35227,7 +35427,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1358 models from 60 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1362 models from 60 providers through a single API.
 
 ## Features
 
@@ -38865,7 +39065,7 @@ const agent = new Agent({
 
 ---
 title: "Cloudflare AI Gateway | Models | Mastra"
-description: "Use Cloudflare AI Gateway models with Mastra. 77 models available."
+description: "Use Cloudflare AI Gateway models with Mastra. 71 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -38875,7 +39075,7 @@ description: "Use Cloudflare AI Gateway models with Mastra. 77 models available.
 # <img src="https://models.dev/logos/cloudflare-ai-gateway.svg" alt="Cloudflare AI Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cloudflare AI Gateway
 [EN] Source: https://mastra.ai/en/models/providers/cloudflare-ai-gateway
 
-Access 77 Cloudflare AI Gateway models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_API_TOKEN` environment variable.
+Access 71 Cloudflare AI Gateway models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_API_TOKEN` environment variable.
 
 Learn more in the [Cloudflare AI Gateway documentation](https://developers.cloudflare.com/ai-gateway/).
 
@@ -38890,7 +39090,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "cloudflare-ai-gateway/anthropic/claude-3-5-haiku"
+  model: "cloudflare-ai-gateway/anthropic/claude-3-haiku"
 });
 
 // Generate a response
@@ -38913,18 +39113,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "cloudflare-ai-gateway/anthropic/claude-3-5-haiku",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": 4
-  },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-3-haiku",
     "imageInput": false,
@@ -38982,24 +39170,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
-    "model": "cloudflare-ai-gateway/anthropic/claude-haiku-4-5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 1,
-    "outputCost": 5
+    "inputCost": 6,
+    "outputCost": 30
   },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-haiku-4.5",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
@@ -39020,30 +39196,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 15,
     "outputCost": 75
-  },
-  {
-    "model": "cloudflare-ai-gateway/anthropic/claude-opus-4-1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 15,
-    "outputCost": 75
-  },
-  {
-    "model": "cloudflare-ai-gateway/anthropic/claude-opus-4-5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 5,
-    "outputCost": 25
   },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-opus-4.1",
@@ -39071,18 +39223,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-sonnet-4",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
-    "model": "cloudflare-ai-gateway/anthropic/claude-sonnet-4-5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -39322,18 +39462,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9.5
   },
   {
-    "model": "cloudflare-ai-gateway/replicate/replicate-internal/llama-405b-instruct-vllm",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 9.5,
-    "outputCost": 9.5
-  },
-  {
     "model": "cloudflare-ai-gateway/workers-ai/aura-1",
     "imageInput": false,
     "audioInput": false,
@@ -39390,7 +39518,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
+    "inputCost": 67000,
     "outputCost": null
   },
   {
@@ -39402,7 +39530,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
+    "inputCost": 200000,
     "outputCost": null
   },
   {
@@ -39414,7 +39542,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
+    "inputCost": 12000,
     "outputCost": null
   },
   {
@@ -39438,7 +39566,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
+    "inputCost": 20000,
     "outputCost": null
   },
   {
@@ -39450,8 +39578,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": 4.88
+    "inputCost": 500000,
+    "outputCost": 4880000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/distilbert-sst-2-int8",
@@ -39462,7 +39590,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
+    "inputCost": 26000,
     "outputCost": null
   },
   {
@@ -39546,8 +39674,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": 6.67
+    "inputCost": 560000,
+    "outputCost": 6670000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-3-8b-instruct",
@@ -39558,8 +39686,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 280000,
+    "outputCost": 830000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-3-8b-instruct-awq",
@@ -39570,8 +39698,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 120000,
+    "outputCost": 270000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-3.1-8b-instruct",
@@ -39582,8 +39710,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 280000,
+    "outputCost": 830000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-3.1-8b-instruct-awq",
@@ -39594,8 +39722,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 120000,
+    "outputCost": 270000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-3.1-8b-instruct-fp8",
@@ -39606,8 +39734,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 150000,
+    "outputCost": 290000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-3.2-11b-vision-instruct",
@@ -39618,8 +39746,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 49000,
+    "outputCost": 680000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-3.2-1b-instruct",
@@ -39630,8 +39758,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 27000,
+    "outputCost": 200000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-3.2-3b-instruct",
@@ -39642,8 +39770,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 51000,
+    "outputCost": 340000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-3.3-70b-instruct-fp8-fast",
@@ -39654,8 +39782,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": 2.25
+    "inputCost": 290000,
+    "outputCost": 2250000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/llama-4-scout-17b-16e-instruct",
@@ -39678,8 +39806,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 480000,
+    "outputCost": 30000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/m2m100-1.2b",
@@ -39690,8 +39818,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 340000,
+    "outputCost": 340000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/melotts",
@@ -39714,8 +39842,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 110000,
+    "outputCost": 190000
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/mistral-small-3.1-24b-instruct",
@@ -39850,7 +39978,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://gateway.ai.cloudflare.com/v1/${CLOUDFLARE_ACCOUNT_ID}/${CLOUDFLARE_GATEWAY_ID}/compat/",
-    id: "cloudflare-ai-gateway/anthropic/claude-3-5-haiku",
+    id: "cloudflare-ai-gateway/anthropic/claude-3-haiku",
     apiKey: process.env.CLOUDFLARE_API_TOKEN,
     headers: {
       "X-Custom-Header": "value"
@@ -39869,7 +39997,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "cloudflare-ai-gateway/workers-ai/whisper-large-v3-turbo"
-      : "cloudflare-ai-gateway/anthropic/claude-3-5-haiku";
+      : "cloudflare-ai-gateway/anthropic/claude-3-haiku";
   }
 });
 ```
@@ -39925,7 +40053,7 @@ npm install @ai-sdk/cohere
 
 ---
 title: "Cortecs | Models | Mastra"
-description: "Use Cortecs models with Mastra. 11 models available."
+description: "Use Cortecs models with Mastra. 16 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -39935,7 +40063,7 @@ description: "Use Cortecs models with Mastra. 11 models available."
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
 [EN] Source: https://mastra.ai/en/models/providers/cortecs
 
-Access 11 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
+Access 16 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
 
 Learn more in the [Cortecs documentation](https://cortecs.ai).
 
@@ -40010,6 +40138,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.654
   },
   {
+    "model": "cortecs/devstral-2512",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "cortecs/devstral-small-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "cortecs/gemini-2.5-pro",
     "imageInput": true,
     "audioInput": false,
@@ -40046,6 +40198,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "cortecs/intellect-3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.219,
+    "outputCost": 1.202
+  },
+  {
     "model": "cortecs/kimi-k2-instruct",
     "imageInput": false,
     "audioInput": false,
@@ -40056,6 +40220,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131000,
     "inputCost": 0.551,
     "outputCost": 2.646
+  },
+  {
+    "model": "cortecs/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.656,
+    "outputCost": 2.731
   },
   {
     "model": "cortecs/llama-3.1-405b-instruct",
@@ -40104,6 +40280,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262000,
     "inputCost": 0.441,
     "outputCost": 1.984
+  },
+  {
+    "model": "cortecs/qwen3-next-80b-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.164,
+    "outputCost": 1.311
   }
 ]}
 />
@@ -40136,7 +40324,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "cortecs/qwen3-coder-480b-a35b-instruct"
+      ? "cortecs/qwen3-next-80b-a3b-thinking"
       : "cortecs/claude-4-5-sonnet";
   }
 });
@@ -44464,12 +44652,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/chutes.svg"
     />    <CardGridItem
       title="Cloudflare AI Gateway"
-      description="77 models"
+      description="71 models"
       href="/models/v1/providers/cloudflare-ai-gateway"
       logo="https://models.dev/logos/cloudflare-ai-gateway.svg"
     />    <CardGridItem
       title="Cortecs"
-      description="11 models"
+      description="16 models"
       href="/models/v1/providers/cortecs"
       logo="https://models.dev/logos/cortecs.svg"
     />    <CardGridItem
@@ -44584,7 +44772,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
       title="OpenCode Zen"
-      description="22 models"
+      description="23 models"
       href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
@@ -44669,12 +44857,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/zenmux.svg"
     />    <CardGridItem
       title="Zhipu AI"
-      description="6 models"
+      description="7 models"
       href="/models/v1/providers/zhipuai"
       logo="https://models.dev/logos/zhipuai.svg"
     />    <CardGridItem
       title="Zhipu AI Coding Plan"
-      description="6 models"
+      description="7 models"
       href="/models/v1/providers/zhipuai-coding-plan"
       logo="https://models.dev/logos/zhipuai-coding-plan.svg"
     />
@@ -48582,7 +48770,7 @@ For detailed provider-specific documentation, see the [AI SDK OpenAI provider do
 
 ---
 title: "OpenCode Zen | Models | Mastra"
-description: "Use OpenCode Zen models with Mastra. 22 models available."
+description: "Use OpenCode Zen models with Mastra. 23 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -48592,7 +48780,7 @@ description: "Use OpenCode Zen models with Mastra. 22 models available."
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 [EN] Source: https://mastra.ai/en/models/providers/opencode
 
-Access 22 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 23 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -48845,6 +49033,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 1.25,
     "outputCost": 10
+  },
+  {
+    "model": "opencode/gpt-5.2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.75,
+    "outputCost": 14
   },
   {
     "model": "opencode/grok-code",
@@ -54844,7 +55044,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI Coding Plan | Models | Mastra"
-description: "Use Zhipu AI Coding Plan models with Mastra. 6 models available."
+description: "Use Zhipu AI Coding Plan models with Mastra. 7 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54854,7 +55054,7 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 6 models available."
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai-coding-plan
 
-Access 6 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 7 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI Coding Plan documentation](https://docs.bigmodel.cn/cn/coding-plan/overview).
 
@@ -54963,6 +55163,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zhipuai-coding-plan/glm-4.6v-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -54995,7 +55207,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai-coding-plan/glm-4.6v"
+      ? "zhipuai-coding-plan/glm-4.6v-flash"
       : "zhipuai-coding-plan/glm-4.5";
   }
 });
@@ -55006,7 +55218,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI | Models | Mastra"
-description: "Use Zhipu AI models with Mastra. 6 models available."
+description: "Use Zhipu AI models with Mastra. 7 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55016,7 +55228,7 @@ description: "Use Zhipu AI models with Mastra. 6 models available."
 # <img src="https://models.dev/logos/zhipuai.svg" alt="Zhipu AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai
 
-Access 6 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 7 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI documentation](https://docs.z.ai/guides/overview/pricing).
 
@@ -55125,6 +55337,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.3,
     "outputCost": 0.9
+  },
+  {
+    "model": "zhipuai/glm-4.6v-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -55157,7 +55381,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai/glm-4.6v"
+      ? "zhipuai/glm-4.6v-flash"
       : "zhipuai/glm-4.5";
   }
 });
@@ -86658,18 +86882,22 @@ description: Documentation for the `Run.stream()` method in workflows, which ena
 # Run.stream()
 [EN] Source: https://mastra.ai/en/reference/streaming/workflows/stream
 
-The `.stream()` method enables real-time streaming of responses from a workflow.
+The `.stream()` method enables real-time streaming of responses from a workflow. It returns a `ReadableStream` of events directly.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRun();
 
-const stream = run.stream({
+const stream = await run.stream({
   inputData: {
     value: "initial data",
   },
 });
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
 ```
 
 ## Parameters
@@ -86782,35 +87010,30 @@ const stream = run.stream({
 
 ## Returns
 
+Returns a `WorkflowRunOutput` object that implements the async iterable interface (can be used directly in `for await...of` loops) and provides access to the stream and workflow execution results.
+
 <PropertiesTable
   content={[
     {
-      name: "stream",
-      type: "MastraWorkflowStream<ChunkType>",
+      name: "fullStream",
+      type: "ReadableStream<WorkflowStreamEvent>",
       description:
-        "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
+        "A ReadableStream of workflow events that you can iterate over to track progress in real-time. You can also iterate over the WorkflowRunOutput object directly.",
     },
     {
-      name: "stream.status",
-      type: "Promise<RunStatus>",
-      description: "A promise that resolves to the current workflow run status",
-    },
-    {
-      name: "stream.result",
-      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
       description: "A promise that resolves to the final workflow result",
     },
     {
-      name: "stream.usage",
-      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
-      description: "A promise that resolves to token usage statistics",
+      name: "status",
+      type: "WorkflowRunStatus",
+      description: "The current workflow run status ('running', 'suspended', 'success', 'failed', 'canceled', or 'tripwire')",
     },
     {
-      name: "stream.traceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "The trace ID associated with this execution when Tracing is enabled.",
+      name: "usage",
+      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cachedInputTokens?: number }>",
+      description: "A promise that resolves to token usage statistics",
     },
   ]}
 />
@@ -86826,7 +87049,21 @@ const stream = run.stream({
   },
 });
 
+// Iterate over stream events (you can iterate over stream directly or use stream.fullStream)
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+
+// Access the final result
 const result = await stream.result;
+console.log("Final result:", result);
+
+// Access token usage
+const usage = await stream.usage;
+console.log("Token usage:", usage);
+
+// Check current status
+console.log("Status:", stream.status);
 ```
 
 ## Stream Events
