@@ -409,52 +409,6 @@ const sidebars = {
           id: "deployment/web-framework",
           label: "With a Web Framework",
         },
-        {
-          type: "category",
-          label: "Cloud Providers",
-          items: [
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/index",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/amazon-ec2",
-              label: "Amazon EC2",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/aws-lambda",
-              label: "AWS Lambda",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/azure-app-services",
-              label: "Azure App Services",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/cloudflare-deployer",
-              label: "Cloudflare",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/digital-ocean",
-              label: "Digital Ocean",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/netlify-deployer",
-              label: "Netlify",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/vercel-deployer",
-              label: "Vercel",
-            },
-          ],
-        },
       ],
     },
     {
