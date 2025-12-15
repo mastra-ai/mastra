@@ -1174,7 +1174,10 @@ export class Workflow<
         type: 'step',
         step: {
           id: mappingStep.id,
-          mapConfig: mappingConfig.toString(),
+          mapConfig:
+            mappingConfig.toString()?.length > 1000
+              ? mappingConfig.toString().slice(0, 1000) + '...\n}'
+              : mappingConfig.toString(),
         },
       });
       return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any>;
@@ -1260,7 +1263,10 @@ export class Workflow<
       type: 'step',
       step: {
         id: mappingStep.id,
-        mapConfig: JSON.stringify(newMappingConfig, null, 2),
+        mapConfig:
+          JSON.stringify(newMappingConfig, null, 2)?.length > 1000
+            ? JSON.stringify(newMappingConfig, null, 2).slice(0, 1000) + '...\n}'
+            : JSON.stringify(newMappingConfig, null, 2),
       },
     });
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, MappedOutputSchema>;
