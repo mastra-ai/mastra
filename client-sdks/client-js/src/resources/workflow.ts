@@ -154,7 +154,7 @@ export class Workflow extends BaseResource {
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the runId of the created run with methods to control execution
    */
-  async createRun(params?: { runId?: string }): Promise<{
+  async createRun(params?: { runId?: string; resourceId?: string; disableScorers?: boolean }): Promise<{
     runId: string;
     start: (params: {
       inputData: Record<string, any>;
@@ -201,6 +201,10 @@ export class Workflow extends BaseResource {
       `/api/workflows/${this.workflowId}/create-run?${searchParams.toString()}`,
       {
         method: 'POST',
+        body: {
+          resourceId: params?.resourceId,
+          disableScorers: params?.disableScorers,
+        },
       },
     );
 
@@ -234,6 +238,7 @@ export class Workflow extends BaseResource {
           initialState: p.initialState,
           requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
+          resourceId: params?.resourceId,
         });
       },
       stream: async (p: {
@@ -246,6 +251,7 @@ export class Workflow extends BaseResource {
           inputData: p.inputData,
           initialState: p.initialState,
           requestContext: p.requestContext,
+          resourceId: params?.resourceId,
         });
       },
       resume: async (p: {
@@ -356,6 +362,7 @@ export class Workflow extends BaseResource {
     initialState?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
+    resourceId?: string;
   }): Promise<WorkflowRunResult> {
     const searchParams = new URLSearchParams();
 
@@ -372,6 +379,7 @@ export class Workflow extends BaseResource {
         initialState: params.initialState,
         requestContext,
         tracingOptions: params.tracingOptions,
+        resourceId: params.resourceId,
       },
     }).then(deserializeWorkflowError);
   }
@@ -387,6 +395,7 @@ export class Workflow extends BaseResource {
     initialState?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
+    resourceId?: string;
   }) {
     const searchParams = new URLSearchParams();
 
@@ -404,6 +413,7 @@ export class Workflow extends BaseResource {
           initialState: params.initialState,
           requestContext,
           tracingOptions: params.tracingOptions,
+          resourceId: params.resourceId,
         },
         stream: true,
       },
@@ -527,6 +537,7 @@ export class Workflow extends BaseResource {
     requestContext?: RequestContext;
     closeOnSuspend?: boolean;
     tracingOptions?: TracingOptions;
+    resourceId?: string;
   }) {
     const searchParams = new URLSearchParams();
 
@@ -545,6 +556,7 @@ export class Workflow extends BaseResource {
           requestContext,
           closeOnSuspend: params.closeOnSuspend,
           tracingOptions: params.tracingOptions,
+          resourceId: params.resourceId,
         },
         stream: true,
       },

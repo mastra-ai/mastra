@@ -274,7 +274,7 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   summary: 'Create workflow run',
   description: 'Creates a new workflow execution instance with an optional custom run ID',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, resourceId }) => {
+  handler: async ({ mastra, workflowId, runId, resourceId, disableScorers }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -286,7 +286,7 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      const run = await workflow.createRun({ runId, resourceId });
+      const run = await workflow.createRun({ runId, resourceId, disableScorers });
 
       return { runId: run.runId };
     } catch (error) {
