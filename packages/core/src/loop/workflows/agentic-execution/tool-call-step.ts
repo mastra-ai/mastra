@@ -9,6 +9,22 @@ import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
+type AddToolMetadataOptions = {
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  resumeSchema: z.ZodType<any>;
+} & (
+  | {
+      type: 'approval';
+      suspendPayload?: never;
+    }
+  | {
+      type: 'suspension';
+      suspendPayload: unknown;
+    }
+);
+
 export function createToolCallStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -36,101 +52,16 @@ export function createToolCallStep<
       const tool =
         stepTools?.[inputData.toolName] ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
-      // Helper function to add tool approval metadata to the assistant message
-      const addToolApprovalMetadata = (toolCallId: string, toolName: string, args: unknown) => {
-        // Find the last assistant message in the response (which should contain this tool call)
-        const responseMessages = messageList.get.response.db();
-        const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
 
-        if (lastAssistantMessage) {
-          const content = lastAssistantMessage.content;
-          if (!content) return;
-          // Add metadata to indicate this tool call is pending approval
-          const metadata =
-            typeof lastAssistantMessage.content.metadata === 'object' && lastAssistantMessage.content.metadata !== null
-              ? (lastAssistantMessage.content.metadata as Record<string, any>)
-              : {};
-          metadata.pendingToolApprovals = metadata.pendingToolApprovals || {};
-          metadata.pendingToolApprovals[toolName] = {
-            toolCallId,
-            toolName,
-            args,
-            type: 'approval',
-            runId, // Store the runId so we can resume after page refresh
-            resumeSchema: z.object({
-              approved: z
-                .boolean()
-                .describe(
-                  'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                ),
-            }),
-          };
-          lastAssistantMessage.content.metadata = metadata;
-        }
-      };
-
-      // Helper function to remove tool approval metadata after approval/decline
-      const removeToolApprovalMetadata = async (toolName: string) => {
-        const { saveQueueManager, memoryConfig, threadId } = _internal || {};
-
-        if (!saveQueueManager || !threadId) {
-          return;
-        }
-
-        const getMetadata = (message: MastraDBMessage) => {
-          const content = message.content;
-          if (!content) return undefined;
-          const metadata =
-            typeof content.metadata === 'object' && content.metadata !== null
-              ? (content.metadata as Record<string, any>)
-              : undefined;
-          return metadata;
-        };
-
-        // Find and update the assistant message to remove approval metadata
-        // At this point, messages have been persisted, so we look in all messages
-        const allMessages = messageList.get.all.db();
-        const lastAssistantMessage = [...allMessages].reverse().find(msg => {
-          const metadata = getMetadata(msg);
-          const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
-          return !!pendingToolApprovals?.[toolName];
-        });
-
-        if (lastAssistantMessage) {
-          const metadata = getMetadata(lastAssistantMessage);
-          const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
-
-          if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
-            delete pendingToolApprovals[toolName];
-
-            // If no more pending suspensions, remove the whole object
-            if (metadata && Object.keys(pendingToolApprovals).length === 0) {
-              delete metadata.pendingToolApprovals;
-            }
-
-            // Flush to persist the metadata removal
-            try {
-              await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
-            } catch (error) {
-              console.error('Error removing tool approval metadata:', error);
-            }
-          }
-        }
-      };
-      // Helper function to add tool suspension metadata to the assistant message
-      const addToolSuspensionMetadata = ({
+      const addToolMetadata = ({
         toolCallId,
         toolName,
         args,
         suspendPayload,
         resumeSchema,
-      }: {
-        toolCallId: string;
-        toolName: string;
-        args: unknown;
-        suspendPayload: unknown;
-        resumeSchema: z.ZodType<any>;
-      }) => {
+        type,
+      }: AddToolMetadataOptions) => {
+        const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         // Find the last assistant message in the response (which should contain this tool call)
         const responseMessages = messageList.get.response.db();
         const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
@@ -143,22 +74,21 @@ export function createToolCallStep<
             typeof lastAssistantMessage.content.metadata === 'object' && lastAssistantMessage.content.metadata !== null
               ? (lastAssistantMessage.content.metadata as Record<string, any>)
               : {};
-          metadata.suspendedTools = metadata.suspendedTools || {};
-          metadata.suspendedTools[toolName] = {
+          metadata[metadataKey] = metadata[metadataKey] || {};
+          metadata[metadataKey][toolName] = {
             toolCallId,
             toolName,
             args,
-            type: 'suspension',
+            type,
             runId, // Store the runId so we can resume after page refresh
-            suspendPayload,
+            ...(type === 'suspension' ? { suspendPayload } : {}),
             resumeSchema,
           };
           lastAssistantMessage.content.metadata = metadata;
         }
       };
 
-      // Helper function to remove tool suspension metadata after resume
-      const removeToolSuspensionMetadata = async (toolName: string) => {
+      const removeToolMetadata = async (toolName: string, type: 'suspension' | 'approval') => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
@@ -175,25 +105,27 @@ export function createToolCallStep<
           return metadata;
         };
 
+        const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
+
         // Find and update the assistant message to remove approval metadata
         // At this point, messages have been persisted, so we look in all messages
         const allMessages = messageList.get.all.db();
         const lastAssistantMessage = [...allMessages].reverse().find(msg => {
           const metadata = getMetadata(msg);
-          const suspendedTools = metadata?.suspendedTools as Record<string, any> | undefined;
+          const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
           return !!suspendedTools?.[toolName];
         });
 
         if (lastAssistantMessage) {
           const metadata = getMetadata(lastAssistantMessage);
-          const suspendedTools = metadata?.suspendedTools as Record<string, any> | undefined;
+          const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
 
           if (suspendedTools && typeof suspendedTools === 'object') {
             delete suspendedTools[toolName];
 
             // If no more pending suspensions, remove the whole object
             if (metadata && Object.keys(suspendedTools).length === 0) {
-              delete metadata.suspendedTools;
+              delete metadata[metadataKey];
             }
 
             // Flush to persist the metadata removal
@@ -295,7 +227,19 @@ export function createToolCallStep<
             });
 
             // Add approval metadata to message before persisting
-            addToolApprovalMetadata(inputData.toolCallId, inputData.toolName, inputData.args);
+            addToolMetadata({
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              args: inputData.args,
+              type: 'approval',
+              resumeSchema: z.object({
+                approved: z
+                  .boolean()
+                  .describe(
+                    'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                  ),
+              }),
+            });
 
             // Flush messages before suspension to ensure they are persisted
             await flushMessagesBeforeSuspension();
@@ -315,7 +259,7 @@ export function createToolCallStep<
             );
           } else {
             // Remove approval metadata since we're resuming (either approved or declined)
-            await removeToolApprovalMetadata(inputData.toolCallId);
+            await removeToolMetadata(inputData.toolCallId, 'approval');
 
             if (!resumeData.approved) {
               return {
@@ -325,7 +269,7 @@ export function createToolCallStep<
             }
           }
         } else if (isResumeToolCall) {
-          await removeToolSuspensionMetadata(inputData.toolName);
+          await removeToolMetadata(inputData.toolName, 'suspension');
         }
 
         const toolOptions: MastraToolInvocationOptions = {
@@ -349,11 +293,12 @@ export function createToolCallStep<
             });
 
             // Add suspension metadata to message before persisting
-            addToolSuspensionMetadata({
+            addToolMetadata({
               toolCallId: inputData.toolCallId,
               toolName: inputData.toolName,
               args,
               suspendPayload,
+              type: 'suspension',
               resumeSchema: options?.resumeSchema,
             });
 
