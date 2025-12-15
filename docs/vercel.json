@@ -434,6 +434,26 @@
       "source": "/examples/v1/rag/embedding/metadata-extraction",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/metadata-extraction",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/overview",
+      "destination": "/docs/v1/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/setting-up",
+      "destination": "/docs/v1/mastra-cloud/setting-up",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/dashboard",
+      "destination": "/docs/v1/mastra-cloud/dashboard",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/observability",
+      "destination": "/docs/v1/mastra-cloud/observability",
+      "permanent": true
     }
   ]
 }

@@ -411,32 +411,6 @@ const sidebars = {
         },
         {
           type: "category",
-          label: "Mastra Cloud",
-          items: [
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/overview",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/setting-up",
-              label: "Setup & Deploy",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/dashboard",
-              label: "Dashboard",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/observability",
-              label: "Observability",
-            },
-          ],
-        },
-        {
-          type: "category",
           label: "Cloud Providers",
           items: [
             {
@@ -480,6 +454,35 @@ const sidebars = {
               label: "Vercel",
             },
           ],
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Mastra Cloud",
+      items: [
+        {
+          type: "doc",
+          id: "mastra-cloud/overview",
+          label: "Overview",
+          customProps: {
+            tags: ["beta"],
+          },
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/setting-up",
+          label: "Setup & Deploy",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/dashboard",
+          label: "Dashboard",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/observability",
+          label: "Observability",
         },
       ],
     },
