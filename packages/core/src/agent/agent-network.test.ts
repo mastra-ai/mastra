@@ -699,7 +699,7 @@ describe('Agent - network - updateWorkingMemory', () => {
   });
 }, 120e3);
 
-describe.only('Agent - network - finalResult token efficiency', () => {
+describe('Agent - network - finalResult token efficiency', () => {
   it('should NOT store redundant toolCalls in finalResult when messages already contain tool call data', async () => {
     // The finalResult object was storing toolCalls separately even though
     // the messages array already contains all tool call information.
