@@ -759,6 +759,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         return chunk.payload;
       });
 
+      const hasToolCalls = toolCalls.length > 0;
+      const needStop = outputStream._getImmediateFinishReason() === 'stop';
+      const needNormalize = hasToolCalls && needStop && !(runState.state.hasErrored || outputStream.tripwire);
+      const normalizedfinishReason = needNormalize
+        ? 'tool-calls'
+        : (runState.state.stepResult?.reason ?? outputStream._getImmediateFinishReason());
+
       if (toolCalls.length > 0) {
         const message: MastraDBMessage = {
           id: messageId,
@@ -797,7 +804,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         try {
           const stepNumber = inputData.output?.steps?.length || 0;
           const immediateText = outputStream._getImmediateText();
-          const immediateFinishReason = outputStream._getImmediateFinishReason();
+          const immediateFinishReason = normalizedfinishReason;
 
           // Convert toolCalls to ToolCallInfo format
           const toolCallInfos = toolCalls.map(tc => ({
@@ -832,7 +839,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         }
       }
 
-      const finishReason = runState?.state?.stepResult?.reason ?? outputStream._getImmediateFinishReason();
       const hasErrored = runState.state.hasErrored;
       const usage = outputStream._getImmediateUsage();
       const responseMetadata = runState.state.responseMetadata;
@@ -850,6 +856,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
       const canRetry = maxProcessorRetries !== undefined && currentProcessorRetryCount < maxProcessorRetries;
       const shouldRetry = retryRequested && canRetry;
 
+      if (needNormalize && !shouldRetry && !tripwireTriggered) {
+        runState.setState({
+          stepResult: {
+            ...(runState.state.stepResult ?? {}),
+            reason: normalizedfinishReason,
+          },
+        });
+      }
+
+      const finishReason = runState?.state?.stepResult?.reason ?? outputStream._getImmediateFinishReason();
       // Log if retry was requested but not allowed
       if (retryRequested && !canRetry) {
         if (maxProcessorRetries === undefined) {
