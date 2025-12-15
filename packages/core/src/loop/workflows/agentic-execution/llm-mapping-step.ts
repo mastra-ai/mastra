@@ -144,7 +144,16 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         if (initialResult.stepResult.reason !== 'retry') {
           initialResult.stepResult.isContinued = false;
         }
-        return bail(initialResult);
+
+        // Update messages field to include any error messages we added to messageList
+        return bail({
+          ...initialResult,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
+          },
+        });
       }
 
       if (inputData?.length) {
