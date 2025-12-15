@@ -29,21 +29,25 @@ Run the following command to [create a new React + Vite app](https://vite.dev/gu
 <TabItem value="npm" label="npm">
 ```bash copy
 npm create vite@latest mastra-react -- --template react-ts
+cd mastra-react
 ```
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 ```bash copy
 pnpm create vite mastra-react --template react-ts
+cd mastra-react
 ```
 </TabItem>
 <TabItem value="yarn" label="yarn">
 ```bash copy
 yarn create vite mastra-react --template react-ts
+cd mastra-react
 ```
 </TabItem>
 <TabItem value="bun" label="bun">
 ```bash copy
 bun create vite mastra-react --template react-ts
+cd mastra-react
 ```
 </TabItem>
 </Tabs>
@@ -134,16 +138,14 @@ Edit `tsconfig.app.json` to resolve paths:
 
 ## Initialize Mastra
 
-`cd` into your Vite project and run [`mastra init`](/reference/v1/cli/create-mastra).
-
-When prompted, choose a provider (e.g. OpenAI) and enter your key:
+Run [`mastra init`](/reference/v1/cli/create-mastra). When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
 ```bash copy
 cd mastra-react
-npx --force mastra@beta init
+npx mastra@beta init
 ```
 
 </TabItem>
@@ -180,16 +182,6 @@ This creates a `src/mastra` folder with an example weather agent and the followi
 -	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
 You'll call `weather-agent.ts` from your chat UI in the next steps.
-
-Lastly, add a `mastra:dev` script to your `package.json` to be able to run the Mastra server in development mode:
-
-```json title="package.json"
-{
-  "scripts": {
-    "mastra:dev": "mastra dev"
-  }
-}
-```
 
 ## Install AI SDK UI & AI Elements
 
@@ -303,7 +295,11 @@ import {
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation';
 
-import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+import {
+  Message,
+  MessageContent,
+  MessageResponse
+} from '@/components/ai-elements/message';
 
 import {
   Tool,
@@ -403,7 +399,7 @@ In order to test your agent with the chat interface, you need to run both the Ma
 1. Start the Mastra development server:
 
     ```bash copy
-    npm run mastra:dev
+    npx mastra dev
     ```
 1. In a separate terminal window, start the Vite development server:
 
