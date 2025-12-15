@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { describe, it, expect } from 'vitest';
 import { Memory } from './index';
 
 // Expose protected method for testing
@@ -99,12 +99,7 @@ describe('Memory', () => {
         createdAt: new Date(),
         content: {
           format: 2,
-          parts: [
-            { type: 'text', text: 'Hello' },
-            null as any,
-            undefined as any,
-            { type: 'text', text: 'World' },
-          ],
+          parts: [{ type: 'text', text: 'Hello' }, null as any, undefined as any, { type: 'text', text: 'World' }],
         },
       };
 
