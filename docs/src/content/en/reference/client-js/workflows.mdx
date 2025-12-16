@@ -100,17 +100,6 @@ const result = await run.startAsync({
 });
 ```
 
-Alternatively, you can call `workflow.startAsync()` directly with `resourceId`:
-
-```typescript
-const result = await workflow.startAsync({
-  inputData: {
-    city: "New York",
-  },
-  resourceId: "user-123",
-});
-```
-
 ### start()
 
 Start a workflow run without waiting for completion:

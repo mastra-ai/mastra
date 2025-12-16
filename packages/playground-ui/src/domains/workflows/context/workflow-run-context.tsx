@@ -32,6 +32,7 @@ type WorkflowRunContextType = {
     params: {
       workflowId: string;
       requestContext: Record<string, unknown>;
+      runId: string;
     } & Omit<TimeTravelParams, 'requestContext'>,
   ) => Promise<void>;
   runSnapshot?: WorkflowRunState;
