@@ -28,7 +28,7 @@ describe('Loop Tests', () => {
     resultObjectTests({ loopFn: loop, runId: 'test-run-id' });
     optionsTests({ loopFn: loop, runId: 'test-run-id' });
     generateTextTestsV5({ loopFn: loop, runId: 'test-run-id' });
-    toolsTests({ loopFn: loop, runId: 'test-run-id' });
+    toolsTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v2' });
 
     streamObjectTests({ loopFn: loop, runId: 'test-run-id' });
   });
@@ -45,6 +45,7 @@ describe('Loop Tests', () => {
 
     textStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v3' });
     fullStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v3' });
+    toolsTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v3' });
   });
 
   // toolsTestsV5({ executeFn: execute, runId });
