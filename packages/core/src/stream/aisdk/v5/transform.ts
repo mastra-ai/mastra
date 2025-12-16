@@ -4,13 +4,13 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3Usage } from '@ai-sdk/provider-v6';
 import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
 import type { OutputSchema, PartialSchemaOutput } from '../../base/schema';
 import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
-import type { LanguageModelV3Usage } from '@ai-sdk/provider-v6';
 
 export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
