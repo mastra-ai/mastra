@@ -62,6 +62,8 @@ export function workflowLoopStream<
               parts: [dataPart],
             },
             createdAt: new Date(),
+            threadId: _internal?.threadId,
+            resourceId: _internal?.resourceId,
           };
           messageList.add(message, 'response');
         }
