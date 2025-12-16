@@ -97,7 +97,7 @@ export const progressTool = createTool({
         data: {
           taskName: input.taskName,
           step: i,
-          progress: i * 33,
+          progress: Math.round((i / 3) * 100),
           status: i < 3 ? 'in-progress' : 'complete',
         },
       });

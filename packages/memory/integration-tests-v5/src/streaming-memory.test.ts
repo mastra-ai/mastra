@@ -460,6 +460,20 @@ describe('Memory Streaming Tests', () => {
       expect(userMessages.length).toBe(2);
       expect(assistantMessages.length).toBe(2);
 
+      // Verify that assistant message IDs from storage match UI message IDs
+      const storageAssistantIds = storageMessages
+        .filter((m: any) => m.role === 'assistant')
+        .map((m: any) => m.id)
+        .sort();
+      const uiAssistantIds = assistantMessages.map(m => m.id).sort();
+
+      expect(uiAssistantIds).toEqual(storageAssistantIds);
+
+      // Verify all IDs are UUIDs (not nanoids)
+      for (const id of uiAssistantIds) {
+        expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+      }
+
       // Clean up
       await mastraClient.getMemoryThread({ threadId: testThreadId, agentId: 'progress' }).delete();
     });
