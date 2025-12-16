@@ -22,7 +22,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: 3.0.0-beta.96
-        version: 3.0.0-beta.96(zod@4.1.13)
+        version: 3.0.0-beta.96(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: 3.0.0-beta.26
         version: 3.0.0-beta.26
@@ -55,13 +55,13 @@ importers:
         version: link:../../voice/openai
       ai:
         specifier: ^6.0.0-beta.149
-        version: 6.0.0-beta.149(zod@4.1.13)
+        version: 6.0.0-beta.149(zod@3.25.76)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
       zod:
-        specifier: ^4
-        version: 4.1.13
+        specifier: ^3
+        version: 3.25.76
     devDependencies:
       mastra:
         specifier: link:../../packages/cli
@@ -331,38 +331,38 @@ packages:
     resolution: {integrity: sha512-U/PBtDf35ff0D8X8D0jfdzHYEPFxAI7jJlxZXwCSez5M3190m+QobIfh+sWDWSHMCWWJN2AWamkegn6vr6YBTw==}
     engines: {node: '>=18'}
 
-  zod@4.1.13:
-    resolution: {integrity: sha512-AvvthqfqrAhNH9dnfmrfKzX5upOdjUVJYFqNSlkmGf64gRaTzlPwz99IHYnVs28qYAybvAlBV+H7pn0saFY4Ig==}
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
 snapshots:
 
-  '@ai-sdk/gateway@2.0.0-beta.78(zod@4.1.13)':
+  '@ai-sdk/gateway@2.0.0-beta.78(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.0-beta.26
-      '@ai-sdk/provider-utils': 4.0.0-beta.47(zod@4.1.13)
+      '@ai-sdk/provider-utils': 4.0.0-beta.47(zod@3.25.76)
       '@vercel/oidc': 3.0.5
-      zod: 4.1.13
+      zod: 3.25.76
     transitivePeerDependencies:
       - '@valibot/to-json-schema'
       - arktype
       - effect
 
-  '@ai-sdk/openai@3.0.0-beta.96(zod@4.1.13)':
+  '@ai-sdk/openai@3.0.0-beta.96(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.0-beta.26
-      '@ai-sdk/provider-utils': 4.0.0-beta.47(zod@4.1.13)
-      zod: 4.1.13
+      '@ai-sdk/provider-utils': 4.0.0-beta.47(zod@3.25.76)
+      zod: 3.25.76
     transitivePeerDependencies:
       - '@valibot/to-json-schema'
       - arktype
       - effect
 
-  '@ai-sdk/provider-utils@4.0.0-beta.47(zod@4.1.13)':
+  '@ai-sdk/provider-utils@4.0.0-beta.47(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.0-beta.26
       '@standard-schema/spec': 1.0.0
       eventsource-parser: 3.0.6
-      zod: 4.1.13
+      zod: 3.25.76
 
   '@ai-sdk/provider@3.0.0-beta.26':
     dependencies:
@@ -416,13 +416,13 @@ snapshots:
 
   '@vercel/oidc@3.0.5': {}
 
-  ai@6.0.0-beta.149(zod@4.1.13):
+  ai@6.0.0-beta.149(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 2.0.0-beta.78(zod@4.1.13)
+      '@ai-sdk/gateway': 2.0.0-beta.78(zod@3.25.76)
       '@ai-sdk/provider': 3.0.0-beta.26
-      '@ai-sdk/provider-utils': 4.0.0-beta.47(zod@4.1.13)
+      '@ai-sdk/provider-utils': 4.0.0-beta.47(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
-      zod: 4.1.13
+      zod: 3.25.76
     transitivePeerDependencies:
       - '@valibot/to-json-schema'
       - arktype
@@ -569,4 +569,4 @@ snapshots:
 
   yoctocolors-cjs@2.1.3: {}
 
-  zod@4.1.13: {}
+  zod@3.25.76: {}
