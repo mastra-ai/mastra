@@ -397,17 +397,22 @@ const sidebars = {
         {
           type: "doc",
           id: "deployment/building-mastra",
-          label: "Building Mastra",
+          label: "Mastra Server",
         },
         {
           type: "doc",
           id: "deployment/monorepo",
-          label: "With a Monorepo",
+          label: "Monorepo",
         },
         {
           type: "doc",
           id: "deployment/web-framework",
-          label: "With a Web Framework",
+          label: "Web Framework",
+        },
+        {
+          type: "doc",
+          id: "deployment/cloud-providers",
+          label: "Cloud Providers",
         },
       ],
     },

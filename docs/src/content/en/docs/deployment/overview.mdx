@@ -5,25 +5,49 @@ description: Learn about different deployment options for your Mastra applicatio
 
 # Deployment Overview
 
-Mastra offers multiple deployment options to suit your application's needs, from fully-managed solutions to self-hosted options, and web framework integrations. This guide will help you understand the available deployment paths and choose the right one for your project.
+Mastra applications can be deployed to any Node.js-compatible environment. You can deploy a Mastra server, integrate with an existing web framework, deploy to cloud providers, or use Mastra Cloud for managed hosting.
 
-## Choosing a Deployment Option
+## Runtime support
 
-| Option                   | Best For                                                      | Key Benefits                                                         |
-| ------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **Mastra Cloud**         | Teams wanting to ship quickly without infrastructure concerns | Fully-managed, automatic scaling, built-in observability             |
-| **Framework Deployment** | Teams already using Next.js, Astro etc                        | Simplify deployment with a unified codebase for frontend and backend |
-| **Server Deployment**    | Teams needing maximum control and customization               | Full control, custom middleware, integrate with existing apps        |
-| **Cloud Providers**      | Teams using AWS, Azure, Digital Ocean, Vercel, Netlify, etc  | Platform integration, simplified deployment, automatic scaling       |
-
-## Deployment Options
-
-### Runtime support
+Mastra can run against any of these runtime environments:
 
 - Node.js `v22.13.0` or later
 - Bun
 - Deno
 - [Cloudflare](/guides/v1/deployment/cloudflare-deployer)
+
+## Deployment Options
+
+### Mastra Server
+
+Mastra provides a [Mastra server](/docs/v1/server/mastra-server) powered by Hono that can be deployed independently.
+
+- Custom API routes and middleware
+- Configurable CORS and authentication
+- Deploy to VMs, containers, or PaaS platforms
+- Integrate with existing Node.js applications
+
+[Deploy a Mastra Server →](./building-mastra)
+
+### Monorepo
+
+Deploy Mastra as part of a monorepo setup, following the same approach as standalone deployment.
+
+[Deploy in a Monorepo →](./monorepo)
+
+### Web Framework
+
+Mastra can be integrated with a variety of web frameworks. When integrated with a framework, Mastra typically requires no additional configuration for deployment.
+
+- [With Next.js on Vercel →](./web-framework#with-nextjs-on-vercel)
+- [With Astro on Vercel →](./web-framework#with-astro-on-vercel)
+- [With Astro on Netlify →](./web-framework#with-astro-on-netlify)
+
+### Cloud Providers
+
+Mastra applications can be deployed to cloud providers like AWS, Azure, Digital Ocean, Vercel, and Netlify. Mastra includes optional built-in deployers for some platforms to streamline the deployment process.
+
+[Deploy to Cloud Providers →](./cloud-providers)
 
 ### Mastra Cloud
 
@@ -36,91 +60,3 @@ Mastra Cloud is a deployment platform that connects to your GitHub repository, a
 - Custom domains for each project
 
 [View Mastra Cloud documentation →](/docs/v1/mastra-cloud/overview)
-
-### With a Web Framework
-
-Mastra can be integrated with a variety of web frameworks. For example, see one of the following for a detailed guide.
-
-- [With Next.js](/guides/v1/getting-started/next-js)
-- [With Astro](/guides/v1/getting-started/astro)
-
-When integrated with a framework, Mastra typically requires no additional configuration for deployment.
-
-[View Web Framework Integration →](./web-framework)
-
-### With a Server
-
-You can deploy Mastra as a standard Node.js HTTP server, which gives you full control over your infrastructure and deployment environment.
-
-- Custom API routes and middleware
-- Configurable CORS and authentication
-- Deploy to VMs, containers, or PaaS platforms
-- Ideal for integrating with existing Node.js applications
-
-[Building Mastra →](./building-mastra)
-
-### Cloud Providers
-
-Mastra applications can be deployed to popular cloud providers and serverless platforms. These platforms offer automatic scaling, simplified deployment, and platform-specific optimizations.
-
-**Supported platforms:**
-
-- [Amazon EC2](/guides/v1/deployment/amazon-ec2) - Virtual machine deployment with full control
-- [AWS Lambda](/guides/v1/deployment/aws-lambda) - Serverless functions with automatic scaling
-- [Azure App Services](/guides/v1/deployment/azure-app-services) - Managed application hosting
-- [Cloudflare](/guides/v1/deployment/cloudflare-deployer) - Edge deployment with global distribution
-- [Digital Ocean](/guides/v1/deployment/digital-ocean) - Simple cloud infrastructure
-- [Netlify](/guides/v1/deployment/netlify-deployer) - Serverless platform with built-in CI/CD
-- [Vercel](/guides/v1/deployment/vercel-deployer) - Serverless platform optimized for frameworks
-
-For cloud provider deployments, you'll need to first build your Mastra application using the `mastra build` command. See [Building Mastra](./building-mastra) for details on the build process and platform-specific deployers.
-
-## Prerequisites
-
-Before deploying to a cloud provider, ensure you have:
-
-- A [Mastra application](/guides/v1/getting-started/quickstart)
-- Node.js `v22.13.0` or later
-- A GitHub repository for your application (required for most CI/CD setups)
-- Domain name management access (for SSL and HTTPS)
-- Basic familiarity with server setup (e.g. Nginx, environment variables)
-
-### LibSQLStore Compatibility
-
-`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of `LibSQLStore`.
-
-Specifically, ensure you've removed it from all Mastra files, including configuration on the main Mastra instance and any agents using it for memory storage:
-
-```diff title="src/mastra/index.ts"
- export const mastra = new Mastra({
--  storage: new LibSQLStore({
--    id: 'mastra-storage',
--    url: ":memory:",
--  }),
- });
-```
-
-```diff
- export const weatherAgent = new Agent({
-   id: "weather-agent",
-   memory: new Memory({
--    storage: new LibSQLStore({
--      id: 'mastra-storage',
--      url: "file:../mastra.db",
--    }),
-   }),
- });
-```
-
-For cloud deployments, use alternative storage solutions like PostgreSQL, MongoDB, or Upstash. See the [Storage documentation](/docs/v1/memory/storage/overview) for available options.
-
-## Client Configuration
-
-Once your Mastra application is deployed, you'll need to configure your client to communicate with it. The Mastra Client SDK provides a simple and type-safe interface for interacting with your Mastra server.
-
-- Type-safe API interactions
-- Authentication and request handling
-- Retries and error handling
-- Support for streaming responses
-
-[Client configuration guide →](/docs/v1/server/mastra-client)
