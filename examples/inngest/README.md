@@ -20,13 +20,13 @@ Define a planning agent which leverages an LLM call to plan activities given a l
 
 ```ts
 // agents/planning-agent.ts
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent';
 
 // Create a new planning agent that uses the OpenAI model
 const planningAgent = new Agent({
-  id: "planning-agent",
-  name: "planningAgent",
-  model: "openai/gpt-5.1",
+  id: 'planning-agent',
+  name: 'planningAgent',
+  model: 'openai/gpt-5.1',
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
 
@@ -79,13 +79,13 @@ Define the activity planner workflow with 3 steps: one to fetch the weather via 
 
 ```ts
 // workflows/inngest-workflow.ts
-import { init } from "@mastra/inngest";
-import { Inngest } from "inngest";
-import { z } from "zod";
+import { init } from '@mastra/inngest';
+import { Inngest } from 'inngest';
+import { z } from 'zod';
 
 const { createWorkflow, createStep } = init(
   new Inngest({
-    id: "mastra",
+    id: 'mastra',
     baseUrl: `http://localhost:8288`,
   }),
 );
@@ -93,24 +93,24 @@ const { createWorkflow, createStep } = init(
 // Helper function to convert weather codes to human-readable descriptions
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
-    0: "Clear sky",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Foggy",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    71: "Slight snow fall",
-    73: "Moderate snow fall",
-    75: "Heavy snow fall",
-    95: "Thunderstorm",
+    0: 'Clear sky',
+    1: 'Mainly clear',
+    2: 'Partly cloudy',
+    3: 'Overcast',
+    45: 'Foggy',
+    48: 'Depositing rime fog',
+    51: 'Light drizzle',
+    53: 'Moderate drizzle',
+    55: 'Dense drizzle',
+    61: 'Slight rain',
+    63: 'Moderate rain',
+    65: 'Heavy rain',
+    71: 'Slight snow fall',
+    73: 'Moderate snow fall',
+    75: 'Heavy snow fall',
+    95: 'Thunderstorm',
   };
-  return conditions[code] || "Unknown";
+  return conditions[code] || 'Unknown';
 }
 
 const forecastSchema = z.object({
@@ -128,15 +128,15 @@ const forecastSchema = z.object({
 ```ts
 // workflows/inngest-workflow.ts
 const fetchWeather = createStep({
-  id: "fetch-weather",
-  description: "Fetches weather forecast for a given city",
+  id: 'fetch-weather',
+  description: 'Fetches weather forecast for a given city',
   inputSchema: z.object({
     city: z.string(),
   }),
   outputSchema: forecastSchema,
   execute: async ({ inputData }) => {
     if (!inputData) {
-      throw new Error("Trigger data not found");
+      throw new Error('Trigger data not found');
     }
 
     // Get latitude and longitude for the city
@@ -173,10 +173,7 @@ const fetchWeather = createStep({
       minTemp: Math.min(...data.hourly.temperature_2m),
       condition: getWeatherCondition(data.current.weathercode),
       location: name,
-      precipitationChance: data.hourly.precipitation_probability.reduce(
-        (acc, curr) => Math.max(acc, curr),
-        0,
-      ),
+      precipitationChance: data.hourly.precipitation_probability.reduce((acc, curr) => Math.max(acc, curr), 0),
     };
 
     return forecast;
@@ -189,8 +186,8 @@ const fetchWeather = createStep({
 ```ts
 // workflows/inngest-workflow.ts
 const planActivities = createStep({
-  id: "plan-activities",
-  description: "Suggests activities based on weather conditions",
+  id: 'plan-activities',
+  description: 'Suggests activities based on weather conditions',
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
@@ -199,26 +196,26 @@ const planActivities = createStep({
     const forecast = inputData;
 
     if (!forecast) {
-      throw new Error("Forecast data not found");
+      throw new Error('Forecast data not found');
     }
 
     const prompt = `Based on the following weather forecast for ${forecast.location}, suggest appropriate activities:
       ${JSON.stringify(forecast, null, 2)}
       `;
 
-    const agent = mastra?.getAgent("planningAgent");
+    const agent = mastra?.getAgent('planningAgent');
     if (!agent) {
-      throw new Error("Planning agent not found");
+      throw new Error('Planning agent not found');
     }
 
     const response = await agent.stream([
       {
-        role: "user",
+        role: 'user',
         content: prompt,
       },
     ]);
 
-    let activitiesText = "";
+    let activitiesText = '';
 
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
@@ -237,8 +234,8 @@ const planActivities = createStep({
 ```ts
 // workflows/inngest-workflow.ts
 const planIndoorActivities = createStep({
-  id: "plan-indoor-activities",
-  description: "Suggests indoor activities based on weather conditions",
+  id: 'plan-indoor-activities',
+  description: 'Suggests indoor activities based on weather conditions',
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
@@ -247,24 +244,24 @@ const planIndoorActivities = createStep({
     const forecast = inputData;
 
     if (!forecast) {
-      throw new Error("Forecast data not found");
+      throw new Error('Forecast data not found');
     }
 
     const prompt = `In case it rains, plan indoor activities for ${forecast.location} on ${forecast.date}`;
 
-    const agent = mastra?.getAgent("planningAgent");
+    const agent = mastra?.getAgent('planningAgent');
     if (!agent) {
-      throw new Error("Planning agent not found");
+      throw new Error('Planning agent not found');
     }
 
     const response = await agent.stream([
       {
-        role: "user",
+        role: 'user',
         content: prompt,
       },
     ]);
 
-    let activitiesText = "";
+    let activitiesText = '';
 
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
@@ -283,9 +280,9 @@ const planIndoorActivities = createStep({
 ```ts
 // workflows/inngest-workflow.ts
 const activityPlanningWorkflow = createWorkflow({
-  id: "activity-planning-workflow-step2-if-else",
+  id: 'activity-planning-workflow-step2-if-else',
   inputSchema: z.object({
-    city: z.string().describe("The city to get the weather for"),
+    city: z.string().describe('The city to get the weather for'),
   }),
   outputSchema: z.object({
     activities: z.string(),
@@ -320,17 +317,17 @@ Register the agents and workflow with the mastra instance. This allows access to
 
 ```ts
 // index.ts
-import { Mastra } from "@mastra/core";
-import { serve as inngestServe } from "@mastra/inngest";
-import { PinoLogger } from "@mastra/loggers";
-import { Inngest } from "inngest";
-import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
-import { planningAgent } from "./agents/planning-agent";
-import { realtimeMiddleware } from "@inngest/realtime/middleware";
+import { Mastra } from '@mastra/core';
+import { serve as inngestServe } from '@mastra/inngest';
+import { PinoLogger } from '@mastra/loggers';
+import { Inngest } from 'inngest';
+import { activityPlanningWorkflow } from './workflows/inngest-workflow';
+import { planningAgent } from './agents/planning-agent';
+import { realtimeMiddleware } from '@inngest/realtime/middleware';
 
 // Create an Inngest instance for workflow orchestration and event handling
 const inngest = new Inngest({
-  id: "mastra",
+  id: 'mastra',
   baseUrl: `http://localhost:8288`, // URL of your local Inngest server
   isDev: true,
   middleware: [realtimeMiddleware()], // Enable real-time updates in the Inngest dashboard
@@ -345,18 +342,18 @@ export const mastra = new Mastra({
     planningAgent,
   },
   server: {
-    host: "0.0.0.0",
+    host: '0.0.0.0',
     apiRoutes: [
       {
-        path: "/api/inngest", // API endpoint for Inngest to send events to
-        method: "ALL",
+        path: '/api/inngest', // API endpoint for Inngest to send events to
+        method: 'ALL',
         createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
       },
     ],
   },
   logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
+    name: 'Mastra',
+    level: 'info',
   }),
 });
 ```
@@ -367,10 +364,10 @@ Here, we'll get the activity planner workflow from the mastra instance, then cre
 
 ```ts
 // exec.ts
-import { mastra } from "./";
-import { serve } from "@hono/node-server";
-import { createHonoServer, getToolExports } from "@mastra/deployer/server";
-import { tools } from "#tools";
+import { mastra } from './';
+import { serve } from '@hono/node-server';
+import { createHonoServer, getToolExports } from '@mastra/deployer/server';
+import { tools } from '#tools';
 
 const app = await createHonoServer(mastra, {
   tools: getToolExports(tools),
@@ -382,12 +379,12 @@ const srv = serve({
   port: 3000,
 });
 
-const workflow = mastra.getWorkflow("activityPlanningWorkflow");
+const workflow = mastra.getWorkflow('activityPlanningWorkflow');
 const run = await workflow.createRun();
 
 // Start the workflow with the required input data (city name)
 // This will trigger the workflow steps and stream the result to the console
-const result = await run.start({ inputData: { city: "New York" } });
+const result = await run.start({ inputData: { city: 'New York' } });
 console.dir(result, { depth: null });
 
 // Close the server after the workflow run is complete
@@ -406,14 +403,14 @@ Control how many workflow instances can run simultaneously:
 
 ```ts
 const workflow = createWorkflow({
-  id: "user-processing-workflow",
+  id: 'user-processing-workflow',
   inputSchema: z.object({ userId: z.string() }),
   outputSchema: z.object({ result: z.string() }),
   steps: [processUserStep],
   // Limit to 10 concurrent executions, scoped by user ID
   concurrency: {
     limit: 10,
-    key: "event.data.userId", // Per-user concurrency
+    key: 'event.data.userId', // Per-user concurrency
   },
 });
 ```
@@ -424,13 +421,13 @@ Limit the number of workflow executions within a time period:
 
 ```ts
 const workflow = createWorkflow({
-  id: "api-sync-workflow",
+  id: 'api-sync-workflow',
   inputSchema: z.object({ endpoint: z.string() }),
   outputSchema: z.object({ status: z.string() }),
   steps: [apiSyncStep],
   // Maximum 1000 executions per hour
   rateLimit: {
-    period: "1h",
+    period: '1h',
     limit: 1000,
   },
 });
@@ -442,15 +439,15 @@ Ensure minimum time between workflow executions:
 
 ```ts
 const workflow = createWorkflow({
-  id: "email-notification-workflow",
+  id: 'email-notification-workflow',
   inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
   outputSchema: z.object({ sent: z.boolean() }),
   steps: [sendEmailStep],
   // Only one execution per 10 seconds per organization
   throttle: {
-    period: "10s",
+    period: '10s',
     limit: 1,
-    key: "event.data.organizationId",
+    key: 'event.data.organizationId',
   },
 });
 ```
@@ -461,14 +458,14 @@ Delay execution until no new events arrive within a time window:
 
 ```ts
 const workflow = createWorkflow({
-  id: "search-index-workflow",
+  id: 'search-index-workflow',
   inputSchema: z.object({ documentId: z.string() }),
   outputSchema: z.object({ indexed: z.boolean() }),
   steps: [indexDocumentStep],
   // Wait 5 seconds of no updates before indexing
   debounce: {
-    period: "5s",
-    key: "event.data.documentId",
+    period: '5s',
+    key: 'event.data.documentId',
   },
 });
 ```
@@ -479,7 +476,7 @@ Set execution priority for workflows:
 
 ```ts
 const workflow = createWorkflow({
-  id: "order-processing-workflow",
+  id: 'order-processing-workflow',
   inputSchema: z.object({
     orderId: z.string(),
     priority: z.number().optional(),
@@ -488,7 +485,7 @@ const workflow = createWorkflow({
   steps: [processOrderStep],
   // Higher priority orders execute first
   priority: {
-    run: "event.data.priority ?? 50", // Dynamic priority, default 50
+    run: 'event.data.priority ?? 50', // Dynamic priority, default 50
   },
 });
 ```
@@ -499,7 +496,7 @@ You can combine multiple flow control features:
 
 ```ts
 const workflow = createWorkflow({
-  id: "comprehensive-workflow",
+  id: 'comprehensive-workflow',
   inputSchema: z.object({
     userId: z.string(),
     organizationId: z.string(),
@@ -510,19 +507,19 @@ const workflow = createWorkflow({
   // Multiple flow control features
   concurrency: {
     limit: 5,
-    key: "event.data.userId",
+    key: 'event.data.userId',
   },
   rateLimit: {
-    period: "1m",
+    period: '1m',
     limit: 100,
   },
   throttle: {
-    period: "10s",
+    period: '10s',
     limit: 1,
-    key: "event.data.organizationId",
+    key: 'event.data.organizationId',
   },
   priority: {
-    run: "event.data.priority ?? 0",
+    run: 'event.data.priority ?? 0',
   },
 });
 ```
