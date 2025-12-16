@@ -486,11 +486,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/v1/deployment/server-deployment",
-      "destination": "/docs/v1/deployment/mastra-server",
-      "permanent": true
-    },
-    {
       "source": "/docs/v1/deployment/building-mastra",
       "destination": "/docs/v1/deployment/mastra-server",
       "permanent": true
