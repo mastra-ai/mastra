@@ -1,500 +1,331 @@
 ---
-title: "Integrate Mastra in your SvelteKit project | Frameworks"
-description: A step-by-step guide to integrating Mastra with SvelteKit.
+title: "SvelteKit | Frameworks"
+description: "Get started with Mastra and SvelteKit"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
 
 # Integrate Mastra in your SvelteKit project
 
-Mastra integrates with SvelteKit, making it easy to:
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to SvelteKit by importing and calling the agent directly from your routes.
 
-- Build flexible APIs to serve AI-powered features
-- Simplify deployment with a unified codebase for frontend and backend
-- Take advantage of SvelteKit's built-in [Actions](https://kit.svelte.dev/docs/form-actions) or [Server Endpoints](https://svelte.dev/docs/kit/routing#server) for efficient server-client workflows
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) to create a beautiful, interactive chat experience.
 
-Use this guide to scaffold and integrate Mastra with your SvelteKit project.
+## Before you begin
 
-<Tabs>
-  <TabItem value="actions" label="Actions">
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
 
-  <Steps>
+## Create a new SvelteKit app (optional)
 
-<StepItem>
+If you already have a SvelteKit app using Tailwind, skip to the next step.
 
-Install Mastra
+Run the following command to [create a new SvelteKit app](https://svelte.dev/docs/kit/creating-a-project):
 
-Install the required packages:
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
 
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy
-    bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-</Tabs>
-
-</StepItem>
-
-<StepItem>
-
-To integrate Mastra into your project, you have two options:
-
-- Use the One-Liner
-
-  Run the following command to quickly scaffold the default Weather agent with sensible defaults:
-
-  ```bash copy
-  npx mastra@beta init --default
-  ```
-
-  > See [mastra init](/reference/v1/cli/create-mastra) for more information.
-
-- Use the Interactive CLI
-
-  If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
-
-  ```bash copy
-  npx mastra@beta init
-  ```
-
-Add the `dev` and `build` scripts to `package.json`:
-
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev",
-    "build:mastra": "mastra build"
-  }
-}
+```bash
+npx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install npm
 ```
 
-</StepItem>
-
-<StepItem>
-
-Modify the `tsconfig.json` file in your project root:
-
-```json title="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
-[Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
-
-```bash title=".env" copy
-VITE_OPENAI_API_KEY=<your-api-key>
-```
-
-</StepItem>
-
-<StepItem>
-
-Add `.mastra` to your `.gitignore` file:
-
-```bash title=".gitignore" copy
-.mastra
-```
-
-</StepItem>
-
-<StepItem>
-
-Update the Mastra Agent
-
-```typescript title="src/mastra/agents/weather-agent.ts"
-import { createOpenAI } from "@ai-sdk/openai";
-
- const openai = createOpenAI({
-   apiKey: import.meta.env?.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
-   compatibility: "strict"
- });
-```
-
-By reading env vars from both `import.meta.env` and `process.env`, we ensure that the API key is available in both the SvelteKit dev server and the Mastra Dev Server.
-
-> More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
-
-</StepItem>
-
-<StepItem>
-
-Start the Mastra Dev Server to expose your agents as REST endpoints:
-
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm run dev:mastra
-    ```
-  </TabItem>
-  <TabItem value="cli" label="CLI">
-    ```bash copy
-    mastra dev:mastra
-    ```
-  </TabItem>
-</Tabs>
-
-> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
-
-</StepItem>
-
-<StepItem>
-
-With the Mastra Dev Server running, you can start your SvelteKit site in the usual way.
-
-</StepItem>
-
-<StepItem>
-
-```bash copy
-mkdir src/routes/test
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a new Action, and add the example code:
-
-```bash copy
-touch src/routes/test/+page.server.ts
-```
-
-```typescript title="src/routes/test/+page.server.ts" showLineNumbers copy
-import type { Actions } from "./$types";
-import { mastra } from "../../mastra";
-
-export const actions = {
-  default: async (event) => {
-    const city = (await event.request.formData()).get("city")!.toString();
-    const agent = mastra.getAgent("weatherAgent");
-
-    const result = await agent.generate(`What's the weather like in ${city}?`);
-    return { result: result.text };
-  },
-} satisfies Actions;
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a new Page file, and add the example code:
-
-```bash copy
-touch src/routes/test/+page.svelte
-```
-
-```typescript title="src/routes/test/+page.svelte" showLineNumbers copy
-<script lang="ts">
-	import type { PageProps} from './$types';
-	let { form }: PageProps = $props();
-</script>
-
-<h1>Test</h1>
-
-<form method="POST">
-	<input name="city" placeholder="Enter city" required />
-	<button type="submit">Get Weather</button>
-</form>
-
-{#if form?.result}
-	<pre>{form.result}</pre>
-{/if}
-
-```
-
-> You can now navigate to `/test` in your browser to try it out.
-
-Submitting **London** as the city would return a result similar to:
-
-```plaintext
-The current weather in London is as follows:
-
-- **Temperature:** 16°C (feels like 13.8°C)
-- **Humidity:** 62%
-- **Wind Speed:** 12.6 km/h
-- **Wind Gusts:** 32.4 km/h
-- **Conditions:** Overcast
-
-If you need more details or information about a different location, feel free to ask!
-```
-
-</StepItem>
-
-  </Steps>
 </TabItem>
+<TabItem value="pnpm" label="pnpm">
 
-<TabItem value="server-endpoints" label="Server Endpoints">
+```bash
+pnpm dlx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install pnpm
+```
 
-  <Steps>
+</TabItem>
+<TabItem value="yarn" label="yarn">
 
-<StepItem>
+```bash
+yarn dlx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install yarn
+```
 
-Install the required packages:
+</TabItem>
+<TabItem value="bun" label="bun">
 
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy
-    bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
+```bash
+bun dlx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install bun
+```
+
+</TabItem>
 </Tabs>
 
-</StepItem>
+This creates a project called `mastra-svelte`, but you can replace it with any name you want. Tailwind was added for styling purposes later on.
 
-<StepItem>
+## Initialize Mastra
 
-To integrate Mastra into your project, you have two options:
+`cd` into your SvelteKit project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
 
-- Use the One-Liner
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-  Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
 
-  ```bash copy
-  npx mastra@beta init --default
-  ```
+```bash
+cd mastra-svelte
+npx mastra@beta init
+```
 
-  > See [mastra init](/reference/v1/cli/create-mastra) for more information.
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
 
-- Use the Interactive CLI
+```bash
+cd mastra-svelte
+pnpm dlx mastra@beta init
+```
 
-  If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
+</TabItem>
+<TabItem value="yarn" label="yarn">
 
-  ```bash copy
-  npx mastra@beta init
-  ```
+```bash
+cd mastra-svelte
+yarn dlx mastra@beta init
+```
 
-Add the `dev` and `build` scripts to `package.json`:
+</TabItem>
+<TabItem value="bun" label="bun">
 
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev",
-    "build:mastra": "mastra build"
+```bash
+cd mastra-svelte
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your SvelteKit routes in the next steps.
+
+## Install AI SDK UI
+
+Install AI SDK UI along with the Mastra adapter:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm install @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm add @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun add @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+</Tabs>
+
+## Create a chat route
+
+Create `src/routes/api/chat/+server.ts`:
+
+```ts title="src/routes/api/chat/+server.ts"
+import type { RequestHandler } from "./$types";
+import { handleChatStream } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+import { createUIMessageStreamResponse } from "ai";
+import { mastra } from "../../../mastra";
+
+const THREAD_ID = "example-user-id";
+const RESOURCE_ID = "weather-chat";
+
+export const POST: RequestHandler = async ({ request }) => {
+  const params = await request.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: "weather-agent",
+    params: {
+      ...params,
+      memory: {
+        ...params.memory,
+        threadId: THREAD_ID,
+        resourceId: RESOURCE_ID,
+      },
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream });
+};
+
+export const GET: RequestHandler = async () => {
+  const memory = await mastra.getAgentById("weather-agent").getMemory();
+  let response = null;
+
+  try {
+    response = await memory?.recall({
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+    });
+  } catch {
+    console.log("No previous messages found.");
   }
-}
+
+  const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+  return Response.json(uiMessages);
+};
 ```
 
-</StepItem>
+The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
 
-<StepItem>
+In order for the `GET` handler to be called, you need to create a `src/routes/+page.ts` file. Its `load()` function runs alongside `+page.svelte`.
 
-Modify the `tsconfig.json` file in your project root:
+```ts title="src/routes/+page.ts"
+import type { UIDataTypes, UIMessage, UITools } from "ai";
+import type { PageLoad } from "./$types";
 
-```json title="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
+export const load: PageLoad = async ({ fetch }) => {
+  const response = await fetch("/api/chat");
+  const initialMessages = (await response.json()) as UIMessage<
+    unknown,
+    UIDataTypes,
+    UITools
+  >[];
+  return { initialMessages };
+};
 ```
 
-</StepItem>
+## Add the chat UI
 
-<StepItem>
+Replace `src/routes/+page.svelte` with the following.
 
-The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
-[Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
-
-```bash title=".env" copy
-VITE_OPENAI_API_KEY=<your-api-key>
-```
-
-</StepItem>
-
-<StepItem>
-
-Add `.mastra` to your `.gitignore` file:
-
-```bash title=".gitignore" copy
-.mastra
-```
-
-</StepItem>
-
-<StepItem>
-
-Update the Mastra Agent
-
-```typescript title="src/mastra/agents/weather-agent.ts"
-import { createOpenAI } from "@ai-sdk/openai";
-
-const openai = createOpenAI({
-   apiKey: import.meta.env?.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
-   compatibility: "strict"
- });
-```
-
-By reading env vars from both `import.meta.env` and `process.env`, we ensure that the API key is available in both the SvelteKit dev server and the Mastra Dev Server.
-
-> More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
-
-</StepItem>
-
-<StepItem>
-
-Start the Mastra Dev Server to expose your agents as REST endpoints:
-
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm run dev:mastra
-    ```
-  </TabItem>
-  <TabItem value="cli" label="CLI">
-    ```bash copy
-    mastra dev:mastra
-    ```
-  </TabItem>
-</Tabs>
-
-> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
-
-</StepItem>
-
-<StepItem>
-
-With the Mastra Dev Server running, you can start your SvelteKit site in the usual way.
-
-</StepItem>
-
-<StepItem>
-
-```bash copy
-mkdir src/routes/weather-api
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a new Endpoint, and add the example code:
-
-```bash copy
-touch src/routes/weather-api/+server.ts
-```
-
-```typescript title="src/routes/weather-api/+server.ts" showLineNumbers copy
-import { json } from "@sveltejs/kit";
-import { mastra } from "../../mastra";
-
-export async function POST({ request }) {
-  const { city } = await request.json();
-
-  const response = await mastra
-    .getAgent("weatherAgent")
-    .generate(`What's the weather like in ${city}?`);
-
-  return json({ result: response.text });
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a new Page, and add the example code:
-
-```bash copy
-touch src/routes/weather-api-test/+page.svelte
-```
-
-```typescript title="src/routes/weather-api-test/+page.svelte" showLineNumbers copy
+```html title="src/routes/+page.svelte"
 <script lang="ts">
-	let result = $state<string | null>(null);
-	async function handleFormSubmit(event: Event) {
-		event.preventDefault();
-		const formData = new FormData(event.currentTarget);
-		const city = formData.get('city')?.toString();
-		if (city) {
-			const response = await fetch('/weather-api', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ city })
-			});
-			const data = await response.json();
-			result = data.result;
-		}
-	}
+  import { Chat } from '@ai-sdk/svelte';
+  import { DefaultChatTransport, type ToolUIPart } from 'ai';
+
+  let input = $state('');
+  const { data } = $props();
+  // let messages = $derived(data.initialMessages)
+
+  const chat = new Chat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat'
+    }),
+    /* TODO: Enable once new beta is out
+    get messages() {
+      return messages;
+    }
+    */
+  });
+
+  function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    chat.sendMessage({ text: input });
+    input = '';
+  }
+
+  const STATE_TO_LABEL_MAP: Record<ToolUIPart["state"], string> = {
+    "input-streaming": "Pending",
+    "input-available": "Running",
+    // @ts-expect-error - Only available in AI SDK v6
+    "approval-requested": "Awaiting Approval",
+    "approval-responded": "Responded",
+    "output-available": "Completed",
+    "output-error": "Error",
+    "output-denied": "Denied",
+  };
 </script>
 
-<h1>Test</h1>
-<form method="POST" onsubmit={handleFormSubmit}>
-	<input name="city" placeholder="Enter city" required />
-	<button type="submit">Get Weather</button>
-</form>
-
-{#if result}
-	<pre>{result}</pre>
-{/if}
+<main class="max-w-3xl mx-auto p-6 size-full h-screen">
+  <div class="flex flex-col h-full">
+    <div class="flex-1 min-h-0 overflow-y-auto" data-name="conversation">
+      <div data-name="conversation-content" class="flex flex-col gap-8">
+        {#each chat.messages as message, messageIndex (messageIndex)}
+          <div>
+            {#each message.parts as part, partIndex (partIndex)}
+              {#if part.type === 'text'}
+                <div data-name="message" class={[message.role === 'user' && 'ml-auto justify-end', 'group flex w-full max-w-[95%] flex-col gap-2', message.role === 'user' ? 'is-user' : 'is-assistant']}>
+                  <div data-name="message-content" class={["is-user:dark flex w-fit max-w-full min-w-0 flex-col gap-2 overflow-hidden text-sm",
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-blue-100 group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
+      "group-[.is-assistant]:text-foreground"]}>
+                    <div data-name="message-response" class="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                      {part.text}
+                    </div>
+                  </div>
+                </div>
+              {:else if part.type.startsWith('tool-')}
+                <div data-name="tool" class="not-prose mb-6 w-full rounded-lg border border-gray-300 shadow">
+                  <details data-name="tool-header" class="w-full p-3 hover:cursor-pointer">
+                    <summary class="font-medium text-sm">{(part as ToolUIPart).type.split("-").slice(1).join("-")} - {STATE_TO_LABEL_MAP[(part as ToolUIPart).state ?? 'output-available']}</summary>
+                    <div data-name="tool-content" class="">
+                      <div data-name="tool-input" class="space-y-2 overflow-hidden py-4">
+                        <div class="font-medium text-muted-foreground text-xs uppercase tracking-wide">Parameters</div>
+                        <pre class="w-full overflow-x-auto rounded-md border border-gray-300 bg-gray-50 p-3 text-sm"><code>{JSON.stringify((part as ToolUIPart).input, null, 2)}</code></pre>
+                      </div>
+                      <div data-name="tool-output" class="space-y-2 overflow-hidden py-4">
+                        <div class="font-medium text-muted-foreground text-xs uppercase tracking-wide">{(part as ToolUIPart).errorText ? 'Error' : 'Result'}</div>
+                        <pre class="w-full overflow-x-auto rounded-md border border-gray-300 bg-gray-50 p-3 text-sm"><code>{JSON.stringify((part as ToolUIPart).output, null, 2)}</code></pre>
+                        {#if (part as ToolUIPart).errorText}
+                          <div data-name="tool-error" class="text-red-600">
+                            {(part as ToolUIPart).errorText}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/each}
+      </div>
+    </div>
+    <form class="w-full grid grid-cols-[1fr_auto] gap-6 shrink-0 pt-4" onsubmit={handleSubmit} data-name="prompt-input">
+      <input name="chat-input" class="rounded-lg border border-gray-300 shadow h-10" placeholder="City name" bind:value={input} />
+      <button class="bg-blue-600 text-white shadow-lg border border-blue-400 px-4 whitespace-nowrap rounded-lg text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" type="submit">Send</button>
+    </form>
+  </div>
+</main>
 ```
 
-> You can now navigate to `/weather-api-test` in your browser to try it out.
+This page connects [`Chat`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
 
-Submitting **London** as the city would return a result similar to:
+It renders the response text using custom message and tool components.
 
-```plaintext
-The current weather in London is as follows:
+## Test your agent
 
-- **Temperature:** 16.1°C (feels like 14.2°C)
-- **Humidity:** 64%
-- **Wind Speed:** 11.9 km/h
-- **Wind Gusts:** 30.6 km/h
-- **Conditions:** Overcast
+1. Run your SvelteKit app with `npm run dev`
+2. Open the chat at http://localhost:5173
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
-If you need more details or information about a different location, feel free to ask!
-```
+## Next steps
 
-</StepItem>
+Congratulations on building your Mastra agent with SvelteKit! 🎉
 
-  </Steps>
-  </TabItem>
-</Tabs>
+From here, you can extend the project with your own tools and logic:
 
-## Next steps
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
 
-- [Monorepo Deployment](/docs/v1/deployment/monorepo)
+When you're ready, read more about how Mastra integrates with AI SDK UI and SvelteKit, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)
+- Try the [unofficial Svelte AI Elements](https://svelte-ai-elements.vercel.app/)

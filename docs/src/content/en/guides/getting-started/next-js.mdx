@@ -212,7 +212,7 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
-  const memory = await mastra.getAgent('weatherAgent').getMemory()
+  const memory = await mastra.getAgentById('weather-agent').getMemory()
   let response = null
   
   try {
@@ -230,7 +230,7 @@ export async function GET() {
 }
 ```
 
-The POST route accepts a prompt and streams the agent's response back in AI SDK format, while the GET route fetches message history from memory so the UI can be hydrated when the client reloads.
+The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
 
 ## Create a chat page
 
@@ -361,7 +361,6 @@ export default Chat;
 This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
 
 It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
-
 
 ## Test your agent
 
