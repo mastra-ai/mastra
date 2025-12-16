@@ -372,11 +372,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     // Create a single workflow with all processors chained
     // Mark it as a processor workflow type
+    // validateInputs is disabled because ProcessorStepSchema contains z.custom() fields
+    // that may hold user-provided Zod schemas. When users use Zod 4 schemas while Mastra
+    // uses Zod 3 internally, validation fails due to incompatible internal structures.
     let workflow = createWorkflow({
       id: workflowId,
       inputSchema: ProcessorStepSchema,
       outputSchema: ProcessorStepSchema,
       type: 'processor',
+      options: { validateInputs: false },
     });
 
     for (const processorOrWorkflow of validProcessors) {
@@ -2692,6 +2696,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       saveQueueManager,
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
+      toolCallConcurrency: options.toolCallConcurrency,
       resumeContext,
       agentId: this.id,
       agentName: this.name,
@@ -2906,6 +2911,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
     const requestContextToUse = options?.requestContext || new RequestContext();
 
+    // Reserved keys from requestContext take precedence for security.
+    // This allows middleware to securely set resourceId/threadId based on authenticated user,
+    // preventing attackers from hijacking another user's memory by passing different values in the body.
+    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+
+    const threadId =
+      threadIdFromContext ||
+      (typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id);
+    const resourceId = resourceIdFromContext || options?.memory?.resource;
+
     return await networkLoop({
       networkName: this.name,
       requestContext: requestContextToUse,
@@ -2918,8 +2934,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       generateId: () => this.#mastra?.generateId() || randomUUID(),
       maxIterations: options?.maxSteps || 1,
       messages,
-      threadId: typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id,
-      resourceId: options?.memory?.resource,
+      threadId,
+      resourceId,
     });
   }
 

@@ -4,9 +4,8 @@ import type {
   LanguageModelV1 as LanguageModel,
   StreamObjectOnFinishCallback,
   StreamTextOnFinishCallback,
-  Schema,
 } from '@internal/ai-sdk-v4';
-import type { JSONSchema7 } from '@mastra/schema-compat';
+import type { JSONSchema7, Schema } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -111,7 +110,7 @@ export class MastraLLMV1 extends MastraBase {
     }
 
     return applyCompatLayer({
-      schema: schema as Schema | ZodSchema,
+      schema: schema,
       compatLayers: schemaCompatLayers,
       mode: 'aiSdkSchema',
     });
@@ -156,12 +155,11 @@ export class MastraLLMV1 extends MastraBase {
           schema = schema._def.type as z.ZodType<inferOutput<Z>>;
         }
 
-        let jsonSchemaToUse;
-        jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7') as JSONSchema7;
+        const jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7');
 
-        schema = jsonSchema(jsonSchemaToUse) as Schema<inferOutput<Z>>;
+        schema = jsonSchema<inferOutput<Z>>(jsonSchemaToUse);
       } else {
-        schema = jsonSchema(experimental_output as JSONSchema7) as Schema<inferOutput<Z>>;
+        schema = jsonSchema<inferOutput<Z>>(experimental_output);
       }
     }
 

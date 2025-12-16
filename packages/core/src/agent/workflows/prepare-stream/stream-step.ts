@@ -16,6 +16,7 @@ interface StreamStepOptions {
   runId: string;
   returnScorerData?: boolean;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
@@ -35,6 +36,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   runId,
   returnScorerData,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
   agentName,
@@ -78,6 +80,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
         returnScorerData,
         tracingContext,
         requireToolApproval,
+        toolCallConcurrency,
         resumeContext,
         _internal: {
           generateId: capabilities.generateMessageId,
