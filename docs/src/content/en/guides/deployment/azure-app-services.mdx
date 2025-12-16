@@ -17,6 +17,10 @@ For more information on how to create a new Mastra application,
 refer to our [getting started guide](/guides/v1/getting-started/quickstart)
 :::
 
+:::warning
+Azure App Services uses an ephemeral filesystem for some pricing tiers. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
 ## Prerequisites
 
 - An [Azure account](https://azure.microsoft.com/) with an active subscription
@@ -150,12 +154,6 @@ const mastraClient = new MastraClient({
   baseUrl: "https://<your-app-name>.azurewebsites.net",
 });
 ```
-
-:::note
-Azure App Services uses an ephemeral file system for some pricing tiers.
-For production applications, avoid using Mastra storage providers that rely on the local file system,
-such as `LibSQLStore` with a file URL. Consider using cloud-based storage solutions instead.
-:::
 
 ## Next steps
 

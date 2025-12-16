@@ -97,11 +97,8 @@ Deployment
 
 You can now access your deployed application at the URL provided by Digital Ocean.
 
-:::note
-The Digital Ocean App Platform uses an ephemeral file system,
-meaning that any files written to the file system are short-lived and may be lost.
-Avoid using a Mastra storage provider that uses the file system,
-such as `LibSQLStore` with a file URL.
+:::warning
+The Digital Ocean App Platform uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
   </TabItem>
