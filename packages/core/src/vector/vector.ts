@@ -20,7 +20,7 @@ import type {
 /** Legacy embedding model (V1) - use embedV1 function */
 export type MastraLegacyEmbeddingModel<T> = EmbeddingModelV1<T>;
 
-/** Modern embedding model (V2/V3) - use embedV2 function */
+/** Modern embedding model (V2/V3) - use embedV2 for V2 models, embedV3 for V3 models */
 export type MastraSupportedEmbeddingModel<T> = EmbeddingModelV2<T> | EmbeddingModelV3;
 
 /** All supported embedding model types */
@@ -31,7 +31,7 @@ export const supportedEmbeddingModelSpecifications = ['v2', 'v3'] as const;
 
 /**
  * Type guard to check if an embedding model is a supported modern version (V2 or V3).
- * Modern models use the embedV2 function, while legacy V1 models use embedV1.
+ * Use embedV2 for V2 models, embedV3 for V3 models, and embedV1 for legacy V1 models.
  */
 export const isSupportedEmbeddingModel = <T>(
   model: MastraEmbeddingModel<T>,
