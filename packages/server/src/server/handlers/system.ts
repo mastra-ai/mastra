@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import type { MastraPackage } from '../schemas/system';
 import { systemPackagesResponseSchema } from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -13,13 +15,14 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   tags: ['System'],
   handler: async () => {
     try {
-      const packagesEnv = process.env.MASTRA_PACKAGES;
+      const packagesFilePath = process.env.MASTRA_PACKAGES_FILE;
 
       let packages: MastraPackage[] = [];
 
-      if (packagesEnv) {
+      if (packagesFilePath) {
         try {
-          packages = JSON.parse(packagesEnv);
+          const fileContent = readFileSync(packagesFilePath, 'utf-8');
+          packages = JSON.parse(fileContent);
         } catch {
           packages = [];
         }
