@@ -14,49 +14,44 @@ Mastra can run against any of these runtime environments:
 - Node.js `v22.13.0` or later
 - Bun
 - Deno
-- [Cloudflare](/guides/v1/deployment/cloudflare-deployer)
+- Cloudflare
 
 ## Deployment Options
 
 ### Mastra Server
 
-Mastra provides a [Mastra server](/docs/v1/server/mastra-server) powered by Hono that can be deployed independently.
-
-- Custom API routes and middleware
-- Configurable CORS and authentication
-- Deploy to VMs, containers, or PaaS platforms
-- Integrate with existing Node.js applications
+Mastra provides a [server](/docs/v1/server/mastra-server) powered by Hono that can be deployed independently. Use the the `mastra build` command to build your application and deploy the output to your preferred VM, container, or PaaS platform.
 
 [Deploy a Mastra Server →](./building-mastra)
 
 ### Monorepo
 
-Deploy Mastra as part of a monorepo setup, following the same approach as standalone deployment.
+Deploy a Mastra server as part of a monorepo setup, following the same approach as standalone deployment.
 
 [Deploy in a Monorepo →](./monorepo)
 
+### Cloud Providers
+
+Mastra applications can be deployed to cloud providers and serverless platforms. Mastra includes optional built-in deployers for Vercel, Netlify, and Cloudflare to automate the build and deployment process.
+
+- [Amazon EC2 →](/guides/v1/deployment/amazon-ec2)
+- [AWS Lambda →](/guides/v1/deployment/aws-lambda)
+- [Azure App Services →](/guides/v1/deployment/azure-app-services)
+- [Cloudflare →](/guides/v1/deployment/cloudflare-deployer)
+- [Digital Ocean →](/guides/v1/deployment/digital-ocean)
+- [Netlify →](/guides/v1/deployment/netlify-deployer)
+- [Vercel →](/guides/v1/deployment/vercel-deployer)
+
 ### Web Framework
 
-Mastra can be integrated with a variety of web frameworks. When integrated with a framework, Mastra typically requires no additional configuration for deployment.
+When Mastra is integrated with a web framework, it deploys alongside your application using the framework's standard deployment process. The guides below cover framework-specific configuration requirements for deployment:
 
 - [With Next.js on Vercel →](./web-framework#with-nextjs-on-vercel)
 - [With Astro on Vercel →](./web-framework#with-astro-on-vercel)
 - [With Astro on Netlify →](./web-framework#with-astro-on-netlify)
 
-### Cloud Providers
-
-Mastra applications can be deployed to cloud providers like AWS, Azure, Digital Ocean, Vercel, and Netlify. Mastra includes optional built-in deployers for some platforms to streamline the deployment process.
-
-[Deploy to Cloud Providers →](./cloud-providers)
-
 ### Mastra Cloud
 
-Mastra Cloud is a deployment platform that connects to your GitHub repository, automatically deploys on code changes, and provides monitoring tools. It includes:
+We're building Mastra Cloud to be the easiest place to deploy and observe your Mastra agents. It's currently in beta.
 
-- GitHub repository integration
-- Deployment on git push
-- Agent testing interface
-- Comprehensive logs and traces
-- Custom domains for each project
-
-[View Mastra Cloud documentation →](/docs/v1/mastra-cloud/overview)
+[Read more about Mastra Cloud →](/docs/v1/mastra-cloud/overview)

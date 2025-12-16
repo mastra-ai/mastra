@@ -406,13 +406,13 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "deployment/web-framework",
-          label: "Web Framework",
+          id: "deployment/cloud-providers",
+          label: "Cloud Providers",
         },
         {
           type: "doc",
-          id: "deployment/cloud-providers",
-          label: "Cloud Providers",
+          id: "deployment/web-framework",
+          label: "Web Framework",
         },
       ],
     },
