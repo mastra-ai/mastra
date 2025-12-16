@@ -3,20 +3,20 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.29.7",
+    "@changesets/cli": "^2.29.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "changesets-changelog-github-local": "^1.0.1",
-    "dotenv": "17.2.0",
+    "dotenv": "17.2.3",
     "husky": "^9.1.7",
-    "lint-staged": "^16.1.6",
+    "lint-staged": "^16.2.7",
     "npm-run-all2": "^8.0.4",
     "path-to-regexp": "^8.3.0",
-    "prettier": "^3.6.2",
-    "semver": "^7.7.2",
-    "turbo": "^2.5.8",
-    "typescript": "^5.8.3",
+    "prettier": "^3.7.4",
+    "semver": "^7.7.3",
+    "turbo": "^2.6.3",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "private": true,
@@ -103,7 +103,7 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.18.2",
   "dependencies": {
-    "globby": "^14.1.0",
+    "globby": "^16.0.0",
     "resolve-from": "^5.0.0"
   }
 }

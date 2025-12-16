@@ -31,13 +31,13 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.5",
-    "uuid": "^11.1.0",
+    "@modelcontextprotocol/sdk": "^1.25.0",
+    "uuid": "^13.0.0",
     "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.24.6"
+    "zod-to-json-schema": "^3.25.0"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.6",
+    "@hono/node-server": "^1.19.7",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -47,11 +47,11 @@
     "@vitest/ui": "catalog:",
     "@wong2/mcp-cli": "^1.13.0",
     "cross-env": "^10.1.0",
-    "eslint": "^9.37.0",
-    "hono": "^4.10.5",
-    "tsup": "^8.5.0",
-    "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
+    "eslint": "^9.39.2",
+    "hono": "^4.11.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "peerDependencies": {

@@ -16,22 +16,22 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@changesets/assemble-release-plan": "^6.0.9",
-    "@changesets/config": "^3.1.1",
+    "@changesets/config": "^3.1.2",
     "@changesets/git": "^3.0.4",
-    "@changesets/read": "^0.6.5",
+    "@changesets/read": "^0.6.6",
     "@changesets/types": "^6.1.0",
     "@changesets/write": "^0.4.0",
     "@clack/prompts": "1.0.0-alpha.6",
-    "@inquirer/editor": "^4.2.23",
-    "@manypkg/get-packages": "^2.2.2",
+    "@inquirer/editor": "^5.0.3",
+    "@manypkg/get-packages": "^3.1.0",
     "@manypkg/tools": "^2.1.0",
     "@octokit/rest": "^22.0.1",
     "citty": "^0.1.6",
     "dotenv": "^17.2.3",
-    "execa": "^9.6.0",
+    "execa": "^9.6.1",
     "mri": "^1.2.0",
     "picocolors": "^1.1.1",
-    "semver": "^7.7.2"
+    "semver": "^7.7.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -39,9 +39,9 @@
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.8.3",
+    "eslint": "^9.39.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   }
 }

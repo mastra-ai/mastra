@@ -59,9 +59,9 @@
   "license": "Apache-2.0",
   "dependencies": {
     "json-schema-to-zod": "^2.7.0",
-    "zod-from-json-schema": "^0.5.0",
+    "zod-from-json-schema": "^0.5.2",
     "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5",
-    "zod-to-json-schema": "^3.24.6"
+    "zod-to-json-schema": "^3.25.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
@@ -74,9 +74,9 @@
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "eslint": "^9.39.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },

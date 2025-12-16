@@ -23,11 +23,11 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@microsoft/api-extractor": "^7.55.2",
-    "globby": "^14.1.0",
+    "globby": "^16.0.0",
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",

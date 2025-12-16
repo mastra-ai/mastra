@@ -16,9 +16,9 @@ packages:
   - explorations/agent-builder-gh-repro
 
 catalog:
-  '@vitest/coverage-v8': 4.0.12
-  '@vitest/ui': 4.0.12
-  vitest: 4.0.12
+  '@vitest/coverage-v8': 4.0.15
+  '@vitest/ui': 4.0.15
+  vitest: 4.0.15
 
 patchedDependencies:
   '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
