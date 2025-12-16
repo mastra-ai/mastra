@@ -231,10 +231,10 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
       const parsedContext = contextValue.trim() ? JSON.parse(contextValue) : {};
       const parsedNestedContext = nestedContextValue.trim() ? JSON.parse(nestedContextValue) : {};
 
-      const { runId } = await createWorkflowRun({ workflowId, prevRunId });
+      const run = await createWorkflowRun({ workflowId, prevRunId });
 
       const payload = {
-        runId,
+        runId: run.runId,
         workflowId,
         step: stepKey,
         inputData: data,

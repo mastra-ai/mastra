@@ -14,7 +14,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 
 ## EN - docs
 - [Adding Voice to Agents | Agents](https://mastra.ai/en/docs/agents/adding-voice)
-- [Agent Approval | Agents](https://mastra.ai/en/docs/agents/agent-approval): Learn how to require approvals and suspend tool execution while keeping humans in control of agent workflows.
+- [Agent Approval | Agents](https://mastra.ai/en/docs/agents/agent-approval): Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
 - [Agent Memory | Agents](https://mastra.ai/en/docs/agents/agent-memory): Learn how to add memory to agents to store conversation history and maintain context across interactions.
 - [Guardrails | Agents](https://mastra.ai/en/docs/agents/guardrails): Learn how to implement guardrails using input and output processors to secure and control AI interactions.
 - [Agent Networks | Agents](https://mastra.ai/en/docs/agents/networks): Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
@@ -134,6 +134,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Using CopilotKit | Frameworks](https://mastra.ai/en/guides/build-your-ui/copilotkit): Learn how to integrate CopilotKit with Mastra
 - [Integrate Mastra in your Astro project | Frameworks](https://mastra.ai/en/guides/getting-started/astro): A step-by-step guide to integrating Mastra with Astro.
 - [Express | Frameworks](https://mastra.ai/en/guides/getting-started/express): Get started with Mastra and Express
+- [Hono | Frameworks](https://mastra.ai/en/guides/getting-started/hono): Get started with Mastra and Hono
 - [Next.js | Frameworks](https://mastra.ai/en/guides/getting-started/next-js): Get started with Mastra and Next.js
 - [Quickstart](https://mastra.ai/en/guides/getting-started/quickstart): Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
 - [Integrate Mastra in your SvelteKit project | Frameworks](https://mastra.ai/en/guides/getting-started/sveltekit): A step-by-step guide to integrating Mastra with SvelteKit.

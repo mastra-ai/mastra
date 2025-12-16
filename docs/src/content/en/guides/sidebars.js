@@ -43,6 +43,11 @@ const sidebars = {
           id: "getting-started/express",
           label: "Express",
         },
+        {
+          type: "doc",
+          id: "getting-started/hono",
+          label: "Hono",
+        },
       ],
     },
     {
