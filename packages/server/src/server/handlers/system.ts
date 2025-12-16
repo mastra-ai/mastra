@@ -1,4 +1,5 @@
-import { systemPackagesResponseSchema, type MastraPackage } from '../schemas/system';
+import type { MastraPackage } from '../schemas/system';
+import { systemPackagesResponseSchema } from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
