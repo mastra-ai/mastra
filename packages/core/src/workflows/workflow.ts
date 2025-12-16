@@ -2589,7 +2589,10 @@ export class Run<
           unwatch();
 
           try {
-            controller.close();
+            // only close when not yet closed
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
           } catch (err) {
             console.error('Error closing stream:', err);
           }
@@ -2750,7 +2753,10 @@ export class Run<
           unwatch();
 
           try {
-            controller.close();
+            // only close when not yet closed
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
           } catch (err) {
             console.error('Error closing stream:', err);
           }
@@ -3396,7 +3402,10 @@ export class Run<
           unwatch();
 
           try {
-            controller.close();
+            // only close when not yet closed
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
           } catch (err) {
             console.error('Error closing stream:', err);
           }
