@@ -1,6 +1,5 @@
-import { isSupportedEmbeddingModel } from '@mastra/core/vector';
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
-import { embedV1, embedV3 } from '@mastra/core/vector';
+import { isSupportedEmbeddingModel, embedV1, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import type { DatabaseConfig, ProviderOptions } from '../tools/types';
 
