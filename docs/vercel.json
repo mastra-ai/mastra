@@ -11,56 +11,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/deployment/serverless-platforms/cloudflare-deployer",
-      "destination": "/docs/deployment/cloud-providers/cloudflare-deployer",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/index",
-      "destination": "/docs/deployment/cloud-providers",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms",
-      "destination": "/docs/deployment/cloud-providers",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/netlify-deployer",
-      "destination": "/docs/deployment/cloud-providers/netlify-deployer",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/vercel-deployer",
-      "destination": "/docs/deployment/cloud-providers/vercel-deployer",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/dashboard",
-      "destination": "/docs/deployment/mastra-cloud/dashboard",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/observability",
-      "destination": "/docs/deployment/mastra-cloud/observability",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/overview",
-      "destination": "/docs/deployment/mastra-cloud/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/setting-up",
-      "destination": "/docs/deployment/mastra-cloud/setting-up",
-      "permanent": true
-    },
-    {
-      "source": "/docs/server-db/production-server",
-      "destination": "/docs/v1/server/mastra-server",
-      "permanent": true
-    },
-    {
       "source": "/docs/v1/getting-started/installation",
       "destination": "/guides/v1/getting-started/quickstart",
       "permanent": true
