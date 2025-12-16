@@ -74,7 +74,7 @@ import { z } from "zod";
 const orderWorkflow = createWorkflow({
   id: 'order-processing',
   inputSchema: z.object({ orderId: z.string() }),
-  outputSchema: z.object({ status: z.string() }),
+  outputSchema: z.object({ orderId: z.string(), status: z.string() }),
   options: {
     onFinish: async (result) => {
       await db.updateOrderStatus(result.result?.orderId, result.status);
