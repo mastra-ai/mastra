@@ -63,7 +63,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "catalog:",
-    "zod": "^3.25.76"
+    "zod": "catalog:"
   },
   "engines": {
     "node": ">=22.13.0"

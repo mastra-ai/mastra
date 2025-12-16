@@ -24,7 +24,7 @@
     "@mastra/pg": "latest",
     "dotenv": "^16.4.7",
     "json-schema": "^0.4.0",
-    "zod": "^3.25.76"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "latest",

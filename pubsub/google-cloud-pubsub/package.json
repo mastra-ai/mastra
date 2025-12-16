@@ -33,7 +33,7 @@
     "@inngest/realtime": "^0.4.5",
     "@opentelemetry/api": "^1.9.0",
     "inngest": "^3.44.2",
-    "zod": "^3.25.76"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
