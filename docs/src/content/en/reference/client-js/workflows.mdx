@@ -48,7 +48,15 @@ const run = await workflow.createRun();
 
 // Or with an existing runId
 const run = await workflow.createRun({ runId: "existing-run-id" });
+
+// Or with a resourceId to associate the run with a specific resource
+const run = await workflow.createRun({
+  runId: "my-run-id",
+  resourceId: "user-123"
+});
 ```
+
+The `resourceId` parameter associates the workflow run with a specific resource (e.g., user ID, tenant ID). This value is persisted with the run and can be used for filtering and querying runs later.
 
 ### startAsync()
 
@@ -79,6 +87,29 @@ const result = await run.startAsync({
 ```
 
 The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+
+To associate a run with a specific resource, pass `resourceId` to `createRun()`:
+
+```typescript
+const run = await workflow.createRun({ resourceId: "user-123" });
+
+const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+});
+```
+
+Alternatively, you can call `workflow.startAsync()` directly with `resourceId`:
+
+```typescript
+const result = await workflow.startAsync({
+  inputData: {
+    city: "New York",
+  },
+  resourceId: "user-123",
+});
+```
 
 ### start()
 
