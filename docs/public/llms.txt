@@ -134,6 +134,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Using CopilotKit | Frameworks](https://mastra.ai/en/guides/build-your-ui/copilotkit): Learn how to integrate CopilotKit with Mastra
 - [Integrate Mastra in your Astro project | Frameworks](https://mastra.ai/en/guides/getting-started/astro): A step-by-step guide to integrating Mastra with Astro.
 - [Express | Frameworks](https://mastra.ai/en/guides/getting-started/express): Get started with Mastra and Express
+- [Hono | Frameworks](https://mastra.ai/en/guides/getting-started/hono): Get started with Mastra and Hono
 - [Next.js | Frameworks](https://mastra.ai/en/guides/getting-started/next-js): Get started with Mastra and Next.js
 - [Quickstart](https://mastra.ai/en/guides/getting-started/quickstart): Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
 - [Integrate Mastra in your SvelteKit project | Frameworks](https://mastra.ai/en/guides/getting-started/sveltekit): A step-by-step guide to integrating Mastra with SvelteKit.

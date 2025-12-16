@@ -125,9 +125,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults,
     requestContext,
   }: ProcessorArgs) {
+    // Preserve resourceId from existing snapshot if present
+    const existingRun = await this.mastra.getStorage()?.getWorkflowRunById({ runId, workflowName: workflow.id });
+    const resourceId = existingRun?.resourceId;
+
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
       runId,
+      resourceId,
       snapshot: {
         activePaths: [],
         suspendedPaths: {},

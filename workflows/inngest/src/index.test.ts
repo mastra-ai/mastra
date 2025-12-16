@@ -364,6 +364,153 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
+    it('should execute multiple runs of a workflow', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state, setState, requestContext }) => {
+          const newState = state.value + '!!!';
+          const testValue = requestContext.get('testKey');
+          requestContext.set('randomKey', newState + testValue);
+          await setState({ value: newState });
+          return { result: 'success', value: newState };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({ result: z.string(), value: z.string() }),
+        outputSchema: z.object({ result: z.string(), value: z.string(), randomValue: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+        execute: async ({ inputData, requestContext }) => {
+          const randomValue = requestContext.get('randomKey') as string;
+          return { ...inputData, randomValue };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+          randomValue: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const [result1, result2] = await Promise.all([
+        (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-one');
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: {},
+            initialState: { value: 'test-state-one', otherValue: 'test-other-state-one' },
+            outputOptions: {
+              includeState: true,
+            },
+            requestContext,
+          });
+          return result;
+        })(),
+        (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-two');
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: {},
+            initialState: { value: 'test-state-two', otherValue: 'test-other-state-two' },
+            outputOptions: {
+              includeState: true,
+            },
+            requestContext,
+          });
+          return result;
+        })(),
+      ]);
+
+      srv.close();
+
+      expect(result1.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-one!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result1.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-one!!!', randomValue: 'test-state-one!!!test-value-one' },
+        payload: { result: 'success', value: 'test-state-one!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result1.state).toEqual({ value: 'test-state-one!!!', otherValue: 'test-other-state-one' });
+      expect(result2.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-two!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-two!!!', randomValue: 'test-state-two!!!test-value-two' },
+        payload: { result: 'success', value: 'test-state-two!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.state).toEqual({ value: 'test-state-two!!!', otherValue: 'test-other-state-two' });
+    });
+
     it('should execute a single step nested workflow successfully with state', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
