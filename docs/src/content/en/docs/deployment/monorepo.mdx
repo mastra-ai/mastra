@@ -58,7 +58,7 @@ api/
 
 ## Deployment configuration
 
-The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](/docs/v1/mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
+The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](../mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
 
 ![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
 
@@ -74,21 +74,3 @@ In a monorepo, keep dependencies consistent to avoid version conflicts and build
 - Use a **single lockfile** at the project root so all packages resolve the same versions.
 - Align versions of **shared libraries** (like Mastra or frameworks) to prevent duplicates.
 
-## Bundler options
-
-Use `transpilePackages` to compile TypeScript workspace packages or libraries. List package names exactly as they appear in each `package.json`. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  // ...
-  bundler: {
-    transpilePackages: ["utils"],
-    externals: ["ui"],
-    sourcemap: true,
-  },
-});
-```
-
-> See [Mastra Class](/reference/v1/core/mastra-class) for more configuration options.

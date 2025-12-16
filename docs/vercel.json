@@ -12,7 +12,7 @@
     },
     {
       "source": "/docs/deployment/server-deployment",
-      "destination": "/docs/deployment/building-mastra",
+      "destination": "/docs/deployment/mastra-server",
       "permanent": true
     },
     {

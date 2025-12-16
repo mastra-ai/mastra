@@ -396,7 +396,7 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "deployment/building-mastra",
+          id: "deployment/mastra-server",
           label: "Mastra Server",
         },
         {
