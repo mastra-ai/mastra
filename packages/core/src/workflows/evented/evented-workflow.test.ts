@@ -1913,6 +1913,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventEngine();
     });
 
     it('should throw error when restart is called on evented workflow', async () => {
