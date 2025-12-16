@@ -1,5 +1,6 @@
 ---
 '@mastra/core': patch
+'@mastra/react': patch
 ---
 
 Remove redundant toolCalls from network agent finalResult
@@ -8,5 +9,7 @@ The network agent's `finalResult` was storing `toolCalls` separately even though
 
 **Before:** `finalResult: { text, toolCalls, messages }`
 **After:** `finalResult: { text, messages }`
+
+Updated `@mastra/react` to extract tool calls directly from the `messages` array instead of the removed `toolCalls` field when resolving initial messages from memory.
 
 Fixes #11059
