@@ -3,6 +3,9 @@ title: "Next.js | Frameworks"
 description: "Get started with Mastra and Next.js"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Integrate Mastra in your Next.js project
 
 In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Next.js by importing and calling the agent directly from your routes.
@@ -16,7 +19,8 @@ You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Eleme
 
 ## Before you begin
 
-* You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
 
 ## Create a new Next.js app (optional)
 
@@ -24,31 +28,80 @@ If you already have a Next.js app, skip to the next step.
 
 Run the following command to [create a new Next.js app](https://nextjs.org/docs/app/getting-started/installation):
 
-```bash
-npx create-next-app \
-    my-nextjs-agent \
-    --yes \
-    --ts \
-    --eslint \
-    --tailwind \
-    --src-dir \
-    --app \
-    --turbopack \
-    --no-react-compiler \
-    --no-import-alias
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash copy
+npx create-next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
+```
+
+</TabItem>
+</Tabs>
 
 This creates a project called `my-nextjs-agent`, but you can replace it with any name you want.
 
 ## Initialize Mastra
-`cd` into your Next.js project and run [`mastra init`](/reference/v1/cli/create-mastra).
+
+`cd` into your Next.js project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-```bash
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash copy
 cd my-nextjs-agent
 npx --force mastra@beta init
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+cd my-nextjs-agent
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+cd my-nextjs-agent
+yarn dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+cd my-nextjs-agent
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
 -	`index.ts` - Mastra config, including memory
@@ -57,26 +110,75 @@ This creates a `src/mastra` folder with an example weather agent and the followi
 
 You'll call `weather-agent.ts` from your Next.js routes in the next steps.
 
+## Install AI SDK UI & AI Elements
 
-## Install AI SDK and AI Elements
+Install AI SDK UI along with the Mastra adapter:
 
-Install AI SDK along with the Mastra adapter:
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
 
-```bash
-npm install \
-    @mastra/ai-sdk@beta \
-    @ai-sdk/react \
-    ai
+```bash copy
+npm install @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+</Tabs>
 
 Next, initialize AI Elements. When prompted, choose the default options:
 
-```bash
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash copy
 npx ai-elements@latest
 ```
 
-This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
 
+```bash copy
+pnpm dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bunx ai-elements@latest
+```
+
+</TabItem>
+</Tabs>
+
+This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 
 ## Create a chat route
 
@@ -262,6 +364,7 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 
 
 ## Test your agent
+
 1. Run your Next.js app with `npm run dev`
 2. Open the chat at http://localhost:3000/chat
 3. Try asking about the weather. If your API key is set up correctly, you'll get a response

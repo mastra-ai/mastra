@@ -1,6 +1,6 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { CallSettings, StepResult, ToolChoice } from 'ai-v5';
+import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';

@@ -1,4 +1,4 @@
-import type { TranscriptionModel, SpeechModel } from 'ai-v5';
+import type { TranscriptionModel, SpeechModel } from '@internal/ai-sdk-v5';
 
 import type { ToolsInput } from '../agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
