@@ -1,4 +1,4 @@
-import type { ToolSet } from 'ai-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
 import type { ProcessorState } from '../../../processors';
@@ -90,7 +90,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
 
-      if (inputData?.every(toolCall => toolCall?.result === undefined)) {
+      if (inputData?.some(toolCall => toolCall?.result === undefined)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error);
 
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
@@ -144,7 +144,16 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         if (initialResult.stepResult.reason !== 'retry') {
           initialResult.stepResult.isContinued = false;
         }
-        return bail(initialResult);
+
+        // Update messages field to include any error messages we added to messageList
+        return bail({
+          ...initialResult,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
+          },
+        });
       }
 
       if (inputData?.length) {
@@ -209,6 +218,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           },
         };
       }
+
+      // Fallback: if inputData is empty or undefined, return initialResult as-is
+      return initialResult;
     },
   });
 }

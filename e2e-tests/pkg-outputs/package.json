@@ -4,6 +4,7 @@
   "private": true,
   "devDependencies": {
     "globby": "^14.1.0",
+    "@manypkg/get-packages": "^3.1.0",
     "resolve.exports": "^2.0.3",
     "vitest": "^4.0.8"
   },

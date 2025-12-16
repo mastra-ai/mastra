@@ -14,7 +14,7 @@ import {
   agentWithSequentialModeration,
 } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
-import { myWorkflowX, nestedWorkflow } from './workflows/other';
+import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
 import { moderationProcessor } from './agents/model-v2-agent';
 import {
   moderatedAssistantAgent,
@@ -71,7 +71,7 @@ export const mastra = new Mastra({
     sensitiveTopicBlocker,
     stepLoggerProcessor,
   },
-  logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
+  // logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
   mcpServers: {
     myMcpServer,
@@ -84,6 +84,7 @@ export const mastra = new Mastra({
     nestedWorkflow,
     contentModerationWorkflow,
     advancedModerationWorkflow,
+    findUserWorkflow,
   },
   bundler: {
     sourcemap: true,
