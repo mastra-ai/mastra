@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git commit -m \"$(cat <<''EOF''\ndocs: update v1 migration guide with 0.x prerequisite and launch messaging\n\nAdd info box directing users to upgrade to latest 0.x version first before migrating to v1. Include messaging about v1 launching in January with recommendation to start new projects with beta or upgrade existing projects.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n)\")",
-      "Bash(git push:*)",
-      "Bash(gh pr create:*)"
-    ]
-  }
-}
