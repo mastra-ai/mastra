@@ -52,8 +52,6 @@ export function ChatbotSidebarProvider({
 }: ChatbotSidebarProviderProps) {
   const [isHidden, setIsHidden] = useState(defaultHidden);
 
-  console.log("isHidden", isHidden);
-
   const toggle = useCallback(() => {
     setIsHidden((prev) => !prev);
   }, []);

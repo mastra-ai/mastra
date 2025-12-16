@@ -1,8 +1,5 @@
 import Link from "@docusaurus/Link";
 import { GithubStarCount } from "@site/src/components/github-star-count";
-import LocaleControl from "@site/src/components/gt/LocaleControl";
-import VersionControl from "@site/src/components/version-control";
-import { ThemeSwitcher } from "@site/src/components/theme-switcher";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
@@ -11,6 +8,37 @@ import SearchContainer, { AskAI } from "./Search";
 import { Logo } from "./logo";
 import { TabSwitcher } from "./tab-switcher";
 import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
+import { GithubCautionIcon } from "../Admonition/icons";
+
+function AnnouncementBanner() {
+  return (
+    <div className="bg-yellow-50 dark:bg-yellow-600/30 text-yellow-700 dark:text-yellow-500 py-2 px-4 text-sm flex items-center justify-center">
+      <div className="shrink-0 size-4 mr-4 md:mr-2">
+        <GithubCautionIcon />
+      </div>
+      <div>
+        <span className="font-semibold">
+          Mastra v1 is coming in January 2026.
+        </span>{" "}
+        Get ahead by starting{" "}
+        <a
+          className="text-yellow-700! dark:text-yellow-500! underline! hover:no-underline! font-medium!"
+          href="https://mastra.ai/docs/v1/getting-started/start"
+        >
+          new projects
+        </a>{" "}
+        with the beta or{" "}
+        <a
+          className="text-yellow-700! dark:text-yellow-500! underline! hover:no-underline! font-medium!"
+          href="https://mastra.ai/guides/v1/migrations/upgrade-to-v1/overview"
+        >
+          upgrade
+        </a>{" "}
+        your existing project today.
+      </div>
+    </div>
+  );
+}
 
 function NavbarContentDesktop() {
   const { i18n } = useDocusaurusContext();
@@ -49,8 +77,11 @@ function NavbarContentDesktop() {
 
 export default function Navbar(): ReactNode {
   return (
-    <NavbarLayout>
-      <NavbarContentDesktop />
-    </NavbarLayout>
+    <>
+      <AnnouncementBanner />
+      <NavbarLayout>
+        <NavbarContentDesktop />
+      </NavbarLayout>
+    </>
   );
 }
