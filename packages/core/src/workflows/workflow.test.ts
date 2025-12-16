@@ -3434,7 +3434,7 @@ describe('Workflow', () => {
           value: z.string(),
         }),
         execute: async ({ inputData, requestContext }) => {
-          const randomValue = requestContext.get('randomKey');
+          const randomValue = requestContext.get('randomKey') as string;
           return { ...inputData, randomValue };
         },
       });
@@ -3469,12 +3469,14 @@ describe('Workflow', () => {
             },
             requestContext,
           });
-
+          const reqContext1 = Array.from(requestContext.values());
+          expect(reqContext1).toEqual(['test-value-one', 'test-state-one!!!test-value-one']);
           return result;
         })(),
         (async () => {
           const requestContext = new RequestContext();
           requestContext.set('testKey', 'test-value-two');
+          requestContext.set('anotherKey', 'another-value-two');
           const run = await workflow.createRun();
           const result = await run.start({
             inputData: {},
@@ -3484,7 +3486,8 @@ describe('Workflow', () => {
             },
             requestContext,
           });
-
+          const reqContext2 = Array.from(requestContext.values());
+          expect(reqContext2).toEqual(['test-value-two', 'another-value-two', 'test-state-two!!!test-value-two']);
           return result;
         })(),
       ]);
