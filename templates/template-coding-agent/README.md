@@ -128,7 +128,7 @@ export const codingAgent = new Agent({
     // Customize agent instructions here
     // Focus on specific languages, frameworks, or development patterns
   `,
-  model: openai('gpt-4.1'),
+  model: 'openai/gpt-4.1',
   // ... other configuration
 });
 ```

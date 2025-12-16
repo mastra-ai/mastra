@@ -1,8 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-
-// Initialize model
-const mainModel = openai('gpt-4.1');
 
 export const learningExtractionAgent = new Agent({
   name: 'Learning Extraction Agent',
@@ -20,5 +16,5 @@ export const learningExtractionAgent = new Agent({
   - Consider the original research query context when extracting insights
 
   3. Generate 1 relevant follow-up question that would deepen the research`,
-  model: mainModel,
+  model: process.env.MODEL || 'openai/gpt-4.1',
 });
