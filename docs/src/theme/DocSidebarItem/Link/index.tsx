@@ -18,7 +18,7 @@ function LinkLabel({ label, item }: { label: string; item: any }) {
   const getBadgeType = () => {
     if (!tags || tags.length === 0) return null;
     if (tags.includes("new")) return "new";
-    if (tags.includes("experimental")) return "experimental";
+    if (tags.includes("beta")) return "beta";
     if (tags.includes("advanced")) return "advanced";
     return null;
   };
@@ -31,7 +31,7 @@ function LinkLabel({ label, item }: { label: string; item: any }) {
         {label}
       </span>
       {badgeType && (
-        <SidebarBadge type={badgeType as "new" | "experimental" | "advanced"} />
+        <SidebarBadge type={badgeType as "new" | "beta" | "advanced"} />
       )}
     </>
   );

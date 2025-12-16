@@ -11,61 +11,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/deployment/server-deployment",
-      "destination": "/docs/deployment/building-mastra",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/cloudflare-deployer",
-      "destination": "/docs/deployment/cloud-providers/cloudflare-deployer",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/index",
-      "destination": "/docs/deployment/cloud-providers",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms",
-      "destination": "/docs/deployment/cloud-providers",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/netlify-deployer",
-      "destination": "/docs/deployment/cloud-providers/netlify-deployer",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/vercel-deployer",
-      "destination": "/docs/deployment/cloud-providers/vercel-deployer",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/dashboard",
-      "destination": "/docs/deployment/mastra-cloud/dashboard",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/observability",
-      "destination": "/docs/deployment/mastra-cloud/observability",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/overview",
-      "destination": "/docs/deployment/mastra-cloud/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/setting-up",
-      "destination": "/docs/deployment/mastra-cloud/setting-up",
-      "permanent": true
-    },
-    {
-      "source": "/docs/server-db/production-server",
-      "destination": "/docs/v1/server/mastra-server",
-      "permanent": true
-    },
-    {
       "source": "/docs/v1/getting-started/installation",
       "destination": "/guides/v1/getting-started/quickstart",
       "permanent": true
@@ -433,6 +378,66 @@
     {
       "source": "/examples/v1/rag/embedding/metadata-extraction",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/metadata-extraction",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/overview",
+      "destination": "/docs/v1/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/setting-up",
+      "destination": "/docs/v1/mastra-cloud/setting-up",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/dashboard",
+      "destination": "/docs/v1/mastra-cloud/dashboard",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/observability",
+      "destination": "/docs/v1/mastra-cloud/observability",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/amazon-ec2",
+      "destination": "/guides/v1/deployment/amazon-ec2",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/aws-lambda",
+      "destination": "/guides/v1/deployment/aws-lambda",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/azure-app-services",
+      "destination": "/guides/v1/deployment/azure-app-services",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/cloudflare-deployer",
+      "destination": "/guides/v1/deployment/cloudflare-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/digital-ocean",
+      "destination": "/guides/v1/deployment/digital-ocean",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/netlify-deployer",
+      "destination": "/guides/v1/deployment/netlify-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/vercel-deployer",
+      "destination": "/guides/v1/deployment/vercel-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/building-mastra",
+      "destination": "/docs/v1/deployment/mastra-server",
       "permanent": true
     }
   ]
