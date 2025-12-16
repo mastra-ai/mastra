@@ -973,6 +973,8 @@ export class Workflow<
       validateInputs: options.validateInputs ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: options.tracingPolicy,
+      onFinish: options.onFinish,
+      onError: options.onError,
     };
 
     if (!executionEngine) {

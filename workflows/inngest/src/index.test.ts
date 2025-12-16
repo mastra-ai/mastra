@@ -12197,4 +12197,368 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     }, 60000);
   });
+  describe.sequential('onFinish and onError callbacks', () => {
+    it('should call onFinish callback when workflow completes successfully', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const onFinishResults: any[] = [];
+      const onErrorResults: any[] = [];
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => {
+          return { value: 42 };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onFinish-success-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+        steps: [step1],
+        retryConfig: { attempts: 0 },
+        options: {
+          onFinish: result => {
+            onFinishResults.push(result);
+          },
+          onError: errorInfo => {
+            onErrorResults.push(errorInfo);
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-onFinish-success-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('success');
+      expect(onFinishResults.length).toBe(1);
+      expect(onFinishResults[0].status).toBe('success');
+      expect(onErrorResults.length).toBe(0);
+
+      srv.close();
+    });
+
+    it('should call onFinish and onError callbacks when workflow fails', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const onFinishResults: any[] = [];
+      const onErrorResults: any[] = [];
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw new Error('Intentional failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+        steps: [failingStep],
+        retryConfig: { attempts: 0 },
+        options: {
+          onFinish: result => {
+            onFinishResults.push(result);
+          },
+          onError: errorInfo => {
+            onErrorResults.push(errorInfo);
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-onError-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(onFinishResults.length).toBe(1);
+      expect(onFinishResults[0].status).toBe('failed');
+      expect(onErrorResults.length).toBe(1);
+      expect(onErrorResults[0].status).toBe('failed');
+
+      srv.close();
+    });
+
+    it('should not call onError when workflow succeeds', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const onErrorResults: any[] = [];
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => {
+          return { value: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-no-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step1],
+        retryConfig: { attempts: 0 },
+        options: {
+          onError: errorInfo => {
+            onErrorResults.push(errorInfo);
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-no-onError-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('success');
+      expect(onErrorResults.length).toBe(0);
+
+      srv.close();
+    });
+
+    it('should support async onFinish callback', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const onFinishResults: any[] = [];
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => {
+          return { value: 'done' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-async-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step1],
+        retryConfig: { attempts: 0 },
+        options: {
+          onFinish: async result => {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            onFinishResults.push(result);
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-async-onFinish-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('success');
+      expect(onFinishResults.length).toBe(1);
+      expect(onFinishResults[0].status).toBe('success');
+
+      srv.close();
+    });
+
+    it('should swallow callback errors and not fail the workflow', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => {
+          return { value: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-callback-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step1],
+        retryConfig: { attempts: 0 },
+        options: {
+          onFinish: () => {
+            throw new Error('Callback error should be swallowed');
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-callback-error-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      // Workflow should still succeed even though callback threw
+      expect(result.status).toBe('success');
+
+      srv.close();
+    });
+  });
 }, 80e3);

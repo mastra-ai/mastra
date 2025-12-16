@@ -141,8 +141,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
       });
     });
 
+    let result: TOutput;
+
     if (resultData.prevResult.status === 'failed') {
-      return {
+      result = {
         status: 'failed',
         error: resultData.prevResult.error,
         steps: resultData.stepResults,
@@ -157,17 +159,22 @@ export class EventedExecutionEngine extends ExecutionEngine {
           return null;
         })
         .filter(Boolean);
-      return {
+      result = {
         status: 'suspended',
         steps: resultData.stepResults,
         suspended: suspendedSteps,
       } as TOutput;
+    } else {
+      result = {
+        status: resultData.prevResult.status,
+        result: resultData.prevResult?.output,
+        steps: resultData.stepResults,
+      } as TOutput;
     }
 
-    return {
-      status: resultData.prevResult.status,
-      result: resultData.prevResult?.output,
-      steps: resultData.stepResults,
-    } as TOutput;
+    // Invoke lifecycle callbacks before returning
+    await this.invokeLifecycleCallbacks(result as any);
+
+    return result;
   }
 }
