@@ -27,29 +27,6 @@ Before deploying to a cloud provider, ensure you have:
 - Domain name management access (for SSL and HTTPS)
 - Basic familiarity with server setup (e.g. Nginx, environment variables)
 
-## LibSQLStore
-
-`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of `LibSQLStore`.
-
-Specifically, ensure you've removed it from all Mastra files, including configuration on the main Mastra instance and any agents using it, e.g. for memory storage.
-
-```diff title="src/mastra/index.ts"
- export const mastra = new Mastra({
--  storage: new LibSQLStore({
--    id: 'mastra-storage',
--    url: ":memory:",
--  }),
- });
-```
-
-```diff
- export const weatherAgent = new Agent({
-   id: "weather-agent",
-   memory: new Memory({
--    storage: new LibSQLStore({
--      id: 'mastra-storage',
--      url: "file:../mastra.db",
--    }),
-   }),
- });
-```
+:::warning
+`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
