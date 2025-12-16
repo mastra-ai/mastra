@@ -1,18 +1,13 @@
 import { ExtendedMastraUIMessage, MastraUIMessage } from '../types';
 
 // Type definitions for parsing network execution data
-interface ToolCallPayload {
+
+// Tool call format from messages array (v1 format)
+interface ToolCallContent {
+  type: 'tool-call';
   toolCallId: string;
   toolName: string;
   args: Record<string, unknown>;
-  providerMetadata?: Record<string, unknown>;
-}
-
-interface ToolCall {
-  type: string;
-  runId: string;
-  from: string;
-  payload: ToolCallPayload;
 }
 
 interface NestedMessage {
@@ -20,7 +15,7 @@ interface NestedMessage {
   id: string;
   createdAt: string;
   type: string;
-  content?: string | ToolResultContent[];
+  content?: string | (ToolCallContent | ToolResultContent)[];
 }
 
 interface ToolResultContent {
@@ -34,7 +29,6 @@ interface ToolResultContent {
 
 interface FinalResult {
   text?: string;
-  toolCalls?: ToolCall[];
   messages?: NestedMessage[];
 }
 
@@ -45,7 +39,6 @@ interface NetworkExecutionData {
   primitiveId?: string;
   input?: string;
   finalResult?: FinalResult;
-  toolCalls?: ToolCall[];
   messages?: NestedMessage[];
 }
 
@@ -82,36 +75,50 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
           const primitiveType = json.primitiveType || '';
           const primitiveId = json.primitiveId || '';
           const finalResult = json.finalResult;
-          const toolCalls = finalResult?.toolCalls || [];
+          const messages = finalResult?.messages || [];
 
           // Build child messages from nested messages
           const childMessages: ChildMessage[] = [];
 
-          // Process tool calls from the network agent
-          for (const toolCall of toolCalls) {
-            if (toolCall.type === 'tool-call' && toolCall.payload) {
-              const toolCallId = toolCall.payload.toolCallId;
+          // Extract tool calls from messages (v1 format: messages with type 'tool-call')
+          // and match them with their results
+          for (const msg of messages) {
+            if (msg.type === 'tool-call' && Array.isArray(msg.content)) {
+              // Process each tool call in this message
+              for (const part of msg.content) {
+                if (typeof part === 'object' && part.type === 'tool-call') {
+                  const toolCallContent = part as ToolCallContent;
+                  const toolCallId = toolCallContent.toolCallId;
 
-              let toolResult;
-
-              for (const message of finalResult?.messages || []) {
-                for (const part of message.content || []) {
-                  if (typeof part === 'object' && part.type === 'tool-result' && part.toolCallId === toolCallId) {
-                    toolResult = part;
-                    break;
+                  // Find the corresponding tool result in messages
+                  let toolResult;
+                  for (const resultMsg of messages) {
+                    if (Array.isArray(resultMsg.content)) {
+                      for (const resultPart of resultMsg.content) {
+                        if (
+                          typeof resultPart === 'object' &&
+                          resultPart.type === 'tool-result' &&
+                          resultPart.toolCallId === toolCallId
+                        ) {
+                          toolResult = resultPart;
+                          break;
+                        }
+                      }
+                    }
+                    if (toolResult) break;
                   }
+
+                  const isWorkflow = Boolean(toolResult?.result?.result?.steps);
+
+                  childMessages.push({
+                    type: 'tool' as const,
+                    toolCallId: toolCallContent.toolCallId,
+                    toolName: toolCallContent.toolName,
+                    args: toolCallContent.args,
+                    toolOutput: isWorkflow ? toolResult?.result?.result : toolResult?.result,
+                  });
                 }
               }
-
-              const isWorkflow = Boolean(toolResult?.result?.result?.steps);
-
-              childMessages.push({
-                type: 'tool' as const,
-                toolCallId: toolCall.payload.toolCallId,
-                toolName: toolCall.payload.toolName,
-                args: toolCall.payload.args,
-                toolOutput: isWorkflow ? toolResult?.result?.result : toolResult?.result,
-              });
             }
           }
 
