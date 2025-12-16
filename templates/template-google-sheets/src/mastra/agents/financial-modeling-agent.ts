@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { anthropic } from '@ai-sdk/anthropic';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -26,7 +25,7 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return getFinancialModelingAgentPrompt(false);
   },
-  model: anthropic('claude-3-7-sonnet-20250219'),
+  model: process.env.MODEL || 'anthropic/claude-3-7-sonnet-20250219',
   memory: new Memory({
     storage: new LibSQLStore({
       url: 'file:../../mastra.db',

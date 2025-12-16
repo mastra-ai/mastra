@@ -17,28 +17,28 @@ const EMAIL = process.env.EMAIL;
 
 const PROVIDERS = {
   openai: {
-    model: 'gpt-4.1',
+    model: 'openai/gpt-4.1',
     package: '@ai-sdk/openai',
     apiKey: 'OPENAI_API_KEY',
     name: 'OpenAI',
     url: 'https://platform.openai.com/api-keys',
   },
   anthropic: {
-    model: 'claude-3-5-sonnet-20240620',
+    model: 'anthropic/claude-3-5-sonnet-20240620',
     package: '@ai-sdk/anthropic',
     apiKey: 'ANTHROPIC_API_KEY',
     name: 'Anthropic',
     url: 'https://console.anthropic.com/settings/keys',
   },
   google: {
-    model: 'gemini-2.5-pro',
+    model: 'google/gemini-2.5-pro',
     package: '@ai-sdk/google',
     apiKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
     name: 'Google',
     url: 'https://console.cloud.google.com/apis/credentials',
   },
   groq: {
-    model: 'llama-3.3-70b-versatile',
+    model: 'groq/llama-3.3-70b-versatile',
     package: '@ai-sdk/groq',
     apiKey: 'GROQ_API_KEY',
     name: 'Groq',
@@ -330,8 +330,8 @@ async function pushToRepo(repoName) {
             `import { ${provider} } from '${providerPackage}';`,
           );
           content = content.replaceAll(
-            /openai\((['"])[^'"]*(['"])\)/g,
-            `${provider}(process.env.MODEL ?? "${defaultModel}")`,
+            /process\.env\.MODEL\s*\|\|\s*['"][^'"]*['"]/g,
+            `process.env.MODEL ?? "${defaultModel}"`,
           );
           await writeFile(filePath, content);
         } else {
