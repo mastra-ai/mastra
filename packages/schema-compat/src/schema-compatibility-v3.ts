@@ -13,9 +13,9 @@ import {
 } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import type { JSONSchema7 } from './json-schema';
+import type { JSONSchema7, Schema } from './json-schema';
 import type { SchemaCompatLayer as ParentSchemaCompatLayer } from './schema-compatibility';
-import type { Schema, ModelInformation } from './types';
+import type { ModelInformation } from './types';
 import { convertZodSchemaToAISDKSchema } from './utils';
 
 /**
