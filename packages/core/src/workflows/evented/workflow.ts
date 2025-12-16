@@ -720,6 +720,16 @@ export class EventedRun<
   }
 
   async cancel() {
+    // Update storage directly for immediate status update (same pattern as Inngest)
+    await this.mastra?.getStorage()?.updateWorkflowState({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      opts: {
+        status: 'canceled',
+      },
+    });
+
+    // Publish event for event-driven architecture (watchers, running workflow termination, etc.)
     await this.mastra?.pubsub.publish('workflows', {
       type: 'workflow.cancel',
       runId: this.runId,

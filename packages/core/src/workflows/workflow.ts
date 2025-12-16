@@ -2130,10 +2130,28 @@ export class Run<
   }
 
   /**
-   * Cancels the workflow execution
+   * Cancels the workflow execution.
+   * This aborts any running execution and updates the workflow status to 'canceled' in storage.
    */
   async cancel() {
-    this.abortController?.abort();
+    // Abort any running execution and update in-memory status
+    this.abortController.abort();
+    this.workflowRunStatus = 'canceled';
+
+    // Update workflow status in storage to 'canceled'
+    // This is necessary for suspended/waiting workflows where the abort signal won't be checked
+    try {
+      await this.mastra?.getStorage()?.updateWorkflowState({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        opts: {
+          status: 'canceled',
+        },
+      });
+    } catch {
+      // Storage errors should not prevent cancellation from succeeding
+      // The abort signal and in-memory status are already updated
+    }
   }
 
   protected async _validateInput(inputData: z.input<TInput>) {

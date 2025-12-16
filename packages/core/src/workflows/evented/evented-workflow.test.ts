@@ -13,7 +13,7 @@ import { Mastra } from '../../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools';
-import type { StreamEvent } from '../types';
+import type { StreamEvent, WorkflowRunState } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
@@ -3722,6 +3722,123 @@ describe('Workflow', () => {
       //   startedAt: expect.any(Number),
       //   endedAt: expect.any(Number),
       // });
+    });
+
+    it('should be able to cancel a suspended workflow', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: async ({ inputData, suspend }) => {
+          await suspend({ reason: 'waiting for approval' });
+          return { result: 'approved: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ reason: z.string() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return { result: 'step3: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      workflow.then(step1).then(suspendStep).then(step3).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+
+      // Start the workflow and wait for it to suspend
+      const initialResult = await run.start({ inputData: { value: 'test' } });
+
+      // Verify workflow is suspended
+      expect(initialResult.status).toBe('suspended');
+      expect(initialResult.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: test' },
+        payload: { value: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(initialResult.steps['suspendStep'].status).toBe('suspended');
+
+      // Now cancel the suspended workflow
+      await run.cancel();
+
+      const workflowRun = await workflow.getWorkflowRunById(run.runId);
+      expect((workflowRun?.snapshot as WorkflowRunState)?.status).toBe('canceled');
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should update status to canceled immediately when cancel() resolves', async () => {
+      // This test verifies that when cancel() returns, the status is already 'canceled'
+      // This is important for API handlers that return immediately after calling cancel()
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: async ({ suspend }) => {
+          await suspend({ reason: 'waiting for approval' });
+          return { done: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+        suspendSchema: z.object({ reason: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+      });
+
+      workflow.then(suspendStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const runId = run.runId;
+
+      // Start the workflow and wait for it to suspend
+      const initialResult = await run.start({ inputData: {} });
+      expect(initialResult.status).toBe('suspended');
+
+      // Cancel the workflow - when this promise resolves, status should be 'canceled'
+      await run.cancel();
+
+      // Check status IMMEDIATELY after cancel() returns (no waiting)
+      // The user expects that after `await run.cancel()`, the status is already updated
+      const workflowRun = await workflow.getWorkflowRunById(runId);
+      expect((workflowRun?.snapshot as WorkflowRunState)?.status).toBe('canceled');
+
+      await mastra.stopEventEngine();
     });
   });
 
