@@ -1,5 +1,5 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { EmbeddingModel, AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
+import type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodObject } from 'zod';
 

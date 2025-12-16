@@ -1,5 +1,5 @@
-import { experimental_transcribe } from 'ai-v5';
-import type { TranscriptionModel } from 'ai-v5';
+import { experimental_transcribe } from '@internal/ai-sdk-v5';
+import type { TranscriptionModel } from '@internal/ai-sdk-v5';
 import { MastraVoice } from '../voice';
 
 export class AISDKTranscription extends MastraVoice {

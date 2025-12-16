@@ -76,7 +76,9 @@ Results include both the text content and a similarity score:
 
 ### Metadata Filtering
 
-Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources, time periods, or with specific attributes. Mastra provides a unified MongoDB-style query syntax that works across all supported vector stores.
+Filter results based on metadata fields to narrow down the search space. This approach - combining vector similarity search with metadata filters - is sometimes called hybrid vector search, as it merges semantic search with structured filtering criteria.
+
+This is useful when you have documents from different sources, time periods, or with specific attributes. Mastra provides a unified MongoDB-style query syntax that works across all supported vector stores.
 
 For detailed information about available operators and syntax, see the [Metadata Filters Reference](/reference/v1/rag/metadata-filters).
 
@@ -146,13 +148,14 @@ Common use cases for metadata filtering:
 - Combine multiple conditions for precise querying
 - Filter by document attributes (e.g., language, author)
 
-For an example of how to use metadata filtering, see the [Hybrid Vector Search](/examples/v1/rag/query/hybrid-vector-search) example.
-
 ### Vector Query Tool
 
 Sometimes you want to give your agent the ability to query a vector database directly. The Vector Query Tool allows your agent to be in charge of retrieval decisions, combining semantic search with optional filtering and reranking based on the agent's understanding of the user's needs.
 
 ```ts showLineNumbers copy
+import { createVectorQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -180,6 +183,9 @@ Connection credentials (URLs, auth tokens) are configured when you instantiate t
 :::
 
 ```ts showLineNumbers copy
+import { createVectorQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
 // Pinecone with namespace
 const pineconeQueryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
@@ -535,8 +541,9 @@ The weights control how different factors influence the final ranking:
 - `vector`: Higher values favor the original vector similarity scores
 - `position`: Higher values help maintain the original ordering of results
 
-
-> **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+:::note
+For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+:::
 
 You can also use other relevance score providers like Cohere or ZeroEntropy:
 
@@ -552,27 +559,4 @@ The re-ranked results combine vector similarity with semantic understanding to i
 
 For more details about re-ranking, see the [rerank()](/reference/v1/rag/rerankWithScorer) method.
 
-### Graph-based Retrieval
-
-For documents with complex relationships, graph-based retrieval can follow connections between chunks. This helps when:
-
-- Information is spread across multiple documents
-- Documents reference each other
-- You need to traverse relationships to find complete answers
-
-Example setup:
-
-```ts showLineNumbers copy
-const graphQueryTool = createGraphQueryTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  graphOptions: {
-    threshold: 0.7,
-  },
-});
-```
-
-For more details about graph-based retrieval, see the [GraphRAG](/reference/v1/rag/graph-rag) class and the [createGraphQueryTool()](/reference/v1/tools/graph-rag-tool) function.
-
-For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](/examples/v1/rag/usage/graph-rag) example.
+For graph-based retrieval that follows connections between chunks, see the [GraphRAG](/docs/v1/rag/graph-rag) documentation.

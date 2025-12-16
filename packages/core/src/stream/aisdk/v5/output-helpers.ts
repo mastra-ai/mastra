@@ -1,6 +1,15 @@
-import type { StepResult, ToolSet, StaticToolCall, StaticToolResult, DynamicToolCall, DynamicToolResult } from 'ai-v5';
+import type {
+  StepResult,
+  ToolSet,
+  StaticToolCall,
+  StaticToolResult,
+  DynamicToolCall,
+  DynamicToolResult,
+} from '@internal/ai-sdk-v5';
 import type { StepTripwireData } from '../../types';
 
+// ContentPart is not exported from ai, so we derive it from StepResult
+type ContentPart<TOOLS extends ToolSet> = StepResult<TOOLS>['content'][number];
 export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOLS> {
   readonly content: StepResult<TOOLS>['content'];
   readonly finishReason: StepResult<TOOLS>['finishReason'];
@@ -64,7 +73,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
     return this.content.filter(part => part.type === 'file').map(part => part.file);
   }
 
-  get sources() {
+  get sources(): Extract<ContentPart<TOOLS>, { type: 'source' }>[] {
     return this.content.filter(part => part.type === 'source');
   }
 

@@ -142,6 +142,182 @@ describe('Workflow (fetch-mocked)', () => {
 // Mock fetch globally for client tests
 global.fetch = vi.fn();
 
+describe('Workflow error deserialization', () => {
+  let fetchMock: any;
+  let wf: Workflow;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as any;
+
+    const options: ClientOptions = { baseUrl: 'http://localhost', retries: 0 } as any;
+    wf = new Workflow(options, 'wf-1');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('deserializes failed workflow error in startAsync', async () => {
+    const serializedError = {
+      name: 'StepError',
+      message: 'Step failed with validation error',
+      stack: 'Error: Step failed...\n    at ...',
+      statusCode: 400,
+      cause: {
+        name: 'ValidationError',
+        message: 'Invalid input',
+      },
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/start-async')) {
+        return Promise.resolve(
+          createJsonResponse({
+            status: 'failed',
+            error: serializedError,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const result = (await wf.startAsync({ inputData: {} })) as any;
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe('Step failed with validation error');
+    expect(result.error?.name).toBe('StepError');
+    expect(result.error.statusCode).toBe(400);
+    expect(result.error?.cause).toBeDefined();
+    expect(result.error?.cause?.message).toBe('Invalid input');
+  });
+
+  it('deserializes failed workflow error in resumeAsync', async () => {
+    const serializedError = {
+      name: 'ResumeError',
+      message: 'Resume step failed',
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/resume-async')) {
+        return Promise.resolve(
+          createJsonResponse({
+            status: 'failed',
+            error: serializedError,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const result = (await wf.resumeAsync({ runId: 'r-123', step: 's1' })) as any;
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe('Resume step failed');
+    expect(result.error?.name).toBe('ResumeError');
+  });
+
+  it('deserializes failed workflow error in restartAsync', async () => {
+    const serializedError = {
+      name: 'RestartError',
+      message: 'Restart failed',
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/restart-async')) {
+        return Promise.resolve(
+          createJsonResponse({
+            status: 'failed',
+            error: serializedError,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const result = (await wf.restartAsync({ runId: 'r-123' })) as any;
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe('Restart failed');
+  });
+
+  it('deserializes failed workflow error in timeTravelAsync', async () => {
+    const serializedError = {
+      name: 'TimeTravelError',
+      message: 'Time travel failed',
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/time-travel-async')) {
+        return Promise.resolve(
+          createJsonResponse({
+            status: 'failed',
+            error: serializedError,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const result = (await wf.timeTravelAsync({ runId: 'r-123', step: 's1' })) as any;
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe('Time travel failed');
+  });
+
+  it('passes through successful workflow result unchanged', async () => {
+    const successResult = {
+      status: 'success',
+      result: { data: 'test-output' },
+      steps: {},
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/start-async')) {
+        return Promise.resolve(createJsonResponse(successResult));
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const result = (await wf.startAsync({ inputData: {} })) as any;
+
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ data: 'test-output' });
+    expect(result.error).toBeUndefined();
+  });
+
+  it('passes through suspended workflow result unchanged', async () => {
+    const suspendedResult = {
+      status: 'suspended',
+      steps: {
+        step1: { status: 'suspended', suspendPayload: { waitingFor: 'approval' } },
+      },
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/start-async')) {
+        return Promise.resolve(createJsonResponse(suspendedResult));
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const result = (await wf.startAsync({ inputData: {} })) as any;
+
+    expect(result.status).toBe('suspended');
+    expect(result.error).toBeUndefined();
+  });
+});
+
 describe('Workflow Client Methods', () => {
   let client: MastraClient;
   const clientOptions = {

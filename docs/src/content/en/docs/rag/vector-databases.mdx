@@ -380,9 +380,11 @@ The dimension size must match the output dimension of your chosen embedding mode
 
 - OpenAI text-embedding-3-small: 1536 dimensions (or custom, e.g., 256)
 - Cohere embed-multilingual-v3: 1024 dimensions
-- Google `text-embedding-004`: 768 dimensions (or custom)
+- Google text-embedding-004: 768 dimensions (or custom)
 
-> **Important**: Index dimensions cannot be changed after creation. To use a different model, delete and recreate the index with the new dimension size.
+:::important
+Index dimensions cannot be changed after creation. To use a different model, delete and recreate the index with the new dimension size.
+:::
 
 ### Naming Rules for Databases
 
@@ -535,7 +537,9 @@ The upsert operation:
 
 Vector stores support rich metadata (any JSON-serializable fields) for filtering and organization. Since metadata is stored with no fixed schema, use consistent field naming to avoid unexpected query results.
 
-**Important**: Metadata is crucial for vector storage - without it, you'd only have numerical embeddings with no way to return the original text or filter results. Always store at least the source text as metadata.
+:::important
+Metadata is crucial for vector storage - without it, you'd only have numerical embeddings with no way to return the original text or filter results. Always store at least the source text as metadata.
+:::
 
 ```ts showLineNumbers copy
 // Store embeddings with rich metadata for better organization and filtering

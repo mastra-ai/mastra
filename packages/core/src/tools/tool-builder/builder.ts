@@ -575,6 +575,7 @@ export class CoreToolBuilder extends MastraBase {
       type: 'function' as const,
       description: this.originalTool.description,
       requireApproval: this.options.requireApproval,
+      hasSuspendSchema: !!this.getSuspendSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,

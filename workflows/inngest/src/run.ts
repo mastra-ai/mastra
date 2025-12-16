@@ -1,10 +1,11 @@
 import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { WorkflowRunOutput, ChunkFrom } from '@mastra/core/stream';
-import { createTimeTravelExecutionParams, Run } from '@mastra/core/workflows';
+import { createTimeTravelExecutionParams, Run, hydrateSerializedStepErrors } from '@mastra/core/workflows';
 import type {
   ExecutionEngine,
   ExecutionGraph,
@@ -139,8 +140,19 @@ export class InngestRun<
           workflowName: this.workflowId,
           runId: this.runId,
         });
+        // Hydrate serialized errors back to Error instances
+        if (snapshot?.context) {
+          snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+        }
         return {
-          output: { result: { steps: snapshot?.context, status: 'failed', error: runs?.[0]?.output?.message } },
+          output: {
+            result: {
+              steps: snapshot?.context,
+              status: 'failed',
+              // Get the original error from NonRetriableError's cause (which contains the workflow result)
+              error: getErrorFromUnknown(runs?.[0]?.output?.cause?.error, { serializeStack: false }),
+            },
+          },
         };
       }
 
@@ -326,9 +338,7 @@ export class InngestRun<
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
 
-    if (result.status === 'failed') {
-      result.error = new Error(result.error);
-    }
+    this.hydrateFailedResult(result);
 
     if (result.status !== 'suspended') {
       this.cleanup?.();
@@ -414,9 +424,7 @@ export class InngestRun<
     }
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
-    if (result.status === 'failed') {
-      result.error = new Error(result.error);
-    }
+    this.hydrateFailedResult(result);
     return result;
   }
 
@@ -554,9 +562,7 @@ export class InngestRun<
     }
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
-    if (result.status === 'failed') {
-      result.error = new Error(result.error);
-    }
+    this.hydrateFailedResult(result);
     return result;
   }
 
@@ -853,5 +859,20 @@ export class InngestRun<
     });
 
     return this.streamOutput;
+  }
+
+  /**
+   * Hydrates errors in a failed workflow result back to proper Error instances.
+   * This ensures error.cause chains and custom properties are preserved.
+   */
+  private hydrateFailedResult(result: WorkflowResult<TState, TInput, TOutput, TSteps>): void {
+    if (result.status === 'failed') {
+      // Ensure error is a proper Error instance with all properties preserved
+      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
+      // Re-hydrate serialized errors in step results
+      if (result.steps) {
+        hydrateSerializedStepErrors(result.steps);
+      }
+    }
   }
 }

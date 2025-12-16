@@ -1,0 +1,127 @@
+---
+title: "Reference: toAISdkV4Messages() | AI SDK"
+description: API reference for toAISdkV4Messages(), a function to convert Mastra messages to AI SDK v4 UI messages.
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# toAISdkV4Messages()
+
+Converts messages from various input formats to AI SDK V4 UI message format. This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V4 `UIMessage` format, which is suitable for use with AI SDK UI components like `useChat()`.
+
+## Usage example
+
+```typescript title="app/chat/page.tsx" copy
+import { toAISdkV4Messages } from "@mastra/ai-sdk";
+import { useChat } from "ai/react"; // AI SDK V4
+
+// Stored messages from your database, memory or API
+const storedMessages = [
+  { id: "1", role: "user", parts: [{ type: "text", text: "Hello" }] },
+  { id: "2", role: "assistant", parts: [{ type: "text", text: "Hi there!" }] }
+];
+
+export default function Chat() {
+  const { messages } = useChat({
+    initialMessages: toAISdkV4Messages(storedMessages)
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.role}: {message.content}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MessageListInput",
+      description: "Messages to convert. Can be a string, array of strings, a single message object, or an array of message objects in any supported format.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+Returns an array of AI SDK V4 `UIMessage` objects with the following structure:
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique message identifier.",
+    },
+    {
+      name: "role",
+      type: "'user' | 'assistant' | 'system'",
+      description: "The role of the message sender.",
+    },
+    {
+      name: "content",
+      type: "string",
+      description: "Text content of the message.",
+    },
+    {
+      name: "parts",
+      type: "UIMessagePart[]",
+      description: "Array of UI parts including text, tool-invocation, file, reasoning, source, and step markers.",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "Message creation timestamp.",
+    },
+    {
+      name: "toolInvocations",
+      type: "ToolInvocation[]",
+      description: "Array of tool invocations for assistant messages.",
+      isOptional: true,
+    },
+    {
+      name: "experimental_attachments",
+      type: "Attachment[]",
+      description: "File attachments on the message.",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "Custom metadata attached to the message.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Examples
+
+### Converting simple text messages
+
+```typescript copy
+import { toAISdkV4Messages } from "@mastra/ai-sdk";
+
+const messages = toAISdkV4Messages(["Hello", "How can I help you today?"]);
+// Returns array of UIMessage objects with user role and content string
+```
+
+### Loading messages with Mastra client
+
+```typescript copy
+import { MastraClient } from "@mastra/client-js";
+import { toAISdkV4Messages } from "@mastra/ai-sdk";
+
+const client = new MastraClient();
+
+const { messages } = await client.listThreadMessages("thread-id", { agentId: "myAgent" });
+const uiMessages = toAISdkV4Messages(messages);
+```

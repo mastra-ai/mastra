@@ -64,7 +64,7 @@ Once you have your API routes set up, you can use them in the [`useChat()`](#use
 
 ### Mastra's server
 
-Run Mastra as a standalone server and connect your frontend (e.g. using Vite + React) to its API endpoints. You'll be using Mastra's [custom API routes](/docs/v1/server-db/custom-api-routes) feature for this.
+Run Mastra as a standalone server and connect your frontend (e.g. using Vite + React) to its API endpoints. You'll be using Mastra's [custom API routes](/docs/v1/server/custom-api-routes) feature for this.
 
 :::info
 
@@ -959,9 +959,13 @@ For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-doj
 
 To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/v1/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/v1/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
 
+### Loading historical messages
+
+When loading messages from Mastra's memory to display in a chat UI, use [`toAISdkV5Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v5-messages) or [`toAISdkV4Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v4-messages) to convert them to the appropriate AI SDK format for `useChat()`'s `initialMessages`.
+
 ### Passing additional data
 
-[`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`](/docs/v1/server-db/request-context).
+[`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`](/docs/v1/server/request-context).
 
 Here's an example of the frontend code:
 
@@ -1040,7 +1044,7 @@ export const mastra = new Mastra({
 
 :::info
 
-You can access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/v1/server-db/request-context) for more details.
+You can access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/v1/server/request-context) for more details.
 
 :::
 

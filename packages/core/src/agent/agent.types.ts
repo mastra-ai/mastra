@@ -1,4 +1,4 @@
-import type { ModelMessage, ToolChoice } from 'ai-v5';
+import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
@@ -124,6 +124,9 @@ export type AgentExecutionOptions<
 
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
+
+  /** Maximum number of tool calls to execute concurrently (default: 1 when approval may be required, otherwise 10) */
+  toolCallConcurrency?: number;
 
   /** Structured output generation with enhanced developer experience  */
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;

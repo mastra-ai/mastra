@@ -1,3 +1,4 @@
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
@@ -14,6 +15,20 @@ import type {
 
 import { parseClientRequestContext, base64RequestContext, requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
+
+/**
+ * Deserializes the error property in a workflow result back to an Error instance.
+ * Server sends SerializedError (plain object), client converts to Error for instanceof checks.
+ */
+function deserializeWorkflowError<T extends WorkflowRunResult>(result: T): T {
+  if (result.status === 'failed' && result.error) {
+    result.error = getErrorFromUnknown(result.error, {
+      fallbackMessage: 'Unknown workflow error',
+      supportSerialization: false,
+    });
+  }
+  return result;
+}
 
 const RECORD_SEPARATOR = '\x1E';
 
@@ -350,7 +365,7 @@ export class Workflow extends BaseResource {
 
     const requestContext = parseClientRequestContext(params.requestContext);
 
-    return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
+    return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
       body: {
         inputData: params.inputData,
@@ -358,7 +373,7 @@ export class Workflow extends BaseResource {
         requestContext,
         tracingOptions: params.tracingOptions,
       },
-    });
+    }).then(deserializeWorkflowError);
   }
 
   /**
@@ -655,7 +670,7 @@ export class Workflow extends BaseResource {
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params.requestContext);
-    return this.request(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
+    return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
       method: 'POST',
       body: {
         step: params.step,
@@ -663,7 +678,7 @@ export class Workflow extends BaseResource {
         requestContext,
         tracingOptions: params.tracingOptions,
       },
-    });
+    }).then(deserializeWorkflowError);
   }
 
   /**
@@ -795,13 +810,13 @@ export class Workflow extends BaseResource {
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params.requestContext);
-    return this.request(`/api/workflows/${this.workflowId}/restart-async?runId=${params.runId}`, {
+    return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/restart-async?runId=${params.runId}`, {
       method: 'POST',
       body: {
         requestContext,
         tracingOptions: params.tracingOptions,
       },
-    });
+    }).then(deserializeWorkflowError);
   }
 
   /**
@@ -855,13 +870,13 @@ export class Workflow extends BaseResource {
     ...params
   }: TimeTravelParams): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(paramsRequestContext);
-    return this.request(`/api/workflows/${this.workflowId}/time-travel-async?runId=${runId}`, {
+    return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/time-travel-async?runId=${runId}`, {
       method: 'POST',
       body: {
         ...params,
         requestContext,
       },
-    });
+    }).then(deserializeWorkflowError);
   }
 
   /**

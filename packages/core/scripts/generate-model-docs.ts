@@ -749,7 +749,7 @@ const reasoningAgent = new Agent({
 \`\`\`
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server-db/request-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server/request-context), variables, or any other logic.
 
 \`\`\`typescript showLineNumbers
 const agent = new Agent({
