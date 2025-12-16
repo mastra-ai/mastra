@@ -16,7 +16,6 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
-  StepResult,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -484,25 +483,20 @@ export class EventedRun<
       },
     });
 
-    // Cast needed for Zod v4 compatibility - input/output types are equivalent for schemas without transforms
-    const inputDataToUse = await this._validateInput(inputData as z.input<TInput>);
-    const initialStateToUse = await this._validateInitialState((initialState ?? {}) as z.input<TState>);
+    const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
-    const result = await this.executionEngine.execute<
-      z.infer<TState>,
-      z.infer<TInput>,
-      WorkflowResult<TState, TInput, TOutput, TSteps>
-    >({
+    const result = await this.executionEngine.execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
-      input: inputDataToUse as z.output<TInput>,
-      initialState: initialStateToUse as z.output<TState>,
+      input: inputDataToUse,
+      initialState: initialStateToUse,
       pubsub: this.mastra.pubsub,
       retryConfig: this.retryConfig,
       requestContext,
@@ -564,9 +558,8 @@ export class EventedRun<
       },
     });
 
-    // Cast needed for Zod v4 compatibility - input/output types are equivalent for schemas without transforms
-    const inputDataToUse = await this._validateInput(inputData as z.input<TInput>);
-    const initialStateToUse = await this._validateInitialState((initialState ?? {}) as z.input<TState>);
+    const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -579,9 +572,9 @@ export class EventedRun<
       data: {
         workflowId: this.workflowId,
         runId: this.runId,
-        prevResult: { status: 'success', output: inputDataToUse as z.output<TInput> },
+        prevResult: { status: 'success', output: inputDataToUse },
         requestContext: Object.fromEntries(requestContext.entries()),
-        initialState: initialStateToUse as z.output<TState>,
+        initialState: initialStateToUse,
       },
     });
 
@@ -662,10 +655,10 @@ export class EventedRun<
         runId: this.runId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
-        input: resumeDataToUse as z.output<TInput>,
+        input: resumeDataToUse,
         resume: {
           steps,
-          stepResults: snapshot?.context as Record<string, StepResult<unknown, unknown, unknown, unknown>>,
+          stepResults: snapshot?.context as any,
           resumePayload: resumeDataToUse,
           resumePath,
         },
