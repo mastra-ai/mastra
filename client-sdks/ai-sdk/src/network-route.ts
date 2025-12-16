@@ -1,6 +1,7 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
@@ -164,6 +165,7 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
     handler: async c => {
       const params = (await c.req.json()) as NetworkStreamHandlerParams<OUTPUT>;
       const mastra = c.get('mastra');
+      const contextRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
       let agentToUse: string | undefined = agent;
       if (!agent) {
@@ -179,6 +181,16 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
+      const routeRequestContext = contextRequestContext || defaultOptions?.requestContext;
+
+      if (routeRequestContext && params.requestContext) {
+        mastra
+          .getLogger()
+          ?.warn(
+            `"requestContext" from the request body will be ignored because "requestContext" is already set in the route options.`,
+          );
+      }
+
       if (!agentToUse) {
         throw new Error('Agent ID is required');
       }
@@ -186,7 +198,10 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
       const uiMessageStream = await handleNetworkStream<UIMessage, OUTPUT>({
         mastra,
         agentId: agentToUse,
-        params,
+        params: {
+          ...params,
+          requestContext: routeRequestContext || params.requestContext,
+        },
         defaultOptions,
       });
 
