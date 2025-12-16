@@ -396,90 +396,52 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "deployment/building-mastra",
-          label: "Building Mastra",
+          id: "deployment/mastra-server",
+          label: "Mastra Server",
         },
         {
           type: "doc",
           id: "deployment/monorepo",
-          label: "With a Monorepo",
+          label: "Monorepo",
+        },
+        {
+          type: "doc",
+          id: "deployment/cloud-providers",
+          label: "Cloud Providers",
         },
         {
           type: "doc",
           id: "deployment/web-framework",
-          label: "With a Web Framework",
+          label: "Web Framework",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Mastra Cloud",
+      items: [
+        {
+          type: "doc",
+          id: "mastra-cloud/overview",
+          label: "Overview",
+          customProps: {
+            tags: ["beta"],
+          },
         },
         {
-          type: "category",
-          label: "Mastra Cloud",
-          items: [
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/overview",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/setting-up",
-              label: "Setup & Deploy",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/dashboard",
-              label: "Dashboard",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/observability",
-              label: "Observability",
-            },
-          ],
+          type: "doc",
+          id: "mastra-cloud/setting-up",
+          label: "Setup & Deploy",
         },
         {
-          type: "category",
-          label: "Cloud Providers",
-          items: [
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/index",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/amazon-ec2",
-              label: "Amazon EC2",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/aws-lambda",
-              label: "AWS Lambda",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/azure-app-services",
-              label: "Azure App Services",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/cloudflare-deployer",
-              label: "Cloudflare",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/digital-ocean",
-              label: "Digital Ocean",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/netlify-deployer",
-              label: "Netlify",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/vercel-deployer",
-              label: "Vercel",
-            },
-          ],
+          type: "doc",
+          id: "mastra-cloud/dashboard",
+          label: "Dashboard",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/observability",
+          label: "Observability",
         },
       ],
     },
