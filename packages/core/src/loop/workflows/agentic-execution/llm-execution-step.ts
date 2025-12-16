@@ -1,6 +1,6 @@
 import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2Usage, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';

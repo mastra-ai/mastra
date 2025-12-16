@@ -1,4 +1,4 @@
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
 import type { MastraMessageContentV2, MessageList } from '../agent/message-list';

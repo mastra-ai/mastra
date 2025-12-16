@@ -8,10 +8,6 @@ import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import {
-  MockLanguageModelV3,
-  convertArrayToReadableStream as convertArrayToReadableStreamV3,
-} from '@internal/ai-v6/test';
 import { config } from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';

@@ -1,5 +1,5 @@
 import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';

@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
+import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
@@ -21,7 +22,6 @@ import type {
   RunProcessInputStepResult,
   ToolCallInfo,
 } from './index';
-import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
 
 /**
  * Implementation of processor state management

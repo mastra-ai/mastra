@@ -27,7 +27,6 @@ import type {
   MastraModelConfig,
 } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
-import { isSupportedLanguageModel } from './utils';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -68,7 +67,7 @@ import type {
   DynamicAgentInstructions,
   AgentMethodType,
 } from './types';
-import { resolveThreadIdFromArgs } from './utils';
+import { isSupportedLanguageModel, resolveThreadIdFromArgs } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
