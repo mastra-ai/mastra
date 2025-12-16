@@ -43,6 +43,7 @@ interface CreatePrepareStreamWorkflowOptions<
   agentId: string;
   agentName?: string;
   toolCallId?: string;
+  assistantMessageId?: string;
 }
 
 export function createPrepareStreamWorkflow<
@@ -68,6 +69,7 @@ export function createPrepareStreamWorkflow<
   agentId,
   agentName,
   toolCallId,
+  assistantMessageId,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -110,6 +112,7 @@ export function createPrepareStreamWorkflow<
     memoryConfig,
     memory,
     resourceId,
+    assistantMessageId,
   });
 
   const mapResultsStep = createMapResultsStep({

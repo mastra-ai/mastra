@@ -2701,6 +2701,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       agentId: this.id,
       agentName: this.name,
       toolCallId: options.toolCallId,
+      assistantMessageId: options.memory?.assistantMessageId,
     });
 
     const run = await executionWorkflow.createRun();
