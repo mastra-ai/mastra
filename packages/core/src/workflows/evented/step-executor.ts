@@ -202,10 +202,11 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
+    abortController?: AbortController;
   }): Promise<number[]> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
 
     const results = await Promise.all(
@@ -318,10 +319,11 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
+    abortController?: AbortController;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
 
     if (step.duration) {
@@ -391,10 +393,11 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
+    abortController?: AbortController;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
 
     if (step.date) {
