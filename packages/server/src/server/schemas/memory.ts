@@ -367,3 +367,29 @@ export const searchMemoryResponseSchema = z.object({
   searchScope: z.string().optional(),
   searchType: z.string().optional(),
 });
+
+// ============================================================================
+// Branch Thread Schemas
+// ============================================================================
+
+/**
+ * Query schema for POST /api/memory/threads/:threadId/branch
+ */
+export const branchThreadQuerySchema = agentIdQuerySchema;
+
+/**
+ * Body schema for POST /api/memory/threads/:threadId/branch
+ */
+export const branchThreadBodySchema = z.object({
+  messageId: z.string().describe('ID of the message to branch up to (inclusive)'),
+  resourceId: z.string().describe('Resource ID for the new thread'),
+  newThreadId: z.string().optional().describe('Optional custom ID for the new thread'),
+});
+
+/**
+ * Response schema for POST /api/memory/threads/:threadId/branch
+ */
+export const branchThreadResponseSchema = z.object({
+  thread: threadSchema,
+  messageCount: z.number().describe('Number of messages copied to the new thread'),
+});

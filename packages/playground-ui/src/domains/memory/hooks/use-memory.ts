@@ -34,6 +34,33 @@ export const useMemoryConfig = (agentId?: string) => {
   });
 };
 
+export const useThread = ({
+  threadId,
+  agentId,
+  enabled = true,
+}: {
+  threadId?: string;
+  agentId: string;
+  enabled?: boolean;
+}) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery({
+    queryKey: ['memory', 'thread', threadId, agentId],
+    queryFn: () => {
+      if (!threadId) return null;
+      const thread = client.getMemoryThread({ threadId, agentId });
+      return thread.get(requestContext);
+    },
+    enabled: Boolean(threadId) && enabled,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+};
+
 export const useThreads = ({
   resourceId,
   agentId,
@@ -98,6 +125,44 @@ export const useMemorySearch = ({
   return useMutation({
     mutationFn: async ({ searchQuery, memoryConfig }: { searchQuery: string; memoryConfig?: MemorySearchParams }) => {
       return client.searchMemory({ agentId, resourceId, threadId, searchQuery, memoryConfig, requestContext });
+    },
+  });
+};
+
+export const useBranchThread = () => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useMutation({
+    mutationFn: ({
+      threadId,
+      messageId,
+      agentId,
+      resourceId,
+      newThreadId,
+    }: {
+      threadId: string;
+      messageId: string;
+      agentId: string;
+      resourceId: string;
+      newThreadId?: string;
+    }) => {
+      return client.branchThread({
+        threadId,
+        messageId,
+        agentId,
+        resourceId,
+        newThreadId,
+        requestContext,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['memory', 'threads'] });
+      toast.success('Conversation branched successfully');
+    },
+    onError: () => {
+      toast.error('Failed to branch conversation');
     },
   });
 };

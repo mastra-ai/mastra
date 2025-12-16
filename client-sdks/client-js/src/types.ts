@@ -313,6 +313,28 @@ export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
 };
 
+export interface BranchThreadParams {
+  /** Source thread ID to branch from */
+  threadId: string;
+  /** ID of the message to branch up to (inclusive) */
+  messageId: string;
+  /** Agent ID for memory access */
+  agentId: string;
+  /** Resource ID for the new thread */
+  resourceId: string;
+  /** Optional custom ID for the new thread */
+  newThreadId?: string;
+  /** Optional request context */
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+export interface BranchThreadResponse {
+  /** The newly created branched thread */
+  thread: StorageThreadType;
+  /** Number of messages copied to the new thread */
+  messageCount: number;
+}
+
 export interface GetLogsParams {
   transportId: string;
   fromDate?: Date;

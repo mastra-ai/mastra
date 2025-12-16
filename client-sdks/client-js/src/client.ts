@@ -49,6 +49,8 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  BranchThreadParams,
+  BranchThreadResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -151,6 +153,25 @@ export class MastraClient extends BaseResource {
     return this.request(
       `/api/memory/threads?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
       { method: 'POST', body: params },
+    );
+  }
+
+  /**
+   * Branches an existing thread by copying messages up to a specific message
+   * @param params - Parameters for branching the thread
+   * @returns Promise containing the new branched thread and message count
+   */
+  public branchThread(params: BranchThreadParams): Promise<BranchThreadResponse> {
+    return this.request(
+      `/api/memory/threads/${params.threadId}/branch?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
+      {
+        method: 'POST',
+        body: {
+          messageId: params.messageId,
+          resourceId: params.resourceId,
+          newThreadId: params.newThreadId,
+        },
+      },
     );
   }
 
