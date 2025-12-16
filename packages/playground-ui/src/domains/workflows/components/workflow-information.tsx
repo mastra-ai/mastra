@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useMemo } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -12,8 +12,10 @@ import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { toast } from '@/lib/toast';
 import { WorkflowRunContext } from '../context/workflow-run-context';
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { PlaygroundTabs, TabList, Tab, TabContent } from '@/components/ui/playground-tabs';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
+import { WorkflowStepDetailContent } from './workflow-step-detail';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -35,11 +37,25 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     isCancellingWorkflowRun,
   } = useContext(WorkflowRunContext);
 
+  const { stepDetail, closeStepDetail } = useWorkflowStepDetail();
+
   const [tab, setTab] = useState<string>('current-run');
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
+
+  // Generate dynamic tab name based on step detail type
+  const nodeDetailTabName = useMemo(() => {
+    if (!stepDetail) return null;
+    if (stepDetail.type === 'map-config') {
+      return 'Map Config';
+    }
+    if (stepDetail.type === 'nested-graph') {
+      return 'Nested Workflow';
+    }
+    return 'Node';
+  }, [stepDetail]);
 
   useEffect(() => {
     if (!runId && !initialRunId) {
@@ -53,6 +69,23 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
       toast.error(`Error loading workflow: ${errorMessage}`);
     }
   }, [error]);
+
+  // Auto-switch tabs when step detail opens/closes
+  useEffect(() => {
+    if (stepDetail) {
+      setTab('node-details');
+    } else if (tab === 'node-details') {
+      setTab('current-run');
+    }
+  }, [stepDetail]);
+
+  // Handle tab change - close step detail when switching away from node-details
+  const handleTabChange = (newTab: string) => {
+    if (tab === 'node-details' && newTab !== 'node-details') {
+      closeStepDetail();
+    }
+    setTab(newTab);
+  };
 
   if (error) {
     return null;
@@ -85,11 +118,22 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         </div>
       </EntityHeader>
 
-      <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
-        <PlaygroundTabs defaultTab="current-run" value={tab} onValueChange={setTab}>
+      <div className="flex-1 overflow-auto border-t-sm border-border1 flex flex-col">
+        <PlaygroundTabs defaultTab="current-run" value={tab} onValueChange={handleTabChange} className="h-full">
           <TabList>
             <Tab value="current-run">Current Run</Tab>
-            <Tab value="run-options">Run options</Tab>
+            <Tab value="run-options">Run Options</Tab>
+            {stepDetail && nodeDetailTabName && (
+              <Tab
+                value="node-details"
+                onClose={() => {
+                  closeStepDetail();
+                  setTab('current-run');
+                }}
+              >
+                {nodeDetailTabName} Details
+              </Tab>
+            )}
           </TabList>
 
           <TabContent value="current-run">
@@ -130,6 +174,11 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
           <TabContent value="run-options">
             <TracingRunOptions />
           </TabContent>
+          {stepDetail && (
+            <TabContent value="node-details">
+              <WorkflowStepDetailContent />
+            </TabContent>
+          )}
         </PlaygroundTabs>
       </div>
     </div>
