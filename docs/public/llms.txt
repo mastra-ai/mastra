@@ -14,7 +14,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 
 ## EN - docs
 - [Adding Voice to Agents | Agents](https://mastra.ai/en/docs/agents/adding-voice)
-- [Agent Approval | Agents](https://mastra.ai/en/docs/agents/agent-approval): Learn how to require approvals and suspend tool execution while keeping humans in control of agent workflows.
+- [Agent Approval | Agents](https://mastra.ai/en/docs/agents/agent-approval): Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
 - [Agent Memory | Agents](https://mastra.ai/en/docs/agents/agent-memory): Learn how to add memory to agents to store conversation history and maintain context across interactions.
 - [Guardrails | Agents](https://mastra.ai/en/docs/agents/guardrails): Learn how to implement guardrails using input and output processors to secure and control AI interactions.
 - [Agent Networks | Agents](https://mastra.ai/en/docs/agents/networks): Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.

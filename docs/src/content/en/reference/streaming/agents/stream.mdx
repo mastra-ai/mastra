@@ -478,6 +478,27 @@ const stream = await agent.stream("message for agent");
         "Save messages incrementally after each stream step completes (default: false).",
     },
     {
+      name: "requireToolApproval",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "When true, all tool calls require explicit approval before execution. The stream will emit `tool-call-approval` chunks and pause until `approveToolCall()` or `declineToolCall()` is called.",
+    },
+    {
+      name: "autoResumeSuspendedTools",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "When true, automatically resumes suspended tools when the user sends a new message on the same thread. The agent extracts `resumeData` from the user's message based on the tool's `resumeSchema`. Requires memory to be configured.",
+    },
+    {
+      name: "toolCallConcurrency",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.",
+    },
+    {
       name: "providerOptions",
       type: "Record<string, Record<string, JSONValue>>",
       isOptional: true,
@@ -765,3 +786,4 @@ await agent.stream("message for agent", {
 
 - [Generating responses](/docs/v1/agents/overview#generating-responses)
 - [Streaming responses](/docs/v1/agents/overview#generating-responses)
+- [Agent Approval](/docs/v1/agents/agent-approval)
