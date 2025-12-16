@@ -1,5 +1,5 @@
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
-import { isSupportedEmbeddingModel, embedV1, embedV3 } from '@mastra/core/vector';
+import { embedV1, embedV2, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import type { DatabaseConfig, ProviderOptions } from '../tools/types';
 
@@ -44,8 +44,15 @@ export const vectorQuerySearch = async ({
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
   let embeddingResult;
 
-  if (isSupportedEmbeddingModel(model)) {
+  if (model.specificationVersion === 'v3') {
     embeddingResult = await embedV3({
+      model: model,
+      value: queryText,
+      maxRetries,
+      ...(providerOptions && { providerOptions }),
+    });
+  } else if (model.specificationVersion === 'v2') {
+    embeddingResult = await embedV2({
       model: model,
       value: queryText,
       maxRetries,
