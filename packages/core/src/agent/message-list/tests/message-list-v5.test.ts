@@ -1,6 +1,6 @@
 import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from '@internal/ai-sdk-v4';
-import { isToolUIPart } from 'ai-v5';
-import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
+import { isToolUIPart } from '@internal/ai-sdk-v5';
+import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';

@@ -3,7 +3,7 @@ import type {
   LanguageModelV2StreamPart,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import { convertArrayToReadableStream, mockId } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { MessageList } from '../../agent/message-list';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
