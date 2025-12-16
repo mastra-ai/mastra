@@ -7,7 +7,15 @@ import type {
   MastraFinishReason,
 } from '@mastra/core/stream';
 
-import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, FinishReason } from 'ai';
+import type {
+  InferUIMessageChunk,
+  LanguageModelUsage as AISDKLanguageModelUsage,
+  ObjectStreamPart,
+  TextStreamPart,
+  ToolSet,
+  UIMessage,
+  FinishReason,
+} from 'ai';
 import { isDataChunkType } from './utils';
 
 /**
@@ -61,7 +69,8 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
       return {
         type: 'finish',
         finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
-        totalUsage: chunk.payload.output.usage,
+        // Cast needed: Mastra's LanguageModelUsage has optional properties, AI SDK has required-but-nullable
+        totalUsage: chunk.payload.output.usage as AISDKLanguageModelUsage,
       };
     }
     case 'reasoning-start':

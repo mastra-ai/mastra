@@ -200,7 +200,7 @@ interface FinishPayload<Tools extends ToolSet = ToolSet> {
     logprobs?: LanguageModelV1LogProbs;
   };
   output: {
-    usage: LanguageModelV2Usage;
+    usage: LanguageModelUsage;
     /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
     steps?: MastraStepResult<Tools>[];
   };

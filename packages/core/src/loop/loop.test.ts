@@ -9,6 +9,7 @@ import { textStreamTests } from './test-utils/textStream';
 import { toolsTests } from './test-utils/tools';
 import { toUIMessageStreamTests } from './test-utils/toUIMessageStream';
 import { mockDate } from './test-utils/utils';
+import { v3UsageNormalizationTests } from './test-utils/v3-usage-normalization';
 
 describe('Loop Tests', () => {
   describe('AISDK v5', () => {
@@ -31,6 +32,19 @@ describe('Loop Tests', () => {
     toolsTests({ loopFn: loop, runId: 'test-run-id' });
 
     streamObjectTests({ loopFn: loop, runId: 'test-run-id' });
+  });
+
+  describe('AISDK v6 (LanguageModelV3)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(mockDate);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    v3UsageNormalizationTests({ loopFn: loop, runId: 'test-run-id' });
   });
 
   // toolsTestsV5({ executeFn: execute, runId });
