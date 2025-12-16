@@ -1,26 +1,27 @@
 import { SearchIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState, useDeferredValue } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 
 export interface SearchbarProps {
   onSearch: (search: string) => void;
   label: string;
   placeholder: string;
+  debounceMs?: number;
 }
 
-export const Searchbar = ({ onSearch, label, placeholder }: SearchbarProps) => {
+export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300 }: SearchbarProps) => {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState('');
-  const deferredValue = useDeferredValue(value);
 
-  // Keep callback ref stable to avoid requiring useCallback from consumers
-  const onSearchRef = useRef(onSearch);
-  onSearchRef.current = onSearch;
+  const debouncedSearch = useDebouncedCallback((value: string) => {
+    onSearch(value);
+  }, debounceMs);
 
-  // Sync deferred value to parent
   useEffect(() => {
-    onSearchRef.current(deferredValue);
-  }, [deferredValue]);
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [debouncedSearch]);
 
   useEffect(() => {
     const input = inputRef.current;
@@ -41,7 +42,7 @@ export const Searchbar = ({ onSearch, label, placeholder }: SearchbarProps) => {
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setValue(e.target.value);
+    debouncedSearch(e.target.value);
   };
 
   return (
@@ -60,7 +61,6 @@ export const Searchbar = ({ onSearch, label, placeholder }: SearchbarProps) => {
           className="bg-surface2 text-ui-md placeholder:text-icon-3 block h-8 w-full px-2 outline-none"
           name={id}
           ref={inputRef}
-          value={value}
           onChange={handleChange}
         />
       </div>
