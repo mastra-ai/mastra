@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import type { ToolSet } from 'ai-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
 import { RequestContext } from '../../request-context';
@@ -163,9 +163,15 @@ export function workflowLoopStream<
           }
         }
 
+        if (executionResult.status !== 'suspended') {
+          await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+        }
+
         controller.close();
         return;
       }
+
+      await agenticLoopWorkflow.deleteWorkflowRunById(runId);
 
       // Always emit finish chunk, even for abort (tripwire) cases
       // This ensures the stream properly completes and all promises are resolved

@@ -1,7 +1,7 @@
 import { delay } from '@ai-sdk/provider-utils-v5';
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
-import { tool } from 'ai-v5';
-import { convertArrayToReadableStream, mockValues, mockId } from 'ai-v5/test';
+import { tool } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';

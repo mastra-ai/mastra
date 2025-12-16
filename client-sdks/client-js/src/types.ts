@@ -550,7 +550,6 @@ export interface MemorySearchResult {
 }
 
 export interface TimeTravelParams {
-  runId: string;
   step: string | string[];
   inputData?: Record<string, any>;
   resumeData?: Record<string, any>;

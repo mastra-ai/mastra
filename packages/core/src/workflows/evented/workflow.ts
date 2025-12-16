@@ -352,7 +352,11 @@ export class EventedWorkflow<
     this.executionEngine.__registerMastra(mastra);
   }
 
-  async createRun(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  async createRun(options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -361,6 +365,7 @@ export class EventedWorkflow<
       new EventedRun({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -385,6 +390,7 @@ export class EventedWorkflow<
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -418,6 +424,7 @@ export class EventedRun<
   constructor(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -459,6 +466,7 @@ export class EventedRun<
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
@@ -537,6 +545,7 @@ export class EventedRun<
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
@@ -709,6 +718,16 @@ export class EventedRun<
   }
 
   async cancel() {
+    // Update storage directly for immediate status update (same pattern as Inngest)
+    await this.mastra?.getStorage()?.updateWorkflowState({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      opts: {
+        status: 'canceled',
+      },
+    });
+
+    // Publish event for event-driven architecture (watchers, running workflow termination, etc.)
     await this.mastra?.pubsub.publish('workflows', {
       type: 'workflow.cancel',
       runId: this.runId,
