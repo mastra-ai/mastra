@@ -297,9 +297,9 @@ export function resultObjectTests({
         ...defaultSettings(),
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.aisdk.v5.response).toMatchObject({
+      expect(await result.response).toMatchObject({
         headers: { call: '2' },
         id: 'id-0',
         messages: [
