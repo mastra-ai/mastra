@@ -51,6 +51,8 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'start':
       return {
         type: 'start',
+        // Preserve messageId from the payload so it can be sent to useChat
+        ...(chunk.payload?.messageId ? { messageId: chunk.payload.messageId } : {}),
       };
     case 'step-start':
       const { messageId: _messageId, ...rest } = chunk.payload;
@@ -498,10 +500,12 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     case 'start': {
       if (sendStart) {
+        // Prefer messageId from the chunk itself (from backend), fall back to responseMessageId parameter
+        const messageId = ('messageId' in part ? part.messageId : undefined) || responseMessageId;
         return {
           type: 'start' as const,
           ...(messageMetadataValue != null ? { messageMetadata: messageMetadataValue } : {}),
-          ...(responseMessageId != null ? { messageId: responseMessageId } : {}),
+          ...(messageId != null ? { messageId } : {}),
         } as InferUIMessageChunk<UI_MESSAGE>;
       }
       return;

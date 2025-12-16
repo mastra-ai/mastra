@@ -80,3 +80,50 @@ export const memoryProcessorAgent = new Agent({
     get_weather: weatherTool,
   },
 });
+
+// Progress tool that emits data-* parts for testing issue #11091
+export const progressTool = createTool({
+  id: 'progress-task',
+  description: 'Runs a task and reports progress updates. Use this when the user asks to run a task with progress.',
+  inputSchema: z.object({
+    taskName: z.string().describe('Name of the task to run'),
+  }),
+  execute: async (input, context) => {
+    // Emit progress updates as data-* parts
+    for (let i = 1; i <= 3; i++) {
+      await context?.writer?.custom({
+        type: 'data-progress',
+        data: {
+          taskName: input.taskName,
+          step: i,
+          progress: Math.round((i / 3) * 100),
+          status: i < 3 ? 'in-progress' : 'complete',
+        },
+      });
+    }
+    return { success: true, taskName: input.taskName, totalSteps: 3 };
+  },
+});
+
+const progressMemory = new Memory({
+  options: {
+    lastMessages: 10,
+  },
+  storage: new LibSQLStore({
+    id: 'progress-memory-storage',
+    url: `file:${dbPath}`,
+  }),
+  embedder: openai.embedding('text-embedding-3-small'),
+});
+
+export const progressAgent = new Agent({
+  id: 'progress-agent',
+  name: 'progress-agent',
+  instructions:
+    'You are a task runner that can run tasks with progress updates. When asked to run a task, use the progress-task tool.',
+  model: openai('gpt-4o'),
+  memory: progressMemory,
+  tools: {
+    'progress-task': progressTool,
+  },
+});
