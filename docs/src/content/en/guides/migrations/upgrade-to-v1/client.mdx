@@ -155,6 +155,23 @@ To migrate, use workflow streaming APIs instead of watch.
 + }
 ```
 
+### Run related methods cannot be called directly on workflow instance
+
+Run related methods cannot be called directly on workflow instance. You need to create a run instance first using `createRun()` method.
+
+
+```diff
+- const result = await workflow.start({ runId: '123', inputData: { ... } });
++ const run = await workflow.createRun({ runId: '123' });
++ const result = await run.start({ inputData: { ... } });
+```
+
+```diff
+- const result = await workflow.stream({ runId: '123', inputData: { ... } });
++ const run = await workflow.createRun({ runId: '123' });
++ const stream = await run.stream({ inputData: { ... } });
+```
+
 ### Deprecated stream endpoints
 
 Some stream endpoints are deprecated and will be removed. The `/api/agents/:agentId/stream/vnext` endpoint returns 410 Gone, and `/api/agents/:agentId/stream/ui` is deprecated. This change consolidates on standard streaming endpoints.

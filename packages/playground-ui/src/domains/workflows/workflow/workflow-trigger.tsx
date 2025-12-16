@@ -106,13 +106,13 @@ export function WorkflowTrigger({
 
       setResult(null);
 
-      const { runId } = await createWorkflowRun({ workflowId });
+      const run = await createWorkflowRun({ workflowId });
 
-      setRunId?.(runId);
-      setInnerRunId(runId);
-      setContextRunId(runId);
+      setRunId?.(run.runId);
+      setInnerRunId(run.runId);
+      setContextRunId(run.runId);
 
-      streamWorkflow({ workflowId, runId, inputData: data, requestContext });
+      streamWorkflow({ workflowId, runId: run.runId, inputData: data, requestContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
@@ -127,11 +127,11 @@ export function WorkflowTrigger({
     setCancelResponse(null);
     const { stepId, runId: prevRunId, resumeData } = step;
 
-    const { runId } = await createWorkflowRun({ workflowId, prevRunId });
+    const run = await createWorkflowRun({ workflowId, prevRunId });
 
     await resumeWorkflow({
       step: stepId,
-      runId,
+      runId: run.runId,
       resumeData,
       workflowId,
       requestContext,

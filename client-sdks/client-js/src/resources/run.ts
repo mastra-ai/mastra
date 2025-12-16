@@ -26,18 +26,17 @@ export class Run extends BaseResource {
   constructor(
     options: ClientOptions,
     private workflowId: string,
-    private runId: string,
+    public readonly runId: string,
   ) {
     super(options);
   }
 
   /**
    * Cancels a specific workflow run by its ID
-   * @param runId - The ID of the workflow run to cancel
    * @returns Promise containing a success message
    */
-  cancelRun(runId: string): Promise<{ message: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/cancel`, {
+  cancelRun(): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${this.runId}/cancel`, {
       method: 'POST',
     });
   }
@@ -517,19 +516,19 @@ export class Run extends BaseResource {
 
   /**
    * Restarts an active workflow run asynchronously
-   * @param params - Object containing the requestContext
+   * @param params - optional object containing the requestContext
    * @returns Promise containing the workflow restart results
    */
-  restartAsync(params: {
+  restartAsync(params?: {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
-    const requestContext = parseClientRequestContext(params.requestContext);
+    const requestContext = parseClientRequestContext(params?.requestContext);
     return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/restart-async?runId=${this.runId}`, {
       method: 'POST',
       body: {
         requestContext,
-        tracingOptions: params.tracingOptions,
+        tracingOptions: params?.tracingOptions,
       },
     }).then(deserializeWorkflowError);
   }
