@@ -3412,8 +3412,10 @@ describe('Workflow', () => {
     it('should execute multiple runs of a workflow', async () => {
       const step1 = createStep({
         id: 'step1',
-        execute: async ({ state, setState }) => {
+        execute: async ({ state, setState, requestContext }) => {
           const newState = state.value + '!!!';
+          const testValue = requestContext.get('testKey');
+          requestContext.set('randomKey', newState + testValue);
           await setState({ value: newState });
           return { result: 'success', value: newState };
         },
@@ -3427,12 +3429,13 @@ describe('Workflow', () => {
       const step2 = createStep({
         id: 'step2',
         inputSchema: z.object({ result: z.string(), value: z.string() }),
-        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        outputSchema: z.object({ result: z.string(), value: z.string(), randomValue: z.string() }),
         stateSchema: z.object({
           value: z.string(),
         }),
-        execute: async ({ inputData }) => {
-          return inputData;
+        execute: async ({ inputData, requestContext }) => {
+          const randomValue = requestContext.get('randomKey');
+          return { ...inputData, randomValue };
         },
       });
 
@@ -3442,6 +3445,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
           value: z.string(),
+          randomValue: z.string(),
         }),
         stateSchema: z.object({
           value: z.string(),
@@ -3454,6 +3458,8 @@ describe('Workflow', () => {
 
       const [result1, result2] = await Promise.all([
         (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-one');
           const run = await workflow.createRun();
           const result = await run.start({
             inputData: {},
@@ -3461,11 +3467,14 @@ describe('Workflow', () => {
             outputOptions: {
               includeState: true,
             },
+            requestContext,
           });
 
           return result;
         })(),
         (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-two');
           const run = await workflow.createRun();
           const result = await run.start({
             inputData: {},
@@ -3473,6 +3482,7 @@ describe('Workflow', () => {
             outputOptions: {
               includeState: true,
             },
+            requestContext,
           });
 
           return result;
@@ -3488,7 +3498,7 @@ describe('Workflow', () => {
       });
       expect(result1.steps['step2']).toEqual({
         status: 'success',
-        output: { result: 'success', value: 'test-state-one!!!' },
+        output: { result: 'success', value: 'test-state-one!!!', randomValue: 'test-state-one!!!test-value-one' },
         payload: { result: 'success', value: 'test-state-one!!!' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
@@ -3503,7 +3513,7 @@ describe('Workflow', () => {
       });
       expect(result2.steps['step2']).toEqual({
         status: 'success',
-        output: { result: 'success', value: 'test-state-two!!!' },
+        output: { result: 'success', value: 'test-state-two!!!', randomValue: 'test-state-two!!!test-value-two' },
         payload: { result: 'success', value: 'test-state-two!!!' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
