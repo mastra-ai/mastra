@@ -118,6 +118,7 @@ export function workflowLoopStream<
           from: ChunkFrom.AGENT,
           payload: {
             id: agentId,
+            messageId,
           },
         });
       }

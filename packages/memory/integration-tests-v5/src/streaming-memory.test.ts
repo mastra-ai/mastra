@@ -6,6 +6,8 @@ import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
 import { toAISdkStream } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { MastraClient } from '@mastra/client-js';
 import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
@@ -386,6 +388,80 @@ describe('Memory Streaming Tests', () => {
           m.content.parts.some(p => p.type === 'tool-invocation' && p.toolInvocation.toolName === 'clipboard'),
       );
       expect(clipboardToolInvocation.length).toBeGreaterThan(0);
+    });
+
+    it('should not create duplicate assistant messages', async () => {
+      const testThreadId = randomUUID();
+      const testResourceId = 'test-user-exact-flow-11091';
+      const mastraClient = new MastraClient({ baseUrl: `http://localhost:${port}` });
+
+      const { result } = renderHook(() => {
+        const chat = useChat({
+          transport: new DefaultChatTransport({
+            api: `http://localhost:${port}/chat/progress`,
+            async prepareSendMessagesRequest({ messages, body }) {
+              return {
+                body: {
+                  messages,
+                  body,
+                  memory: {
+                    thread: testThreadId,
+                    resource: testResourceId,
+                  },
+                },
+              };
+            },
+          }),
+        });
+        return chat;
+      });
+
+      // Turn 1
+      await act(async () => {
+        await result.current.sendMessage({
+          role: 'user',
+          parts: [{ type: 'text', text: 'Run a task called "first-task"' }],
+        });
+      });
+
+      await waitFor(
+        () => {
+          expect(result.current.messages.length).toBeGreaterThanOrEqual(2);
+        },
+        { timeout: 30000 },
+      );
+
+      // Turn 2
+      await act(async () => {
+        await result.current.sendMessage({
+          role: 'user',
+          parts: [{ type: 'text', text: 'Run another task called "second-task"' }],
+        });
+      });
+
+      await waitFor(
+        () => {
+          expect(result.current.messages.length).toBeGreaterThanOrEqual(4);
+        },
+        { timeout: 30000 },
+      );
+
+      const { messages: storageMessages } = await mastraClient.listThreadMessages(testThreadId, {
+        agentId: 'progress',
+      });
+
+      const uiMessages: UIMessage[] = toAISdkV5Messages(storageMessages);
+
+      const assistantMessages = uiMessages.filter(m => m.role === 'assistant');
+      const userMessages = uiMessages.filter(m => m.role === 'user');
+
+      // Should have exactly 4 messages: 2 user + 2 assistant (no duplicates)
+      expect(uiMessages.length).toBe(4);
+      expect(userMessages.length).toBe(2);
+      expect(assistantMessages.length).toBe(2);
+
+      // Clean up
+      await mastraClient.getMemoryThread({ threadId: testThreadId, agentId: 'progress' }).delete();
     });
   });
 
