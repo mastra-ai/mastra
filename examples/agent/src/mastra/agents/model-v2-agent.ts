@@ -6,7 +6,7 @@ import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { logDataMiddleware } from '../../model-middleware';
-import { wrapLanguageModel } from '@internal/ai-sdk-v5';
+import { wrapLanguageModel } from 'ai-v5';
 import { cookingTool } from '../tools';
 import {
   advancedModerationWorkflow,

@@ -1815,6 +1815,108 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
+    it('should execute multiple runs of a workflow', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData, requestContext }) => {
+          const newValue = inputData.value + '!!!';
+          const testValue = requestContext.get('testKey');
+          requestContext.set('randomKey', newValue + testValue);
+          return { result: 'success', value: newValue };
+        },
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({ result: z.string(), value: z.string() }),
+        outputSchema: z.object({ result: z.string(), value: z.string(), randomValue: z.string() }),
+        execute: async ({ inputData, requestContext }) => {
+          const randomValue = requestContext.get('randomKey') as string;
+          return { ...inputData, randomValue };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+          randomValue: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const [result1, result2] = await Promise.all([
+        (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-one');
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: { value: 'test-input-one' },
+            requestContext,
+          });
+          return result;
+        })(),
+        (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-two');
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: { value: 'test-input-two' },
+            requestContext,
+          });
+          return result;
+        })(),
+      ]);
+
+      expect(result1.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-input-one!!!' },
+        payload: { value: 'test-input-one' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result1.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-input-one!!!', randomValue: 'test-input-one!!!test-value-one' },
+        payload: { result: 'success', value: 'test-input-one!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-input-two!!!' },
+        payload: { value: 'test-input-two' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-input-two!!!', randomValue: 'test-input-two!!!test-value-two' },
+        payload: { result: 'success', value: 'test-input-two!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      await mastra.stopEventEngine();
+    });
+
     it('should throw error when restart is called on evented workflow', async () => {
       const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
