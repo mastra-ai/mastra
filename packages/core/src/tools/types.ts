@@ -15,7 +15,7 @@ import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
-import type { OutputWriter } from '../workflows/types';
+import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 
@@ -35,7 +35,7 @@ export interface AgentToolExecutionContext<
   // Always present when called from agent context
   toolCallId: string;
   messages: any[];
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
+  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>, suspendOptions?: SuspendOptions) => Promise<any>;
 
   // Optional - memory identifiers
   threadId?: string;
@@ -58,7 +58,7 @@ export interface WorkflowToolExecutionContext<
   workflowId: string;
   state: any;
   setState: (state: any) => void;
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
+  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>, suspendOptions?: SuspendOptions) => Promise<any>;
 
   // Optional - only present if workflow step was previously suspended
   resumeData?: InferZodLikeSchema<TResumeSchema>;
@@ -87,7 +87,7 @@ export interface MCPToolExecutionContext {
  * - Returns: Results back to AI SDK
  */
 export type MastraToolInvocationOptions = ToolInvocationOptions & {
-  suspend?: (suspendPayload: any) => Promise<any>;
+  suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
   resumeData?: any;
   outputWriter?: OutputWriter;
   tracingContext?: TracingContext;

@@ -102,6 +102,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSc
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
+  autoResumeSuspendedTools?: boolean;
   agentId: string;
   toolCallConcurrency?: number;
   agentName?: string;
