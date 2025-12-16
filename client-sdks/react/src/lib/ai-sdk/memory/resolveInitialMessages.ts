@@ -80,34 +80,26 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
           // Build child messages from nested messages
           const childMessages: ChildMessage[] = [];
 
-          // Extract tool calls from messages (v1 format: messages with type 'tool-call')
-          // and match them with their results
+          // Build a map of toolCallId -> toolResult for efficient lookup
+          const toolResultMap = new Map<string, ToolResultContent>();
+          for (const msg of messages) {
+            if (Array.isArray(msg.content)) {
+              for (const part of msg.content) {
+                if (typeof part === 'object' && part.type === 'tool-result') {
+                  toolResultMap.set(part.toolCallId, part as ToolResultContent);
+                }
+              }
+            }
+          }
+
+          // Extract tool calls from messages and match them with their results
           for (const msg of messages) {
             if (msg.type === 'tool-call' && Array.isArray(msg.content)) {
               // Process each tool call in this message
               for (const part of msg.content) {
                 if (typeof part === 'object' && part.type === 'tool-call') {
                   const toolCallContent = part as ToolCallContent;
-                  const toolCallId = toolCallContent.toolCallId;
-
-                  // Find the corresponding tool result in messages
-                  let toolResult;
-                  for (const resultMsg of messages) {
-                    if (Array.isArray(resultMsg.content)) {
-                      for (const resultPart of resultMsg.content) {
-                        if (
-                          typeof resultPart === 'object' &&
-                          resultPart.type === 'tool-result' &&
-                          resultPart.toolCallId === toolCallId
-                        ) {
-                          toolResult = resultPart;
-                          break;
-                        }
-                      }
-                    }
-                    if (toolResult) break;
-                  }
-
+                  const toolResult = toolResultMap.get(toolCallContent.toolCallId);
                   const isWorkflow = Boolean(toolResult?.result?.result?.steps);
 
                   childMessages.push({
