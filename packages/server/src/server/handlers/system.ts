@@ -13,7 +13,6 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   handler: async () => {
     try {
       const packagesEnv = process.env.MASTRA_PACKAGES;
-      const isDev = process.env.MASTRA_DEV === 'true';
 
       let packages: MastraPackage[] = [];
 
@@ -25,10 +24,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         }
       }
 
-      return {
-        packages,
-        isDev,
-      };
+      return { packages };
     } catch (error) {
       return handleError(error, 'Error getting system packages');
     }
