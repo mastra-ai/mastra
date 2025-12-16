@@ -134,27 +134,28 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Cancel this workflow and all nested child workflows
     this.cancelRunAndChildren(runId);
 
-    const currentState = await this.mastra.getStorage()?.updateWorkflowState({
+    const storage = this.mastra.getStorage();
+    const currentState = await storage?.loadWorkflowSnapshot({
       workflowName: workflowId,
       runId,
-      opts: {
-        status: 'canceled',
-      },
     });
 
-    await this.endWorkflow({
-      workflow: undefined as any,
-      workflowId,
-      runId,
-      stepResults: currentState?.context as any,
-      prevResult: { status: 'canceled' } as any,
-      requestContext: currentState?.requestContext as any,
-      executionPath: [],
-      activeSteps: {},
-      resumeSteps: [],
-      resumeData: undefined,
-      parentWorkflow: undefined,
-    });
+    await this.endWorkflow(
+      {
+        workflow: undefined as any,
+        workflowId,
+        runId,
+        stepResults: (currentState?.context ?? {}) as any,
+        prevResult: { status: 'canceled' } as any,
+        requestContext: (currentState?.requestContext ?? {}) as any,
+        executionPath: [],
+        activeSteps: {},
+        resumeSteps: [],
+        resumeData: undefined,
+        parentWorkflow: undefined,
+      },
+      'canceled',
+    );
   }
 
   protected async processWorkflowStart({
@@ -177,10 +178,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (parentWorkflow?.runId) {
       this.parentChildRelationships.set(runId, parentWorkflow.runId);
     }
+    // Preserve resourceId from existing snapshot if present
+    const existingRun = await this.mastra.getStorage()?.getWorkflowRunById({ runId, workflowName: workflow.id });
+    const resourceId = existingRun?.resourceId;
 
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
       runId,
+      resourceId,
       snapshot: {
         activePaths: [],
         suspendedPaths: {},
@@ -219,13 +224,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
-  protected async endWorkflow(args: ProcessorArgs) {
+  protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' = 'success') {
     const { workflowId, runId, prevResult } = args;
     await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
       runId,
       opts: {
-        status: 'success',
+        status,
         result: prevResult,
       },
     });
@@ -1209,7 +1214,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId: workflowData.runId,
     });
 
-    if (currentState?.status === 'canceled' && type !== 'workflow.end') {
+    if (currentState?.status === 'canceled' && type !== 'workflow.end' && type !== 'workflow.cancel') {
       return;
     }
 

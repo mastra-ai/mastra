@@ -14,7 +14,7 @@ import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowRunState, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -3409,6 +3409,121 @@ describe('Workflow', () => {
       expect(result.state).toEqual({ value: 'test-state!!!', otherValue: 'test-other-state' });
     });
 
+    it('should execute multiple runs of a workflow', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state, setState, requestContext }) => {
+          const newState = state.value + '!!!';
+          const testValue = requestContext.get('testKey');
+          requestContext.set('randomKey', newState + testValue);
+          await setState({ value: newState });
+          return { result: 'success', value: newState };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({ result: z.string(), value: z.string() }),
+        outputSchema: z.object({ result: z.string(), value: z.string(), randomValue: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+        execute: async ({ inputData, requestContext }) => {
+          const randomValue = requestContext.get('randomKey') as string;
+          return { ...inputData, randomValue };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+          randomValue: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const [result1, result2] = await Promise.all([
+        (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-one');
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: {},
+            initialState: { value: 'test-state-one', otherValue: 'test-other-state-one' },
+            outputOptions: {
+              includeState: true,
+            },
+            requestContext,
+          });
+          const reqContext1 = Array.from(requestContext.values());
+          expect(reqContext1).toEqual(['test-value-one', 'test-state-one!!!test-value-one']);
+          return result;
+        })(),
+        (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-two');
+          requestContext.set('anotherKey', 'another-value-two');
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: {},
+            initialState: { value: 'test-state-two', otherValue: 'test-other-state-two' },
+            outputOptions: {
+              includeState: true,
+            },
+            requestContext,
+          });
+          const reqContext2 = Array.from(requestContext.values());
+          expect(reqContext2).toEqual(['test-value-two', 'another-value-two', 'test-state-two!!!test-value-two']);
+          return result;
+        })(),
+      ]);
+
+      expect(result1.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-one!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result1.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-one!!!', randomValue: 'test-state-one!!!test-value-one' },
+        payload: { result: 'success', value: 'test-state-one!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result1.state).toEqual({ value: 'test-state-one!!!', otherValue: 'test-other-state-one' });
+      expect(result2.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-two!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-two!!!', randomValue: 'test-state-two!!!test-value-two' },
+        payload: { result: 'success', value: 'test-state-two!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.state).toEqual({ value: 'test-state-two!!!', otherValue: 'test-other-state-two' });
+    });
+
     it('should execute a single step nested workflow successfully with state', async () => {
       let calls = 0;
       const step1 = createStep({
@@ -5994,6 +6109,57 @@ describe('Workflow', () => {
       //   startedAt: expect.any(Number),
       //   endedAt: expect.any(Number),
       // });
+    });
+
+    it('should be able to cancel a suspended workflow', async () => {
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: async ({ suspend, resumeData }) => {
+          if (!resumeData) {
+            return suspend({ reason: 'waiting for approval' });
+          }
+          return { done: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+        suspendSchema: z.object({ reason: z.string() }),
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+      });
+
+      testWorkflow.then(suspendStep).commit();
+
+      const storage = new MockStore();
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': testWorkflow },
+        storage,
+      });
+
+      const workflow = mastra.getWorkflow('test-workflow');
+
+      const run = await workflow.createRun();
+      const runId = run.runId;
+
+      // Start the workflow and wait for it to suspend
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe('suspended');
+
+      // Verify status is suspended in storage
+      const beforeCancel = await workflow.getWorkflowRunById(runId);
+      expect(beforeCancel).not.toBeNull();
+      expect((beforeCancel!.snapshot as WorkflowRunState).status).toBe('suspended');
+
+      // Cancel the suspended workflow
+      await run.cancel();
+
+      // Check status IMMEDIATELY after cancel() returns
+      const afterCancel = await workflow.getWorkflowRunById(runId);
+      expect(afterCancel).not.toBeNull();
+      expect((afterCancel!.snapshot as WorkflowRunState).status).toBe('canceled');
     });
   });
 
