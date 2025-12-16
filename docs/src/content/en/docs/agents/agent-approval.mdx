@@ -254,6 +254,35 @@ export const weatherTool = createTool({
     return { city, weather };
   },
 });
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o-mini",
+  tools: { weatherTool },
+  memory: new Memory(),
+  defaultOptions: {
+    autoResumeSuspendedTools: true,
+  },
+});
+
+const stream = await agent.stream("What's the weather like?");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tool-call-suspended") {
+    console.log(chunk.payload.suspendPayload);
+  }
+}
+
+const handleResume = async () => {
+  const resumedStream = await agent.stream("San Francisco");
+
+  for await (const chunk of resumedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
 ```
 
 **Conversation flow:**
