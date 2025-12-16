@@ -171,6 +171,28 @@ export const agent = new Agent({
 });
 ```
 
+## Thread-scoped memory example
+
+For conversation-specific context that doesn't persist across threads:
+
+```typescript copy
+import { WorkingMemory } from "@mastra/core/processors";
+
+const processor = new WorkingMemory({
+  storage: memoryStorage,
+  scope: "thread",
+  template: {
+    format: "markdown",
+    content: `# Conversation Context
+- **Current Topic**:
+- **Session Goal**:
+- **Key Points Discussed**:
+- **Action Items**:
+`,
+  },
+});
+```
+
 ## JSON format example
 
 ```typescript copy

@@ -15,10 +15,10 @@ This is useful for maintaining ongoing state that's always relevant and should a
 
 Working memory can persist at two different scopes:
 
-- **Resource-scoped** (default): Memory persists across all conversation threads for the same user
-- **Thread-scoped**: Memory is isolated per conversation thread
+- **Resource-scoped** (default): Memory persists across all conversation threads for the same user, storing long-term user information like their name, preferences, and goals
+- **Thread-scoped**: Memory is isolated per conversation thread, storing temporary context like the current topic, session goals, and discussion points
 
-**Important:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory.
+**Important:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory. Choose the scope based on whether the information should persist across all conversations (resource-scoped) or only within a single conversation (thread-scoped).
 
 ## Quick Start
 
@@ -54,6 +54,11 @@ Working memory is a block of Markdown text that the agent is able to update over
 
 Working memory can operate in two different scopes, allowing you to choose how memory persists across conversations:
 
+| Scope | Storage Location | Persistence | Best For | Example Data |
+|-------|-----------------|-------------|----------|--------------|
+| **Resource** (default) | `mastra_resources` table | All threads for same user | User identity, preferences, long-term context | Name, location, interests, goals |
+| **Thread** | `thread.metadata.workingMemory` | Single conversation thread | Session-specific context | Current topic, action items, discussion points |
+
 ### Resource-Scoped Memory (Default)
 
 By default, working memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
@@ -64,7 +69,7 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      scope: "resource", // Memory persists across all user threads
+      scope: "resource", // Memory persists across all user threads (default)
       template: `# User Profile
 - **Name**:
 - **Location**:
@@ -79,9 +84,18 @@ const memory = new Memory({
 
 **Use cases:**
 
-- Personal assistants that remember user preferences
-- Customer service bots that maintain customer context
-- Educational applications that track student progress
+- Personal assistants that remember user preferences across all conversations
+- Customer service bots that maintain customer context and history across support sessions
+- Educational applications that track student progress and learning style over time
+- Healthcare assistants that maintain patient context across appointments
+
+**What to store in resource-scoped memory:**
+
+- User identity information (name, location, timezone)
+- Long-term preferences and settings
+- Persistent goals and objectives
+- Historical context that's valuable across all conversations
+- Information that defines the user or their relationship with the agent
 
 ### Usage with Agents
 
@@ -106,10 +120,12 @@ const memory = new Memory({
     workingMemory: {
       enabled: true,
       scope: "thread", // Memory is isolated per thread
-      template: `# User Profile
-- **Name**:
-- **Interests**:
-- **Current Goal**:
+      template: `# Conversation Context
+- **Current Topic**:
+- **Session Goal**:
+- **Key Points Discussed**:
+- **Action Items**:
+- **Questions to Follow Up**:
 `,
     },
   },
@@ -118,9 +134,18 @@ const memory = new Memory({
 
 **Use cases:**
 
-- Different conversations about separate topics
-- Temporary or session-specific information
+- Project-specific conversations where context doesn't need to persist across different projects
+- Support tickets where each ticket is a separate thread with its own context
+- Different conversations about separate topics that shouldn't share context
+- Temporary or session-specific information that expires when the conversation ends
 - Workflows where each thread needs working memory but threads are ephemeral and not related to each other
+
+**Key differences from resource-scoped:**
+
+- Thread-scoped memory stores **conversation-specific context** (current topic, session goals, discussion points)
+- Resource-scoped memory stores **user-level information** (name, preferences, long-term goals)
+- Use thread-scoped when memory should be isolated between different conversation threads
+- Use resource-scoped (default) when you want the agent to remember the user across all their conversations
 
 ## Storage Adapter Support
 
