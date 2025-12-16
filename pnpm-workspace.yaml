@@ -1,4 +1,5 @@
 packages:
+  - packages/_vendored/*
   - packages/*
   - deployers/*
   - stores/*

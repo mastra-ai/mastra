@@ -900,6 +900,7 @@ export type ProviderModelsMap = {
     'glm-4.5v',
     'glm-4.6',
     'glm-4.6v',
+    'glm-4.6v-flash',
   ];
   readonly 'minimax-cn': readonly ['MiniMax-M2'];
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
@@ -1135,7 +1136,15 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.5',
   ];
-  readonly zhipuai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
+  readonly zhipuai: readonly [
+    'glm-4.5',
+    'glm-4.5-air',
+    'glm-4.5-flash',
+    'glm-4.5v',
+    'glm-4.6',
+    'glm-4.6v',
+    'glm-4.6v-flash',
+  ];
   readonly submodel: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
@@ -1300,6 +1309,7 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
     'google/gemini-3-pro',
+    'google/gemini-deep-research',
     'google/imagen-3',
     'google/imagen-3-fast',
     'google/imagen-4',
@@ -1345,8 +1355,12 @@ export type ProviderModelsMap = {
     'openai/gpt-5-pro',
     'openai/gpt-5.1',
     'openai/gpt-5.1-codex',
+    'openai/gpt-5.1-codex-max',
     'openai/gpt-5.1-codex-mini',
     'openai/gpt-5.1-instant',
+    'openai/gpt-5.2',
+    'openai/gpt-5.2-instant',
+    'openai/gpt-5.2-pro',
     'openai/gpt-image-1',
     'openai/gpt-image-1-mini',
     'openai/o1',
@@ -1360,6 +1374,7 @@ export type ProviderModelsMap = {
     'openai/o4-mini-deep-research',
     'openai/sora-2',
     'openai/sora-2-pro',
+    'poetools/claude-code',
     'runwayml/runway',
     'runwayml/runway-gen-4-turbo',
     'stabilityai/stablediffusionxl',
