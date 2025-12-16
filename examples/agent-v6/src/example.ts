@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 import { weatherInfo } from './mastra/tools';
+import z from 'zod';
 
 const agent = new Agent({
   id: 'example-agent',
@@ -12,14 +13,14 @@ const agent = new Agent({
   },
 });
 
-const result = await agent.generate('Yo whats up', {
-  prepareStep: ({ stepNumber }) => {
-    if (stepNumber === 0) {
-      return {
-        toolChoice: 'required',
-      };
-    }
+const result = await agent.generate('weather in new york', {
+  structuredOutput: {
+    schema: z.object({
+      weather: z.string(),
+      temperature: z.number(),
+      humidity: z.number(),
+    }),
   },
 });
 
-console.log(result.text);
+console.log(result.object);
