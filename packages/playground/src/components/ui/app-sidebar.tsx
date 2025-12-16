@@ -23,6 +23,7 @@ import {
   type NavSection,
   LogoWithoutText,
   SettingsIcon,
+  MastraVersionFooter,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -198,6 +199,8 @@ export function AppSidebar() {
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
+        <MainSidebar.NavSeparator />
+        <MastraVersionFooter collapsed={state === 'collapsed'} />
       </MainSidebar.Bottom>
     </MainSidebar>
   );

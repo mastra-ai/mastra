@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
@@ -22,11 +23,56 @@ interface HTTPSOptions {
   cert: Buffer;
 }
 
+interface PackageJson {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+}
+
+interface MastraPackageInfo {
+  name: string;
+  version: string;
+}
+
+function getResolvedVersion(rootDir: string, packageName: string, specifiedVersion: string): string {
+  try {
+    // Try to read the actual installed version from node_modules
+    const installedPackageJsonPath = join(rootDir, 'node_modules', packageName, 'package.json');
+    const installedPackageJson = JSON.parse(readFileSync(installedPackageJsonPath, 'utf-8'));
+    return installedPackageJson.version ?? specifiedVersion;
+  } catch {
+    // Fall back to the specified version if we can't read the installed version
+    return specifiedVersion;
+  }
+}
+
+function getMastraPackages(rootDir: string): MastraPackageInfo[] {
+  try {
+    const packageJsonPath = join(rootDir, 'package.json');
+    const packageJsonContent = readFileSync(packageJsonPath, 'utf-8');
+    const packageJson: PackageJson = JSON.parse(packageJsonContent);
+
+    const allDependencies = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+    };
+
+    return Object.entries(allDependencies)
+      .filter(([name]) => name.startsWith('@mastra/') || name === 'mastra')
+      .map(([name, specifiedVersion]) => ({
+        name,
+        version: getResolvedVersion(rootDir, name, specifiedVersion),
+      }));
+  } catch {
+    return [];
+  }
+}
+
 interface StartOptions {
   inspect?: string | boolean;
   inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: HTTPSOptions;
+  mastraPackages?: MastraPackageInfo[];
 }
 
 const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port: number }) => {
@@ -98,6 +144,7 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
+        MASTRA_PACKAGES: JSON.stringify(startOptions.mastraPackages),
         ...(startOptions?.https
           ? {
               MASTRA_HTTPS_KEY: startOptions.https.key.toString('base64'),
@@ -385,7 +432,10 @@ export async function dev({
     httpsOptions = { key, cert };
   }
 
-  const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions };
+  // Extract mastra packages from the project's package.json
+  const mastraPackages = getMastraPackages(rootDir);
+
+  const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions, mastraPackages };
 
   await bundler.prepare(dotMastraPath);
 

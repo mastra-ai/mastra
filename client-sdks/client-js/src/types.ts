@@ -679,3 +679,17 @@ export interface Provider {
   docUrl?: string;
   models: string[];
 }
+
+// ============================================================================
+// System Types
+// ============================================================================
+
+export interface MastraPackage {
+  name: string;
+  version: string;
+}
+
+export interface GetSystemPackagesResponse {
+  packages: MastraPackage[];
+  isDev: boolean;
+}
