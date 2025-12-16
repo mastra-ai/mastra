@@ -1,4 +1,3 @@
-import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { ToolCallFilter } from '@mastra/core/processors';
@@ -122,7 +121,7 @@ export const progressAgent = new Agent({
   name: 'progress-agent',
   instructions:
     'You are a task runner that can run tasks with progress updates. When asked to run a task, use the progress-task tool.',
-  model: anthropic('claude-sonnet-4-20250514'),
+  model: openai('gpt-4o'),
   memory: progressMemory,
   tools: {
     'progress-task': progressTool,
