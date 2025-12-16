@@ -2,6 +2,10 @@ import { openai } from '@ai-sdk/openai-v5';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV3,
+  MockLanguageModelV3,
+} from '@internal/ai-v6/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { TestIntegration } from '../../integration/openapi-toolset.mock';
@@ -23,9 +27,9 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
   return userInfo;
 });
 
-function toolsTest(version: 'v1' | 'v2') {
+function toolsTest(version: 'v1' | 'v2' | 'v3') {
   const integration = new TestIntegration();
-  let mockModel: MockLanguageModelV1 | MockLanguageModelV2;
+  let mockModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
   beforeEach(() => {
     if (version === 'v1') {
@@ -65,7 +69,7 @@ function toolsTest(version: 'v1' | 'v2') {
           rawCall: { rawPrompt: null, rawSettings: {} },
         }),
       });
-    } else {
+    } else if (version === 'v2') {
       mockModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -101,6 +105,47 @@ function toolsTest(version: 'v1' | 'v2') {
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
+        }),
+      });
+    } else {
+      // v3
+      mockModel = new MockLanguageModelV3({
+        doGenerate: async () => ({
+          finishReason: 'tool-calls',
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: 20, reasoning: undefined },
+          },
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call-test-1',
+              toolName: 'testTool',
+              input: '{}',
+            },
+          ],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStreamV3([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-test-1',
+              toolName: 'testTool',
+              input: '{}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
+            },
+          ]),
         }),
       });
     }
@@ -145,7 +190,7 @@ function toolsTest(version: 'v1' | 'v2') {
 
     it('should call findUserTool with parameters', async () => {
       // Create a new mock model for this test that calls findUserTool
-      let findUserToolModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let findUserToolModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         findUserToolModel = new MockLanguageModelV1({
@@ -184,7 +229,7 @@ function toolsTest(version: 'v1' | 'v2') {
             rawCall: { rawPrompt: null, rawSettings: {} },
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         findUserToolModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -220,6 +265,47 @@ function toolsTest(version: 'v1' | 'v2') {
             ]),
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
+          }),
+        });
+      } else {
+        // v3
+        findUserToolModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: 'tool-calls',
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 20, text: 20, reasoning: undefined },
+            },
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call-finduser-1',
+                toolName: 'findUserTool',
+                input: '{"name":"Dero Israel"}',
+              },
+            ],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-finduser-1',
+                toolName: 'findUserTool',
+                input: '{"name":"Dero Israel"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 20, text: 20, reasoning: undefined },
+                },
+              },
+            ]),
           }),
         });
       }
@@ -271,7 +357,7 @@ function toolsTest(version: 'v1' | 'v2') {
 
     it('should call client side tools in generate', async () => {
       // Create a mock model that calls the changeColor tool
-      let clientToolModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let clientToolModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         clientToolModel = new MockLanguageModelV1({
@@ -310,7 +396,7 @@ function toolsTest(version: 'v1' | 'v2') {
             rawCall: { rawPrompt: null, rawSettings: {} },
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         clientToolModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -346,6 +432,47 @@ function toolsTest(version: 'v1' | 'v2') {
             ]),
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
+          }),
+        });
+      } else {
+        // v3
+        clientToolModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: 'tool-calls',
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 20, text: 20, reasoning: undefined },
+            },
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call-color-1',
+                toolName: 'changeColor',
+                input: '{"color":"green"}',
+              },
+            ],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-color-1',
+                toolName: 'changeColor',
+                input: '{"color":"green"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 20, text: 20, reasoning: undefined },
+                },
+              },
+            ]),
           }),
         });
       }
@@ -391,7 +518,7 @@ function toolsTest(version: 'v1' | 'v2') {
 
     it('should call client side tools in stream', async () => {
       // Reuse the same mock model for streaming
-      let clientToolModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let clientToolModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         clientToolModel = new MockLanguageModelV1({
@@ -430,7 +557,7 @@ function toolsTest(version: 'v1' | 'v2') {
             rawCall: { rawPrompt: null, rawSettings: {} },
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         clientToolModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -466,6 +593,47 @@ function toolsTest(version: 'v1' | 'v2') {
             ]),
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
+          }),
+        });
+      } else {
+        // v3
+        clientToolModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: 'tool-calls',
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 20, text: 20, reasoning: undefined },
+            },
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call-color-stream-1',
+                toolName: 'changeColor',
+                input: '{"color":"green"}',
+              },
+            ],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-color-stream-1',
+                toolName: 'changeColor',
+                input: '{"color":"green"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 20, text: 20, reasoning: undefined },
+                },
+              },
+            ]),
           }),
         });
       }
@@ -518,7 +686,7 @@ function toolsTest(version: 'v1' | 'v2') {
 
     it('should make requestContext available to tools in generate', async () => {
       // Create a mock model that calls the testTool
-      let requestContextModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let requestContextModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         requestContextModel = new MockLanguageModelV1({
@@ -557,7 +725,7 @@ function toolsTest(version: 'v1' | 'v2') {
             rawCall: { rawPrompt: null, rawSettings: {} },
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         requestContextModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -593,6 +761,47 @@ function toolsTest(version: 'v1' | 'v2') {
             ]),
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
+          }),
+        });
+      } else {
+        // v3
+        requestContextModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: 'tool-calls',
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 20, text: 20, reasoning: undefined },
+            },
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call-runtime-1',
+                toolName: 'testTool',
+                input: '{"query":"test"}',
+              },
+            ],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-runtime-1',
+                toolName: 'testTool',
+                input: '{"query":"test"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 20, text: 20, reasoning: undefined },
+                },
+              },
+            ]),
           }),
         });
       }
@@ -655,7 +864,7 @@ function toolsTest(version: 'v1' | 'v2') {
 
     it('should make requestContext available to tools in stream', async () => {
       // Create a mock model that calls the testTool
-      let requestContextModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let requestContextModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         requestContextModel = new MockLanguageModelV1({
@@ -694,7 +903,7 @@ function toolsTest(version: 'v1' | 'v2') {
             rawCall: { rawPrompt: null, rawSettings: {} },
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         requestContextModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -730,6 +939,47 @@ function toolsTest(version: 'v1' | 'v2') {
             ]),
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
+          }),
+        });
+      } else {
+        // v3
+        requestContextModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: 'tool-calls',
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 20, text: 20, reasoning: undefined },
+            },
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call-runtime-stream-1',
+                toolName: 'testTool',
+                input: '{"query":"test"}',
+              },
+            ],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-runtime-stream-1',
+                toolName: 'testTool',
+                input: '{"query":"test"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 20, text: 20, reasoning: undefined },
+                },
+              },
+            ]),
           }),
         });
       }
@@ -800,6 +1050,7 @@ function toolsTest(version: 'v1' | 'v2') {
 
 toolsTest('v1');
 toolsTest('v2');
+toolsTest('v3');
 
 describe('requireApproval property preservation', () => {
   it('should preserve requireApproval property from tools passed via toolsets', async () => {
