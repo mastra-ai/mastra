@@ -9,7 +9,6 @@ import { textStreamTests } from './test-utils/textStream';
 import { toolsTests } from './test-utils/tools';
 import { toUIMessageStreamTests } from './test-utils/toUIMessageStream';
 import { mockDate } from './test-utils/utils';
-import { v3UsageNormalizationTests } from './test-utils/v3-usage-normalization';
 
 describe('Loop Tests', () => {
   describe('AISDK v5', () => {
@@ -23,8 +22,8 @@ describe('Loop Tests', () => {
       vi.useRealTimers();
     });
 
-    textStreamTests({ loopFn: loop, runId: 'test-run-id' });
-    fullStreamTests({ loopFn: loop, runId: 'test-run-id' });
+    textStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v2' });
+    fullStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v2' });
     toUIMessageStreamTests({ loopFn: loop, runId: 'test-run-id' });
     resultObjectTests({ loopFn: loop, runId: 'test-run-id' });
     optionsTests({ loopFn: loop, runId: 'test-run-id' });
@@ -34,7 +33,7 @@ describe('Loop Tests', () => {
     streamObjectTests({ loopFn: loop, runId: 'test-run-id' });
   });
 
-  describe('AISDK v6 (LanguageModelV3)', () => {
+  describe('AISDK v6 (V3 models)', () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(mockDate);
@@ -44,7 +43,8 @@ describe('Loop Tests', () => {
       vi.useRealTimers();
     });
 
-    v3UsageNormalizationTests({ loopFn: loop, runId: 'test-run-id' });
+    textStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v3' });
+    fullStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v3' });
   });
 
   // toolsTestsV5({ executeFn: execute, runId });
