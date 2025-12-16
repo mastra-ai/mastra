@@ -16,6 +16,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/v1/deployment/building-mastra",
+      "destination": "/docs/v1/deployment/mastra-server",
+      "permanent": true
+    },
+    {
       "source": "/docs/deployment/serverless-platforms/cloudflare-deployer",
       "destination": "/docs/deployment/cloud-providers/cloudflare-deployer",
       "permanent": true
