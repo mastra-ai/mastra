@@ -345,7 +345,6 @@ async function pushToRepo(repoName) {
       const packageJsonPath = path.join(tempDir, 'package.json');
       let packageJson = await readFile(packageJsonPath, 'utf-8');
       packageJson = JSON.parse(packageJson);
-      delete packageJson.dependencies['@ai-sdk/openai'];
       packageJson.dependencies[providerPackage] = `^${latestVersion}`;
       await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
 
@@ -356,9 +355,7 @@ async function pushToRepo(repoName) {
         let envExample = await readFile(envExamplePath, 'utf-8');
         envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
         envExample = envExample.replaceAll('https://platform.openai.com/api-keys', providerUrl);
-        if (!envExample.includes('MODEL')) {
-          envExample = envExample + `\nMODEL=${defaultModel}`;
-        }
+        envExample = envExample.replaceAll(/^MODEL\s*=\s*.*$/gm, `MODEL=${defaultModel}`);
         await writeFile(envExamplePath, envExample);
       } else {
         console.log(`${envExamplePath} does not exist, skipping`);
