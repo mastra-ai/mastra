@@ -29,11 +29,8 @@ Before deploying to AWS Lambda, ensure you have:
 
 ## Memory Configuration
 
-:::note
-AWS Lambda uses an ephemeral file system,
-meaning that any files written to the file system are short-lived and may be lost.
-Avoid using a Mastra storage provider that uses the file system,
-such as `LibSQLStore` with a file URL.
+:::warning
+AWS Lambda uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 Lambda functions have limitations with file system storage. Configure your Mastra application to use either in-memory or external storage providers:
@@ -216,7 +213,7 @@ Once deployed, test your Lambda function:
 2. Visit the URL in your browser to see your Mastra's server home screen
 3. Test your agents and workflows using the generated API endpoints
 
-For more information about available API endpoints, see the [Server documentation](/docs/v1/deployment/building-mastra).
+For more information about available API endpoints, see the [Server documentation](/docs/v1/deployment/mastra-server).
 
 ## Connecting your client
 
