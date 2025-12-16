@@ -14,8 +14,8 @@ import { BetaIcon, StableIcon, TriggerIcon, VersionLabel } from "./icons/icon";
 import FeatureVersioning from "../../feature-versioning.json";
 
 const versions = [
-  { value: "stable", label: "Stable" },
-  { value: "beta", label: "Beta" },
+  { value: "stable", label: "Stable (v0)" },
+  { value: "beta", label: "Beta (v1)" },
 ];
 
 type Version = "beta" | "stable";
