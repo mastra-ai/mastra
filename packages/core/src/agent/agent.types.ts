@@ -125,6 +125,9 @@ export type AgentExecutionOptions<
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
 
+  /** Automatically resume suspended tools */
+  autoResumeSuspendedTools?: boolean;
+
   /** Maximum number of tool calls to execute concurrently (default: 1 when approval may be required, otherwise 10) */
   toolCallConcurrency?: number;
 
