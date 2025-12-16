@@ -9841,4 +9841,48 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
   });
+
+  describe('resourceId support', () => {
+    it('should pass resourceId to createRun and persist it in storage', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow-resourceid',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow-resourceid': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const resourceId = 'user-123';
+      const runId = 'test-run-resourceid';
+
+      // Create run with resourceId
+      const run = await workflow.createRun({
+        runId,
+        resourceId,
+      });
+
+      // Execute the workflow
+      await run.start({ inputData: {} });
+
+      // Check that resourceId is stored in the snapshot
+      const storedRun = await workflow.getWorkflowRunById(runId);
+      expect(storedRun?.resourceId).toBe(resourceId);
+
+      await mastra.stopEventEngine();
+    });
+  });
 });
