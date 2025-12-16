@@ -88,11 +88,19 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * Clean up abort controller and relationships when a workflow completes
+   * Clean up abort controller and relationships when a workflow completes.
+   * Also cleans up any orphaned child entries that reference this run as parent.
    */
   private cleanupRun(runId: string): void {
     this.abortControllers.delete(runId);
     this.parentChildRelationships.delete(runId);
+
+    // Clean up any orphaned child entries pointing to this run as their parent
+    for (const [childRunId, parentRunId] of this.parentChildRelationships.entries()) {
+      if (parentRunId === runId) {
+        this.parentChildRelationships.delete(childRunId);
+      }
+    }
   }
 
   __registerMastra(mastra: Mastra) {
