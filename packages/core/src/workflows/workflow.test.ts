@@ -14,7 +14,7 @@ import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowRunState, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -6109,6 +6109,57 @@ describe('Workflow', () => {
       //   startedAt: expect.any(Number),
       //   endedAt: expect.any(Number),
       // });
+    });
+
+    it('should be able to cancel a suspended workflow', async () => {
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: async ({ suspend, resumeData }) => {
+          if (!resumeData) {
+            return suspend({ reason: 'waiting for approval' });
+          }
+          return { done: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+        suspendSchema: z.object({ reason: z.string() }),
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+      });
+
+      testWorkflow.then(suspendStep).commit();
+
+      const storage = new MockStore();
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': testWorkflow },
+        storage,
+      });
+
+      const workflow = mastra.getWorkflow('test-workflow');
+
+      const run = await workflow.createRun();
+      const runId = run.runId;
+
+      // Start the workflow and wait for it to suspend
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe('suspended');
+
+      // Verify status is suspended in storage
+      const beforeCancel = await workflow.getWorkflowRunById(runId);
+      expect(beforeCancel).not.toBeNull();
+      expect((beforeCancel!.snapshot as WorkflowRunState).status).toBe('suspended');
+
+      // Cancel the suspended workflow
+      await run.cancel();
+
+      // Check status IMMEDIATELY after cancel() returns
+      const afterCancel = await workflow.getWorkflowRunById(runId);
+      expect(afterCancel).not.toBeNull();
+      expect((afterCancel!.snapshot as WorkflowRunState).status).toBe('canceled');
     });
   });
 
