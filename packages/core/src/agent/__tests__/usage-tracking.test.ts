@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect } from 'vitest';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';

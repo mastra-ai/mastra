@@ -1,4 +1,4 @@
-import type { ToolSet } from 'ai-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
 import type { OutputSchema } from '../../../stream/base/schema';
